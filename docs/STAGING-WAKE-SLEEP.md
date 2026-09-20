@@ -19,9 +19,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/staging-lifecycle.yml": "sha256:6defa4e93f8b8389ab2cda44f5f36a7b7433948137c820f0c527db90cba7ccdb"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:625caac71bb1960cec2191cc8ed3486d199d626d9197b1c7082f2f66e7bcf185"
+  ".github/workflows/staging-lifecycle.yml": "sha256:548bd6d191d27609ed2f261d5b8a61bbc2c3e59e431be9090108569ca95d9898"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:1176ba513d3315e97ad962b39c06113a36a5e1ae8db50da59d55a798645903ec"
+  ".github/workflows/terraform-promote.yml": "sha256:f555f32c30627b3c095936c3a929367fa67d8e6f67c56695d4258a57409da4a0"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
@@ -172,9 +172,11 @@ reviewed-plan machinery as a production apply.
    `staging_state=awake` and both digests. Run discovery polls for 300 s;
    **more than one candidate run is a hard failure** rather than a guess.
    Completion is awaited up to `promote_timeout_minutes`.
-3. **Verify the plan artifact.** All 14 `reviewed.*` files must be present and
+3. **Verify the plan artifact.** All 16 `reviewed.*` files must be present and
    non-empty; `reviewed.profile == staging`;
    `reviewed.state-key == profiles/staging/terraform.tfstate`;
+   `reviewed.state-bucket` and `reviewed.state-lock-table` must be present and
+   syntactically valid;
    `sha256sum --check` on `reviewed.tfplan.sha256`; `reviewed.commit` a
    40-character SHA.
 4. **`wake-validate` re-verifies independently**, at the reviewed commit, from a
@@ -303,16 +305,20 @@ Steps, in order, with what each proves:
    headers, every object is read back, and the bucket contents are compared
    byte-for-byte with the release artifact. This is a real staging mutation:
    it requires the scoped S3 write permission and fails closed if the lease
-   expires or publication differs from the approved digest. The public
-   Olympus, Aether, docs, app, and status shells are separate Amplify apps;
-   they build from the checked-in monorepo branch and are verified at their
-   Amplify default domains during staging rather than being copied into these
-   private S3 origins.
+   expires or publication differs from the approved digest. The five public
+   Amplify applications (Olympus, Aether, docs, app, and status) are a
+   separate application-delivery surface; their branch builds and
+   default-domain checks belong to the Amplify delivery/smoke workflows, not
+   this private S3 publication phase.
 3. **Migrations.** A one-off Fargate task is launched from the
-   `AETHER-staging-backend` task definition with `RUN_MIGRATIONS=1`
-   (`alembic upgrade head`), awaited with `aws ecs wait tasks-stopped`, and
-   required to exit 0. The resulting revision is then verified over HTTP: a 200
-   from `/v1/ready` whose body mentions `alembic` or `migration`.
+   `AETHER-staging-backend` task definition with `RUN_MIGRATIONS=1`. The
+   release entrypoint runs `alembic upgrade head` and receives an explicit
+   `/bin/sh -c 'exit 0'` command override so it exits after migrations instead
+   of starting a second long-running API process. It is awaited with
+   `aws ecs wait tasks-stopped`, its stopped task and exit code are retained as
+   evidence, and it is required to exit 0. The resulting revision is then
+   verified over HTTP: a 200 from `/v1/ready` whose body mentions `alembic` or
+   `migration`.
    On a `public_ip` profile the run-task network configuration needs
    `assignPublicIp=ENABLED` — there is no NAT to egress through.
 4. **Readiness and frontend availability.** `/v1/health` and `/v1/ready` must
@@ -320,12 +326,14 @@ Steps, in order, with what each proves:
    the static bucket name is read from SSM
    (`/aether/staging/AETHER_STATIC_BUCKET`,
    `/aether/staging/KYBER_STATIC_BUCKET`) and `index.html` must exist. The
-   five public Amplify apps must also expose their staging default domains;
-   the run records those domains and checks the Olympus, Aether, docs, app, and
-   status shells over HTTPS. Staging intentionally does not attach the
-   production custom domain or a production status API URL.
+   five public Amplify apps are checked by their own delivery/smoke gate; this
+   lifecycle phase does not claim to publish or verify those separate Amplify
+   domains. Staging intentionally does not attach the production custom domain
+   or a production status API URL.
    Before apply, the promotion workflow verifies that every ECS-mounted
-   Secrets Manager name has an `AWSCURRENT` version. Terraform creates the
+   application Secrets Manager name has an `AWSCURRENT` version and, when the
+   canonical Aurora already exists, that its AWS-managed `MasterUserSecret`
+   reports `active`. Terraform creates the
    encrypted secret stubs but never invents their values; bootstrap or import
    those values through the secure operator procedure before a wake. The check
    reads metadata only and never uploads or prints secret material. The Kyber
@@ -351,12 +359,15 @@ Steps, in order, with what each proves:
    (polls analytics for the ingested event for up to 300 s; failure to drain is
    reported as the `lean-worker` execution group not draining — this is the
    check that proves consolidation actually works), graph, analytics, and
-   inline ML (`/v1/ml/models`, since staging runs `remote_ml: false`).
+   inline ML (`/v1/ml/models` plus the unique in-process `/models` probe,
+   since staging runs `remote_ml: false`).
 7. **Synthetic-seed exclusion and empty state.**
    `scripts/validate_frontend_data_truth.py`, plus a probe that an unknown
    subject returns no records, plus a scan of the response for the markers
    `demo`, `synthetic`, `sample-tenant`, `lorem`.
-8. **Baseline load.** `scripts/load_smoke.py --users 10 --duration 60`.
+8. **Baseline load.** `scripts/load_smoke.py --users 10 --duration 60
+   --api-key "$REHEARSAL_TENANT_API_KEY"`, so the load path exercises the same
+   authenticated tenant contract as the capability probes.
 9. **Failure and retry.** A malformed ingest payload must be a 4xx — a 5xx is a
    server error and a 2xx means it was accepted. A duplicate event must not
    produce a 5xx.
@@ -368,8 +379,9 @@ Steps, in order, with what each proves:
    `not_applicable` instead of fabricating a rollback; every later revision must
    execute and verify both rollback and roll-forward.
 11. **Evidence collection.** ECS service state, log groups, CloudWatch metrics,
-    `release.json`, and a cost-model run. Every command is `|| true`, so this
-    step never fails the rehearsal.
+    `release.json`, and a cost-model run are collected with required AWS
+    permissions. Missing or unreadable evidence is a rehearsal failure; no
+    command is allowed to turn an evidence error into a false green.
 12. **Tenant cleanup.** Every run-scoped tenant recorded by the bootstrap or
     registration marker is removed with `DELETE /v1/admin/tenants/{id}`, falling
     back to `POST .../deactivate`. Both admin paths revoke durable API keys,
@@ -403,8 +415,9 @@ at the end.
 3. **Generate the reviewed sleep plan** — dispatch `terraform-promote.yml` with
    `action=plan`, `staging_state=asleep`, same 300 s discovery window with the
    same hard failure on ambiguity.
-4. **Verify the plan and assert the asleep shape.** Same 14-artifact,
-   checksum, profile, state-key and 24-hour-expiry verification as wake. Then:
+4. **Verify the plan and assert the asleep shape.** Same 16-artifact,
+   checksum, profile, state-key, state-backend and 24-hour-expiry verification
+   as wake. Then:
    the expected map must be **all zero** (a non-zero expected count means the
    `asleep` multiplier itself has drifted); the planned counts must equal it
    exactly; and **every** Application Auto Scaling target in the plan must have
@@ -418,7 +431,9 @@ at the end.
 ### Fail-safe cleanup
 
 If staging was not already at zero and the reviewed sleep apply did not
-succeed, the last-resort cost stop runs:
+succeed, the last-resort cost stop runs. It scales services down, lowers the
+matching autoscaling floors through the reviewed lifecycle permissions, and
+stops every remaining running or pending ECS task in the staging cluster:
 
 ```bash
 test "$STAGING_CLUSTER" = "AETHER-staging" || exit 1   # refuses outside staging
@@ -426,12 +441,15 @@ for service in "${services[@]}"; do
   aws ecs update-service --cluster AETHER-staging --service "$service" --desired-count 0
   echo "::warning::scaled ${service} to 0 outside Terraform; state must be reconciled"
 done
+for task_arn in "${task_arns[@]}"; do
+  aws ecs stop-task --cluster AETHER-staging --task "$task_arn" \
+    --reason 'staging reviewed sleep apply failed'
+done
 ```
 
-It reduces only. Unlike the TTL guard it does **not** touch autoscaling floors,
-so a service with a non-zero floor can be scaled back up by Application Auto
-Scaling after this stop runs. That gap is why the residual check below inspects
-floors separately and why the job fails when it finds one.
+It reduces only and never provisions. Any force-stop or floor change is called
+out as outside-Terraform state that requires a later reviewed reconciliation;
+the residual check below still fails if a floor, service, or task remains.
 
 The stop also fires on a plain `plan-sleep` run whenever staging was not
 already at zero, because there is no apply conclusion to succeed.
@@ -454,13 +472,11 @@ It then prices the residue: task sizes come from
 `max(desired, running + pending)`, and the result is reported as
 `residual_cost_usd_per_hour`.
 
-**Known scope limit.** Residue detection covers ECS services and ECS
-autoscaling floors only. Standalone `run-task` tasks (including an orphaned
-migration task), EC2 instances, RDS, NAT Gateways and Elastic IPs are **not**
-inspected. On staging that is a small gap — `nat_mode` is `none` so there is
-nothing NAT-shaped to leak, and Aurora auto-pauses at 0 ACU — but a stray
-`run-task` will not be caught and must be checked by hand if a rehearsal died
-mid-migration.
+**Known scope limit.** Residue detection covers ECS services, running/pending
+ECS tasks, and ECS autoscaling floors. EC2 instances, RDS, NAT Gateways and
+Elastic IPs are not inspected by the sleep job; staging's `nat_mode` is `none`
+and Aurora auto-pauses at 0 ACU. A task that cannot be enumerated or described
+is an unknown-state failure, not an asleep result.
 
 ## Evidence
 
@@ -484,8 +500,10 @@ bundle. `config/deployment_readiness.yaml` expects credentialed lifecycle
 evidence at `release-evidence/lifecycle/staging-wake.json`,
 `release-evidence/lifecycle/rehearsal-history.json` and
 `release-evidence/lifecycle/sleep-residual.json`; promoting a rehearsal's
-artifacts into that layout is a manual step that has never been performed,
-because no credentialed rehearsal has ever run.
+artifacts into that layout is a manual release-evidence step. A credentialed
+rehearsal has run, but the latest run failed during migration because the
+immutable backend image did not contain `psycopg2`; no successful full
+rehearsal has yet been recorded.
 
 ## Incident handling
 
@@ -548,26 +566,18 @@ re-run blindly — find out who else dispatched a promotion, let it finish, then
 retry. The `staging-lifecycle` concurrency group is `staging-lifecycle`, which
 does not serialise manual dispatches of `terraform-promote.yml`.
 
-## Known gap: `staging_state` is not a promotion input
+## Promotion input: `staging_state`
 
-`staging-lifecycle.yml` dispatches the promotion workflow with
-`-f staging_state=awake` and `-f staging_state=asleep`, but
-`.github/workflows/terraform-promote.yml` declares **no `staging_state` input**
-and its `terraform plan` invocation passes no `-var staging_state=`.
+`terraform-promote.yml` declares `staging_state` as an explicit `awake` /
+`asleep` choice and passes it to Terraform as `-var staging_state=...`.
+The lifecycle workflow records the same value in the reviewed plan and the
+apply job verifies that recorded value before consuming the binary plan.
+This keeps the wake/sleep shape reviewable and prevents a plan for one shape
+from being applied as the other.
 
-Two consequences, both real:
-
-1. `gh workflow run` rejects an undeclared input, so the wake and sleep
-   dispatches will fail rather than silently plan the wrong shape.
-2. Even if the dispatch were accepted, the plan would fall back to the root
-   variable's default of `awake`, and the sleep job's own "assert the asleep
-   shape" check would then catch it — the asleep assertion compares planned
-   counts against an all-zero expectation by exact equality.
-
-So the failure mode is loud in both directions, which is the right side to fail
-on, but the wake/sleep path **cannot currently complete end to end**. This is
-recorded in `config/implementation_ledger.yaml` under `FT-9-STAGING-LIFECYCLE`.
-No claim on this page should be read as saying a rehearsal has been executed.
+This wiring is a source-level control, not runtime evidence. A complete
+rehearsal still requires a hosted plan, reviewed apply, and successful
+post-apply shape checks tied to the exact commit and plan checksum.
 
 ## What has not been proven
 

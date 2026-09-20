@@ -158,6 +158,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
+      - name: Validate the staging application-delivery IAM contract
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        run: python scripts/release/check_staging_application_delivery_policy.py
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -237,6 +240,23 @@ jobs:
           digest="${EXISTING_DIGEST:-${RACE_DIGEST:-${BUILT_DIGEST:-}}}"
           test -n "$digest"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Validate published backend migration runtime
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          BACKEND_DIGEST: ${{ steps.backend-digest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          image="${REGISTRY}/aether-backend@${BACKEND_DIGEST}"
+          docker pull "$image"
+          docker run --rm --entrypoint python "$image" -c '
+          import alembic
+          import psycopg2
+          from pathlib import Path
+
+          assert Path("alembic.ini").is_file(), "alembic.ini missing from published image"
+          assert Path("alembic/env.py").is_file(), "alembic/env.py missing from published image"
+          print(f"validated alembic={alembic.__version__} psycopg2={psycopg2.__version__}")
+          '
       - name: Build static frontends (per-app Auth0 client and endpoints)
         # Each SPA is built with its own Auth0 client ID and API endpoints.
         # AETHER_AUTH0_CLIENT_ID / KYBER_AUTH0_CLIENT_ID come from the
@@ -603,7 +623,7 @@ jobs:
         # /v1/ready is the authoritative in-environment gate: it fails unless the
         # database alembic revision matches the deployed release's migration head.
         env:
-          ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+          ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME || secrets.TF_DOMAIN_NAME }}
         run: |
           set -euo pipefail
           test -n "$ALB_DNS_NAME" || { echo '::error::ALB_DNS_NAME environment variable is required for the readiness gate'; exit 1; }
@@ -621,7 +641,7 @@ jobs:
           exit 1
       - name: Golden-path smoke test
         env:
-          ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+          ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME || secrets.TF_DOMAIN_NAME }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
         run: |
           set -euo pipefail

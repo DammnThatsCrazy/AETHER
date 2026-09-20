@@ -14,9 +14,9 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:33ab3399a831c294bc5d24df294c627ec28307f701d66a47d4d60e3f5d1c5749"
+  "deploy/aws/terraform/main.tf": "sha256:257fa5e129a6c8363bcda9ca687f2b75b7a3a29ee753626ae51f3cb8d326cfb3"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
-  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:c1c005d1f9662dc4dfcc72ca8fbaeda01f4b1c95ea020578c09d5d368516b863"
+  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:e609cdfaaf5d9d384e213edf6f936b0045eac823cc38d432e75db464c8eb14ad"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:18b6900d5b62ac98c1bdcea37acd74cf05185e9b22161831f40d59a747c22383"
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239"
@@ -127,6 +127,14 @@ and preview profiles may leave the ML digest empty when `remote_ml` is disabled,
 because those profiles run inline ML and do not start a dedicated ML service.
 The Terraform promotion workflow enforces this distinction and rejects an empty
 ML digest for profiles that declare dedicated remote ML.
+
+The repository's live credential inventory currently arms only the staging
+promotion/lifecycle path and the `staging-terraform` environment. The named
+production, demo, and preview GitHub environments, their profile-specific OIDC
+roles, and the dedicated ML image release are not configured yet. The workflow
+fails closed when one of those inputs is absent; an in-repo profile definition
+or an automatically created empty GitHub environment is not provisioning
+evidence.
 
 Staging is not considered runnable merely because its Terraform plan is green.
 The lifecycle rehearsal also requires a verified `AetherStagingLifecycle` role,
@@ -545,6 +553,7 @@ apply — and the apply job consumes the exact binary plan the plan job produced
 | Plan identity | `reviewed.tfplan` digest equals the dispatched `plan_checksum`, and `sha256sum --check` passes on the recorded manifest |
 | Profile | `reviewed.profile` equals the dispatched profile |
 | State key | `reviewed.state-key` equals `profiles/<profile>/terraform.tfstate` |
+| State backend | `reviewed.state-bucket` and `reviewed.state-lock-table` equal the backend secrets used by the apply |
 | Commit | apply checks out the plan's **own recorded commit**, not the dispatch ref, and verifies `HEAD` matches |
 | Terraform version | the installed version equals `reviewed.terraform-version` |
 | Lockfile | `sha256(.terraform.lock.hcl)` equals `reviewed.lock.sha256`, captured before `init` |

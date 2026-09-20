@@ -230,6 +230,32 @@ def test_deploy_gates_on_readiness_and_golden_path_smoke():
     assert workflow.index("scripts/smoke_test.py") < evidence_upload
 
 
+def test_staging_delivery_validates_its_runtime_iam_delta_and_api_host_fallback():
+    workflow = _workflow("deploy.yml")
+    assert "check_staging_application_delivery_policy.py" in workflow
+    assert "vars.ALB_DNS_NAME || secrets.TF_DOMAIN_NAME" in workflow
+    assert "aws ecs run-task" in workflow
+    assert "aws ecs describe-tasks" in workflow
+    assert "aws s3 sync" in workflow
+    assert "aws s3 cp" in workflow
+
+
+def test_staging_smoke_uses_the_authoritative_proof_environment_and_fails_closed():
+    workflow = _workflow("staging-smoke.yml")
+    assert "environment: staging" in workflow
+    assert "AETHER_API_URL" in workflow
+    assert "AETHER_API_KEY" in workflow
+    assert "PROOF_TENANT_ID" in workflow
+    assert "PROOF_WORKSPACE_ID" in workflow
+    assert "vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME" in workflow
+    assert "secrets.SMOKE_API_KEY" in workflow
+    assert "needs.preflight.result == 'success'" in workflow
+    assert "skipping staging smoke test" not in workflow
+    assert "AETHER_STAGING_URL" not in workflow
+    assert "secrets.PROOF_TENANT_ID" not in workflow
+    assert "secrets.PROOF_WORKSPACE_ID" not in workflow
+
+
 def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
     workflow = _workflow("deploy.yml")
     assert "secrets.AETHER_AUTH0_CLIENT_ID" in workflow
@@ -259,6 +285,17 @@ def test_deploy_recovers_an_immutable_tag_publish_race():
     assert "no immutable image exists" in workflow
     assert "RACE_DIGEST: ${{ steps.backend-race.outputs.digest }}" in workflow
     assert 'digest="${EXISTING_DIGEST:-${RACE_DIGEST:-${BUILT_DIGEST:-}}}"' in workflow
+
+
+def test_deploy_inspects_the_published_image_before_releasing_it():
+    """The release manifest must not bless an image whose migration runtime is broken."""
+    workflow = _workflow("deploy.yml")
+    assert "Validate published backend migration runtime" in workflow
+    assert 'docker pull "$image"' in workflow
+    assert 'docker run --rm --entrypoint python "$image"' in workflow
+    assert "import psycopg2" in workflow
+    assert 'Path("alembic.ini").is_file()' in workflow
+    assert 'Path("alembic/env.py").is_file()' in workflow
 
 
 def test_deploy_verifies_source_run_identity_before_trusting_artifacts():
@@ -773,6 +810,21 @@ def test_infrastructure_remote_plan_validates_plan_json_for_policy_and_cost():
         assert retained in paths, f"remote-plan evidence drops {retained}"
 
 
+def test_infrastructure_remote_plan_rejects_a_stale_backend_digest_on_main():
+    doc = _workflow_yaml("infrastructure.yml")
+    validation = next(
+        step for step in _steps(doc, "remote-plan")
+        if step.get("name") == "Validate approved backend digest is present and current"
+    )
+    script = validation["run"]
+    assert "aws ecr describe-images" in script
+    assert "--image-ids imageDigest=\"$APPROVED_BACKEND_DIGEST\"" in script
+    assert "--image-ids imageTag=\"$GITHUB_SHA\"" in script
+    assert '"$GITHUB_EVENT_NAME" = push' in script
+    assert '"$GITHUB_REF" = refs/heads/main' in script
+    assert "TF_BACKEND_IMAGE_DIGEST is stale" in script
+
+
 def test_infrastructure_requires_credentialed_remote_plans_on_pushes_to_main():
     doc = _workflow_yaml("infrastructure.yml")
     remote_plan = doc["jobs"]["remote-plan"]
@@ -837,6 +889,22 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
     assert guard_index < aws_index < plan_index
 
 
+def test_remote_plan_requires_ml_digest_only_for_dedicated_ml_profiles():
+    """Inline-ML profiles must not be blocked by an unrelated ML image secret."""
+    infra = _workflow_yaml("infrastructure.yml")
+    probe = next(
+        s for s in _steps(infra, "remote-plan-readiness") if s.get("id") == "credentials"
+    )
+    assert "TF_ML_IMAGE_DIGEST" not in probe["env"]
+    required_names = probe["run"].split("for name in", 1)[1].split("do", 1)[0]
+    assert "TF_ML_IMAGE_DIGEST" not in required_names
+
+    remote_plan = _job_script(infra, "remote-plan")
+    assert '"$PROFILE" == production-scale || "$PROFILE" == enterprise-isolated' in remote_plan
+    assert "requires TF_ML_IMAGE_DIGEST" in remote_plan
+    assert "^sha256:[0-9a-f]{64}$" in remote_plan
+
+
 def test_amplify_checkout_token_is_required_for_public_and_private_repositories():
     """Amplify requires a real repository token regardless of visibility."""
     infra = _workflow_yaml("infrastructure.yml")
@@ -863,6 +931,8 @@ PLAN_EVIDENCE = {
     "reviewed.state-key": (
         'printf \'%s\\n\' "profiles/${PROFILE}/terraform.tfstate" > reviewed.state-key'
     ),
+    "reviewed.state-bucket": 'printf \'%s\\n\' "$TF_STATE_BUCKET" > reviewed.state-bucket',
+    "reviewed.state-lock-table": 'printf \'%s\\n\' "$TF_LOCK_TABLE" > reviewed.state-lock-table',
     "reviewed.terraform-version": (
         "terraform version -json | jq -r '.terraform_version' > reviewed.terraform-version"
     ),
@@ -922,6 +992,8 @@ def test_promotion_apply_verifies_every_recorded_field_before_applying():
         "state key": (
             'test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"'
         ),
+        "state bucket": 'test "$reviewed_state_bucket" = "$TF_STATE_BUCKET"',
+        "state lock table": 'test "$reviewed_state_lock_table" = "$TF_LOCK_TABLE"',
         "dispatch checksum": (
             'test "$(sha256sum reviewed.tfplan | cut -d\' \' -f1)" = "$PLAN_CHECKSUM"'
         ),

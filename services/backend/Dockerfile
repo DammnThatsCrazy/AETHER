@@ -66,9 +66,15 @@ COPY ["contracts/delivery/", "./contracts/delivery/"]
 COPY ["pyproject.toml", "./pyproject.toml"]
 COPY security/ ./security/
 
-# ML serving source tree (required when ML_SERVING_INLINE=true, E2).
-# Routes are lazy-loaded per request; the image boots without them.
+# Inline ML source trees (required when ML_SERVING_INLINE=true, E2). The
+# serving router is mounted during backend startup; its model and monitoring
+# authorities are lazy in places, but must still be present in the immutable
+# image so readiness and inference never degrade because a source subtree was
+# omitted from the build context.
 COPY ["services/ml/common/", "./common/"]
+COPY ["services/ml/edge/", "./edge/"]
+COPY ["services/ml/monitoring/", "./monitoring/"]
+COPY ["services/ml/server/", "./server/"]
 COPY ["services/ml/serving/", "./serving/"]
 
 ENV ML_SERVING_INLINE=false

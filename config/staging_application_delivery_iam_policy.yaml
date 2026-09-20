@@ -1,0 +1,37 @@
+# Supplemental least-privilege permissions for the staging application
+# delivery workflow. Terraform provisioning remains governed by
+# staging_apply_iam_policy.yaml; this file covers only the runtime operations
+# performed by deploy.yml after a reviewed infrastructure apply and awake lease.
+version: 1
+profile: staging
+role: AetherStagingDeploy
+region: us-east-1
+statements:
+  - sid: RunStagingApplicationTasks
+    actions:
+      - ecs:RunTask
+    resource:
+      - arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*
+      - arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
+    scope: staging-application-tasks
+    conditions:
+      ArnEquals:
+        ecs:cluster: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
+  - sid: InspectStagingApplicationTasks
+    actions:
+      - ecs:DescribeTasks
+    resource: arn:aws:ecs:us-east-1:${account_id}:task/AETHER-staging/*
+    scope: staging-application-tasks
+    conditions:
+      ArnEquals:
+        ecs:cluster: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
+  - sid: PublishStagingStaticArtifacts
+    actions:
+      - s3:ListBucket
+      - s3:GetObject
+      - s3:PutObject
+      - s3:DeleteObject
+    resource:
+      - arn:aws:s3:::aether-staging-*
+      - arn:aws:s3:::aether-staging-*/*
+    scope: staging-static-assets

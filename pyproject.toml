@@ -75,6 +75,12 @@ backend = [
     "gremlinpython>=3.7.0",
     "prometheus-client>=0.20.0",
     "asyncpg>=0.29.0",
+    # Alembic normalises asyncpg URLs to postgresql:// and runs migrations
+    # through SQLAlchemy's synchronous PostgreSQL dialect in the release
+    # entrypoint. Keep that driver explicit in the production image; relying
+    # on the async application driver makes RUN_MIGRATIONS=1 fail only after
+    # the ECS task has already been provisioned.
+    "psycopg2-binary>=2.9.9",
     "PyJWT>=2.8.0",
     "graphql-core>=3.2.0",
     "eth-account>=0.11.0",

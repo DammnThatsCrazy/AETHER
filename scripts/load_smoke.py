@@ -5,6 +5,7 @@ and fails if key SLO thresholds are breached.
 
 Usage:
     python scripts/load_smoke.py [--host http://localhost:8000] [--users 20] [--duration 30]
+        [--api-key <staging-key>]
 
 Exit codes:
     0  all thresholds passed, real traffic was observed, and Locust exited cleanly
@@ -73,7 +74,13 @@ def _wait_for_backend(host: str, timeout: int = 10) -> bool:
     return False
 
 
-def _run_locust(host: str, users: int, duration: int, csv_prefix: str) -> int:
+def _run_locust(
+    host: str,
+    users: int,
+    duration: int,
+    csv_prefix: str,
+    api_key: str = "",
+) -> int:
     cmd = [
         sys.executable, "-m", "locust",
         "-f", str(ROOT / "tests/load/locustfile.py"),
@@ -88,7 +95,10 @@ def _run_locust(host: str, users: int, duration: int, csv_prefix: str) -> int:
         "--users", str(users),
         LOCUST_USER_CLASS,
     ]
-    return subprocess.call(cmd, cwd=ROOT)
+    env = os.environ.copy()
+    if api_key:
+        env["AETHER_LOAD_API_KEY"] = api_key
+    return subprocess.call(cmd, cwd=ROOT, env=env)
 
 
 def _parse_stats(csv_prefix: str) -> list[dict]:
@@ -177,6 +187,11 @@ def main() -> int:
     parser.add_argument("--host", default="http://localhost:8000")
     parser.add_argument("--users", type=int, default=20)
     parser.add_argument("--duration", type=int, default=30)
+    parser.add_argument(
+        "--api-key",
+        default="",
+        help="API key passed to the Locust process as AETHER_LOAD_API_KEY",
+    )
     parser.add_argument("--json-out", help="Write results JSON to this path")
     args = parser.parse_args()
 
@@ -188,7 +203,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         csv_prefix = os.path.join(tmpdir, "smoke")
         print(f"[load-smoke] running {args.users} users for {args.duration}s ...")
-        locust_rc = _run_locust(args.host, args.users, args.duration, csv_prefix)
+        locust_rc = _run_locust(
+            args.host, args.users, args.duration, csv_prefix, args.api_key
+        )
         rows = _parse_stats(csv_prefix)
 
     if not rows:

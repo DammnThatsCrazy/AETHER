@@ -154,8 +154,30 @@ def _batch_requires_privileged(canonical_id: str) -> bool:
 # ML serving URL
 # ---------------------------------------------------------------------------
 
-_ML_SERVING_URL = os.getenv("ML_SERVING_URL", "http://localhost:8080")
 _ML_SERVING_INLINE = os.getenv("ML_SERVING_INLINE", "false").lower() == "true"
+
+
+def _resolve_serving_url(*, configured: str | None = None, inline: bool | None = None) -> str:
+    """Resolve the serving URL without turning inline mode into a dead proxy.
+
+    Terraform intentionally leaves ``ML_SERVING_URL`` empty for consolidated
+    profiles.  The gateway still owns the legacy ``/v1/ml`` API, so an empty
+    URL must resolve to the backend's own listener when the inline router is
+    mounted; otherwise model-list and inference requests silently degrade to
+    the registry-only/unreachable fallback even though the serving code is in
+    the image.
+    """
+    is_inline = _ML_SERVING_INLINE if inline is None else inline
+    value = os.getenv("ML_SERVING_URL", "") if configured is None else configured
+    value = value.strip()
+    if value:
+        return value.rstrip("/")
+    if is_inline:
+        return "http://127.0.0.1:8000"
+    return "http://localhost:8080"
+
+
+_ML_SERVING_URL = _resolve_serving_url()
 
 # Shared async HTTP client (thread-safe lazy init)
 _http_client: Optional[httpx.AsyncClient] = None
@@ -341,7 +363,9 @@ async def list_models(request: Request):
     # Attempt live status from ML serving
     client = _get_client()
     try:
-        resp = await client.get("/models")
+        api_key = request.headers.get("X-API-Key", "")
+        headers = {"X-API-Key": api_key} if api_key else {}
+        resp = await client.get("/models", headers=headers)
         if resp.status_code == 200:
             live_data = resp.json()
             # Merge live status into registry data

@@ -756,15 +756,19 @@ async def _drift_check_periodic(interval: int = 300) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Service token auth — checked on every route when ML_SERVICE_TOKEN is set.
-# No-op when the env var is absent (local dev). Fail-closed in staging/prod.
+# Service token auth — checked on every route for the standalone ML service.
+# The consolidated backend mounts this router in-process when
+# ML_SERVING_INLINE=true; in that mode the backend's tenant/auth middleware is
+# the outer boundary and there is no second HTTP service token to present.
+# Standalone staging/production serving remains fail-closed.
 # ---------------------------------------------------------------------------
 
 
 def _require_service_token(x_service_token: str = Header(default="")) -> None:
     env = os.getenv("AETHER_ENV", "local").lower()
     expected = os.environ.get("ML_SERVICE_TOKEN", "")
-    if env in ("staging", "production"):
+    inline_embedded = os.getenv("ML_SERVING_INLINE", "false").lower() == "true"
+    if env in ("staging", "production") and not inline_embedded:
         if not expected:
             raise HTTPException(
                 status_code=503,
@@ -772,6 +776,8 @@ def _require_service_token(x_service_token: str = Header(default="")) -> None:
             )
         if not _hmac_compare(x_service_token, expected):
             raise HTTPException(status_code=401, detail="Invalid or missing service token")
+    elif inline_embedded:
+        return
     elif expected and not _hmac_compare(x_service_token, expected):
         # Local/dev: only validate if token is explicitly configured
         raise HTTPException(status_code=401, detail="Invalid or missing service token")

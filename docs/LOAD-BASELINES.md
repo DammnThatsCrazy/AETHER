@@ -13,7 +13,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 toc_depth: 2
 source_hashes:
-  "tests/load/locustfile.py": "sha256:cdc0fc597d99c63fe87547e6a2197ceaef8c202b09a6de427f842a30e7aaee0d"
+  "tests/load/locustfile.py": "sha256:842bd5d5f2a90f545bbd5652c456922dd4a824d0fc70993d8ae717a6cda24001"
   "tests/load/thresholds.json": "sha256:aee0927999630736a9eb307900b102bf1548600d9814caa262a49591902a4fd0"
 ---
 
@@ -42,12 +42,16 @@ every staging load run before a production deployment.
 ## Running a Baseline
 
 ```bash
-# Against staging (requires STAGING_URL env var)
-make load-baselines
+# Against staging: pass the reviewed API origin and a run-scoped tenant key.
+# The key is never written to the CSV evidence.
+AETHER_LOAD_API_KEY="$RUN_SCOPED_TENANT_API_KEY" \
+  make load-baselines STAGING_URL="$AETHER_API_URL"
 ```
 
 This runs Locust headless for 5 minutes with 50 users at 10 rps spawn rate
-and writes CSV results to `tests/load/results/baseline_*.csv`.
+and writes CSV results to `tests/load/results/baseline_*.csv`. Every request
+uses `AETHER_LOAD_API_KEY` through the `X-API-Key` header; the deterministic
+`test-key-*` fallback is for local-only runs and is not staging evidence.
 
 ## Recorded Baselines
 

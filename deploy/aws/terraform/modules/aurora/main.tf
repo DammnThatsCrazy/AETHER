@@ -25,6 +25,10 @@ resource "aws_kms_key" "aurora" {
     Name        = "${var.project}-${var.environment}-aurora-kms"
     Environment = var.environment
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_kms_alias" "aurora" {
@@ -141,6 +145,13 @@ resource "aws_rds_cluster" "this" {
     Name = "${var.project}-${var.environment}-aurora"
   }
 
+  # The database is stateful and must never disappear because a profile toggle
+  # or an accidental count change removed the module from a reviewed plan.
+  # Intentional retirement follows deploy/aws/terraform/DECOMMISSION.md.
+  lifecycle {
+    prevent_destroy = true
+  }
+
   depends_on = [aws_rds_cluster_parameter_group.this]
 }
 
@@ -169,6 +180,10 @@ resource "aws_rds_cluster_instance" "writer" {
 
   tags = {
     Name = "${var.project}-${var.environment}-aurora-writer"
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 

@@ -9,13 +9,13 @@ since_version: 0.1.0
 canonical_owner: ml@aether
 source_files: [services/ml/common/model_registry.py, services/ml/common/feature_contracts.py, services/ml/common/artifact_registry.py, services/ml/training/pipelines/train.py, services/ml/serving/src/api.py, services/backend/services/ml_serving/routes.py, security/model_extraction_defense/defense_layer.py]
 source_hashes:
-  services/backend/services/ml_serving/routes.py: sha256:7f6fe06f72b1f5e08b9c732a59f800b4bfb5bd3662e51100d2d700535aee369d
-  services/ml/common/artifact_registry.py: sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83
-  services/ml/common/feature_contracts.py: sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99
-  services/ml/common/model_registry.py: sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113
-  services/ml/serving/src/api.py: sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c
-  services/ml/training/pipelines/train.py: sha256:98f93d379b93e93aa1e9a80eec03c8d1697408d7b58339e42ef4076a4c4cdbd8
-  security/model_extraction_defense/defense_layer.py: sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a
+  "security/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
+  "services/backend/services/ml_serving/routes.py": "sha256:ea7282eb8f2bba07167989d8c7c62cfaf2e8780ab994f158ca8ea86ff37eb172"
+  "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
+  "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
+  "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"
+  "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"
+  "services/ml/training/pipelines/train.py": "sha256:98f93d379b93e93aa1e9a80eec03c8d1697408d7b58339e42ef4076a4c4cdbd8"
 ---
 
 # Aether ML Productization Readiness Report
@@ -294,7 +294,7 @@ Backend admin routes for ML operational state are defined in:
 | Atomic artifact metadata save | Phase 4 — write-then-rename | Medium | ✅ Implemented (`.tmp` + `os.replace()`) |
 | Promotion audit log | Phase 4 — append-only JSONL per model | Medium | ✅ Implemented (`promotion_audit.jsonl`) |
 | Complete rollback with active pointer | Phase 4 — `active_artifact.json` pointer | Medium | ✅ Implemented; `resolve_active_artifact` honours pointer |
-| Service token auth (serving) | Phase 5 — `X-Service-Token` header | Medium | ✅ Implemented; `ML_SERVICE_TOKEN` env var; no-op when absent |
+| Service token auth (serving) | Phase 5 — `X-Service-Token` header | Medium | ✅ Implemented for standalone serving; inline profiles use the backend tenant/API-key boundary and do not require a second token |
 | MLflow tracking | Available, fails gracefully if unreachable | Infra | 🔧 |
 | S3 artifact store | G11.6 — S3ArtifactStore class for artifact persistence | Infra | 🔧 Requires AWS credentials |
 | Redis instance for distributed budgets | Requires Redis instance; code dispatches to it when `REDIS_URL` set | Infra | 🔧 |

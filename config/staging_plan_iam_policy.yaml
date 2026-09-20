@@ -33,6 +33,7 @@ statements:
     actions:
       - ecr:DescribeImageScanFindings
       - ecr:GetImageScanningConfiguration
+      - ecr:DescribeImages
     resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
     scope: staging-name-prefix
 

@@ -22,13 +22,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:af7e6463b18d144db739d4fa47c62f050e43da9cfc64ffecb4168ac192372d24"
+  ".github/workflows/": "sha256:ec3a1ea2f857979a558cd2bb5034f4aeb56644a372f683934234439e5e43a87d"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
   "cicd/aether-cicd/stages/": "sha256:f26f7a608ed0d1cf1aff849650848b64958eba563c69ccb7f7d120726c767619"
   "config/staging_apply_iam_policy.yaml": "sha256:87e3f96de932225bfb87344e93f7bea10338ce8189967a92d1aa829915ddbd47"
-  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:c1c005d1f9662dc4dfcc72ca8fbaeda01f4b1c95ea020578c09d5d368516b863"
+  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:e609cdfaaf5d9d384e213edf6f936b0045eac823cc38d432e75db464c8eb14ad"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:18b6900d5b62ac98c1bdcea37acd74cf05185e9b22161831f40d59a747c22383"
@@ -392,8 +392,8 @@ deployment.
 
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
-| `deploy.yml` | push to `main`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; staging dispatch reuses the successful merged-main integration authority for the exact SHA and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
-| `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
+| `deploy.yml` | push to `main`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; staging dispatch reuses the successful merged-main integration authority for the exact SHA and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
+| `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the shared credential set exists (the ML image digest is additionally required only by production-scale and enterprise-isolated); ephemeral-class is deliberately excluded from remote-plan; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. A full rehearsal binds the delivery run and `release.json` to the intended merged-main SHA, arms the bounded lease before apply, re-assumes the lifecycle role after the protected promotion wait, preserves the original lease anchor and extension count when refreshing after readiness, revalidates the lease before every mutating phase, publishes and verifies the exact AETHER/Kyber SPA archives, and cleans only a secret-free, run-scoped registration tenant marker. | no (delegates) |
 | `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Import-only reconciliation for an existing staging target group and/or the four reviewed Terraform ECR repositories. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact target/repository validation, the reviewed staging ECR KMS key for KMS-encrypted repositories, all required root-module URL/certificate/alert inputs, and the Auth0 provider environment used by ordinary remote plans; those credentials remain runner environment variables and never enter Terraform state or plan variables. If a repository exists at one unambiguous legacy staging address, the workflow validates all import prerequisites and every candidate status before adopting it with a state-only move to the canonical module address; it records the complete adoption set before moving anything, rejects tainted or otherwise non-managed legacy instances, treats an already-canonical healthy entry as a verified retry no-op, and fails closed on ambiguous duplicate ownership or demo/preview ownership. It also has a separate, confirmation-gated `untaint_ecr_repository_names` path for repositories already at the canonical staging address whose reviewed before/after attributes are identical but were left tainted by an interrupted replacement; that path verifies the live repository against the Terraform-managed KMS key in staging state, uses Terraform's top-level `untaint` command, and always requires a fresh reviewed plan. Aurora and DynamoDB monitoring are enabled with static profile decisions, so an unrelated state import never derives Terraform resource cardinality from unresolved resource IDs. Temporary local state snapshots are removed in one exit cleanup path. A fresh reviewed plan is required after any state change. The pre-existing `aether-backend` repository is intentionally immutable AES-256 because ECR encryption cannot be changed after creation; the other staging repositories remain KMS-encrypted. It never deletes or applies infrastructure. | no (state import/taint repair only) |
@@ -450,16 +450,22 @@ or path trigger can reach an apply. Apply consumes the exact binary plan the
 plan job produced and **never re-plans**. It refuses unless all of the following
 hold: the plan digest matches the dispatched checksum and its recorded
 `sha256sum` manifest; the reviewed profile matches the dispatched profile; the
-state key is `profiles/<profile>/terraform.tfstate`; the checked-out `HEAD` is
+state key is `profiles/<profile>/terraform.tfstate`; the recorded state bucket
+and lock table match the apply backend; the checked-out `HEAD` is
 the plan's **own recorded commit** rather than the dispatch ref; the installed
 Terraform version equals the recorded one; `sha256(.terraform.lock.hcl)` equals
 the digest captured before `init`; and the plan is inside its **24-hour**
 validity window. The policy and cost validators are re-run at the reviewed
 commit, because the reports in the artifact are evidence, not proof.
 
-Approval is per profile: the apply job binds to `staging-terraform`,
-`production-lean-terraform`, `production-scale-terraform` or
-`enterprise-terraform`, so staging cannot borrow production's reviewers.
+Approval is intended to be per profile: the apply job binds to
+`staging-terraform`, `production-lean-terraform`, `production-scale-terraform`
+or `enterprise-terraform`, so staging cannot borrow production's reviewers.
+The live repository currently defines only `staging` and `staging-terraform`,
+with no protection rules; the non-staging environments and their credentials
+must be provisioned before those profiles can be promoted. An empty environment
+created by a workflow reference is not approval and is not a credentialed
+promotion path.
 
 `staging_state` (`awake` | `asleep`) is a **plan-time** input, recorded next to
 the plan so a reviewer sees which shape was approved; an apply cannot reshape

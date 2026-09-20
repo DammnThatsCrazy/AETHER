@@ -17,3 +17,8 @@ output "auth_token_secret_arn" {
   description = "ARN of the Secrets Manager secret containing the Redis AUTH token"
   value       = aws_secretsmanager_secret.redis_auth.arn
 }
+
+output "kms_key_arn" {
+  description = "ARN of the customer-managed KMS key used for Redis and its AUTH secret"
+  value       = aws_kms_key.redis.arn
+}

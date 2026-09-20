@@ -25,20 +25,20 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/staging-lifecycle.yml": "sha256:6defa4e93f8b8389ab2cda44f5f36a7b7433948137c820f0c527db90cba7ccdb"
+  ".github/workflows/staging-lifecycle.yml": "sha256:548bd6d191d27609ed2f261d5b8a61bbc2c3e59e431be9090108569ca95d9898"
   ".github/workflows/staging-state-reconcile.yml": "sha256:081fcc79c11e82ece276f1496b5febb802ae2db2261746d0753e0817c1f19bf7"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:625caac71bb1960cec2191cc8ed3486d199d626d9197b1c7082f2f66e7bcf185"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:1176ba513d3315e97ad962b39c06113a36a5e1ae8db50da59d55a798645903ec"
+  ".github/workflows/terraform-promote.yml": "sha256:f555f32c30627b3c095936c3a929367fa67d8e6f67c56695d4258a57409da4a0"
   "config/staging_apply_iam_policy.yaml": "sha256:87e3f96de932225bfb87344e93f7bea10338ce8189967a92d1aa829915ddbd47"
-  "config/staging_lifecycle_iam_policy.yaml": "sha256:63ea9abe5bd93f28700fc6ab081090ddb6da5291b05f6d7532461c3357f75dd7"
+  "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:374035869574722721516012a6c4d10dc67d0b2014e0af47835f76ba5e007a93"
-  "scripts/release/check_staging_lifecycle_policy.py": "sha256:d501c59246d15b8ff3e750ceb6d76ef01c30c646817ea1156784e545f5837b44"
+  "deploy/aws/terraform/": "sha256:6031335c5c291d432029a3e001b9c631d7deecc920556dcff327dcc939427028"
+  "scripts/release/check_staging_lifecycle_policy.py": "sha256:68d70ad0a009244251eb3caec93186be55415685600c3f590270ffb05e0680ea"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
-  "services/backend/Dockerfile": "sha256:153ae4fd31387b8a6d6560c7b144bd9f804ec60e3eaabea1249a7fef74f2d941"
+  "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -124,13 +124,33 @@ simulation; the live role must match the rendered statements exactly. State
 reconciliation is always followed by a fresh plan; no plan generated before an
 import or untaint may be reused.
 
+The direct immutable application-delivery path has its own supplemental
+contract at `config/staging_application_delivery_iam_policy.yaml`. It covers
+only `ecs:RunTask`, `ecs:DescribeTasks`, and the S3 list/object operations used
+to publish the two protected SPAs; the workflow checks that contract before it
+assumes `AetherStagingDeploy`. The Terraform apply manifest remains the
+authority for infrastructure actions, so a new AWS CLI call in `deploy.yml`
+must be added deliberately to one of those two reviewed contracts.
+
+ECS task execution roles do not receive account-wide KMS access. The
+`KMSDecrypt` statement contains only `kms:Decrypt` and only the customer-managed
+CMKs that encrypt Secrets Manager values mounted by that profile: the shared
+application-secrets key, the active Aurora or legacy-RDS key when present, and
+the Redis key when that backend is enabled. Express-mode Aurora contributes no
+customer-managed database key. This list is assembled by the root module and
+is checked by the Terraform wiring tests, so adding a profile backend requires
+its key to be named explicitly rather than widening the execution role to `*`.
+
 The backend image preserves the repository-relative source depth used by its
 canonical asset readers and explicitly ships the root `config/`, shared JSON
 contracts, delivery schemas, and release metadata. Flattening
 `services/backend` into `/app` or leaving `packages/shared/contracts/` excluded
 from the Docker build context makes startup/request-time authorities silently
 fall back or fail only after ECS launch, so the image layout is covered by the
-backend guard tests and the hosted immutable build.
+backend guard tests and the hosted immutable build. Inline-ML profiles also
+ship the `common`, `edge`, `monitoring`, `server`, and `serving` source trees
+together; the route-policy catalog includes the inline ML prefixes so enabling
+`ML_SERVING_INLINE=true` is validated before an ECS task becomes healthy.
 
 The apply manifest also covers ECR scan configuration and the account-plan
 probe used by the staging free-plan guard. On a free AWS account, the guard
@@ -215,7 +235,8 @@ preview profiles may leave it empty when `remote_ml` is disabled. Every digest
 that is supplied is still pinned to the exact release-manifest value.
 
 The apply preflight verifies the selected profile's exact Terraform state key
-(`profiles/<profile>/terraform.tfstate`) against the assumed role. It does not
+(`profiles/<profile>/terraform.tfstate`) and the reviewed state backend names
+against the assumed role. It does not
 probe a synthetic object path or broaden access beyond the reviewed state
 prefix.
 
@@ -333,7 +354,7 @@ deliberately not scaled.
 
 | Store | Provisioned on | Notes |
 |---|---|---|
-| Aurora Serverless v2 Postgres + writer | **all profiles** | Database, graph and analytics of record. Isolated subnets, customer-managed KMS key (or AWS-managed in express mode), AWS-managed master password rotation into `aether/db-password`. |
+| Aurora Serverless v2 Postgres + writer | **all profiles** | Database, graph and analytics of record. Isolated subnets, customer-managed KMS key (or AWS-managed in express mode), AWS-managed master password rotation into the RDS-managed `rds!cluster-*` Secrets Manager secret. |
 | DynamoDB cache table | **all profiles** | Read/write autoscaling, TTL-backed. The staging and production-lean `shared.store` durable-store path uses this table when `CACHE_BACKEND=dynamodb`; it does not enable an in-memory fallback. |
 | SNS fanout topic → per-role SQS queues + DLQs | **all profiles** | One queue per role, so a consolidated task binds one queue per hosted role. |
 | S3 object lake, log archive, SPA origins | **all profiles** | Public access blocked, SSE configured. |
@@ -735,8 +756,8 @@ accounts when their names would otherwise collide.
 2. **Inject secret values.** Secrets Manager stubs are created empty. Store raw
    secret strings, not JSON objects — ECS `valueFrom` injects the entire secret
    string, so a JSON wrapper needs a JSON-key suffix on the ARN and is
-   error-prone. `aether/db-password` is populated automatically by Aurora's
-   managed rotation; `aether/redis-auth-token` exists only on profiles that
+   error-prone. Aurora's RDS-managed `MasterUserSecret` is populated
+   automatically by managed rotation; `aether/redis-auth-token` exists only on profiles that
    provision Redis. Staging and production-class Kyber workloads additionally
    require `aether/kyber-google-client-id` and
    `aether/kyber-google-client-secret`. The Google Web OAuth client must allow

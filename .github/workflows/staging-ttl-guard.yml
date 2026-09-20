@@ -14,7 +14,8 @@ name: Staging TTL guard
 #   2. LIVE ECS STATE. Every `aws ecs` call here has its exit status checked.
 #      A throttle, an API error or an expired credential makes the awake-task
 #      count UNKNOWN, and unknown ends the run red rather than reporting zero
-#      tasks and "staging is asleep". `mapfile -t x < <(aws ...)` does not
+#      tasks and "staging is asleep". The task inventory is authoritative for
+#      both service-backed and standalone tasks. `mapfile -t x < <(aws ...)` does not
 #      observe the AWS exit status -- `pipefail` does not reach into a process
 #      substitution -- which is why no AWS call in this file is invoked that way.
 #
@@ -199,7 +200,19 @@ jobs:
             echo '::error::could not describe staging ECS services; live staging state is UNKNOWN and will not be reported as asleep'
             exit 1
           fi
-          awake_tasks="$(python -c "import json;d=json.load(open('artifacts/ttl-guard/services.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
+          service_workload="$(python -c "import json;d=json.load(open('artifacts/ttl-guard/services.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
+          if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
+              --output json > artifacts/ttl-guard/tasks.json; then
+            echo 'state_known=false' >> "$GITHUB_OUTPUT"
+            echo '::error::could not enumerate staging ECS tasks; live staging state is UNKNOWN and will not be reported as asleep'
+            exit 1
+          fi
+          task_workload="$(jq 'length' artifacts/ttl-guard/tasks.json)"
+          if [ "$service_workload" -gt "$task_workload" ]; then
+            awake_tasks="$service_workload"
+          else
+            awake_tasks="$task_workload"
+          fi
 
           # Only an explicit ParameterNotFound means the environment has no
           # lease. AccessDenied, throttling, and other read failures leave live
@@ -403,8 +416,10 @@ jobs:
           set -euo pipefail
           test "$STAGING_CLUSTER" = "AETHER-staging" \
             || { echo '::error::TTL enforcement refused outside the staging cluster'; exit 1; }
-          # Fail closed: enforcement that could not read the service list did not
-          # enforce anything, and must not exit green claiming it did.
+          # Fail closed: enforcement that could not read the service or task
+          # inventory did not enforce anything, and must not exit green claiming
+          # it did. Standalone tasks are stopped explicitly below; scaling only
+          # the ECS services would leave a failed migration task running.
           if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
             --query 'serviceArns[]' --output text)"; then
             echo '::error::could not enumerate staging ECS services; TTL enforcement did not run'
@@ -420,6 +435,20 @@ jobs:
             printf 'scaled_to_zero=%s lease=%s at=%s\n' \
               "$service" "$LEASE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
             echo "::warning::scaled ${service} to desired-count 0 (awake TTL exceeded)"
+          done
+          if ! task_arns_raw="$(aws ecs list-tasks --cluster "$STAGING_CLUSTER" \
+            --desired-status RUNNING --query 'taskArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS tasks; TTL enforcement did not run'
+            exit 1
+          fi
+          mapfile -t task_arns < <(printf '%s' "$task_arns_raw" | tr '\t' '\n' | sed '/^$/d')
+          for task_arn in "${task_arns[@]:-}"; do
+            test -n "$task_arn" || continue
+            aws ecs stop-task --cluster "$STAGING_CLUSTER" --task "$task_arn" \
+              --reason 'staging TTL exceeded' >/dev/null
+            printf 'stopped_task=%s lease=%s at=%s\n' \
+              "$task_arn" "$LEASE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
+            echo "::warning::stopped residual ${task_arn} (awake TTL exceeded)"
           done
           # Drop autoscaling floors so nothing scales the group straight back up.
           # The ECS autoscaling namespace is ACCOUNT-WIDE and its ResourceId has
@@ -467,6 +496,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/ttl-guard
           echo '[]' > artifacts/ttl-guard/services-after.json
+          echo '[]' > artifacts/ttl-guard/tasks-after.json
           # FAIL CLOSED. This step exists to PROVE staging came back to zero. An
           # AWS call it could not make proves nothing, so the residual count is
           # reported as `unknown`, which the alert below treats as requiring
@@ -488,6 +518,17 @@ jobs:
               echo '[]' > artifacts/ttl-guard/services-after.json
               echo '::error::could not describe staging ECS services; residual staging compute is UNKNOWN'
             fi
+          fi
+          if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
+              --output json > artifacts/ttl-guard/tasks-after.json; then
+            residual=unknown
+            echo '::error::could not enumerate staging ECS tasks; residual staging compute is UNKNOWN'
+          else
+            task_residual="$(jq 'length' artifacts/ttl-guard/tasks-after.json)"
+            case "$residual" in
+              ''|*[!0-9]*) residual="$task_residual" ;;
+              *) if [ "$task_residual" -gt "$residual" ]; then residual="$task_residual"; fi ;;
+            esac
           fi
           printf 'residual_tasks=%s\n' "$residual" >> "$GITHUB_OUTPUT"
           echo "residual staging tasks after the guard: ${residual}"

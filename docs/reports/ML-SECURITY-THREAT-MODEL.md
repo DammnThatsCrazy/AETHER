@@ -11,12 +11,12 @@ source_files: [security/model_extraction_defense/__init__.py, security/model_ext
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  services/backend/services/ml_serving/routes.py: sha256:7f6fe06f72b1f5e08b9c732a59f800b4bfb5bd3662e51100d2d700535aee369d
-  services/ml/common/artifact_registry.py: sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83
-  services/ml/serving/src/api.py: sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c
-  security/model_extraction_defense/__init__.py: sha256:e275b980e96643b072d6f2505f3e47742d0e3f5a8501a35c4ddb5e2851a02072
-  security/model_extraction_defense/defense_layer.py: sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a
-  security/model_extraction_defense/rate_limiter.py: sha256:a2429c3ad4dd0198764124b8a4c5e1d7a9046eca740b9fe983564b4c6d80c7a8
+  "security/model_extraction_defense/__init__.py": "sha256:e275b980e96643b072d6f2505f3e47742d0e3f5a8501a35c4ddb5e2851a02072"
+  "security/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
+  "security/model_extraction_defense/rate_limiter.py": "sha256:a2429c3ad4dd0198764124b8a4c5e1d7a9046eca740b9fe983564b4c6d80c7a8"
+  "services/backend/services/ml_serving/routes.py": "sha256:ea7282eb8f2bba07167989d8c7c62cfaf2e8780ab994f158ca8ea86ff37eb172"
+  "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
+  "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"
 ---
 
 # ML Security Threat Model
@@ -93,15 +93,17 @@ backend gateway access controls and tenant isolation.
 
 | Control | Location | State |
 |---------|----------|-------|
-| Service token auth (`X-Service-Token` vs `ML_SERVICE_TOKEN`) | `serving/src/api.py` | ✅ (⚠️ requires token provisioning) |
-| Token skipped only in local/dev (env absent) | `_require_service_token` dependency | ✅ |
+| Service token auth (`X-Service-Token` vs `ML_SERVICE_TOKEN`) for standalone serving | `serving/src/api.py` | ✅ (⚠️ requires token provisioning) |
+| Inline serving uses the backend tenant/API-key boundary; no second HTTP token is required | `_require_service_token` dependency | ✅ |
 | Backend proxies all ML requests (single entry point) | `ml_serving/routes.py` | ✅ |
 | Extraction defense applied before cache lookup | `defense_layer.py` | ✅ |
 | Versioned cache keys (artifact_version + contract_hash) | `shared/cache/cache.py` | ✅ |
 
-**Residual risk:** mTLS between backend and ML serving is not yet implemented
-(documented path; requires certificate provisioning). `ML_SERVICE_TOKEN` is a
-shared secret — rotation requires coordinated backend + serving redeploy.
+**Residual risk:** mTLS between backend and standalone ML serving is not yet
+implemented (documented path; requires certificate provisioning).
+`ML_SERVICE_TOKEN` remains a shared secret for standalone serving — rotation
+requires coordinated backend + serving redeploy. Inline profiles do not have a
+second network boundary; they rely on the backend's tenant/API-key middleware.
 
 ---
 

@@ -139,13 +139,10 @@ resource "aws_iam_role_policy" "execution_secrets" {
         Resource = local.readable_secret_arns
       },
       {
-        Sid    = "KMSDecrypt"
-        Effect = "Allow"
-        Action = [
-          "kms:Decrypt",
-          "kms:GenerateDataKey",
-        ]
-        Resource = "*"
+        Sid      = "KMSDecrypt"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = var.secret_kms_key_arns
       },
       {
         Sid    = "CloudWatchLogs"

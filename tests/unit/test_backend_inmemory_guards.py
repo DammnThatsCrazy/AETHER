@@ -5,6 +5,7 @@ import importlib
 import os
 import subprocess
 import sys
+import tomllib
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -435,13 +436,26 @@ def test_staging_api_imports_with_the_configured_durable_backends():
         "ROUTE_REGISTRY_ENFORCED": "true",
         "KYBER_OPERATOR_GATE_ENFORCED": "true",
         "AWS_EC2_METADATA_DISABLED": "true",
-        "PYTHONPATH": str(BACKEND_ROOT),
+        "ML_SERVING_INLINE": "true",
+        "PYTHONPATH": os.pathsep.join(
+            (str(BACKEND_ROOT), str(ROOT / "services" / "ml"))
+        ),
     })
     env.pop("AETHER_ALLOW_INMEMORY_STORE", None)
     env.pop("AETHER_ALLOW_INMEMORY_JOURNEY_STORE", None)
 
     result = subprocess.run(
-        [sys.executable, "-c", "import main; print('STAGING_IMPORT_OK')"],
+        [
+            sys.executable,
+            "-c",
+            (
+                "import main; "
+                "from services.security.route_registry import validate_mounted_routes; "
+                "inventory = validate_mounted_routes(main.app.routes); "
+                "assert any(item['route_template'] == '/models' for item in inventory); "
+                "print('STAGING_IMPORT_OK')"
+            ),
+        ],
         cwd=BACKEND_ROOT,
         env=env,
         capture_output=True,
@@ -460,6 +474,11 @@ def test_backend_image_preserves_runtime_authority_layout():
 
     assert 'COPY ["services/backend/services/", "./services/backend/services/"]' in dockerfile
     assert 'COPY ["services/backend/shared/", "./services/backend/shared/"]' in dockerfile
+    assert 'COPY ["services/ml/common/", "./common/"]' in dockerfile
+    assert 'COPY ["services/ml/edge/", "./edge/"]' in dockerfile
+    assert 'COPY ["services/ml/monitoring/", "./monitoring/"]' in dockerfile
+    assert 'COPY ["services/ml/server/", "./server/"]' in dockerfile
+    assert 'COPY ["services/ml/serving/", "./serving/"]' in dockerfile
     assert 'COPY ["config/", "./config/"]' in dockerfile
     assert 'COPY ["packages/shared/contracts/", "./packages/shared/contracts/"]' in dockerfile
     assert 'COPY ["contracts/delivery/", "./contracts/delivery/"]' in dockerfile
@@ -469,6 +488,14 @@ def test_backend_image_preserves_runtime_authority_layout():
     assert "packages/*" in dockerignore
     assert "!packages/shared/contracts/" in dockerignore
     assert "!packages/shared/contracts/**" in dockerignore
+    for relative in (
+        "!services/ml/common/",
+        "!services/ml/edge/",
+        "!services/ml/monitoring/",
+        "!services/ml/server/",
+        "!services/ml/serving/",
+    ):
+        assert relative in dockerignore
 
     # These are the first startup/request-time authorities whose absence must
     # never be hidden by a fallback or discovered only by an ECS health probe.
@@ -482,3 +509,14 @@ def test_backend_image_preserves_runtime_authority_layout():
         "pyproject.toml",
     ):
         assert (ROOT / relative).is_file(), relative
+
+
+def test_backend_image_declares_the_synchronous_alembic_driver():
+    """The release image must be able to execute its one-off migration task."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    backend_deps = project["project"]["optional-dependencies"]["backend"]
+    assert any(dep.startswith("psycopg2-binary>=") for dep in backend_deps)
+
+    alembic_env = (BACKEND_ROOT / "alembic" / "env.py").read_text(encoding="utf-8")
+    assert "postgresql://" in alembic_env
+    assert "synchronous migration execution" in alembic_env

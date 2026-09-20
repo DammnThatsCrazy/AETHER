@@ -690,6 +690,7 @@ class TestServiceTokenAuth:
 
     def test_token_required_in_staging(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AETHER_ENV", "staging")
+        monkeypatch.delenv("ML_SERVING_INLINE", raising=False)
         monkeypatch.delenv("ML_SERVICE_TOKEN", raising=False)
         import importlib
         import serving.src.api as api_mod
@@ -699,6 +700,21 @@ class TestServiceTokenAuth:
         assert resp.status_code in (401, 503), (
             f"Expected 401/503 in staging without ML_SERVICE_TOKEN, got {resp.status_code}"
         )
+
+    def test_token_is_not_required_for_embedded_inline_routes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AETHER_ENV", "staging")
+        monkeypatch.setenv("ML_SERVING_INLINE", "true")
+        monkeypatch.delenv("ML_SERVICE_TOKEN", raising=False)
+        import importlib
+        import serving.src.api as api_mod
+        importlib.reload(api_mod)
+        test_client = TestClient(api_mod.app)
+        for path in ("/health", "/models"):
+            resp = test_client.get(path)
+            assert resp.status_code == 200, (
+                f"embedded inline ML {path} must not require a second service token; "
+                f"got {resp.status_code}"
+            )
 
     def test_token_optional_in_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AETHER_ENV", "local")

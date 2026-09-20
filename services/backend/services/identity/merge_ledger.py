@@ -8,12 +8,13 @@ Every merge queues projection restatement.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any, Optional
 
 from shared.common.common import utc_now
 from shared.events.events import Event, EventProducer, Topic
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, log_event
 
 from .graph_versioner import GraphVersioner
 from .models import (
@@ -94,7 +95,9 @@ class MergeLedger:
             decided_at=now,
         )
 
-        logger.info(
+        log_event(
+            logger,
+            logging.INFO,
             "identity.merge.auto",
             tenant_id=tenant_id,
             decision_id=decision_id,
@@ -186,7 +189,9 @@ class MergeLedger:
             decided_at=now,
         )
 
-        logger.info(
+        log_event(
+            logger,
+            logging.INFO,
             "identity.merge.manual",
             tenant_id=tenant_id,
             decision_id=decision_id,
@@ -240,7 +245,9 @@ class MergeLedger:
             decided_at=now,
         )
 
-        logger.info(
+        log_event(
+            logger,
+            logging.INFO,
             "identity.merge.blocked",
             tenant_id=tenant_id,
             decision_id=decision_id,
@@ -295,7 +302,9 @@ class MergeLedger:
             created_at=utc_now(),
         )
 
-        logger.info(
+        log_event(
+            logger,
+            logging.INFO,
             "identity.projection_restatement.queued",
             tenant_id=tenant_id,
             job_id=job.id,

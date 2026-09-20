@@ -54,10 +54,12 @@ jobs:
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
           TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
-          TF_ML_IMAGE_DIGEST: ${{ secrets.TF_ML_IMAGE_DIGEST }}
         run: |
           set -euo pipefail
           missing=()
+          # TF_ML_IMAGE_DIGEST is profile-specific: staging and
+          # production-lean run inline ML and do not require a serving image.
+          # Dedicated ML profiles validate it in their matrix job below.
           for name in \
             AWS_INFRA_ROLE_ARN \
             TF_STATE_BUCKET \
@@ -71,8 +73,7 @@ jobs:
             TF_AMPLIFY_GITHUB_ACCESS_TOKEN \
             TF_AETHER_APP_URL \
             TF_KYBER_APP_URL \
-            TF_BACKEND_IMAGE_DIGEST \
-            TF_ML_IMAGE_DIGEST
+            TF_BACKEND_IMAGE_DIGEST
           do
             # `${!name-}` is indirect expansion with an empty default, so an
             # entirely unset secret does not abort the loop under `set -u`.
@@ -277,6 +278,31 @@ jobs:
           role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Validate approved backend digest is present and current
+        env:
+          APPROVED_BACKEND_DIGEST: ${{ env.TF_VAR_backend_image_digest }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$APPROVED_BACKEND_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' \
+            || { echo '::error::TF_BACKEND_IMAGE_DIGEST must be an immutable sha256 digest'; exit 1; }
+          published_digest="$(aws ecr describe-images \
+            --repository-name aether-backend \
+            --image-ids imageDigest="$APPROVED_BACKEND_DIGEST" \
+            --query 'imageDetails[0].imageDigest' --output text)"
+          test "$published_digest" = "$APPROVED_BACKEND_DIGEST" \
+            || { echo '::error::approved backend digest is not present in aether-backend'; exit 1; }
+          # A main-branch remote plan must use the image published for the
+          # exact commit being planned. A stale secret is a hard stop rather
+          # than a green plan for an older release.
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            commit_digest="$(aws ecr describe-images \
+              --repository-name aether-backend \
+              --image-ids imageTag="$GITHUB_SHA" \
+              --query 'imageDetails[0].imageDigest' --output text)"
+            test "$commit_digest" = "$APPROVED_BACKEND_DIGEST" \
+              || { echo "::error::TF_BACKEND_IMAGE_DIGEST is stale for ${GITHUB_SHA}; update it to the immutable image published for this commit"; exit 1; }
+          fi
+
       - name: Terraform Init (isolated profile state)
         env:
           PROFILE: ${{ matrix.profile }}
@@ -299,6 +325,12 @@ jobs:
           PROFILE: ${{ matrix.profile }}
         run: |
           set -euo pipefail
+          if [[ "$PROFILE" == production-scale || "$PROFILE" == enterprise-isolated ]]; then
+            test -n "${TF_VAR_ml_image_digest:-}" \
+              || { echo "::error::${PROFILE} requires TF_ML_IMAGE_DIGEST because remote_ml is enabled"; exit 1; }
+            printf '%s' "$TF_VAR_ml_image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$' \
+              || { echo "::error::${PROFILE} requires an immutable sha256 ML image digest"; exit 1; }
+          fi
           terraform plan \
             -input=false \
             -lock-timeout=5m \

@@ -154,6 +154,19 @@ variable "companion_secret_arns" {
   default     = {}
 }
 
+variable "secret_kms_key_arns" {
+  type        = list(string)
+  description = "Customer-managed KMS key ARNs used to encrypt the Secrets Manager credentials mounted into ECS tasks"
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]+$", arn))
+    ])
+    error_message = "secret_kms_key_arns must contain concrete customer-managed KMS key ARNs."
+  }
+}
+
 variable "database_host" {
   type        = string
   description = "Database writer endpoint injected alongside the AWS-managed credential secret"

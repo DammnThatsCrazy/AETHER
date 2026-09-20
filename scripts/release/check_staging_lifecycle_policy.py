@@ -19,8 +19,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED = {
-    "ecs:DescribeClusters", "ecs:ListServices", "ecs:DescribeServices",
-    "ecs:DescribeTaskDefinition", "ecs:DescribeTasks", "ecs:UpdateService", "ecs:RunTask", "iam:PassRole",
+    "ecs:DescribeClusters", "ecs:ListServices", "ecs:ListTasks", "ecs:DescribeServices",
+    "ecs:DescribeTaskDefinition", "ecs:DescribeTasks", "ecs:StopTask", "ecs:UpdateService", "ecs:RunTask", "iam:PassRole",
     "ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter",
     "s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
     "logs:DescribeLogGroups", "cloudwatch:ListMetrics",
@@ -34,6 +34,7 @@ EXPECTED = {
 # the same resource semantics used by the reviewed staging-apply contract.
 GLOBAL_RESOURCE_ACTIONS = {
     "ecs:ListServices",
+    "ecs:ListTasks",
     "ecs:DescribeTaskDefinition",
     "logs:DescribeLogGroups",
     "cloudwatch:ListMetrics",
@@ -88,9 +89,11 @@ def render_policy_document(document: dict, account_id: str) -> dict:
 CLI_TO_IAM = {
     ("ecs", "describe-clusters"): {"ecs:DescribeClusters"},
     ("ecs", "list-services"): {"ecs:ListServices"},
+    ("ecs", "list-tasks"): {"ecs:ListTasks"},
     ("ecs", "describe-services"): {"ecs:DescribeServices"},
     ("ecs", "describe-task-definition"): {"ecs:DescribeTaskDefinition"},
     ("ecs", "describe-tasks"): {"ecs:DescribeTasks"},
+    ("ecs", "stop-task"): {"ecs:StopTask"},
     ("ecs", "update-service"): {"ecs:UpdateService"},
     ("ecs", "run-task"): {"ecs:RunTask"},
     # Waiters poll the preceding Describe operation and do not add an IAM

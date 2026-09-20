@@ -175,3 +175,29 @@ def test_removing_module_from_root_fails():
         ECS_MAIN.read_text(), ECS_VARS.read_text(), ECS_OUTPUTS.read_text(),
     )
     assert problems, "uncounting the kms_credentials module was not detected"
+
+
+def test_ecs_execution_secret_decrypt_is_profile_scoped():
+    """The ECS agent may decrypt only the CMKs that encrypt mounted secrets.
+
+    A wildcard here silently turns a task-definition secret mount into account-
+    wide KMS access. The root must pass the CMKs for the shared secrets,
+    Aurora/RDS, and Redis when those profile backends exist.
+    """
+    ecs = ECS_MAIN.read_text(encoding="utf-8")
+    root = MAIN.read_text(encoding="utf-8")
+    variables = ECS_VARS.read_text(encoding="utf-8")
+    outputs = (TF / "modules/elasticache/outputs.tf").read_text(encoding="utf-8")
+
+    assert 'variable "secret_kms_key_arns"' in variables
+    assert 'Action   = ["kms:Decrypt"]' in ecs
+    assert 'Resource = var.secret_kms_key_arns' in ecs
+    kms_start = ecs.index('"KMSDecrypt"')
+    logs_start = ecs.index('"CloudWatchLogs"')
+    assert 'Resource = "*"' not in ecs[kms_start:logs_start]
+    assert "secret_kms_key_arns = compact(concat(" in root
+    assert "module.secrets.kms_key_arn" in root
+    assert "module.aurora[0].kms_key_arn" in root
+    assert "module.rds[0].kms_key_arn" in root
+    assert "module.elasticache[0].kms_key_arn" in root
+    assert 'output "kms_key_arn"' in outputs

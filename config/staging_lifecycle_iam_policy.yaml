@@ -20,6 +20,14 @@ statements:
     conditions:
       ArnEquals:
         ecs:cluster: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
+  - sid: ListStagingTasks
+    actions:
+      - ecs:ListTasks
+    resource: '*'
+    scope: staging-cluster
+    conditions:
+      ArnEquals:
+        ecs:cluster: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
   - sid: InspectStagingServices
     actions:
       - ecs:DescribeServices
@@ -30,6 +38,14 @@ statements:
       - ecs:DescribeTasks
     resource: arn:aws:ecs:us-east-1:${account_id}:task/AETHER-staging/*
     scope: staging-task
+  - sid: StopStagingTasks
+    actions:
+      - ecs:StopTask
+    resource: arn:aws:ecs:us-east-1:${account_id}:task/AETHER-staging/*
+    scope: staging-task
+    conditions:
+      ArnEquals:
+        ecs:cluster: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
   - sid: InspectStagingTaskDefinitions
     actions:
       - ecs:DescribeTaskDefinition

@@ -150,6 +150,9 @@ def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
         "canary-secret-seed",
         "extraction-canary-seed",
         "sdk-config-secret",
+        "first-admin-bootstrap-token",
+        "jwt-secret-previous",
+        "byok-encryption-key-previous",
         "kyber-google-client-id",
         "kyber-google-client-secret",
     ):
@@ -158,6 +161,12 @@ def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
     assert "AWSCURRENT" in guard
     assert "DeletedDate" in guard
     assert "pending deletion" in guard
+    assert "aws rds describe-db-clusters" in guard
+    assert "MasterUserSecret.SecretStatus" in guard
+    assert "DBClusterNotFoundFault" in guard
+    assert "expected active" in guard
+    assert "its value was not read" in guard
+    assert "secretsmanager get-secret-value" not in guard
     assert "terraform apply" not in guard
     manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
     secret_read = next(s for s in manifest["statements"] if "secretsmanager:DescribeSecret" in s["actions"])

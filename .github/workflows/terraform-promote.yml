@@ -50,6 +50,10 @@ on:
         description: Approved plan SHA256 (required for apply)
         type: string
         required: false
+      expected_commit_sha:
+        description: "Optional exact commit SHA the plan must be generated from"
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -93,6 +97,17 @@ jobs:
       TF_VAR_kms_key_admin_role_arns: '${{ inputs.profile == ''staging'' && format(''["{0}"]'', secrets.AWS_TERRAFORM_APPLY_ROLE_ARN) || ''[]'' }}'
     steps:
       - uses: actions/checkout@v4
+      - name: Verify the requested plan commit
+        if: inputs.expected_commit_sha != ''
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$EXPECTED_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' \
+            || { echo '::error::expected_commit_sha is not a 40-character lowercase commit sha'; exit 1; }
+          actual_commit="$(git rev-parse HEAD)"
+          test "$actual_commit" = "$EXPECTED_COMMIT_SHA" \
+            || { echo "::error::Terraform plan checkout ${actual_commit} is not expected commit ${EXPECTED_COMMIT_SHA}; refusing to plan a different repository state"; exit 1; }
       - uses: hashicorp/setup-terraform@v3
 
       - name: Cache Terraform providers
@@ -308,6 +323,8 @@ jobs:
           sha256sum reviewed.tfplan > reviewed.tfplan.sha256
           printf '%s\n' "$COMMIT_SHA" > reviewed.commit
           printf '%s\n' "$PROFILE" > reviewed.profile
+          printf '%s\n' "$TF_STATE_BUCKET" > reviewed.state-bucket
+          printf '%s\n' "$TF_LOCK_TABLE" > reviewed.state-lock-table
           terraform version -json | jq -r '.terraform_version' > reviewed.terraform-version
           # A reviewed plan is valid for 24 hours. Apply refuses an expired plan.
           date -u +%Y-%m-%dT%H:%M:%SZ > reviewed.created-utc
@@ -461,6 +478,8 @@ jobs:
         env:
           PROFILE: ${{ inputs.profile }}
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/reviewed-plan"
@@ -468,6 +487,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
+            reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
             reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
           do
@@ -522,6 +542,17 @@ jobs:
             echo "::error::plan records backend state key ${reviewed_state_key}, not this profile's"
             exit 1
           fi
+
+          reviewed_state_bucket="$(cat reviewed.state-bucket)"
+          reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
+          test -n "$reviewed_state_bucket" || {
+            echo '::error::reviewed plan records an empty state bucket'; exit 1; }
+          test -n "$reviewed_state_lock_table" || {
+            echo '::error::reviewed plan records an empty state lock table'; exit 1; }
+          test "$reviewed_state_bucket" = "$TF_STATE_BUCKET" || {
+            echo '::error::reviewed plan state bucket differs from the apply backend'; exit 1; }
+          test "$reviewed_state_lock_table" = "$TF_LOCK_TABLE" || {
+            echo '::error::reviewed plan lock table differs from the apply backend'; exit 1; }
 
           reviewed_commit="$(cat reviewed.commit)"
           if ! printf '%s' "$reviewed_commit" | grep -Eq '^[0-9a-f]{40}$'; then
@@ -712,6 +743,9 @@ jobs:
             canary-secret-seed
             extraction-canary-seed
             sdk-config-secret
+            first-admin-bootstrap-token
+            jwt-secret-previous
+            byok-encryption-key-previous
             kyber-google-client-id
             kyber-google-client-secret
           )
@@ -743,6 +777,36 @@ jobs:
             rm -f "$describe_file"
           done
           echo 'Verified all ECS-mounted staging secrets exist with an AWSCURRENT version; values were not read.'
+
+          # Aurora owns its database credential secret, so it is not in the
+          # aether/* application-secret allow-list above. When an existing
+          # cluster is present, its RDS-managed secret must nevertheless be
+          # active before a task definition can successfully connect. A brand
+          # new cluster is allowed to remain absent here because the same
+          # reviewed apply creates it and AWS creates the managed secret.
+          rds_metadata="$(mktemp)"
+          rds_error="$(mktemp)"
+          if ! aws rds describe-db-clusters \
+            --db-cluster-identifier AETHER-staging-aurora \
+            --output json >"$rds_metadata" 2>"$rds_error"; then
+            if grep -q 'DBClusterNotFoundFault' "$rds_error"; then
+              echo 'No existing canonical Aurora cluster; the reviewed apply will create its RDS-managed secret.'
+            else
+              cat "$rds_error" >&2
+              echo '::error::could not inspect the existing canonical Aurora credential status; refusing apply'
+              exit 1
+            fi
+          elif [ "$(jq '.DBClusters | length' "$rds_metadata")" -eq 0 ]; then
+            echo 'No existing canonical Aurora cluster; the reviewed apply will create its RDS-managed secret.'
+          else
+            rds_secret_status="$(jq -r '.DBClusters[0].MasterUserSecret.SecretStatus // empty' "$rds_metadata")"
+            test "$rds_secret_status" = active || {
+              echo "::error::canonical Aurora RDS-managed credential status is '$rds_secret_status', expected active"
+              exit 1
+            }
+            echo 'Verified the existing canonical Aurora RDS-managed credential is active; its value was not read.'
+          fi
+          rm -f "$rds_metadata" "$rds_error"
       - name: Validate reviewed staging maintenance target group
         if: inputs.profile == 'staging'
         env:

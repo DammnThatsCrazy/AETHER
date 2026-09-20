@@ -284,10 +284,11 @@ aws secretsmanager put-secret-value \
 > inject the entire secret string into the container — a JSON wrapper would
 > require a JSON-key suffix on the ARN and is error-prone.
 
-`aether/db-password` is populated automatically by the Aurora module via
-AWS-managed master password rotation and contains JSON with `host`, `port`,
-`username`, `password`, `dbname`. `aether/redis-auth-token` is populated by the
-ElastiCache module and exists only on profiles that provision Redis.
+The Aurora module exposes the AWS-managed `MasterUserSecret` (an
+`rds!cluster-*` Secrets Manager secret) to ECS via its logical `db-password`
+mapping; AWS manages its value and rotation, and the JSON contains the database
+credentials. `aether/redis-auth-token` is populated by the ElastiCache module
+and exists only on profiles that provision Redis.
 
 ### 3. Build and push Docker images
 

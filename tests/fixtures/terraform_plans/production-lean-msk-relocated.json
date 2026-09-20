@@ -229,7 +229,7 @@
               "values": {
                 "engine": "aurora-postgresql",
                 "engine_mode": "provisioned",
-                "engine_version": "16.4",
+                "engine_version": "16.8",
                 "storage_encrypted": true,
                 "serverlessv2_scaling_configuration": [
                   {
@@ -1347,7 +1347,7 @@
         "after": {
           "engine": "aurora-postgresql",
           "engine_mode": "provisioned",
-          "engine_version": "16.4",
+          "engine_version": "16.8",
           "storage_encrypted": true,
           "serverlessv2_scaling_configuration": [
             {

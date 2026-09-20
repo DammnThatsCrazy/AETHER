@@ -23,13 +23,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:ff68dd9188c9686dfbe9abf0390ae4b6d795f430791258c7720b97625c5d60e7"
-  ".github/workflows/terraform-promote.yml": "sha256:625caac71bb1960cec2191cc8ed3486d199d626d9197b1c7082f2f66e7bcf185"
+  ".github/workflows/infrastructure.yml": "sha256:06eedce5be20e5e6e8518f23f96d4fdef2e2a4eaecc4c53ac97e0882fe298c51"
+  ".github/workflows/terraform-promote.yml": "sha256:f555f32c30627b3c095936c3a929367fa67d8e6f67c56695d4258a57409da4a0"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/DECOMMISSION.md": "sha256:a37cb94abdcbc9472eb4881722289412f4adcc79fa75755946bbef0fc93b8dec"
-  "deploy/aws/terraform/main.tf": "sha256:33ab3399a831c294bc5d24df294c627ec28307f701d66a47d4d60e3f5d1c5749"
+  "deploy/aws/terraform/DECOMMISSION.md": "sha256:f1199d32b3e315cd78dcc4beaf3589ac46fc69134ea7083ce5698c270ab2f377"
+  "deploy/aws/terraform/main.tf": "sha256:257fa5e129a6c8363bcda9ca687f2b75b7a3a29ee753626ae51f3cb8d326cfb3"
   "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
@@ -349,11 +349,15 @@ gh workflow run terraform-promote.yml \
 ```
 
 The plan job fails closed on an incomplete remote-plan credential set. That
-credential set includes `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` because AWS Amplify
+shared set includes `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` because AWS Amplify
 requires a repository access token for public and private GitHub repositories.
+`TF_ML_IMAGE_DIGEST` is not part of the shared set: staging and
+`production-lean` run inline ML. The dedicated `production-scale` and
+`enterprise-isolated` matrix plans require that secret and an immutable digest
+at their own profile-specific plan step.
 The historical placeholder value `-` and values containing whitespace are
 rejected before AWS credentials are assumed. The job then produces an
-**immutable reviewed plan** consisting of 14 artifacts:
+**immutable reviewed plan** consisting of 16 artifacts:
 
 | Artifact | Records |
 |---|---|
@@ -363,6 +367,8 @@ rejected before AWS credentials are assumed. The job then produces an
 | `reviewed.commit` | the 40-char commit the plan was built from |
 | `reviewed.profile` | the profile it was reviewed for |
 | `reviewed.state-key` | `profiles/<profile>/terraform.tfstate` |
+| `reviewed.state-bucket` | the exact S3 backend bucket used to produce the plan |
+| `reviewed.state-lock-table` | the exact DynamoDB lock table used to produce the plan |
 | `reviewed.terraform-version` | the concrete Terraform version |
 | `reviewed.lock.sha256` | `.terraform.lock.hcl` digest, captured **before** init |
 | `reviewed.created-utc` / `reviewed.expires-utc` | 24-hour validity window |
@@ -389,9 +395,13 @@ gh workflow run terraform-promote.yml \
   -f plan_checksum=<reviewed.tfplan sha256>
 ```
 
-The apply job runs under a **per-profile GitHub environment**, so each profile
-carries its own reviewers and protection rules and none can borrow another's
-approvals:
+The workflow names a **per-profile GitHub environment**, so the intended
+configuration gives each profile its own reviewers and protection rules and
+prevents borrowed approvals. In the current repository only `staging` and
+`staging-terraform` exist, and neither has a protection rule; the four
+production environments and their credential sets are not provisioned yet.
+Their plan/apply jobs therefore fail closed on missing credentials rather than
+constituting a production-ready path:
 
 | Profile | Environment |
 |---|---|
@@ -400,11 +410,16 @@ approvals:
 | `production-scale` | `production-scale-terraform` |
 | `enterprise-isolated` | `enterprise-terraform` |
 
-Before applying anything it verifies, in order: all 14 artifacts present and
+Before any non-staging promotion, create and protect the named environment,
+populate its profile-specific OIDC role and Terraform inputs, and prove the
+credentialed remote plan. Do not treat an automatically created, empty GitHub
+environment as approval or as evidence that the profile is configured.
+
+Before applying anything it verifies, in order: all 16 artifacts present and
 non-empty; the reviewed profile matches the dispatched one; the recorded state
-key is this profile's; the commit is a 40-char SHA; the Terraform version is
-concrete; expiry is after creation, the window is ≤ 24 hours, and it has not
-passed.
+key is this profile's; the recorded state bucket and lock table match the
+apply backend; the commit is a 40-char SHA; the Terraform version is concrete;
+expiry is after creation, the window is ≤ 24 hours, and it has not passed.
 
 It then **checks out the plan's own recorded commit**, not the dispatch ref —
 the ref may have moved since review, and `github.sha` says nothing about which
@@ -421,6 +436,8 @@ test "$(cat reviewed.profile)"   = "$PROFILE"
 test "$(cat reviewed.commit)"    = "$REVIEWED_COMMIT"
 test "$(cat reviewed.commit)"    = "$(git rev-parse HEAD)"
 test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+test "$(cat reviewed.state-bucket)" = "$TF_STATE_BUCKET"
+test "$(cat reviewed.state-lock-table)" = "$TF_LOCK_TABLE"
 test "$(sha256sum reviewed.tfplan | cut -d' ' -f1)" = "$PLAN_CHECKSUM"
 sha256sum --check --status reviewed.tfplan.sha256
 test "$(cat reviewed.lock.sha256)"      = "$(sha256sum .terraform.lock.hcl | cut -d' ' -f1)"

@@ -36,7 +36,17 @@ from services.ml_serving.routes import (  # noqa: E402
     _grounded_signal,
     _prediction_cache_hash,
     _prediction_envelope,
+    _resolve_serving_url,
 )
+
+
+def test_inline_gateway_resolves_empty_url_to_the_consolidated_backend():
+    """Consolidated profiles must not silently proxy ML to an empty URL."""
+    assert _resolve_serving_url(configured="", inline=True) == "http://127.0.0.1:8000"
+    assert _resolve_serving_url(configured="", inline=False) == "http://localhost:8080"
+    assert _resolve_serving_url(configured="http://ml-serving:8080/", inline=True) == (
+        "http://ml-serving:8080"
+    )
 
 
 @pytest.fixture

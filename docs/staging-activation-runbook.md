@@ -59,11 +59,11 @@ faked) until a credentialed operator runs it.
 
 Infrastructure is promoted by the **reviewed Terraform promotion** workflow
 (`.github/workflows/terraform-promote.yml`), never by an un-reviewed apply.
-The canonical root is `deploy/aws/terraform`; the staging
-environment is `deploy/aws/terraform/environments/staging/main.tf`
-(state key `staging/terraform.tfstate` in bucket `aether-terraform-state`, lock
-table `aether-terraform-locks`) and the profile is
-`profiles/staging.tfvars`.
+The canonical root is `deploy/aws/terraform`; staging is selected by
+`deploy/aws/terraform/profiles/staging.tfvars` and uses the isolated state key
+`profiles/staging/terraform.tfstate`. The bucket and lock-table names are
+resolved from the `TF_STATE_BUCKET` and `TF_LOCK_TABLE` GitHub environment
+secrets; the reviewed plan records both names and the apply refuses a mismatch.
 
 1. Validate and plan (no mutation):
    ```bash

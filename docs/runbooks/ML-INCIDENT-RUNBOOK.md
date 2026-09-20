@@ -11,10 +11,10 @@ source_files: [services/ml/serving/src/api.py, services/ml/common/artifact_regis
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  services/ml/common/artifact_registry.py: sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83
-  services/ml/monitoring/monitor.py: sha256:dead8fcf2862488278dbfdff89a84a90d068dcc38d5ed750a3d103372589cd08
-  services/ml/serving/src/api.py: sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c
-  deploy/observability/prometheus/alert_rules.yml: sha256:5e8f65fa818bb0d5de947050f6925bac3fd4665facc9e262d16c46a9f3030586
+  "deploy/observability/prometheus/alert_rules.yml": "sha256:5e8f65fa818bb0d5de947050f6925bac3fd4665facc9e262d16c46a9f3030586"
+  "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
+  "services/ml/monitoring/monitor.py": "sha256:dead8fcf2862488278dbfdff89a84a90d068dcc38d5ed750a3d103372589cd08"
+  "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"
 ---
 
 # ML Incident Runbook
@@ -105,7 +105,7 @@ docker logs aether-ml-serving 2>&1 | grep "ContractMismatch\|validation_error" |
 | `ValidationError` on features | Upstream feature pipeline renamed fields | Check `features/pipeline.py` vs feature contract |
 | HTTP 422 spike on prediction endpoints | Caller sending out-of-contract payloads (unknown keys, out-of-range or non-finite values, missing required features) — serving rejects these before inference | Compare the 422 detail against the model's contract in `common/feature_contracts.py`; fix the caller, not the contract |
 | `503` on all models | Redis unreachable and fail-closed | Restore Redis connectivity; check `REDIS_URL` |
-| `401 Unauthorized` | `ML_SERVICE_TOKEN` rotation not propagated | Update token in both backend and ML serving env |
+| `401 Unauthorized` | Standalone `ML_SERVICE_TOKEN` rotation not propagated | Update the token in both backend and standalone ML serving env; inline profiles use the backend API-key boundary and do not require this second token |
 
 **Remediation:** Fix root cause per table above. If rate drops below 5% within 10 minutes, alert auto-resolves.
 

@@ -31,6 +31,7 @@ Staging signoff thresholds (see tests/load/thresholds.json for canonical values)
 
 from __future__ import annotations
 
+import os
 import random
 import string
 import uuid
@@ -47,7 +48,10 @@ def _random_string(n: int = 8) -> str:
 
 def _api_headers(tenant_id: str = "load-test-tenant") -> dict:
     return {
-        "X-API-Key": f"test-key-{tenant_id}",
+        # Local load runs retain their deterministic fixture key. Hosted staging
+        # passes the run-scoped key through the load-smoke subprocess so every
+        # request exercises the real tenant/API-key boundary.
+        "X-API-Key": os.environ.get("AETHER_LOAD_API_KEY", f"test-key-{tenant_id}"),
         "Content-Type": "application/json",
         "X-Request-ID": str(uuid.uuid4()),
     }

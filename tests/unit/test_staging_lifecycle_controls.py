@@ -56,6 +56,8 @@ REVIEWED_EVIDENCE = (
     "reviewed.terraform-version",
     "reviewed.lock.sha256",
     "reviewed.state-key",
+    "reviewed.state-bucket",
+    "reviewed.state-lock-table",
     "reviewed.created-utc",
     "reviewed.expires-utc",
     "reviewed.resources.json",
@@ -561,6 +563,32 @@ def test_full_rehearsal_runs_every_declared_phase():
         assert surface in script.lower(), f"the rehearsal never touches {surface}"
     assert "RUN_MIGRATIONS" in script, "migrations are not run as a one-off task"
     assert "/v1/ready" in script, "the migration revision is never verified"
+    assert 'call("GET", "/models", expect={200})' in script, (
+        "inline ML serving is not probed through its mounted in-process route"
+    )
+
+
+def test_rehearsal_imports_validation_inventory_and_fails_closed_on_evidence():
+    doc = _workflow_yaml(LIFECYCLE)
+    rehearsal_steps = _steps(doc, "rehearse")
+    downloads = [
+        step for step in rehearsal_steps
+        if str(step.get("uses", "")).startswith("actions/download-artifact")
+    ]
+    assert any(
+        step.get("with", {}).get("name") == "staging-wake-plan-validation-${{ github.run_id }}"
+        for step in downloads
+    ), "rehearsal cost evidence has no credentialed plan-inventory input"
+
+    collect = next(
+        step for step in rehearsal_steps
+        if step.get("name") == "Collect logs, metrics, plans, test output and cost"
+    )["run"]
+    assert '"/ecs/${STAGING_CLUSTER}"' in collect
+    assert "artifacts/profile-resource-inventory.json" in collect
+    assert '--out-dir "artifacts/rehearsal/cost"' in collect
+    assert "2>&1 || true" not in collect
+    assert 'release.json" 2>/dev/null || true' not in collect
 
 
 def test_first_staging_revision_records_rollback_as_not_applicable():
@@ -1256,7 +1284,7 @@ def test_the_cleanup_gate_treats_an_unreadable_staging_state_as_not_asleep():
     run = step["run"]
     assert "asleep=true" in run
     # Every failure path publishes `unknown`, and none of them publishes `true`.
-    assert run.count("asleep=unknown") == 3, (
+    assert run.count("asleep=unknown") == 4, (
         "not every unreadable-state path reports the state as unknown"
     )
     for guard in (
@@ -1265,10 +1293,11 @@ def test_the_cleanup_gate_treats_an_unreadable_staging_state_as_not_asleep():
     ):
         assert guard in run, f"{guard} is not status-checked"
     assert "must not be treated as asleep" in run
-    # `asleep=true` has exactly two legitimate sources — a cluster that exposes
-    # no services at all, and a successful describe reporting zero — and both
-    # come AFTER the status check that proves the reading happened.
-    assert run.count("asleep=true") == 2
+    # `asleep=true` has one legitimate source: the desired-count reading (or
+    # the no-service equivalent) is zero and a separate task listing proves
+    # there is no running/pending task. An empty service list must still reach
+    # that task check.
+    assert run.count("asleep=true") == 1
     first_guard = run.index('if ! services_raw="$(aws ecs list-services')
     assert all(
         position > first_guard
@@ -1291,8 +1320,9 @@ def test_the_residual_check_never_reports_zero_it_could_not_measure():
         s for s in _steps(_workflow_yaml(LIFECYCLE), "sleep") if s.get("id") == "residual"
     )
     run = step["run"]
-    # Each of the three AWS reads has a failure branch, and each sets zero_ok=false.
-    assert run.count("zero_ok=false") == 5, (
+    # Service, autoscaling, and residual-task reads all have explicit failure
+    # branches; each branch sets zero_ok=false before the report is emitted.
+    assert run.count("zero_ok=false") == 8, (
         "a residual measurement path no longer fails closed"
     )
     assert run.count("residual_tasks=unknown") >= 1
@@ -1332,7 +1362,7 @@ def test_the_ttl_guard_never_reports_asleep_on_an_unreadable_environment():
     state = _guard_step("state")["run"]
     assert 'if ! services_raw="$(aws ecs list-services' in state
     assert "state_known=false" in state
-    assert state.count("state_known=false") == 3, (
+    assert state.count("state_known=false") == 4, (
         "an unreadable-state path no longer publishes state_known=false"
     )
     assert "will not be reported as asleep" in state

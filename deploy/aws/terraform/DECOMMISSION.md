@@ -45,17 +45,20 @@ carries `lifecycle { prevent_destroy = true }`:
 | `modules/msk` | `aws_msk_cluster.this`, `aws_kms_key.msk` |
 | `modules/neptune` | `aws_neptune_cluster.this`, `aws_neptune_cluster_instance.this`, `aws_kms_key.neptune` |
 | `modules/rds` | `aws_db_instance.this`, `aws_kms_key.rds` |
+| `modules/aurora` | `aws_rds_cluster.this`, `aws_rds_cluster_instance.writer`, `aws_kms_key.aurora` |
 
 A profile flip that would remove any of them now **fails the plan** with
 `Instance cannot be destroyed`. That is the intended outcome: the workspace
 stops, nothing is destroyed, and the operator runs the procedure below rather
 than approving a diff.
 
-Aurora, the DynamoDB cache table, the SQS queues and the S3 origins are
-deliberately not in the table: they are provisioned in *every* profile, so no
-profile flip can remove them, and adding `prevent_destroy` there would only
-block legitimate replacements. They are still covered by the rule at the top of
-this section — the mechanism for them is `deletion_protection` plus review.
+The DynamoDB cache table, the SQS queues and the S3 origins are deliberately
+not in the table: they are provisioned in *every* profile, so no profile flip
+can remove them, and adding `prevent_destroy` there would only block legitimate
+replacements. Aurora is listed because `skip_aurora` is an explicit profile
+escape hatch and a reviewed toggle could otherwise remove a live database.
+Aurora is also covered by AWS `deletion_protection` in staging and production;
+the Terraform lifecycle guard is the earlier, fail-closed backstop.
 
 **`prevent_destroy` is a literal, not an expression.** Terraform does not allow
 it to depend on a variable, so a genuinely intended removal (step 10 below)

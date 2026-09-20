@@ -38,17 +38,26 @@ The combined sequence is available as `pnpm smoke:all`. Each `smoke:<target>` co
 
 ## Required environment variables
 
-The staging smoke command and the downstream smoke commands require these environment variables to be set before running:
+The staging smoke command and the downstream smoke commands require the
+canonical runtime variables below. CI maps the encrypted `SMOKE_API_KEY`
+repository secret to `AETHER_API_KEY` and derives the API URL from the optional
+`AETHER_API_URL` repository variable or the reviewed `TF_DOMAIN_NAME` secret.
+Secret values are never written to the repository or reports.
 
 | Variable | Purpose | Example |
 |---|---|---|
-| `AETHER_STAGING_BASE_URL` | Staging API base URL | `https://staging.aether.example` |
-| `AETHER_STAGING_API_KEY` | API key with staging proof tenant access | `aether-staging-***` |
-| `AETHER_PROOF_TENANT_ID` | The proof tenant to target | `aether-proof-tenant` |
-| `AETHER_PROOF_WORKSPACE` | The proof workspace | `proof-lab` |
-| `AETHER_STAGING_ENVIRONMENT` | The environment name for the run | `staging` |
+| `AETHER_API_URL` | Staging API base URL | `https://staging.aether.example` |
+| `AETHER_API_KEY` | API key with staging proof-tenant access | `aether-staging-***` |
+| `PROOF_TENANT_ID` | The proof tenant to target | `aether-proof-tenant` |
+| `PROOF_WORKSPACE_ID` | The proof workspace | `proof-lab` |
+| `AETHER_ENV` | The environment name for the run | `staging` |
 
-If any required variable is missing, the smoke command exits with a `BLOCKED` result and a typed reason that names the missing variable. Do not hardcode credentials in the script or in the repository. The staging smoke command reads from the environment, not from a config file in the repo.
+If any required variable is missing, the local smoke command exits with a
+`BLOCKED` result and a typed reason that names the missing variable. The
+GitHub Actions proof workflow fails its preflight and does not run a skipped
+smoke job. Do not hardcode credentials in the script or in the repository. The
+staging smoke command reads from the environment, not from a config file in the
+repo.
 
 ## Proof tenant reset
 
@@ -56,7 +65,9 @@ Before the staging smoke runs, the proof tenant must be reset to a known state. 
 
 Until the reset is implemented, the proof tenant must be reset manually before running the smoke sequence, or the smoke run must be preceded by a reset step documented in the run log. A smoke run that starts from a dirty tenant state is not a valid pass, because the expected PASS output assumes a clean baseline.
 
-The proof tenant is identified by `AETHER_PROOF_TENANT_ID` (default `aether-proof-tenant`) and `AETHER_PROOF_WORKSPACE` (default `proof-lab`). These are the values documented in [Proof Tenant Specification](../proof/proof-tenant.md).
+The proof tenant is identified by `PROOF_TENANT_ID` (default
+`aether-proof-tenant`) and `PROOF_WORKSPACE_ID` (default `proof-lab`). These are
+the values documented in [Proof Tenant Specification](../proof/proof-tenant.md).
 
 ## Expected 24-line PASS output
 
@@ -87,7 +98,7 @@ The following FAIL states are the ones the staging smoke command is designed to 
 | `TENANT_UNREACHABLE` | Platform / tenant management | The proof tenant was not reachable at the staging endpoint. |
 | `TENANT_RESET_FAILED` | Platform / tenant management | The proof tenant reset did not complete or did not return to a clean state. |
 | `API_KEY_INVALID` | Platform / credentials | The staging API key was rejected. |
-| `ENVIRONMENT_MISMATCH` | Platform / staging operations | The `AETHER_STAGING_ENVIRONMENT` value did not match the expected staging environment. |
+| `ENVIRONMENT_MISMATCH` | Platform / staging operations | The `AETHER_ENV` value did not match the expected staging environment. |
 | `SMOKE_CHECK_FAILED` | Depends on the check | A named smoke check failed its pass condition. The check name is included in the output. |
 | `BLOCKED_MISSING_ENV` | Operator / run setup | A required environment variable was missing. The variable name is included in the output. |
 

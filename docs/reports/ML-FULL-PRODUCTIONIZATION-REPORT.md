@@ -18,7 +18,7 @@ source_hashes:
   "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
   "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"
   "services/ml/docker/Dockerfile": "sha256:dd379b3e4129fbe375350003b2061ce0db3f96c50b7c4cea8b9b1714d3923355"
-  "services/ml/serving/src/api.py": "sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c"
+  "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"
 ---
 
 # Aether ML Full Productionization Report
@@ -136,8 +136,10 @@ Promotion audit log: append-only JSONL per model at
 - Freshness SLA wired for 8 endpoints: intent, bot, session_score, churn,
   ltv, anomaly, journey, campaign_attribution
 - Service token auth: `_require_service_token` FastAPI dependency checks
-  `X-Service-Token` against `ML_SERVICE_TOKEN` env var on all prediction
-  routes; skipped if env absent (local dev)
+  `X-Service-Token` against `ML_SERVICE_TOKEN` on standalone prediction
+  routes; inline profiles use the backend tenant/API-key boundary and do not
+  require a second HTTP token. Local development remains permissive when no
+  token is configured.
 
 ### Phase 6 — Cache, Security, Deployment Hardening
 

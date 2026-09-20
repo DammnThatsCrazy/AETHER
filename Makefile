@@ -866,19 +866,19 @@ security-release-check: ## Fail-closed security gate: secrets + security-control
 # ---------------------------------------------------------------------------
 
 validate-profile-config: ## Validate deployment-profile matrix + founding-tenant posture
-	python scripts/release/check_profile_config.py
+	$(GATE_PY) scripts/release/check_profile_config.py
 
 validate-profile-parity: ## Cross-source profile parity (docs count, cloud subset, terraform, contracts, env templates)
-	python scripts/release/check_profile_parity.py
+	$(GATE_PY) scripts/release/check_profile_parity.py
 
 validate-cost-policy: ## Validate production-lean cost policy (forbidden/required resources)
-	python scripts/release/check_cost_policy.py
+	$(GATE_PY) scripts/release/check_cost_policy.py
 
 validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the production-lean cost policy
-	python scripts/release/check_cost_policy_terraform.py
+	$(GATE_PY) scripts/release/check_cost_policy_terraform.py
 
 validate-profile-doctor: ## Per-profile readiness doctor (§27) + deployment certificate (§28); no cloud profile may fall below credential_waiting
-	python scripts/release/profile_doctor.py --all --strict
+	$(GATE_PY) scripts/release/profile_doctor.py --all --strict
 
 # ---------------------------------------------------------------------------
 # Deployment-profile enforcement (FT-9)
@@ -897,13 +897,13 @@ PLAN_PROFILE ?= production-lean
 PLAN_JSON    ?= tests/fixtures/terraform_plans/production-lean-valid.json
 
 validate-terraform-profile-policy: ## Prove a Terraform plan matches its profile's required/forbidden resources
-	python scripts/release/check_terraform_plan_policy.py \
+	$(GATE_PY) scripts/release/check_terraform_plan_policy.py \
 		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
 
 validate-cost-model: ## Price a plan inventory against the profile's numeric budget (fails closed on unpriced fixed cost)
-	python scripts/release/check_terraform_plan_policy.py \
+	$(GATE_PY) scripts/release/check_terraform_plan_policy.py \
 		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
-	python scripts/release/check_cost_model.py \
+	$(GATE_PY) scripts/release/check_cost_model.py \
 		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
 
 # Staging has its own budget (target 25 / hard 50 against a 40h awake month) and
@@ -913,16 +913,16 @@ validate-cost-model: ## Price a plan inventory against the profile's numeric bud
 # offline. Both wake states are gated here: asleep is where "no always-on staging
 # compute" is actually provable.
 validate-staging-budget: ## Plan-policy + cost gate for staging, awake and asleep
-	python scripts/release/check_terraform_plan_policy.py --profile staging \
+	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile staging \
 		--plan-json tests/fixtures/terraform_plans/staging-awake.json \
 		--out-dir artifacts/staging-awake
-	python scripts/release/check_cost_model.py --profile staging \
+	$(GATE_PY) scripts/release/check_cost_model.py --profile staging \
 		--inventory artifacts/staging-awake/profile-resource-inventory.json \
 		--out-dir reports/cost/staging-awake
-	python scripts/release/check_terraform_plan_policy.py --profile staging \
+	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile staging \
 		--plan-json tests/fixtures/terraform_plans/staging-asleep.json \
 		--out-dir artifacts/staging-asleep
-	python scripts/release/check_cost_model.py --profile staging \
+	$(GATE_PY) scripts/release/check_cost_model.py --profile staging \
 		--inventory artifacts/staging-asleep/profile-resource-inventory.json \
 		--out-dir reports/cost/staging-asleep
 
@@ -932,16 +932,16 @@ validate-staging-budget: ## Plan-policy + cost gate for staging, awake and aslee
 # or production-lean's. This target prices both so a budget regression in the
 # ephemeral class surfaces offline, with no AWS credentials.
 validate-ephemeral-budget: ## Plan-policy + cost gate for demo and preview, off their committed fixtures
-	python scripts/release/check_terraform_plan_policy.py --profile demo \
+	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile demo \
 		--plan-json tests/fixtures/terraform_plans/demo-valid.json \
 		--out-dir artifacts/demo
-	python scripts/release/check_cost_model.py --profile demo \
+	$(GATE_PY) scripts/release/check_cost_model.py --profile demo \
 		--inventory artifacts/demo/profile-resource-inventory.json \
 		--out-dir reports/cost/demo
-	python scripts/release/check_terraform_plan_policy.py --profile preview \
+	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile preview \
 		--plan-json tests/fixtures/terraform_plans/preview-valid.json \
 		--out-dir artifacts/preview
-	python scripts/release/check_cost_model.py --profile preview \
+	$(GATE_PY) scripts/release/check_cost_model.py --profile preview \
 		--inventory artifacts/preview/profile-resource-inventory.json \
 		--out-dir reports/cost/preview
 
@@ -951,26 +951,26 @@ test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile mod
 		terraform test -filter=tests/profile_plan.tftest.hcl -no-color
 
 test-runtime-topology: ## Execution-group topology: every worker role owned by exactly one service
-	python -m pytest tests/unit/test_runtime_topology.py tests/unit/test_runtime_execution_groups.py -q
+	$(GATE_PY) -m pytest tests/unit/test_runtime_topology.py tests/unit/test_runtime_execution_groups.py -q
 
 test-workflow-controls: ## Structural controls: no automatic apply, no false-green, reviewed-plan integrity, GitHub-only deployment operator
-	$(GATE_PY) -m pytest tests/unit/test_release_workflow_controls.py -q
+	$(GATE_PY) -m pytest tests/unit/test_release_workflow_controls.py tests/unit/test_staging_application_delivery_iam_contract.py -q
 	$(GATE_PY) scripts/release/check_deployment_operator_surface.py
 
 test-cost-model: ## Cost-model unit tests (ceilings, fail-closed pricing, exception expiry)
-	python -m pytest tests/unit/test_cost_model.py -q
+	$(GATE_PY) -m pytest tests/unit/test_cost_model.py -q
 
 test-staging-lifecycle: ## Staging wake/sleep + TTL guard structural controls
-	python -m pytest tests/unit/test_staging_lifecycle_controls.py -q
+	$(GATE_PY) -m pytest tests/unit/test_staging_lifecycle_controls.py -q
 
 test-ephemeral-lifecycle: ## Ephemeral TTL guard + provision/teardown ops unit tests
-	python -m pytest tests/unit/test_ephemeral_ttl_guard.py -q
+	$(GATE_PY) -m pytest tests/unit/test_ephemeral_ttl_guard.py -q
 
 test-plan-policy: ## Plan-policy validator against the pass/fail plan fixtures
-	python -m pytest tests/unit/test_terraform_plan_policy.py tests/unit/test_terraform_resource_contracts.py -q
+	$(GATE_PY) -m pytest tests/unit/test_terraform_plan_policy.py tests/unit/test_terraform_resource_contracts.py -q
 
 deployment-readiness-score: ## Evidence-backed readiness scorecard (code-complete vs externally verified)
-	python scripts/release/check_deployment_readiness.py
+	$(GATE_PY) scripts/release/check_deployment_readiness.py
 
 collect-deployment-evidence: ## Materialise the release-evidence bundle with checksummed manifest
 	python scripts/release/collect_evidence.py --bundle-dir release-evidence
@@ -997,7 +997,7 @@ resolved-feature-flags: ## Validate explicit staging and production-lean feature
 	$(VENV_PY) scripts/release/check_resolved_feature_flags.py --all
 
 validate-delivery-topology: ## Validate immutable delivery and profile-to-role topology
-	python scripts/release/check_delivery_topology.py
+	$(GATE_PY) scripts/release/check_delivery_topology.py
 
 validate-route-registry: ## Validate route policy registry seed schema
 	python scripts/release/check_route_registry.py

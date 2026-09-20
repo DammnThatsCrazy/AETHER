@@ -192,8 +192,11 @@ module "aurora" {
   auto_pause_seconds = var.environment == "staging" ? 300 : null
 
   backup_retention_days = var.aurora_backup_retention_days
-  deletion_protection   = var.environment == "production"
-  express_mode          = var.aurora_express_mode
+  # Staging is persistent state too: the reviewed lifecycle sleeps ECS, it
+  # does not authorize destroying the database. Keep the AWS-side guard on
+  # alongside Terraform's prevent_destroy backstop.
+  deletion_protection = var.environment == "production" || var.environment == "staging"
+  express_mode        = var.aurora_express_mode
 }
 
 # ---------------------------------------------------------------------------
@@ -451,6 +454,12 @@ module "ecs" {
     local.redis_auth_secret_arn == "" ? {} : { "redis-auth-token" = local.redis_auth_secret_arn },
   )
   companion_secret_arns = module.secrets.companion_secret_arns
+  secret_kms_key_arns = compact(concat(
+    [module.secrets.kms_key_arn],
+    local.enable_aurora && !var.aurora_express_mode ? [module.aurora[0].kms_key_arn] : [],
+    local.enable_legacy_rds ? [module.rds[0].kms_key_arn] : [],
+    local.enable_elasticache ? [module.elasticache[0].kms_key_arn] : [],
+  ))
 
   # Which backend the task actually uses is stated explicitly rather than
   # inferred from whether a host string happens to be empty.

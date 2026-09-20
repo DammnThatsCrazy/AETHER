@@ -64,6 +64,12 @@ services/ml/
 !services/ml/
 !services/ml/common/
 !services/ml/common/**
+!services/ml/edge/
+!services/ml/edge/**
+!services/ml/monitoring/
+!services/ml/monitoring/**
+!services/ml/server/
+!services/ml/server/**
 !services/ml/serving/
 !services/ml/serving/**
 

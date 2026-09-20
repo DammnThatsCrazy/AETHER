@@ -378,6 +378,7 @@ jobs:
           pattern: release-*
           path: ${{ runner.temp }}/release
           merge-multiple: true
+
       - name: Resolve the backend image digest from the approved release manifest
         id: release
         env:
@@ -449,6 +450,7 @@ jobs:
           STAGING_STATE: awake
           BACKEND_IMAGE_DIGEST: ${{ steps.release.outputs.backend_image_digest }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+          INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -464,7 +466,8 @@ jobs:
             -f action=plan \
             -f staging_state="$STAGING_STATE" \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
-            -f ml_image_digest="$ML_IMAGE_DIGEST"
+            -f ml_image_digest="$ML_IMAGE_DIGEST" \
+            -f expected_commit_sha="$INTENDED_RELEASE_SHA"
           run_id=''
           discover_deadline="$(( $(date -u +%s) + 300 ))"
           while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
@@ -516,6 +519,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           EXPECTED_STATE: awake
+          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/reviewed-plan"
@@ -523,6 +527,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
+            reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
             reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
           do
@@ -530,6 +535,12 @@ jobs:
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          reviewed_state_bucket="$(cat reviewed.state-bucket)"
+          reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
+          printf '%s' "$reviewed_state_bucket" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$' \
+            || { echo '::error::reviewed plan records an invalid state bucket'; exit 1; }
+          printf '%s' "$reviewed_state_lock_table" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$' \
+            || { echo '::error::reviewed plan records an invalid state lock table'; exit 1; }
           # The shape this run asked terraform-promote to plan. The authoritative
           # check is the desired-count assertion against the plan JSON in
           # wake-validate; this refuses a plan that was not even requested for
@@ -540,6 +551,8 @@ jobs:
           reviewed_commit="$(cat reviewed.commit)"
           printf '%s' "$reviewed_commit" | grep -Eq '^[0-9a-f]{40}$' \
             || { echo '::error::reviewed.commit is not a 40-character commit sha'; exit 1; }
+          test "$reviewed_commit" = "$EXPECTED_COMMIT_SHA" \
+            || { echo "::error::reviewed plan commit ${reviewed_commit} is not the intended release ${EXPECTED_COMMIT_SHA}"; exit 1; }
           checksum="$(sha256sum reviewed.tfplan | cut -d' ' -f1)"
           {
             printf 'plan_checksum=%s\n' "$checksum"
@@ -611,6 +624,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
+            reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
             reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
           do
@@ -618,6 +632,12 @@ jobs:
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          reviewed_state_bucket="$(cat reviewed.state-bucket)"
+          reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
+          printf '%s' "$reviewed_state_bucket" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$' \
+            || { echo '::error::reviewed plan records an invalid state bucket'; exit 1; }
+          printf '%s' "$reviewed_state_lock_table" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$' \
+            || { echo '::error::reviewed plan records an invalid state lock table'; exit 1; }
           test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE" \
             || { echo "::error::reviewed plan records staging_state $(cat reviewed.staging-state), not ${EXPECTED_STATE}"; exit 1; }
           sha256sum --check --status reviewed.tfplan.sha256
@@ -752,7 +772,7 @@ jobs:
             artifacts/wake-plan-policy.txt
             artifacts/wake-plan-cost.txt
             artifacts/profile-resource-inventory.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
   # ---------------------------------------------------------------------------
@@ -1030,6 +1050,15 @@ jobs:
           path: ${{ runner.temp }}/release
           merge-multiple: true
 
+      # The policy-validation job emits the credentialed Terraform resource
+      # inventory used by the rehearsal's cost evidence. Jobs have isolated
+      # workspaces, so make that artifact an explicit input instead of letting
+      # the evidence phase silently price a missing file.
+      - uses: actions/download-artifact@v4
+        with:
+          name: staging-wake-plan-validation-${{ github.run_id }}
+          path: artifacts
+
       - name: Verify the exact immutable application artifact is what staging runs
         env:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
@@ -1164,6 +1193,7 @@ jobs:
       - name: Run migrations and verify the resulting revision
         run: |
           set -euo pipefail
+          mkdir -p artifacts/rehearsal
           service="AETHER-${STAGING_ENV}-backend"
           task_def="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
             --query 'services[0].taskDefinition' --output text)"
@@ -1175,15 +1205,34 @@ jobs:
           # RUN_MIGRATIONS=1 makes the release entrypoint run `alembic upgrade head`.
           task_arn="$(aws ecs run-task --cluster "$STAGING_CLUSTER" --task-definition "$task_def" \
             --launch-type FARGATE --network-configuration "$netcfg" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"${container}\",\"environment\":[{\"name\":\"RUN_MIGRATIONS\",\"value\":\"1\"}]}]}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${container}\",\"command\":[\"/bin/sh\",\"-c\",\"exit 0\"],\"environment\":[{\"name\":\"RUN_MIGRATIONS\",\"value\":\"1\"}]}]}" \
             --query 'tasks[0].taskArn' --output text)"
-          aws ecs wait tasks-stopped --cluster "$STAGING_CLUSTER" --tasks "$task_arn"
-          exit_code="$(aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "$task_arn" \
-            --query 'tasks[0].containers[0].exitCode' --output text)"
+          test -n "$task_arn" && test "$task_arn" != None \
+            || { echo '::error::migration task did not return a task ARN'; exit 1; }
+          printf 'migration_task=%s\n' "$task_arn" > artifacts/rehearsal/migrations.txt
+          wait_status=0
+          if aws ecs wait tasks-stopped --cluster "$STAGING_CLUSTER" --tasks "$task_arn"; then
+            :
+          else
+            wait_status=$?
+          fi
+          describe_status=0
+          if aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "$task_arn" \
+            > artifacts/rehearsal/migration-task.json; then
+            :
+          else
+            describe_status=$?
+          fi
+          test "$describe_status" = 0 \
+            || { echo '::error::could not collect migration task evidence'; exit 1; }
+          test "$wait_status" = 0 \
+            || { echo "::error::migration task did not stop successfully (wait status ${wait_status})"; exit 1; }
+          jq -e '.tasks | length == 1 and .[0].lastStatus == "STOPPED"' \
+            artifacts/rehearsal/migration-task.json >/dev/null \
+            || { echo '::error::migration task evidence does not show a stopped task'; exit 1; }
+          exit_code="$(jq -er '.tasks[0].containers[0].exitCode // empty' artifacts/rehearsal/migration-task.json)"
           test "$exit_code" = 0 || { echo "::error::migration task failed (exit ${exit_code})"; exit 1; }
-          mkdir -p artifacts/rehearsal
-          printf 'migration_task=%s\nexit_code=%s\n' "$task_arn" "$exit_code" \
-            > artifacts/rehearsal/migrations.txt
+          printf 'exit_code=%s\n' "$exit_code" >> artifacts/rehearsal/migrations.txt
           # /v1/ready fails unless the database alembic revision equals the
           # packaged head, so it is the authoritative revision verification.
           status="$(curl -sS -o artifacts/rehearsal/ready.json -w '%{http_code}' \
@@ -1352,7 +1401,7 @@ jobs:
           _registration_status, registration = call("POST", "/v1/tenants", body={
               "name": "Aether staging rehearsal",
               "contact_email": f"rehearsal-{uuid.uuid4().hex}@staging.invalid",
-              "plan_tier": "P1",
+              "plan_tier": "alpha",
               "settings": {"lifecycle": "run-scoped-rehearsal"},
           }, expect={200, 201})
           # Persist only a secret-free marker and a narrowly validated tenant ID.
@@ -1410,6 +1459,7 @@ jobs:
             --base-url "https://${ALB_DNS_NAME}" \
             --api-key "$REHEARSAL_TENANT_API_KEY" \
             --admin-api-key "$SMOKE_ADMIN_API_KEY" \
+            --web2 \
             --timeout 20 \
             | tee artifacts/rehearsal/smoke.txt
           python - <<'PY'
@@ -1496,6 +1546,12 @@ jobs:
 
           # inline ML — staging runs remote_ml: false, so serving is in-process.
           call("GET", "/v1/ml/models", expect={200})
+          # The gateway list endpoint can return registry-only data even when
+          # the serving process is absent. Probe the unique /models route from
+          # the mounted in-process router as well, so staging proves the inline
+          # image path and its auth boundary rather than only proving the model
+          # registry is importable.
+          call("GET", "/models", expect={200})
           results["inline_ml"] = "ok"
 
           json.dump(results, open("artifacts/rehearsal/capabilities.json", "w"), indent=2)
@@ -1549,6 +1605,7 @@ jobs:
           set -euo pipefail
           python scripts/load_smoke.py \
             --host "https://${ALB_DNS_NAME}" \
+            --api-key "$REHEARSAL_TENANT_API_KEY" \
             --users 10 \
             --duration 60 \
             --json-out artifacts/rehearsal/load.json \
@@ -1608,8 +1665,13 @@ jobs:
           service="AETHER-${STAGING_ENV}-backend"
           current="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
             --query 'services[0].taskDefinition' --output text)"
+          test -n "$current" && test "$current" != None \
+            || { echo "::error::backend service ${service} has no current task definition"; exit 1; }
           family="${current%:*}"
           revision="${current##*:}"
+          case "$revision" in
+            ''|*[!0-9]*) echo "::error::backend service task definition ${current} has an invalid revision"; exit 1 ;;
+          esac
           if [ "$revision" -le 1 ]; then
             # The first approved staging deployment has no prior revision.
             # Record that rollback is not applicable rather than failing a
@@ -1620,8 +1682,45 @@ jobs:
             exit 0
           fi
           previous="${family}:$((revision - 1))"
+          aws ecs describe-task-definition --task-definition "$previous" >/dev/null \
+            || { echo "::error::previous task definition ${previous} is not available for rollback"; exit 1; }
+
+          rolled_back=false
+          restore_current() {
+            if [ "$rolled_back" != true ]; then
+              return 0
+            fi
+            echo "restoring reviewed task definition ${current}"
+            if ! aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
+              --task-definition "$current" >/dev/null; then
+              echo '::error::roll-forward update failed while restoring the reviewed task definition'
+              return 1
+            fi
+            if ! aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "$service"; then
+              echo '::error::roll-forward service never became stable while restoring the reviewed task definition'
+              return 1
+            fi
+            restored="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
+              --query 'services[0].taskDefinition' --output text)"
+            if [ "$restored" != "$current" ]; then
+              echo "::error::roll-forward restored ${restored}, not ${current}"
+              return 1
+            fi
+            rolled_back=false
+            return 0
+          }
+          on_exit() {
+            status=$?
+            if [ "$rolled_back" = true ]; then
+              restore_current || status=1
+            fi
+            exit "$status"
+          }
+          trap on_exit EXIT
+
           aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
             --task-definition "$previous" >/dev/null
+          rolled_back=true
           aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "$service"
           rolled="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
             --query 'services[0].taskDefinition' --output text)"
@@ -1629,12 +1728,8 @@ jobs:
           status="$(curl -sS -o /dev/null -w '%{http_code}' "https://${ALB_DNS_NAME}/v1/health")"
           test "$status" = 200 || { echo "::error::rolled-back revision is unhealthy (${status})"; exit 1; }
           # Roll forward to the reviewed release revision and prove it is restored.
-          aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
-            --task-definition "$current" >/dev/null
-          aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "$service"
-          restored="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
-            --query 'services[0].taskDefinition' --output text)"
-          test "$restored" = "$current" || { echo "::error::roll-forward did not restore ${current}"; exit 1; }
+          restore_current
+          trap - EXIT
           printf 'rolled_back_to=%s\nrestored=%s\n' "$previous" "$restored" \
             > artifacts/rehearsal/rollback.txt
 
@@ -1656,16 +1751,16 @@ jobs:
           }
           aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
             > artifacts/rehearsal/ecs-services.json
-          aws logs describe-log-groups --log-group-name-prefix "/aether/${STAGING_ENV}" \
+          aws logs describe-log-groups --log-group-name-prefix "/ecs/${STAGING_CLUSTER}" \
             > artifacts/rehearsal/log-groups.json
           aws cloudwatch list-metrics --namespace AETHER \
             > artifacts/rehearsal/metrics.json
-          cp -f "${RUNNER_TEMP}/release/release.json" artifacts/rehearsal/release.json 2>/dev/null || true
+          cp -f "${RUNNER_TEMP}/release/release.json" artifacts/rehearsal/release.json
           python scripts/release/check_cost_model.py \
             --profile "$PROFILE" \
             --inventory artifacts/profile-resource-inventory.json \
             --out-dir "artifacts/rehearsal/cost" \
-            > artifacts/rehearsal/cost.txt 2>&1 || true
+            > artifacts/rehearsal/cost.txt 2>&1
 
       - name: Delete or expire the rehearsal tenant
         if: always()
@@ -1784,6 +1879,8 @@ jobs:
     outputs:
       cleanup_result: ${{ steps.report.outputs.cleanup_result }}
       residual_tasks: ${{ steps.residual.outputs.residual_tasks }}
+      residual_task_arns: ${{ steps.residual.outputs.residual_task_arns }}
+      standalone_tasks: ${{ steps.residual.outputs.standalone_tasks }}
       residual_cost_usd_per_hour: ${{ steps.residual.outputs.residual_cost_usd_per_hour }}
       manual_intervention_required: ${{ steps.report.outputs.manual_intervention_required }}
     steps:
@@ -1838,15 +1935,15 @@ jobs:
           fi
           mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
           if [ "${#services[@]}" -eq 0 ]; then
-            echo 'asleep=true' >> "$GITHUB_OUTPUT"
-            echo 'staging exposes no ECS services; already at zero'
-            exit 0
-          fi
-          if ! nonzero="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
-            --query 'length(services[?desiredCount>`0`])' --output text)"; then
-            echo '::error::could not describe staging ECS services; staging state is UNKNOWN and must not be treated as asleep'
-            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
-            exit 1
+            nonzero=0
+            echo 'staging exposes no ECS services; checking for standalone ECS tasks before declaring zero'
+          else
+            if ! nonzero="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+              --query 'length(services[?desiredCount>`0`])' --output text)"; then
+              echo '::error::could not describe staging ECS services; staging state is UNKNOWN and must not be treated as asleep'
+              echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
           fi
           case "$nonzero" in
             ''|*[!0-9]*)
@@ -1855,7 +1952,19 @@ jobs:
               exit 1 ;;
           esac
           if [ "$nonzero" = 0 ]; then
-            echo 'asleep=true' >> "$GITHUB_OUTPUT"
+            if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
+              --query 'taskArns[]' --output json > "${RUNNER_TEMP}/staging-running-tasks.json"; then
+              echo '::error::could not enumerate standalone staging tasks; staging state is UNKNOWN and must not be treated as asleep'
+              echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            running_tasks="$(jq 'length' "${RUNNER_TEMP}/staging-running-tasks.json")"
+            if [ "$running_tasks" = 0 ]; then
+              echo 'asleep=true' >> "$GITHUB_OUTPUT"
+            else
+              echo 'asleep=false' >> "$GITHUB_OUTPUT"
+              echo "staging has ${running_tasks} running or pending task(s); a reviewed sleep path is required"
+            fi
           else
             echo 'asleep=false' >> "$GITHUB_OUTPUT"
           fi
@@ -1869,6 +1978,7 @@ jobs:
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -1881,7 +1991,8 @@ jobs:
             -f action=plan \
             -f staging_state=asleep \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
-            -f ml_image_digest="$ML_IMAGE_DIGEST"
+            -f ml_image_digest="$ML_IMAGE_DIGEST" \
+            -f expected_commit_sha="$EXPECTED_COMMIT_SHA"
           run_id=''
           discover_deadline="$(( $(date -u +%s) + 300 ))"
           while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
@@ -1934,6 +2045,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           EXPECTED_STATE: asleep
+          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
         run: |
           set -euo pipefail
           plan_dir="${RUNNER_TEMP}/reviewed-sleep-plan"
@@ -1942,6 +2054,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
+            reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
             reviewed.policy.txt reviewed.cost.txt reviewed.staging-state
           do
@@ -1949,11 +2062,20 @@ jobs:
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
+          reviewed_state_bucket="$(cat reviewed.state-bucket)"
+          reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
+          printf '%s' "$reviewed_state_bucket" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$' \
+            || { echo '::error::reviewed sleep plan records an invalid state bucket'; exit 1; }
+          printf '%s' "$reviewed_state_lock_table" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$' \
+            || { echo '::error::reviewed sleep plan records an invalid state lock table'; exit 1; }
           test "$(cat reviewed.staging-state)" = "$EXPECTED_STATE" \
             || { echo "::error::reviewed sleep plan records staging_state $(cat reviewed.staging-state), not ${EXPECTED_STATE}"; exit 1; }
           sha256sum --check --status reviewed.tfplan.sha256
-          printf '%s' "$(cat reviewed.commit)" | grep -Eq '^[0-9a-f]{40}$' \
+          reviewed_commit="$(cat reviewed.commit)"
+          printf '%s' "$reviewed_commit" | grep -Eq '^[0-9a-f]{40}$' \
             || { echo '::error::reviewed.commit is not a 40-character commit sha'; exit 1; }
+          test "$reviewed_commit" = "$EXPECTED_COMMIT_SHA" \
+            || { echo "::error::reviewed sleep plan commit ${reviewed_commit} is not expected commit ${EXPECTED_COMMIT_SHA}"; exit 1; }
           created_epoch="$(date -u -d "$(cat reviewed.created-utc)" +%s)"
           expires_epoch="$(date -u -d "$(cat reviewed.expires-utc)" +%s)"
           if [ "$((expires_epoch - created_epoch))" -gt 86400 ]; then
@@ -2088,7 +2210,11 @@ jobs:
       # reconciles Terraform state to the same zero.
       - name: Last-resort cost stop (scale staging to zero)
         id: last-resort
-        if: always() && steps.already.outputs.asleep != 'true' && steps.sleep-apply.outputs.conclusion != 'success'
+        if: >-
+          always()
+          && needs.select-profile.outputs.apply_sleep == 'true'
+          && steps.already.outputs.asleep != 'true'
+          && steps.sleep-apply.outputs.conclusion != 'success'
         run: |
           set -euo pipefail
           test "$STAGING_CLUSTER" = "AETHER-staging" \
@@ -2109,11 +2235,26 @@ jobs:
             stopped=$((stopped + 1))
             echo "::warning::scaled ${service} to 0 outside Terraform; state must be reconciled"
           done
+          task_stop_count=0
+          if ! task_arns_raw="$(aws ecs list-tasks --cluster "$STAGING_CLUSTER" \
+            --desired-status RUNNING --query 'taskArns[]' --output text)"; then
+            echo '::error::could not enumerate staging ECS tasks; the last-resort cost stop did not complete'
+            exit 1
+          fi
+          mapfile -t task_arns < <(printf '%s' "$task_arns_raw" | tr '\t' '\n' | sed '/^$/d')
+          for task_arn in "${task_arns[@]:-}"; do
+            test -n "$task_arn" || continue
+            aws ecs stop-task --cluster "$STAGING_CLUSTER" --task "$task_arn" \
+              --reason 'staging reviewed sleep apply failed' >/dev/null
+            task_stop_count=$((task_stop_count + 1))
+            echo "::warning::stopped residual ${task_arn} outside Terraform; state must be reconciled"
+          done
           printf 'scaled_to_zero=%s\n' "$stopped" >> "$GITHUB_OUTPUT"
+          printf 'tasks_stopped=%s\n' "$task_stop_count" >> "$GITHUB_OUTPUT"
 
       - name: Verify zero desired counts and no residual staging compute
         id: residual
-        if: always()
+        if: always() && needs.select-profile.outputs.apply_sleep == 'true'
         run: |
           set -euo pipefail
           mkdir -p artifacts/sleep
@@ -2168,6 +2309,32 @@ jobs:
             echo '[]' > artifacts/sleep/autoscaling.json
             echo '::error::could not read staging autoscaling targets; an autoscaling floor could revive staging and cannot be ruled out'
           fi
+          residual_task_arns=unknown
+          standalone_tasks=unknown
+          if aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
+            --output json > artifacts/sleep/running-task-arns.json; then
+            mapfile -t task_arns < <(jq -r '.taskArns[]?' artifacts/sleep/running-task-arns.json)
+            residual_task_arns="${#task_arns[@]}"
+            if [ "$residual_task_arns" -gt 0 ]; then
+              if aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "${task_arns[@]}" \
+                --output json > artifacts/sleep/running-tasks.json; then
+                standalone_tasks="$(jq '[.tasks[] | select(((.group // "") | startswith("service:")) | not)] | length' artifacts/sleep/running-tasks.json)"
+                zero_ok=false
+                echo "::error::${residual_task_arns} ECS task(s) remain running or pending after sleep (${standalone_tasks} standalone)"
+              else
+                standalone_tasks=unknown
+                zero_ok=false
+                echo '::error::could not describe residual ECS tasks; staging compute is UNKNOWN and must not be reported as zero'
+              fi
+            else
+              echo '[]' > artifacts/sleep/running-tasks.json
+              standalone_tasks=0
+            fi
+          else
+            zero_ok=false
+            echo '[]' > artifacts/sleep/running-task-arns.json
+            echo '::error::could not enumerate residual ECS tasks; staging compute is UNKNOWN and must not be reported as zero'
+          fi
           # Residual cost, priced from the canonical price book rather than a guess.
           RESIDUAL_JSON=artifacts/sleep/desired-counts.json python - <<'PY'
           import json, os, yaml
@@ -2192,11 +2359,13 @@ jobs:
           PY
           {
             printf 'residual_tasks=%s\n' "$residual_tasks"
+            printf 'residual_task_arns=%s\n' "$residual_task_arns"
+            printf 'standalone_tasks=%s\n' "$standalone_tasks"
             printf 'zero_ok=%s\n' "$zero_ok"
           } >> "$GITHUB_OUTPUT"
 
       - name: Close the awake lease
-        if: always()
+        if: always() && needs.select-profile.outputs.apply_sleep == 'true'
         run: |
           set -euo pipefail
           # Only an explicit ParameterNotFound is a benign already-closed
@@ -2220,34 +2389,41 @@ jobs:
         if: always()
         env:
           VALIDATION_RESULT: ${{ steps.upstream.outputs.validation_result }}
+          APPLY_SLEEP: ${{ needs.select-profile.outputs.apply_sleep }}
           ALREADY_ASLEEP: ${{ steps.already.outputs.asleep }}
           SLEEP_APPLY_CONCLUSION: ${{ steps.sleep-apply.outputs.conclusion }}
           SCALED_TO_ZERO: ${{ steps.last-resort.outputs.scaled_to_zero }}
           RESIDUAL_TASKS: ${{ steps.residual.outputs.residual_tasks }}
+          RESIDUAL_TASK_ARNS: ${{ steps.residual.outputs.residual_task_arns }}
+          STANDALONE_TASKS: ${{ steps.residual.outputs.standalone_tasks }}
           RESIDUAL_COST: ${{ steps.residual.outputs.residual_cost_usd_per_hour }}
           ZERO_OK: ${{ steps.residual.outputs.zero_ok }}
         run: |
           set -euo pipefail
           cleanup_result=success
           manual=false
+          if [ "${APPLY_SLEEP:-false}" != true ]; then
+            cleanup_result=not_applied
+            echo '::notice::sleep plan verified; plan-sleep does not mutate staging or close the awake lease'
+          fi
           # `zero_ok` is only true when an AWS call actually PROVED staging is at
           # zero. An absent or false value (a skipped step, a failed step, an
           # unreadable API) is a failure, never a pass.
-          if [ "${ZERO_OK:-false}" != true ]; then
+          if [ "${APPLY_SLEEP:-false}" = true ] && [ "${ZERO_OK:-false}" != true ]; then
             cleanup_result=failure
             manual=true
           fi
           # The same rule for the pre-sleep state probe: `unknown` is not `true`.
-          if [ "${ALREADY_ASLEEP:-unknown}" = unknown ]; then
+          if [ "${APPLY_SLEEP:-false}" = true ] && [ "${ALREADY_ASLEEP:-unknown}" = unknown ]; then
             cleanup_result=failure
             manual=true
             echo '::error::staging was never proven to be at zero before the sleep phase ran'
           fi
-          if [ "${ALREADY_ASLEEP:-false}" != true ] && [ "${SLEEP_APPLY_CONCLUSION:-}" != success ]; then
+          if [ "${APPLY_SLEEP:-false}" = true ] && [ "${ALREADY_ASLEEP:-false}" != true ] && [ "${SLEEP_APPLY_CONCLUSION:-}" != success ]; then
             cleanup_result=degraded
             manual=true
           fi
-          if [ -n "${SCALED_TO_ZERO:-}" ] && [ "${SCALED_TO_ZERO:-0}" -gt 0 ]; then
+          if [ "${APPLY_SLEEP:-false}" = true ] && [ -n "${SCALED_TO_ZERO:-}" ] && [ "${SCALED_TO_ZERO:-0}" -gt 0 ]; then
             manual=true
           fi
           {
@@ -2257,11 +2433,14 @@ jobs:
             echo '| --- | --- |'
             echo "| validation result | ${VALIDATION_RESULT:-unknown} |"
             echo "| cleanup result | ${cleanup_result} |"
+            echo "| sleep mutation requested | ${APPLY_SLEEP:-false} |"
             echo "| staging state before sleep | ${ALREADY_ASLEEP:-unknown} |"
             echo "| staging proven at zero after sleep | ${ZERO_OK:-false} |"
             echo "| reviewed sleep apply | ${SLEEP_APPLY_CONCLUSION:-not-dispatched} |"
             echo "| services force-scaled to zero | ${SCALED_TO_ZERO:-0} |"
             echo "| residual running/pending tasks | ${RESIDUAL_TASKS:-unknown} |"
+            echo "| residual ECS task ARNs | ${RESIDUAL_TASK_ARNS:-not-run} |"
+            echo "| residual standalone tasks | ${STANDALONE_TASKS:-not-run} |"
             echo "| estimated residual cost | \$${RESIDUAL_COST:-unknown}/hour |"
             echo "| manual intervention required | ${manual} |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -2315,8 +2494,10 @@ jobs:
           SLEEP_RESULT: ${{ needs.sleep.result }}
           CLEANUP_RESULT: ${{ needs.sleep.outputs.cleanup_result }}
           RESIDUAL_TASKS: ${{ needs.sleep.outputs.residual_tasks }}
+          RESIDUAL_TASK_ARNS: ${{ needs.sleep.outputs.residual_task_arns }}
           RESIDUAL_COST: ${{ needs.sleep.outputs.residual_cost_usd_per_hour }}
           MANUAL_INTERVENTION: ${{ needs.sleep.outputs.manual_intervention_required }}
+          APPLY_SLEEP: ${{ needs.select-profile.outputs.apply_sleep }}
         run: |
           set -euo pipefail
           failed=()
@@ -2334,6 +2515,7 @@ jobs:
             echo
             echo "- cleanup result: ${CLEANUP_RESULT:-not-run}"
             echo "- residual running tasks: ${RESIDUAL_TASKS:-unknown}"
+            echo "- residual ECS task ARNs: ${RESIDUAL_TASK_ARNS:-not-run}"
             echo "- estimated residual cost: \$${RESIDUAL_COST:-unknown}/hour"
             echo "- manual intervention required: ${MANUAL_INTERVENTION:-unknown}"
             echo "- failed phases: ${failed[*]:-none}"
@@ -2342,4 +2524,8 @@ jobs:
             echo "::error::staging lifecycle failed in: ${failed[*]}"
             exit 1
           fi
-          echo 'staging lifecycle completed and staging is asleep'
+          if [ "${APPLY_SLEEP:-false}" = true ]; then
+            echo 'staging lifecycle completed and staging is asleep'
+          else
+            echo 'staging sleep plan completed; staging was not mutated'
+          fi

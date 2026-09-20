@@ -36,6 +36,11 @@ on:
         type: string
         default: 'aether-proof-tenant'
         required: false
+      proof_workspace_id:
+        description: 'Proof workspace ID for smoke test authentication'
+        type: string
+        default: 'proof-lab'
+        required: false
   push:
     branches: [main]
     paths:
@@ -50,36 +55,41 @@ concurrency:
   group: staging-smoke-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  AETHER_STAGING_URL: ${{ secrets.AETHER_STAGING_URL }}
-  PROOF_TENANT_ID: ${{ secrets.PROOF_TENANT_ID }}
-  PROOF_WORKSPACE_ID: ${{ secrets.PROOF_WORKSPACE_ID }}
-
 jobs:
   # -------------------------------------------------------------------
-  # preflight — Verify staging secrets are configured before running.
+  # preflight — Verify the canonical staging proof contract before running.
   #
-  # When the required secrets (AETHER_STAGING_URL, PROOF_TENANT_ID,
-  # PROOF_WORKSPACE_ID) are not configured, this job skips the entire
-  # workflow gracefully instead of failing. This prevents false-negative
-  # CI failures on repositories that have not yet provisioned a staging
-  # environment.
+  # This gate fails closed. A skipped smoke job is not evidence that staging
+  # passed, and the runtime scripts consume AETHER_API_URL/AETHER_API_KEY/
+  # PROOF_TENANT_ID/PROOF_WORKSPACE_ID rather than the retired secret names.
   # -------------------------------------------------------------------
   preflight:
     name: Preflight — Check Staging Secrets
+    environment: staging
     runs-on: ubuntu-latest
-    outputs:
-      secrets-configured: ${{ steps.check.outputs.configured }}
     steps:
-      - name: Check for required staging secrets
+      - name: Check the canonical staging proof inputs
         id: check
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+          AETHER_API_URL: ${{ vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME }}
+          AETHER_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          PROOF_TENANT_ID: ${{ inputs.proof_tenant_id || 'aether-proof-tenant' }}
+          PROOF_WORKSPACE_ID: ${{ inputs.proof_workspace_id || 'proof-lab' }}
         run: |
-          if [ -z "${{ secrets.AETHER_STAGING_URL }}" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::AETHER_STAGING_URL secret is not configured — skipping staging smoke test."
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
+          set -euo pipefail
+          test "$TARGET_ENVIRONMENT" = staging || {
+            echo "::error::staging-smoke.yml only accepts environment=staging"; exit 1;
+          }
+          test -n "${AETHER_API_URL:-}" || {
+            echo "::error::AETHER_API_URL is missing; set repository variable AETHER_API_URL or secret TF_DOMAIN_NAME"; exit 1;
+          }
+          test -n "${AETHER_API_KEY:-}" || {
+            echo "::error::AETHER_API_KEY is missing; configure SMOKE_API_KEY"; exit 1;
+          }
+          test -n "${PROOF_TENANT_ID:-}" || { echo '::error::PROOF_TENANT_ID is empty'; exit 1; }
+          test -n "${PROOF_WORKSPACE_ID:-}" || { echo '::error::PROOF_WORKSPACE_ID is empty'; exit 1; }
+          echo 'Canonical staging proof inputs are configured; secret values were not printed.'
 
   # -------------------------------------------------------------------
   # smoke-staging — P0 smoke test against the staging environment.
@@ -98,7 +108,8 @@ jobs:
   smoke-staging:
     name: Smoke Test Staging
     needs: preflight
-    if: needs.preflight.outputs.secrets-configured == 'true'
+    if: needs.preflight.result == 'success'
+    environment: staging
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -121,9 +132,10 @@ jobs:
 
       - name: Run staging smoke test
         env:
-          AETHER_STAGING_URL: ${{ secrets.AETHER_STAGING_URL }}
-          PROOF_TENANT_ID: ${{ secrets.PROOF_TENANT_ID }}
-          PROOF_WORKSPACE_ID: ${{ secrets.PROOF_WORKSPACE_ID }}
+          AETHER_API_URL: ${{ vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME }}
+          AETHER_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          PROOF_TENANT_ID: ${{ inputs.proof_tenant_id || 'aether-proof-tenant' }}
+          PROOF_WORKSPACE_ID: ${{ inputs.proof_workspace_id || 'proof-lab' }}
           AETHER_ENV: staging
         run: pnpm smoke:staging
 
@@ -150,10 +162,11 @@ jobs:
   # -------------------------------------------------------------------
   release-proof:
     name: Release Proof Report
+    environment: staging
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [preflight, smoke-staging]
-    if: always() && needs.preflight.outputs.secrets-configured == 'true' && needs.smoke-staging.result == 'success'
+    if: always() && needs.preflight.result == 'success' && needs.smoke-staging.result == 'success'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -178,9 +191,11 @@ jobs:
 
       - name: Generate release proof report
         env:
-          AETHER_STAGING_URL: ${{ secrets.AETHER_STAGING_URL }}
-          PROOF_TENANT_ID: ${{ secrets.PROOF_TENANT_ID }}
-          PROOF_WORKSPACE_ID: ${{ secrets.PROOF_WORKSPACE_ID }}
+          AETHER_API_URL: ${{ vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME }}
+          AETHER_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          PROOF_TENANT_ID: ${{ inputs.proof_tenant_id || 'aether-proof-tenant' }}
+          PROOF_WORKSPACE_ID: ${{ inputs.proof_workspace_id || 'proof-lab' }}
+          AETHER_ENV: staging
           REPORT_DATE: ${{ steps.date.outputs.date }}
         run: pnpm release:proof
 
