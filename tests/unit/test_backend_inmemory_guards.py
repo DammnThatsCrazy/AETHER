@@ -451,3 +451,34 @@ def test_staging_api_imports_with_the_configured_durable_backends():
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "STAGING_IMPORT_OK" in result.stdout
+
+
+def test_backend_image_preserves_runtime_authority_layout():
+    """The image must retain the source depth used by canonical asset readers."""
+    dockerfile = (BACKEND_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+    assert 'COPY ["services/backend/services/", "./services/backend/services/"]' in dockerfile
+    assert 'COPY ["services/backend/shared/", "./services/backend/shared/"]' in dockerfile
+    assert 'COPY ["config/", "./config/"]' in dockerfile
+    assert 'COPY ["packages/shared/contracts/", "./packages/shared/contracts/"]' in dockerfile
+    assert 'COPY ["contracts/delivery/", "./contracts/delivery/"]' in dockerfile
+    assert 'COPY ["pyproject.toml", "./pyproject.toml"]' in dockerfile
+    assert "ENV PYTHONPATH=/app/services/backend:/app" in dockerfile
+    assert "WORKDIR /app/services/backend" in dockerfile
+    assert "packages/*" in dockerignore
+    assert "!packages/shared/contracts/" in dockerignore
+    assert "!packages/shared/contracts/**" in dockerignore
+
+    # These are the first startup/request-time authorities whose absence must
+    # never be hidden by a fallback or discovered only by an ECS health probe.
+    for relative in (
+        "config/route_registry.yaml",
+        "config/founding_tenant_release.yaml",
+        "packages/shared/contracts/consent-registry.json",
+        "packages/shared/contracts/signal-use-matrix.json",
+        "packages/shared/contracts/surface-capability-registry.json",
+        "contracts/delivery/release-evidence-bundle.schema.json",
+        "pyproject.toml",
+    ):
+        assert (ROOT / relative).is_file(), relative

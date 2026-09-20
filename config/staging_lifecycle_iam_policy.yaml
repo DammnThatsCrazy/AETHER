@@ -10,9 +10,16 @@ statements:
   - sid: InspectStagingEcsCluster
     actions:
       - ecs:DescribeClusters
-      - ecs:ListServices
     resource: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
     scope: staging-cluster
+  - sid: ListStagingServices
+    actions:
+      - ecs:ListServices
+    resource: '*'
+    scope: staging-cluster
+    conditions:
+      ArnEquals:
+        ecs:cluster: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
   - sid: InspectStagingServices
     actions:
       - ecs:DescribeServices
@@ -26,8 +33,8 @@ statements:
   - sid: InspectStagingTaskDefinitions
     actions:
       - ecs:DescribeTaskDefinition
-    resource: arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*
-    scope: staging-task-definition
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: MutateStagingEcs
     actions:
       - ecs:UpdateService
@@ -51,8 +58,9 @@ statements:
       - arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role
     scope: staging-task-roles
     conditions:
-      iam:PassedToService:
-        - ecs-tasks.amazonaws.com
+      StringEquals:
+        iam:PassedToService:
+          - ecs-tasks.amazonaws.com
   - sid: ManageStagingAwakeLease
     actions:
       - ssm:GetParameter
@@ -80,19 +88,20 @@ statements:
   - sid: InspectStagingLogs
     actions:
       - logs:DescribeLogGroups
-    resource:
-      - arn:aws:logs:us-east-1:${account_id}:log-group:/aether/staging/*
-      - arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*
-      - arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*
-    scope: staging-logs
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: InspectStagingMetrics
     actions:
       - cloudwatch:ListMetrics
     resource: '*'
     scope: global-read-required-by-api
-  - sid: PreventAutoscalingRevival
+  - sid: InspectStagingAutoscalingTargets
     actions:
       - application-autoscaling:DescribeScalableTargets
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: PreventAutoscalingRevival
+    actions:
       - application-autoscaling:RegisterScalableTarget
     resource: '*'
     scope: staging-ecs-scalable-targets

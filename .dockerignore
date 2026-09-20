@@ -14,7 +14,12 @@
 # Node / workspace artifacts
 node_modules/
 **/node_modules/
-packages/
+# Keep the backend's canonical JSON contracts available to the image while
+# continuing to exclude the rest of the workspace packages.
+packages/*
+!packages/shared/
+!packages/shared/contracts/
+!packages/shared/contracts/**
 apps/
 playground/
 RootPackageSDK.json

@@ -40,20 +40,30 @@ RUN groupadd --gid 1000 appuser && \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code
-# Build context is the repository root, so paths are relative to repo root.
-# The aether-backend/ tree provides main.py and the shared/ package used by
-# imports of the form `from shared.X import ...`. The top-level security/
-# package is consumed via `from security.X import ...`.
-COPY ["services/backend/config/", "./config/"]
-COPY ["services/backend/dependencies/", "./dependencies/"]
-COPY ["services/backend/middleware/", "./middleware/"]
-COPY ["services/backend/repositories/", "./repositories/"]
-COPY ["services/backend/services/", "./services/"]
-COPY ["services/backend/shared/", "./shared/"]
-COPY ["services/backend/main.py", "./main.py"]
-COPY ["services/backend/alembic/", "./alembic/"]
-COPY ["services/backend/alembic.ini", "./alembic.ini"]
+# Copy application code while preserving the repository-relative backend root.
+# Several runtime authorities resolve canonical config/contracts by walking from
+# __file__; flattening services/backend into /app silently made those readers
+# point at /nonexistent (or made route_registry.yaml disappear entirely). The
+# backend root is the first PYTHONPATH entry below, so `main`, `config`,
+# `dependencies`, `middleware`, `repositories`, `services`, and `shared` keep
+# their existing import names without losing the source-tree depth.
+COPY ["services/backend/config/", "./services/backend/config/"]
+COPY ["services/backend/dependencies/", "./services/backend/dependencies/"]
+COPY ["services/backend/middleware/", "./services/backend/middleware/"]
+COPY ["services/backend/repositories/", "./services/backend/repositories/"]
+COPY ["services/backend/services/", "./services/backend/services/"]
+COPY ["services/backend/shared/", "./services/backend/shared/"]
+COPY ["services/backend/main.py", "./services/backend/main.py"]
+COPY ["services/backend/alembic/", "./services/backend/alembic/"]
+COPY ["services/backend/alembic.ini", "./services/backend/alembic.ini"]
+
+# These are runtime authorities, not build-only documentation. Keep the
+# profile/route registries and the contract JSON that the consent, graph,
+# projection, and capability readers load lazily after startup.
+COPY ["config/", "./config/"]
+COPY ["packages/shared/contracts/", "./packages/shared/contracts/"]
+COPY ["contracts/delivery/", "./contracts/delivery/"]
+COPY ["pyproject.toml", "./pyproject.toml"]
 COPY security/ ./security/
 
 # ML serving source tree (required when ML_SERVING_INLINE=true, E2).
@@ -62,6 +72,7 @@ COPY ["services/ml/common/", "./common/"]
 COPY ["services/ml/serving/", "./serving/"]
 
 ENV ML_SERVING_INLINE=false
+ENV PYTHONPATH=/app/services/backend:/app
 
 EXPOSE 8000
 
@@ -72,6 +83,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 # into DATABASE_URL before uvicorn starts. No-op when DATABASE_URL is already set.
 COPY ["services/backend/entrypoint.sh", "/entrypoint.sh"]
 RUN chmod +x /entrypoint.sh
+
+WORKDIR /app/services/backend
 
 USER appuser
 

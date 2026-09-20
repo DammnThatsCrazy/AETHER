@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.release.check_staging_lifecycle_policy import EXPECTED, main
+from scripts.release.check_staging_lifecycle_policy import EXPECTED, main, render_policy_document
 import yaml
 
 
@@ -27,7 +27,6 @@ def test_lifecycle_workflows_run_contract_check() -> None:
 def test_lifecycle_manifest_uses_task_specific_scopes() -> None:
     doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     by_sid = {statement["sid"]: statement for statement in doc["statements"]}
-    assert by_sid["InspectStagingTaskDefinitions"]["resource"].endswith("task-definition/AETHER-staging-*")
     assert by_sid["RunStagingMigrationTasks"]["resource"] == [
         "arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*",
         "arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging",
@@ -36,6 +35,35 @@ def test_lifecycle_manifest_uses_task_specific_scopes() -> None:
         "ArnEquals": {
             "ecs:cluster": "arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging",
         }
+    }
+
+
+def test_lifecycle_manifest_uses_aws_global_api_scopes() -> None:
+    doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    by_sid = {statement["sid"]: statement for statement in doc["statements"]}
+    assert by_sid["ListStagingServices"]["resource"] == "*"
+    assert by_sid["InspectStagingTaskDefinitions"]["resource"] == "*"
+    assert by_sid["InspectStagingLogs"]["resource"] == "*"
+    assert by_sid["InspectStagingAutoscalingTargets"]["resource"] == "*"
+    assert by_sid["PreventAutoscalingRevival"]["resource"] == "*"
+
+
+def test_lifecycle_manifest_conditions_are_iam_operator_maps() -> None:
+    doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    by_sid = {statement["sid"]: statement for statement in doc["statements"]}
+    assert by_sid["PassOnlyStagingTaskRoles"]["conditions"] == {
+        "StringEquals": {"iam:PassedToService": ["ecs-tasks.amazonaws.com"]}
+    }
+
+
+def test_lifecycle_manifest_renders_to_an_aws_policy_document() -> None:
+    doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    rendered = render_policy_document(doc, "544471417928")
+    by_sid = {statement["Sid"]: statement for statement in rendered["Statement"]}
+    assert by_sid["InspectStagingTaskDefinitions"]["Resource"] == "*"
+    assert by_sid["InspectStagingLogs"]["Resource"] == "*"
+    assert by_sid["PassOnlyStagingTaskRoles"]["Condition"] == {
+        "StringEquals": {"iam:PassedToService": ["ecs-tasks.amazonaws.com"]}
     }
 
 

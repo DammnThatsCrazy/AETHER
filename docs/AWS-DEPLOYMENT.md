@@ -20,6 +20,7 @@ source_files:
   - config/staging_apply_iam_policy.yaml
   - config/staging_lifecycle_iam_policy.yaml
   - scripts/release/check_staging_lifecycle_policy.py
+  - services/backend/Dockerfile
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -29,14 +30,15 @@ source_hashes:
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
   ".github/workflows/terraform-promote.yml": "sha256:625caac71bb1960cec2191cc8ed3486d199d626d9197b1c7082f2f66e7bcf185"
   "config/staging_apply_iam_policy.yaml": "sha256:87e3f96de932225bfb87344e93f7bea10338ce8189967a92d1aa829915ddbd47"
-  "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
+  "config/staging_lifecycle_iam_policy.yaml": "sha256:63ea9abe5bd93f28700fc6ab081090ddb6da5291b05f6d7532461c3357f75dd7"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:374035869574722721516012a6c4d10dc67d0b2014e0af47835f76ba5e007a93"
-  "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
+  "scripts/release/check_staging_lifecycle_policy.py": "sha256:d501c59246d15b8ff3e750ceb6d76ef01c30c646817ea1156784e545f5837b44"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
+  "services/backend/Dockerfile": "sha256:153ae4fd31387b8a6d6560c7b144bd9f804ec60e3eaabea1249a7fef74f2d941"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -112,8 +114,23 @@ autoscaling-floor cleanup, and evidence collection; it cannot create IAM roles,
 read application secret values, or mutate non-staging resources. The checked-in
 IAM manifests are validated against the workflow action inventory so adding a
 new lifecycle AWS call without its least-privilege grant fails CI before a
-rehearsal can start. State reconciliation is always followed by a fresh plan;
-no plan generated before an import or untaint may be reused.
+rehearsal can start. AWS evaluates several lifecycle namespace/read APIs against
+`Resource: "*"` (`ecs:ListServices`, `ecs:DescribeTaskDefinition`,
+`logs:DescribeLogGroups`, and the application-autoscaling APIs); those global
+scopes are intentional and are constrained by request conditions where AWS
+supports them. Before changing the external `AetherStagingLifecycle` inline
+policy, render the checked-in manifest for the account and confirm it with IAM
+simulation; the live role must match the rendered statements exactly. State
+reconciliation is always followed by a fresh plan; no plan generated before an
+import or untaint may be reused.
+
+The backend image preserves the repository-relative source depth used by its
+canonical asset readers and explicitly ships the root `config/`, shared JSON
+contracts, delivery schemas, and release metadata. Flattening
+`services/backend` into `/app` or leaving `packages/shared/contracts/` excluded
+from the Docker build context makes startup/request-time authorities silently
+fall back or fail only after ECS launch, so the image layout is covered by the
+backend guard tests and the hosted immutable build.
 
 The apply manifest also covers ECR scan configuration and the account-plan
 probe used by the staging free-plan guard. On a free AWS account, the guard
