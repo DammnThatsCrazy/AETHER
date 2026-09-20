@@ -34,6 +34,7 @@ export async function fetchSession(signal?: AbortSignal): Promise<KyberSessionVi
       return parseSession(raw);
     },
     { signal },
+    { csrfCritical: true },
   );
 }
 
@@ -86,8 +87,29 @@ export interface StepUpAssertionPayload {
 }
 
 export async function verifyStepUp(payload: StepUpAssertionPayload): Promise<KyberSessionView> {
-  return requestJson(KYBER_AUTH_ENDPOINTS.stepUpVerify, parseSession, {
-    method: 'POST',
-    body: payload,
-  });
+  return requestJson(
+    KYBER_AUTH_ENDPOINTS.stepUpVerify,
+    (raw) => {
+      const body =
+        raw !== null && typeof raw === 'object'
+          ? (raw as Record<string, unknown>)
+          : {};
+      const meta =
+        body.meta !== null && typeof body.meta === 'object'
+          ? (body.meta as Record<string, unknown>)
+          : {};
+      setSessionCsrfToken(
+        typeof meta.csrf_token === 'string' ? meta.csrf_token : null,
+      );
+      const data =
+        body.data !== null && typeof body.data === 'object'
+          ? (body.data as Record<string, unknown>)
+          : {};
+      return parseSession(data.session ?? raw);
+    },
+    {
+      method: 'POST',
+      body: payload,
+    },
+  );
 }

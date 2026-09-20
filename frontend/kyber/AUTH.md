@@ -23,6 +23,12 @@ the local environment.
 - The backend session is represented by an HttpOnly cookie.
 - Mutations carry the paired CSRF value.
 - No reusable token or secret exists in frontend code or browser storage.
+- The raw CSRF value is memory-only. Because `/v1/kyber/auth/session` rotates
+  the server-side CSRF pair, Kyber serializes token-issuing session/step-up
+  responses and mutating requests across supported browser tabs with Web Locks,
+  then shares the fresh value through an in-memory `BroadcastChannel`. Only a
+  non-sensitive revision marker may be written to storage; session handles and
+  CSRF values are never persisted.
 
 ## Authorization (RBAC)
 

@@ -1,5 +1,6 @@
 export {
   credentialedFetch,
+  withCsrfCriticalSection,
   requestJson,
   requestVoid,
   readCsrfToken,
@@ -12,7 +13,7 @@ export {
   CSRF_COOKIE_NAMES,
   SESSION_EXPIRED_EVENT,
 } from './session-transport';
-export type { CredentialedRequestInit } from './session-transport';
+export type { CredentialedRequestInit, RequestOptions } from './session-transport';
 export {
   KYBER_AUTH_ENDPOINTS,
   KYBER_DEVICE_ENDPOINTS,
