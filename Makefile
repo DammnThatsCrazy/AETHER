@@ -1063,7 +1063,7 @@ integration-faults: ## Run durable outbox/storage crash, replay, and lifecycle f
 .PHONY: staging-preflight staging-preflight-dry-run \
         staging-preflight-credentialless staging-infra-plan staging-deploy \
         pilot-smoke pilot-evidence pilot-manifest-validate staging-capability-matrix
-staging-preflight: ## Staging preflight gate: env/Settings, DB migrations + table shape, Redis, HTTP health, contracts (fail-closed)
+staging-preflight: ## Staging preflight gate: env/Settings, DB migrations + table shape, selected durable cache, HTTP health, contracts (fail-closed)
 	python scripts/staging_preflight.py
 
 staging-preflight-dry-run: ## Staging preflight self-test against committed fixtures (no live services; does not certify an environment)

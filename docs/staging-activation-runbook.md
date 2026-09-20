@@ -344,7 +344,7 @@ test, restore evidence, known limitations, and a `readiness_decision`
 Additional gates:
 
 ```bash
-make staging-preflight            # LIVE: env/settings, DB migrations + table shape, Redis, HTTP health, contracts
+make staging-preflight            # LIVE: env/settings, DB migrations + table shape, selected durable cache, HTTP health, contracts
 python scripts/ops_readiness.py   # one-person ops readiness surface (flags, stores, worker bridge)
 ```
 

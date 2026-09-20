@@ -31,6 +31,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from typing import Optional
+from urllib.parse import quote
 
 from shared.logger.logger import get_logger
 
@@ -56,6 +57,19 @@ def _require_inmemory_allowed(store_name: str) -> None:
             f"In-memory store '{store_name}' is disabled outside local mode. "
             "Configure Redis or set AETHER_ALLOW_INMEMORY_STORE=1 for an explicit override."
         )
+
+
+def redis_url_from_env() -> str:
+    """Build the Redis URL used by Terraform-managed scale profiles."""
+    explicit = os.getenv("REDIS_URL", "").strip()
+    if explicit:
+        return explicit
+    host = os.getenv("REDIS_HOST", "localhost").strip() or "localhost"
+    port = os.getenv("REDIS_PORT", "6379").strip() or "6379"
+    database = os.getenv("REDIS_DB", "0").strip() or "0"
+    password = os.getenv("REDIS_PASSWORD", "")
+    auth = f":{quote(password, safe='')}@" if password else ""
+    return f"redis://{auth}{host}:{port}/{database}"
 
 
 # =========================================================================
@@ -183,13 +197,18 @@ class RedisStore(DurableStore):
         self._prefix = f"aether:{name}:"
         self._list_prefix = f"aether:{name}:list:"
         self._redis = None
-        self._fallback = InMemoryStore(name)
+        # Do not construct the local fallback eagerly: InMemoryStore correctly
+        # raises in hosted environments, and a Redis-backed hosted store must
+        # be constructible before its first network operation.
+        self._fallback: InMemoryStore | None = None
         self._init_attempted = False
 
-        self._redis_url = redis_url or os.getenv(
-            "REDIS_URL",
-            f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}/0"
-        )
+        self._redis_url = redis_url or redis_url_from_env()
+
+    def _fallback_store(self) -> InMemoryStore:
+        if self._fallback is None:
+            self._fallback = InMemoryStore(self.name)
+        return self._fallback
 
     async def _get_redis(self):
         if self._init_attempted:
@@ -213,14 +232,14 @@ class RedisStore(DurableStore):
     async def get(self, key: str) -> Optional[dict]:
         r = await self._get_redis()
         if r is None:
-            return await self._fallback.get(key)
+            return await self._fallback_store().get(key)
         raw = await r.get(self._prefix + key)
         return json.loads(raw) if raw else None
 
     async def set(self, key: str, value: dict, ttl_seconds: int = 0) -> None:
         r = await self._get_redis()
         if r is None:
-            return await self._fallback.set(key, value, ttl_seconds)
+            return await self._fallback_store().set(key, value, ttl_seconds)
         if ttl_seconds > 0:
             await r.setex(self._prefix + key, ttl_seconds, json.dumps(value))
         else:
@@ -229,13 +248,13 @@ class RedisStore(DurableStore):
     async def delete(self, key: str) -> bool:
         r = await self._get_redis()
         if r is None:
-            return await self._fallback.delete(key)
+            return await self._fallback_store().delete(key)
         return bool(await r.delete(self._prefix + key))
 
     async def find(self, **filters) -> list[dict]:
         r = await self._get_redis()
         if r is None:
-            return await self._fallback.find(**filters)
+            return await self._fallback_store().find(**filters)
         # Scan all keys with prefix (production: use secondary index)
         results = []
         async for key in r.scan_iter(match=self._prefix + "*"):
@@ -249,20 +268,20 @@ class RedisStore(DurableStore):
     async def append_list(self, key: str, value: dict) -> None:
         r = await self._get_redis()
         if r is None:
-            return await self._fallback.append_list(key, value)
+            return await self._fallback_store().append_list(key, value)
         await r.rpush(self._list_prefix + key, json.dumps(value))
 
     async def get_list(self, key: str, limit: int = 100) -> list[dict]:
         r = await self._get_redis()
         if r is None:
-            return await self._fallback.get_list(key, limit)
+            return await self._fallback_store().get_list(key, limit)
         raw_items = await r.lrange(self._list_prefix + key, -limit, -1)
         return [json.loads(item) for item in raw_items]
 
     async def count(self, **filters) -> int:
         r = await self._get_redis()
         if r is None:
-            return await self._fallback.count(**filters)
+            return await self._fallback_store().count(**filters)
         if not filters:
             count = 0
             async for _ in r.scan_iter(match=self._prefix + "*"):

@@ -10,12 +10,13 @@ no backend deps).
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
 from scripts import staging_preflight
-from scripts.lib import preflight_contracts, preflight_db, preflight_env
+from scripts.lib import preflight_contracts, preflight_db, preflight_dynamodb, preflight_env
 from scripts.lib import preflight_http, preflight_redis
 from scripts.lib.preflight_results import (
     FAIL,
@@ -94,7 +95,7 @@ def test_valid_fixture_passes_all_env_checks(monkeypatch):
         "env:inmemory-store-disabled",
         "env:cors-origins",
         "env:database-url",
-        "env:redis-config",
+        "env:cache-config",
         "env:signing-secrets",
         "env:no-placeholder-secrets",
         "env:settings-construct",
@@ -110,6 +111,32 @@ def test_valid_fixture_settings_subprocess_genuinely_constructs():
     env = preflight_env.parse_env_file(VALID_FIXTURE)
     ok, detail = preflight_env.run_settings_subprocess(env)
     assert ok, f"Settings() rejected the valid fixture: {detail}"
+
+
+def test_valid_fixture_api_import_subprocess_genuinely_constructs():
+    """The full backend module graph must import under the staging fixture."""
+    env = preflight_env.parse_env_file(VALID_FIXTURE)
+    ok, detail = preflight_env.run_api_import_subprocess(env)
+    assert ok, f"backend API import rejected the valid fixture: {detail}"
+
+
+def test_api_import_failure_is_reported_as_a_startup_gate(monkeypatch):
+    monkeypatch.setattr(preflight_env, "run_settings_subprocess", _stub_settings_ok)
+    monkeypatch.setattr(
+        preflight_env,
+        "run_api_import_subprocess",
+        lambda env, **kwargs: (False, "RuntimeError: module-level durable store failed"),
+    )
+    env = preflight_env.parse_env_file(VALID_FIXTURE)
+    by_suffix = _by_suffix(
+        preflight_env.run_env_checks(
+            env,
+            api_import_runner=preflight_env.run_api_import_subprocess,
+        ),
+        "env",
+    )
+    assert by_suffix["api-import-graph"].status == FAIL
+    assert "durable store" in by_suffix["api-import-graph"].detail
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +206,15 @@ def test_missing_signing_secret_fails(monkeypatch):
     assert "SDK_CONFIG_SECRET" in by_suffix["signing-secrets"].detail
 
 
+def test_journey_inmemory_override_is_rejected(monkeypatch):
+    monkeypatch.setattr(preflight_env, "run_settings_subprocess", _stub_settings_ok)
+    env = dict(preflight_env.parse_env_file(VALID_FIXTURE))
+    env["AETHER_ALLOW_INMEMORY_JOURNEY_STORE"] = "1"
+    by_suffix = _by_suffix(preflight_env.run_env_checks(env), "env")
+    assert by_suffix["inmemory-store-disabled"].status == FAIL
+    assert "AETHER_ALLOW_INMEMORY_JOURNEY_STORE" in by_suffix["inmemory-store-disabled"].detail
+
+
 def test_production_requires_byok_encryption_key(monkeypatch):
     monkeypatch.setattr(preflight_env, "run_settings_subprocess", _stub_settings_ok)
     env = dict(preflight_env.parse_env_file(VALID_FIXTURE))
@@ -202,7 +238,7 @@ def test_settings_subprocess_failure_detail_is_surfaced(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# DB / Redis / HTTP checks — skip semantics and fail-closed inputs
+# DB / cache / HTTP checks — skip semantics and fail-closed inputs
 # ---------------------------------------------------------------------------
 
 
@@ -235,6 +271,79 @@ async def test_redis_check_skips_in_dry_run():
 async def test_redis_check_fails_without_config():
     results = await preflight_redis.run_redis_checks({}, dry_run=False)
     assert [r.status for r in results] == [FAIL]
+
+
+async def test_dynamodb_check_skips_in_dry_run():
+    results = await preflight_dynamodb.run_dynamodb_checks({}, dry_run=True)
+    assert [r.name for r in results] == [preflight_dynamodb.CHECK_NAME]
+    assert [r.status for r in results] == [SKIP]
+
+
+async def test_dynamodb_check_fails_without_table_name():
+    results = await preflight_dynamodb.run_dynamodb_checks(
+        {"CACHE_BACKEND": "dynamodb"}, dry_run=False
+    )
+    assert [r.status for r in results] == [FAIL]
+    assert "DYNAMODB_CACHE_TABLE" in results[0].detail
+
+
+async def test_dynamodb_check_accepts_active_cache_schema(monkeypatch):
+    class _FakeDynamoClient:
+        def describe_table(self, *, TableName):
+            assert TableName == "AETHER-staging-cache"
+            return {
+                "Table": {
+                    "TableStatus": "ACTIVE",
+                    "KeySchema": [{"AttributeName": "cache_key", "KeyType": "HASH"}],
+                }
+            }
+
+    class _FakeBoto3:
+        @staticmethod
+        def client(service, **_kwargs):
+            assert service == "dynamodb"
+            return _FakeDynamoClient()
+
+    monkeypatch.setitem(sys.modules, "boto3", _FakeBoto3())
+    results = await preflight_dynamodb.run_dynamodb_checks(
+        {
+            "CACHE_BACKEND": "dynamodb",
+            "DYNAMODB_CACHE_TABLE": "AETHER-staging-cache",
+        },
+        dry_run=False,
+    )
+    assert [r.status for r in results] == [PASS]
+
+
+async def test_dynamodb_check_rejects_unexpected_sort_key(monkeypatch):
+    class _FakeDynamoClient:
+        def describe_table(self, *, TableName):
+            return {
+                "Table": {
+                    "TableStatus": "ACTIVE",
+                    "KeySchema": [
+                        {"AttributeName": "cache_key", "KeyType": "HASH"},
+                        {"AttributeName": "tenant_id", "KeyType": "RANGE"},
+                    ],
+                }
+            }
+
+    class _FakeBoto3:
+        @staticmethod
+        def client(service, **_kwargs):
+            assert service == "dynamodb"
+            return _FakeDynamoClient()
+
+    monkeypatch.setitem(sys.modules, "boto3", _FakeBoto3())
+    results = await preflight_dynamodb.run_dynamodb_checks(
+        {
+            "CACHE_BACKEND": "dynamodb",
+            "DYNAMODB_CACHE_TABLE": "AETHER-staging-cache",
+        },
+        dry_run=False,
+    )
+    assert [r.status for r in results] == [FAIL]
+    assert "exactly one cache_key HASH key" in results[0].detail
 
 
 def test_redis_url_resolution():
@@ -413,10 +522,10 @@ def test_dry_run_report_shape_and_pass(monkeypatch):
     # Valid fixture env checks, self-test, service skips, contract checks.
     assert "env:valid-fixture:aether-env" in names
     assert staging_preflight.SELF_TEST_NAME in names
-    assert "db:connect" in names and "redis:ping" in names and "http:health" in names
+    assert "db:connect" in names and "dynamodb:cache-table" in names and "http:health" in names
     statuses = {c["name"]: c["status"] for c in report["checks"]}
     assert statuses["db:connect"] == "SKIP"
-    assert statuses["redis:ping"] == "SKIP"
+    assert statuses["dynamodb:cache-table"] == "SKIP"
     assert statuses["http:ready"] == "SKIP"
     assert statuses[staging_preflight.SELF_TEST_NAME] == "PASS"
     # The report is JSON-serializable.

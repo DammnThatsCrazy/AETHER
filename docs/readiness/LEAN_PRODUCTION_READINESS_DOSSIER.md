@@ -6,12 +6,16 @@ visibility: I
 audience: [ops, architect, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [scripts/staging_preflight.py]
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_dynamodb.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 11
 toc_depth: 3
 source_hashes:
-  scripts/staging_preflight.py: sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15
+  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
+  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "scripts/lib/preflight_dynamodb.py": "sha256:412fa322a11832da710b26c2834a9d7f57a02e0b5451ea4336e7a599de1e41f9"
+  "scripts/lib/preflight_env.py": "sha256:f2b8a4efc17d0923f5e3f844907e1c576ab3dbf368de35dc9edfca8094ec8012"
+  "scripts/staging_preflight.py": "sha256:961ec8e350c05fdb548801e946c27a7385f376331fffec6d5de6d8ea14557c84"
 ---
 
 # Lean Production Readiness Dossier
@@ -41,8 +45,9 @@ written and gated, not improvised. Overall readiness today is **~3.77 / 5**
 
 ## 2. Expected services
 
-Everything staging requires (Postgres, Redis, Neptune, Kafka, ClickHouse, S3,
-backend, Kyber, tenant frontend), plus production-grade posture:
+Everything staging requires (Aurora PostgreSQL, DynamoDB, SNS/SQS, PostgreSQL
+graph/analytics, S3, inline ML, backend, Kyber, tenant frontend), plus
+production-grade posture:
 
 - Multi-AZ / redundancy for the durable stores per the lean-production Terraform
   profile.
@@ -50,6 +55,11 @@ backend, Kyber, tenant frontend), plus production-grade posture:
 - Published ML serving artifacts for any intelligence that serves models.
 - Durable storage provisioned for **agent hosted-mode** (in-memory fallback is
   refused in hosted modes — this is a P0).
+- **DynamoDB** — idempotency, caches, and hosted-mode agent durability for the
+  canonical production-lean profile.
+- **SNS + SQS** — event fanout, role queues, and dead-letter queues.
+- **PostgreSQL graph/analytics paths** — Neptune and ClickHouse belong to
+  heavier profiles, not production-lean.
 
 ---
 
@@ -59,7 +69,7 @@ backend, Kyber, tenant frontend), plus production-grade posture:
 |------|---------|--------------------------|
 | Release gate | `make release-gate` | The canonical release gate: `ci-check` (CI mode) + **strict** production status + ops readiness + founding-tenant control spine |
 | Repo consistency | `make ci-check` | Registry suite (skip = FAIL) + `npm run test` + ~40 validators; no generated-doc diff |
-| Staging preflight (live) | `python scripts/staging_preflight.py --base-url <prod-url>` | env/`Settings()`, DB + Alembic head + table-shape parity, Redis, **live** `/v1/health` + `/v1/ready` |
+| Staging preflight (live) | `python scripts/staging_preflight.py --base-url <prod-url>` | env/`Settings()`, DB + Alembic head + table-shape parity, selected durable cache (DynamoDB for production-lean), **live** `/v1/health` + `/v1/ready` |
 | Readiness scorecard (strict) | `make production-status` (release-gate runs it `--strict`) | 30-area scorecard + declared blockers + live consistency checks |
 | Scale baselines | `make load-baselines` | Recorded RPS/latency baselines against a provisioned environment |
 

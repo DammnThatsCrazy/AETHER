@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior, ops]
 status: stable
 since_version: "0.1.0"
-source_files: [.github/workflows/repo-consistency.yml, .github/workflows/repo-health.yml, scripts/verification_disposition.py, scripts/impact_graph.py, config/impact_graph.json]
+source_files: [.github/workflows/repo-consistency.yml, .github/workflows/repo-health.yml, scripts/verification_disposition.py, scripts/impact_graph.py, config/impact_graph.json, scripts/staging_preflight.py, scripts/lib/preflight_dynamodb.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
@@ -96,7 +96,7 @@ as the repo grows.
 | Push to `main` only | `repo-health.yml` → `main-integration` | Blocking for that job, but scoped to `push` on `main` — it is a post-merge integration authority, not a PR gate. It rebuilds the impact graph against the pre-merge SHA and runs `make integration-durable`. |
 | Push to `main` only | `repo-health.yml` → `docs-sync` | Write-capable auto-commit of regenerated `docs/_generated/**` when `main` has drifted. Runs with `contents: write`, deliberately never on PR-head code. |
 | Nightly (`schedule`) or manual `workflow_dispatch` | `repo-health.yml` → `python-tests`, `backend-tests`, `ml-tests`, `typescript`, `e2e-tenant`, `staging-preflight-dry-run`, aggregated by `validate` | Broad regression evidence (`make ci-check`-class checks plus full test trees). Not a PR blocker — this is what `make ci-check` documents as "broad local, trusted-main, nightly, or release evidence." |
-| Manual `workflow_dispatch` only | `repo-consistency.yml` → `release-gate` | Release-only. Runs `make release-gate` (repo consistency in CI mode + strict production status + ops readiness + founding-tenant control spine) plus a staging preflight dry run. |
+| Manual `workflow_dispatch` only | `repo-consistency.yml` → `release-gate` | Release-only. Runs `make release-gate` (repo consistency in CI mode + strict production status + ops readiness + founding-tenant control spine) plus a staging preflight dry run. The preflight selects the profile's durable cache check: DynamoDB for staging/production-lean, Redis where Redis is selected. |
 
 The practical rule, stated in both `AGENTS.md`/`CLAUDE.md` and
 `docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md`: `make

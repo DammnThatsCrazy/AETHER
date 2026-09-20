@@ -16,7 +16,7 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:122b4db9bed9f32963471c04f5c56dbf418af5751aaf0208a4afba563769467e"
-  "Makefile": "sha256:0e48896e53bb44e0f6a81db0581d1a3df23063aabbfb94029b7dcbe464778afd"
+  "Makefile": "sha256:ee2f327940afe108388c90ad70e31c0f6b24a426426475c816050a9c8507a9d2"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:3973482780754878fd56b1d7018d86bc1c48c9b4e2aa701a7ddb8336c3d0b924"
   "scripts/repo_doctor.py": "sha256:96a8ef3a60787275ff29edbe11697865ad5ea9bd1e01025e1a7f5ce030481c57"
 ---

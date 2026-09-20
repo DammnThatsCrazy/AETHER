@@ -7,12 +7,18 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
+  - config/deployment_profiles.yaml
+  - config/runtime_deployment.yaml
   - scripts/staging_preflight.py
+  - scripts/lib/preflight_dynamodb.py
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
 source_hashes:
-  "scripts/staging_preflight.py": "sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15"
+  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
+  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "scripts/lib/preflight_dynamodb.py": "sha256:412fa322a11832da710b26c2834a9d7f57a02e0b5451ea4336e7a599de1e41f9"
+  "scripts/staging_preflight.py": "sha256:961ec8e350c05fdb548801e946c27a7385f376331fffec6d5de6d8ea14557c84"
 ---
 
 # Staging Deployment Guide
@@ -24,9 +30,12 @@ references: `docs/DEPLOYMENT-RUNBOOK.md`, `docs/PRODUCTION-DEPLOYMENT.md`,
 
 ## Sequence
 
-1. **Provision infrastructure.** Terraform stack (Postgres, Redis, Neptune,
-   Kafka, ClickHouse, S3). Staging and production require real backends — the
-   in-memory fallbacks are dev/test only and are refused in hosted modes.
+1. **Provision infrastructure.** Apply the canonical staging profile: Aurora
+   PostgreSQL, DynamoDB cache/durable stores, SNS/SQS event fanout and DLQs,
+   PostgreSQL graph/analytics paths, S3, inline ML, the API, consolidated
+   worker, ALB, and static frontends. Staging and production require real
+   backends — in-memory fallbacks are dev/test only and are refused in hosted
+   modes.
 2. **Load secrets.** `scripts/bootstrap_aws_secrets.py`; provider secrets per
    `CREDENTIAL_SECRET_REFERENCE.md`. Confirm the secret-scan gate is green.
 3. **Set environment.** `AETHER_ENV=staging`. Keep every economic/agent rollout
@@ -46,8 +55,9 @@ references: `docs/DEPLOYMENT-RUNBOOK.md`, `docs/PRODUCTION-DEPLOYMENT.md`,
 ## What staging must prove before production is even discussed
 
 - Recorded load baselines (`make load-baselines`, `docs/LOAD-BASELINES.md`).
-- Neptune throughput/cost validated with a synthetic merge/traversal workload.
-- ClickHouse/medallion compaction soaked.
+- Staging's PostgreSQL graph/analytics paths and DynamoDB durable-store behavior
+  validated with the synthetic merge/measurement workload. Neptune and
+  ClickHouse are separate heavier-profile prerequisites, not staging defaults.
 - At least one live provider per enabled domain validated (`partner_live`).
 
 None of these are done yet — they are the gap between credential-waiting and

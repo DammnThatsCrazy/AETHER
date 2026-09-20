@@ -9,11 +9,13 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 7
 toc_depth: 2
-source_files: [scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_results.py, services/backend/services/gateway/readiness.py]
+source_files: [scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_dynamodb.py, scripts/lib/preflight_redis.py, scripts/lib/preflight_results.py, services/backend/services/gateway/readiness.py]
 source_hashes:
-  "scripts/lib/preflight_env.py": "sha256:762f42a22b9f7552b330dbeac9d00548516f94be6af235080a9b8accd9fceabe"
+  "scripts/lib/preflight_dynamodb.py": "sha256:412fa322a11832da710b26c2834a9d7f57a02e0b5451ea4336e7a599de1e41f9"
+  "scripts/lib/preflight_env.py": "sha256:f2b8a4efc17d0923f5e3f844907e1c576ab3dbf368de35dc9edfca8094ec8012"
+  "scripts/lib/preflight_redis.py": "sha256:418ac3a2e776cfb96572e3b78864a65e96c34c70cfdd838fb3a90b2bf18ee117"
   "scripts/lib/preflight_results.py": "sha256:ce8f40edac30f24e6be3a9840d43c906436059055525cb2fba8df44c5165da86"
-  "scripts/staging_preflight.py": "sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15"
+  "scripts/staging_preflight.py": "sha256:961ec8e350c05fdb548801e946c27a7385f376331fffec6d5de6d8ea14557c84"
   "services/backend/services/gateway/readiness.py": "sha256:76a97f3b23bdbc35dfed9909b13fbc4de56c3e509e43ea950b60b8855d7c1c3e"
 ---
 
@@ -31,11 +33,18 @@ Validates the target environment before traffic. Checks:
 - **env** — instantiates `Settings()` against the candidate env so the same
   fail-closed `__post_init__` guards run: `AETHER_ENV ∈ {staging,production}`,
   no in-memory store, no localhost/wildcard CORS, no placeholder secrets
-  (`changeme`/`dev-secret`/`test-secret`/…), Redis configured. This is the
-  load-bearing check (`scripts/lib/preflight_env.py`).
+  (`changeme`/`dev-secret`/`test-secret`/…), and a selected durable cache
+  anchor. Staging uses `CACHE_BACKEND=dynamodb` plus
+  `DYNAMODB_CACHE_TABLE`; Redis profiles use `REDIS_URL` or `REDIS_HOST`.
+  This is the load-bearing check (`scripts/lib/preflight_env.py`). It also
+  imports the complete backend API graph under the candidate environment so
+  module-level durable-store or router construction failures are caught before
+  ECS is woken.
 - **db** — asyncpg `SELECT 1`, alembic head-vs-`alembic_version` parity, and a
   migration-vs-runtime table-shape parity probe. *(Skipped in `--dry-run`.)*
-- **redis** — `redis.asyncio` PING. *(Skipped in `--dry-run`.)*
+- **cache** — DynamoDB `DescribeTable` plus `ACTIVE`/`cache_key` schema
+  validation for staging, or `redis.asyncio` PING for Redis profiles.
+  *(Skipped in `--dry-run`.)*
 - **http** — `/v1/health` + `/v1/ready` green. *(Only with `--base-url`.)*
 - **contracts / version** — contract checks and `scripts/bump_version.py --check`.
 
@@ -62,15 +71,17 @@ the gate has regressed and the dry run fails. `--dry-run` rejects `--env-file` /
 
 - **`env` fails "placeholder secret" / "in-memory store" / "CORS".** The env file
   carries a dev/default value. Replace the real secret, unset
-  `AETHER_ALLOW_INMEMORY_STORE`, pin explicit non-wildcard CORS origins. Do not
-  add the value to the allowlist to pass.
+  `AETHER_ALLOW_INMEMORY_STORE` and `AETHER_ALLOW_INMEMORY_JOURNEY_STORE`, pin
+  explicit non-wildcard CORS origins. Do not add the value to the allowlist to
+  pass.
 - **`db` fails "database at X, expected head(s) …".** Migrations are not applied.
   Run `alembic upgrade head` (or deploy with `RUN_MIGRATIONS=1`) and re-run.
   A **table-shape parity** failure means a table's runtime shape diverged from
   its migration — investigate before deploying; this guards the JSONB-vs-real
   column split.
-- **`db`/`redis` fail "unreachable".** Networking/credentials to the datastore.
-  Fix connectivity; these are hard, non-skippable outside `--dry-run`.
+- **`db`/`cache` fail "unreachable".** Networking/credentials to the selected
+  datastore. Fix connectivity; these are hard, non-skippable outside
+  `--dry-run`.
 - **`--dry-run` self-test fails.** The gate itself regressed (a fixture or a
   check changed). Fix the check/fixture — do NOT skip the dry-run in CI.
 

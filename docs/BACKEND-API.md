@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:e1031f2b1f96f4a4555c93ce6f1a6e776bbdbeccf62ef8fef559d0d53e008f18"
+  "services/backend/services/": "sha256:dfb94ef5a0661ec8c743b356d87feeb1f694065be353ef0fb2d4f488fad1e6d4"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -2547,7 +2547,7 @@ Core entity management — create, resolve, and manage entity records and cluste
 
 ### Operational Intelligence / Graph Service (v8.8.0)
 
-Graph traversal, overlay, and analytics over the unified Neptune-backed intelligence graph.
+Graph traversal, overlay, and analytics over the unified profile-selected intelligence graph.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -2558,7 +2558,9 @@ Graph traversal, overlay, and analytics over the unified Neptune-backed intellig
 | POST | `/v1/graph/filter` | Filter vertices by risk level, relationship type, or custom property |
 | GET | `/v1/graph/contracts` | List active smart-contract vertices in the graph |
 
-**Permissions:** `read`. Neptune-backed in staging/production; in-memory backend in local mode.
+**Permissions:** `read`. Uses the profile-selected durable graph backend (PostgreSQL for
+staging/production-lean; Neptune only where a heavier profile selects it); local uses the
+local graph backend.
 
 ---
 

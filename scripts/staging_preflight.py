@@ -16,11 +16,12 @@ Supported CLI contract::
 Checks
 ------
 env        candidate env vars (AETHER_ENV, CORS, secrets, placeholders,
-           in-memory override) + a subprocess constructing the real
+           in-memory overrides) + a subprocess constructing the real
            config.settings.Settings() under exactly that environment
 db         asyncpg connect + SELECT 1, alembic head parity, and
            migration-vs-runtime table-shape parity (SKIP in --dry-run)
-redis      redis.asyncio PING (SKIP in --dry-run)
+cache      Redis PING or DynamoDB table/schema validation, selected by
+           CACHE_BACKEND (SKIP in --dry-run)
 http       GET {base}/v1/health + GET {base}/v1/ready
            (only with --base-url; SKIP otherwise and in --dry-run)
 contracts  scripts/validate_sdk_contracts.py,
@@ -49,6 +50,7 @@ if str(ROOT) not in sys.path:
 from scripts.lib import (  # noqa: E402
     preflight_contracts,
     preflight_db,
+    preflight_dynamodb,
     preflight_env,
     preflight_http,
     preflight_redis,
@@ -103,7 +105,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Self-test the gate against tests/fixtures/staging_preflight "
-        "fixtures; DB/Redis/HTTP checks SKIP; never certifies an environment",
+        "fixtures; DB/cache/HTTP checks SKIP; never certifies an environment",
     )
     parser.add_argument("--json", action="store_true", help="Machine-readable JSON report")
     args = parser.parse_args(argv)
@@ -168,7 +170,11 @@ async def _run_service_checks(
 ) -> list[CheckResult]:
     results: list[CheckResult] = []
     results += await preflight_db.run_db_checks(env, dry_run=dry_run)
-    results += await preflight_redis.run_redis_checks(env, dry_run=dry_run)
+    cache_backend = env.get("CACHE_BACKEND", "").strip().lower()
+    if cache_backend == "dynamodb":
+        results += await preflight_dynamodb.run_dynamodb_checks(env, dry_run=dry_run)
+    elif cache_backend == "redis":
+        results += await preflight_redis.run_redis_checks(env, dry_run=dry_run)
     results += await preflight_http.run_http_checks(base_url, dry_run=dry_run)
     return results
 
@@ -184,7 +190,11 @@ def run_preflight(
 
     if dry_run:
         valid_env = preflight_env.parse_env_file(VALID_FIXTURE)
-        checks += preflight_env.run_env_checks(valid_env, prefix=VALID_PREFIX)
+        checks += preflight_env.run_env_checks(
+            valid_env,
+            prefix=VALID_PREFIX,
+            api_import_runner=preflight_env.run_api_import_subprocess,
+        )
         invalid_env = preflight_env.parse_env_file(INVALID_FIXTURE)
         invalid_fixture_checks = preflight_env.run_env_checks(
             invalid_env, prefix=INVALID_PREFIX
@@ -193,7 +203,10 @@ def run_preflight(
         candidate_env = valid_env
     else:
         candidate_env = preflight_env.load_candidate_env(env_file)
-        checks += preflight_env.run_env_checks(candidate_env)
+        checks += preflight_env.run_env_checks(
+            candidate_env,
+            api_import_runner=preflight_env.run_api_import_subprocess,
+        )
 
     checks += asyncio.run(_run_service_checks(candidate_env, base_url, dry_run))
     checks += preflight_contracts.run_contract_checks(dry_run=dry_run)
