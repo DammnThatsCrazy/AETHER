@@ -13,6 +13,7 @@ source_files:
   - cicd/aether-cicd/quality_gates/
   - .github/workflows/
   - scripts/release/verify_effective_staging_apply_policy.py
+  - scripts/release/check_staging_lane_contract.py
   - config/staging_apply_iam_policy.yaml
   - deploy/aws/terraform/modules/secrets/main.tf
   - deploy/aws/terraform/modules/ecr/main.tf
@@ -22,17 +23,18 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:ec3a1ea2f857979a558cd2bb5034f4aeb56644a372f683934234439e5e43a87d"
+  ".github/workflows/": "sha256:23d6f6f0ed9b4a42a40755339b43f162d460c77b6d2879d48bf8c0ff5236c074"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
   "cicd/aether-cicd/stages/": "sha256:f26f7a608ed0d1cf1aff849650848b64958eba563c69ccb7f7d120726c767619"
-  "config/staging_apply_iam_policy.yaml": "sha256:87e3f96de932225bfb87344e93f7bea10338ce8189967a92d1aa829915ddbd47"
+  "config/staging_apply_iam_policy.yaml": "sha256:ed9ae866b562e8d127ce7d687f3992e8d7c041c21cadc9307911235cea082f9d"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:e609cdfaaf5d9d384e213edf6f936b0045eac823cc38d432e75db464c8eb14ad"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:18b6900d5b62ac98c1bdcea37acd74cf05185e9b22161831f40d59a747c22383"
-  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
+  "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:371031747e27ce1267ed6341994ff9410675289d92ed0b830dc50db5891ca4eb"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -152,6 +154,14 @@ re-plans.
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
 remote-ML profiles must provide one before apply or wake.
+The raw secret payload check is deliberately a separate, short-lived
+read-only preflight. It assumes `AetherStagingSecretPreflight`, which can read
+only the `aether/*` secret prefix; the plan, deploy, and lifecycle roles do not
+receive `secretsmanager:GetSecretValue`. After apply, a metadata-only ECS
+task-definition gate proves that the running backend and worker revisions carry
+the selected pilot/full lane contract before smoke proceeds. This closes the
+gap between a correct source plan and an old registered task definition still
+running in ECS.
 Before an apply, the promotion workflow parses the reviewed plan for ECR
 repositories in every shared-account profile (staging, demo, and preview) and
 fails closed when a same-name repository exists outside the reviewed state; it
@@ -383,8 +393,9 @@ Two things get promoted, on two separate paths that must never be conflated: the
 The public web layer follows the infrastructure topology but has its own
 Amplify build path. `olympus-marketing`, `aether-marketing`, `docs`,
 `aether-app`, and `status` are connected to the checked-in monorepo build
-configuration; staging uses their Amplify default domains and production adds
-the reviewed `*.olympuslabsml.com` associations. The protected tenant and
+configuration; staging reuses the verified `*.staging.olympuslabsml.com`
+associations and production adds the reviewed `*.olympuslabsml.com` associations.
+The protected tenant and
 Kyber artifacts remain part of the immutable release and are published to
 their private S3 origins by the staging rehearsal. This keeps Kyber internal
 and prevents a public marketing build from being mistaken for an operator
@@ -404,6 +415,16 @@ deployment.
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
 | `production-equivalent-ci.yml` | PR finalization (`ready_for_review`) / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every triggered event. On finalized PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
 
+Staging delivery and lifecycle workflows carry the same explicit
+`deployment_lane` token (`full` or `pilot`) through the immutable release,
+reviewed Terraform plan/apply, wake/sleep lifecycle and smoke gate. The
+canonical profile remains `staging` for both lanes. `full` retains all existing
+rehearsal and Kyber/workforce gates; `pilot` keeps the complete AWS-hosted
+Aether customer path and fail-closed Stripe/runtime checks while deferring only
+Kyber operator/workforce identity and GCP/Google hosting or credentials. A pilot
+path cannot proceed until the required Stripe ECS/bootstrap wiring and real
+test price secrets are present.
+
 The reviewed-promotion credential boundary is intentional: a `plan` action
 requires only the plan role and read-only planning inputs. The apply role is
 required separately by the protected `apply` job immediately before mutation,
@@ -421,13 +442,13 @@ four profiles produced a credentialed, policy- and cost-validated remote plan.
 Without that job a commit could land on `main` with every remote plan silently
 skipped and still be dispatched for promotion.
 
-**Not armed without the remote-plan credential set.** When the credential set
-is absent (a credential-less repository), `require-production-credentials`
-reports that it is a NO-OP — the commit is explicitly **NOT** promotable — and
-passes green, so a credential-less `main` is not permanently red. The job
-re-arms and fails closed on plan/remote-plan results the moment the full
-credential set is wired. The notice is the opposite of a promotability claim;
-it states that promotion is impossible until credentials exist.
+**Not armed without the remote-plan credential set.** Pushes and PR
+finalization keep the credentialed remote-plan lane held; they do not claim that
+a live plan exists. An explicit remote-plan dispatch must provide the exact
+immutable backend digest and commit SHA and must have the complete credential
+set. Missing or malformed inputs fail closed before any AWS or Terraform work,
+while the provider-mocked configuration plan remains available for repository
+evidence.
 
 The two evidence layers it publishes are not interchangeable:
 

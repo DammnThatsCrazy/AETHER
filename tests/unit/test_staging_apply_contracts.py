@@ -173,6 +173,24 @@ def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
     assert secret_read["resource"] == "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
 
 
+def test_pilot_price_secrets_are_bootstrapped_and_reconcilable() -> None:
+    """Every pilot price secret must have one secure-write and state path."""
+    bootstrap = (ROOT / "scripts/bootstrap_aws_secrets.py").read_text(encoding="utf-8")
+    reconcile = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    for env_name, secret_name in (
+        ("STRIPE_PRICE_ALPHA", "stripe-price-alpha"),
+        ("STRIPE_PRICE_BETA", "stripe-price-beta"),
+        ("STRIPE_PRICE_GAMMA", "stripe-price-gamma"),
+        ("STRIPE_PRICE_DELTA", "stripe-price-delta"),
+        ("STRIPE_PRICE_EPSILON", "stripe-price-epsilon"),
+        ("STRIPE_PRICE_OMICRON", "stripe-price-omicron"),
+        ("STRIPE_PRICE_OMEGA", "stripe-price-omega"),
+    ):
+        assert f'"{env_name}": "{secret_name}"' in bootstrap
+        assert secret_name in reconcile
+    assert '"FIRST_ADMIN_BOOTSTRAP_TOKEN": "first-admin-bootstrap-token"' in bootstrap
+
+
 def test_kyber_workforce_runtime_contract_is_explicit_and_secret_backed() -> None:
     ecs = (TF / "modules/ecs/main.tf").read_text(encoding="utf-8")
     root = (TF / "main.tf").read_text(encoding="utf-8")
@@ -194,8 +212,11 @@ def test_kyber_workforce_runtime_contract_is_explicit_and_secret_backed() -> Non
     assert "kyber-google-client-secret" in ecs
     assert "kyber-google-client-id" in secrets
     assert "kyber-google-client-secret" in secrets
-    assert "kyber_app_url        = var.kyber_app_url" in root
-    assert 'api_base_url         = "https://${var.domain_name}"' in root
+    assert re.search(r"kyber_app_url\s*=\s*var\.kyber_app_url", root)
+    assert re.search(r'api_base_url\s*=\s*"https://\$\{var\.domain_name\}"', root)
+    assert "task_readable_secret_arns = concat(" in ecs
+    assert "values(var.companion_secret_arns)" in ecs
+    assert "backend_secret_mounts_complete" in ecs
 
 
 def test_backend_task_definition_has_an_explicit_api_runtime_role() -> None:
@@ -246,6 +267,19 @@ def test_role_name_assertions_are_profile_aware() -> None:
     assert 'if [ "$PROFILE" = staging ]; then' in apply
     assert 'test "$caller_role_path" = AetherStagingPlan' in plan
     assert 'test "$caller_role_path" = AetherStagingDeploy' in apply
+
+
+def test_staging_plan_checks_effective_role_policy_before_planning() -> None:
+    promote = PROMOTE.read_text(encoding="utf-8")
+    plan_check = promote[
+        promote.index("Verify effective staging plan IAM contract") : promote.index(
+            "Verify required staging secret metadata before planning"
+        )
+    ]
+    assert "verify_effective_staging_apply_policy.py" in plan_check
+    assert "config/staging_plan_iam_policy.yaml" in plan_check
+    assert "--expected-role AetherStagingPlan" in plan_check
+    assert "--required-policy-suffix AetherStagingPlanContract" in plan_check
 
 
 def test_effective_policy_checker_matches_resources_conditions_and_denies() -> None:
@@ -522,7 +556,7 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
     assert "ecr_repository_names" in text
     assert 'required: false' in text
-    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES"' in text
+    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES$STAGING_AMPLIFY_DOMAIN_NAME"' in text
     assert "aether-backend|aether-ml-serving|aether-kyber|aether-aether" in text
     assert "module.ecr.aws_ecr_repository.this[\\\"${repository}\\\"]" in text
     assert "requires a fresh reviewed plan" in text or "fresh staging plan" in text
@@ -778,6 +812,10 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
         "logs:PutRetentionPolicy",
         "amplify:CreateApp",
         "amplify:TagResource",
+        "amplify:CreateDomainAssociation",
+        "amplify:GetDomainAssociation",
+        "amplify:UpdateDomainAssociation",
+        "amplify:DeleteDomainAssociation",
     ):
         assert required in all_actions
 
@@ -787,6 +825,7 @@ def test_staging_amplify_contract_is_scoped_to_apps_and_branches() -> None:
     statements = manifest["statements"]
     apps = "arn:aws:amplify:us-east-1:${account_id}:apps/*"
     branches = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*"
+    domains = "arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*"
     create = next(s for s in statements if s["sid"] == "CreateStagingAmplifyApps")
     assert create["actions"] == ["amplify:CreateApp"]
     assert create["resource"] == "*"
@@ -794,6 +833,8 @@ def test_staging_amplify_contract_is_scoped_to_apps_and_branches() -> None:
     assert app_ops["resource"] == apps
     branch_ops = next(s for s in statements if s["sid"] == "ManageStagingAmplifyBranches")
     assert branch_ops["resource"] == branches
+    domain_ops = next(s for s in statements if s["sid"] == "ManageStagingAmplifyDomains")
+    assert domain_ops["resource"] == domains
     tags = next(s for s in statements if s["sid"] == "TagStagingAmplifyResources")
     assert tags["resource"] == [apps, branches]
 

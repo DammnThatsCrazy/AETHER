@@ -1,6 +1,8 @@
+from copy import deepcopy
 from pathlib import Path
 
 from scripts.release.check_staging_lifecycle_policy import EXPECTED, main, render_policy_document
+from scripts.release.verify_effective_staging_lifecycle_policy import compare_documents
 import yaml
 
 
@@ -22,6 +24,7 @@ def test_lifecycle_workflows_run_contract_check() -> None:
     for name in ("staging-lifecycle.yml", "staging-ttl-guard.yml"):
         text = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
         assert "check_staging_lifecycle_policy.py" in text
+        assert "verify_effective_staging_lifecycle_policy.py" in text
 
 
 def test_lifecycle_manifest_uses_task_specific_scopes() -> None:
@@ -65,6 +68,31 @@ def test_lifecycle_manifest_renders_to_an_aws_policy_document() -> None:
     assert by_sid["PassOnlyStagingTaskRoles"]["Condition"] == {
         "StringEquals": {"iam:PassedToService": ["ecs-tasks.amazonaws.com"]}
     }
+
+
+def test_effective_lifecycle_policy_comparison_is_exact() -> None:
+    doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    expected = render_policy_document(doc, "544471417928")
+    assert compare_documents(expected, deepcopy(expected)) == ([], [])
+
+    missing = deepcopy(expected)
+    missing["Statement"] = missing["Statement"][:-1]
+    missing_sids, unexpected_sids = compare_documents(expected, missing)
+    assert missing_sids == [expected["Statement"][-1]["Sid"]]
+    assert unexpected_sids == []
+
+    unexpected = deepcopy(expected)
+    unexpected["Statement"].append(
+        {
+            "Sid": "UnexpectedStagingPermission",
+            "Effect": "Allow",
+            "Action": "s3:ListAllMyBuckets",
+            "Resource": "*",
+        }
+    )
+    missing_sids, unexpected_sids = compare_documents(expected, unexpected)
+    assert missing_sids == []
+    assert unexpected_sids == ["UnexpectedStagingPermission"]
 
 
 def test_lifecycle_manifest_covers_static_bucket_parameter_reads() -> None:

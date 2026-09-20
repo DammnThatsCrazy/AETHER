@@ -162,6 +162,7 @@ variables {
   alert_email          = "terraform-ci@aether.invalid"
   aether_app_url       = "https://app.ci.aether.invalid"
   kyber_app_url        = "https://kyber.ci.aether.invalid"
+  status_api_url        = "https://api.ci.aether.invalid/health"
   auth0_domain         = "tenant.ci.aether.invalid"
   # Provider-mocked plans still validate the AWS Amplify schema. This is a
   # test-only shape value; hosted plans must provide the encrypted repository
@@ -265,11 +266,14 @@ run "staging_profile_plan" {
     error_message = "Amplify custom rules would rewrite a prerendered marketing or status surface, or omit the required client/auth fallback."
   }
 
-  # The status shell must stay inside the same environment while staging uses
-  # Amplify default domains. These branch variables are intentionally derived
-  # from the sibling Amplify apps rather than hard-coded production origins.
+  # The status shell must stay inside the same staging environment. These
+  # branch variables are derived from the sibling Amplify apps and the
+  # verified staging custom-domain profile rather than hard-coded production
+  # origins.
   assert {
     condition = alltrue([
+      aws_amplify_branch.main["status"].environment_variables.AETHER_ENV == "staging",
+      aws_amplify_branch.main["status"].environment_variables.VITE_STATUS_API_URL == var.status_api_url,
       contains(keys(aws_amplify_branch.main["status"].environment_variables), "VITE_STATUS_DOCS_URL"),
       contains(keys(aws_amplify_branch.main["status"].environment_variables), "VITE_STATUS_AETHER_MARKETING_URL"),
     ])
@@ -367,6 +371,63 @@ run "staging_profile_plan" {
     error_message = "An awake staging plan no longer runs the reviewed baseline capacity."
   }
 
+}
+
+run "staging_pilot_profile_plan" {
+  command = plan
+
+  variables {
+    deployment_profile  = "staging"
+    deployment_lane     = "pilot"
+    environment         = "staging"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    aurora_express_mode = true
+    skip_aurora         = true
+    log_retention_days  = 3
+  }
+
+  # Pilot is an additive staging overlay: it retains the same lean topology,
+  # turns on only the Aether self-service billing path, and does not create
+  # optional social identity connections that would reintroduce Google/GCP
+  # credentials into the critical path.
+  assert {
+    condition = alltrue([
+      var.deployment_profile == "staging",
+      var.deployment_lane == "pilot",
+      module.auth0.social_connections_enabled == false,
+      module.ecs.stripe_billing_enabled == true,
+    ])
+    error_message = "The pilot overlay is not constrained to staging, does not disable optional social connections, or does not enable Stripe billing."
+  }
+
+  assert {
+    condition = alltrue([
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_SECRET_KEY"),
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_WEBHOOK_SECRET"),
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_ALPHA"),
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_BETA"),
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_GAMMA"),
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_DELTA"),
+      !contains(module.ecs.backend_secret_environment_names, "KYBER_GOOGLE_CLIENT_ID"),
+      !contains(module.ecs.backend_secret_environment_names, "KYBER_GOOGLE_CLIENT_SECRET"),
+    ])
+    error_message = "The pilot backend task secret mounts do not match the reviewed Aether-only Stripe runtime contract."
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.msk) == 0,
+      length(module.elasticache) == 0,
+      length(module.neptune) == 0,
+      length(module.rds) == 0,
+      length(module.ecs.dedicated_ml_service_arns) == 0,
+      length(module.ecs.runtime_service_names) == 1,
+      contains(module.ecs.runtime_service_names, "AETHER-staging-lean-worker"),
+    ])
+    error_message = "The pilot overlay provisions a deferred heavy subsystem or loses the consolidated lean-worker runtime."
+  }
 }
 
 run "staging_listener_maintenance_transition" {
@@ -1336,7 +1397,7 @@ run "staging_awake_applied" {
     aurora_min_acu        = 0
     aurora_max_acu        = 2
     aurora_express_mode   = true
-    skip_aurora           = true
+    skip_aurora           = false
     log_retention_days    = 3
     enable_credential_kms = false
   }
@@ -1365,7 +1426,7 @@ run "staging_sleep_plan_against_applied" {
     aurora_min_acu      = 0
     aurora_max_acu      = 2
     aurora_express_mode = true
-    skip_aurora         = true
+    skip_aurora         = false
     log_retention_days  = 3
   }
 

@@ -60,6 +60,7 @@ SYNTHETIC_FIXTURE_VALUES: frozenset[str] = frozenset({
     'TOKEN = "kses_containment_scope_test"',
     'TOKEN = "csrf_containment_scope_test"',
     'SECRET = "fake-client-secret-value"',
+    'SECRET="fake-client-secret-value"',
     'secret="whsec_golden_stripe_2024"',
     'secret="whsec_golden_moonpay_2024"',
     'secret="whsec_golden_coinbase_2024"',

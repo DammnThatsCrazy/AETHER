@@ -47,6 +47,7 @@ def test_oracle_routes_require_explicit_secrets_outside_local(monkeypatch):
     # tests/security/test_kyber_gate_migration.py — this test must trip only
     # the guard it is actually testing.
     monkeypatch.setenv("KYBER_GOOGLE_CLIENT_ID", "test-kyber-client-id")
+    monkeypatch.setenv("KYBER_GOOGLE_CLIENT_SECRET", "test-kyber-client-secret")
     monkeypatch.setenv("KYBER_GOOGLE_REDIRECT_URI", "https://kyber.test.invalid/v1/kyber/auth/callback")
     monkeypatch.setenv("KYBER_WEBAUTHN_RP_ID", "kyber.test.invalid")
     monkeypatch.setenv("KYBER_WEBAUTHN_ORIGIN", "https://kyber.test.invalid")

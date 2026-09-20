@@ -12,9 +12,11 @@ as an open one.
 """
 from __future__ import annotations
 
+import os
 from typing import Any, Callable, Optional
+from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -39,6 +41,7 @@ from .invitations import invitation_service
 from .lifecycle import offboard_principal
 from .oidc import OidcError, get_oidc_client, oidc_transaction_store
 from .principals import normalize_email, principal_service, record_authentication_event
+from ..sessions.cookies import clear_kyber_cookies, set_csrf_cookie, set_session_cookie
 
 logger = get_logger("aether.kyber.identity.routes")
 
@@ -154,6 +157,9 @@ async def kyber_login(
     State, nonce and the PKCE verifier are generated and held server-side; the
     browser carries only the opaque ``state`` value back through Google.
     """
+    if next_path is not None and _safe_next_path(next_path) is None:
+        raise BadRequestError("next must be a same-origin path")
+
     client = get_oidc_client()
     redirect_uri = _callback_uri(request)
     transaction = oidc_transaction_store.start(
@@ -182,8 +188,15 @@ async def kyber_login(
 
 
 @router.get("/auth/callback")
-async def kyber_callback(request: Request, code: str, state: str) -> dict:
-    """Complete the login: exchange the code, resolve the principal, open a session."""
+async def kyber_callback(request: Request, code: str, state: str) -> Response:
+    """Complete login, set opaque cookies, and return to the Kyber console.
+
+    The callback is a browser navigation, not an API call. Returning the
+    session record as JSON left the browser without either cookie and made the
+    next authenticated request fail. The opaque session and CSRF values are
+    therefore attached to the redirect response; neither value is serialized
+    into a response body or a URL.
+    """
     client_ip = _client_ip(request)
     user_agent = _user_agent(request)
 
@@ -238,9 +251,14 @@ async def kyber_callback(request: Request, code: str, state: str) -> dict:
     session_result = await session_service.create_session(
         operator_id=principal.operator_id,
         google_subject=identity.google_subject,
+        device_id=None,
+        environment=os.getenv("AETHER_ENV", "local").strip().lower(),
+        authentication_methods=["google_oidc"],
         client_ip=client_ip,
         user_agent=user_agent,
     )
+    session, raw_token = session_result
+    csrf_token = await session_service.issue_csrf_token(session.session_id)
     await principal_service.mark_login(principal.operator_id)
     await record_authentication_event(
         event_type="login_succeeded",
@@ -251,20 +269,20 @@ async def kyber_callback(request: Request, code: str, state: str) -> dict:
         user_agent=user_agent,
     )
     metrics.increment("kyber_auth_success_total")
-    return APIResponse(
-        data={
-            "operator_id": principal.operator_id,
-            "email": principal.email,
-            "display_name": principal.display_name,
-            "session": _serialize(session_result),
-            "next": transaction.next_path,
-        }
-    ).to_dict()
+    response = RedirectResponse(
+        url=_callback_landing_url(transaction.next_path),
+        status_code=303,
+    )
+    set_session_cookie(response, raw_token)
+    if csrf_token:
+        set_csrf_cookie(response, csrf_token)
+    return response
 
 
 @router.post("/auth/logout")
 async def kyber_logout(
     request: Request,
+    response: Response,
     context: Any = Depends(_require(SELF_CAPABILITY)),
 ) -> dict:
     """End the current session. Idempotent from the caller's point of view."""
@@ -278,6 +296,7 @@ async def kyber_logout(
     else:
         await session_service.revoke(session_id, reason="logout")
         revoked = True
+    clear_kyber_cookies(response)
 
     await record_authentication_event(
         event_type="logout",
@@ -631,6 +650,38 @@ def _callback_uri(request: Request) -> str:
     if configured:
         return configured
     return str(request.url_for("kyber_callback"))
+
+
+def _safe_next_path(value: Optional[str]) -> Optional[str]:
+    """Accept only a path that cannot turn the callback into an open redirect."""
+    if value is None:
+        return None
+    parsed = urlsplit(value)
+    if (
+        not value.startswith("/")
+        or value.startswith("//")
+        or parsed.scheme
+        or parsed.netloc
+        or parsed.path.startswith("//")
+    ):
+        return None
+    return value
+
+
+def _callback_landing_url(next_path: Optional[str]) -> str:
+    """Build the post-login console URL from the Terraform-owned origin."""
+    origin = (os.getenv("KYBER_WEBAUTHN_ORIGIN") or "").strip().rstrip("/")
+    if not origin:
+        # Deploy targets require this value in Settings and Terraform injects
+        # it from kyber_app_url. Keep local/test callbacks usable while still
+        # refusing an unsafe or absent production landing origin.
+        origin = "http://localhost:5173"
+    if not origin.startswith(("https://", "http://")):
+        raise OidcError("kyber_origin_invalid", "Kyber console origin is invalid")
+    safe_path = _safe_next_path(next_path)
+    if next_path is not None and safe_path is None:
+        raise OidcError("next_path_invalid", "Kyber callback path is invalid")
+    return f"{origin}{safe_path or '/'}"
 
 
 def _serialize(value: Any) -> Any:

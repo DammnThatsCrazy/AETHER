@@ -428,13 +428,13 @@ hosting:
     status: https://status.olympuslabsml.com
     api: https://api.olympuslabsml.com
   kyber: internal_only_no_public_dns
-  staging_custom_domain: disabled_until_promotion
+  staging_custom_domain: enabled
 cost_guardrails:
   seven_consecutive_observed_days_required: true
   evidence_mode: observed_only
   monthly_target_usd: 25
   monthly_hard_cap_usd: 50
-  status_api_url: "not_configured_until_credentialed_environment"
+  status_api_url: "https://api.staging.olympuslabsml.com/health"
 sdk_release:
   package_families:
     - "@aether/shared"

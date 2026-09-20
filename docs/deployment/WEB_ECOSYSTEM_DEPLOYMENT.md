@@ -30,9 +30,10 @@ The Olympus + Aether web ecosystem targets a fixed set of canonical origins.
 The repository now contains the Amplify application definitions, branch builds,
 custom-domain associations, status app, CORS wiring, and profile controls for
 those origins. The checkout has not performed a credentialed AWS plan/apply,
-so none of the domains below may be described as live yet. Staging deliberately
-uses Amplify default domains; production-lean is the controlled custom-domain
-promotion shape.
+so none of the domains below may be described as live yet. Staging reuses the
+verified `*.staging.olympuslabsml.com` associations already present in Amplify,
+with Squarespace authoritative for DNS; production-lean is the controlled
+`*.olympuslabsml.com` custom-domain promotion shape.
 
 Kyber stays internal. `kyber.olympuslabsml.com` is declared only so the topology
 is explicit; public marketing never links to it.
@@ -87,10 +88,13 @@ and publishes that workspace's `dist/` directory. The managed apps are:
 - `aether-app` → `app`; and
 - `status` → `status`.
 
-Staging sets `amplify_custom_domain_enabled = false` and records each app's
-Amplify default domain in SSM. `production-lean` enables the reviewed custom
-domain associations under `olympuslabsml.com` and exports their DNS targets for
-Squarespace. The apex remains on Squarespace and redirects to the `www` surface;
+Staging sets `amplify_custom_domain_enabled = true` for
+`staging.olympuslabsml.com` and records each app's default domain plus the
+reviewed association outputs in SSM. The state-reconciliation workflow imports
+the five existing associations before planning, so Terraform cannot create a
+second owner or detach the live targets. `production-lean` enables the reviewed
+custom-domain associations under `olympuslabsml.com` and exports their DNS
+targets for Squarespace. The apex remains on Squarespace and redirects to the `www` surface;
 the Route 53 hosted-zone path is an explicit opt-in. `kyber` is not an Amplify
 app and receives no public DNS record unless the explicit internal DNS controls
 are enabled.
@@ -187,12 +191,12 @@ credentialed apply has occurred from this checkout.
    before touching infrastructure.
 2. Run the repository checks and a credentialed plan with the staging profile.
    Staging uses the real Aurora path with auto-pause (`0` minimum ACU), no NAT
-   gateway, Amplify default domains, and an empty status API URL until the
-   backend health origin is verified.
+   gateway, the verified staging Amplify custom domains, and the staging status
+   health URL (`https://api.staging.olympuslabsml.com/health`).
 3. Apply only the checksum-bound plan through the repository's Terraform
    promotion workflow.
 4. Execute the staging lifecycle: wake, migrate, publish the protected tenant
-   and Kyber artifacts, verify the API and all five Amplify default domains,
+   and Kyber artifacts, verify the API and all five staging Amplify domains,
    run smoke/load checks, prove rollback, then sleep the environment. If the
    status API URL is still unset, the status page must remain explicitly
    **not yet verified**, not green.

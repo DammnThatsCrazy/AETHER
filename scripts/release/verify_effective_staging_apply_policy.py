@@ -396,14 +396,28 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--role-arn", required=True)
     parser.add_argument("--manifest", required=True)
+    parser.add_argument(
+        "--expected-role",
+        default="AetherStagingDeploy",
+        help="role name declared by the manifest (default: AetherStagingDeploy)",
+    )
+    parser.add_argument(
+        "--required-policy-suffix",
+        default="AetherStagingApplyMissingOps",
+        help="inline/managed policy suffix that must be attached; empty disables this check",
+    )
     args = parser.parse_args()
 
     role_name = role_name_from_arn(args.role_arn)
-    if role_name != "AetherStagingDeploy":
-        fail(f"effective policy check must target AetherStagingDeploy, not {role_name}")
+    if role_name != args.expected_role:
+        fail(f"effective policy check must target {args.expected_role}, not {role_name}")
     manifest = yaml.safe_load(Path(args.manifest).read_text()) or {}
     statements = manifest.get("statements")
-    if manifest.get("profile") != "staging" or not isinstance(statements, list):
+    if (
+        manifest.get("profile") != "staging"
+        or manifest.get("role") != args.expected_role
+        or not isinstance(statements, list)
+    ):
         fail("staging apply IAM manifest is malformed")
     account_id = args.role_arn.split(":", 4)[4].split(":", 1)[0]
     required_operations: list[tuple[str, str, dict[str, Any] | None]] = []
@@ -474,11 +488,15 @@ def main() -> int:
     )
     if missing:
         fail(
-            "AetherStagingDeploy effective policy does not cover reviewed operations: "
+            f"{args.expected_role} effective policy does not cover reviewed operations: "
             + ", ".join(missing)
         )
-    if not any(name.endswith("AetherStagingApplyMissingOps") for name in policy_names):
-        fail("AetherStagingApplyMissingOps is not attached to AetherStagingDeploy")
+    if args.required_policy_suffix and not any(
+        name.endswith(args.required_policy_suffix) for name in policy_names
+    ):
+        fail(
+            f"{args.required_policy_suffix} is not attached to {args.expected_role}"
+        )
     print(
         f"Effective staging apply policy covers {len(required_operations)} reviewed operations across {len(policy_names)} attached policies."
     )

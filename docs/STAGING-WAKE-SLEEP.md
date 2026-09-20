@@ -10,23 +10,45 @@ source_files:
   - .github/workflows/staging-lifecycle.yml
   - .github/workflows/staging-ttl-guard.yml
   - .github/workflows/terraform-promote.yml
+  - .github/workflows/pilot-staging.yml
+  - .github/workflows/staging-smoke.yml
+  - .github/workflows/amplify-status-production.yml
   - config/runtime_deployment.yaml
   - config/deployment_profiles.yaml
   - deploy/aws/terraform/profiles.tf
   - deploy/aws/terraform/variables.tf
   - deploy/aws/terraform/profiles/staging.tfvars
+  - scripts/release/check_staging_lane_contract.py
+  - scripts/release/check_staging_credential_contract.py
+  - scripts/release/check_amplify_app_contract.py
+  - scripts/release/check_staging_secret_payload_contract.py
+  - scripts/release/check_staging_secret_preflight_policy.py
+  - scripts/release/check_staging_task_definition_contract.py
+  - config/staging_secret_preflight_iam_policy.yaml
+  - config/staging_secret_preflight_trust_policy.json
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/staging-lifecycle.yml": "sha256:548bd6d191d27609ed2f261d5b8a61bbc2c3e59e431be9090108569ca95d9898"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:1176ba513d3315e97ad962b39c06113a36a5e1ae8db50da59d55a798645903ec"
-  ".github/workflows/terraform-promote.yml": "sha256:f555f32c30627b3c095936c3a929367fa67d8e6f67c56695d4258a57409da4a0"
-  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
+  ".github/workflows/amplify-status-production.yml": "sha256:6b24ee13fb51366713cde866bc6d6fc5d4bef1be87dd91381e09627c1739c22f"
+  ".github/workflows/pilot-staging.yml": "sha256:bd1c3b55aed8b06e9c380f1053446e8e5198e261ae2029d48091538b6128d7f9"
+  ".github/workflows/staging-lifecycle.yml": "sha256:0f908f361c21e3211da1e186d2c43b724d3b1bf771fc8ded5883c6659e90911c"
+  ".github/workflows/staging-smoke.yml": "sha256:7ecf7d77441520e36e75f1f3a53d514ca4965a0065cbf34684526e9cacd07ac4"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:f5c66d618aad6b84887fa689dda91d9f68c43c397e39003f96efc440823a7111"
+  ".github/workflows/terraform-promote.yml": "sha256:89242263c6151b05c3b299c72fa8525cbb4cfecfb57273359e7c9a48c335edde"
+  "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/staging_secret_preflight_iam_policy.yaml": "sha256:8e8ade1e700682a42c8f8012d6debc4ca7d51175adb426cc2a8a5ea6ff0ed9b7"
+  "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:e5d7497b37b76299734a889cdc756e9a0f952b90c6aededc7c7b6312cdb451f0"
-  "deploy/aws/terraform/variables.tf": "sha256:b7d0ffae68cd9c7215b815dfd54aaa18529a71131f93ce158b20747d7e9d51e0"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
+  "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
+  "scripts/release/check_amplify_app_contract.py": "sha256:7c60acb5b3b270c10a6f3897124d7ac10484213768475bd7d6cac3b2f6139cfe"
+  "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
+  "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
+  "scripts/release/check_staging_secret_payload_contract.py": "sha256:3f12899f82d18f82ff9961c123e366da12568dc6040e416c292f981ac34ef90f"
+  "scripts/release/check_staging_secret_preflight_policy.py": "sha256:4ab78af2ac6c11571f4aa13a49233797196cfb9bcc467f70e0cf6baee4194560"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:7bce8901b3706085a0367526bcb6114d4221bff136cc380295d3e0c378e627b2"
 ---
 
 # Staging Wake / Sleep
@@ -154,7 +176,26 @@ both `awake` and `asleep` states.
 | Awake-lease SSM parameter | `/aether/staging/lifecycle/awake-until` |
 | Terraform state key | `profiles/staging/terraform.tfstate` |
 | AWS role | `secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN` |
+| Secret payload preflight role | `secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN` |
 | Promotion workflow | `.github/workflows/terraform-promote.yml` |
+
+The canonical profile and state key do not change between staging lanes. Every
+staging lifecycle, delivery, promotion and smoke dispatch carries the explicit
+`deployment_lane` token (`full` or `pilot`). `full` keeps the existing rehearsal
+including Kyber/workforce checks. `pilot` is the complete lean AWS customer
+staging path: it still provisions and verifies the Aether backend and public
+surfaces, durable state, Stripe billing/webhooks/entitlements, tenant isolation,
+observability, migrations, lifecycle controls and smoke coverage; only Kyber
+operator/workforce identity and GCP/Google hosting/credentials are deferred.
+
+Pilot admission is fail-closed. The repository contract validator checks the
+bootstrap/ECS Stripe wiring before planning, and the promotion preflight also
+requires populated current versions for the four self-service Stripe price
+secrets (`aether/stripe-price-alpha`, `-beta`, `-gamma`, and `-delta`).
+Epsilon, Omicron, and Omega remain contract-tier operator mappings and are not
+part of the self-service pilot critical path. The secure bootstrap rejects
+malformed or placeholder values before writing them; the workflow preflight
+reads metadata only and never prints or invents a price ID.
 
 ## Wake
 
@@ -169,7 +210,8 @@ reviewed-plan machinery as a production apply.
    `artifacts.backend_image.digest`. A separately supplied
    `backend_image_digest` must match it exactly.
 2. **Dispatch the reviewed plan** with `action=plan`, `profile=staging`,
-   `staging_state=awake` and both digests. Run discovery polls for 300 s;
+   `deployment_lane=full|pilot`, `staging_state=awake` and both digests. Run
+   discovery polls for 300 s;
    **more than one candidate run is a hard failure** rather than a guess.
    Completion is awaited up to `promote_timeout_minutes`.
 3. **Verify the plan artifact.** All 16 `reviewed.*` files must be present and
@@ -308,8 +350,8 @@ Steps, in order, with what each proves:
    expires or publication differs from the approved digest. The five public
    Amplify applications (Olympus, Aether, docs, app, and status) are a
    separate application-delivery surface; their branch builds and
-   default-domain checks belong to the Amplify delivery/smoke workflows, not
-   this private S3 publication phase.
+   verified `*.staging.olympuslabsml.com` domain checks belong to the Amplify
+   delivery/smoke workflows, not this private S3 publication phase.
 3. **Migrations.** A one-off Fargate task is launched from the
    `AETHER-staging-backend` task definition with `RUN_MIGRATIONS=1`. The
    release entrypoint runs `alembic upgrade head` and receives an explicit
@@ -336,9 +378,21 @@ Steps, in order, with what each proves:
    reports `active`. Terraform creates the
    encrypted secret stubs but never invents their values; bootstrap or import
    those values through the secure operator procedure before a wake. The check
-   reads metadata only and never uploads or prints secret material. The Kyber
-   workforce pair (`aether/kyber-google-client-id` and
-   `aether/kyber-google-client-secret`) is part of this required set. The
+   reads metadata only and never uploads or prints secret material. In the
+   pilot lane, the Kyber workforce pair (`aether/kyber-google-client-id` and
+   `aether/kyber-google-client-secret`) is intentionally deferred; the twelve
+   core application secrets and four real self-service Stripe test-price
+   secrets remain required, and the value-safe payload contract checks the
+   `sk_test_`, `whsec_`, and `price_` forms. In the full lane, the Kyber pair
+   remains part of this required set. The
+   payload check assumes the dedicated `AetherStagingSecretPreflight` OIDC
+   role, whose only reviewed read is `secretsmanager:GetSecretValue` for the
+   `aether/*` prefix. The lifecycle role remains forbidden from reading secret
+   values. After a reviewed apply, `check_staging_task_definition_contract.py`
+   reads only ECS metadata and proves both the API and `lean-worker` revisions
+   match the selected lane, including the pilot Stripe mounts and the absence
+   of deferred Kyber mounts. A stale registered revision is a hard failure,
+   not a successful source-only check. The
    Google client must use the API callback
    `https://<api-domain>/v1/kyber/auth/callback`; the Kyber SPA origin is the
    separate WebAuthn origin. This prevents a green infrastructure plan from

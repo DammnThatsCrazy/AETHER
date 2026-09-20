@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   ".env.example": "sha256:e2b6b38f488416520011bd3c7bb7fde36acf89d0f967015fbcf6c77d8c755e4f"
-  "services/backend/config/settings.py": "sha256:15dc219af1ffde705c2ce23a1a41e61fec88e8fd820e980d69eb5faa5a15c236"
+  "services/backend/config/settings.py": "sha256:b93f7e8775022ceb602e28f42df42e5f524a15c5d849e56643dfff21d7b039c5"
 ---
 
 # Deployment Profile Matrix

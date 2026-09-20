@@ -12,6 +12,10 @@ Endpoint:
 Events handled:
     checkout.session.completed      — New subscription; maps customer to tenant,
                                       activates plan tier
+    checkout.session.async_payment_succeeded — Delayed payment success; uses the
+                                      same idempotent customer/subscription mapping
+    checkout.session.async_payment_failed — Delayed payment failure; marks the
+                                      subscription past_due without downgrading it
     customer.subscription.created   — Subscription object created (may arrive
                                       alongside or instead of checkout event)
     customer.subscription.updated   — Plan changed, status changed, renewal
@@ -223,6 +227,45 @@ async def _handle_checkout_session_completed(event_data: dict[str, Any]) -> None
         f"checkout.session.completed: tenant={tenant_id} "
         f"customer={customer_id} subscription={subscription_id} "
         f"plan_tier={plan_tier.value if plan_tier else 'pending'}"
+    )
+
+
+async def _handle_checkout_session_async_payment_failed(
+    event_data: dict[str, Any],
+) -> None:
+    """Keep delayed-payment subscriptions recoverable as ``past_due``.
+
+    Checkout can complete before an asynchronous payment method settles. A
+    failed settlement is not an immediate cancellation: Stripe may retry or
+    the customer may repair the payment method. The subscription-deleted
+    webhook remains the only downgrade boundary.
+    """
+    session = event_data.get("object", {})
+    tenant_id = (
+        session.get("client_reference_id")
+        or (session.get("metadata") or {}).get("tenant_id")
+        or await _resolve_tenant(session)
+    )
+    subscription_id = session.get("subscription") or ""
+    if not tenant_id:
+        logger.warning(
+            "checkout.session.async_payment_failed: cannot resolve tenant; "
+            "subscription status not updated"
+        )
+        return
+
+    if subscription_id:
+        await stripe_repository.update_subscription_state(
+            tenant_id=tenant_id,
+            stripe_subscription_id=subscription_id,
+            subscription_status="past_due",
+        )
+    metrics.increment("stripe_webhook_checkout_async_payment_failed")
+    logger.warning(
+        "checkout.session.async_payment_failed: tenant=%s subscription=%s; "
+        "left subscription recoverable as past_due",
+        tenant_id,
+        subscription_id,
     )
 
 
@@ -466,6 +509,8 @@ async def _handle_invoice_finalized(event_data: dict[str, Any]) -> None:
 
 _HANDLERS = {
     "checkout.session.completed": _handle_checkout_session_completed,
+    "checkout.session.async_payment_succeeded": _handle_checkout_session_completed,
+    "checkout.session.async_payment_failed": _handle_checkout_session_async_payment_failed,
     "customer.subscription.created": _handle_subscription_created,
     "customer.subscription.updated": _handle_subscription_updated,
     "customer.subscription.deleted": _handle_subscription_deleted,

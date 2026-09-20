@@ -209,7 +209,8 @@ being replaced by static copy.
 
 The hosting shape is implemented for five separate Amplify applications:
 Olympus marketing, Aether marketing, docs, the end-user app, and status. Staging
-uses Amplify default domains and cost-aware Aurora auto-pause. Production-lean
+reuses the verified staging custom-domain associations under
+`staging.olympuslabsml.com` and cost-aware Aurora auto-pause. Production-lean
 uses the reviewed custom-domain association under `olympuslabsml.com`. Kyber
 remains an internal operator surface with protected artifacts and no public DNS
 by default. The status app is fail-closed and remains unverified until its API

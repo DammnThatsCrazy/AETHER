@@ -185,8 +185,82 @@ profiles:
   staging:
     purpose: Release rehearsal.
     class: staging
+    environment: staging
     cost_capped: true
     wake_sleep: true
+    # `deployment_profile` remains the canonical Terraform/state identity.
+    # `deployment_lane` is an additive staging-only overlay selector so the
+    # customer-pilot path cannot fork or accidentally share a second state
+    # namespace. Terraform and both staging workflows must pass one of these
+    # exact tokens explicitly; `full` preserves the existing rehearsal.
+    deployment_lane:
+      default: full
+      allowed: [full, pilot]
+      valid_when:
+        profile: staging
+        environment: staging
+    deployment_lanes:
+      full:
+        purpose: Existing complete staging release rehearsal.
+        state_namespace: staging
+        inherits: staging
+      pilot:
+        purpose: Complete lean AWS staging for customer-facing design partners and early pilots.
+        base_lane: full
+        state_namespace: staging
+        required_surfaces:
+          - olympus_marketing
+          - aether_marketing
+          - aether_docs
+          - aether_app
+          - aether_status
+        required_controls:
+          - aws_networking
+          - durable_aurora_postgres
+          - durable_persistence
+          - tenant_isolation
+          - secrets_manager
+          - stripe_billing
+          - stripe_webhooks
+          - stripe_entitlements
+          - cloudwatch_observability
+          - wake_sleep_lifecycle
+          - immutable_artifact_redeploy
+          - database_migrations
+          - full_staging_smoke
+        deferred_capabilities:
+          - kyber_operator_ui
+          - kyber_workforce_identity
+          - google_workforce_credentials
+          - google_oidc
+          - gcp_hosting
+        stripe_contract:
+          enabled: true
+          fail_closed_if_unwired: true
+          required_runtime_env:
+            - STRIPE_BILLING_ENABLED
+            - STRIPE_PRICE_ALPHA
+            - STRIPE_PRICE_BETA
+            - STRIPE_PRICE_GAMMA
+            - STRIPE_PRICE_DELTA
+            - STRIPE_CHECKOUT_SUCCESS_URL
+            - STRIPE_CHECKOUT_CANCEL_URL
+            - STRIPE_PORTAL_RETURN_URL
+          required_secret_mounts:
+            - stripe-secret-key
+            - stripe-webhook-secret
+            - stripe-price-alpha
+            - stripe-price-beta
+            - stripe-price-gamma
+            - stripe-price-delta
+          required_populated_secret_mounts:
+            - stripe-price-alpha
+            - stripe-price-beta
+            - stripe-price-gamma
+            - stripe-price-delta
+          secret_registry_source: scripts/bootstrap_aws_secrets.py
+          ecs_mount_source: deploy/aws/terraform/modules/ecs/main.tf
+          price_id_format: '^price_[A-Za-z0-9]+$'
     backends:
       database: aurora_postgres
       cache: dynamodb

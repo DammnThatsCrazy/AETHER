@@ -6,24 +6,25 @@ visibility: I
 audience: [ops, architect]
 status: stable
 since_version: 0.1.0
-source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, deploy/aws/terraform/profiles.tf, deploy/aws/terraform/main.tf, deploy/aws/terraform/modules/alb/main.tf, deploy/aws/terraform/modules/aurora/main.tf, deploy/aws/terraform/modules/ecr/main.tf, deploy/aws/terraform/modules/secrets/main.tf, deploy/aws/terraform/modules/secrets/rotation.tf, deploy/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py]
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, deploy/aws/terraform/profiles.tf, deploy/aws/terraform/main.tf, deploy/aws/terraform/modules/alb/main.tf, deploy/aws/terraform/modules/aurora/main.tf, deploy/aws/terraform/modules/ecr/main.tf, deploy/aws/terraform/modules/secrets/main.tf, deploy/aws/terraform/modules/secrets/rotation.tf, deploy/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
-  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
+  "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:257fa5e129a6c8363bcda9ca687f2b75b7a3a29ee753626ae51f3cb8d326cfb3"
+  "deploy/aws/terraform/main.tf": "sha256:1e688d149d4f6650de0b938ac8dd3c8144ec62d1cb4fa364a8237760cc9961dd"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:e609cdfaaf5d9d384e213edf6f936b0045eac823cc38d432e75db464c8eb14ad"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:18b6900d5b62ac98c1bdcea37acd74cf05185e9b22161831f40d59a747c22383"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "deploy/aws/terraform/variables.tf": "sha256:b7d0ffae68cd9c7215b815dfd54aaa18529a71131f93ce158b20747d7e9d51e0"
+  "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
   "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
   "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
+  "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
 ---
 
 # Deployment Profiles
@@ -259,10 +260,10 @@ service conditions are part of the Terraform profile shape and must remain
 covered by the profile plan and cost/topology gates before promotion.
 
 The public web surfaces are five separate Amplify applications — Olympus
-marketing, Aether marketing, docs, the end-user app, and status. Staging uses
-their Amplify default domains; production-lean is the first profile that
-associates the reviewed `www`, `aether`, `docs`, `app`, and `status`
-subdomains under `olympuslabsml.com`. Kyber is not one of those public apps and
+marketing, Aether marketing, docs, the end-user app, and status. Staging reuses
+the verified `www`, `aether`, `docs`, `app`, and `status` subdomains under
+`staging.olympuslabsml.com`; production-lean associates the same surface under
+`olympuslabsml.com`. Kyber is not one of those public apps and
 has no public DNS route. The protected tenant and Kyber release archives remain
 private S3 artifacts for the staging rehearsal and internal operator path.
 
@@ -278,6 +279,8 @@ delete/recreate plan.
 |---|---|
 | **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |
 | **Selection** | `terraform plan -var-file=profiles/staging.tfvars`, or `.github/workflows/staging-lifecycle.yml`, which dispatches `terraform-promote.yml` for every mutation. `environment = "staging"` is set explicitly; the root default is `production`. |
+| **Deployment lane** | `deployment_lane=full` preserves this existing release rehearsal. `deployment_lane=pilot` is an additive, complete lean AWS staging lane that keeps `deployment_profile=staging` and the unchanged `profiles/staging/terraform.tfstate` state key; it does not create a second Terraform profile or state namespace. |
+| **Pilot contract** | Pilot retains all five public Aether/Olympus surfaces, the AWS backend, durable Aurora/persistence, networking, Secrets Manager, tenant isolation, Stripe billing/webhooks/entitlements, CloudWatch observability, lifecycle/redeploy controls, migrations and full smoke coverage. Only Kyber operator/workforce identity and GCP/Google hosting/credentials are deferred. `scripts/release/check_staging_lane_contract.py` fails closed until ECS/bootstrap Stripe wiring is complete and the four real self-service Stripe test price secrets (`aether/stripe-price-{alpha,beta,gamma,delta}`) have populated current versions; Epsilon/Omicron/Omega remain optional contract-tier mappings. Bootstrap validates identifiers before write and no price IDs are invented. |
 | **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, private S3 SPA artifacts + SSM pointers, five Amplify public web apps, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. The reviewed paid-account staging profile uses the customer-managed Aurora KMS key; free-tier rehearsals may set `aurora_express_mode = true` or `skip_aurora = true` according to the account-plan guard. Aurora and Postgres graph remain omitted from the staging `required_resources` list only so a free-tier rehearsal can defer them safely. |
 | **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks when awake: `api` (1 vCPU / 2 GiB, max 2) and `lean-worker` (1 vCPU / 4 GiB, max 2) hosting all eight worker roles. `staging_state: asleep` drives every desired count **and every autoscaling floor** to zero. |
 | **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. Aurora auto-pauses at 0 ACU while asleep. |
@@ -539,9 +542,11 @@ push to `main` has been **deleted**. What remains there:
   **promotability**, not an apply: a commit is only dispatchable for promotion
   if its main-branch run proved the credential set exists and all four profiles
   produced a credentialed, policy- and cost-validated remote plan. When the
-  credential set is absent the job reports it is a NO-OP — the commit is
-  explicitly **not** promotable — and passes green, re-arming fail-closed the
-  moment the credentials are wired.
+  credentialed remote-plan lane is held. An explicit remote-plan dispatch must
+  provide the exact immutable backend digest and commit SHA plus the complete
+  credential set; missing or malformed inputs fail closed before AWS or
+  Terraform work. Provider-mocked configuration plans remain available for
+  repository evidence.
 
 `.github/workflows/terraform-promote.yml` is the **sole apply path**. It is
 `workflow_dispatch`-only — no push, tag, schedule or path trigger can reach an

@@ -13,10 +13,19 @@ source_files:
   - deploy/aws/config/
   - scripts/release/verify_terraform_state_role.py
   - .github/workflows/terraform-promote.yml
+  - .github/workflows/amplify-status-production.yml
   - .github/workflows/staging-state-reconcile.yml
   - .github/workflows/staging-lifecycle.yml
   - .github/workflows/staging-ttl-guard.yml
   - scripts/release/verify_effective_staging_apply_policy.py
+  - scripts/release/check_staging_lane_contract.py
+  - scripts/release/check_staging_credential_contract.py
+  - scripts/release/check_amplify_app_contract.py
+  - scripts/release/check_staging_secret_payload_contract.py
+  - scripts/release/check_staging_secret_preflight_policy.py
+  - scripts/release/check_staging_task_definition_contract.py
+  - config/staging_secret_preflight_iam_policy.yaml
+  - config/staging_secret_preflight_trust_policy.json
   - config/staging_apply_iam_policy.yaml
   - config/staging_lifecycle_iam_policy.yaml
   - scripts/release/check_staging_lifecycle_policy.py
@@ -25,18 +34,27 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/staging-lifecycle.yml": "sha256:548bd6d191d27609ed2f261d5b8a61bbc2c3e59e431be9090108569ca95d9898"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:081fcc79c11e82ece276f1496b5febb802ae2db2261746d0753e0817c1f19bf7"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:1176ba513d3315e97ad962b39c06113a36a5e1ae8db50da59d55a798645903ec"
-  ".github/workflows/terraform-promote.yml": "sha256:f555f32c30627b3c095936c3a929367fa67d8e6f67c56695d4258a57409da4a0"
-  "config/staging_apply_iam_policy.yaml": "sha256:87e3f96de932225bfb87344e93f7bea10338ce8189967a92d1aa829915ddbd47"
+  ".github/workflows/amplify-status-production.yml": "sha256:6b24ee13fb51366713cde866bc6d6fc5d4bef1be87dd91381e09627c1739c22f"
+  ".github/workflows/staging-lifecycle.yml": "sha256:0f908f361c21e3211da1e186d2c43b724d3b1bf771fc8ded5883c6659e90911c"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:942a4df69556a2b859c869c04edc0ca29dfbac3016e1809cdef3b38a995c401d"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:f5c66d618aad6b84887fa689dda91d9f68c43c397e39003f96efc440823a7111"
+  ".github/workflows/terraform-promote.yml": "sha256:89242263c6151b05c3b299c72fa8525cbb4cfecfb57273359e7c9a48c335edde"
+  "config/staging_apply_iam_policy.yaml": "sha256:ed9ae866b562e8d127ce7d687f3992e8d7c041c21cadc9307911235cea082f9d"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
+  "config/staging_secret_preflight_iam_policy.yaml": "sha256:8e8ade1e700682a42c8f8012d6debc4ca7d51175adb426cc2a8a5ea6ff0ed9b7"
+  "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:6031335c5c291d432029a3e001b9c631d7deecc920556dcff327dcc939427028"
+  "deploy/aws/terraform/": "sha256:a09051a5238503afe9910d1fd3546dade8727611626eb769251795628dc60eb4"
+  "scripts/release/check_amplify_app_contract.py": "sha256:7c60acb5b3b270c10a6f3897124d7ac10484213768475bd7d6cac3b2f6139cfe"
+  "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
+  "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:68d70ad0a009244251eb3caec93186be55415685600c3f590270ffb05e0680ea"
-  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
+  "scripts/release/check_staging_secret_payload_contract.py": "sha256:3f12899f82d18f82ff9961c123e366da12568dc6040e416c292f981ac34ef90f"
+  "scripts/release/check_staging_secret_preflight_policy.py": "sha256:4ab78af2ac6c11571f4aa13a49233797196cfb9bcc467f70e0cf6baee4194560"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:7bce8901b3706085a0367526bcb6114d4221bff136cc380295d3e0c378e627b2"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:371031747e27ce1267ed6341994ff9410675289d92ed0b830dc50db5891ca4eb"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
 ---
@@ -124,6 +142,16 @@ simulation; the live role must match the rendered statements exactly. State
 reconciliation is always followed by a fresh plan; no plan generated before an
 import or untaint may be reused.
 
+Secret payload validation is deliberately performed by the separate
+`AetherStagingSecretPreflight` OIDC role. Its reviewed policy grants only
+`secretsmanager:GetSecretValue` for the `aether/*` staging prefix and forbids
+secret mutation, KMS, and IAM actions. This keeps the lifecycle role's
+no-secret-values boundary intact while still proving that the actual values
+mounted by ECS are raw, non-placeholder staging values before a plan, wake, or
+smoke path proceeds. The post-apply ECS task-definition check is metadata-only
+and proves the registered API and `lean-worker` revisions match the selected
+pilot/full lane.
+
 The direct immutable application-delivery path has its own supplemental
 contract at `config/staging_application_delivery_iam_policy.yaml`. It covers
 only `ecs:RunTask`, `ecs:DescribeTasks`, and the S3 list/object operations used
@@ -162,9 +190,12 @@ at all (the `WithExpressConfiguration` API parameter forces Internet Access
 Gateway mode, incompatible with the VPC topology) set `skip_aurora = true` in
 their profile tfvars; the rest of the stack validates without it and Aurora is
 added back when the account is upgraded. Existing Secrets Manager
-objects are reconciled by metadata only: exact names, the staging CMK, and an
-`AWSCURRENT` version are checked before state import; no secret value is read
-or written by that workflow. The ECS module uses `lookup()` for secret ARN
+objects are reconciled by metadata only in Terraform state/apply: exact names,
+the staging CMK, and an `AWSCURRENT` version are checked before state import;
+the apply role does not read or write secret values. A separate,
+read-only `AetherStagingSecretPreflight` role validates raw payload shape and
+Stripe test-mode prefixes before a plan or smoke path. The ECS module uses
+`lookup()` for secret ARN
 references so that `terraform import` can evaluate the full configuration
 graph while secrets are imported incrementally.
 
@@ -385,9 +416,9 @@ whether a host string happens to be empty.
 
 The public Olympus, Aether, documentation, end-user application, and status
 surfaces are separate Amplify applications. They build from the monorepo root
-using their app-specific `appRoot` entries in `amplify.yml`; staging uses the
-Amplify default domains and production associates the canonical
-`*.olympuslabsml.com` hosts.
+using their app-specific `appRoot` entries in `amplify.yml`; staging reuses the
+verified `*.staging.olympuslabsml.com` associations and production associates
+the canonical `*.olympuslabsml.com` hosts.
 
 The protected tenant application release and private Kyber operator release
 remain immutable object-store artifacts at **every** profile —
@@ -416,17 +447,24 @@ Amplify app IDs and default domains for downstream consumption.
 
 The apex domain remains on Squarespace and redirects to the canonical
 `www.olympuslabsml.com` Amplify surface. The `www` host itself is served by
-Amplify when the custom-domain association is enabled. Staging leaves custom
-domains disabled and uses the five Amplify default domains. Production-lean
-leaves Squarespace authoritative by default; the Amplify association's DNS
-targets are exported for the controlled manual DNS change. The public status
-application consumes `status_api_url` only after the API hostname and CORS
-policy have been verified; an empty value renders an explicit unverified state.
+Amplify when the custom-domain association is enabled. Staging uses the five
+verified `*.staging.olympuslabsml.com` associations; the import-only state
+reconciliation workflow adopts those live associations before the reviewed
+plan. Production-lean leaves Squarespace authoritative by default; the
+Amplify association's DNS targets are exported for the controlled manual DNS
+change. The public status application consumes its profile's verified
+`status_api_url`; a missing or unverified API origin renders an explicit
+unverified state. After a reviewed staging apply, the promotion workflow
+checks the live branch-level API, Auth0, and custom status-shell origins before
+publishing apply evidence. The separate `amplify-status-production.yml`
+workflow binds the existing public status app to this repository, pins its
+`main` branch to `PRODUCTION`, deploys the exact main SHA, and verifies the
+production runtime links; its AWS caller is required to be
+`AetherStagingDeploy`.
 The staging apply contract grants `amplify:CreateApp` only at the API-required
-global scope and keeps existing-app, branch, and tag operations constrained to
-the generated staging Amplify app and branch ARN families. Custom-domain
-association permissions remain outside this staging contract because those
-associations are production-only.
+global scope, keeps existing-app and branch operations constrained to the
+generated staging Amplify app and branch ARN families, and scopes custom-domain
+association operations to the generated staging domain-association ARN family.
 The Amplify applications and the private S3 artifacts are both gated by the
 same `enable_static_frontends` toggle, but they are separate delivery paths:
 Amplify serves the public web surfaces; S3 stores the protected tenant and Kyber
@@ -617,9 +655,12 @@ from a pinned price book against a plan inventory.
 applies.** The `apply-production-lean` job that once auto-applied on every push
 to `main` has been deleted. On a push to `main` its
 `require-production-credentials` job gates *promotability*, not an apply. When
-the remote-plan credential set is absent, that job reports it is a NO-OP and
-passes green — the commit is explicitly **not** promotable — and re-arms,
-fail-closed, the moment the credentials are wired.
+pushes and PR finalization intentionally hold the credentialed remote-plan lane;
+they do not pretend that a live plan exists. An explicit remote-plan dispatch
+must provide the exact immutable backend digest and commit SHA and must have
+the complete credential set. Missing or malformed inputs fail closed before any
+AWS or Terraform work, while provider-mocked configuration plans remain
+available on pushes and PR finalization.
 
 The path-scoped provider-mocked plan runs on PR finalization
 (`ready_for_review`), matching pushes to `main`, or explicit dispatch. Draft
@@ -638,6 +679,20 @@ the reviewed commit.
 
 Operator procedure: [Deployment Runbook](DEPLOYMENT-RUNBOOK.md). Staging's
 wake/validate/sleep cycle: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md).
+
+Staging keeps one canonical Terraform profile and state key while accepting the
+explicit `deployment_lane` token (`full` or `pilot`). The full lane preserves
+the existing release rehearsal and Kyber/workforce gates. The pilot lane is a
+complete lean AWS staging provision for the Aether customer surface — including
+durable state, networking, secrets, Stripe billing/webhooks/entitlements,
+tenant isolation, observability, lifecycle/redeploy controls, migrations and
+smoke coverage — and intentionally defers only Kyber operator/workforce
+identity plus GCP/Google hosting and credentials. Its validator and apply
+preflight fail closed if the required ECS/bootstrap Stripe wiring is absent or
+if any of the seven real Stripe test price secrets is missing or stale. The
+secure bootstrap rejects malformed or placeholder IDs before writing them;
+the workflow preflight reads metadata only and never invents, reads, or prints
+a price ID.
 
 ### Staging apply prerequisites and collision safety
 
@@ -758,14 +813,20 @@ accounts when their names would otherwise collide.
    string, so a JSON wrapper needs a JSON-key suffix on the ARN and is
    error-prone. Aurora's RDS-managed `MasterUserSecret` is populated
    automatically by managed rotation; `aether/redis-auth-token` exists only on profiles that
-   provision Redis. Staging and production-class Kyber workloads additionally
-   require `aether/kyber-google-client-id` and
+   provision Redis. Pilot staging additionally requires the four self-service
+   `aether/stripe-price-{alpha,beta,gamma,delta}` values, plus the Stripe API and
+   webhook secrets. Contract-tier mappings (`epsilon`, `omicron`, and `omega`)
+   remain optional and are only needed when those operator-managed tiers are enabled.
+   The secure bootstrap creates new
+   secrets with the Terraform staging CMK; it validates price-ID shape before
+   writing and never prints values. Full staging and production-class Kyber
+   workloads additionally require `aether/kyber-google-client-id` and
    `aether/kyber-google-client-secret`. The Google Web OAuth client must allow
    the backend callback `https://<api-domain>/v1/kyber/auth/callback`; the
    browser's Kyber origin is a separate `TF_KYBER_APP_URL` input used for
-   WebAuthn. Populate those two values through the secure bootstrap, then let
-   the reviewed state-reconciliation workflow import only their metadata. Do
-   not put either value in Terraform variables, state, plans, or logs.
+   WebAuthn. Populate those values through the secure bootstrap, then let the
+   reviewed state-reconciliation workflow import only their metadata. Do not
+   put any secret value in Terraform variables, state, plans, or logs.
 3. **Push images.** Task definitions pin an immutable digest, so a new digest is
    a new task definition and deploys itself. The ML image is only needed on
    profiles that run the dedicated ML service.

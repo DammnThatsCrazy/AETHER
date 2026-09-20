@@ -23,18 +23,18 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:06eedce5be20e5e6e8518f23f96d4fdef2e2a4eaecc4c53ac97e0882fe298c51"
-  ".github/workflows/terraform-promote.yml": "sha256:f555f32c30627b3c095936c3a929367fa67d8e6f67c56695d4258a57409da4a0"
-  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
+  ".github/workflows/infrastructure.yml": "sha256:649addadd9a2cfff621fcafe18d7e5acb13b2f8a7f51fdca77cca76cccdb8100"
+  ".github/workflows/terraform-promote.yml": "sha256:89242263c6151b05c3b299c72fa8525cbb4cfecfb57273359e7c9a48c335edde"
+  "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/DECOMMISSION.md": "sha256:f1199d32b3e315cd78dcc4beaf3589ac46fc69134ea7083ce5698c270ab2f377"
-  "deploy/aws/terraform/main.tf": "sha256:257fa5e129a6c8363bcda9ca687f2b75b7a3a29ee753626ae51f3cb8d326cfb3"
+  "deploy/aws/terraform/main.tf": "sha256:1e688d149d4f6650de0b938ac8dd3c8144ec62d1cb4fa364a8237760cc9961dd"
   "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
-  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:ffcb3981400613ca686cf3f6c0caef5ce915d819f0edaa20f4e64080f445b305"
-  "deploy/aws/terraform/variables.tf": "sha256:b7d0ffae68cd9c7215b815dfd54aaa18529a71131f93ce158b20747d7e9d51e0"
+  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:659fe7698c3ee8dfada9a4eaa97b0e4e33ca265023f24d885bb3312704ffa5cd"
+  "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
 ---
 
 # AWS Lean Production

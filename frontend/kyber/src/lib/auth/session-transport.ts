@@ -9,8 +9,9 @@
  *     Every request therefore sets `credentials: 'include'` and there is no
  *     `Authorization` header anywhere in this app.
  *  2. Mutating requests (anything that is not GET/HEAD/OPTIONS) carry the CSRF
- *     token from the paired, readable cookie in an `X-Kyber-CSRF` header. The
- *     backend rejects the request if it is missing or does not match.
+ *     token issued in the authenticated session response in an
+ *     `X-Kyber-CSRF` header. The backend rejects the request if it is missing
+ *     or does not match. The token is memory-only; it is never persisted.
  *  3. A 401 is authoritative and immediate: it means the session is gone. Any
  *     401 broadcasts `kyber:session-expired` on `window` so the auth provider
  *     can flip the whole app to logged-out without waiting for a poll.
@@ -30,6 +31,20 @@ export const CSRF_HEADER = 'X-Kyber-CSRF';
 export const SESSION_EXPIRED_EVENT = 'kyber:session-expired';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+// The CSRF cookie is deliberately HttpOnly and host-bound to the API. The
+// backend returns the raw value once in the authenticated session response;
+// retain only that value in memory so a cross-origin Kyber SPA can still echo
+// the paired token without weakening the cookie boundary.
+let sessionCsrfToken: string | null = null;
+
+export function setSessionCsrfToken(token: string | null): void {
+  sessionCsrfToken = token && token.length > 0 ? token : null;
+}
+
+export function clearSessionCsrfToken(): void {
+  sessionCsrfToken = null;
+}
 
 export class KyberAuthError extends Error {
   constructor(
@@ -75,6 +90,7 @@ export function resolveControlPlaneBase(): string {
 }
 
 export function readCsrfToken(): string | null {
+  if (sessionCsrfToken !== null) return sessionCsrfToken;
   if (typeof document === 'undefined') return null;
   const jar = document.cookie ? document.cookie.split(';') : [];
   for (const raw of jar) {
@@ -90,6 +106,7 @@ export function readCsrfToken(): string | null {
 }
 
 function notifySessionExpired(path: string): void {
+  clearSessionCsrfToken();
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { path } }));
 }

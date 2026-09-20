@@ -190,6 +190,26 @@ def test_repo_health_main_integration_is_bounded_and_fail_closed() -> None:
     assert "deploy" not in script.lower()
 
 
+def test_repo_health_builds_cross_workspace_dependencies_before_lint() -> None:
+    jobs = _repo_health_workflow()["jobs"]
+    typescript = jobs["typescript"]
+    steps = typescript["steps"]
+    names = [step.get("name", "") for step in steps]
+    dependency_step = names.index("Build proof and mobile dependency packages before workspace lint")
+    lint_step = names.index("TypeScript lint/static checks")
+    assert dependency_step < lint_step
+    dependency_run = steps[dependency_step]["run"]
+    for workspace in (
+        "packages/proof-contracts",
+        "packages/proof-fixtures",
+        "packages/proof-runner",
+        "packages/proof-reporting",
+        "packages/react-native",
+        "packages/mobile-core",
+    ):
+        assert workspace in dependency_run
+
+
 def test_production_equivalent_ci_filters_real_stack_with_impact_authority() -> None:
     jobs = _production_equivalent_workflow()["jobs"]
     classifier = jobs["classify-impact"]

@@ -10,11 +10,15 @@ tree](terraform/README.md#dead-second-terraform-tree).
 describes the infrastructure exactly as the Terraform defines it. This file is
 the *procedure*; that doc is the *reference*. When they disagree, the doc wins.
 
-> **Current status.** No AWS account, credentials, or applied infrastructure is
-> wired to this repository today (`config/deployment_readiness.yaml`, exception
-> `DR-EX-NO-CLOUD-ACCOUNT`). `deployment_ready` is `false`. This guide is what it
-> takes to change that. Every step below that needs credentials is, by design,
-> not runnable from CI until a real account exists.
+> **Current status.** The repository now has a live AWS staging account and
+> reviewed GitHub OIDC roles wired for the pilot lane. This from-zero guide is
+> still the procedure for a new account, but the existing staging path should
+> use the reviewed `terraform-promote.yml` workflow rather than recreating
+> infrastructure by hand. Pilot provisioning requires the read-only
+> `AetherStagingSecretPreflight` role for raw secret-shape validation; the
+> Terraform plan/apply and lifecycle roles remain separate and value-blind.
+> Kyber workforce identity and GCP/Google hosting credentials are intentionally
+> deferred only for the pilot lane. The full lane retains those prerequisites.
 
 ---
 
@@ -141,7 +145,7 @@ Record the bucket and table names — they become the `TF_STATE_BUCKET` and
    | `TF_STATE_BUCKET` | the bucket from Step 1 |
    | `TF_LOCK_TABLE` | the lock table from Step 1 |
    | `AWS_REGION` | your region |
-   | AWS OIDC role ARNs | the plan role and the `AWS_TERRAFORM_APPLY_ROLE_ARN` state-write role |
+   | AWS OIDC role ARNs | the plan role, the `AWS_TERRAFORM_APPLY_ROLE_ARN` state-write role, the staging deploy/lifecycle roles, and the read-only `AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN` payload-check role |
 
    The apply role is deliberately least-privilege; its checked-in contract is
    `config/staging_apply_iam_policy.yaml` (staging) and is verified by IAM

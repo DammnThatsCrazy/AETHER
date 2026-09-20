@@ -3,6 +3,8 @@ export {
   requestJson,
   requestVoid,
   readCsrfToken,
+  setSessionCsrfToken,
+  clearSessionCsrfToken,
   resolveControlPlaneBase,
   describeAuthError,
   KyberAuthError,

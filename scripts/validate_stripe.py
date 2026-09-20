@@ -27,7 +27,8 @@ Checks performed:
     1. SDK installed (stripe>=10)
     2. API key format (sk_live_ or sk_test_)
     3. Stripe API connection (stripe.Account.retrieve())
-    4. All seven plan Price IDs exist in your Stripe account
+    4. All four self-service Price IDs exist in your Stripe account;
+       contract-tier Price IDs are checked only when configured
     5. Webhook secret format (whsec_ prefix and minimum length)
     6. Overage Price ID (STRIPE_OVERAGE_PRICE_ID) if configured
 """
@@ -115,19 +116,41 @@ def run(skip_webhook: bool) -> bool:
         print()
 
     # 4. Price IDs
-    price_vars = {
+    required_price_vars = {
         "Alpha": "STRIPE_PRICE_ALPHA",
         "Beta": "STRIPE_PRICE_BETA",
         "Gamma": "STRIPE_PRICE_GAMMA",
         "Delta": "STRIPE_PRICE_DELTA",
+    }
+    optional_price_vars = {
         "Epsilon": "STRIPE_PRICE_EPSILON",
         "Omicron": "STRIPE_PRICE_OMICRON",
         "Omega": "STRIPE_PRICE_OMEGA",
     }
-    for label, env_var in price_vars.items():
+    for label, env_var in required_price_vars.items():
         price_id = os.getenv(env_var, "")
         if not price_id:
             all_pass &= _check(f"Price ID {label}", False, f"{env_var} not set")
+            continue
+        try:
+            price = stripe.Price.retrieve(price_id)  # type: ignore[attr-defined]
+            currency = price.get("currency", "?").upper()
+            unit_amount = price.get("unit_amount")
+            recurring = price.get("recurring") or {}
+            interval = recurring.get("interval", "?")
+            detail = f"{price_id} — {currency} {unit_amount} / {interval}"
+            if price.get("active") is False:
+                detail += " (INACTIVE)"
+                all_pass &= _check(f"Price ID {label}", False, detail)
+            else:
+                _check(f"Price ID {label}", True, detail)
+        except Exception as e:
+            all_pass &= _check(f"Price ID {label}", False, f"{price_id} — {e}")
+
+    for label, env_var in optional_price_vars.items():
+        price_id = os.getenv(env_var, "")
+        if not price_id:
+            print(f"  [SKIP] Price ID {label}  — optional contract tier not configured")
             continue
         try:
             price = stripe.Price.retrieve(price_id)  # type: ignore[attr-defined]

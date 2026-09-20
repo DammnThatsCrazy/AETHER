@@ -15,7 +15,7 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/backend/services/billing/routes.py": "sha256:c5da14570c9272a06f1e9b3f296ac7892d33916d94d31c4fcfd3421bb1956429"
-  "services/backend/shared/billing/stripe_client.py": "sha256:2f1f6f6fa308966e61557addd32a15ef2bfac6f09a679e235c88db4a240e1a8a"
+  "services/backend/shared/billing/stripe_client.py": "sha256:6b218eea6bf9dffd0e398722948813ccea454863270693c8200cd278ab0b1742"
   "services/backend/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
 ---
 # Stripe Billing — Aether Alpha–Omega Integration
@@ -44,22 +44,25 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
    - **Delta** ($1,999/mo) → recurring subscription Price
 
    Contract tiers (Epsilon, Omicron, Omega) are provisioned through the
-   admin operator path and do not require self-serve Stripe Prices.
+   admin operator path and do not require self-serve Stripe Prices. Their
+   mappings may be added later when those operator-managed flows are enabled.
 
    Pricing lives in `shared/plans/catalog.py::PLAN_CATALOG`. Aether does
    **not** ship hard-coded Stripe Price IDs; the operator must paste them
    into env vars below.
 
-2. **Set the Price IDs in env**:
+2. **Set the Price IDs in env**. Alpha–Delta are the self-serve Checkout
+   tiers. Epsilon, Omicron, and Omega are optional contract-tier mappings. The
+   pilot staging lane requires the four self-service IDs and can accept the
+   optional contract mappings without making them a self-service dependency:
    ```env
    STRIPE_PRICE_ALPHA=price_xxx_alpha
    STRIPE_PRICE_BETA=price_xxx_beta
    STRIPE_PRICE_GAMMA=price_xxx_gamma
    STRIPE_PRICE_DELTA=price_xxx_delta
-   # Contract tiers (optional — only if billing contract tiers through Stripe):
-   # STRIPE_PRICE_EPSILON=price_xxx_epsilon
-   # STRIPE_PRICE_OMICRON=price_xxx_omicron
-   # STRIPE_PRICE_OMEGA=price_xxx_omega
+   STRIPE_PRICE_EPSILON=price_xxx_epsilon
+   STRIPE_PRICE_OMICRON=price_xxx_omicron
+   STRIPE_PRICE_OMEGA=price_xxx_omega
    ```
 
 3. **(Optional) Overage Price** — only if you want to charge Aether overage
@@ -104,7 +107,7 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
 | `STRIPE_SECRET_KEY` | Stripe API secret. Required in non-local when enabled. |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for webhook signature verification. |
 | `STRIPE_PRICE_ALPHA..DELTA` | Recurring subscription Price IDs for self-serve plans. |
-| `STRIPE_PRICE_EPSILON/OMICRON/OMEGA` | (Optional) Price IDs for contract tiers. |
+| `STRIPE_PRICE_EPSILON/OMICRON/OMEGA` | Optional contract-tier Price IDs for operator-managed flows. |
 | `STRIPE_OVERAGE_PRICE_ID` | OPTIONAL Price ID for overage line items. |
 | `STRIPE_CHECKOUT_SUCCESS_URL` | Redirect URL after successful Checkout. |
 | `STRIPE_CHECKOUT_CANCEL_URL` | Redirect URL on cancelled Checkout. |
@@ -112,9 +115,10 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
 
 In **non-local** environments with `STRIPE_BILLING_ENABLED=true`, the secret
 key, webhook secret, the four self-serve Price IDs (Alpha–Delta), and the
-checkout/portal URLs are required — `Settings.__post_init__` raises
-`RuntimeError` if any are missing. Contract tier Price IDs are optional.
-In **local** mode, they may be unset.
+checkout/portal URLs are required. Contract-tier IDs are optional unless an
+operator-managed tier is being activated; `Settings.__post_init__` raises
+`RuntimeError` if a required value is missing. In **local** mode, they may be
+unset.
 
 ---
 

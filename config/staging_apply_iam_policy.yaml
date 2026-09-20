@@ -648,13 +648,19 @@ statements:
     resource: '*'
     scope: global-read-required-by-api
   # ----- Amplify Hosting (root main.tf) -----
-  # Staging uses Amplify default domains. Custom-domain associations are
-  # production-only and therefore are not included in this staging contract.
+  # Staging reuses the already-verified staging.olympuslabsml.com
+  # associations. Squarespace remains authoritative for the DNS records; this
+  # contract covers only the Amplify association resource itself.
   - sid: CreateStagingAmplifyApps
     actions:
       - amplify:CreateApp
     resource: '*'
     scope: amplify-create-required-by-api
+  - sid: DiscoverStagingAmplifyApps
+    actions:
+      - amplify:ListApps
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: ManageStagingAmplifyApps
     actions:
       - amplify:GetApp
@@ -671,6 +677,25 @@ statements:
       - amplify:DeleteBranch
     resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
     scope: staging-amplify-branches
+  - sid: ManageStagingAmplifyJobs
+    actions:
+      - amplify:StartJob
+      - amplify:ListJobs
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-branches
+  - sid: ReadStagingAmplifyJobs
+    actions:
+      - amplify:GetJob
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*/jobs/*
+    scope: staging-amplify-jobs
+  - sid: ManageStagingAmplifyDomains
+    actions:
+      - amplify:CreateDomainAssociation
+      - amplify:GetDomainAssociation
+      - amplify:UpdateDomainAssociation
+      - amplify:DeleteDomainAssociation
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*
+    scope: staging-amplify-domains
   - sid: TagStagingAmplifyResources
     actions:
       - amplify:TagResource

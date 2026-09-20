@@ -233,6 +233,7 @@ def test_deploy_gates_on_readiness_and_golden_path_smoke():
 def test_staging_delivery_validates_its_runtime_iam_delta_and_api_host_fallback():
     workflow = _workflow("deploy.yml")
     assert "check_staging_application_delivery_policy.py" in workflow
+    assert "python -m pip install --disable-pip-version-check pyyaml" in workflow
     assert "vars.ALB_DNS_NAME || secrets.TF_DOMAIN_NAME" in workflow
     assert "aws ecs run-task" in workflow
     assert "aws ecs describe-tasks" in workflow
@@ -242,18 +243,37 @@ def test_staging_delivery_validates_its_runtime_iam_delta_and_api_host_fallback(
 
 def test_staging_smoke_uses_the_authoritative_proof_environment_and_fails_closed():
     workflow = _workflow("staging-smoke.yml")
+    assert "  push:" not in workflow
+    assert "workflow_dispatch:" in workflow
     assert "environment: staging" in workflow
     assert "AETHER_API_URL" in workflow
     assert "AETHER_API_KEY" in workflow
     assert "PROOF_TENANT_ID" in workflow
     assert "PROOF_WORKSPACE_ID" in workflow
-    assert "vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME" in workflow
+    assert "vars.AETHER_API_URL || format('https://{0}', secrets.TF_DOMAIN_NAME)" in workflow
     assert "secrets.SMOKE_API_KEY" in workflow
     assert "needs.preflight.result == 'success'" in workflow
     assert "skipping staging smoke test" not in workflow
     assert "AETHER_STAGING_URL" not in workflow
     assert "secrets.PROOF_TENANT_ID" not in workflow
     assert "secrets.PROOF_WORKSPACE_ID" not in workflow
+    assert "check_staging_secret_payload_contract.py --lane pilot" in workflow
+    assert "secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN" in workflow
+    assert "check_staging_task_definition_contract.py --lane pilot" in workflow
+    assert "Load the pilot Stripe test key without logging it" in workflow
+    assert 'echo "::add-mask::$stripe_key"' in workflow
+    assert "STRIPE_SECRET_KEY" in workflow
+
+
+def test_production_status_workflow_binds_the_canonical_build_and_runtime_links():
+    workflow = _workflow("amplify-status-production.yml")
+    assert "--repository \"$AMPLIFY_REPOSITORY\"" in workflow
+    assert "appRoot: frontend/status" in workflow
+    assert "npm run build --workspace=frontend/status" in workflow
+    assert "VITE_STATUS_API_URL=https://api.olympuslabsml.com/health" in workflow
+    assert "VITE_STATUS_DOCS_URL=https://docs.olympuslabsml.com" in workflow
+    assert "VITE_STATUS_AETHER_MARKETING_URL=https://aether.olympuslabsml.com" in workflow
+    assert "--stage PRODUCTION" in workflow
 
 
 def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
@@ -459,28 +479,17 @@ def test_ephemeral_ttl_guard_blocking_alert_only_when_armed_and_expired():
 
 
 def test_infrastructure_promotion_gate_reports_not_armed_without_credentials():
-    """A credential-less push to main must go green with a loud not-armed
-    notice — never fail the run — and the enforce step must run fail-closed
-    only when the complete credential set is present. A failed probe publishes
-    no output and must not be misattributed to missing credentials, so the
-    notice also requires the probe job to have succeeded."""
+    """A credentialed remote-plan dispatch must fail closed at its final gate."""
     doc = _workflow_yaml("infrastructure.yml")
     steps = doc["jobs"]["require-production-credentials"]["steps"]
-
-    not_armed = next(
-        s for s in steps if "not armed" in s.get("name", "").lower()
-    )
-    assert "needs.remote-plan-readiness.result == 'success'" in not_armed["if"]
-    assert "needs.remote-plan-readiness.outputs.configured != 'true'" in not_armed["if"]
-    assert "NOT promotable" in not_armed["run"]
-    assert "NO-OP" in not_armed["run"]
-
     enforce = next(
         s for s in steps if s.get("name") == "Enforce credentialed remote plans"
     )
-    assert "needs.remote-plan-readiness.outputs.configured == 'true'" in enforce["if"]
-    # The enforce step still carries all three fail-closed checks.
-    assert enforce["run"].count("exit 1") == 3
+    assert enforce["if"] == "always()"
+    assert "READINESS_RESULT" in enforce["env"]
+    assert "CONFIGURED" in enforce["env"]
+    # The enforce step carries all three fail-closed checks.
+    assert enforce["run"].count("exit 1") == 4
 
 
 # ---------------------------------------------------------------------------
@@ -819,26 +828,26 @@ def test_infrastructure_remote_plan_rejects_a_stale_backend_digest_on_main():
     script = validation["run"]
     assert "aws ecr describe-images" in script
     assert "--image-ids imageDigest=\"$APPROVED_BACKEND_DIGEST\"" in script
-    assert "--image-ids imageTag=\"$GITHUB_SHA\"" in script
-    assert '"$GITHUB_EVENT_NAME" = push' in script
-    assert '"$GITHUB_REF" = refs/heads/main' in script
-    assert "TF_BACKEND_IMAGE_DIGEST is stale" in script
+    assert "--image-ids imageTag=\"$EXPECTED_COMMIT_SHA\"" in script
+    assert '"$GITHUB_EVENT_NAME" = push' not in script
+    assert '"$GITHUB_REF" = refs/heads/main' not in script
+    assert "TF_BACKEND_IMAGE_DIGEST is stale" not in script
+    assert "EXPECTED_COMMIT_SHA" in script
 
 
-def test_infrastructure_requires_credentialed_remote_plans_on_pushes_to_main():
+def test_infrastructure_requires_explicit_credentialed_remote_plan_dispatch():
     doc = _workflow_yaml("infrastructure.yml")
     remote_plan = doc["jobs"]["remote-plan"]
-    assert remote_plan["if"] == "needs.remote-plan-readiness.outputs.configured == 'true'"
+    assert remote_plan["if"] == "github.event_name == 'workflow_dispatch' && needs.remote-plan-readiness.outputs.configured == 'true'"
 
     gate = doc["jobs"]["require-production-credentials"]
     assert set(gate["needs"]) == {"remote-plan-readiness", "plan", "remote-plan"}
-    assert "github.event_name == 'push'" in gate["if"]
-    assert "github.ref == 'refs/heads/main'" in gate["if"]
+    assert gate["if"] == "always() && github.event_name == 'workflow_dispatch'"
     script = _job_script(doc, "require-production-credentials")
     for guarded in ('"$CONFIGURED" != \'true\'', '"$PLAN_RESULT" != \'success\'',
                     '"$REMOTE_PLAN_RESULT" != \'success\''):
         assert guarded in script, f"promotability gate no longer checks {guarded}"
-    assert script.count("exit 1") == 3
+    assert script.count("exit 1") == 4
 
 
 def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
@@ -852,7 +861,8 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
         for name in probe_step["env"]
         if name not in {
             "AWS_INFRA_ROLE_ARN",
-            "TF_BACKEND_IMAGE_DIGEST",
+            "BACKEND_IMAGE_DIGEST",
+            "EXPECTED_COMMIT_SHA",
             "TF_ML_IMAGE_DIGEST",
         }
     }
@@ -928,6 +938,7 @@ PLAN_EVIDENCE = {
     "reviewed.tfplan.sha256": "sha256sum reviewed.tfplan > reviewed.tfplan.sha256",
     "reviewed.commit": 'printf \'%s\\n\' "$COMMIT_SHA" > reviewed.commit',
     "reviewed.profile": 'printf \'%s\\n\' "$PROFILE" > reviewed.profile',
+    "reviewed.deployment-lane": 'printf \'%s\\n\' "${DEPLOYMENT_LANE}" > reviewed.deployment-lane',
     "reviewed.state-key": (
         'printf \'%s\\n\' "profiles/${PROFILE}/terraform.tfstate" > reviewed.state-key'
     ),

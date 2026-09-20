@@ -11,7 +11,7 @@ source_files:
   - docs/SECRETS-MANAGEMENT.md
 canonical_owner: platform@aether
 source_hashes:
-  "docs/SECRETS-MANAGEMENT.md": "sha256:0b551db10a55264ef5981ee810093a83bd0b6e68aa5bcda6f190498f92ec9c43"
+  "docs/SECRETS-MANAGEMENT.md": "sha256:c6de47c6acb95edbc3b85ecacd253e1d0d2c9fa30db3e46416a6797fb1255c2a"
   "services/backend/shared/certification/registry.py": "sha256:5c2e75d47d24e1dc2429c6ea6a2476cab2b0dcc71be4899ad77bac802ee12624"
 ---
 

@@ -245,8 +245,8 @@ def validate(path: Path) -> list[str]:
         if hosting.get("kyber") != "internal_only_no_public_dns":
             errors.append(f"{label}: hosting.kyber must remain internal_only_no_public_dns")
         if environment == "staging":
-            if hosting.get("staging_custom_domain") != "disabled_until_promotion":
-                errors.append(f"{label}: staging custom domains must remain disabled until promotion")
+            if hosting.get("staging_custom_domain") != "enabled":
+                errors.append(f"{label}: staging custom domains must be explicitly enabled for the verified staging lane")
         elif hosting.get("production_custom_domain") != "enabled":
             errors.append(f"{label}: production-lean custom domains must be explicitly enabled")
 

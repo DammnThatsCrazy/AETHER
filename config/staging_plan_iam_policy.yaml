@@ -74,6 +74,39 @@ statements:
     resource: '*'
     scope: global-read-required-by-api
 
+  # ----- Amplify Hosting (root main.tf) -----
+  - sid: DiscoverStagingAmplifyApps
+    actions:
+      - amplify:ListApps
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadStagingAmplifyApps
+    actions:
+      - amplify:GetApp
+      - amplify:ListBranches
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*
+    scope: staging-amplify-apps
+  - sid: ReadStagingAmplifyBranches
+    actions:
+      - amplify:GetBranch
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-branches
+  - sid: ReadStagingAmplifyDomains
+    actions:
+      - amplify:GetDomainAssociation
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*
+    scope: staging-amplify-domains
+  - sid: ReadStagingAmplifyJobs
+    actions:
+      - amplify:ListJobs
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-branches
+  - sid: ReadStagingAmplifyJob
+    actions:
+      - amplify:GetJob
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*/jobs/*
+    scope: staging-amplify-jobs
+
   # ----- ECS (module.ecs) -----
   - sid: ReadStagingEcsServices
     actions:

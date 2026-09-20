@@ -438,6 +438,25 @@ jobs:
       - name: Build web package
         run: npm run build --workspace=packages/web
 
+      # The workspace lint/typecheck commands run every workspace in a clean
+      # checkout.  Proof packages and the proof mobile apps import sibling
+      # packages through their published `dist` entrypoints, so building only
+      # shared/web leaves the clean runner with missing modules even though the
+      # later aggregate build would have produced them.  Keep this dependency
+      # build explicit and ordered before the cross-workspace lint stage.
+      - name: Build proof and mobile dependency packages before workspace lint
+        run: |
+          set -euo pipefail
+          for workspace in \
+            packages/proof-contracts \
+            packages/proof-fixtures \
+            packages/proof-runner \
+            packages/proof-reporting \
+            packages/react-native \
+            packages/mobile-core; do
+            npm run build --workspace="$workspace"
+          done
+
       - name: TypeScript lint/static checks
         run: npm run lint
 

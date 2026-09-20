@@ -77,6 +77,7 @@ REQUIRED_ACTIONS = {
     "ssm:DescribeParameters",
     # Amplify Hosting
     "amplify:CreateApp",
+    "amplify:ListApps",
     "amplify:GetApp",
     "amplify:UpdateApp",
     "amplify:DeleteApp",
@@ -85,6 +86,13 @@ REQUIRED_ACTIONS = {
     "amplify:GetBranch",
     "amplify:UpdateBranch",
     "amplify:DeleteBranch",
+    "amplify:StartJob",
+    "amplify:ListJobs",
+    "amplify:GetJob",
+    "amplify:CreateDomainAssociation",
+    "amplify:GetDomainAssociation",
+    "amplify:UpdateDomainAssociation",
+    "amplify:DeleteDomainAssociation",
     "amplify:TagResource",
     "amplify:UntagResource",
     "amplify:ListTagsForResource",
@@ -498,6 +506,7 @@ ALLOWED_GLOBAL_ACTIONS = {
     # Amplify CreateApp has no resource-level ARN; the app and branch
     # operations below remain resource-scoped.
     "amplify:CreateApp",
+    "amplify:ListApps",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -524,6 +533,8 @@ _SECRET_ARN = "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
 _SSM_PARAM = "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*"
 _AMPLIFY_APPS = "arn:aws:amplify:us-east-1:${account_id}:apps/*"
 _AMPLIFY_BRANCHES = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*"
+_AMPLIFY_DOMAINS = "arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*"
+_AMPLIFY_JOBS = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*/jobs/*"
 _DYNAMO_TABLE = "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*"
 _SQS_QUEUE = "arn:aws:sqs:us-east-1:${account_id}:AETHER-staging-*"
 _EVENTS_RULE = "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*"
@@ -711,6 +722,17 @@ def main() -> int:
         "amplify:UpdateBranch", "amplify:DeleteBranch",
     ):
         expected_resources[_amplify_branch] = _AMPLIFY_BRANCHES
+    expected_resources["amplify:ListApps"] = "*"
+    for _amplify_job_branch in (
+        "amplify:StartJob", "amplify:ListJobs",
+    ):
+        expected_resources[_amplify_job_branch] = _AMPLIFY_BRANCHES
+    expected_resources["amplify:GetJob"] = _AMPLIFY_JOBS
+    for _amplify_domain in (
+        "amplify:CreateDomainAssociation", "amplify:GetDomainAssociation",
+        "amplify:UpdateDomainAssociation", "amplify:DeleteDomainAssociation",
+    ):
+        expected_resources[_amplify_domain] = _AMPLIFY_DOMAINS
     expected_resources["amplify:TagResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
     expected_resources["amplify:UntagResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
     expected_resources["amplify:ListTagsForResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]

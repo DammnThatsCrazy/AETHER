@@ -53,6 +53,7 @@ REVIEWED_EVIDENCE = (
     "reviewed.tfplan.sha256",
     "reviewed.commit",
     "reviewed.profile",
+    "reviewed.deployment-lane",
     "reviewed.terraform-version",
     "reviewed.lock.sha256",
     "reviewed.state-key",
@@ -315,9 +316,18 @@ def test_every_terraform_mutation_is_a_dispatch_of_the_reviewed_workflow():
     dispatches = _dispatch_steps(doc)
     assert dispatches, "the lifecycle no longer reaches terraform-promote at all"
     for job, step in dispatches:
-        invocations = _dispatch_invocations(step["run"])
-        assert invocations, f"{job}:{step.get('name')} has no parseable dispatch"
-        for invocation in invocations:
+            invocations = _dispatch_invocations(step["run"])
+            assert invocations, f"{job}:{step.get('name')} has no parseable dispatch"
+            for invocation in invocations:
+                if '"$reconcile_workflow"' in invocation:
+                    # The workflow builds a quoted argument array before the
+                    # dispatch so secret names and KMS ARNs cannot be split by
+                    # shell word parsing. Inspect the complete function body,
+                    # not only the parser's abbreviated invocation token.
+                    assert "staging_secret_names=" in step["run"]
+                    assert "staging_secrets_kms_key_arn" in step["run"]
+                    assert "confirm_staging_import=IMPORT-STAGING" in step["run"]
+                    continue
             assert '"$PROMOTE_WORKFLOW"' in invocation, (
                 f"{job} dispatches something other than the reviewed workflow: {invocation}"
             )
@@ -809,6 +819,7 @@ def test_sleep_runs_under_always():
         "wake-validate",
         "wake-apply",
         "rehearse",
+        "amplify-preflight",
     }
     # And the steps that stop cost run even when an earlier sleep step failed.
     for step_id in ("last-resort", "residual", "report"):

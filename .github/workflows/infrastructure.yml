@@ -4,6 +4,13 @@ name: Infrastructure Profiles
 # The single production apply path is .github/workflows/terraform-promote.yml,
 # which is workflow_dispatch-only, environment-gated, and consumes a reviewed,
 # checksum-bound binary plan.
+#
+# Provider-mocked configuration plans run on pushes and PR finalization. A
+# credentialed remote plan is deliberately explicit: dispatch it only after
+# Immutable delivery has published the commit-bound release manifest, passing
+# both its backend digest and commit SHA as inputs. This prevents the old race
+# where a main push planned against a mutable repository secret while deploy.yml
+# was still publishing the image for that same commit.
 
 on:
   pull_request:
@@ -12,6 +19,15 @@ on:
       - 'deploy/aws/**'
       - '.github/workflows/infrastructure.yml'
   workflow_dispatch:
+    inputs:
+      backend_image_digest:
+        description: Immutable backend digest from the completed delivery manifest
+        type: string
+        required: true
+      expected_commit_sha:
+        description: Exact commit SHA contained in the completed delivery manifest
+        type: string
+        required: true
   push:
     branches: [main]
     paths:
@@ -53,9 +69,19 @@ jobs:
           TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
-          TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
         run: |
           set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::notice title=Remote Terraform plan held::Credentialed remote plans are dispatch-only and must be run after Immutable delivery with its exact backend digest and commit SHA.'
+            exit 0
+          fi
+          printf '%s' "$BACKEND_IMAGE_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' \
+            || { echo '::error::backend_image_digest input must be an immutable sha256 digest'; exit 1; }
+          printf '%s' "$EXPECTED_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' \
+            || { echo '::error::expected_commit_sha input must be a 40-character lowercase commit SHA'; exit 1; }
           missing=()
           # TF_ML_IMAGE_DIGEST is profile-specific: staging and
           # production-lean run inline ML and do not require a serving image.
@@ -72,8 +98,7 @@ jobs:
             TF_AUTH0_MANAGEMENT_CLIENT_SECRET \
             TF_AMPLIFY_GITHUB_ACCESS_TOKEN \
             TF_AETHER_APP_URL \
-            TF_KYBER_APP_URL \
-            TF_BACKEND_IMAGE_DIGEST
+            TF_KYBER_APP_URL
           do
             # `${!name-}` is indirect expansion with an empty default, so an
             # entirely unset secret does not abort the loop under `set -u`.
@@ -96,10 +121,9 @@ jobs:
             echo 'configured=false' >> "$GITHUB_OUTPUT"
             printf -v missing_list '%s, ' "${missing[@]}"
             # The enforcement step below is itself gated on this same
-            # `configured` output, so a credential-less push to main does NOT
-            # fail the run: remote plans are skipped, the promotion gate reports
-            # not-armed, and the commit is NOT promotable until the set is wired.
-            echo "::notice title=Remote Terraform plans not configured::Missing ${missing_list%, }. Pull requests still run provider-mocked configuration plans. Pushes to main skip credentialed remote plans while the set is absent; the promotion gate reports not-armed instead of failing, and enforces fail-closed the moment the set is wired."
+            # `configured` output, so a dispatch with incomplete credentials
+            # fails closed without attempting AWS or Terraform work.
+            echo "::notice title=Remote Terraform plans not configured::Missing ${missing_list%, }. Provider-mocked configuration plans remain available on pushes and PR finalization; run this workflow again only after the complete credential set is wired."
           fi
 
   plan:
@@ -121,6 +145,8 @@ jobs:
         working-directory: deploy/aws/terraform
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_commit_sha || github.sha }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -180,7 +206,7 @@ jobs:
       - name: Upload immutable configuration-plan evidence
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-configuration-plan-${{ matrix.profile }}-${{ github.sha }}
+          name: terraform-configuration-plan-${{ matrix.profile }}-${{ inputs.expected_commit_sha || github.sha }}
           path: |
             ${{ env.TF_DIR }}/plan-${{ matrix.profile }}.txt
             ${{ env.TF_DIR }}/plan-${{ matrix.profile }}.txt.sha256
@@ -190,7 +216,7 @@ jobs:
   remote-plan:
     name: Terraform Remote Plan (${{ matrix.profile }})
     needs: [remote-plan-readiness, plan]
-    if: needs.remote-plan-readiness.outputs.configured == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.remote-plan-readiness.outputs.configured == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -228,10 +254,12 @@ jobs:
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
       # Immutable image digests are required root variables (no defaults):
       # remote plans must pin the currently approved release digests.
-      TF_VAR_backend_image_digest: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
+      TF_VAR_backend_image_digest: ${{ inputs.backend_image_digest }}
       TF_VAR_ml_image_digest: ${{ secrets.TF_ML_IMAGE_DIGEST }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_commit_sha || github.sha }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -258,6 +286,34 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
 
+      - name: Validate staging credential shape before remote planning
+        if: matrix.profile == 'staging'
+        env:
+          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL }}
+          TF_AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          TF_AUTH0_MANAGEMENT_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+          TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ secrets.KYBER_GOOGLE_CLIENT_ID }}
+          KYBER_GOOGLE_CLIENT_SECRET: ${{ secrets.KYBER_GOOGLE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_credential_contract.py --lane full
+
       - name: Validate Amplify checkout token
         run: |
           set -euo pipefail
@@ -278,30 +334,44 @@ jobs:
           role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Verify effective staging plan IAM contract
+        if: matrix.profile == 'staging'
+        env:
+          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          # Remote-plan role drift must fail before image/state work. This is
+          # metadata-only and never reads application secrets.
+          python scripts/release/verify_effective_staging_apply_policy.py \
+            --role-arn "$AWS_INFRA_ROLE_ARN" \
+            --manifest config/staging_plan_iam_policy.yaml \
+            --expected-role AetherStagingPlan \
+            --required-policy-suffix AetherStagingPlanContract
+
       - name: Validate approved backend digest is present and current
         env:
           APPROVED_BACKEND_DIGEST: ${{ env.TF_VAR_backend_image_digest }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
         run: |
           set -euo pipefail
           printf '%s' "$APPROVED_BACKEND_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' \
-            || { echo '::error::TF_BACKEND_IMAGE_DIGEST must be an immutable sha256 digest'; exit 1; }
+            || { echo '::error::backend_image_digest must be an immutable sha256 digest'; exit 1; }
           published_digest="$(aws ecr describe-images \
             --repository-name aether-backend \
             --image-ids imageDigest="$APPROVED_BACKEND_DIGEST" \
             --query 'imageDetails[0].imageDigest' --output text)"
           test "$published_digest" = "$APPROVED_BACKEND_DIGEST" \
             || { echo '::error::approved backend digest is not present in aether-backend'; exit 1; }
-          # A main-branch remote plan must use the image published for the
-          # exact commit being planned. A stale secret is a hard stop rather
-          # than a green plan for an older release.
-          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
-            commit_digest="$(aws ecr describe-images \
-              --repository-name aether-backend \
-              --image-ids imageTag="$GITHUB_SHA" \
-              --query 'imageDetails[0].imageDigest' --output text)"
-            test "$commit_digest" = "$APPROVED_BACKEND_DIGEST" \
-              || { echo "::error::TF_BACKEND_IMAGE_DIGEST is stale for ${GITHUB_SHA}; update it to the immutable image published for this commit"; exit 1; }
-          fi
+          commit_digest="$(aws ecr describe-images \
+            --repository-name aether-backend \
+            --image-ids imageTag="$EXPECTED_COMMIT_SHA" \
+            --query 'imageDetails[0].imageDigest' --output text)"
+          test "$commit_digest" = "$APPROVED_BACKEND_DIGEST" \
+            || { echo "::error::backend_image_digest does not match the immutable image published for ${EXPECTED_COMMIT_SHA}"; exit 1; }
+          python "${GITHUB_WORKSPACE}/scripts/release/check_staging_image_provenance.py" \
+            --repository aether-backend \
+            --digest "$APPROVED_BACKEND_DIGEST" \
+            --expected-commit "$EXPECTED_COMMIT_SHA"
 
       - name: Terraform Init (isolated profile state)
         env:
@@ -396,7 +466,7 @@ jobs:
       - name: Upload immutable remote-plan evidence
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-remote-plan-${{ matrix.profile }}-${{ github.sha }}
+          name: terraform-remote-plan-${{ matrix.profile }}-${{ inputs.expected_commit_sha || github.sha }}
           path: |
             ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.txt
             ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.json
@@ -409,50 +479,29 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # Retained deliberately after the automatic apply was deleted. It no longer
-  # gates an apply — it gates PROMOTABILITY. terraform-promote.yml can only
-  # build a reviewed plan for a commit whose main-branch run proved that the
-  # complete remote-plan credential set exists and that all four profiles
-  # produced a credentialed, policy- and cost-validated remote plan. Without
-  # this job a commit could land on main with every remote plan silently
-  # skipped, and still be dispatched for promotion.
+  # Retained deliberately after the automatic apply was deleted. It gates the
+  # explicit post-delivery remote-plan dispatch, whose inputs bind the plan to
+  # the exact immutable release manifest that was just published.
   require-production-credentials:
     name: Require Reviewed Remote Plans Before Promotion
     needs: [remote-plan-readiness, plan, remote-plan]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # NOT ARMED WITHOUT THE REMOTE-PLAN CREDENTIAL SET. The job exists so a
-      # commit cannot reach promotion with every remote plan silently skipped;
-      # when the credential set is absent there is nothing to be promotable
-      # WITH, so the gate reports its own absence rather than failing the run
-      # for a state it is explicitly designed to tolerate on a credential-less
-      # repository. The notice is NOT a promotability claim: it states the
-      # opposite. The moment the full set is wired, the enforcement step below
-      # runs exactly as before — fail-closed on plan and remote-plan results.
-      - name: Promotion gate is not armed without the remote-plan credential set
-        # The notice fires only when the probe job itself SUCCEEDED and reported
-        # the set absent. A failed/timed-out probe publishes no output, which
-        # would read as `configured != 'true'`; that state is carried by the
-        # probe's own red run, and this job must not misattribute it to missing
-        # credentials (nor skip enforcement on an inconclusive probe).
-        if: >-
-          needs.remote-plan-readiness.result == 'success'
-          && needs.remote-plan-readiness.outputs.configured != 'true'
-        run: |
-          set -euo pipefail
-          echo '::notice title=Remote-plan promotion gate not armed::The complete remote Terraform planning credential set is not configured, so this commit is NOT promotable via .github/workflows/terraform-promote.yml. The gate is a NO-OP until the credentials are wired; it re-arms and enforces the moment they are.'
       - name: Enforce credentialed remote plans
-        if: >-
-          needs.remote-plan-readiness.result == 'success'
-          && needs.remote-plan-readiness.outputs.configured == 'true'
+        if: always()
         env:
+          READINESS_RESULT: ${{ needs.remote-plan-readiness.result }}
           CONFIGURED: ${{ needs.remote-plan-readiness.outputs.configured }}
           PLAN_RESULT: ${{ needs.plan.result }}
           REMOTE_PLAN_RESULT: ${{ needs.remote-plan.result }}
         run: |
           set -euo pipefail
+          if [ "$READINESS_RESULT" != 'success' ]; then
+            echo "::error::Remote Terraform plan credential readiness did not complete successfully (result: $READINESS_RESULT)."
+            exit 1
+          fi
           if [ "$CONFIGURED" != 'true' ]; then
             echo '::error::Production promotion requires the complete remote Terraform planning credential set.'
             exit 1
@@ -465,4 +514,4 @@ jobs:
             echo "::error::Remote Terraform plan matrix did not pass (result: $REMOTE_PLAN_RESULT)."
             exit 1
           fi
-          echo 'This commit is promotable via .github/workflows/terraform-promote.yml.'
+          echo 'The exact post-delivery remote plan passed; the reviewed promotion workflow may now be dispatched separately.'

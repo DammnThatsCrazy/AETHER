@@ -35,10 +35,14 @@ aurora_backup_retention_days = 1
 aurora_express_mode = false
 skip_aurora         = false
 
-# Staging uses Amplify default domains. Do not claim the production
-# olympuslabsml.com DNS family before the reviewed production promotion.
-amplify_custom_domain_enabled = false
-status_api_url                = ""
+# The staging custom-domain associations already exist and are verified in
+# Amplify, with Squarespace remaining authoritative for DNS. Keep Terraform
+# aligned with those live associations and use the staging API health origin
+# for the status shell; state reconciliation imports the existing associations
+# before a reviewed plan is created.
+amplify_custom_domain_enabled = true
+amplify_domain_name            = "staging.olympuslabsml.com"
+status_api_url                 = "https://api.staging.olympuslabsml.com/health"
 
 # Logs — short retention; INFO/DEBUG ship to S3.
 log_retention_days        = 3

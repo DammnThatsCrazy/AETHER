@@ -135,6 +135,15 @@ jobs:
           role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
           aws-region: us-east-1
 
+      - name: Verify effective lifecycle IAM policy before enforcement
+        if: steps.check-armed.outputs.armed == 'true'
+        env:
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_lifecycle_policy.py \
+            --role-arn "$AWS_STAGING_LIFECYCLE_ROLE_ARN"
+
       - name: Resolve the guard mode and the TTL bounds
         id: config
         if: steps.check-armed.outputs.armed == 'true'
