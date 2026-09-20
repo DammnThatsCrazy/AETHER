@@ -58,8 +58,17 @@ def test_rejects_json_wrapped_payload_without_exposing_value():
     values = _values()
     values["stripe-secret-key"] = {"value": "sk_test_secret_that_must_not_be_printed"}  # type: ignore[assignment]
     errors = checker.payload_errors(lane="pilot", runner=_runner(values))
-    assert any("stripe-secret-key" in error and "JSON-wrapped" in error for error in errors)
+    assert any("stripe-secret-key" in error and "JSON-encoded" in error for error in errors)
     assert "sk_test_secret_that_must_not_be_printed" not in " ".join(errors)
+
+
+def test_rejects_json_scalar_payloads_without_exposing_value():
+    for scalar in ('"sk_test_quoted_secret"', "true", "1234"):
+        values = _values()
+        values["stripe-secret-key"] = scalar
+        errors = checker.payload_errors(lane="pilot", runner=_runner(values))
+        assert any("stripe-secret-key" in error and "JSON-encoded" in error for error in errors)
+        assert scalar not in " ".join(errors)
 
 
 def test_rejects_missing_secret_and_wrong_stripe_mode():

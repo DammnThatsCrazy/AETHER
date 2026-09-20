@@ -121,6 +121,31 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/release/check_staging_secret_payload_contract.py --lane pilot
+      - name: Configure the read-only staging plan role for ECS metadata
+        if: inputs.deployment_lane == 'pilot'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # The secret preflight role is intentionally value-readable only.
+          # Switch to the existing read-only plan role for ECS metadata rather
+          # than widening the secret role with DescribeServices permissions.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify the read-only ECS metadata role
+        if: inputs.deployment_lane == 'pilot'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role="$(jq -r .Arn <<<"$caller_json")"
+          caller_role="${caller_role#*:assumed-role/}"
+          caller_role="${caller_role%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::ECS metadata role account mismatch'; exit 1; }
+          test "$caller_role" = AetherStagingPlan || { echo '::error::unexpected ECS metadata read role'; exit 1; }
+          echo 'Verified ECS metadata checks use the read-only AetherStagingPlan role.'
       - name: Verify pilot ECS task-definition lane
         if: inputs.deployment_lane == 'pilot'
         run: |

@@ -241,6 +241,15 @@ def test_staging_delivery_validates_its_runtime_iam_delta_and_api_host_fallback(
     assert "aws s3 cp" in workflow
 
 
+def test_staging_delivery_rejects_a_live_task_lane_mismatch_before_mutation():
+    workflow = _workflow("deploy.yml")
+    lane_check = workflow.index("Verify the current staging task-definition lane before mutation")
+    mutation = workflow.index("Apply packaged migrations, then register exact task revision")
+    assert lane_check < mutation
+    assert "check_staging_task_definition_contract.py" in workflow[lane_check:mutation]
+    assert "DEPLOYMENT_LANE" in workflow[lane_check:mutation]
+
+
 def test_staging_smoke_uses_the_authoritative_proof_environment_and_fails_closed():
     workflow = _workflow("staging-smoke.yml")
     assert "  push:" not in workflow
@@ -259,6 +268,8 @@ def test_staging_smoke_uses_the_authoritative_proof_environment_and_fails_closed
     assert "secrets.PROOF_WORKSPACE_ID" not in workflow
     assert "check_staging_secret_payload_contract.py --lane pilot" in workflow
     assert "secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN" in workflow
+    assert "secrets.AWS_TERRAFORM_PLAN_ROLE_ARN" in workflow
+    assert "AetherStagingPlan" in workflow
     assert "check_staging_task_definition_contract.py --lane pilot" in workflow
     assert "Load the pilot Stripe test key without logging it" in workflow
     assert 'echo "::add-mask::$stripe_key"' in workflow

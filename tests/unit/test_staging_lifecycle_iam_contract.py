@@ -2,7 +2,10 @@ from copy import deepcopy
 from pathlib import Path
 
 from scripts.release.check_staging_lifecycle_policy import EXPECTED, main, render_policy_document
-from scripts.release.verify_effective_staging_lifecycle_policy import compare_documents
+from scripts.release.verify_effective_staging_lifecycle_policy import (
+    compare_documents,
+    inline_policy_name_errors,
+)
 import yaml
 
 
@@ -93,6 +96,15 @@ def test_effective_lifecycle_policy_comparison_is_exact() -> None:
     missing_sids, unexpected_sids = compare_documents(expected, unexpected)
     assert missing_sids == []
     assert unexpected_sids == ["UnexpectedStagingPermission"]
+
+
+def test_effective_lifecycle_policy_requires_an_exact_inline_policy_name_set() -> None:
+    assert inline_policy_name_errors({"AetherStagingLifecyclePolicy"}, "AetherStagingLifecyclePolicy") == []
+    assert inline_policy_name_errors(set(), "AetherStagingLifecyclePolicy")
+    assert inline_policy_name_errors(
+        {"AetherStagingLifecyclePolicy", "UnexpectedLifecycleGrant"},
+        "AetherStagingLifecyclePolicy",
+    ) == ["unexpected inline policies: UnexpectedLifecycleGrant"]
 
 
 def test_lifecycle_manifest_covers_static_bucket_parameter_reads() -> None:

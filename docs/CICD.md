@@ -23,7 +23,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:6267b779dfab13c3723f7cf30859b3acebadfe6a018fba6783d411a52a0ea15a"
+  ".github/workflows/": "sha256:2aa4cb6b0628625dcd33de5d92e69561a6094fbc5fdf5c78abbb5b32b57098e7"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -34,7 +34,7 @@ source_hashes:
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
-  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:ee8a6740c863b9906ad77486aa6efe3dfe009f8ec5fa88157792fa17e454f6c4"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:334c1ddd6347bf133afc9732b59a3e7d824c0f46a0d68ded50e603da784545e8"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -161,8 +161,11 @@ CMK through its reviewed alias/tag conditions; the plan, deploy, and lifecycle
 roles do not receive `secretsmanager:GetSecretValue`. After apply, a
 metadata-only ECS task-definition gate proves that the running backend and
 worker revisions carry the selected pilot/full lane contract before smoke
-proceeds. This closes the gap between a correct source plan and an old
-registered task definition still running in ECS.
+proceeds. The pilot smoke gate switches to the existing read-only
+`AetherStagingPlan` role for that ECS metadata check rather than widening the
+secret-value role. The immutable delivery path performs the same lane check
+before cloning a live task definition, closing the gap between a correct
+source plan and an old registered task definition still running in ECS.
 Before an apply, the promotion workflow parses the reviewed plan for ECR
 repositories in every shared-account profile (staging, demo, and preview) and
 fails closed when a same-name repository exists outside the reviewed state; it
@@ -408,7 +411,7 @@ deployment.
 
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
-| `deploy.yml` | push to `main`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; a staging dispatch may select `delivery_mode=build-only` to publish the verified immutable artifact without touching ECS, which breaks the asleep-staging/release circular dependency. The pilot full-rehearsal wrapper uses that build-only path when no approved release inputs were supplied; the lifecycle workflow accepts only a successful run with a successful immutable-build job. Staging dispatch reuses the successful merged-main integration authority for the exact SHA and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum; build-only is rejected for production. Registers one task-definition revision per declared service on deploy; no rebuild on promotion. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
+| `deploy.yml` | push to `main`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; a staging dispatch may select `delivery_mode=build-only` to publish the verified immutable artifact without touching ECS, which breaks the asleep-staging/release circular dependency. The pilot full-rehearsal wrapper uses that build-only path when no approved release inputs were supplied; the lifecycle workflow accepts only a successful run with a successful immutable-build job. Staging dispatch reuses the successful merged-main integration authority for the exact SHA and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum; build-only is rejected for production. Before staging mutation, the deploy job verifies the currently registered task definitions already match the requested full/pilot lane, then registers one immutable task-definition revision per declared service; no rebuild occurs on promotion. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
 | `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the shared credential set exists (the ML image digest is additionally required only by production-scale and enterprise-isolated); ephemeral-class is deliberately excluded from remote-plan; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. A full rehearsal accepts a successful immutable delivery or build-only run, verifies that the run contains a successful `Build immutable release once` job, binds its `release.json` to the intended merged-main SHA, arms the bounded lease before apply, re-assumes the lifecycle role after the protected promotion wait, preserves the original lease anchor and extension count when refreshing after readiness, revalidates the lease before every mutating phase, publishes and verifies the exact AETHER/Kyber SPA archives, and cleans only a secret-free, run-scoped registration tenant marker. | no (delegates) |

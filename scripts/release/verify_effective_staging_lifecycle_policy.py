@@ -106,6 +106,19 @@ def compare_documents(expected: dict[str, Any], actual: dict[str, Any]) -> tuple
     return sid_map(expected_statements - actual_statements), sid_map(actual_statements - expected_statements)
 
 
+def inline_policy_name_errors(policy_names: set[str], expected_name: str) -> list[str]:
+    """Return drift errors for the lifecycle role's inline policy name set."""
+    expected = {expected_name}
+    errors: list[str] = []
+    missing = sorted(expected - policy_names)
+    unexpected = sorted(policy_names - expected)
+    if missing:
+        errors.append("missing inline policies: " + ", ".join(missing))
+    if unexpected:
+        errors.append("unexpected inline policies: " + ", ".join(unexpected))
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--role-arn", required=True)
@@ -125,8 +138,9 @@ def main(argv: list[str] | None = None) -> int:
 
     inline = aws_json("iam", "list-role-policies", "--role-name", role_name)
     policy_names = set(inline.get("PolicyNames", []))
-    if args.policy_name not in policy_names:
-        fail(f"{args.policy_name} is not attached to {role_name}")
+    inline_errors = inline_policy_name_errors(policy_names, args.policy_name)
+    if inline_errors:
+        fail(f"{role_name} inline policy set drifted: " + "; ".join(inline_errors))
 
     attached = aws_json("iam", "list-attached-role-policies", "--role-name", role_name)
     attached_names = sorted(

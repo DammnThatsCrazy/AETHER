@@ -691,6 +691,18 @@ jobs:
             echo '::error::staging ECS delivery must use AetherStagingDeploy'; exit 1;
           }
           echo 'Verified staging ECS delivery credentials resolve to AetherStagingDeploy in the expected account.'
+      - name: Verify the current staging task-definition lane before mutation
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        env:
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          # The rollout below clones each live task definition and changes only
+          # its image and AETHER_ROLE. Prove that the source revision already
+          # belongs to the requested lane so an earlier pilot/full rollout
+          # cannot silently carry the wrong Stripe, Kyber, or secret shape.
+          python scripts/release/check_staging_task_definition_contract.py \
+            --lane "$DEPLOYMENT_LANE"
       - name: Apply packaged migrations, then register exact task revision for every profile service
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}

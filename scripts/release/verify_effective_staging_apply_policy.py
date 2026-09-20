@@ -194,6 +194,85 @@ def _forbidden_action_errors(
     return sorted(errors)
 
 
+def _resource_pattern_is_within(actual: str, reviewed: str) -> bool:
+    """Return whether an attached resource pattern is no broader than reviewed."""
+    if reviewed == "*":
+        return True
+    if actual == "*":
+        return False
+    if "?" in actual or "?" in reviewed:
+        # The reviewed contracts use prefix wildcards. Refuse a pattern form
+        # this checker cannot prove safe instead of treating it as scoped.
+        return False
+    if "*" not in actual:
+        return fnmatch.fnmatchcase(actual, reviewed)
+    if "*" not in reviewed:
+        return False
+    actual_prefix, actual_suffix = actual.split("*", 1)
+    reviewed_prefix, reviewed_suffix = reviewed.split("*", 1)
+    return actual_prefix.startswith(reviewed_prefix) and actual_suffix.endswith(reviewed_suffix)
+
+
+def _condition_scope_is_within(actual: Any, reviewed: dict[str, Any] | None) -> bool:
+    """Return whether attached conditions preserve the reviewed scope."""
+    if _has_unsupported_condition_operator(actual):
+        return False
+    if not actual:
+        return not reviewed
+    if not isinstance(actual, dict):
+        return False
+    if not reviewed:
+        # Additional supported conditions narrow an exact required action and
+        # are therefore safe; unsupported operators failed closed above.
+        return True
+    actual_entries = _condition_entries(actual)
+    for required_operator, key, wanted_values in _condition_entries(reviewed):
+        if not any(
+            actual_key == key
+            and (required_operator is None or actual_operator == required_operator)
+            and actual_values
+            and actual_values <= wanted_values
+            for actual_operator, actual_key, actual_values in actual_entries
+        ):
+            return False
+    return True
+
+
+def _required_action_scope_errors(
+    statements: list[dict[str, Any]],
+    required_operations: list[tuple[str, str, dict[str, Any] | None]],
+) -> list[str]:
+    """Find exact required-action Allows that grant outside reviewed scope."""
+    reviewed_by_action: dict[str, list[tuple[str, dict[str, Any] | None]]] = {}
+    for action, resource, conditions in required_operations:
+        reviewed_by_action.setdefault(action.lower(), []).append((resource, conditions))
+
+    errors: set[str] = set()
+    for statement in statements:
+        if statement.get("Effect") != "Allow":
+            continue
+        resources = _statement_resources(statement)
+        for action in _statement_actions(statement):
+            scopes = reviewed_by_action.get(action.lower())
+            if not scopes:
+                continue
+            if "NotResource" in statement:
+                errors.add(f"{action} uses NotResource outside reviewed scope")
+                continue
+            if not all(
+                any(_resource_pattern_is_within(resource, reviewed) for reviewed, _ in scopes)
+                for resource in resources
+            ):
+                errors.add(f"{action} grants a resource broader than its reviewed scope")
+                continue
+            if not any(
+                _condition_scope_is_within(statement.get("Condition"), conditions)
+                for _, conditions in scopes
+            ):
+                errors.add(f"{action} grants conditions broader than its reviewed scope")
+    return sorted(errors)
+
+
 def _statement_matches_action(statement: dict[str, Any], action: str) -> bool:
     normalized_action = action.lower()
     actions = _statement_actions(statement)
@@ -256,6 +335,26 @@ def _has_unsupported_condition_operator(condition: Any) -> bool:
     return any(operator not in SUPPORTED_CONDITION_OPERATORS for operator in condition)
 
 
+def _condition_entries(condition: Any) -> list[tuple[str | None, str, set[str]]]:
+    """Normalize flat manifest conditions and AWS operator maps."""
+    if not isinstance(condition, dict):
+        return []
+    nested = bool(condition) and all(
+        operator in SUPPORTED_CONDITION_OPERATORS and isinstance(entries, dict)
+        for operator, entries in condition.items()
+    )
+    if nested:
+        return [
+            (operator, key, {str(value) for value in _as_list(raw_value)})
+            for operator, entries in condition.items()
+            for key, raw_value in entries.items()
+        ]
+    return [
+        (None, key, {str(value) for value in _as_list(raw_value)})
+        for key, raw_value in condition.items()
+    ]
+
+
 def _conditions_compatible(
     actual: Any,
     required: dict[str, Any] | None,
@@ -276,36 +375,59 @@ def _conditions_compatible(
         return not required or not require_required
     if not isinstance(actual, dict) or not isinstance(required, dict):
         return False
-    matched_keys: set[str] = set()
+    required_entries = _condition_entries(required)
+    matched_entries: set[tuple[str | None, str]] = set()
     for operator, entries in actual.items():
         if operator not in SUPPORTED_CONDITION_OPERATORS:
             return False
         if not isinstance(entries, dict):
             return False
         for key, actual_value in entries.items():
-            if key not in required:
+            candidates = [
+                (required_operator, required_key, wanted_values)
+                for required_operator, required_key, wanted_values in required_entries
+                if required_key == key
+                and (required_operator is None or required_operator == operator)
+            ]
+            if not candidates:
                 return False
-            matched_keys.add(key)
-            wanted = required[key]
             actual_values = {str(v) for v in _as_list(actual_value)}
-            wanted_values = {str(v) for v in _as_list(wanted)}
-            if operator in {"StringLike", "ArnLike"}:
-                if not any(
-                    fnmatch.fnmatchcase(wanted_value, actual_pattern)
-                    for wanted_value in wanted_values
-                    for actual_pattern in actual_values
-                ):
-                    return False
-            elif not (wanted_values & actual_values):
+            matching = next(
+                (
+                    (required_operator, required_key, wanted_values)
+                    for required_operator, required_key, wanted_values in candidates
+                    if (
+                        any(
+                            fnmatch.fnmatchcase(wanted_value, actual_pattern)
+                            for wanted_value in wanted_values
+                            for actual_pattern in actual_values
+                        )
+                        if operator in {"StringLike", "ArnLike"}
+                        else bool(wanted_values & actual_values)
+                    )
+                ),
+                None,
+            )
+            if matching is None:
                 return False
+            matched_entries.add((matching[0], matching[1]))
     # Every mandatory manifest condition must survive on the attached Allow;
     # accepting only a subset would turn a scoped contract into a broad grant.
-    return not require_required or not required or matched_keys >= set(required)
+    if not require_required or not required_entries:
+        return True
+    return matched_entries >= {
+        (required_operator, required_key)
+        for required_operator, required_key, _ in required_entries
+    }
 
 
 def _request_context(resource: str, required: dict[str, Any] | None) -> dict[str, Any]:
     """Build the reviewed request context used for policy-condition checks."""
-    context = dict(required or {})
+    context = {
+        key: value
+        for _operator, key, values in _condition_entries(required)
+        for value in [next(iter(values), "")]
+    }
     parts = resource.split(":")
     if len(parts) >= 6:
         context.setdefault("aws:RequestedRegion", parts[3] or "us-east-1")
@@ -508,6 +630,12 @@ def main() -> int:
         fail(
             f"{args.expected_role} effective policy grants forbidden actions: "
             + "; ".join(forbidden)
+        )
+    overbroad_required = _required_action_scope_errors(effective, required_operations)
+    if overbroad_required:
+        fail(
+            f"{args.expected_role} effective policy grants required actions outside reviewed scope: "
+            + "; ".join(overbroad_required)
         )
     denied = sorted(
         f"{action} on {resource}"

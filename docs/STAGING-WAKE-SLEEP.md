@@ -33,7 +33,7 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:6b24ee13fb51366713cde866bc6d6fc5d4bef1be87dd91381e09627c1739c22f"
   ".github/workflows/pilot-staging.yml": "sha256:2662ba32392254f7b53893101dedcfe020dfa7876d83376f422f9ceecbc14b00"
   ".github/workflows/staging-lifecycle.yml": "sha256:10e1d820332480f00951459f5a27e3ba79290c1eec080a3665299a6a6ebeddc1"
-  ".github/workflows/staging-smoke.yml": "sha256:7ecf7d77441520e36e75f1f3a53d514ca4965a0065cbf34684526e9cacd07ac4"
+  ".github/workflows/staging-smoke.yml": "sha256:e225e83998f4844eebdc1f105449cedbc36145bfd97d78f47f3c987f9d71377c"
   ".github/workflows/staging-ttl-guard.yml": "sha256:f5c66d618aad6b84887fa689dda91d9f68c43c397e39003f96efc440823a7111"
   ".github/workflows/terraform-promote.yml": "sha256:782c4760636b2a2089256ab26750b1d90435ffe946353c6540e3a6c9ef89b029"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
@@ -46,7 +46,7 @@ source_hashes:
   "scripts/release/check_amplify_app_contract.py": "sha256:7c60acb5b3b270c10a6f3897124d7ac10484213768475bd7d6cac3b2f6139cfe"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
-  "scripts/release/check_staging_secret_payload_contract.py": "sha256:c61c73868cfc56350e10449f5579b6838bd483add5fe857f23262e5b08f3230d"
+  "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:cb23b553551e1f7de9a0f28e0b5b9b40fe324a664acabc59a1d1b3189e38b88c"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:7bce8901b3706085a0367526bcb6114d4221bff136cc380295d3e0c378e627b2"
 ---
@@ -177,6 +177,7 @@ both `awake` and `asleep` states.
 | Terraform state key | `profiles/staging/terraform.tfstate` |
 | AWS role | `secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN` |
 | Secret payload preflight role | `secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN` |
+| ECS metadata read role | `secrets.AWS_TERRAFORM_PLAN_ROLE_ARN` (`AetherStagingPlan`) |
 | Promotion workflow | `.github/workflows/terraform-promote.yml` |
 
 The canonical profile and state key do not change between staging lanes. Every
@@ -390,7 +391,10 @@ Steps, in order, with what each proves:
    role, whose reviewed reads are `secretsmanager:GetSecretValue` for the
    `aether/*` prefix plus `kms:Decrypt` only for the staging Secrets Manager
    CMK under its alias and environment-tag conditions. The lifecycle role
-   remains forbidden from reading secret values. After a reviewed apply,
+   remains forbidden from reading secret values. The pilot smoke gate then
+   switches to the read-only `AetherStagingPlan` role for ECS
+   `DescribeServices`/`DescribeTaskDefinition` metadata; it never broadens the
+   secret preflight role. After a reviewed apply,
    `check_staging_task_definition_contract.py`
    reads only ECS metadata and proves both the API and `lean-worker` revisions
    match the selected lane, including the pilot Stripe mounts and the absence

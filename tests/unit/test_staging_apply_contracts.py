@@ -494,6 +494,79 @@ def test_effective_policy_checker_enforces_declared_forbidden_actions() -> None:
     )
 
 
+def test_effective_policy_checker_constrains_required_action_grants() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "verify_effective_staging_apply_policy_scope", EFFECTIVE_POLICY_CHECKER
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    required = [
+        (
+            "secretsmanager:GetSecretValue",
+            "arn:aws:secretsmanager:us-east-1:544471417928:secret:aether/*",
+            None,
+        ),
+        (
+            "kms:Decrypt",
+            "arn:aws:kms:us-east-1:544471417928:key/*",
+            {
+                "StringEquals": {"aws:ResourceTag/Environment": "staging"},
+                "StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
+            },
+        ),
+    ]
+    assert module._required_action_scope_errors(
+        [
+            {
+                "Effect": "Allow",
+                "Action": "secretsmanager:GetSecretValue",
+                "Resource": "*",
+            }
+        ],
+        required,
+    )
+    assert module._required_action_scope_errors(
+        [
+            {
+                "Effect": "Allow",
+                "Action": "kms:Decrypt",
+                "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
+            }
+        ],
+        required,
+    )
+    assert module._required_action_scope_errors(
+        [
+            {
+                "Effect": "Allow",
+                "Action": "kms:Decrypt",
+                "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
+                "Condition": {
+                    "StringEquals": {"aws:ResourceTag/Environment": "staging"},
+                    "StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
+                },
+            }
+        ],
+        required,
+    ) == []
+    assert module._operation_is_covered(
+        {
+            "Effect": "Allow",
+            "Action": "kms:Decrypt",
+            "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
+            "Condition": {
+                "StringEquals": {"aws:ResourceTag/Environment": "staging"},
+                "StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
+            },
+        },
+        "kms:Decrypt",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        required[1][2],
+    )
+
+
 def test_external_provider_validation_precedes_service_linked_role() -> None:
     text = PROMOTE.read_text(encoding="utf-8")
     provider = text.index("Validate AWS and external-provider apply inputs")

@@ -97,12 +97,14 @@ def _secret_value(
     if not isinstance(value, str) or not value:
         return None, f"aether/{name} must have a non-empty SecretString"
     try:
-        decoded = json.loads(value)
+        json.loads(value)
     except json.JSONDecodeError:
         return value, None
-    if isinstance(decoded, (dict, list)):
-        return None, f"aether/{name} is JSON-wrapped; ECS requires a raw secret string"
-    return value, None
+    # ECS injects the bytes stored in SecretString verbatim. A successful JSON
+    # decode therefore means the secret was stored as a JSON object, array, or
+    # scalar wrapper rather than as the raw credential the task expects. This
+    # also rejects quoted strings (which would otherwise mount with quotes).
+    return None, f"aether/{name} is JSON-encoded; ECS requires a raw secret string"
 
 
 def payload_errors(
