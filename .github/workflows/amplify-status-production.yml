@@ -29,6 +29,11 @@ env:
   AWS_REGION: us-east-1
   AMPLIFY_REPOSITORY: https://github.com/DammnThatsCrazy/AETHER
   AMPLIFY_APP_NAME: aether-status
+  # UpdateDomainAssociation performs a dependent iam:PassRole check even
+  # when automatic subdomains are disabled. This exact, empty role is passed
+  # explicitly so the API request has a concrete reviewed target; it has no
+  # permissions and Squarespace remains the DNS authority.
+  AMPLIFY_DOMAIN_ROLE_ARN: arn:aws:iam::544471417928:role/AETHER-staging-amplify-domain-role
 
 jobs:
   verify-main-integration:
@@ -176,9 +181,10 @@ jobs:
           # until the domain association no longer points at it. Record the
           # canonical restoration and temporarily move only affected mappings
           # to a workflow-owned branch. The compact state contains no secrets.
-          # The explicit empty role below also clears stale legacy role
-          # metadata; omitting the field leaves that metadata attached to an
-          # existing Amplify domain association.
+          # Amplify's API performs a dependent iam:PassRole check for this
+          # update even with auto-subdomains disabled. Pass the exact empty
+          # delegated role so the request is authorized without granting a
+          # wildcard role or enabling automatic subdomains.
           domain_names_json="$(aws amplify list-domain-associations \
             --app-id "$APP_ID" --max-results 50 \
             --query 'domainAssociations[].domainName' --output json)"
@@ -251,7 +257,7 @@ jobs:
                 --app-id "$APP_ID" \
                 --domain-name "$domain_name" \
                 --no-enable-auto-sub-domain \
-                --auto-sub-domain-iam-role '' \
+                --auto-sub-domain-iam-role "$AMPLIFY_DOMAIN_ROLE_ARN" \
                 --sub-domain-settings "$migration_settings" \
                 >/dev/null
               wait_for_domain_association "$domain_name"
@@ -358,7 +364,7 @@ jobs:
                 --app-id "$APP_ID" \
                 --domain-name "$domain_name" \
                 --no-enable-auto-sub-domain \
-                --auto-sub-domain-iam-role '' \
+                --auto-sub-domain-iam-role "$AMPLIFY_DOMAIN_ROLE_ARN" \
                 --sub-domain-settings "$restore_settings" \
                 >/dev/null
               wait_for_domain_association "$domain_name"

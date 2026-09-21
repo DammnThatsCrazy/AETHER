@@ -41,13 +41,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:7fdb61b05405031117003a5a5fa1f8835623a39dde5837a2a4f7a0f89cf38faa"
+  ".github/workflows/amplify-status-production.yml": "sha256:6c4cf0602d00730f9cd3b5adc6ffb9cd325abd8dd85ff1a6c0a353588ba085d2"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:3a9c3ef5b991d6c592d51e0eb69dc29a28177fd42be95c72215ffc4e8e340e1a"
-  "config/staging_apply_iam_policy.yaml": "sha256:1e4b2012208427e682ad033f199e458a428ed06c0d5ca51551d0a84c242ddb1a"
+  "config/staging_apply_iam_policy.yaml": "sha256:488c0d20926932293bd28a0a76fa472cd097a96ffb74651825a5445304ab5581"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
   "config/staging_plan_iam_policy.yaml": "sha256:f310130204a44c99dbb3e9b16d47471b4eb575a2fb974b5936bc1fe93a90796f"
   "config/staging_plan_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
@@ -508,14 +508,12 @@ association to a workflow-owned temporary branch, restores it to canonical
 interrupted migration without deleting normal repository-backed branches. Once
 the app is repository-backed, the workflow never deletes normal branches and
 simply updates the existing branch. The workflow disables Amplify
-auto-subdomain creation and explicitly clears the optional delegated role
-field in its domain-association calls, preventing stale legacy role metadata
-from surviving on an existing association. Amplify still performs its
-dependent `iam:PassRole` authorization for `UpdateDomainAssociation`; the
-staging apply contract therefore grants `iam:PassRole` only on the exact empty
-`AETHER-staging-amplify-domain-role` with Amplify-only trust for any future,
-separately reviewed operation that explicitly enables auto-subdomains. The
-role has no Route 53 permissions because Squarespace remains authoritative.
+auto-subdomain creation and explicitly passes the exact empty delegated role
+in its domain-association calls. Amplify still performs its dependent
+`iam:PassRole` authorization for `UpdateDomainAssociation` even for this
+manual mapping, so the staging apply contract grants `iam:PassRole` only on
+`AETHER-staging-amplify-domain-role` with Amplify-only trust. The role has no
+permissions or Route 53 access because Squarespace remains authoritative.
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the
 generated staging Amplify app and branch ARN families, and scopes custom-domain
