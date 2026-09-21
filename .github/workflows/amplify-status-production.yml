@@ -125,40 +125,18 @@ jobs:
           if [[ "$AMPLIFY_GITHUB_ACCESS_TOKEN" =~ [[:space:]] ]]; then
             echo '::error::TF_AMPLIFY_GITHUB_ACCESS_TOKEN contains whitespace'; exit 1;
           fi
-          caller_account="$(aws sts get-caller-identity --query Account --output text)"
           mapfile -t app_ids < <(aws amplify list-apps --max-results 100 \
             --query "apps[?name=='${AMPLIFY_APP_NAME}'].appId" --output text | tr '\t' '\n' | awk 'NF')
           test "${#app_ids[@]}" -eq 1 || {
             echo "::error::expected exactly one Amplify app named ${AMPLIFY_APP_NAME}; found ${#app_ids[@]}"; exit 1;
           }
-          domain_role_arn="$(aws iam get-role \
-            --role-name AETHER-staging-amplify-domain-role \
-            --query 'Role.Arn' --output text)"
-          test "$domain_role_arn" = "arn:aws:iam::${caller_account}:role/AETHER-staging-amplify-domain-role" || {
-            echo '::error::the staging Amplify domain role is missing or has an unexpected ARN'; exit 1;
-          }
-          role_document="$(aws iam get-role \
-            --role-name AETHER-staging-amplify-domain-role \
-            --query 'Role.AssumeRolePolicyDocument' --output json)"
-          jq -e '
-            def array_value($value):
-              if ($value | type) == "array" then $value else [$value] end;
-            [.Statement[]? | select(.Effect == "Allow")] as $allows |
-            ($allows | length) == 1 and
-            (array_value($allows[0].Principal.Service // []) == ["amplify.amazonaws.com"]) and
-            (array_value($allows[0].Action // []) == ["sts:AssumeRole"])
-          ' <<<"$role_document" >/dev/null || {
-            echo '::error::the staging Amplify domain role trust policy must allow only the Amplify service'; exit 1;
-          }
           printf 'app_id=%s\n' "${app_ids[0]}" >> "$GITHUB_OUTPUT"
           printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
-          printf 'domain_role_arn=%s\n' "$domain_role_arn" >> "$GITHUB_OUTPUT"
 
       - name: Migrate legacy manual status branches before repository binding
         id: migrate
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
-          AMPLIFY_DOMAIN_ROLE_ARN: ${{ steps.inputs.outputs.domain_role_arn }}
         run: |
           set -euo pipefail
           migration_branch='status-repository-migration'
@@ -270,7 +248,6 @@ jobs:
                 --app-id "$APP_ID" \
                 --domain-name "$domain_name" \
                 --no-enable-auto-sub-domain \
-                --auto-sub-domain-iam-role "$AMPLIFY_DOMAIN_ROLE_ARN" \
                 --sub-domain-settings "$migration_settings" \
                 >/dev/null
               wait_for_domain_association "$domain_name"
@@ -343,7 +320,6 @@ jobs:
         if: steps.migrate.outputs.domain_state_b64 != '' || steps.migrate.outputs.cleanup_migration_branch == 'true'
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
-          AMPLIFY_DOMAIN_ROLE_ARN: ${{ steps.inputs.outputs.domain_role_arn }}
           DOMAIN_STATE_B64: ${{ steps.migrate.outputs.domain_state_b64 }}
           CLEANUP_MIGRATION_BRANCH: ${{ steps.migrate.outputs.cleanup_migration_branch }}
         run: |
@@ -378,7 +354,6 @@ jobs:
                 --app-id "$APP_ID" \
                 --domain-name "$domain_name" \
                 --no-enable-auto-sub-domain \
-                --auto-sub-domain-iam-role "$AMPLIFY_DOMAIN_ROLE_ARN" \
                 --sub-domain-settings "$restore_settings" \
                 >/dev/null
               wait_for_domain_association "$domain_name"

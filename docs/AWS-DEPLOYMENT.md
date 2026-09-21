@@ -41,13 +41,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:c08ee1dde8992be518aeedaaed7afb59c1fd63024bbb05d9e5f832b3845e8664"
+  ".github/workflows/amplify-status-production.yml": "sha256:7f5ba24a66904f7675c6f8260a3f65a99125db37134baae806b723a5d721f846"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:3a9c3ef5b991d6c592d51e0eb69dc29a28177fd42be95c72215ffc4e8e340e1a"
-  "config/staging_apply_iam_policy.yaml": "sha256:f9c5b8d7d008a288017888a0579ec4fa528213bca7290a31905a010866aa1d0a"
+  "config/staging_apply_iam_policy.yaml": "sha256:c4dd7fefffa96eca292be4acbc80810033362fea96b22596eb4f70d614ff9909"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
   "config/staging_plan_iam_policy.yaml": "sha256:f310130204a44c99dbb3e9b16d47471b4eb575a2fb974b5936bc1fe93a90796f"
   "config/staging_plan_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
@@ -59,7 +59,7 @@ source_hashes:
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:a09051a5238503afe9910d1fd3546dade8727611626eb769251795628dc60eb4"
-  "scripts/release/check_amplify_app_contract.py": "sha256:44b7eaa4c06e205fe0930f09c5f81b6050a0e3c78fd7dceda0d51957e22b64f6"
+  "scripts/release/check_amplify_app_contract.py": "sha256:28fe586a024e18c9375af589b4d9c2527cce03071ad55ec88a2f6a1237a596db"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6f5d20b382a79aa41946c75c6fcfc63ab69d1cf6628f7bc45dd38ea4b6807fc2"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
@@ -495,8 +495,8 @@ checks the live branch-level API, Auth0, and custom status-shell origins before
 publishing apply evidence. The separate `amplify-status-production.yml`
 workflow binds the existing public status app to this repository, pins its
 `main` branch to `PRODUCTION`, deploys the exact main SHA, and verifies the
-production runtime links and the AVAILABLE verified `status` subdomain on
-`olympuslabsml.com`; its AWS caller is required to be
+production runtime links, the AVAILABLE status association, and the live
+`status` CNAME on `olympuslabsml.com`; its AWS caller is required to be
 `AetherStagingDeploy`. Because this app was historically created by a manual
 static deployment, the workflow has a guarded one-time migration step: when
 the exact `aether-status` app is still unconnected to a repository, it removes
@@ -507,15 +507,13 @@ association to a workflow-owned temporary branch, restores it to canonical
 `main` after binding, and removes the temporary branch. Retries also repair an
 interrupted migration without deleting normal repository-backed branches. Once
 the app is repository-backed, the workflow never deletes normal branches and
-simply updates the existing branch. Amplify's domain-association API also
-requires a dependent `iam:PassRole` authorization; the staging account keeps
-that permission limited to the exact
-`AETHER-staging-amplify-domain-role`, whose trust is restricted to
-`amplify.amazonaws.com` and which has no Route 53 permissions because
-Squarespace remains authoritative and auto-subdomain creation is disabled.
-The policy uses `ForAnyValue:StringEquals` for Amplify's multivalued
-`iam:PassedToService` context, and the workflow verifies that role before
-changing any domain mapping.
+simply updates the existing branch. The workflow disables Amplify
+auto-subdomain creation and omits the optional delegated role from its domain
+association calls, so this status/pilot path does not require `iam:PassRole`.
+The staging account retains the exact empty
+`AETHER-staging-amplify-domain-role` with Amplify-only trust for any future,
+separately reviewed operation that explicitly enables auto-subdomains; it has
+no Route 53 permissions because Squarespace remains authoritative.
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the
 generated staging Amplify app and branch ARN families, and scopes custom-domain

@@ -786,13 +786,11 @@ statements:
     resource:
       - arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role
     scope: staging-amplify-domain-role
-  # Amplify's domain-association API authorizes iam:PassRole even when
-  # auto-subdomain creation is disabled. Its delegated-role authorization
-  # context is multivalued, so keep the service restriction explicit with
-  # ForAnyValue:StringEquals rather than a single-value StringEquals check.
-  # The role is intentionally empty: Squarespace remains authoritative for
-  # DNS, so Amplify must not receive Route 53 permissions from this staging
-  # control-plane path.
+  # Retain the empty delegated role only for a separately reviewed operation
+  # that explicitly enables Amplify auto-subdomain creation. The pilot/status
+  # path disables auto-subdomains and intentionally omits this role from its
+  # domain-association calls, so it does not need iam:PassRole. Squarespace
+  # remains authoritative for DNS and this role has no Route 53 permissions.
   - sid: PassOnlyStagingAmplifyDomainRole
     actions:
       - iam:PassRole

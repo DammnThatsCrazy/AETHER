@@ -30,7 +30,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:c08ee1dde8992be518aeedaaed7afb59c1fd63024bbb05d9e5f832b3845e8664"
+  ".github/workflows/amplify-status-production.yml": "sha256:7f5ba24a66904f7675c6f8260a3f65a99125db37134baae806b723a5d721f846"
   ".github/workflows/pilot-staging.yml": "sha256:6f01ef3271178d33d925e108f7a0d71f2ad16240f345accbc866bc7f9533a47b"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
@@ -43,7 +43,7 @@ source_hashes:
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
-  "scripts/release/check_amplify_app_contract.py": "sha256:44b7eaa4c06e205fe0930f09c5f81b6050a0e3c78fd7dceda0d51957e22b64f6"
+  "scripts/release/check_amplify_app_contract.py": "sha256:28fe586a024e18c9375af589b4d9c2527cce03071ad55ec88a2f6a1237a596db"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
@@ -357,13 +357,13 @@ runtime wake. On a merged `main` push, `amplify-status-production.yml` waits
 for the exact main integration authority, then binds `aether-status` to the
 repository, recreates its production `main` branch when migrating the legacy
 manual deployment, deploys the exact merge SHA, and verifies the public
-`status.olympuslabsml.com` association. Before changing a domain mapping, the
-workflow verifies and passes the dedicated empty
-`AETHER-staging-amplify-domain-role`; its pass-role grant uses the reviewed
-`ForAnyValue:StringEquals` `iam:PassedToService` restriction. Squarespace
-remains authoritative and auto-subdomain creation is disabled. A repository-backed status app is
-updated in place on later runs; it is never treated as a staging ECS or
-Terraform mutation.
+`status.olympuslabsml.com` association and its live CNAME target. Before changing a domain mapping, the
+workflow disables Amplify auto-subdomain creation and intentionally omits the
+optional delegated IAM role, so the pilot/status path does not require
+`iam:PassRole`. Squarespace remains authoritative; the dedicated empty
+`AETHER-staging-amplify-domain-role` remains reserved for a separately reviewed
+auto-subdomain operation. A repository-backed status app is updated in place on
+later runs; it is never treated as a staging ECS or Terraform mutation.
 
 Steps, in order, with what each proves:
 
