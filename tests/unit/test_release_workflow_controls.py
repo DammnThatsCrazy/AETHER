@@ -309,18 +309,19 @@ def test_stripe_smoke_uses_form_encoded_confirmed_test_payment():
 def test_production_status_workflow_binds_the_canonical_build_and_runtime_links():
     workflow = _workflow("amplify-status-production.yml")
     assert "--repository \"$AMPLIFY_REPOSITORY\"" in workflow
-    assert "Migrate legacy manual status branches before repository binding" in workflow
-    assert "aws amplify delete-branch" in workflow
+    assert "Assess status app state before repository binding" in workflow
+    assert "bootstrap_required=true" in workflow
+    assert "repository-backed but its canonical domain mapping is not restored yet" in workflow
+    assert "Complete one-time status app bootstrap" in workflow
     assert "aws amplify list-domain-associations" in workflow
     assert 'domain_names_json="$(aws amplify list-domain-associations' in workflow
     assert "--output json)" in workflow
-    assert "aws amplify update-domain-association" in workflow
-    assert "--no-enable-auto-sub-domain" in workflow
-    assert "AMPLIFY_DOMAIN_ROLE_ARN: arn:aws:iam::544471417928:role/AETHER-staging-amplify-domain-role" in workflow
-    assert '--auto-sub-domain-iam-role "$AMPLIFY_DOMAIN_ROLE_ARN"' in workflow
-    assert "status-repository-migration" in workflow
-    assert "Restore status domain mappings and remove migration branch" in workflow
-    assert "cleanup_migration_branch" in workflow
+    assert "aws amplify get-domain-association" in workflow
+    assert "Verify canonical status domain mapping" in workflow
+    assert "aws amplify update-domain-association" not in workflow
+    assert "aws amplify delete-branch" not in workflow
+    assert "status-repository-migration" not in workflow
+    assert "AMPLIFY_DOMAIN_ROLE_ARN" not in workflow
     assert "app.name // empty" in workflow
     assert "app.repository // empty" in workflow
     assert "aws amplify create-branch \"${branch_args[@]}\"" in workflow

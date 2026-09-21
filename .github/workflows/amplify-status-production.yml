@@ -29,11 +29,6 @@ env:
   AWS_REGION: us-east-1
   AMPLIFY_REPOSITORY: https://github.com/DammnThatsCrazy/AETHER
   AMPLIFY_APP_NAME: aether-status
-  # UpdateDomainAssociation performs a dependent iam:PassRole check even
-  # when automatic subdomains are disabled. This exact, empty role is passed
-  # explicitly so the API request has a concrete reviewed target; it has no
-  # permissions and Squarespace remains the DNS authority.
-  AMPLIFY_DOMAIN_ROLE_ARN: arn:aws:iam::544471417928:role/AETHER-staging-amplify-domain-role
 
 jobs:
   verify-main-integration:
@@ -138,143 +133,67 @@ jobs:
           printf 'app_id=%s\n' "${app_ids[0]}" >> "$GITHUB_OUTPUT"
           printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Migrate legacy manual status branches before repository binding
-        id: migrate
+      - name: Assess status app state before repository binding
+        id: state
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
         run: |
           set -euo pipefail
-          migration_branch='status-repository-migration'
           app_json="$(aws amplify get-app --app-id "$APP_ID")"
           app_name="$(jq -r '.app.name // empty' <<<"$app_json")"
           repository="$(jq -r '.app.repository // empty' <<<"$app_json")"
           test "$app_name" = "$AMPLIFY_APP_NAME" || {
-            echo "::error::refusing to migrate unexpected Amplify app ${app_name}"; exit 1;
+            echo "::error::refusing to bind unexpected Amplify app ${app_name}"; exit 1;
           }
 
-          legacy_branches_json="$(aws amplify list-branches --app-id "$APP_ID" --max-results 50 \
+          branches_json="$(aws amplify list-branches --app-id "$APP_ID" --max-results 50 \
             --query 'branches[].branchName' --output json)"
-          mapfile -t legacy_branches < <(jq -r '.[]' <<<"$legacy_branches_json")
-          domain_state="$(mktemp)"
-          trap 'rm -f "$domain_state" "$domain_state.next"' EXIT
-          printf '[]\n' > "$domain_state"
-          wait_for_domain_association() {
-            local domain_name="$1"
-            local deadline=$((SECONDS + 180))
-            while [ "$SECONDS" -lt "$deadline" ]; do
-              local status
-              status="$(aws amplify get-domain-association \
-                --app-id "$APP_ID" --domain-name "$domain_name" \
-                --query 'domainAssociation.domainStatus' --output text)"
-              case "$status" in
-                AVAILABLE) return 0 ;;
-                FAILED|ERROR|CANCELLED)
-                  echo "::error::Amplify domain association ${domain_name} entered ${status}"; return 1 ;;
-                *) sleep 5 ;;
-              esac
-            done
-            echo "::error::Amplify domain association ${domain_name} did not become AVAILABLE"; return 1
-          }
-
-          # A manually deployed status branch may be the target of the live
-          # status subdomain. Amplify rejects DeleteBranch for that branch
-          # until the domain association no longer points at it. Record the
-          # canonical restoration and temporarily move only affected mappings
-          # to a workflow-owned branch. The compact state contains no secrets.
-          # Amplify's API performs a dependent iam:PassRole check for this
-          # update even with auto-subdomains disabled. Pass the exact empty
-          # delegated role so the request is authorized without granting a
-          # wildcard role or enabling automatic subdomains.
+          branch_count="$(jq 'length' <<<"$branches_json")"
           domain_names_json="$(aws amplify list-domain-associations \
             --app-id "$APP_ID" --max-results 50 \
             --query 'domainAssociations[].domainName' --output json)"
+          expected_domain_present="$(jq 'index("olympuslabsml.com") != null' <<<"$domain_names_json")"
+          test "$expected_domain_present" = true || {
+            echo '::error::aether-status is missing the canonical olympuslabsml.com domain association'; exit 1;
+          }
+
+          domain_has_mappings=false
           mapfile -t domain_names < <(jq -r '.[]' <<<"$domain_names_json")
           for domain_name in "${domain_names[@]}"; do
             domain_json="$(aws amplify get-domain-association \
               --app-id "$APP_ID" --domain-name "$domain_name")"
-            settings="$(jq -c '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(. != null))' <<<"$domain_json")"
-            if [ -n "$repository" ]; then
-              affected="$(jq -c --arg migration "$migration_branch" \
-                'map(select(.branchName == $migration))' <<<"$settings")"
-            else
-              affected="$(jq -c --argjson branches "$legacy_branches_json" \
-                'map(select(.branchName as $branch | ($branches | index($branch)) != null))' <<<"$settings")"
+            status="$(jq -r '.domainAssociation.domainStatus // empty' <<<"$domain_json")"
+            test "$status" = AVAILABLE || {
+              echo "::error::Amplify domain association ${domain_name} is ${status:-unknown}; refusing to bind"; exit 1;
+            }
+            settings_count="$(jq '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(. != null)) | length' <<<"$domain_json")"
+            if [ "$settings_count" -gt 0 ]; then
+              domain_has_mappings=true
             fi
-            if [ "$affected" = '[]' ]; then
-              continue
-            fi
-            migration_settings="$(jq -c --arg migration "$migration_branch" \
-              --argjson branches "$legacy_branches_json" \
-              'map(if (.branchName as $branch | ($branches | index($branch)) != null) then .branchName = $migration else . end)' \
-              <<<"$settings")"
-            restore_settings="$(jq -c --arg migration "$migration_branch" \
-              --argjson branches "$legacy_branches_json" \
-              'map(if .branchName == $migration or (.branchName as $branch | ($branches | index($branch)) != null) then .branchName = "main" else . end)' \
-              <<<"$settings")"
-            jq --arg domain_name "$domain_name" \
-              --argjson migration_settings "$migration_settings" \
-              --argjson restore_settings "$restore_settings" \
-              '. + [{domainName: $domain_name, migrationSettings: $migration_settings, restoreSettings: $restore_settings}]' \
-              "$domain_state" > "$domain_state.next"
-            mv "$domain_state.next" "$domain_state"
           done
 
-          if [ "$(jq 'length' "$domain_state")" -eq 0 ]; then
-            printf 'domain_state_b64=\n' >> "$GITHUB_OUTPUT"
-          else
-            domain_state_b64="$(base64 "$domain_state" | tr -d '\n')"
-            printf 'domain_state_b64=%s\n' "$domain_state_b64" >> "$GITHUB_OUTPUT"
-          fi
-          if aws amplify get-branch --app-id "$APP_ID" --branch-name "$migration_branch" >/dev/null 2>&1; then
-            printf 'cleanup_migration_branch=true\n' >> "$GITHUB_OUTPUT"
-          else
-            printf 'cleanup_migration_branch=false\n' >> "$GITHUB_OUTPUT"
-          fi
-
-          # Once repository-backed, never delete a normal branch here. A
-          # retry may still need to restore a domain mapping left by an
-          # interrupted migration, which the next step handles after binding.
-          if [ -n "$repository" ]; then
-            echo 'Status app is already repository-backed; no legacy branch deletion is needed.'
+          if [ -z "$repository" ]; then
+            if [ "$branch_count" -ne 0 ] || [ "$domain_has_mappings" = true ]; then
+              echo '::error::aether-status is still in legacy manual state.'
+              echo '::error::One-time administrative cleanup must remove its manual branches and detach domain mappings before CI can bind the repository.'
+              exit 1
+            fi
+            echo 'The legacy status app is clean and unbound; this run will perform the one-time repository bootstrap.'
+            printf 'bootstrap_required=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [ "$(jq 'length' "$domain_state")" -gt 0 ]; then
-            if ! aws amplify get-branch --app-id "$APP_ID" --branch-name "$migration_branch" >/dev/null 2>&1; then
-              echo "Creating temporary Amplify branch ${migration_branch} to detach live status domains."
-              aws amplify create-branch \
-                --app-id "$APP_ID" \
-                --branch-name "$migration_branch" \
-                --stage PRODUCTION \
-                --no-enable-auto-build \
-                >/dev/null
-            fi
-            while IFS= read -r record; do
-              domain_name="$(jq -r '.domainName' <<<"$record")"
-              migration_settings="$(jq -c '.migrationSettings' <<<"$record")"
-              echo "Temporarily moving ${domain_name} status mappings to ${migration_branch}."
-              aws amplify update-domain-association \
-                --app-id "$APP_ID" \
-                --domain-name "$domain_name" \
-                --no-enable-auto-sub-domain \
-                --auto-sub-domain-iam-role "$AMPLIFY_DOMAIN_ROLE_ARN" \
-                --sub-domain-settings "$migration_settings" \
-                >/dev/null
-              wait_for_domain_association "$domain_name"
-            done < <(jq -c '.[]' "$domain_state")
+          unexpected_branches="$(jq -r 'map(select(. != "main")) | join(",")' <<<"$branches_json")"
+          test -z "$unexpected_branches" || {
+            echo "::error::repository-backed aether-status has unexpected manual branches: ${unexpected_branches}"; exit 1;
+          }
+          if [ "$domain_has_mappings" = false ]; then
+            echo 'The status app is repository-backed but its canonical domain mapping is not restored yet; this run will stop before release.'
+            printf 'bootstrap_required=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-
-          for branch_name in "${legacy_branches[@]}"; do
-            if [ "$branch_name" = "$migration_branch" ]; then
-              continue
-            fi
-            echo "Removing legacy manually deployed Amplify branch ${branch_name}."
-            aws amplify delete-branch \
-              --app-id "$APP_ID" \
-              --branch-name "$branch_name" \
-              >/dev/null
-          done
-          echo 'Legacy manual status branches removed; repository binding may proceed.'
+          printf 'bootstrap_required=false\n' >> "$GITHUB_OUTPUT"
+          echo 'Status app is repository-backed with only the canonical main branch; CI will verify its domain mapping without mutating it.'
 
       - name: Bind the existing status app to the canonical repository
         env:
@@ -326,62 +245,36 @@ jobs:
           fi
           echo 'Bound the existing status app to the reviewed repository, canonical status build, runtime links, and PRODUCTION main branch.'
 
-      - name: Restore status domain mappings and remove migration branch
-        if: steps.migrate.outputs.domain_state_b64 != '' || steps.migrate.outputs.cleanup_migration_branch == 'true'
+      - name: Verify canonical status domain mapping
+        if: steps.state.outputs.bootstrap_required != 'true'
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
-          DOMAIN_STATE_B64: ${{ steps.migrate.outputs.domain_state_b64 }}
-          CLEANUP_MIGRATION_BRANCH: ${{ steps.migrate.outputs.cleanup_migration_branch }}
         run: |
           set -euo pipefail
-          migration_branch='status-repository-migration'
-          domain_state="$(mktemp)"
-          trap 'rm -f "$domain_state"' EXIT
-          wait_for_domain_association() {
-            local domain_name="$1"
-            local deadline=$((SECONDS + 180))
-            while [ "$SECONDS" -lt "$deadline" ]; do
-              local status
-              status="$(aws amplify get-domain-association \
-                --app-id "$APP_ID" --domain-name "$domain_name" \
-                --query 'domainAssociation.domainStatus' --output text)"
-              case "$status" in
-                AVAILABLE) return 0 ;;
-                FAILED|ERROR|CANCELLED)
-                  echo "::error::Amplify domain association ${domain_name} entered ${status}"; return 1 ;;
-                *) sleep 5 ;;
-              esac
-            done
-            echo "::error::Amplify domain association ${domain_name} did not become AVAILABLE"; return 1
+          domain_json="$(aws amplify get-domain-association \
+            --app-id "$APP_ID" --domain-name olympuslabsml.com)"
+          status="$(jq -r '.domainAssociation.domainStatus // empty' <<<"$domain_json")"
+          test "$status" = AVAILABLE || {
+            echo "::error::production status domain association is ${status:-unknown}"; exit 1;
           }
-          if [ -n "$DOMAIN_STATE_B64" ]; then
-            printf '%s' "$DOMAIN_STATE_B64" | base64 --decode > "$domain_state"
-            while IFS= read -r record; do
-              domain_name="$(jq -r '.domainName' <<<"$record")"
-              restore_settings="$(jq -c '.restoreSettings' <<<"$record")"
-              echo "Restoring ${domain_name} status mappings to the canonical main branch."
-              aws amplify update-domain-association \
-                --app-id "$APP_ID" \
-                --domain-name "$domain_name" \
-                --no-enable-auto-sub-domain \
-                --auto-sub-domain-iam-role "$AMPLIFY_DOMAIN_ROLE_ARN" \
-                --sub-domain-settings "$restore_settings" \
-                >/dev/null
-              wait_for_domain_association "$domain_name"
-            done < <(jq -c '.[]' "$domain_state")
-          fi
-          if [ "$CLEANUP_MIGRATION_BRANCH" = 'true' ] && \
-             aws amplify get-branch --app-id "$APP_ID" --branch-name "$migration_branch" >/dev/null 2>&1; then
-            echo "Removing temporary Amplify branch ${migration_branch}."
-            aws amplify delete-branch \
-              --app-id "$APP_ID" \
-              --branch-name "$migration_branch" \
-              >/dev/null
-          fi
-          echo 'Status domain mappings and temporary migration state are clean.'
+          status_mapping_count="$(jq '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == "status")) | length' <<<"$domain_json")"
+          main_mapping_count="$(jq '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == "status" and .branchName == "main")) | length' <<<"$domain_json")"
+          test "$status_mapping_count" = 1 && test "$main_mapping_count" = 1 || {
+            echo '::error::production status domain must have exactly one status mapping to the canonical main branch'; exit 1;
+          }
+          echo 'Verified the production status domain is AVAILABLE and maps status to the canonical main branch without a CI domain mutation.'
+
+      - name: Complete one-time status app bootstrap
+        if: steps.state.outputs.bootstrap_required == 'true'
+        run: |
+          set -euo pipefail
+          echo 'The status app is now repository-backed with a PRODUCTION main branch.'
+          echo '::notice::One-time administrative action required: restore olympuslabsml.com status -> main, then dispatch this workflow for the first commit-pinned release.'
+          echo 'Bootstrap intentionally stops before release so the domain association is restored before public provenance is claimed.'
 
       - name: Start the commit-pinned Amplify release
         id: job
+        if: steps.state.outputs.bootstrap_required != 'true'
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
@@ -399,6 +292,7 @@ jobs:
           printf 'job_id=%s\n' "$job_id" >> "$GITHUB_OUTPUT"
 
       - name: Wait for the exact status deployment
+        if: steps.state.outputs.bootstrap_required != 'true'
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
@@ -430,6 +324,7 @@ jobs:
           echo '::error::Aether status deployment exceeded the 40-minute deadline'; exit 1
 
       - name: Verify production status provenance and branch stage
+        if: steps.state.outputs.bootstrap_required != 'true'
         run: |
           set -euo pipefail
           python scripts/release/check_amplify_app_contract.py \

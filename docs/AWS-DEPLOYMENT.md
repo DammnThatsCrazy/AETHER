@@ -41,7 +41,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:6c4cf0602d00730f9cd3b5adc6ffb9cd325abd8dd85ff1a6c0a353588ba085d2"
+  ".github/workflows/amplify-status-production.yml": "sha256:426d990822ec754ec5483283198814eaa6d0405f3eafef38e113d9592da2c6ce"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
@@ -499,23 +499,19 @@ workflow binds the existing public status app to this repository, pins its
 production runtime links, the AVAILABLE status association, and the live
 `status` CNAME on `olympuslabsml.com`; its AWS caller is required to be
 `AetherStagingDeploy`. Because this app was historically created by a manual
-static deployment, the workflow has a guarded one-time migration step: when
-the exact `aether-status` app is still unconnected to a repository, it removes
-only that app's legacy branch metadata before binding the repository and
-creating or updating production `main`. If a legacy branch is still referenced
-by a live custom-domain association, the workflow first moves only that
-association to a workflow-owned temporary branch, restores it to canonical
-`main` after binding, and removes the temporary branch. Retries also repair an
-interrupted migration without deleting normal repository-backed branches. Once
-the app is repository-backed, the workflow never deletes normal branches and
-simply updates the existing branch. The workflow disables Amplify
-auto-subdomain creation and explicitly passes the exact empty delegated role
-in its domain-association calls. Amplify still performs its dependent
-`iam:PassRole` authorization for `UpdateDomainAssociation` even for this
-manual mapping, so the staging apply contract grants `iam:PassRole` only on
-`AETHER-staging-amplify-domain-role`, constrained to the Amplify service
-principal, with Amplify-only trust. The role has no permissions or Route 53
-access because Squarespace remains authoritative.
+static deployment, the workflow performs a read-only state assessment before
+binding. A clean, unbound app (no manual branches and no live domain mappings)
+gets a one-time repository bootstrap and stops before release. A reviewed
+administrative step then restores `status -> main`; the next dispatch deploys
+the exact merge SHA. If legacy branches or mappings remain, CI fails closed
+instead of attempting a domain mutation. Repository-backed runs never delete
+branches or call `UpdateDomainAssociation`; they verify the AVAILABLE
+association and canonical `main` mapping before release. Amplify performs a
+dependent `iam:PassRole` authorization for domain mutations, so the status
+workflow intentionally does not make that API call from its OIDC deploy role.
+The dedicated empty `AETHER-staging-amplify-domain-role` remains constrained
+to Amplify-only trust for the staging infrastructure contract, has no
+permissions or Route 53 access, and Squarespace remains authoritative.
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the
 generated staging Amplify app and branch ARN families, and scopes custom-domain
