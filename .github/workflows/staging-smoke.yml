@@ -89,6 +89,38 @@ jobs:
             --profile staging \
             --deployment-lane "$DEPLOYMENT_LANE" \
             --check-runtime-wiring
+      - name: Configure AWS inspection credentials for the pilot lane
+        if: inputs.deployment_lane == 'pilot'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # The existing read-only AetherStagingPlan role performs IAM
+          # metadata inspection; the secret role remains value-readable only.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify staging IAM inspection role assumption
+        if: inputs.deployment_lane == 'pilot'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+      - name: Verify the effective secret preflight IAM contract
+        if: inputs.deployment_lane == 'pilot'
+        env:
+          TARGET_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_apply_policy.py --role-arn "$TARGET_ROLE_ARN" --manifest config/staging_secret_preflight_iam_policy.yaml --expected-role AetherStagingSecretPreflight --required-policy-suffix AetherStagingSecretPreflightContract
       - name: Configure AWS secret preflight credentials for the pilot lane
         if: inputs.deployment_lane == 'pilot'
         uses: aws-actions/configure-aws-credentials@v4
@@ -111,11 +143,6 @@ jobs:
           caller_role="${caller_role%/*}"
           test "$caller_account" = "$expected_account" || { echo '::error::secret preflight account mismatch'; exit 1; }
           test "$caller_role" = AetherStagingSecretPreflight || { echo '::error::unexpected secret preflight role'; exit 1; }
-          python scripts/release/verify_effective_staging_apply_policy.py \
-            --role-arn "$EXPECTED_ROLE_ARN" \
-            --manifest config/staging_secret_preflight_iam_policy.yaml \
-            --expected-role AetherStagingSecretPreflight \
-            --required-policy-suffix AetherStagingSecretPreflightContract
       - name: Verify pilot ECS-mounted secret payloads
         if: inputs.deployment_lane == 'pilot'
         run: |
@@ -224,6 +251,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Python for the Stripe catalog validator
+        if: inputs.deployment_lane == 'pilot'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -237,6 +270,10 @@ jobs:
 
       - name: Install dependencies (pnpm)
         run: pnpm install
+
+      - name: Install the Stripe catalog validator
+        if: inputs.deployment_lane == 'pilot'
+        run: python -m pip install --disable-pip-version-check "stripe>=10.0.0"
 
       - name: Configure AWS secret preflight credentials for the pilot Stripe smoke
         if: inputs.deployment_lane == 'pilot'
@@ -260,6 +297,64 @@ jobs:
           esac
           echo "::add-mask::$stripe_key"
           printf 'STRIPE_SECRET_KEY=%s\n' "$stripe_key" >> "$GITHUB_ENV"
+
+      - name: Load pilot Stripe prices without logging values
+        if: inputs.deployment_lane == 'pilot'
+        run: |
+          set -euo pipefail
+          load_price() {
+            local variable="$1"
+            local secret_name="$2"
+            local price_id
+            price_id="$(aws secretsmanager get-secret-value \
+              --region us-east-1 \
+              --secret-id "aether/$secret_name" \
+              --query SecretString \
+              --output text)"
+            case "$price_id" in
+              price_*) ;;
+              *) echo "::error::$secret_name is not a Stripe price ID"; exit 1 ;;
+            esac
+            echo "::add-mask::$price_id"
+            printf '%s=%s\n' "$variable" "$price_id" >> "$GITHUB_ENV"
+          }
+          load_optional_price() {
+            local variable="$1"
+            local secret_name="$2"
+            local price_id
+            local error_file
+            error_file="$(mktemp)"
+            if price_id="$(aws secretsmanager get-secret-value \
+              --region us-east-1 \
+              --secret-id "aether/$secret_name" \
+              --query SecretString \
+              --output text 2>"$error_file")"; then
+              case "$price_id" in
+                price_*) ;;
+                *) sed -n '1,120p' "$error_file" >&2; rm -f "$error_file"; echo "::error::$secret_name is not a Stripe price ID"; exit 1 ;;
+              esac
+              echo "::add-mask::$price_id"
+              printf '%s=%s\n' "$variable" "$price_id" >> "$GITHUB_ENV"
+            elif grep -q 'ResourceNotFoundException' "$error_file"; then
+              echo "Optional Stripe price secret aether/$secret_name is not configured; validation will skip it."
+            else
+              sed -n '1,120p' "$error_file" >&2
+              rm -f "$error_file"
+              echo "::error::could not read optional Stripe price secret aether/$secret_name"; exit 1
+            fi
+            rm -f "$error_file"
+          }
+          load_price STRIPE_PRICE_ALPHA stripe-price-alpha
+          load_price STRIPE_PRICE_BETA stripe-price-beta
+          load_price STRIPE_PRICE_GAMMA stripe-price-gamma
+          load_price STRIPE_PRICE_DELTA stripe-price-delta
+          load_optional_price STRIPE_PRICE_EPSILON stripe-price-epsilon
+          load_optional_price STRIPE_PRICE_OMICRON stripe-price-omicron
+          load_optional_price STRIPE_PRICE_OMEGA stripe-price-omega
+
+      - name: Validate pilot Stripe prices against the configured test account
+        if: inputs.deployment_lane == 'pilot'
+        run: python scripts/validate_stripe.py --skip-webhook
 
       - name: Run staging smoke test
         env:

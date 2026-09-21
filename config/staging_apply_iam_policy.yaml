@@ -244,6 +244,13 @@ statements:
     conditions:
       iam:AWSServiceName: ecs.amazonaws.com
     scope: ecs-service-linked-role-only
+  - sid: EnsureEcsApplicationAutoScalingServiceLinkedRole
+    actions:
+      - iam:CreateServiceLinkedRole
+    resource: '*'
+    conditions:
+      iam:AWSServiceName: ecs.application-autoscaling.amazonaws.com
+    scope: ecs-application-autoscaling-service-linked-role-only
   - sid: ReadEcsServiceLinkedRole
     actions:
       - iam:GetRole

@@ -141,6 +141,27 @@ statements:
       - iam:GetRole
     resource: arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
     scope: ecs-service-linked-role-only
+  - sid: AuditStagingWorkflowRoles
+    actions:
+      - iam:GetRole
+      - iam:GetRolePolicy
+      - iam:ListAttachedRolePolicies
+      - iam:ListRolePolicies
+      - iam:ListInstanceProfilesForRole
+    resource:
+      - arn:aws:iam::${account_id}:role/AetherStagingPlan
+      - arn:aws:iam::${account_id}:role/AetherStagingDeploy
+      - arn:aws:iam::${account_id}:role/AetherStagingLifecycle
+      - arn:aws:iam::${account_id}:role/AetherStagingSecretPreflight
+    scope: staging-workflow-role-audit
+  - sid: ReadStagingWorkflowManagedPolicies
+    actions:
+      - iam:GetPolicy
+      - iam:GetPolicyVersion
+    resource:
+      - arn:aws:iam::${account_id}:policy/AetherStagingDeployContract*
+      - arn:aws:iam::${account_id}:policy/AetherStagingApplyMissingOps
+    scope: staging-workflow-policy-audit
   - sid: VerifyTerraformStateAccess
     actions:
       - iam:SimulatePrincipalPolicy

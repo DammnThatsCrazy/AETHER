@@ -44,6 +44,11 @@ on:
         options: [awake, asleep]
         default: awake
         required: false
+      secret_preflight_required:
+        description: "Keep application-secret preflight enabled; only sleep plans/applies may set this false"
+        type: boolean
+        default: true
+        required: false
       staging_listener_target_group_arn:
         description: "Optional existing maintenance target-group ARN for a reviewed staging backend replacement transition"
         type: string
@@ -75,7 +80,7 @@ env:
 jobs:
   staging-secret-payload-preflight:
     name: Verify staging secret payloads before plan or apply
-    if: inputs.profile == 'staging'
+    if: inputs.profile == 'staging' && inputs.secret_preflight_required
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: staging
@@ -85,6 +90,39 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Configure AWS inspection credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # IAM policy inspection is deliberately performed by the separate
+          # infrastructure inspection role. The secret role is value-readable
+          # only and must not be widened with iam:List*/Get* permissions.
+          # The dedicated staging plan role is the metadata-only IAM auditor.
+          # Keep the shared infrastructure credential out of this contract so
+          # the audit path remains explicit and the secret role stays value-only.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify staging IAM inspection role assumption
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+      - name: Verify the effective secret preflight IAM contract
+        env:
+          TARGET_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_apply_policy.py --role-arn "$TARGET_ROLE_ARN" --manifest config/staging_secret_preflight_iam_policy.yaml --expected-role AetherStagingSecretPreflight --required-policy-suffix AetherStagingSecretPreflightContract
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
@@ -104,11 +142,6 @@ jobs:
           caller_role="${caller_role%/*}"
           test "$caller_account" = "$expected_account" || { echo '::error::secret preflight account mismatch'; exit 1; }
           test "$caller_role" = AetherStagingSecretPreflight || { echo '::error::unexpected secret preflight role'; exit 1; }
-          python scripts/release/verify_effective_staging_apply_policy.py \
-            --role-arn "$EXPECTED_ROLE_ARN" \
-            --manifest config/staging_secret_preflight_iam_policy.yaml \
-            --expected-role AetherStagingSecretPreflight \
-            --required-policy-suffix AetherStagingSecretPreflightContract
       - name: Verify raw secret payloads and staging Stripe mode
         run: |
           set -euo pipefail
@@ -120,7 +153,10 @@ jobs:
     if: >-
       always()
       && inputs.action == 'plan'
-      && (inputs.profile != 'staging' || needs.staging-secret-payload-preflight.result == 'success')
+      && (inputs.profile != 'staging'
+          || inputs.staging_state == 'asleep'
+          || inputs.secret_preflight_required == false
+          || needs.staging-secret-payload-preflight.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions: {contents: read, id-token: write}
@@ -189,6 +225,15 @@ jobs:
             echo '::error::deployment_lane=pilot is valid only with the canonical profile=staging'
             exit 1
           fi
+      - name: Require secret-preflight bypass to be sleep-only
+        if: inputs.profile == 'staging' && inputs.secret_preflight_required == false
+        env:
+          STAGING_STATE: ${{ inputs.staging_state }}
+        run: |
+          set -euo pipefail
+          test "$STAGING_STATE" = asleep || {
+            echo '::error::secret_preflight_required=false is only valid for a plan with staging_state=asleep'; exit 1;
+          }
       - name: Install plan-validation dependencies
         run: |
           set -euo pipefail
@@ -334,7 +379,7 @@ jobs:
             --expected-role AetherStagingPlan \
             --required-policy-suffix AetherStagingPlanContract
       - name: Verify required staging secret metadata before planning
-        if: inputs.profile == 'staging'
+        if: inputs.profile == 'staging' && inputs.staging_state != 'asleep'
         env:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
@@ -643,7 +688,10 @@ jobs:
     if: >-
       always()
       && inputs.action == 'apply'
-      && (inputs.profile != 'staging' || needs.staging-secret-payload-preflight.result == 'success')
+      && (inputs.profile != 'staging'
+          || inputs.staging_state == 'asleep'
+          || inputs.secret_preflight_required == false
+          || needs.staging-secret-payload-preflight.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     # Per-profile environments: each profile carries its own reviewers and
@@ -860,7 +908,19 @@ jobs:
             printf 'terraform_version=%s\n' "$reviewed_tf_version"
             printf 'listener_target_group_arn=%s\n' "$reviewed_listener_arn"
             printf 'deployment_lane=%s\n' "$reviewed_deployment_lane"
+            printf 'staging_state=%s\n' "$reviewed_staging_state"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Require secret-preflight bypass to be backed by an asleep reviewed plan
+        if: inputs.profile == 'staging' && inputs.secret_preflight_required == false
+        env:
+          REVIEWED_STAGING_STATE: ${{ steps.reviewed.outputs.staging_state }}
+        run: |
+          set -euo pipefail
+          test "$REVIEWED_STAGING_STATE" = asleep || {
+            echo '::error::secret_preflight_required=false is only valid when the reviewed plan records staging_state=asleep'; exit 1;
+          }
+
       # Bind the apply to the plan's OWN commit, not the dispatch ref. The ref
       # may have moved since review; github.sha says nothing about which code
       # the reviewed plan was built from.
@@ -999,7 +1059,7 @@ jobs:
             --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
             --manifest config/staging_apply_iam_policy.yaml
       - name: Verify required staging secrets have current versions
-        if: inputs.profile == 'staging'
+        if: inputs.profile == 'staging' && steps.reviewed.outputs.staging_state != 'asleep'
         env:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
@@ -1092,7 +1152,10 @@ jobs:
           fi
           rm -f "$rds_metadata" "$rds_error"
       - name: Require complete pilot Stripe wiring and current-version price secrets
-        if: inputs.profile == 'staging' && inputs.deployment_lane == 'pilot'
+        if: >-
+          inputs.profile == 'staging'
+          && inputs.deployment_lane == 'pilot'
+          && steps.reviewed.outputs.staging_state != 'asleep'
         env:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
         run: |

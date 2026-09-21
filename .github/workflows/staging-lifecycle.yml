@@ -197,6 +197,7 @@ jobs:
         if: inputs.action != 'validate' && inputs.action != 'plan-wake'
         env:
           ACTION: ${{ inputs.action }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
           AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -213,7 +214,13 @@ jobs:
             *) echo '::error::AWS_STAGING_LIFECYCLE_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
           esac
           case "$ACTION" in
-            apply-wake|apply-sleep|full-rehearsal)
+            apply-wake|full-rehearsal)
+              test -n "${AWS_TERRAFORM_PLAN_ROLE_ARN:-}" \
+                || { echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is required before staging IAM policy inspection'; exit 1; }
+              case "$AWS_TERRAFORM_PLAN_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
               test -n "${AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN:-}" \
                 || { echo '::error::AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN is required before validating staging secret payloads'; exit 1; }
               case "$AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN" in
@@ -227,12 +234,74 @@ jobs:
                 *) echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
               esac
               ;;
+            apply-sleep)
+              test -n "${AWS_TERRAFORM_PLAN_ROLE_ARN:-}" \
+                || { echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is required before staging IAM policy inspection'; exit 1; }
+              case "$AWS_TERRAFORM_PLAN_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              test -n "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
+                || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is required before a staging sleep apply'; exit 1; }
+              case "$AWS_TERRAFORM_APPLY_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              ;;
+            plan-sleep)
+              test -n "${AWS_TERRAFORM_PLAN_ROLE_ARN:-}" \
+                || { echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is required before staging IAM policy inspection'; exit 1; }
+              case "$AWS_TERRAFORM_PLAN_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              ;;
           esac
           if { [ "$ACTION" = apply-wake ] || [ "$ACTION" = full-rehearsal ]; } \
             && [ "$CONFIRM_RUNTIME_WAKE" != true ]; then
             echo '::error::runtime wake is disabled by default; set confirm_runtime_wake=true for an explicit staging wake authorization'
             exit 1
           fi
+
+      - name: Configure AWS inspection credentials
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # The lifecycle role is intentionally narrow and cannot inspect IAM
+          # policy attachments. Keep policy auditing on the separate
+          # infrastructure inspection role.
+          # AetherStagingPlan is the dedicated read-only inspector for role
+          # metadata and Amplify metadata. The lifecycle role must not inspect
+          # its own IAM contract, and the shared infrastructure credential is
+          # not part of this audit boundary.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Verify staging IAM inspection role assumption
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+
+      - name: Verify effective lifecycle IAM policy before dispatch
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          TARGET_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_lifecycle_policy.py --role-arn "$TARGET_ROLE_ARN"
 
       - name: Verify lifecycle role assumption before dispatch
         if: inputs.action != 'validate' && inputs.action != 'plan-wake'
@@ -262,24 +331,15 @@ jobs:
           test "$caller_role_path" = AetherStagingLifecycle || { echo '::error::lifecycle job assumed an unexpected IAM role'; exit 1; }
           echo 'Verified lifecycle credentials resolve to AetherStagingLifecycle in the expected account.'
 
-      - name: Verify effective lifecycle IAM policy before dispatch
-        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
-        env:
-          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
-        run: |
-          set -euo pipefail
-          python scripts/release/verify_effective_staging_lifecycle_policy.py \
-            --role-arn "$AWS_STAGING_LIFECYCLE_ROLE_ARN"
-
       - name: Configure AWS secret preflight credentials
-        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        if: inputs.action == 'apply-wake' || inputs.action == 'full-rehearsal'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Verify secret preflight role assumption and policy
-        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        if: inputs.action == 'apply-wake' || inputs.action == 'full-rehearsal'
         env:
           EXPECTED_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
         run: |
@@ -294,14 +354,8 @@ jobs:
           caller_role="${caller_role%/*}"
           test "$caller_account" = "$expected_account" || { echo '::error::secret preflight account mismatch'; exit 1; }
           test "$caller_role" = AetherStagingSecretPreflight || { echo '::error::unexpected secret preflight role'; exit 1; }
-          python scripts/release/verify_effective_staging_apply_policy.py \
-            --role-arn "$EXPECTED_ROLE_ARN" \
-            --manifest config/staging_secret_preflight_iam_policy.yaml \
-            --expected-role AetherStagingSecretPreflight \
-            --required-policy-suffix AetherStagingSecretPreflightContract
-
       - name: Verify ECS-mounted staging secret payloads before dispatch
-        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        if: inputs.action == 'apply-wake' || inputs.action == 'full-rehearsal'
         env:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
         run: |
@@ -424,7 +478,7 @@ jobs:
       - name: Configure AWS read credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           aws-region: us-east-1
       - name: Verify all staging Amplify apps and current-head jobs
         env:
@@ -2313,6 +2367,7 @@ jobs:
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f staging_state=asleep \
+            -f secret_preflight_required=false \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
             -f expected_commit_sha="$EXPECTED_COMMIT_SHA"
@@ -2495,6 +2550,7 @@ jobs:
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f secret_preflight_required=false \
             -f plan_run_id="$PLAN_RUN_ID" \
             -f plan_checksum="$PLAN_CHECKSUM"
           run_id=''

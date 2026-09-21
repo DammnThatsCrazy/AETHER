@@ -28,6 +28,12 @@ on:
         description: Exact commit SHA contained in the completed delivery manifest
         type: string
         required: true
+      deployment_lane:
+        description: "Staging lane for the remote plan; pilot defers Kyber/GCP credentials while preserving the full AWS topology"
+        type: choice
+        options: [pilot, full]
+        default: pilot
+        required: false
   push:
     branches: [main]
     paths:
@@ -58,6 +64,7 @@ jobs:
         id: credentials
         env:
           AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
           TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
@@ -88,6 +95,7 @@ jobs:
           # Dedicated ML profiles validate it in their matrix job below.
           for name in \
             AWS_INFRA_ROLE_ARN \
+            AWS_TERRAFORM_PLAN_ROLE_ARN \
             TF_STATE_BUCKET \
             TF_LOCK_TABLE \
             TF_ACM_CERTIFICATE_ARN \
@@ -236,6 +244,7 @@ jobs:
       run:
         working-directory: deploy/aws/terraform
     env:
+      DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'pilot' }}
       TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
       TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
       TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
@@ -310,9 +319,14 @@ jobs:
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
           KYBER_GOOGLE_CLIENT_ID: ${{ secrets.KYBER_GOOGLE_CLIENT_ID }}
           KYBER_GOOGLE_CLIENT_SECRET: ${{ secrets.KYBER_GOOGLE_CLIENT_SECRET }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'pilot' }}
         run: |
           set -euo pipefail
-          python scripts/release/check_staging_credential_contract.py --lane full
+          case "$DEPLOYMENT_LANE" in
+            pilot|full) ;;
+            *) echo "::error::deployment_lane must be pilot or full, got $DEPLOYMENT_LANE"; exit 1 ;;
+          esac
+          python scripts/release/check_staging_credential_contract.py --lane "$DEPLOYMENT_LANE"
 
       - name: Validate Amplify checkout token
         run: |
@@ -331,19 +345,24 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          # The staging matrix leg must plan with the dedicated read-only
+          # AetherStagingPlan role. Other profiles retain the shared
+          # infrastructure planning role until their profile contracts are
+          # migrated to dedicated authorities.
+          role-to-assume: ${{ matrix.profile == 'staging' && secrets.AWS_TERRAFORM_PLAN_ROLE_ARN || secrets.AWS_INFRA_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify effective staging plan IAM contract
         if: matrix.profile == 'staging'
         env:
-          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
         run: |
           set -euo pipefail
-          # Remote-plan role drift must fail before image/state work. This is
-          # metadata-only and never reads application secrets.
+          # Audit the same dedicated staging role that the matrix leg actually
+          # assumed before image/state work; this is metadata-only and never
+          # reads application secrets.
           python scripts/release/verify_effective_staging_apply_policy.py \
-            --role-arn "$AWS_INFRA_ROLE_ARN" \
+            --role-arn "$AWS_TERRAFORM_PLAN_ROLE_ARN" \
             --manifest config/staging_plan_iam_policy.yaml \
             --expected-role AetherStagingPlan \
             --required-policy-suffix AetherStagingPlanContract
@@ -395,17 +414,25 @@ jobs:
           PROFILE: ${{ matrix.profile }}
         run: |
           set -euo pipefail
+          plan_args=(
+            -input=false
+            -lock-timeout=5m
+            -var-file="profiles/${PROFILE}.tfvars"
+          )
+          if [ "$PROFILE" = staging ]; then
+            case "$DEPLOYMENT_LANE" in
+              pilot|full) ;;
+              *) echo "::error::deployment_lane must be pilot or full, got $DEPLOYMENT_LANE"; exit 1 ;;
+            esac
+            plan_args+=("-var=deployment_lane=${DEPLOYMENT_LANE}")
+          fi
           if [[ "$PROFILE" == production-scale || "$PROFILE" == enterprise-isolated ]]; then
             test -n "${TF_VAR_ml_image_digest:-}" \
               || { echo "::error::${PROFILE} requires TF_ML_IMAGE_DIGEST because remote_ml is enabled"; exit 1; }
             printf '%s' "$TF_VAR_ml_image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$' \
               || { echo "::error::${PROFILE} requires an immutable sha256 ML image digest"; exit 1; }
           fi
-          terraform plan \
-            -input=false \
-            -lock-timeout=5m \
-            -var-file="profiles/${PROFILE}.tfvars" \
-            -out="tfplan-${PROFILE}"
+          terraform plan "${plan_args[@]}" -out="tfplan-${PROFILE}"
           # The human-readable rendering redacts sensitive values itself and
           # never prints root variables at all.
           terraform show -no-color "tfplan-${PROFILE}" > "remote-plan-${PROFILE}.txt"

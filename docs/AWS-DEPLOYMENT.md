@@ -26,6 +26,8 @@ source_files:
   - scripts/release/check_staging_task_definition_contract.py
   - config/staging_secret_preflight_iam_policy.yaml
   - config/staging_secret_preflight_trust_policy.json
+  - config/staging_plan_iam_policy.yaml
+  - config/staging_plan_trust_policy.json
   - config/staging_apply_iam_policy.yaml
   - config/staging_lifecycle_iam_policy.yaml
   - scripts/release/check_staging_lifecycle_policy.py
@@ -34,13 +36,15 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:6b24ee13fb51366713cde866bc6d6fc5d4bef1be87dd91381e09627c1739c22f"
-  ".github/workflows/staging-lifecycle.yml": "sha256:10e1d820332480f00951459f5a27e3ba79290c1eec080a3665299a6a6ebeddc1"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:942a4df69556a2b859c869c04edc0ca29dfbac3016e1809cdef3b38a995c401d"
+  ".github/workflows/amplify-status-production.yml": "sha256:8ec4732e36ddb39d2d02ddaddcf90a6da076703f15378f382c99082b9309bd5f"
+  ".github/workflows/staging-lifecycle.yml": "sha256:4ca6bc9d2ea9e2f79496a7bcd9ad0f06a78bf1fdddc6c274bc73d58dd573dd7a"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:7ba3e90901a412665672efee443f21f3dacb95044e4633f01c35c86fc77cdc18"
   ".github/workflows/staging-ttl-guard.yml": "sha256:f5c66d618aad6b84887fa689dda91d9f68c43c397e39003f96efc440823a7111"
-  ".github/workflows/terraform-promote.yml": "sha256:782c4760636b2a2089256ab26750b1d90435ffe946353c6540e3a6c9ef89b029"
-  "config/staging_apply_iam_policy.yaml": "sha256:ed9ae866b562e8d127ce7d687f3992e8d7c041c21cadc9307911235cea082f9d"
+  ".github/workflows/terraform-promote.yml": "sha256:4e6ce2c97d6a9d32da0d42fd5c57912be0bfc1ccdbff50294cd6979f95d80477"
+  "config/staging_apply_iam_policy.yaml": "sha256:d38ec524f261e3e749869437484a82995253ed591445362a9e8c445bcb967ced"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
+  "config/staging_plan_iam_policy.yaml": "sha256:ae444db9fb3ce03c0a230cfe1062610aac5e31dc39cf00fa51675b7cb6d53db9"
+  "config/staging_plan_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:9fbac99f2693435b11d93b768d52b8ff5e5f06a797980d0ffb7ac720f8598e80"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
@@ -124,11 +128,12 @@ rehearsal credential is the encrypted staging admin bootstrap key, which is
 supplied out of band and never generated or echoed by CI.
 
 The lifecycle and apply contracts are intentionally separate. `AetherStagingPlan`
-owns remote plan and state-lock access, while `AetherStagingDeploy` owns only the
-reviewed staging apply actions and must be verified by the effective-policy
-simulator before a mutation. `AetherStagingLifecycle` owns the bounded awake
-lease, ECS inspection/update, migration-task execution, static publication,
-autoscaling-floor cleanup, and evidence collection; it cannot create IAM roles,
+owns remote plan and state-lock access and is the dedicated metadata-only
+inspector for the effective IAM contracts and Amplify app state. `AetherStagingDeploy`
+owns only the reviewed staging apply actions and must be verified by the
+effective-policy simulator before a mutation. `AetherStagingLifecycle` owns the
+bounded awake lease, ECS inspection/update, migration-task execution, static
+publication, autoscaling-floor cleanup, and evidence collection; it cannot create IAM roles,
 read application secret values, or mutate non-staging resources. The checked-in
 IAM manifests are validated against the workflow action inventory so adding a
 new lifecycle AWS call without its least-privilege grant fails CI before a

@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import re
+import json
 import importlib.util
 from pathlib import Path
 
@@ -109,6 +110,62 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     role_step = text[text.index("Ensure the ECS service-linked role"):text.index("Apply the exact approved plan")]
     assert "Every selectable profile provisions the ECS capacity-provider" in role_step
     assert "aws-service-name ecs.amazonaws.com" in role_step
+
+
+def test_staging_apply_contract_scopes_both_reviewed_service_linked_roles() -> None:
+    manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+    linked = [
+        statement
+        for statement in manifest["statements"]
+        if "iam:CreateServiceLinkedRole" in statement.get("actions", [])
+    ]
+    assert {statement["resource"] for statement in linked} == {"*"}
+    assert {
+        statement["conditions"]["iam:AWSServiceName"]
+        for statement in linked
+    } == {
+        "ecs.amazonaws.com",
+        "ecs.application-autoscaling.amazonaws.com",
+    }
+
+
+def test_staging_plan_role_can_audit_workflow_role_contracts_without_view_only() -> None:
+    plan = yaml.safe_load((ROOT / "config/staging_plan_iam_policy.yaml").read_text(encoding="utf-8"))
+    by_sid = {statement["sid"]: statement for statement in plan["statements"]}
+    role_audit = by_sid["AuditStagingWorkflowRoles"]
+    assert set(role_audit["actions"]) == {
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:ListInstanceProfilesForRole",
+    }
+    assert role_audit["resource"] == [
+        "arn:aws:iam::${account_id}:role/AetherStagingPlan",
+        "arn:aws:iam::${account_id}:role/AetherStagingDeploy",
+        "arn:aws:iam::${account_id}:role/AetherStagingLifecycle",
+        "arn:aws:iam::${account_id}:role/AetherStagingSecretPreflight",
+    ]
+    policy_audit = by_sid["ReadStagingWorkflowManagedPolicies"]
+    assert set(policy_audit["actions"]) == {"iam:GetPolicy", "iam:GetPolicyVersion"}
+    assert "AetherStagingDeployContract*" in policy_audit["resource"][0]
+    assert "AetherStagingApplyMissingOps" in policy_audit["resource"][1]
+
+
+def test_staging_plan_trust_is_limited_to_reviewed_github_subjects() -> None:
+    trust = json.loads(
+        (ROOT / "config/staging_plan_trust_policy.json").read_text(encoding="utf-8")
+    )
+    statement = trust["Statement"][0]
+    assert statement["Action"] == "sts:AssumeRoleWithWebIdentity"
+    assert statement["Condition"]["StringEquals"] == {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+    }
+    assert set(statement["Condition"]["StringLike"]["token.actions.githubusercontent.com:sub"]) == {
+        "repo:DammnThatsCrazy/AETHER:ref:refs/heads/main",
+        "repo:DammnThatsCrazy/AETHER:environment:staging",
+        "repo:DammnThatsCrazy/AETHER:environment:staging-terraform",
+    }
 
 
 def test_staging_apply_rejects_free_plan_before_any_mutation() -> None:

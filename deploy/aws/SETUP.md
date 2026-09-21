@@ -145,7 +145,7 @@ Record the bucket and table names — they become the `TF_STATE_BUCKET` and
    | `TF_STATE_BUCKET` | the bucket from Step 1 |
    | `TF_LOCK_TABLE` | the lock table from Step 1 |
    | `AWS_REGION` | your region |
-   | AWS OIDC role ARNs | the plan role, the `AWS_TERRAFORM_APPLY_ROLE_ARN` state-write role, the staging deploy/lifecycle roles, and the read-only `AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN` payload-check role |
+   | AWS OIDC role ARNs | the read-only `AWS_TERRAFORM_PLAN_ROLE_ARN` role (also used for IAM-policy and Amplify metadata audits), the `AWS_TERRAFORM_APPLY_ROLE_ARN` state-write role, the staging deploy/lifecycle roles, and the read-only `AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN` payload-check role |
 
    The apply role is deliberately least-privilege; its checked-in contract is
    `config/staging_apply_iam_policy.yaml` (staging) and is verified by IAM

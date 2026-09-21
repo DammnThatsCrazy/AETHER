@@ -152,6 +152,74 @@ jobs:
           printf 'STAGING_SECRETS_KMS_KEY_ARN=%s\n' "$resolved_key_arn" >> "$GITHUB_ENV"
           echo 'Resolved the reviewed staging Secrets Manager CMK reference to the current account key; key values were not read.'
 
+      - name: Discover pre-existing Stripe price secrets for state reconciliation
+        id: discover-price-secrets
+        env:
+          REQUESTED_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+        run: |
+          set -euo pipefail
+          normalize_secret_names() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | sort -u
+          }
+          names_file="$(mktemp)"
+          metadata_file=""
+          error_file=""
+          trap 'rm -f "$names_file" "$metadata_file" "$error_file"' EXIT
+          normalize_secret_names "$REQUESTED_SECRET_NAMES" >"$names_file"
+          discovered_kms=""
+          for name in \
+            stripe-price-alpha stripe-price-beta stripe-price-gamma stripe-price-delta \
+            stripe-price-epsilon stripe-price-omicron stripe-price-omega
+          do
+            metadata_file="$(mktemp)"
+            error_file="$(mktemp)"
+            if aws secretsmanager describe-secret \
+              --region us-east-1 \
+              --secret-id "aether/$name" \
+              --output json >"$metadata_file" 2>"$error_file"; then
+              actual_name="$(jq -r '.Name // empty' "$metadata_file")"
+              test "$actual_name" = "aether/$name" || {
+                echo "::error::discovered secret metadata name '$actual_name' does not match aether/$name"; exit 1;
+              }
+              kms_ref="$(jq -r '.KmsKeyId // empty' "$metadata_file")"
+              test -n "$kms_ref" || {
+                echo "::error::existing aether/$name has no customer-managed KMS key; refusing an unmanaged Terraform collision"; exit 1;
+              }
+              kms_arn="$(aws kms describe-key --region us-east-1 --key-id "$kms_ref" --query 'KeyMetadata.Arn' --output text)"
+              test -n "$kms_arn" && test "$kms_arn" != None || {
+                echo "::error::could not resolve the KMS key for aether/$name"; exit 1;
+              }
+              if [ -z "$discovered_kms" ]; then
+                discovered_kms="$kms_arn"
+              else
+                test "$discovered_kms" = "$kms_arn" || {
+                  echo '::error::pre-existing Stripe price secrets use different KMS keys; refusing a mixed-key state import'; exit 1;
+                }
+              fi
+              printf '%s\n' "$name" >>"$names_file"
+              echo "Discovered existing metadata for aether/$name; the secret value was not read."
+            elif grep -q 'ResourceNotFoundException' "$error_file"; then
+              :
+            else
+              cat "$error_file" >&2
+              echo "::error::could not determine whether aether/$name exists"; exit 1
+            fi
+            rm -f "$metadata_file" "$error_file"
+            metadata_file=""
+            error_file=""
+          done
+          staging_kms="$(printenv STAGING_SECRETS_KMS_KEY_ARN || true)"
+          if [ -n "$discovered_kms" ]; then
+            if [ -n "$staging_kms" ]; then
+              test "$staging_kms" = "$discovered_kms" || {
+                echo '::error::pre-existing Stripe price secrets are encrypted with a different staging Secrets Manager CMK'; exit 1;
+              }
+            else
+              printf 'STAGING_SECRETS_KMS_KEY_ARN=%s\n' "$discovered_kms" >>"$GITHUB_ENV"
+            fi
+          fi
+          effective_names="$(sort -u "$names_file" | paste -sd, -)"
+          printf 'secret_names=%s\n' "$effective_names" >>"$GITHUB_OUTPUT"
       - name: Verify effective Terraform state permissions
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -175,7 +243,7 @@ jobs:
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
-          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
           STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
         run: |
           set -euo pipefail
@@ -297,9 +365,9 @@ jobs:
           fi
 
       - name: Validate existing staging secret metadata before state mutation
-        if: inputs.staging_secret_names != ''
+        if: steps.discover-price-secrets.outputs.secret_names != ''
         env:
-          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
         run: |
           set -euo pipefail
           test -n "$STAGING_SECRETS_KMS_KEY_ARN" || {
@@ -774,7 +842,7 @@ jobs:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
-          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
           STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
@@ -985,7 +1053,7 @@ jobs:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
-          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
           STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
         run: |
           set -euo pipefail

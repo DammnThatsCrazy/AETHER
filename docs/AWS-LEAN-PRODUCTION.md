@@ -23,8 +23,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:649addadd9a2cfff621fcafe18d7e5acb13b2f8a7f51fdca77cca76cccdb8100"
-  ".github/workflows/terraform-promote.yml": "sha256:782c4760636b2a2089256ab26750b1d90435ffe946353c6540e3a6c9ef89b029"
+  ".github/workflows/infrastructure.yml": "sha256:47ad2c8b39ef8337a3e4961a86ddc2d9bc3d69e4e44888e2dfe1619830afd681"
+  ".github/workflows/terraform-promote.yml": "sha256:4e6ce2c97d6a9d32da0d42fd5c57912be0bfc1ccdbff50294cd6979f95d80477"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"

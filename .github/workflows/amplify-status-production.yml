@@ -17,6 +17,8 @@ on:
 
 permissions:
   contents: read
+  checks: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -29,8 +31,46 @@ env:
   AMPLIFY_APP_NAME: aether-status
 
 jobs:
+  verify-main-integration:
+    name: Verify Main integration authority for exact commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - name: Wait for the exact commit's integration authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$EXPECTED_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' || {
+            echo '::error::expected status commit must be a 40-character lowercase Git SHA'; exit 1;
+          }
+          deadline=$((SECONDS + 2040))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            runs_json="$(gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_COMMIT_SHA/check-runs?per_page=100")"
+            status="$(jq -r '[.check_runs[] | select(.name == "Main integration authority")] | sort_by(.started_at) | last | .status // "missing"' <<<"$runs_json")"
+            conclusion="$(jq -r '[.check_runs[] | select(.name == "Main integration authority")] | sort_by(.started_at) | last | .conclusion // "missing"' <<<"$runs_json")"
+            if [ "$status" = completed ]; then
+              test "$conclusion" = success || {
+                echo "::error::Main integration authority concluded $conclusion for $EXPECTED_COMMIT_SHA"; exit 1;
+              }
+              echo "Main integration authority is green for $EXPECTED_COMMIT_SHA."
+              exit 0
+            fi
+            echo "Main integration authority is $status for $EXPECTED_COMMIT_SHA; waiting."
+            sleep 15
+          done
+          echo "::error::Main integration authority did not complete within the 34-minute verification window for $EXPECTED_COMMIT_SHA"
+          exit 1
+
   deploy:
     name: Bind status app and deploy exact main SHA
+    needs: verify-main-integration
+    if: needs.verify-main-integration.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: staging

@@ -607,7 +607,7 @@ def main() -> int:
                 fail(f"global resource scope is not allowed for {action}")
         if resource == "*" and not (
             statement.get("scope", "").endswith("required-by-api")
-            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess", "CreateStagingKmsKeys"}
+            or sid in {"EnsureEcsServiceLinkedRole", "EnsureEcsApplicationAutoScalingServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess", "CreateStagingKmsKeys"}
         ):
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
@@ -652,8 +652,11 @@ def main() -> int:
                 if resource != _KMS_KEY or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                     fail(f"{_kms_data_action} must use a staging KMS key ARN and resource-tag condition")
         if "iam:CreateServiceLinkedRole" in statement_actions:
-            if (statement.get("conditions") or {}).get("iam:AWSServiceName") != "ecs.amazonaws.com":
-                fail("iam:CreateServiceLinkedRole must be restricted to ECS")
+            if (statement.get("conditions") or {}).get("iam:AWSServiceName") not in {
+                "ecs.amazonaws.com",
+                "ecs.application-autoscaling.amazonaws.com",
+            }:
+                fail("iam:CreateServiceLinkedRole must be restricted to ECS service-linked roles")
 
     expected_resources: dict[str, str | list[str]] = {}
 
@@ -962,6 +965,19 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": ["monitoring.rds.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
+        elif action == "iam:CreateServiceLinkedRole":
+            expected_service_names = {
+                "ecs.amazonaws.com",
+                "ecs.application-autoscaling.amazonaws.com",
+            }
+            actual_service_names = {
+                (statement.get("conditions") or {}).get("iam:AWSServiceName")
+                for statement in matching
+            }
+            if len(matching) != 2 or any(statement.get("resource") != "*" for statement in matching):
+                fail("iam:CreateServiceLinkedRole must use one global statement per reviewed ECS service")
+            if actual_service_names != expected_service_names:
+                fail("iam:CreateServiceLinkedRole must cover only the reviewed ECS service names")
         elif action == "iam:GetRole":
             slr_arn = "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
             single_resources = {s.get("resource") for s in matching if isinstance(s.get("resource"), str)}

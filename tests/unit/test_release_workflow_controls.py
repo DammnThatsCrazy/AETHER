@@ -312,6 +312,126 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "--stage PRODUCTION" in workflow
 
 
+def test_production_status_waits_for_exact_main_integration_authority():
+    document = _workflow_yaml("amplify-status-production.yml")
+    workflow = _workflow("amplify-status-production.yml")
+    gate = document["jobs"]["verify-main-integration"]
+    deploy = document["jobs"]["deploy"]
+    assert gate["name"] == "Verify Main integration authority for exact commit"
+    assert "checks: read" in workflow
+    assert "Main integration authority" in workflow
+    assert deploy["needs"] == "verify-main-integration"
+    assert deploy["if"] == "needs.verify-main-integration.result == 'success'"
+    assert "commits/$EXPECTED_COMMIT_SHA/check-runs" in workflow
+    assert "conclusion" in workflow
+
+
+def test_staging_secret_policy_audits_use_the_separate_inspection_role():
+    for name in ("terraform-promote.yml", "pilot-staging.yml", "staging-smoke.yml"):
+        document = _workflow_yaml(name)
+        text = _workflow(name)
+        assert document["jobs"]
+        assert "AWS_TERRAFORM_PLAN_ROLE_ARN" in text
+        assert "verify_effective_staging_apply_policy.py" in text
+        assert "Verify staging IAM inspection role assumption" in text
+        assert text.index("Configure AWS inspection credentials") < text.rindex(
+            "AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN"
+        ), name
+        assert "AetherStagingSecretPreflightContract" in text
+        assert "role-to-assume: " + "$" + "{{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}" in text
+
+    lifecycle = _workflow_yaml("staging-lifecycle.yml")
+    lifecycle_text = _workflow("staging-lifecycle.yml")
+    assert lifecycle["jobs"]["select-profile"]["steps"]
+    assert (
+        "TARGET_ROLE_ARN: "
+        + "$"
+        + "{{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}"
+        in lifecycle_text
+    )
+    assert "role-to-assume: " + "$" + "{{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}" in lifecycle_text
+    assert "Verify staging IAM inspection role assumption" in lifecycle_text
+    assert lifecycle_text.index("verify_effective_staging_lifecycle_policy.py") < lifecycle_text.index(
+        "Verify lifecycle role assumption before dispatch"
+    )
+    assert "if: inputs.action == 'apply-wake' || inputs.action == 'full-rehearsal'" in lifecycle_text
+
+
+def test_sleep_paths_do_not_depend_on_application_secret_values():
+    promote = _workflow_yaml("terraform-promote.yml")
+    promote_text = _workflow("terraform-promote.yml")
+    preflight = promote["jobs"]["staging-secret-payload-preflight"]
+    assert preflight["if"] == "inputs.profile == 'staging' && inputs.secret_preflight_required"
+    assert "inputs.staging_state == 'asleep'" in promote_text
+    assert "steps.reviewed.outputs.staging_state != 'asleep'" in promote_text
+
+    lifecycle_text = _workflow("staging-lifecycle.yml")
+    assert "-f staging_state=asleep" in lifecycle_text
+    assert "no verified sleep plan_run_id" in lifecycle_text
+
+
+def test_staging_reconciliation_discovers_all_managed_price_resources():
+    text = _workflow("staging-state-reconcile.yml")
+    for name in (
+        "stripe-price-alpha",
+        "stripe-price-beta",
+        "stripe-price-gamma",
+        "stripe-price-delta",
+        "stripe-price-epsilon",
+        "stripe-price-omicron",
+        "stripe-price-omega",
+    ):
+        assert name in text
+    assert "Discover pre-existing Stripe price secrets for state reconciliation" in text
+    assert "steps.discover-price-secrets.outputs.secret_names" in text
+    assert "ResourceNotFoundException" in text
+    assert "the secret value was not read" in text
+
+
+def test_pilot_smoke_validates_the_configured_stripe_price_catalog():
+    text = _workflow("staging-smoke.yml")
+    assert "Load pilot Stripe prices without logging values" in text
+    assert "Validate pilot Stripe prices against the configured test account" in text
+    assert "python scripts/validate_stripe.py --skip-webhook" in text
+    for variable in (
+        "STRIPE_PRICE_ALPHA",
+        "STRIPE_PRICE_BETA",
+        "STRIPE_PRICE_GAMMA",
+        "STRIPE_PRICE_DELTA",
+        "STRIPE_PRICE_EPSILON",
+        "STRIPE_PRICE_OMICRON",
+        "STRIPE_PRICE_OMEGA",
+    ):
+        assert variable in text
+    assert "load_optional_price" in text
+    assert "ResourceNotFoundException" in text
+
+
+def test_infrastructure_staging_audits_the_dedicated_plan_role():
+    text = _workflow("infrastructure.yml")
+    document = _workflow_yaml("infrastructure.yml")
+    assert (
+        "AWS_TERRAFORM_PLAN_ROLE_ARN: "
+        + "$"
+        + "{{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}"
+        in text
+    )
+    staging_gate = text[text.index("Verify effective staging plan IAM contract"):]
+    assert "--role-arn \"$AWS_TERRAFORM_PLAN_ROLE_ARN\"" in staging_gate
+    assert "--expected-role AetherStagingPlan" in staging_gate
+    assert (
+        "role-to-assume: "
+        + "${{ matrix.profile == 'staging' && secrets.AWS_TERRAFORM_PLAN_ROLE_ARN || secrets.AWS_INFRA_ROLE_ARN }}"
+        in text
+    )
+    triggers = document.get("on", document.get(True))
+    dispatch_inputs = triggers["workflow_dispatch"]["inputs"]
+    assert dispatch_inputs["deployment_lane"]["default"] == "pilot"
+    assert "--lane \"$DEPLOYMENT_LANE\"" in text
+    remote_plan = _job_script(document, "remote-plan")
+    assert 'plan_args+=("-var=deployment_lane=${DEPLOYMENT_LANE}")' in remote_plan
+
+
 def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
     workflow = _workflow("deploy.yml")
     assert "secrets.AETHER_AUTH0_CLIENT_ID" in workflow
@@ -902,7 +1022,8 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
             "TF_ML_IMAGE_DIGEST",
         }
     }
-    assert len(shared) == 11
+    assert len(shared) == 12
+    assert "AWS_TERRAFORM_PLAN_ROLE_ARN" in shared
     assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN" in probe_step["env"]
     assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN \\\n" in probe_step["run"]
 

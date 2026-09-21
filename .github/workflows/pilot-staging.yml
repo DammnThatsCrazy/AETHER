@@ -178,6 +178,35 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Configure AWS inspection credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # AetherStagingPlan carries the reviewed read-only IAM metadata
+          # permissions needed to inspect the secret role before assumption.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify staging IAM inspection role assumption
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+      - name: Verify the effective secret preflight IAM contract
+        env:
+          TARGET_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_apply_policy.py --role-arn "$TARGET_ROLE_ARN" --manifest config/staging_secret_preflight_iam_policy.yaml --expected-role AetherStagingSecretPreflight --required-policy-suffix AetherStagingSecretPreflightContract
       - name: Configure AWS secret preflight credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -198,11 +227,6 @@ jobs:
           caller_role="${caller_role%/*}"
           test "$caller_account" = "$expected_account" || { echo '::error::secret preflight account mismatch'; exit 1; }
           test "$caller_role" = AetherStagingSecretPreflight || { echo '::error::unexpected secret preflight role'; exit 1; }
-          python scripts/release/verify_effective_staging_apply_policy.py \
-            --role-arn "$EXPECTED_ROLE_ARN" \
-            --manifest config/staging_secret_preflight_iam_policy.yaml \
-            --expected-role AetherStagingSecretPreflight \
-            --required-policy-suffix AetherStagingSecretPreflightContract
       - name: Verify raw secret payloads and staging Stripe mode
         run: |
           set -euo pipefail
@@ -229,7 +253,9 @@ jobs:
       - name: Configure AWS read credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          # Amplify verification is metadata-only and belongs on the same
+          # dedicated read-only plan role used by the staging audit gates.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           aws-region: us-east-1
       - name: Verify all staging Amplify apps and current-head jobs
         env:
