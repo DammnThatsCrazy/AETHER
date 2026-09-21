@@ -789,14 +789,17 @@ statements:
   # Amplify's UpdateDomainAssociation API performs its dependent
   # iam:PassRole authorization even for manual mappings with auto-subdomains
   # disabled, and the request must name a concrete role target. Keep the role
-  # resource exact but do not add a condition that would reject the reviewed
-  # pilot/status mapping. The workflow passes this empty role explicitly and
-  # never enables automatic subdomains. Squarespace remains authoritative for
-  # DNS and this role has no Route 53 permissions.
+  # resource exact and restrict delegation to Amplify's service principal.
+  # The workflow passes this empty role explicitly and never enables automatic
+  # subdomains. Squarespace remains authoritative for DNS and this role has no
+  # Route 53 permissions.
   - sid: PassOnlyStagingAmplifyDomainRole
     actions:
       - iam:PassRole
     resource: arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role
+    conditions:
+      iam:PassedToService:
+        - amplify.amazonaws.com
     scope: staging-amplify-domain-role
 
 # The provider errors below are deliberately not represented as AWS IAM
