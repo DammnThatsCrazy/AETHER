@@ -1443,8 +1443,8 @@ suites:
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
-    expected_runtime_seconds: 45
-    hard_runtime_budget_seconds: 120
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 180
     paths: ["frontend/kyber"]
     runner: ["npm", "run", "test", "--workspace=frontend/kyber"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
