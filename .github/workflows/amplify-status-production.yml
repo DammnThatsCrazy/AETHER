@@ -295,7 +295,7 @@ jobs:
               --max-results 50 \
               --output json)"
             job_id="$(jq -r --arg expected "$EXPECTED_COMMIT_SHA" --argjson active "$active_statuses" \
-              '[.jobSummaries[] | select(.commitId == $expected and (.status as $status | $active | index($status) != null))] \
+              '[.jobSummaries[] | select(.commitId == $expected and (.status as $status | $active | index($status) != null))]
               | sort_by((.jobId | tonumber)) | last | .jobId // empty' <<<"$jobs_json")"
             if [ -n "$job_id" ]; then
               echo "Reusing active Amplify status deployment job ${job_id} for ${EXPECTED_COMMIT_SHA}."

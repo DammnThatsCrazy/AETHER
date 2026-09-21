@@ -30,7 +30,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:31e5e4f91a0b404e0d239db3127247990fcef706791ae9c46e812f7e4a9623cd"
+  ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
   ".github/workflows/pilot-staging.yml": "sha256:6f01ef3271178d33d925e108f7a0d71f2ad16240f345accbc866bc7f9533a47b"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
