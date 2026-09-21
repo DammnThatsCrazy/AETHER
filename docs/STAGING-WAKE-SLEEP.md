@@ -362,7 +362,8 @@ workflow disables Amplify auto-subdomain creation and explicitly passes the
 exact empty delegated IAM role on the association update. Amplify still
 performs its dependent `iam:PassRole` authorization for this update, so the
 staging policy grants that permission only on the exact dedicated empty
-`AETHER-staging-amplify-domain-role`, which has no Route 53 permissions.
+`AETHER-staging-amplify-domain-role` and constrains delegation to
+`amplify.amazonaws.com`; the role has no Route 53 permissions.
 Squarespace remains authoritative. A repository-backed status app is updated in place on
 later runs; it is never treated as a staging ECS or Terraform mutation.
 
