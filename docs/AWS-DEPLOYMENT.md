@@ -29,7 +29,12 @@ source_files:
   - config/staging_plan_iam_policy.yaml
   - config/staging_plan_trust_policy.json
   - config/staging_apply_iam_policy.yaml
+  - config/staging_application_delivery_iam_policy.yaml
+  - config/terraform_state_access_policy.yaml
+  - config/terraform_plan_state_access_policy.yaml
   - config/staging_lifecycle_iam_policy.yaml
+  - scripts/release/check_staging_application_delivery_policy.py
+  - scripts/release/check_terraform_state_access_policy.py
   - scripts/release/check_staging_lifecycle_policy.py
   - services/backend/Dockerfile
 canonical_owner: platform@aether
@@ -37,29 +42,34 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:8ec4732e36ddb39d2d02ddaddcf90a6da076703f15378f382c99082b9309bd5f"
-  ".github/workflows/staging-lifecycle.yml": "sha256:4ca6bc9d2ea9e2f79496a7bcd9ad0f06a78bf1fdddc6c274bc73d58dd573dd7a"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:7ba3e90901a412665672efee443f21f3dacb95044e4633f01c35c86fc77cdc18"
+  ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
-  ".github/workflows/terraform-promote.yml": "sha256:a0f6fc6d330226e1f8631e871ecbd1ebfff22b0a07a26a34cb1aa396a943c9ef"
-  "config/staging_apply_iam_policy.yaml": "sha256:d38ec524f261e3e749869437484a82995253ed591445362a9e8c445bcb967ced"
+  ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
+  "config/staging_application_delivery_iam_policy.yaml": "sha256:3a9c3ef5b991d6c592d51e0eb69dc29a28177fd42be95c72215ffc4e8e340e1a"
+  "config/staging_apply_iam_policy.yaml": "sha256:08b716e9ede615874b9e76767f6429f7f862df6535d3a3fe39bd37795e5b2f8c"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
-  "config/staging_plan_iam_policy.yaml": "sha256:ae444db9fb3ce03c0a230cfe1062610aac5e31dc39cf00fa51675b7cb6d53db9"
+  "config/staging_plan_iam_policy.yaml": "sha256:f1250de0704163b777dcbd345e7fa0f8e21e0caf4ef0bef761d123430795ae10"
   "config/staging_plan_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
+  "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
+  "config/terraform_state_access_policy.yaml": "sha256:474ebd2cd035d8c27e09e6fd20da2b752ba5171225d8c832ab1c1fcb72a724d6"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:a09051a5238503afe9910d1fd3546dade8727611626eb769251795628dc60eb4"
-  "scripts/release/check_amplify_app_contract.py": "sha256:6f5c338bb8abc8c497a927098d90c35ef5cb891352f2452d6b5f713681f13bad"
+  "scripts/release/check_amplify_app_contract.py": "sha256:44b7eaa4c06e205fe0930f09c5f81b6050a0e3c78fd7dceda0d51957e22b64f6"
+  "scripts/release/check_staging_application_delivery_policy.py": "sha256:6f5d20b382a79aa41946c75c6fcfc63ab69d1cf6628f7bc45dd38ea4b6807fc2"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:68d70ad0a009244251eb3caec93186be55415685600c3f590270ffb05e0680ea"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:c741b3fe45139c8493818dd2184c5ea530a44225eaa38a8ad435576d5273508e"
-  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:f4676aa2112dfd97b8edcdb0f93d3dd95dc16b0407e7518656f5edca363e9192"
-  "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
+  "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
+  "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
 ---
 
@@ -128,10 +138,12 @@ rehearsal credential is the encrypted staging admin bootstrap key, which is
 supplied out of band and never generated or echoed by CI.
 
 The lifecycle and apply contracts are intentionally separate. `AetherStagingPlan`
-owns remote plan and state-lock access and is the dedicated metadata-only
+owns remote plan and read-only state access and is the dedicated metadata-only
 inspector for the effective IAM contracts and Amplify app state. `AetherStagingDeploy`
-owns only the reviewed staging apply actions and must be verified by the
-effective-policy simulator before a mutation. `AetherStagingLifecycle` owns the
+realizes the reviewed staging apply actions plus the explicitly declared
+application-delivery and apply-state-backend supplemental contracts; the
+effective-policy simulator evaluates that complete union before a mutation.
+`AetherStagingLifecycle` owns the
 bounded awake lease, ECS inspection/update, migration-task execution, static
 publication, autoscaling-floor cleanup, and evidence collection; it cannot create IAM roles,
 read application secret values, or mutate non-staging resources. The checked-in
@@ -146,6 +158,10 @@ policy, render the checked-in manifest for the account and confirm it with IAM
 simulation; the live role must match the rendered statements exactly. State
 reconciliation is always followed by a fresh plan; no plan generated before an
 import or untaint may be reused.
+The effective-policy verifier also requires every attached `Allow` action
+pattern to be a subset of the reviewed action inventory; broad wildcards,
+`NotAction`, and unreviewed namespace grants fail closed even when the required
+actions are present.
 
 Secret payload validation is deliberately performed by the separate
 `AetherStagingSecretPreflight` OIDC role. Its reviewed policy grants only
@@ -161,14 +177,20 @@ pilot/full lane.
 
 The direct immutable application-delivery path has its own supplemental
 contract at `config/staging_application_delivery_iam_policy.yaml`. It covers
-only `ecs:RunTask`, `ecs:DescribeTasks`, and the S3 list/object operations used
-to publish the two protected SPAs; the workflow checks that contract before it
-assumes `AetherStagingDeploy`. The Terraform apply manifest remains the
-authority for infrastructure actions, so a new AWS CLI call in `deploy.yml`
-must be added deliberately to one of those two reviewed contracts.
+the exact ECR client/image-publish operations, `ecs:RunTask`,
+`ecs:DescribeTasks`, and the S3 list/object operations used to publish the two
+protected SPAs; the workflow checks that contract before it assumes
+`AetherStagingDeploy`. The apply role's state access is separately described by
+`config/terraform_state_access_policy.yaml`, while the read-only plan role uses
+`config/terraform_plan_state_access_policy.yaml`. The effective verifier loads
+all applicable contracts and rejects any attached Allow action outside their
+union, so a new AWS call or attachment must be added deliberately to a reviewed
+contract before a run can proceed.
 
 ECS task execution roles do not receive account-wide KMS access. The
-`KMSDecrypt` statement contains only `kms:Decrypt` and only the customer-managed
+`KMSDecrypt` statement contains only the required decrypt operation, while the
+separate staging apply role uses `kms:Encrypt` only for Secrets Manager
+re-encryption; both are restricted to the customer-managed
 CMKs that encrypt Secrets Manager values mounted by that profile: the shared
 application-secrets key, the active Aurora or legacy-RDS key when present, and
 the Redis key when that backend is enabled. Express-mode Aurora contributes no
@@ -205,6 +227,13 @@ Stripe test-mode prefixes before a plan or smoke path. The ECS module uses
 `lookup()` for secret ARN
 references so that `terraform import` can evaluate the full configuration
 graph while secrets are imported incrementally.
+If a legacy allowed secret was created under an AWS-managed key, an explicitly
+confirmed reconcile may re-encrypt it under the reviewed staging CMK before
+import (`MIGRATE-STAGING-SECRETS`); that path rechecks metadata and never reads
+or changes the plaintext value. Its apply-role decrypt grant is limited to
+Secrets Manager requests whose encryption context is the `aether/*` staging
+secret namespace, and the destination encrypt grant remains limited to the
+staging-tagged CMK.
 
 ## Scope — three different things live under `docs/archive/legacy-architecture/aws-deployment/`
 
@@ -466,7 +495,8 @@ checks the live branch-level API, Auth0, and custom status-shell origins before
 publishing apply evidence. The separate `amplify-status-production.yml`
 workflow binds the existing public status app to this repository, pins its
 `main` branch to `PRODUCTION`, deploys the exact main SHA, and verifies the
-production runtime links; its AWS caller is required to be
+production runtime links and the AVAILABLE verified `status` subdomain on
+`olympuslabsml.com`; its AWS caller is required to be
 `AetherStagingDeploy`.
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the

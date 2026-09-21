@@ -102,7 +102,11 @@ def main() -> int:
     errors += _simulate(args.role_arn, ["s3:ListBucket"], bucket, "profiles/")
     errors += _simulate(
         args.role_arn,
-        ["s3:GetBucketVersioning", "s3:GetBucketLocation"],
+        [
+            "s3:GetBucketVersioning",
+            "s3:GetBucketLocation",
+            "s3:GetEncryptionConfiguration",
+        ],
         bucket,
     )
     errors += _simulate(args.role_arn, ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], objects)

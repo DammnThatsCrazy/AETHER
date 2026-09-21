@@ -310,6 +310,7 @@ def test_provider_mocked_profile_plans_cover_the_untagged_aws_alias() -> None:
 
 def test_staging_secret_reconciliation_handles_absent_kms_alias() -> None:
     text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    assert "ref: ${{ inputs.expected_commit_sha || github.sha }}" in text
     metadata_start = text.index("Validate existing staging secret metadata before state mutation")
     metadata_end = text.index("Initialize the staging state backend", metadata_start)
     metadata = text[metadata_start:metadata_end]
@@ -325,6 +326,10 @@ def test_staging_secret_reconciliation_handles_absent_kms_alias() -> None:
     assert "KeyMetadata.Arn" in metadata
     assert "leave it for the fresh reviewed plan to create" in metadata
     assert "leaving its Terraform address unmanaged" in imports
+    assert "REQUIRED_STAGING_SECRET_NAMES" in metadata
+    assert "required_secret_names" in text
+    assert "Optional contract-tier metadata" in metadata
+    assert metadata.count("has no AWSCURRENT version") == 1
 
 
 def test_role_name_assertions_are_profile_aware() -> None:
@@ -346,8 +351,29 @@ def test_staging_plan_checks_effective_role_policy_before_planning() -> None:
     ]
     assert "verify_effective_staging_apply_policy.py" in plan_check
     assert "config/staging_plan_iam_policy.yaml" in plan_check
+    assert "config/terraform_plan_state_access_policy.yaml" in plan_check
+    assert "--state-bucket" in plan_check
+    assert "--state-lock-table" in plan_check
+    assert "--state-profile" in plan_check
     assert "--expected-role AetherStagingPlan" in plan_check
     assert "--required-policy-suffix AetherStagingPlanContract" in plan_check
+    checkout = promote[promote.index("  plan:") : promote.index("  apply:")]
+    assert "ref: ${{ inputs.expected_commit_sha || github.sha }}" in checkout
+
+
+def test_staging_apply_checks_effective_delivery_and_state_contracts() -> None:
+    promote = PROMOTE.read_text(encoding="utf-8")
+    apply_check = promote[
+        promote.index("Verify effective staging apply policy") : promote.index(
+            "Verify required staging secrets have current versions"
+        )
+    ]
+    assert "config/staging_apply_iam_policy.yaml" in apply_check
+    assert "config/staging_application_delivery_iam_policy.yaml" in apply_check
+    assert "config/terraform_state_access_policy.yaml" in apply_check
+    assert "--state-bucket" in apply_check
+    assert "--state-lock-table" in apply_check
+    assert "--state-profile" in apply_check
 
 
 def test_effective_policy_checker_matches_resources_conditions_and_denies() -> None:
@@ -608,6 +634,21 @@ def test_effective_policy_checker_constrains_required_action_grants() -> None:
         ],
         required,
     ) == []
+    # The effective policy must not gain an unreviewed wildcard or service
+    # action merely because its resource is already constrained. The reviewed
+    # operation set is the action allow-list, not just a resource contract.
+    assert module._required_action_scope_errors(
+        [{"Effect": "Allow", "Action": "*", "Resource": "*"}],
+        required,
+    )
+    assert module._required_action_scope_errors(
+        [{"Effect": "Allow", "Action": "iam:*", "Resource": "*"}],
+        required,
+    )
+    assert module._required_action_scope_errors(
+        [{"Effect": "Allow", "NotAction": "kms:Decrypt", "Resource": "*"}],
+        required,
+    )
 
     pass_role_required = [
         (
@@ -690,7 +731,13 @@ def test_state_access_contract_is_explicit_and_checked() -> None:
     assert result.returncode == 0, result.stderr + result.stdout
     manifest = yaml.safe_load(STATE_POLICY.read_text(encoding="utf-8"))
     actions = {action for statement in manifest["statements"] for action in statement["actions"]}
-    assert {"s3:ListBucket", "s3:GetObject", "s3:PutObject", "dynamodb:DeleteItem"} <= actions
+    assert {
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:GetEncryptionConfiguration",
+        "dynamodb:DeleteItem",
+    } <= actions
     assert manifest["state_lock_table"] == "aether-terraform-locks"
     assert "aether-terraform-locks" in STATE_POLICY.read_text(encoding="utf-8")
     list_bucket = next(s for s in manifest["statements"] if "s3:ListBucket" in s["actions"])
@@ -701,6 +748,7 @@ def test_state_access_contract_is_explicit_and_checked() -> None:
     verifier = STATE_ROLE_CHECKER.read_text(encoding="utf-8")
     assert "s3:GetBucketVersioning" in verifier
     assert "s3:GetBucketLocation" in verifier
+    assert "s3:GetEncryptionConfiguration" in verifier
 
 
 def test_state_role_checker_accepts_the_reviewed_staging_backend_alias() -> None:
@@ -1023,8 +1071,12 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
         "ecr:SetRepositoryPolicy",
         "secretsmanager:CreateSecret",
         "secretsmanager:RotateSecret",
+        "secretsmanager:CancelRotateSecret",
         "kms:GenerateDataKey",
         "kms:Decrypt",
+        "kms:Encrypt",
+        "rds:DescribeGlobalClusters",
+        "application-autoscaling:ListTagsForResource",
         "lambda:CreateFunction",
         "iam:CreateRole",
         "events:PutRule",
@@ -1111,6 +1163,10 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "secretsmanager:UpdateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "secretsmanager:DeleteSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "secretsmanager:RotateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:CancelRotateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "rds:DescribeGlobalClusters": "*",
+        "application-autoscaling:ListTagsForResource":
+            "arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "ssm:ListTagsForResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
@@ -1120,6 +1176,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "kms:ListAliases": "*",
         "kms:GenerateDataKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:Decrypt": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:Encrypt": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "events:PutRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "events:DeleteRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
@@ -1162,6 +1219,16 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
             assert {tuple(sorted((s.get("conditions") or {}).items())) for s in matches} == {
                 (("aws:RequestTag/Environment", "staging"),),
                 (("aws:ResourceTag/Environment", "staging"),),
+            }
+        elif action == "kms:Decrypt":
+            staging = [s for s in matches if s["resource"] == resource]
+            legacy = [s for s in matches if s["resource"] == "*"]
+            assert len(staging) == 1
+            assert (staging[0].get("conditions") or {}).get("aws:ResourceTag/Environment") == "staging"
+            assert len(legacy) == 1
+            assert legacy[0]["conditions"] == {
+                "kms:ViaService": "secretsmanager.us-east-1.amazonaws.com",
+                "kms:EncryptionContext:SecretARN": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
             }
         else:
             assert len(matches) == 1

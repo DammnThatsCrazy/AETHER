@@ -638,8 +638,8 @@ jobs:
           reconcile_staging_state() {
             local secret_names="$1"
             local reconcile_workflow=staging-state-reconcile.yml
-            local reconcile_before_id reconcile_run_id reconcile_status reconcile_conclusion
-            local reconcile_discover_deadline reconcile_wait_deadline
+            local reconcile_output reconcile_run_id reconcile_status reconcile_conclusion
+            local reconcile_wait_deadline
             local -a reconcile_args
             reconcile_args=(
               -f staging_amplify_domain_name=staging.olympuslabsml.com
@@ -654,28 +654,18 @@ jobs:
               reconcile_args+=(
                 -f staging_secret_names="$secret_names"
                 -f staging_secrets_kms_key_arn="$STAGING_SECRETS_KMS_KEY_ARN"
+                -f migrate_legacy_secret_kms=true
+                -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS
               )
             fi
-            reconcile_before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${reconcile_workflow}/runs?per_page=1" \
-              --jq '.workflow_runs[0].id // 0')"
-            gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}"
-            reconcile_run_id=''
-            reconcile_discover_deadline="$(( $(date -u +%s) + 300 ))"
-            while [ "$(date -u +%s)" -lt "$reconcile_discover_deadline" ]; do
-              mapfile -t reconcile_candidates < <(gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/${reconcile_workflow}/runs?event=workflow_dispatch&per_page=50" \
-                --jq "[.workflow_runs[] | select(.id > ${reconcile_before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-              if [ "${#reconcile_candidates[@]}" -gt 1 ]; then
-                echo "::error::ambiguous ${reconcile_workflow} runs after dispatch (${reconcile_candidates[*]}); refusing to guess"
-                exit 1
-              fi
-              if [ "${#reconcile_candidates[@]}" -eq 1 ]; then
-                reconcile_run_id="${reconcile_candidates[0]}"
-                break
-              fi
-              sleep 10
-            done
-            test -n "$reconcile_run_id" || { echo "::error::${reconcile_workflow} dispatch never appeared"; exit 1; }
+            reconcile_output="$(gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}" 2>&1)"
+            printf '%s\n' "$reconcile_output"
+            reconcile_run_id="$(printf '%s\n' "$reconcile_output" \
+              | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+            test -n "$reconcile_run_id" || {
+              echo "::error::${reconcile_workflow} dispatch did not return its created run URL; refusing ambiguous correlation"
+              exit 1
+            }
             reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
               reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status')"
@@ -699,35 +689,21 @@ jobs:
           else
             reconcile_staging_state ''
           fi
-          # Run IDs increase monotonically per repository, so anything created
-          # after this watermark and on our ref is a candidate for our dispatch.
-          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
-            --jq '.workflow_runs[0].id // 0')"
-          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f staging_state="$STAGING_STATE" \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
-            -f expected_commit_sha="$INTENDED_RELEASE_SHA"
-          run_id=''
-          discover_deadline="$(( $(date -u +%s) + 300 ))"
-          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
-            mapfile -t candidates < <(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
-              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-            if [ "${#candidates[@]}" -gt 1 ]; then
-              echo "::error::ambiguous reviewed-plan runs (${candidates[*]}); refusing to guess"
-              exit 1
-            fi
-            if [ "${#candidates[@]}" -eq 1 ]; then
-              run_id="${candidates[0]}"
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id" || { echo '::error::dispatched reviewed plan never appeared'; exit 1; }
+            -f expected_commit_sha="$INTENDED_RELEASE_SHA" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || {
+            echo '::error::reviewed plan dispatch did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
           echo "reviewed plan run: ${run_id}"
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
@@ -1091,31 +1067,19 @@ jobs:
           # has already downloaded, checksummed and policy-validated.
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified plan_checksum'; exit 1; }
-          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
-            --jq '.workflow_runs[0].id // 0')"
-          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f plan_run_id="$PLAN_RUN_ID" \
-            -f plan_checksum="$PLAN_CHECKSUM"
-          run_id=''
-          discover_deadline="$(( $(date -u +%s) + 300 ))"
-          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
-            mapfile -t candidates < <(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
-              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-            if [ "${#candidates[@]}" -gt 1 ]; then
-              echo "::error::ambiguous reviewed-apply runs (${candidates[*]}); refusing to guess"
-              exit 1
-            fi
-            if [ "${#candidates[@]}" -eq 1 ]; then
-              run_id="${candidates[0]}"
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id" || { echo '::error::dispatched reviewed apply never appeared'; exit 1; }
+            -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || {
+            echo '::error::dispatched reviewed apply did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
           echo "reviewed apply run: ${run_id}"
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
@@ -2299,8 +2263,8 @@ jobs:
           reconcile_staging_state() {
             local secret_names="$1"
             local reconcile_workflow=staging-state-reconcile.yml
-            local reconcile_before_id reconcile_run_id reconcile_status reconcile_conclusion
-            local reconcile_discover_deadline reconcile_wait_deadline
+            local reconcile_output reconcile_run_id reconcile_status reconcile_conclusion
+            local reconcile_wait_deadline
             local -a reconcile_args
             reconcile_args=(
               -f staging_amplify_domain_name=staging.olympuslabsml.com
@@ -2315,28 +2279,18 @@ jobs:
               reconcile_args+=(
                 -f staging_secret_names="$secret_names"
                 -f staging_secrets_kms_key_arn="$STAGING_SECRETS_KMS_KEY_ARN"
+                -f migrate_legacy_secret_kms=true
+                -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS
               )
             fi
-            reconcile_before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${reconcile_workflow}/runs?per_page=1" \
-              --jq '.workflow_runs[0].id // 0')"
-            gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}"
-            reconcile_run_id=''
-            reconcile_discover_deadline="$(( $(date -u +%s) + 300 ))"
-            while [ "$(date -u +%s)" -lt "$reconcile_discover_deadline" ]; do
-              mapfile -t reconcile_candidates < <(gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/${reconcile_workflow}/runs?event=workflow_dispatch&per_page=50" \
-                --jq "[.workflow_runs[] | select(.id > ${reconcile_before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-              if [ "${#reconcile_candidates[@]}" -gt 1 ]; then
-                echo "::error::ambiguous ${reconcile_workflow} runs after dispatch (${reconcile_candidates[*]}); refusing to guess"
-                exit 1
-              fi
-              if [ "${#reconcile_candidates[@]}" -eq 1 ]; then
-                reconcile_run_id="${reconcile_candidates[0]}"
-                break
-              fi
-              sleep 10
-            done
-            test -n "$reconcile_run_id" || { echo "::error::${reconcile_workflow} dispatch never appeared"; exit 1; }
+            reconcile_output="$(gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}" 2>&1)"
+            printf '%s\n' "$reconcile_output"
+            reconcile_run_id="$(printf '%s\n' "$reconcile_output" \
+              | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+            test -n "$reconcile_run_id" || {
+              echo "::error::${reconcile_workflow} dispatch did not return its created run URL; refusing ambiguous correlation"
+              exit 1
+            }
             reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
               reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status')"
@@ -2360,9 +2314,7 @@ jobs:
           else
             reconcile_staging_state ''
           fi
-          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
-            --jq '.workflow_runs[0].id // 0')"
-          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
@@ -2370,24 +2322,14 @@ jobs:
             -f secret_preflight_required=false \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
-            -f expected_commit_sha="$EXPECTED_COMMIT_SHA"
-          run_id=''
-          discover_deadline="$(( $(date -u +%s) + 300 ))"
-          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
-            mapfile -t candidates < <(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
-              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-            if [ "${#candidates[@]}" -gt 1 ]; then
-              echo "::error::ambiguous reviewed sleep-plan runs (${candidates[*]}); refusing to guess"
-              exit 1
-            fi
-            if [ "${#candidates[@]}" -eq 1 ]; then
-              run_id="${candidates[0]}"
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id" || { echo '::error::dispatched reviewed sleep plan never appeared'; exit 1; }
+            -f expected_commit_sha="$EXPECTED_COMMIT_SHA" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || {
+            echo '::error::reviewed sleep plan dispatch did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
@@ -2544,32 +2486,20 @@ jobs:
             || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified sleep plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified sleep plan_checksum'; exit 1; }
-          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
-            --jq '.workflow_runs[0].id // 0')"
-          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f secret_preflight_required=false \
             -f plan_run_id="$PLAN_RUN_ID" \
-            -f plan_checksum="$PLAN_CHECKSUM"
-          run_id=''
-          discover_deadline="$(( $(date -u +%s) + 300 ))"
-          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
-            mapfile -t candidates < <(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
-              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-            if [ "${#candidates[@]}" -gt 1 ]; then
-              echo "::error::ambiguous reviewed sleep-apply runs (${candidates[*]}); refusing to guess"
-              exit 1
-            fi
-            if [ "${#candidates[@]}" -eq 1 ]; then
-              run_id="${candidates[0]}"
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id" || { echo '::error::dispatched reviewed sleep apply never appeared'; exit 1; }
+            -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || {
+            echo '::error::dispatched reviewed sleep apply did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do

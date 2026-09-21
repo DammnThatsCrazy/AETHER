@@ -74,6 +74,7 @@ statements:
   - sid: ConfigureStagingSecretRotation
     actions:
       - secretsmanager:RotateSecret
+      - secretsmanager:CancelRotateSecret
     resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
     scope: staging-name-prefix
   - sid: TagStagingParameters
@@ -142,10 +143,22 @@ statements:
     actions:
       - kms:GenerateDataKey
       - kms:Decrypt
+      - kms:Encrypt
     resource: arn:aws:kms:us-east-1:${account_id}:key/*
     scope: staging-kms-resource-tag
     conditions:
       aws:ResourceTag/Environment: staging
+  - sid: ReencryptLegacyStagingSecrets
+    actions:
+      - kms:Decrypt
+    resource: '*'
+    scope: staging-secret-legacy-rekey
+    conditions:
+      kms:ViaService: secretsmanager.us-east-1.amazonaws.com
+      kms:EncryptionContext:SecretARN: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
+    condition_operators:
+      kms:ViaService: StringEquals
+      kms:EncryptionContext:SecretARN: ArnLike
   - sid: EnableStagingKeyRotation
     actions:
       - kms:EnableKeyRotation
@@ -520,6 +533,7 @@ statements:
       - rds:DescribeDBClusterParameterGroups
       - rds:DescribeDBClusterParameters
       - rds:DescribeDBInstances
+      - rds:DescribeGlobalClusters
       - rds:ListTagsForResource
     resource: '*'
     scope: staging-write-required-by-api
@@ -638,6 +652,11 @@ statements:
   - sid: RemoveStagingAutoScalingTags
     actions:
       - application-autoscaling:UntagResource
+    resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
+    scope: staging-autoscaling-targets
+  - sid: ReadStagingAutoScalingTags
+    actions:
+      - application-autoscaling:ListTagsForResource
     resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
     scope: staging-autoscaling-targets
   # ----- SSM Parameters (root main.tf) -----

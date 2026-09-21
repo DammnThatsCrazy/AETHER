@@ -25,6 +25,7 @@ from typing import Any, NoReturn
 
 REPOSITORY = "https://github.com/DammnThatsCrazy/AETHER"
 STAGING_DOMAIN = "staging.olympuslabsml.com"
+PRODUCTION_DOMAIN = "olympuslabsml.com"
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
@@ -166,6 +167,7 @@ def _check_app(
     required_branch_environment_keys: tuple[str, ...] = (),
     check_job_provenance: bool = True,
     check_domain: bool = True,
+    domain_name: str | None = None,
     client: AwsCall,
 ) -> list[str]:
     errors: list[str] = []
@@ -207,6 +209,8 @@ def _check_app(
                 errors.append(f"Amplify app {name} latest main job is not for the reviewed commit")
 
     if check_domain and subdomain_prefix is not None:
+        requested_domain = domain_name or STAGING_DOMAIN
+        domain_label = "staging" if requested_domain == STAGING_DOMAIN else "production"
         association_payload = client(
             [
                 "amplify",
@@ -214,13 +218,13 @@ def _check_app(
                 "--app-id",
                 app_id,
                 "--domain-name",
-                STAGING_DOMAIN,
+                requested_domain,
             ]
         )
         association = _mapping(association_payload.get("domainAssociation"))
         if association.get("domainStatus") != "AVAILABLE":
             errors.append(
-                f"Amplify app {name} staging domain association is not AVAILABLE"
+                f"Amplify app {name} {domain_label} domain association is not AVAILABLE"
             )
         subdomains = association.get("subDomains")
         matching = [
@@ -232,7 +236,7 @@ def _check_app(
         ] if isinstance(subdomains, list) else []
         if not matching or matching[0].get("verified") is not True:
             errors.append(
-                f"Amplify app {name} staging domain lacks an AVAILABLE {subdomain_prefix} subdomain"
+                f"Amplify app {name} {domain_label} domain lacks an AVAILABLE {subdomain_prefix} subdomain"
             )
     return errors
 
@@ -282,8 +286,9 @@ def contract_errors(
                 app=apps.get(STATUS_APP),
                 branch_stage="PRODUCTION",
                 expected_commit=expected_commit,
-                subdomain_prefix=None,
+                subdomain_prefix="status",
                 expected_branch_environment=PRODUCTION_STATUS_ENVIRONMENT,
+                domain_name=PRODUCTION_DOMAIN,
                 client=client,
             )
         )

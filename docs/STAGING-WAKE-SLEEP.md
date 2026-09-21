@@ -31,11 +31,11 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:8ec4732e36ddb39d2d02ddaddcf90a6da076703f15378f382c99082b9309bd5f"
-  ".github/workflows/pilot-staging.yml": "sha256:100c4c73873dc64ae13f3987dfce4b26a771a6e031992f5a6a9d231bd4d559d2"
-  ".github/workflows/staging-lifecycle.yml": "sha256:4ca6bc9d2ea9e2f79496a7bcd9ad0f06a78bf1fdddc6c274bc73d58dd573dd7a"
+  ".github/workflows/pilot-staging.yml": "sha256:6f01ef3271178d33d925e108f7a0d71f2ad16240f345accbc866bc7f9533a47b"
+  ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
-  ".github/workflows/terraform-promote.yml": "sha256:a0f6fc6d330226e1f8631e871ecbd1ebfff22b0a07a26a34cb1aa396a943c9ef"
+  ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
@@ -43,7 +43,7 @@ source_hashes:
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
-  "scripts/release/check_amplify_app_contract.py": "sha256:6f5c338bb8abc8c497a927098d90c35ef5cb891352f2452d6b5f713681f13bad"
+  "scripts/release/check_amplify_app_contract.py": "sha256:44b7eaa4c06e205fe0930f09c5f81b6050a0e3c78fd7dceda0d51957e22b64f6"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
@@ -197,6 +197,11 @@ Epsilon, Omicron, and Omega remain contract-tier operator mappings and are not
 part of the self-service pilot critical path. The secure bootstrap rejects
 malformed or placeholder values before writing them; the workflow preflight
 reads metadata only and never prints or invents a price ID.
+If one of the four self-service price secrets predates the staging CMK, the pilot
+reconcile path can re-encrypt it with an explicit
+`migrate_legacy_secret_kms=true` and `MIGRATE-STAGING-SECRETS` confirmation;
+the migration uses metadata-only Secrets Manager calls and does not read the
+secret value.
 
 The pilot wrapper treats `plan-sleep` and `apply-sleep` as cleanup actions:
 after the contract job, it skips credential, secret-payload and Amplify
@@ -220,9 +225,10 @@ reviewed-plan machinery as a production apply.
    `backend_image_digest` must match it exactly.
 2. **Dispatch the reviewed plan** with `action=plan`, `profile=staging`,
    `deployment_lane=full|pilot`, `staging_state=awake` and both digests. Run
-   discovery polls for 300 s;
-   **more than one candidate run is a hard failure** rather than a guess.
-   Completion is awaited up to `promote_timeout_minutes`.
+   the workflow-dispatch command and capture the exact run URL returned by
+   GitHub. If GitHub does not return a run ID, the handoff fails closed rather
+   than guessing from concurrent-run history. Completion is awaited up to
+   `promote_timeout_minutes`.
 3. **Verify the plan artifact.** All 16 `reviewed.*` files must be present and
    non-empty; `reviewed.profile == staging`;
    `reviewed.state-key == profiles/staging/terraform.tfstate`;

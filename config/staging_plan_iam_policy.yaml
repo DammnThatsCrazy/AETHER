@@ -91,6 +91,13 @@ statements:
       - amplify:GetBranch
     resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
     scope: staging-amplify-branches
+  - sid: ReadStagingAmplifyTags
+    actions:
+      - amplify:ListTagsForResource
+    resource:
+      - arn:aws:amplify:us-east-1:${account_id}:apps/*
+      - arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-apps-and-branches
   - sid: ReadStagingAmplifyDomains
     actions:
       - amplify:GetDomainAssociation
@@ -123,6 +130,11 @@ statements:
       - application-autoscaling:DescribeScalingPolicies
     resource: '*'
     scope: global-read-required-by-api
+  - sid: ReadStagingAutoScalingTags
+    actions:
+      - application-autoscaling:ListTagsForResource
+    resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
+    scope: staging-autoscaling-targets
 
   # ----- IAM roles read (module.ecs, module.ml_drift_lambda) -----
   - sid: ReadStagingTaskRoles

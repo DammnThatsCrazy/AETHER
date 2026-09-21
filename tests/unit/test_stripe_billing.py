@@ -471,6 +471,69 @@ class TestWebhookHandling:
             acct = asyncio.run(stripe_repository.get_billing_account("t-async-failed"))
             assert acct["subscription_status"] == "past_due"
 
+    def test_async_checkout_payment_failure_upserts_mapping_before_state_update(self, monkeypatch):
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            wh = importlib.import_module("services.admin.webhook_routes")
+            mapping = AsyncMock()
+            state = AsyncMock()
+            monkeypatch.setattr(wh.stripe_repository, "update_customer_mapping", mapping)
+            monkeypatch.setattr(wh.stripe_repository, "update_subscription_state", state)
+
+            asyncio.run(wh._handle_checkout_session_async_payment_failed({
+                "object": {
+                    "customer": "cus_async_failed_first",
+                    "subscription": "sub_async_failed_first",
+                    "client_reference_id": "t-async-failed-first",
+                    "metadata": {
+                        "tenant_id": "t-async-failed-first",
+                        "contact_email": "pilot@example.com",
+                    },
+                },
+            }))
+
+            mapping.assert_awaited_once_with(
+                tenant_id="t-async-failed-first",
+                stripe_customer_id="cus_async_failed_first",
+                stripe_subscription_id="sub_async_failed_first",
+                contact_email="pilot@example.com",
+            )
+            state.assert_awaited_once_with(
+                tenant_id="t-async-failed-first",
+                stripe_subscription_id="sub_async_failed_first",
+                subscription_status="past_due",
+            )
+
+    def test_async_checkout_activation_email_uses_requested_tier_before_default(self, monkeypatch):
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            from shared.email import email_service
+
+            stripe_repository._reset_in_memory_for_tests()
+            send_email = AsyncMock()
+            monkeypatch.setattr(email_service, "send_email", send_email)
+            wh = importlib.import_module("services.admin.webhook_routes")
+            asyncio.run(wh._handle_checkout_session_async_payment_succeeded({
+                "object": {
+                    "customer": "cus_async_gamma",
+                    "subscription": "sub_async_gamma",
+                    "client_reference_id": "t-async-gamma",
+                    "metadata": {
+                        "tenant_id": "t-async-gamma",
+                        "requested_plan_tier": "gamma",
+                        "contact_email": "pilot@example.com",
+                    },
+                },
+            }))
+
+            send_email.assert_awaited_once()
+            assert send_email.await_args.kwargs["subject"] == (
+                "AETHER subscription activated — gamma"
+            )
+
     def test_invoice_paid_upserts_paid_invoice(self, monkeypatch):
         self._setup(monkeypatch)
         with backend_path():

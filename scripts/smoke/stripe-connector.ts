@@ -128,7 +128,9 @@ function stripeRequest(
       'STRIPE_SECRET_KEY must be a Stripe test-mode secret key (sk_test_...)'
     );
   }
-  const url = new URL(path, 'https://api.stripe.com/v1/');
+  // URL treats a leading slash as an absolute host path. Normalize it away so
+  // every request remains under Stripe's versioned /v1 API prefix.
+  const url = new URL(path.replace(/^\/+/, ''), 'https://api.stripe.com/v1/');
   return new Promise((resolve, reject) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(payload ?? {})) {

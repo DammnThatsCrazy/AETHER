@@ -1,9 +1,12 @@
 name: Reconcile staging Terraform state
 
-# This is a deliberately manual, import-only escape hatch for resources that
+# This is a deliberately manual reconciliation escape hatch for resources that
 # already exist in the staging account but are absent from the reviewed state.
-# It never deletes, replaces, or applies Terraform resources. Importing changes
-# state, so the reviewed plan must be regenerated after this workflow succeeds.
+# It never deletes, replaces, or applies Terraform resources. When explicitly
+# confirmed, it may re-encrypt a legacy AWS-managed-key staging secret under
+# the reviewed CMK without reading or changing its plaintext value. Importing
+# or re-encrypting changes state, so the reviewed plan must be regenerated after
+# this workflow succeeds.
 
 on:
   workflow_dispatch:
@@ -30,6 +33,15 @@ on:
         type: string
       staging_secrets_kms_key_arn:
         description: "Reviewed staging Secrets Manager CMK ARN or alias; required when importing staging secrets"
+        required: false
+        type: string
+      migrate_legacy_secret_kms:
+        description: "Allow legacy AWS-managed-key staging secrets to be re-encrypted under the reviewed CMK"
+        required: false
+        default: false
+        type: boolean
+      confirm_legacy_secret_kms:
+        description: "Type MIGRATE-STAGING-SECRETS when the legacy secret re-encryption path is reviewed"
         required: false
         type: string
       staging_amplify_domain_name:
@@ -72,6 +84,10 @@ jobs:
     environment: staging-terraform
     steps:
       - uses: actions/checkout@v4
+        with:
+          # State reconciliation must use the same source commit whose image
+          # provenance and reviewed Terraform state are being repaired.
+          ref: ${{ inputs.expected_commit_sha || github.sha }}
       - uses: hashicorp/setup-terraform@v3
       - uses: actions/setup-python@v5
         with:
@@ -156,17 +172,33 @@ jobs:
         id: discover-price-secrets
         env:
           REQUESTED_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          MIGRATE_LEGACY_SECRET_KMS: ${{ inputs.migrate_legacy_secret_kms }}
+          CONFIRM_LEGACY_SECRET_KMS: ${{ inputs.confirm_legacy_secret_kms }}
         run: |
           set -euo pipefail
           normalize_secret_names() {
             printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | sort -u
           }
+          requested_names_file="$(mktemp)"
           names_file="$(mktemp)"
           metadata_file=""
           error_file=""
-          trap 'rm -f "$names_file" "$metadata_file" "$error_file"' EXIT
-          normalize_secret_names "$REQUESTED_SECRET_NAMES" >"$names_file"
+          trap 'rm -f "$requested_names_file" "$names_file" "$metadata_file" "$error_file"' EXIT
+          normalize_secret_names "$REQUESTED_SECRET_NAMES" >"$requested_names_file"
+          cp "$requested_names_file" "$names_file"
           discovered_kms=""
+          migrate_legacy_secret_kms="${MIGRATE_LEGACY_SECRET_KMS:-false}"
+          case "$migrate_legacy_secret_kms" in
+            true|false) ;;
+            *) echo '::error::migrate_legacy_secret_kms must be a boolean'; exit 1 ;;
+          esac
+          if [ "$migrate_legacy_secret_kms" = true ]; then
+            test "${CONFIRM_LEGACY_SECRET_KMS:-}" = "MIGRATE-STAGING-SECRETS" || {
+              echo '::error::legacy secret re-encryption requires confirmation MIGRATE-STAGING-SECRETS'; exit 1;
+            }
+          elif [ -n "${CONFIRM_LEGACY_SECRET_KMS:-}" ]; then
+            echo '::error::confirm_legacy_secret_kms is only valid with migrate_legacy_secret_kms=true'; exit 1
+          fi
           for name in \
             stripe-price-alpha stripe-price-beta stripe-price-gamma stripe-price-delta \
             stripe-price-epsilon stripe-price-omicron stripe-price-omega
@@ -182,9 +214,28 @@ jobs:
                 echo "::error::discovered secret metadata name '$actual_name' does not match aether/$name"; exit 1;
               }
               kms_ref="$(jq -r '.KmsKeyId // empty' "$metadata_file")"
-              test -n "$kms_ref" || {
-                echo "::error::existing aether/$name has no customer-managed KMS key; refusing an unmanaged Terraform collision"; exit 1;
-              }
+              if [ -z "$kms_ref" ]; then
+                test "$migrate_legacy_secret_kms" = true || {
+                  echo "::error::existing aether/$name uses the AWS-managed Secrets Manager key; review and enable the explicit legacy re-encryption path before import"; exit 1;
+                }
+                test -n "${STAGING_SECRETS_KMS_KEY_ARN:-}" || {
+                  echo '::error::a reviewed staging Secrets Manager CMK is required to re-encrypt a legacy secret'; exit 1;
+                }
+                aws secretsmanager update-secret \
+                  --region us-east-1 \
+                  --secret-id "aether/$name" \
+                  --kms-key-id "$STAGING_SECRETS_KMS_KEY_ARN" \
+                  --query ARN --output text >/dev/null
+                aws secretsmanager describe-secret \
+                  --region us-east-1 \
+                  --secret-id "aether/$name" \
+                  --output json >"$metadata_file"
+                kms_ref="$(jq -r '.KmsKeyId // empty' "$metadata_file")"
+                test -n "$kms_ref" || {
+                  echo "::error::legacy aether/$name re-encryption did not produce a customer-managed KMS reference"; exit 1;
+                }
+                echo "Re-encrypted legacy metadata for aether/$name under the reviewed staging CMK; the secret value was not read or changed."
+              fi
               kms_arn="$(aws kms describe-key --region us-east-1 --key-id "$kms_ref" --query 'KeyMetadata.Arn' --output text)"
               test -n "$kms_arn" && test "$kms_arn" != None || {
                 echo "::error::could not resolve the KMS key for aether/$name"; exit 1;
@@ -219,7 +270,9 @@ jobs:
             fi
           fi
           effective_names="$(sort -u "$names_file" | paste -sd, -)"
+          requested_names="$(sort -u "$requested_names_file" | paste -sd, -)"
           printf 'secret_names=%s\n' "$effective_names" >>"$GITHUB_OUTPUT"
+          printf 'required_secret_names=%s\n' "$requested_names" >>"$GITHUB_OUTPUT"
       - name: Verify effective Terraform state permissions
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -368,6 +421,7 @@ jobs:
         if: steps.discover-price-secrets.outputs.secret_names != ''
         env:
           STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
+          REQUIRED_STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.required_secret_names }}
         run: |
           set -euo pipefail
           test -n "$STAGING_SECRETS_KMS_KEY_ARN" || {
@@ -414,6 +468,7 @@ jobs:
             printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
           }
           normalized_secrets="$(normalize_secret_names "$STAGING_SECRET_NAMES")"
+          required_secrets="$(normalize_secret_names "$REQUIRED_STAGING_SECRET_NAMES")"
           test -n "$normalized_secrets" || {
             echo '::error::staging_secret_names must contain at least one secret key'; exit 1;
           }
@@ -426,7 +481,7 @@ jobs:
             describe_file="$(mktemp)"
             aws secretsmanager describe-secret --secret-id "aether/$name" --output json >"$describe_file" || {
               rm -f "$describe_file"
-              echo "::error::required staging secret aether/$name was not found or is not readable"; exit 1;
+              echo "::error::existing staging secret aether/$name was not found or is not readable"; exit 1;
             }
             actual_name="$(jq -r '.Name // empty' "$describe_file")"
             test "$actual_name" = "aether/$name" || {
@@ -451,14 +506,21 @@ jobs:
               rm -f "$describe_file"
               echo "::error::secret aether/$name is encrypted with a different CMK; refusing silent re-encryption"; exit 1;
             }
-            jq -e 'any((.VersionIdsToStages // {})[]; index("AWSCURRENT") != null)' "$describe_file" >/dev/null || {
-              rm -f "$describe_file"
-              echo "::error::secret aether/$name has no AWSCURRENT version; populate it through the secure secret bootstrap before import"; exit 1;
-            }
             jq -e '(.DeletedDate // null) == null' "$describe_file" >/dev/null || {
               rm -f "$describe_file"
               echo "::error::secret aether/$name is pending deletion; restore or replace it before import"; exit 1;
             }
+            case ",$required_secrets," in
+              *,${name},*)
+                jq -e 'any((.VersionIdsToStages // {})[]; index("AWSCURRENT") != null)' "$describe_file" >/dev/null || {
+                  rm -f "$describe_file"
+                  echo "::error::required secret aether/$name has no AWSCURRENT version; populate it through the secure secret bootstrap before import"; exit 1;
+                }
+                ;;
+              *)
+                echo "Optional contract-tier metadata aether/$name has no required AWSCURRENT check; importing only its resource metadata."
+                ;;
+            esac
             rm -f "$describe_file"
           done
           echo 'Validated staging secret names, CMK ownership, and AWSCURRENT metadata without reading plaintext values.'

@@ -296,6 +296,8 @@ def test_stripe_smoke_uses_form_encoded_confirmed_test_payment():
     assert "URLSearchParams" in smoke
     assert "application/x-www-form-urlencoded" in smoke
     assert "JSON.stringify(payload)" not in smoke
+    assert "path.replace(/^\\/+/, '')" in smoke
+    assert "https://api.stripe.com/v1/" in smoke
     assert "payment_method: 'pm_card_visa'" in smoke
     assert "confirm: true" in smoke
     assert "expand[]=latest_charge" in smoke
@@ -411,6 +413,24 @@ def test_staging_reconciliation_discovers_all_managed_price_resources():
     assert "steps.discover-price-secrets.outputs.secret_names" in text
     assert "ResourceNotFoundException" in text
     assert "the secret value was not read" in text
+
+
+def test_legacy_price_secrets_have_an_explicit_metadata_only_rekey_path():
+    text = _workflow("staging-state-reconcile.yml")
+    assert "migrate_legacy_secret_kms" in text
+    assert "confirm_legacy_secret_kms" in text
+    assert "MIGRATE-STAGING-SECRETS" in text
+    assert 'aws secretsmanager update-secret' in text
+    assert '--kms-key-id "$STAGING_SECRETS_KMS_KEY_ARN"' in text
+    assert "secretsmanager get-secret-value" not in text
+
+
+def test_pilot_dispatch_binds_to_the_exact_created_run():
+    text = _workflow("pilot-staging.yml")
+    assert "before_id" not in text
+    assert "workflow_runs[0]" not in text
+    assert text.count("actions/runs/([0-9]+)") == text.count("gh workflow run")
+    assert "dispatch did not return its created run URL" in text
 
 
 def test_pilot_smoke_validates_the_configured_stripe_price_catalog():

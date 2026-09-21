@@ -71,6 +71,7 @@ def _client(
                 "d-docs": "docs",
                 "d-aether-app": "app",
                 "d-status": "status",
+                "d-production-status": "status",
             }[args[args.index("--app-id") + 1]]
             return {
                 "domainAssociation": {
@@ -120,6 +121,15 @@ def test_production_status_rejects_missing_runtime_links():
         client=missing_runtime_links,
     )
     assert any("VITE_STATUS_API_URL" in error for error in errors)
+
+
+def test_production_status_requires_the_canonical_status_hostname_mapping():
+    errors = checker.contract_errors(
+        mode="production-status",
+        expected_commit=COMMIT,
+        client=_client(domain_branch="preview"),
+    )
+    assert any("production domain lacks an AVAILABLE status subdomain" in error for error in errors)
 
 
 def test_staging_domain_requires_the_main_branch_mapping():

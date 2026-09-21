@@ -176,6 +176,19 @@ async def _send_subscription_activated_email(
         logger.debug(f"checkout email skipped: {_e}")
 
 
+def _requested_plan_tier(session: dict[str, Any]) -> Optional[PlanTier]:
+    """Return the validated tier requested by a Checkout session, if present."""
+    requested_tier_value = (session.get("metadata") or {}).get(
+        "requested_plan_tier", ""
+    )
+    if not requested_tier_value:
+        return None
+    try:
+        return PlanTier(requested_tier_value)
+    except ValueError:
+        return None
+
+
 async def _handle_checkout_session_completed(event_data: dict[str, Any]) -> None:
     """
     checkout.session.completed fires once per successful Checkout flow.
@@ -216,15 +229,12 @@ async def _handle_checkout_session_completed(event_data: dict[str, Any]) -> None
     requested_tier_value: str = (
         (session.get("metadata") or {}).get("requested_plan_tier", "")
     )
-    plan_tier: Optional[PlanTier] = None
-    if requested_tier_value:
-        try:
-            plan_tier = PlanTier(requested_tier_value)
-        except ValueError:
-            logger.warning(
-                f"checkout.session.completed: unknown plan_tier "
-                f"'{requested_tier_value}' for tenant={tenant_id}"
-            )
+    plan_tier = _requested_plan_tier(session)
+    if requested_tier_value and plan_tier is None:
+        logger.warning(
+            f"checkout.session.completed: unknown plan_tier "
+            f"'{requested_tier_value}' for tenant={tenant_id}"
+        )
 
     # Do NOT update plan_tier here. The subscription.created / subscription.updated
     # event always arrives after checkout completion and carries the authoritative
@@ -301,9 +311,20 @@ async def _handle_checkout_session_async_payment_succeeded(
         contact_email = (account or {}).get("contact_email", "")
     if contact_email:
         account = await stripe_repository.get_billing_account(tenant_id)
+        requested_tier = _requested_plan_tier(session)
+        # The completion handler intentionally leaves plan_tier to the
+        # subscription lifecycle events. Until those events arrive, a newly
+        # inserted account defaults to alpha; use the validated Checkout
+        # request for the delayed-payment email so Gamma/Delta purchases are
+        # not reported as Alpha.
+        tier_label = (
+            requested_tier.value
+            if requested_tier is not None
+            else (account or {}).get("plan_tier") or "your plan"
+        )
         await _send_subscription_activated_email(
             contact_email,
-            (account or {}).get("plan_tier") or "your plan",
+            tier_label,
         )
 
     metrics.increment("stripe_webhook_checkout_async_payment_succeeded")
@@ -339,6 +360,22 @@ async def _handle_checkout_session_async_payment_failed(
         )
         return
 
+    customer_id = session.get("customer") or ""
+    contact_email = (
+        session.get("customer_details", {}).get("email", "")
+        or (session.get("metadata") or {}).get("contact_email", "")
+    )
+    # update_subscription_state is intentionally UPDATE-only in the database
+    # path. Async failures can arrive before checkout completion has inserted
+    # the billing account, so establish the customer/subscription mapping first
+    # or the past_due state is silently lost.
+    if customer_id or subscription_id:
+        await stripe_repository.update_customer_mapping(
+            tenant_id=tenant_id,
+            stripe_customer_id=customer_id or None,
+            stripe_subscription_id=subscription_id or None,
+            contact_email=contact_email or None,
+        )
     if subscription_id:
         await stripe_repository.update_subscription_state(
             tenant_id=tenant_id,

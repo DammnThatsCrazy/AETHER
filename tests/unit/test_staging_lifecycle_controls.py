@@ -121,10 +121,21 @@ def _dispatch_invocations(run: str) -> list[str]:
     """Each `gh workflow run ...` invocation, backslash-continuations joined."""
     joined = re.sub(r"\\\n\s*", " ", run)
     return [
-        line.strip()
+        line.strip()[line.index("gh workflow run") :]
         for line in joined.splitlines()
-        if line.strip().startswith("gh workflow run")
+        if "gh workflow run" in line
     ]
+
+
+def test_lifecycle_dispatches_bind_to_the_run_returned_by_github() -> None:
+    """Concurrent workflow dispatches must never be matched by a watermark."""
+    text = _workflow(LIFECYCLE)
+    assert "before_id" not in text
+    assert "reconcile_before_id" not in text
+    assert "select(.id >" not in text
+    assert text.count("actions/runs/([0-9]+)") == text.count("gh workflow run")
+    assert text.count("did not return its created run URL") >= 1
+    assert text.count("refusing ambiguous correlation") >= 1
 
 
 def _referenced_text(doc: dict) -> str:

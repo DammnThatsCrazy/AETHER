@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import re
 import subprocess
 import sys
 import urllib.parse
@@ -145,6 +146,114 @@ def _as_list(value: Any) -> list[Any]:
     return [value]
 
 
+def _backend_name(value: str, kind: str) -> str:
+    """Validate a non-secret Terraform backend name before ARN rendering."""
+    if kind == "bucket":
+        valid = re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", value)
+    else:
+        valid = re.fullmatch(r"[A-Za-z0-9_.-]{3,255}", value)
+    if not valid:
+        fail(f"Terraform state {kind} name is not a valid AWS resource name")
+    return value
+
+
+def _resolve_manifest_value(value: Any, account_id: str) -> Any:
+    """Resolve account placeholders in resources and condition values."""
+    if isinstance(value, str):
+        return value.replace("${account_id}", account_id)
+    if isinstance(value, list):
+        return [_resolve_manifest_value(item, account_id) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _resolve_manifest_value(item, account_id)
+            for key, item in value.items()
+        }
+    return value
+
+
+def _render_reviewed_resource(
+    resource: str,
+    manifest: dict[str, Any],
+    account_id: str,
+    state_bucket: str | None,
+    state_lock_table: str | None,
+    state_profile: str | None,
+) -> str:
+    """Resolve account and the approved runtime state-backend names."""
+    rendered = resource.replace("${account_id}", account_id)
+    scope = manifest.get("scope")
+    if scope in {"terraform-state-backend", "terraform-plan-state-backend"}:
+        canonical_bucket = manifest.get("state_bucket")
+        if isinstance(canonical_bucket, str) and state_bucket:
+            bucket = _backend_name(state_bucket, "bucket")
+            rendered = rendered.replace(
+                f"arn:aws:s3:::{canonical_bucket}", f"arn:aws:s3:::{bucket}"
+            )
+        canonical_lock = manifest.get("state_lock_table")
+        if isinstance(canonical_lock, str) and state_lock_table:
+            lock_table = _backend_name(state_lock_table, "lock table")
+            rendered = rendered.replace(
+                f":table/{canonical_lock}", f":table/{lock_table}"
+            )
+        if state_profile:
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", state_profile):
+                fail("Terraform state profile is not a valid profile name")
+            rendered = rendered.replace("/profiles/*", f"/profiles/{state_profile}/*")
+    return rendered
+
+
+def _manifest_operations(
+    path: Path,
+    account_id: str,
+    expected_role: str,
+    *,
+    primary: bool,
+    state_bucket: str | None,
+    state_lock_table: str | None,
+    state_profile: str | None,
+) -> tuple[list[tuple[str, str, dict[str, Any] | None]], dict[str, Any]]:
+    """Load one reviewed contract without silently broadening its scope."""
+    manifest = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    statements = manifest.get("statements")
+    if not isinstance(statements, list):
+        fail(f"IAM manifest {path} has no statements list")
+    if manifest.get("profile") not in (None, "staging"):
+        fail(f"IAM manifest {path} is not a staging contract")
+    declared_role = manifest.get("role")
+    if declared_role is not None and declared_role != expected_role:
+        fail(f"IAM manifest {path} targets {declared_role}, not {expected_role}")
+    if primary and declared_role != expected_role:
+        fail(f"primary IAM manifest must target {expected_role}")
+    operations: list[tuple[str, str, dict[str, Any] | None]] = []
+    for statement in statements:
+        if not isinstance(statement, dict):
+            fail(f"IAM manifest {path} contains a non-object statement")
+        resources = _as_list(statement.get("resource", "*"))
+        conditions = _resolve_manifest_value(statement.get("conditions"), account_id)
+        for action in statement.get("actions") or []:
+            if not isinstance(action, str):
+                fail(f"IAM manifest {path} contains a non-string action")
+            for resource in resources:
+                if isinstance(resource, str):
+                    if action.lower() in GLOBAL_READ_ACTIONS and resource != "*":
+                        fail(f"{action} must be validated with the account-level resource scope")
+                    operations.append(
+                        (
+                            action,
+                            _render_reviewed_resource(
+                                resource,
+                                manifest,
+                                account_id,
+                                state_bucket,
+                                state_lock_table,
+                                state_profile,
+                            ),
+                            conditions,
+                        )
+                    )
+    return operations, manifest
+
+
 def _statement_actions(statement: dict[str, Any]) -> list[str]:
     return [value for value in _as_list(statement.get("Action", [])) if isinstance(value, str)]
 
@@ -154,6 +263,25 @@ def _action_patterns_overlap(left: str, right: str) -> bool:
     left = left.lower()
     right = right.lower()
     return fnmatch.fnmatchcase(left, right) or fnmatch.fnmatchcase(right, left)
+
+
+def _action_pattern_is_within(actual: str, reviewed: str) -> bool:
+    """Return whether an attached action pattern is no broader than reviewed."""
+    actual = actual.lower()
+    reviewed = reviewed.lower()
+    if actual == reviewed or reviewed == "*":
+        return True
+    if "?" in actual or "?" in reviewed:
+        # The reviewed contracts use prefix wildcards. Refuse a pattern form
+        # this checker cannot prove safe instead of treating it as scoped.
+        return False
+    if "*" not in actual:
+        return fnmatch.fnmatchcase(actual, reviewed)
+    if "*" not in reviewed:
+        return False
+    actual_prefix, actual_suffix = actual.split("*", 1)
+    reviewed_prefix, reviewed_suffix = reviewed.split("*", 1)
+    return actual_prefix.startswith(reviewed_prefix) and actual_suffix.endswith(reviewed_suffix)
 
 
 def _forbidden_action_errors(
@@ -238,23 +366,52 @@ def _condition_scope_is_within(actual: Any, reviewed: dict[str, Any] | None) -> 
     return True
 
 
+def _reviewed_operation_covers(
+    candidate: tuple[str, str, dict[str, Any] | None],
+    target: tuple[str, str, dict[str, Any] | None],
+) -> bool:
+    """Return whether one reviewed operation already subsumes another."""
+    candidate_action, candidate_resource, candidate_conditions = candidate
+    target_action, target_resource, target_conditions = target
+    if not _action_pattern_is_within(target_action, candidate_action):
+        return False
+    if not _resource_pattern_is_within(target_resource, candidate_resource):
+        return False
+    if not candidate_conditions:
+        return True
+    return _condition_scope_is_within(target_conditions, candidate_conditions)
+
+
 def _required_action_scope_errors(
     statements: list[dict[str, Any]],
     required_operations: list[tuple[str, str, dict[str, Any] | None]],
 ) -> list[str]:
-    """Find exact required-action Allows that grant outside reviewed scope."""
-    reviewed_by_action: dict[str, list[tuple[str, dict[str, Any] | None]]] = {}
+    """Find Allows whose action/resource/condition scope exceeds the review."""
+    reviewed_operations: list[tuple[str, str, dict[str, Any] | None]] = []
     for action, resource, conditions in required_operations:
-        reviewed_by_action.setdefault(action.lower(), []).append((resource, conditions))
+        reviewed_operations.append((action, resource, conditions))
 
     errors: set[str] = set()
     for statement in statements:
         if statement.get("Effect") != "Allow":
             continue
+        not_actions = [
+            value
+            for value in _as_list(statement.get("NotAction", []))
+            if isinstance(value, str)
+        ]
+        if not_actions:
+            errors.add("Allow uses NotAction outside reviewed action scope")
+            continue
         resources = _statement_resources(statement)
         for action in _statement_actions(statement):
-            scopes = reviewed_by_action.get(action.lower())
+            scopes = [
+                (reviewed_resource, conditions)
+                for reviewed_action, reviewed_resource, conditions in reviewed_operations
+                if _action_pattern_is_within(action, reviewed_action)
+            ]
             if not scopes:
+                errors.add(f"{action} grants an action outside its reviewed scope")
                 continue
             if "NotResource" in statement:
                 errors.add(f"{action} uses NotResource outside reviewed scope")
@@ -564,7 +721,26 @@ def _operation_is_denied(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--role-arn", required=True)
-    parser.add_argument("--manifest", required=True)
+    parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument(
+        "--supplemental-manifest",
+        action="append",
+        type=Path,
+        default=[],
+        help="additional reviewed contract realized by the same role; may be repeated",
+    )
+    parser.add_argument(
+        "--state-bucket",
+        help="runtime Terraform state bucket used when rendering a state manifest",
+    )
+    parser.add_argument(
+        "--state-lock-table",
+        help="runtime Terraform state lock table used when rendering a state manifest",
+    )
+    parser.add_argument(
+        "--state-profile",
+        help="profile whose state path is being checked (for example, staging)",
+    )
     parser.add_argument(
         "--expected-role",
         default="AetherStagingDeploy",
@@ -580,37 +756,44 @@ def main() -> int:
     role_name = role_name_from_arn(args.role_arn)
     if role_name != args.expected_role:
         fail(f"effective policy check must target {args.expected_role}, not {role_name}")
-    manifest = yaml.safe_load(Path(args.manifest).read_text()) or {}
-    statements = manifest.get("statements")
-    if (
-        manifest.get("profile") != "staging"
-        or manifest.get("role") != args.expected_role
-        or not isinstance(statements, list)
-    ):
-        fail("staging apply IAM manifest is malformed")
     account_id = args.role_arn.split(":", 4)[4].split(":", 1)[0]
-    required_operations: list[tuple[str, str, dict[str, Any] | None]] = []
+    primary_operations, manifest = _manifest_operations(
+        args.manifest,
+        account_id,
+        args.expected_role,
+        primary=True,
+        state_bucket=args.state_bucket,
+        state_lock_table=args.state_lock_table,
+        state_profile=args.state_profile,
+    )
+    required_operations = list(primary_operations)
+    supplemental_names: list[str] = []
+    for supplemental_path in args.supplemental_manifest:
+        supplemental_operations, _supplemental_manifest = _manifest_operations(
+            supplemental_path,
+            account_id,
+            args.expected_role,
+            primary=False,
+            state_bucket=args.state_bucket,
+            state_lock_table=args.state_lock_table,
+            state_profile=args.state_profile,
+        )
+        required_operations.extend(
+            operation
+            for operation in supplemental_operations
+            if not any(
+                _reviewed_operation_covers(primary_operation, operation)
+                for primary_operation in primary_operations
+            )
+        )
+        supplemental_names.append(str(supplemental_path))
     paired_alias: str | None = None
-    for statement in statements:
-        if not isinstance(statement, dict):
-            continue
-        resources = _as_list(statement.get("resource", "*"))
-        conditions = statement.get("conditions")
-        for action in statement.get("actions") or []:
-            if not isinstance(action, str):
-                continue
-            for resource in resources:
-                if isinstance(resource, str):
-                    if action.lower() in GLOBAL_READ_ACTIONS and resource != "*":
-                        fail(f"{action} must be validated with the account-level resource scope")
-                    if action.lower() == "kms:createalias" and ":alias/" in resource:
-                        alias_sample = _resource_samples(resource)[0]
-                        paired_alias = "alias/" + alias_sample.split(":alias/", 1)[1]
-                    required_operations.append(
-                        (action, resource.replace("${account_id}", account_id), conditions)
-                    )
     if not required_operations:
-        fail("staging apply IAM manifest declares no actions")
+        fail("IAM manifests declare no actions")
+    for action, resource, _conditions in required_operations:
+        if action.lower() == "kms:createalias" and ":alias/" in resource:
+            alias_sample = _resource_samples(resource)[0]
+            paired_alias = "alias/" + alias_sample.split(":alias/", 1)[1]
     forbidden_actions = manifest.get("forbidden_actions", [])
     if forbidden_actions is None:
         forbidden_actions = []
@@ -690,7 +873,8 @@ def main() -> int:
             f"{args.required_policy_suffix} is not attached to {args.expected_role}"
         )
     print(
-        f"Effective staging apply policy covers {len(required_operations)} reviewed operations across {len(policy_names)} attached policies."
+        f"Effective {args.expected_role} policy covers {len(required_operations)} reviewed operations across {len(policy_names)} attached policies"
+        + (f" and {len(supplemental_names)} supplemental contracts." if supplemental_names else ".")
     )
     return 0
 

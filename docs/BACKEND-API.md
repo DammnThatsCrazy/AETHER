@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:5ba79e3424e6baf847908ca2fd4a41ad3c7b15807a722bf15b69d1ebfac19fff"
+  "services/backend/services/": "sha256:eb0658eb6cafedcd6e44b4a307ec06a7acb6aa8196d4f637213b82cf9d5e214e"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -150,6 +150,13 @@ signature-verification failures.
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
 | `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
 | `/v1/admin/billing/stripe/webhook` | POST | Stripe-signed webhook (subscription, invoice, and delayed Checkout payment events; delayed activation is fulfilled only after async payment success) |
+
+Delayed Checkout events preserve the billing lifecycle even when delivery order
+is not ideal: `checkout.session.async_payment_failed` upserts the customer and
+subscription mapping before recording `past_due`, so an early failure is not
+lost when the billing-account row does not yet exist. For delayed success,
+subscription events remain authoritative for `plan_tier`; the validated tier
+requested by Checkout is used only for an interim activation notification.
 
 ### Self-service caller endpoints (`/v1/me/*`, API key required)
 

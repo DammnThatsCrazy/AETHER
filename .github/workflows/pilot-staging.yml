@@ -352,26 +352,18 @@ jobs:
           dispatch_and_wait() {
             local workflow="$1"
             shift
-            local before_id run_id status conclusion deadline
-            before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?per_page=1" --jq '.workflow_runs[0].id // 0')"
-            gh workflow run "$workflow" --ref "$REF_NAME" "$@"
-            run_id=''
-            deadline="$(( $(date -u +%s) + 300 ))"
-            while [ "$(date -u +%s)" -lt "$deadline" ]; do
-              mapfile -t candidates < <(gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?event=workflow_dispatch&per_page=50" \
-                --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-              if [ "${#candidates[@]}" -gt 1 ]; then
-                echo "::error::ambiguous ${workflow} runs after dispatch (${candidates[*]}); refusing to guess"
-                exit 1
-              fi
-              if [ "${#candidates[@]}" -eq 1 ]; then
-                run_id="${candidates[0]}"
-                break
-              fi
-              sleep 10
-            done
-            test -n "$run_id" || { echo "::error::${workflow} dispatch never appeared"; exit 1; }
+            local dispatch_output run_id status conclusion deadline
+            # gh returns the created run URL when the dispatch is accepted.
+            # Use that exact ID; a before/after list watermark can bind this
+            # parent to an unrelated concurrent run on the same ref.
+            dispatch_output="$(gh workflow run "$workflow" --ref "$REF_NAME" "$@" 2>&1)"
+            printf '%s\n' "$dispatch_output"
+            run_id="$(printf '%s\n' "$dispatch_output" \
+              | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+            test -n "$run_id" || {
+              echo "::error::${workflow} dispatch did not return its created run URL; refusing ambiguous correlation"
+              exit 1
+            }
             DISPATCHED_RUN_ID="$run_id"
             deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
@@ -405,6 +397,8 @@ jobs:
             dispatch_and_wait staging-state-reconcile.yml \
               -f staging_secret_names='stripe-price-alpha,stripe-price-beta,stripe-price-gamma,stripe-price-delta' \
               -f staging_secrets_kms_key_arn="$STAGING_SECRETS_KMS_KEY_ARN" \
+              -f migrate_legacy_secret_kms=true \
+              -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS \
               -f staging_amplify_domain_name=staging.olympuslabsml.com \
               -f confirm_staging_import=IMPORT-STAGING \
               -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \

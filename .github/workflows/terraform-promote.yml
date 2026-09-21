@@ -186,6 +186,11 @@ jobs:
       TF_VAR_kms_key_admin_role_arns: '${{ inputs.profile == ''staging'' && format(''["{0}"]'', secrets.AWS_TERRAFORM_APPLY_ROLE_ARN) || ''[]'' }}'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A moving dispatch ref is not the reviewed source. When the caller
+          # supplies an exact SHA, fetch that commit before any plan checks so
+          # a branch advance cannot turn a valid handoff into a false mismatch.
+          ref: ${{ inputs.expected_commit_sha || github.sha }}
       - name: Verify the requested plan commit
         if: inputs.expected_commit_sha != ''
         env:
@@ -366,6 +371,8 @@ jobs:
         if: inputs.profile == 'staging'
         env:
           AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
           # The checked-in manifest is reviewed intent; this read-only check
@@ -376,6 +383,10 @@ jobs:
           python scripts/release/verify_effective_staging_apply_policy.py \
             --role-arn "$AWS_TERRAFORM_PLAN_ROLE_ARN" \
             --manifest config/staging_plan_iam_policy.yaml \
+            --supplemental-manifest config/terraform_plan_state_access_policy.yaml \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --state-lock-table "$TF_LOCK_TABLE" \
+            --state-profile "${{ inputs.profile }}" \
             --expected-role AetherStagingPlan \
             --required-policy-suffix AetherStagingPlanContract
       - name: Verify required staging secret metadata before planning
@@ -1056,11 +1067,18 @@ jobs:
         if: inputs.profile == 'staging'
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
           python scripts/release/verify_effective_staging_apply_policy.py \
             --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
-            --manifest config/staging_apply_iam_policy.yaml
+            --manifest config/staging_apply_iam_policy.yaml \
+            --supplemental-manifest config/staging_application_delivery_iam_policy.yaml \
+            --supplemental-manifest config/terraform_state_access_policy.yaml \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --state-lock-table "$TF_LOCK_TABLE" \
+            --state-profile "${{ inputs.profile }}"
       - name: Verify required staging secrets have current versions
         if: inputs.profile == 'staging' && steps.reviewed.outputs.staging_state != 'asleep'
         env:

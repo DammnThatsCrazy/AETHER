@@ -1,9 +1,9 @@
-# Least-privilege backend access shared by the reviewed Terraform apply and
-# confirmation-gated state migration roles. The account-specific names are
-# resolved by the bootstrap; this manifest is the reviewable action contract.
-# Encrypted staging state also requires a bucket-encryption metadata read.
+# Read-only Terraform backend access for the dedicated staging plan role.
+# Apply and state-migration roles use terraform_state_access_policy.yaml, which
+# additionally includes state-object writes. The plan role still needs lock
+# coordination to prevent concurrent state use, but cannot write state objects.
 version: 1
-scope: terraform-state-backend
+scope: terraform-plan-state-backend
 state_bucket: aether-terraform-state
 state_lock_table: aether-terraform-locks
 statements:
@@ -16,18 +16,15 @@ statements:
         s3:prefix:
           - profiles/*
     scope: profile-state-prefix-only
-  - sid: ReadWriteProfileStateObjects
+  - sid: ReadProfileStateObjects
     actions:
       - s3:GetObject
-      - s3:PutObject
-      - s3:DeleteObject
     resource: arn:aws:s3:::aether-terraform-state/profiles/*
     scope: profile-state-prefix-only
   - sid: ReadStateBucketMetadata
     actions:
       - s3:GetBucketVersioning
       - s3:GetBucketLocation
-      - s3:GetEncryptionConfiguration
     resource: arn:aws:s3:::aether-terraform-state
     scope: state-bucket-metadata
   - sid: LockProfileState

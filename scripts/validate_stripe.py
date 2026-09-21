@@ -27,7 +27,8 @@ Checks performed:
     1. SDK installed (stripe>=10)
     2. API key format (sk_live_ or sk_test_)
     3. Stripe API connection (stripe.Account.retrieve())
-    4. All four self-service Price IDs exist in your Stripe account;
+    4. All four self-service Price IDs exist in your Stripe account and match
+       the canonical product, USD amount, monthly recurring shape, and key mode;
        contract-tier Price IDs are checked only when configured
     5. Webhook secret format (whsec_ prefix and minimum length)
     6. Overage Price ID (STRIPE_OVERAGE_PRICE_ID) if configured
@@ -39,7 +40,67 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any
+
+
+# These are the four self-service entries in the canonical plan catalog. Keep
+# the validator's external Stripe check explicit and secret-free: a Price ID
+# can exist and be active while still being a one-time price, the wrong
+# product, or the wrong amount for the tier selected by Checkout.
+REQUIRED_PRICE_CONTRACTS: dict[str, dict[str, Any]] = {
+    "Alpha": {
+        "env_var": "STRIPE_PRICE_ALPHA",
+        "product_id": "prod_VBIVKHD2G1maZC",
+        "unit_amount": 0,
+    },
+    "Beta": {
+        "env_var": "STRIPE_PRICE_BETA",
+        "product_id": "prod_V8G5BQNKwGiwJY",
+        "unit_amount": 29900,
+    },
+    "Gamma": {
+        "env_var": "STRIPE_PRICE_GAMMA",
+        "product_id": "prod_V8G5BcUyK9FTN3",
+        "unit_amount": 89900,
+    },
+    "Delta": {
+        "env_var": "STRIPE_PRICE_DELTA",
+        "product_id": "prod_V8G6eoKilEbNf0",
+        "unit_amount": 344900,
+    },
+}
+
+
+def _price_contract_errors(
+    price: dict[str, Any],
+    *,
+    expected_product_id: str,
+    expected_unit_amount: int,
+    expected_livemode: bool,
+) -> list[str]:
+    """Return value-free contract errors for a self-service Stripe Price."""
+    errors: list[str] = []
+    if price.get("active") is not True:
+        errors.append("price is not active")
+    if price.get("livemode") is not expected_livemode:
+        errors.append("price mode does not match the configured Stripe key")
+    product = price.get("product")
+    product_id = product.get("id") if isinstance(product, dict) else product
+    if product_id != expected_product_id:
+        errors.append("price is assigned to the wrong Stripe product")
+    if str(price.get("currency", "")).lower() != "usd":
+        errors.append("currency must be USD")
+    if price.get("unit_amount") != expected_unit_amount:
+        errors.append(f"unit amount must be {expected_unit_amount} cents")
+    recurring = price.get("recurring")
+    if not isinstance(recurring, dict):
+        errors.append("price must be recurring for subscription Checkout")
+    else:
+        if recurring.get("interval") != "month":
+            errors.append("recurring interval must be monthly")
+        if recurring.get("interval_count") != 1:
+            errors.append("recurring interval_count must be 1")
+    return errors
 
 
 def _load_env_file(path: str) -> None:
@@ -116,18 +177,14 @@ def run(skip_webhook: bool) -> bool:
         print()
 
     # 4. Price IDs
-    required_price_vars = {
-        "Alpha": "STRIPE_PRICE_ALPHA",
-        "Beta": "STRIPE_PRICE_BETA",
-        "Gamma": "STRIPE_PRICE_GAMMA",
-        "Delta": "STRIPE_PRICE_DELTA",
-    }
+    required_price_vars = REQUIRED_PRICE_CONTRACTS
     optional_price_vars = {
         "Epsilon": "STRIPE_PRICE_EPSILON",
         "Omicron": "STRIPE_PRICE_OMICRON",
         "Omega": "STRIPE_PRICE_OMEGA",
     }
-    for label, env_var in required_price_vars.items():
+    for label, contract in required_price_vars.items():
+        env_var = contract["env_var"]
         price_id = os.getenv(env_var, "")
         if not price_id:
             all_pass &= _check(f"Price ID {label}", False, f"{env_var} not set")
@@ -139,8 +196,14 @@ def run(skip_webhook: bool) -> bool:
             recurring = price.get("recurring") or {}
             interval = recurring.get("interval", "?")
             detail = f"{price_id} — {currency} {unit_amount} / {interval}"
-            if price.get("active") is False:
-                detail += " (INACTIVE)"
+            errors = _price_contract_errors(
+                price,
+                expected_product_id=contract["product_id"],
+                expected_unit_amount=contract["unit_amount"],
+                expected_livemode=not is_test,
+            )
+            if errors:
+                detail += f" ({'; '.join(errors)})"
                 all_pass &= _check(f"Price ID {label}", False, detail)
             else:
                 _check(f"Price ID {label}", True, detail)
