@@ -780,6 +780,24 @@ statements:
       iam:PassedToService:
         - monitoring.rds.amazonaws.com
     scope: staging-aurora-monitoring-role
+  - sid: ReadStagingAmplifyDomainRole
+    actions:
+      - iam:GetRole
+    resource:
+      - arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role
+    scope: staging-amplify-domain-role
+  # Amplify's domain-association API authorizes iam:PassRole even when
+  # auto-subdomain creation is disabled. The role is intentionally empty:
+  # Squarespace remains authoritative for DNS, so Amplify must not receive
+  # Route 53 permissions from this staging control-plane path.
+  - sid: PassOnlyStagingAmplifyDomainRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role
+    conditions:
+      iam:PassedToService:
+        - amplify.amazonaws.com
+    scope: staging-amplify-domain-role
 
 # The provider errors below are deliberately not represented as AWS IAM
 # actions: Auth0 permissions are governed by the Auth0 management API and must

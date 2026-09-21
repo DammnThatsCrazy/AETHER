@@ -1039,6 +1039,20 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     flow_logs = next(s for s in statements if s["sid"] == "PassOnlyStagingFlowLogsRole")
     assert flow_logs["resource"].endswith("AETHER-staging-vpc-flow-logs-role")
     assert flow_logs["conditions"]["iam:PassedToService"] == ["vpc-flow-logs.amazonaws.com"]
+    amplify_domain = next(
+        s for s in statements if s["sid"] == "PassOnlyStagingAmplifyDomainRole"
+    )
+    assert amplify_domain["resource"].endswith("AETHER-staging-amplify-domain-role")
+    assert amplify_domain["conditions"]["iam:PassedToService"] == [
+        "amplify.amazonaws.com"
+    ]
+    domain_role_read = next(
+        s for s in statements if s["sid"] == "ReadStagingAmplifyDomainRole"
+    )
+    assert domain_role_read["actions"] == ["iam:GetRole"]
+    assert domain_role_read["resource"] == [
+        "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role"
+    ]
     notifications = next(s for s in statements if s["sid"] == "ConfigureStagingNotifications")
     assert "sns:DeleteTopic" in notifications["actions"]
     assert "elasticloadbalancing:DescribeTargetGroups" in {

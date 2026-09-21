@@ -30,7 +30,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:09bc5c70f390eccc27425610c12eb2b61abc36bce4c913789098b60dbaebc9ae"
+  ".github/workflows/amplify-status-production.yml": "sha256:c08ee1dde8992be518aeedaaed7afb59c1fd63024bbb05d9e5f832b3845e8664"
   ".github/workflows/pilot-staging.yml": "sha256:6f01ef3271178d33d925e108f7a0d71f2ad16240f345accbc866bc7f9533a47b"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
@@ -357,7 +357,10 @@ runtime wake. On a merged `main` push, `amplify-status-production.yml` waits
 for the exact main integration authority, then binds `aether-status` to the
 repository, recreates its production `main` branch when migrating the legacy
 manual deployment, deploys the exact merge SHA, and verifies the public
-`status.olympuslabsml.com` association. A repository-backed status app is
+`status.olympuslabsml.com` association. Before changing a domain mapping, the
+workflow verifies and passes the dedicated empty
+`AETHER-staging-amplify-domain-role`; Squarespace remains authoritative and
+auto-subdomain creation is disabled. A repository-backed status app is
 updated in place on later runs; it is never treated as a staging ECS or
 Terraform mutation.
 
