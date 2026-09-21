@@ -133,6 +133,40 @@ jobs:
           printf 'app_id=%s\n' "${app_ids[0]}" >> "$GITHUB_OUTPUT"
           printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Migrate legacy manual status branches before repository binding
+        env:
+          APP_ID: ${{ steps.inputs.outputs.app_id }}
+        run: |
+          set -euo pipefail
+          app_json="$(aws amplify get-app --app-id "$APP_ID")"
+          app_name="$(jq -r '.app.name // empty' <<<"$app_json")"
+          repository="$(jq -r '.app.repository // empty' <<<"$app_json")"
+          test "$app_name" = "$AMPLIFY_APP_NAME" || {
+            echo "::error::refusing to migrate unexpected Amplify app ${app_name}"; exit 1;
+          }
+
+          # Amplify will not attach a manually deployed app to a repository
+          # while any legacy branch exists. This is a one-time, metadata-only
+          # migration guarded by the exact unconnected public status app. Once
+          # the app is repository-backed, never delete a branch here.
+          if [ -n "$repository" ]; then
+            echo 'Status app is already repository-backed; no legacy branch migration is needed.'
+            exit 0
+          fi
+
+          mapfile -t legacy_branches < <(
+            aws amplify list-branches --app-id "$APP_ID" --max-results 50 \
+              --query 'branches[].branchName' --output text | tr '\t' '\n' | awk 'NF'
+          )
+          for branch_name in "${legacy_branches[@]}"; do
+            echo "Removing legacy manually deployed Amplify branch ${branch_name}."
+            aws amplify delete-branch \
+              --app-id "$APP_ID" \
+              --branch-name "$branch_name" \
+              >/dev/null
+          done
+          echo 'Legacy manual status branches removed; repository binding may proceed.'
+
       - name: Bind the existing status app to the canonical repository
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
@@ -169,13 +203,18 @@ jobs:
             --build-spec "$(cat "$status_build_spec")" \
             --enable-branch-auto-build \
             >/dev/null
-          aws amplify update-branch \
-            --app-id "$APP_ID" \
-            --branch-name main \
-            --stage PRODUCTION \
-            --enable-auto-build \
-            --environment-variables 'AETHER_ENV=production,VITE_STATUS_API_URL=https://api.olympuslabsml.com/health,VITE_STATUS_DOCS_URL=https://docs.olympuslabsml.com,VITE_STATUS_AETHER_MARKETING_URL=https://aether.olympuslabsml.com' \
-            >/dev/null
+          branch_args=(
+            --app-id "$APP_ID"
+            --branch-name main
+            --stage PRODUCTION
+            --enable-auto-build
+            --environment-variables 'AETHER_ENV=production,VITE_STATUS_API_URL=https://api.olympuslabsml.com/health,VITE_STATUS_DOCS_URL=https://docs.olympuslabsml.com,VITE_STATUS_AETHER_MARKETING_URL=https://aether.olympuslabsml.com'
+          )
+          if aws amplify get-branch --app-id "$APP_ID" --branch-name main >/dev/null 2>&1; then
+            aws amplify update-branch "${branch_args[@]}" >/dev/null
+          else
+            aws amplify create-branch "${branch_args[@]}" >/dev/null
+          fi
           echo 'Bound the existing status app to the reviewed repository, canonical status build, runtime links, and PRODUCTION main branch.'
 
       - name: Start the commit-pinned Amplify release

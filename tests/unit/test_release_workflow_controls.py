@@ -306,6 +306,12 @@ def test_stripe_smoke_uses_form_encoded_confirmed_test_payment():
 def test_production_status_workflow_binds_the_canonical_build_and_runtime_links():
     workflow = _workflow("amplify-status-production.yml")
     assert "--repository \"$AMPLIFY_REPOSITORY\"" in workflow
+    assert "Migrate legacy manual status branches before repository binding" in workflow
+    assert "aws amplify delete-branch" in workflow
+    assert "app.name // empty" in workflow
+    assert "app.repository // empty" in workflow
+    assert "aws amplify create-branch \"${branch_args[@]}\"" in workflow
+    assert "aws amplify update-branch \"${branch_args[@]}\"" in workflow
     assert "appRoot: frontend/status" in workflow
     assert "npm run build --workspace=frontend/status" in workflow
     assert "VITE_STATUS_API_URL=https://api.olympuslabsml.com/health" in workflow
