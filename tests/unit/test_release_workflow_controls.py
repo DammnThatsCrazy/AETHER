@@ -239,6 +239,9 @@ def test_staging_delivery_validates_its_runtime_iam_delta_and_api_host_fallback(
     assert "aws ecs describe-tasks" in workflow
     assert "aws s3 sync" in workflow
     assert "aws s3 cp" in workflow
+    assert "Verify live ECR image permissions before build" in workflow
+    assert "iam simulate-principal-policy" in workflow
+    assert "ecr:GetDownloadUrlForLayer" in workflow
 
 
 def test_staging_delivery_rejects_a_live_task_lane_mismatch_before_mutation():

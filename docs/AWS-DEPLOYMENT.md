@@ -46,7 +46,7 @@ source_hashes:
   ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
-  "config/staging_application_delivery_iam_policy.yaml": "sha256:3a9c3ef5b991d6c592d51e0eb69dc29a28177fd42be95c72215ffc4e8e340e1a"
+  "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:4a311f675ceb344018a5037f936da7b482d381f5a5628d0f03562ff4628ba802"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
   "config/staging_plan_iam_policy.yaml": "sha256:f310130204a44c99dbb3e9b16d47471b4eb575a2fb974b5936bc1fe93a90796f"
@@ -60,7 +60,7 @@ source_hashes:
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:a09051a5238503afe9910d1fd3546dade8727611626eb769251795628dc60eb4"
   "scripts/release/check_amplify_app_contract.py": "sha256:28fe586a024e18c9375af589b4d9c2527cce03071ad55ec88a2f6a1237a596db"
-  "scripts/release/check_staging_application_delivery_policy.py": "sha256:6f5d20b382a79aa41946c75c6fcfc63ab69d1cf6628f7bc45dd38ea4b6807fc2"
+  "scripts/release/check_staging_application_delivery_policy.py": "sha256:01bbce3783d9c0a59d480e96fc05e2b98e2d3126660805304d8bfee6337d8bd2"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:68d70ad0a009244251eb3caec93186be55415685600c3f590270ffb05e0680ea"
@@ -177,7 +177,8 @@ pilot/full lane.
 
 The direct immutable application-delivery path has its own supplemental
 contract at `config/staging_application_delivery_iam_policy.yaml`. It covers
-the exact ECR client/image-publish operations, `ecs:RunTask`,
+the ECR client and exact backend image pull/publish operations (including
+`ecr:GetDownloadUrlForLayer` for immutable runtime validation), `ecs:RunTask`,
 `ecs:DescribeTasks`, and the S3 list/object operations used to publish the two
 protected SPAs; the workflow checks that contract before it assumes
 `AetherStagingDeploy`. The apply role's state access is separately described by

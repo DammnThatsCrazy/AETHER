@@ -22,6 +22,7 @@ EXPECTED = {
     "ecr:BatchGetImage",
     "ecr:CompleteLayerUpload",
     "ecr:DescribeImages",
+    "ecr:GetDownloadUrlForLayer",
     "ecr:InitiateLayerUpload",
     "ecr:PutImage",
     "ecr:UploadLayerPart",
@@ -46,9 +47,27 @@ CLI_TO_IAM = {
     ("s3", "sync"): {"s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject"},
     ("s3", "cp"): {"s3:PutObject"},
     ("ssm", "get-parameter"): {"ssm:GetParameter"},
+    ("iam", "simulate-principal-policy"): {"iam:SimulatePrincipalPolicy"},
     # deploy.yml verifies the exact assumed role before each mutating phase;
     # this read is already covered by the base staging apply contract.
     ("sts", "get-caller-identity"): {"sts:GetCallerIdentity"},
+}
+
+# The AWS CLI inventory above cannot see API calls made by Docker or by the
+# docker/build-push-action. Keep those implicit ECR calls explicit here so the
+# manifest checker fails when the runtime image path loses a required grant.
+DOCKER_PULL_ECR_ACTIONS = {
+    "ecr:BatchCheckLayerAvailability",
+    "ecr:BatchGetImage",
+    "ecr:GetDownloadUrlForLayer",
+}
+DOCKER_PUBLISH_ECR_ACTIONS = {
+    "ecr:BatchCheckLayerAvailability",
+    "ecr:BatchGetImage",
+    "ecr:CompleteLayerUpload",
+    "ecr:InitiateLayerUpload",
+    "ecr:PutImage",
+    "ecr:UploadLayerPart",
 }
 
 
@@ -86,6 +105,10 @@ def workflow_actions(path: Path) -> set[str]:
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if line.lstrip().startswith("#"):
             continue
+        if re.search(r"\bdocker\s+pull\b", line):
+            found.update(DOCKER_PULL_ECR_ACTIONS)
+        if "docker/build-push-action@" in line:
+            found.update(DOCKER_PUBLISH_ECR_ACTIONS)
         for service, operation in re.findall(r"\baws\s+([a-z0-9-]+)\s+([a-z0-9-]+)\b", line):
             key = (service, operation)
             if key not in CLI_TO_IAM:

@@ -23,7 +23,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:8544f30637a6913a0f03155c5ca54c9161881797bb841f0a51cbbb318759f431"
+  ".github/workflows/": "sha256:e1ed6dc375e5cd982af2957f5ee56417a93f332466af749592314a3db71f8dac"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -549,6 +549,13 @@ reviewed Terraform secret inputs (`TF_AUTH0_DOMAIN` and `TF_DOMAIN_NAME`) and
 uses the canonical API audience. This prevents a release build from silently
 embedding empty identity or endpoint configuration while preserving an
 explicit override path for a later environment-specific release train.
+
+For staging, the same delivery job simulates the live `AetherStagingDeploy`
+permissions for ECR authorization and the exact immutable backend image
+pull/publish operations before Docker authentication or image build begins.
+This catches drift in the externally attached IAM policy at the role boundary,
+including the `ecr:GetDownloadUrlForLayer` permission required by the
+published-image runtime validation, before a release job consumes runner time.
 
 ### Deployment gates
 
