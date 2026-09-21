@@ -23,12 +23,12 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:4225b19fc9a05708793efb6bbad5f94f9bd757da1d4989cdb47a46362b685da5"
+  ".github/workflows/": "sha256:d7691312b20b44618ea93fe53e7c887385657366a91dc96a3929928d73eabeec"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
   "cicd/aether-cicd/stages/": "sha256:f26f7a608ed0d1cf1aff849650848b64958eba563c69ccb7f7d120726c767619"
-  "config/staging_apply_iam_policy.yaml": "sha256:c4dd7fefffa96eca292be4acbc80810033362fea96b22596eb4f70d614ff9909"
+  "config/staging_apply_iam_policy.yaml": "sha256:1e4b2012208427e682ad033f199e458a428ed06c0d5ca51551d0a84c242ddb1a"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:e609cdfaaf5d9d384e213edf6f936b0045eac823cc38d432e75db464c8eb14ad"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"

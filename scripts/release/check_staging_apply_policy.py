@@ -622,7 +622,10 @@ def main() -> int:
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
             passed_to = (statement.get("conditions") or {}).get("iam:PassedToService")
-            if passed_to not in (
+            amplify_manual_update = (
+                resource == _AMPLIFY_DOMAIN_ROLE_ARN and passed_to is None
+            )
+            if not amplify_manual_update and passed_to not in (
                 ["ecs-tasks.amazonaws.com"],
                 ["vpc-flow-logs.amazonaws.com"],
                 ["lambda.amazonaws.com"],
@@ -1000,7 +1003,7 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda": ["lambda.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation": ["lambda.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": ["monitoring.rds.amazonaws.com"],
-                "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": ["amplify.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": None,
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
             expected_operators = {
@@ -1014,7 +1017,7 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda": None,
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation": None,
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": None,
-                "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": "ForAnyValue:StringEquals",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": None,
             }:
                 fail("iam:PassRole condition operators do not match the reviewed service bindings")
         elif action == "iam:CreateServiceLinkedRole":

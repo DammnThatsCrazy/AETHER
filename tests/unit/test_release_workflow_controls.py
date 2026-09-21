@@ -314,7 +314,7 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "aws amplify update-domain-association" in workflow
     assert "--no-enable-auto-sub-domain" in workflow
     assert "AMPLIFY_DOMAIN_ROLE_ARN" not in workflow
-    assert "--auto-sub-domain-iam-role" not in workflow
+    assert "--auto-sub-domain-iam-role ''" in workflow
     assert "status-repository-migration" in workflow
     assert "Restore status domain mappings and remove migration branch" in workflow
     assert "cleanup_migration_branch" in workflow

@@ -30,7 +30,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:7f5ba24a66904f7675c6f8260a3f65a99125db37134baae806b723a5d721f846"
+  ".github/workflows/amplify-status-production.yml": "sha256:7fdb61b05405031117003a5a5fa1f8835623a39dde5837a2a4f7a0f89cf38faa"
   ".github/workflows/pilot-staging.yml": "sha256:6f01ef3271178d33d925e108f7a0d71f2ad16240f345accbc866bc7f9533a47b"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
@@ -358,11 +358,14 @@ for the exact main integration authority, then binds `aether-status` to the
 repository, recreates its production `main` branch when migrating the legacy
 manual deployment, deploys the exact merge SHA, and verifies the public
 `status.olympuslabsml.com` association and its live CNAME target. Before changing a domain mapping, the
-workflow disables Amplify auto-subdomain creation and intentionally omits the
-optional delegated IAM role, so the pilot/status path does not require
-`iam:PassRole`. Squarespace remains authoritative; the dedicated empty
-`AETHER-staging-amplify-domain-role` remains reserved for a separately reviewed
-auto-subdomain operation. A repository-backed status app is updated in place on
+workflow disables Amplify auto-subdomain creation and explicitly clears the
+optional delegated IAM role field so stale legacy metadata cannot survive on
+an existing association. Amplify still performs its dependent
+`iam:PassRole` authorization for this update, so the staging policy grants
+that permission only on the exact dedicated empty
+`AETHER-staging-amplify-domain-role`, which remains reserved for a separately
+reviewed auto-subdomain operation and has no Route 53 permissions. Squarespace
+remains authoritative. A repository-backed status app is updated in place on
 later runs; it is never treated as a staging ECS or Terraform mutation.
 
 Steps, in order, with what each proves:
