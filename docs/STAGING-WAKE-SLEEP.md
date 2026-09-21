@@ -31,24 +31,24 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:8ec4732e36ddb39d2d02ddaddcf90a6da076703f15378f382c99082b9309bd5f"
-  ".github/workflows/pilot-staging.yml": "sha256:b00e84bdeae4580a15a7d47f59e8cc4fd4353b20a2a34646e96ff299d5a5d6e3"
+  ".github/workflows/pilot-staging.yml": "sha256:7cee7b824dfcacb0a1a1159289ab569562950366dfb239de4d22fb3f2db72c70"
   ".github/workflows/staging-lifecycle.yml": "sha256:4ca6bc9d2ea9e2f79496a7bcd9ad0f06a78bf1fdddc6c274bc73d58dd573dd7a"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:f5c66d618aad6b84887fa689dda91d9f68c43c397e39003f96efc440823a7111"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:4e6ce2c97d6a9d32da0d42fd5c57912be0bfc1ccdbff50294cd6979f95d80477"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
-  "config/staging_secret_preflight_iam_policy.yaml": "sha256:9fbac99f2693435b11d93b768d52b8ff5e5f06a797980d0ffb7ac720f8598e80"
+  "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
-  "scripts/release/check_amplify_app_contract.py": "sha256:7c60acb5b3b270c10a6f3897124d7ac10484213768475bd7d6cac3b2f6139cfe"
+  "scripts/release/check_amplify_app_contract.py": "sha256:6f5c338bb8abc8c497a927098d90c35ef5cb891352f2452d6b5f713681f13bad"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
-  "scripts/release/check_staging_secret_preflight_policy.py": "sha256:cb23b553551e1f7de9a0f28e0b5b9b40fe324a664acabc59a1d1b3189e38b88c"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:7bce8901b3706085a0367526bcb6114d4221bff136cc380295d3e0c378e627b2"
+  "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:c8141f446dec7c3b8b7ec8a5b1cf48b10ae2c6140524257eecc3aff2554a78c7"
 ---
 
 # Staging Wake / Sleep
@@ -284,6 +284,13 @@ TTL, reports it is a NO-OP and exits green — staging may still be running and
 will **not** be guarded; that is **not** a claim that staging is asleep. The
 moment the role is wired it enforces exactly as below, fail-closed in both
 directions.
+
+When armed, the guard first validates and assumes
+`AWS_TERRAFORM_PLAN_ROLE_ARN` (`AetherStagingPlan`) to inspect the effective
+`AetherStagingLifecycle` IAM policy. Only after that inspection succeeds does it
+assume `AWS_STAGING_LIFECYCLE_ROLE_ARN` for SSM/ECS lease enforcement. The
+lifecycle role therefore never needs IAM policy-read permissions merely to run
+the TTL guard.
 
 Its design constraints are deliberate and worth understanding before relying on
 it:

@@ -19,7 +19,17 @@ def _client(*, pilot: bool = True):
     secret_names = checker.COMMON_SECRET_ENV | (
         checker.PILOT_PRICE_SECRET_ENV if pilot else checker.KYBER_SECRET_ENV
     )
-    secrets = {name: f"arn:aws:secretsmanager:us-east-1:111122223333:secret:aether/{name}" for name in secret_names}
+    secrets = {
+        name: (
+            "arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-aether-staging"
+            if name == "DATABASE_URL_SECRET"
+            else (
+                "arn:aws:secretsmanager:us-east-1:111122223333:secret:aether/"
+                + checker.SECRET_ENV_TO_CANONICAL_NAME[name]
+            )
+        )
+        for name in secret_names
+    }
 
     def call(args: list[str]) -> dict[str, Any]:
         if args[:2] == ["ecs", "describe-services"]:
@@ -88,3 +98,53 @@ def test_pilot_rejects_old_full_lane_mounts():
     errors = checker.contract_errors(lane="pilot", client=old_definition)
     assert any("missing ECS secret mounts" in error for error in errors)
     assert any("deferred Kyber runtime fields" in error for error in errors)
+
+
+def test_pilot_rejects_a_swapped_stripe_price_mount():
+    original = _client()
+
+    def swapped_price(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            container = payload["taskDefinition"]["containerDefinitions"][0]
+            for mount in container["secrets"]:
+                if mount["name"] == "STRIPE_PRICE_ALPHA":
+                    mount["valueFrom"] = (
+                        "arn:aws:secretsmanager:us-east-1:111122223333:secret:"
+                        "aether/stripe-price-beta"
+                    )
+        return payload
+
+    errors = checker.contract_errors(
+        lane="pilot",
+        client=swapped_price,
+        expected_account_id="111122223333",
+    )
+    assert any(
+        "STRIPE_PRICE_ALPHA" in error and "aether/stripe-price-alpha" in error
+        for error in errors
+    )
+
+
+def test_pilot_rejects_secret_mounts_from_wrong_account_or_region():
+    original = _client()
+
+    def wrong_location(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            container = payload["taskDefinition"]["containerDefinitions"][0]
+            for mount in container["secrets"]:
+                if mount["name"] == "STRIPE_PRICE_ALPHA":
+                    mount["valueFrom"] = (
+                        "arn:aws:secretsmanager:eu-west-1:999988887777:secret:"
+                        "aether/stripe-price-alpha"
+                    )
+        return payload
+
+    errors = checker.contract_errors(
+        lane="pilot",
+        client=wrong_location,
+        expected_account_id="111122223333",
+    )
+    assert any("STRIPE_PRICE_ALPHA" in error and "region" in error for error in errors)
+    assert any("STRIPE_PRICE_ALPHA" in error and "account" in error for error in errors)

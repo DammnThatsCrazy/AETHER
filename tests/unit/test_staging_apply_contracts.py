@@ -570,7 +570,7 @@ def test_effective_policy_checker_constrains_required_action_grants() -> None:
             "arn:aws:kms:us-east-1:544471417928:key/*",
             {
                 "StringEquals": {"aws:ResourceTag/Environment": "staging"},
-                "StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
+                "ForAnyValue:StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
             },
         ),
     ]
@@ -602,7 +602,7 @@ def test_effective_policy_checker_constrains_required_action_grants() -> None:
                 "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
                 "Condition": {
                     "StringEquals": {"aws:ResourceTag/Environment": "staging"},
-                    "StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
+                    "ForAnyValue:StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
                 },
             }
         ],
@@ -615,13 +615,14 @@ def test_effective_policy_checker_constrains_required_action_grants() -> None:
             "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
             "Condition": {
                 "StringEquals": {"aws:ResourceTag/Environment": "staging"},
-                "StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
+                "ForAnyValue:StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
             },
         },
         "kms:Decrypt",
         "arn:aws:kms:us-east-1:544471417928:key/contract-check",
         required[1][2],
     )
+    assert "ForAnyValue:StringLike" in module.SUPPORTED_CONDITION_OPERATORS
 
 
 def test_external_provider_validation_precedes_service_linked_role() -> None:

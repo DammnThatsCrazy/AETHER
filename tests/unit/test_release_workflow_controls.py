@@ -370,6 +370,21 @@ def test_sleep_paths_do_not_depend_on_application_secret_values():
     assert "no verified sleep plan_run_id" in lifecycle_text
 
 
+def test_pilot_sleep_paths_skip_secret_payload_preflight_but_keep_authority():
+    document = _workflow_yaml("pilot-staging.yml")
+    text = _workflow("pilot-staging.yml")
+    secret_job = document["jobs"]["secret-payload-preflight"]
+    assert "inputs.action != 'plan-sleep'" in secret_job["if"]
+    assert "inputs.action != 'apply-sleep'" in secret_job["if"]
+    assert "secret-payload-preflight.result == 'skipped'" in text
+    for job_name in ("amplify-preflight", "dispatch-authority"):
+        job = document["jobs"][job_name]
+        assert job["if"].startswith("always()")
+        assert "secret-payload-preflight" in job["needs"]
+        assert "inputs.action == 'plan-sleep'" in job["if"]
+        assert "inputs.action == 'apply-sleep'" in job["if"]
+
+
 def test_staging_reconciliation_discovers_all_managed_price_resources():
     text = _workflow("staging-state-reconcile.yml")
     for name in (
@@ -607,6 +622,22 @@ def test_ttl_guards_are_loud_noops_without_the_lifecycle_role():
         assert "NO-OP" in notice
         # The notice is the OPPOSITE of an "environment is asleep" claim.
         assert "NOT a claim" in notice
+
+
+def test_staging_ttl_guard_inspects_lifecycle_policy_with_plan_role_first():
+    text = _workflow("staging-ttl-guard.yml")
+    assert "AWS_TERRAFORM_PLAN_ROLE_ARN" in text
+    assert "AetherStagingPlan" in text
+    assert text.index("Configure AWS inspection credentials") < text.index(
+        "Verify effective lifecycle IAM policy before enforcement"
+    )
+    assert text.index("Verify effective lifecycle IAM policy before enforcement") < text.index(
+        "Configure AWS lifecycle credentials"
+    )
+    assert text.index("Verify staging IAM inspection role assumption") < text.index(
+        "Verify effective lifecycle IAM policy before enforcement"
+    )
+    assert "Verify lifecycle role assumption before TTL enforcement" in text
 
 
 def test_staging_ttl_guard_blocking_alert_keys_on_armed_output_not_readings():

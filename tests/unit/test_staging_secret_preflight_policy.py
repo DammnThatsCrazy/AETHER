@@ -41,6 +41,6 @@ def test_secret_preflight_policy_grants_only_scoped_staging_key_decrypt():
     assert kms["conditions"]["StringEquals"] == {
         "aws:ResourceTag/Environment": "staging"
     }
-    assert kms["conditions"]["StringLike"] == {
+    assert kms["conditions"]["ForAnyValue:StringLike"] == {
         "kms:ResourceAliases": ["alias/aether-staging-secrets"]
     }

@@ -228,6 +228,7 @@ def _check_app(
             for item in subdomains
             if isinstance(item, Mapping)
             and _mapping(item.get("subDomainSetting")).get("prefix") == subdomain_prefix
+            and _mapping(item.get("subDomainSetting")).get("branchName") == "main"
         ] if isinstance(subdomains, list) else []
         if not matching or matching[0].get("verified") is not True:
             errors.append(

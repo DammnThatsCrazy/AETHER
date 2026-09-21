@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
@@ -19,6 +20,32 @@ from typing import Any, NoReturn
 
 
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
+
+SECRET_ENV_TO_CANONICAL_NAME = {
+    "JWT_SECRET": "jwt-secret",
+    "BYOK_ENCRYPTION_KEY": "byok-encryption-key",
+    "STRIPE_SECRET_KEY": "stripe-secret-key",
+    "STRIPE_WEBHOOK_SECRET": "stripe-webhook-secret",
+    "ORACLE_SIGNER_PRIVATE_KEY": "oracle-signer-private-key",
+    "WATERMARK_SECRET_KEY": "watermark-secret-key",
+    "CANARY_SECRET_SEED": "canary-secret-seed",
+    "EXTRACTION_CANARY_SEED": "extraction-canary-seed",
+    "SDK_CONFIG_SECRET": "sdk-config-secret",
+    "FIRST_ADMIN_BOOTSTRAP_TOKEN": "first-admin-bootstrap-token",
+    "JWT_SECRET_PREVIOUS": "jwt-secret-previous",
+    "BYOK_ENCRYPTION_KEY_PREVIOUS": "byok-encryption-key-previous",
+    "STRIPE_PRICE_ALPHA": "stripe-price-alpha",
+    "STRIPE_PRICE_BETA": "stripe-price-beta",
+    "STRIPE_PRICE_GAMMA": "stripe-price-gamma",
+    "STRIPE_PRICE_DELTA": "stripe-price-delta",
+    "KYBER_GOOGLE_CLIENT_ID": "kyber-google-client-id",
+    "KYBER_GOOGLE_CLIENT_SECRET": "kyber-google-client-secret",
+    "REDIS_PASSWORD": "redis-auth-token",
+}
+SECRET_ARN_RE = re.compile(
+    r"^arn:aws:secretsmanager:(?P<region>[^:]+):(?P<account>\d{12}):secret:(?P<resource>[^:]+)(?::.*)?$"
+)
+DATABASE_SECRET_RESOURCE_PREFIX = "rds!cluster-"
 
 SERVICES = {
     "AETHER-staging-backend": "api",
@@ -107,13 +134,13 @@ def aws_json(args: list[str]) -> Mapping[str, Any]:
     )
     if result.returncode != 0:
         detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "unknown AWS error"
-        fail(f"AWS ECS metadata request failed for {args[0]}: {detail}")
+        fail(f"AWS metadata request failed for {args[0]}: {detail}")
     try:
         payload = json.loads(result.stdout or "{}")
     except ValueError as exc:
-        fail(f"AWS ECS metadata request for {args[0]} was not JSON: {exc}")
+        fail(f"AWS metadata request for {args[0]} was not JSON: {exc}")
     if not isinstance(payload, Mapping):
-        fail(f"AWS ECS metadata request for {args[0]} returned a non-object")
+        fail(f"AWS metadata request for {args[0]} returned a non-object")
     return payload
 
 
@@ -143,11 +170,63 @@ def _secret_map(container: Mapping[str, Any]) -> dict[str, str]:
     return result
 
 
+def _secret_mount_errors(
+    *,
+    service: str,
+    env_name: str,
+    value_from: str,
+    expected_account_id: str | None,
+) -> list[str]:
+    """Validate the complete ARN identity for one ECS secret mount.
+
+    Secrets Manager app ARNs include a generated suffix after the canonical
+    name. The suffix is accepted, but the environment variable must still map
+    to its own reviewed name; a valid-looking ARN for a sibling secret is not
+    sufficient. Aurora's managed master secret is the one deliberate
+    exception: Terraform exposes it as DATABASE_URL_SECRET and AWS names it
+    with the rds!cluster- resource prefix rather than aether/.
+    """
+    errors: list[str] = []
+    match = SECRET_ARN_RE.fullmatch(value_from)
+    if match is None:
+        return [f"{service}: secret mount {env_name} is not a complete Secrets Manager ARN"]
+
+    region = match.group("region")
+    account = match.group("account")
+    resource = match.group("resource")
+    if region != "us-east-1":
+        errors.append(f"{service}: secret mount {env_name} is in region {region!r}, expected 'us-east-1'")
+    if expected_account_id is not None and account != expected_account_id:
+        errors.append(
+            f"{service}: secret mount {env_name} is in account {account!r}, expected {expected_account_id!r}"
+        )
+
+    if env_name == "DATABASE_URL_SECRET":
+        if not resource.startswith(DATABASE_SECRET_RESOURCE_PREFIX):
+            errors.append(
+                f"{service}: secret mount {env_name} must reference the Aurora-managed "
+                f"{DATABASE_SECRET_RESOURCE_PREFIX}* secret"
+            )
+        return errors
+
+    canonical_name = SECRET_ENV_TO_CANONICAL_NAME.get(env_name)
+    if canonical_name is None:
+        return [f"{service}: secret mount {env_name} is not in the reviewed ECS secret mapping"]
+    expected_resource = f"aether/{canonical_name}"
+    if resource != expected_resource and not resource.startswith(f"{expected_resource}-"):
+        errors.append(
+            f"{service}: secret mount {env_name} must reference {expected_resource} "
+            "(with an optional Secrets Manager suffix)"
+        )
+    return errors
+
+
 def contract_errors(
     *,
     lane: str,
     client: AwsCall,
     cluster: str = "AETHER-staging",
+    expected_account_id: str | None = None,
 ) -> list[str]:
     if lane not in {"pilot", "full"}:
         return [f"deployment lane must be pilot or full, got {lane!r}"]
@@ -209,8 +288,14 @@ def contract_errors(
         if missing:
             errors.append(f"{service}: missing ECS secret mounts: {', '.join(missing)}")
         for name, value_from in secrets.items():
-            if not value_from.startswith("arn:aws:secretsmanager:"):
-                errors.append(f"{service}: secret mount {name} is not a Secrets Manager ARN")
+            errors.extend(
+                _secret_mount_errors(
+                    service=service,
+                    env_name=name,
+                    value_from=value_from,
+                    expected_account_id=expected_account_id,
+                )
+            )
         if lane == "pilot":
             forbidden = sorted((KYBER_SECRET_ENV | KYBER_ONLY_ENV) & (secrets.keys() | environment.keys()))
             if forbidden:
@@ -228,7 +313,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lane", choices=("pilot", "full"), required=True)
     parser.add_argument("--cluster", default="AETHER-staging")
     args = parser.parse_args(argv)
-    errors = contract_errors(lane=args.lane, cluster=args.cluster, client=aws_json)
+    identity = aws_json(["sts", "get-caller-identity"])
+    expected_account_id = identity.get("Account")
+    if not isinstance(expected_account_id, str) or not re.fullmatch(r"\d{12}", expected_account_id):
+        fail("AWS caller identity did not provide a valid 12-digit account ID")
+    errors = contract_errors(
+        lane=args.lane,
+        cluster=args.cluster,
+        client=aws_json,
+        expected_account_id=expected_account_id,
+    )
     if errors:
         print("staging ECS task-definition contract FAILED:", file=sys.stderr)
         for error in errors:

@@ -129,11 +129,58 @@ jobs:
         run: |
           set -euo pipefail
           echo '::notice title=Staging TTL guard not armed::AWS_STAGING_LIFECYCLE_ROLE_ARN is not configured, so the guard has no credential to read the lease or enforce the TTL; it is a NO-OP until the role is wired. Staging may still be running and will NOT be guarded — this is NOT a claim that staging is asleep.'
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Validate the armed lifecycle and inspection role ARNs
         if: steps.check-armed.outputs.armed == 'true'
+        env:
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          [[ "$AWS_TERRAFORM_PLAN_ROLE_ARN" =~ ^arn:aws:iam::[0-9]{12}:role/AetherStagingPlan$ ]] || {
+            echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN must target AetherStagingPlan in the current AWS account'
+            exit 1
+          }
+          [[ "$AWS_STAGING_LIFECYCLE_ROLE_ARN" =~ ^arn:aws:iam::[0-9]{12}:role/AetherStagingLifecycle$ ]] || {
+            echo '::error::AWS_STAGING_LIFECYCLE_ROLE_ARN must target AetherStagingLifecycle in the current AWS account'
+            exit 1
+          }
+          plan_account="$(printf '%s' "$AWS_TERRAFORM_PLAN_ROLE_ARN" | cut -d: -f5)"
+          lifecycle_account="$(printf '%s' "$AWS_STAGING_LIFECYCLE_ROLE_ARN" | cut -d: -f5)"
+          test "$plan_account" = "$lifecycle_account" || {
+            echo '::error::inspection and lifecycle roles must be in the same AWS account'
+            exit 1
+          }
+
+      - name: Configure AWS inspection credentials
+        if: steps.check-armed.outputs.armed == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           aws-region: us-east-1
+
+      - name: Verify staging IAM inspection role assumption
+        if: steps.check-armed.outputs.armed == 'true'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="$(printf '%s' "$EXPECTED_ROLE_ARN" | cut -d: -f5)"
+          expected_role_path="$(printf '%s' "$EXPECTED_ROLE_ARN" | sed 's|^.*:role/||')"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json" | sed 's|^.*:assumed-role/||; s|/.*$||')"
+          test "$caller_account" = "$expected_account" || {
+            echo '::error::IAM inspection account mismatch'
+            exit 1
+          }
+          test "$caller_role_path" = "$expected_role_path" || {
+            echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'
+            exit 1
+          }
+          test "$caller_role_path" = AetherStagingPlan || {
+            echo '::error::IAM inspection must use AetherStagingPlan'
+            exit 1
+          }
 
       - name: Verify effective lifecycle IAM policy before enforcement
         if: steps.check-armed.outputs.armed == 'true'
@@ -143,6 +190,37 @@ jobs:
           set -euo pipefail
           python scripts/release/verify_effective_staging_lifecycle_policy.py \
             --role-arn "$AWS_STAGING_LIFECYCLE_ROLE_ARN"
+
+      - name: Configure AWS lifecycle credentials
+        if: steps.check-armed.outputs.armed == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Verify lifecycle role assumption before TTL enforcement
+        if: steps.check-armed.outputs.armed == 'true'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="$(printf '%s' "$EXPECTED_ROLE_ARN" | cut -d: -f5)"
+          expected_role_path="$(printf '%s' "$EXPECTED_ROLE_ARN" | sed 's|^.*:role/||')"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json" | sed 's|^.*:assumed-role/||; s|/.*$||')"
+          test "$caller_account" = "$expected_account" || {
+            echo '::error::staging lifecycle account mismatch'
+            exit 1
+          }
+          test "$caller_role_path" = "$expected_role_path" || {
+            echo '::error::staging lifecycle role does not match AWS_STAGING_LIFECYCLE_ROLE_ARN'
+            exit 1
+          }
+          test "$caller_role_path" = AetherStagingLifecycle || {
+            echo '::error::TTL enforcement must use AetherStagingLifecycle'
+            exit 1
+          }
 
       - name: Resolve the guard mode and the TTL bounds
         id: config

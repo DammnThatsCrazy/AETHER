@@ -25,7 +25,12 @@ APP_IDS = {
 }
 
 
-def _client(*, production_repository: str = checker.REPOSITORY, production_commit: str | None = COMMIT):
+def _client(
+    *,
+    production_repository: str = checker.REPOSITORY,
+    production_commit: str | None = COMMIT,
+    domain_branch: str = "main",
+):
     apps = []
     for name, app_id in APP_IDS.items():
         apps.append(
@@ -72,7 +77,7 @@ def _client(*, production_repository: str = checker.REPOSITORY, production_commi
                     "domainStatus": "AVAILABLE",
                     "subDomains": [
                         {
-                            "subDomainSetting": {"prefix": prefix, "branchName": "main"},
+                            "subDomainSetting": {"prefix": prefix, "branchName": domain_branch},
                             "verified": True,
                         }
                     ],
@@ -115,6 +120,15 @@ def test_production_status_rejects_missing_runtime_links():
         client=missing_runtime_links,
     )
     assert any("VITE_STATUS_API_URL" in error for error in errors)
+
+
+def test_staging_domain_requires_the_main_branch_mapping():
+    errors = checker.contract_errors(
+        mode="staging",
+        expected_commit=COMMIT,
+        client=_client(domain_branch="preview"),
+    )
+    assert any("staging domain lacks an AVAILABLE" in error for error in errors)
 
 
 def test_staging_runtime_contract_requires_api_and_custom_status_origins():

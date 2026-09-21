@@ -317,6 +317,7 @@ SUPPORTED_CONDITION_OPERATORS = frozenset(
         "ArnLike",
         "ForAllValues:StringEquals",
         "ForAnyValue:StringEquals",
+        "ForAnyValue:StringLike",
     }
 )
 
@@ -402,7 +403,7 @@ def _conditions_compatible(
                             for wanted_value in wanted_values
                             for actual_pattern in actual_values
                         )
-                        if operator in {"StringLike", "ArnLike"}
+                        if operator in {"StringLike", "ForAnyValue:StringLike", "ArnLike"}
                         else bool(wanted_values & actual_values)
                     )
                 ),

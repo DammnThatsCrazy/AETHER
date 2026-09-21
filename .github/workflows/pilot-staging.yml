@@ -166,7 +166,11 @@ jobs:
   secret-payload-preflight:
     name: Verify pilot secret payloads are ECS-safe
     needs: [contract, credential-preflight]
-    if: needs.contract.result == 'success' && needs.credential-preflight.result == 'success'
+    if: >-
+      needs.contract.result == 'success'
+      && needs.credential-preflight.result == 'success'
+      && inputs.action != 'plan-sleep'
+      && inputs.action != 'apply-sleep'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: staging
@@ -236,9 +240,16 @@ jobs:
     name: Verify Amplify app ownership and current-head artifacts
     needs: [contract, credential-preflight, secret-payload-preflight]
     if: >-
-      needs.contract.result == 'success'
+      always()
+      && needs.contract.result == 'success'
       && needs.credential-preflight.result == 'success'
-      && needs.secret-payload-preflight.result == 'success'
+      && (
+        needs.secret-payload-preflight.result == 'success'
+        || (
+          (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
+          && needs.secret-payload-preflight.result == 'skipped'
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: staging-terraform
@@ -276,11 +287,19 @@ jobs:
 
   dispatch-authority:
     name: Dispatch canonical staging authority
-    needs: [contract, credential-preflight, amplify-preflight]
+    needs: [contract, credential-preflight, secret-payload-preflight, amplify-preflight]
     if: >-
-      needs.contract.result == 'success'
+      always()
+      && needs.contract.result == 'success'
       && needs.credential-preflight.result == 'success'
       && needs.amplify-preflight.result == 'success'
+      && (
+        needs.secret-payload-preflight.result == 'success'
+        || (
+          (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
+          && needs.secret-payload-preflight.result == 'skipped'
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 240
     permissions:

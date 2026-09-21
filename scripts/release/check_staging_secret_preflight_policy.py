@@ -16,7 +16,7 @@ EXPECTED_KMS_RESOURCE_SUFFIX = ":key/*"
 EXPECTED_KMS_SCOPE = "staging-secrets-kms-key"
 EXPECTED_KMS_CONDITIONS = {
     "StringEquals": {"aws:ResourceTag/Environment": "staging"},
-    "StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
+    "ForAnyValue:StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
 }
 REQUIRED_FORBIDDEN = {
     "secretsmanager:PutSecretValue",
