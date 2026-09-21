@@ -1043,12 +1043,8 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
         s for s in statements if s["sid"] == "PassOnlyStagingAmplifyDomainRole"
     )
     assert amplify_domain["resource"].endswith("AETHER-staging-amplify-domain-role")
-    assert amplify_domain["conditions"]["iam:PassedToService"] == [
-        "amplify.amazonaws.com"
-    ]
-    assert amplify_domain["condition_operators"] == {
-        "iam:PassedToService": "ForAnyValue:StringEquals"
-    }
+    assert "conditions" not in amplify_domain
+    assert "condition_operators" not in amplify_domain
     domain_role_read = next(
         s for s in statements if s["sid"] == "ReadStagingAmplifyDomainRole"
     )

@@ -176,6 +176,9 @@ jobs:
           # until the domain association no longer points at it. Record the
           # canonical restoration and temporarily move only affected mappings
           # to a workflow-owned branch. The compact state contains no secrets.
+          # The explicit empty role below also clears stale legacy role
+          # metadata; omitting the field leaves that metadata attached to an
+          # existing Amplify domain association.
           domain_names_json="$(aws amplify list-domain-associations \
             --app-id "$APP_ID" --max-results 50 \
             --query 'domainAssociations[].domainName' --output json)"
@@ -248,6 +251,7 @@ jobs:
                 --app-id "$APP_ID" \
                 --domain-name "$domain_name" \
                 --no-enable-auto-sub-domain \
+                --auto-sub-domain-iam-role '' \
                 --sub-domain-settings "$migration_settings" \
                 >/dev/null
               wait_for_domain_association "$domain_name"
@@ -354,6 +358,7 @@ jobs:
                 --app-id "$APP_ID" \
                 --domain-name "$domain_name" \
                 --no-enable-auto-sub-domain \
+                --auto-sub-domain-iam-role '' \
                 --sub-domain-settings "$restore_settings" \
                 >/dev/null
               wait_for_domain_association "$domain_name"
