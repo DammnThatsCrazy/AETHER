@@ -12,6 +12,11 @@ Endpoint:
 Events handled:
     checkout.session.completed      — New subscription; maps customer to tenant,
                                       activates plan tier
+    checkout.session.async_payment_succeeded — Delayed payment success; confirms
+                                      the subscription without replaying completion
+                                      side effects
+    checkout.session.async_payment_failed — Delayed payment failure; marks the
+                                      subscription past_due without downgrading it
     customer.subscription.created   — Subscription object created (may arrive
                                       alongside or instead of checkout event)
     customer.subscription.updated   — Plan changed, status changed, renewal
@@ -143,6 +148,47 @@ async def _resolve_tenant(
 # Event handlers
 # ---------------------------------------------------------------------------
 
+
+async def _send_subscription_activated_email(
+    contact_email: str,
+    tier_label: str,
+) -> None:
+    """Send one best-effort activation notification after payment settles."""
+    try:
+        from shared.email import email_service
+        from shared.email.templates import _base
+
+        subject = f"AETHER subscription activated — {tier_label}"
+        body_html = _base(
+            f"Subscription activated: {tier_label}",
+            f"""
+<p>Your AETHER subscription is active.</p>
+<p>Plan: <strong>{tier_label}</strong></p>
+<p>Log in to your dashboard to view usage and manage your account.</p>
+""",
+        )
+        await email_service.send_email(
+            to=contact_email,
+            subject=subject,
+            body_html=body_html,
+        )
+    except Exception as _e:
+        logger.debug(f"checkout email skipped: {_e}")
+
+
+def _requested_plan_tier(session: dict[str, Any]) -> Optional[PlanTier]:
+    """Return the validated tier requested by a Checkout session, if present."""
+    requested_tier_value = (session.get("metadata") or {}).get(
+        "requested_plan_tier", ""
+    )
+    if not requested_tier_value:
+        return None
+    try:
+        return PlanTier(requested_tier_value)
+    except ValueError:
+        return None
+
+
 async def _handle_checkout_session_completed(event_data: dict[str, Any]) -> None:
     """
     checkout.session.completed fires once per successful Checkout flow.
@@ -183,15 +229,12 @@ async def _handle_checkout_session_completed(event_data: dict[str, Any]) -> None
     requested_tier_value: str = (
         (session.get("metadata") or {}).get("requested_plan_tier", "")
     )
-    plan_tier: Optional[PlanTier] = None
-    if requested_tier_value:
-        try:
-            plan_tier = PlanTier(requested_tier_value)
-        except ValueError:
-            logger.warning(
-                f"checkout.session.completed: unknown plan_tier "
-                f"'{requested_tier_value}' for tenant={tenant_id}"
-            )
+    plan_tier = _requested_plan_tier(session)
+    if requested_tier_value and plan_tier is None:
+        logger.warning(
+            f"checkout.session.completed: unknown plan_tier "
+            f"'{requested_tier_value}' for tenant={tenant_id}"
+        )
 
     # Do NOT update plan_tier here. The subscription.created / subscription.updated
     # event always arrives after checkout completion and carries the authoritative
@@ -203,26 +246,148 @@ async def _handle_checkout_session_completed(event_data: dict[str, Any]) -> None
         labels={"plan_tier": plan_tier.value if plan_tier else "unknown"},
     )
 
-    # Send payment-success / subscription-activated email (best-effort)
-    if contact_email:
-        try:
-            from shared.email import email_service
-            from shared.email.templates import _base
-            tier_label = plan_tier.value if plan_tier else "your plan"
-            subject = f"AETHER subscription activated — {tier_label}"
-            body_html = _base(f"Subscription activated: {tier_label}", f"""
-<p>Your AETHER subscription is active.</p>
-<p>Plan: <strong>{tier_label}</strong></p>
-<p>Log in to your dashboard to view usage and manage your account.</p>
-""")
-            await email_service.send_email(to=contact_email, subject=subject, body_html=body_html)
-        except Exception as _e:
-            logger.debug(f"checkout email skipped: {_e}")
+    # Delayed payment methods arrive here while still unpaid. Fulfillment and
+    # the activation email belong to async_payment_succeeded in that case.
+    if contact_email and session.get("payment_status", "paid") != "unpaid":
+        await _send_subscription_activated_email(
+            contact_email,
+            plan_tier.value if plan_tier else "your plan",
+        )
 
     logger.info(
         f"checkout.session.completed: tenant={tenant_id} "
         f"customer={customer_id} subscription={subscription_id} "
         f"plan_tier={plan_tier.value if plan_tier else 'pending'}"
+    )
+
+
+async def _handle_checkout_session_async_payment_succeeded(
+    event_data: dict[str, Any],
+) -> None:
+    """Confirm a delayed Checkout payment without replaying activation effects.
+
+    Stripe can deliver ``checkout.session.completed`` before an asynchronous
+    payment method settles and later emit this event. The completion handler
+    owns customer mapping, while this handler is the only fulfillment path for
+    the previously-unpaid session. The subscription lifecycle events remain
+    authoritative for the plan tier, so this handler records settled state and
+    repairs the customer mapping when the async event arrives first without
+    replaying the completion side effects.
+    """
+    session = event_data.get("object", {})
+    tenant_id = (
+        session.get("client_reference_id")
+        or (session.get("metadata") or {}).get("tenant_id")
+        or await _resolve_tenant(session)
+    )
+    if not tenant_id:
+        logger.warning(
+            "checkout.session.async_payment_succeeded: no tenant_id; skipping"
+        )
+        return
+
+    customer_id = session.get("customer") or ""
+    subscription_id = session.get("subscription") or ""
+    contact_email = (
+        session.get("customer_details", {}).get("email", "")
+        or (session.get("metadata") or {}).get("contact_email", "")
+    )
+    if customer_id or subscription_id:
+        await stripe_repository.update_customer_mapping(
+            tenant_id=tenant_id,
+            stripe_customer_id=customer_id or None,
+            stripe_subscription_id=subscription_id or None,
+            contact_email=contact_email or None,
+        )
+    if subscription_id:
+        await stripe_repository.update_subscription_state(
+            tenant_id=tenant_id,
+            stripe_subscription_id=subscription_id,
+            subscription_status="active",
+        )
+
+    if not contact_email:
+        account = await stripe_repository.get_billing_account(tenant_id)
+        contact_email = (account or {}).get("contact_email", "")
+    if contact_email:
+        account = await stripe_repository.get_billing_account(tenant_id)
+        requested_tier = _requested_plan_tier(session)
+        # The completion handler intentionally leaves plan_tier to the
+        # subscription lifecycle events. Until those events arrive, a newly
+        # inserted account defaults to alpha; use the validated Checkout
+        # request for the delayed-payment email so Gamma/Delta purchases are
+        # not reported as Alpha.
+        tier_label = (
+            requested_tier.value
+            if requested_tier is not None
+            else (account or {}).get("plan_tier") or "your plan"
+        )
+        await _send_subscription_activated_email(
+            contact_email,
+            tier_label,
+        )
+
+    metrics.increment("stripe_webhook_checkout_async_payment_succeeded")
+    logger.info(
+        "checkout.session.async_payment_succeeded: tenant=%s subscription=%s; "
+        "recorded settled payment without replaying checkout activation",
+        tenant_id,
+        subscription_id,
+    )
+
+
+async def _handle_checkout_session_async_payment_failed(
+    event_data: dict[str, Any],
+) -> None:
+    """Keep delayed-payment subscriptions recoverable as ``past_due``.
+
+    Checkout can complete before an asynchronous payment method settles. A
+    failed settlement is not an immediate cancellation: Stripe may retry or
+    the customer may repair the payment method. The subscription-deleted
+    webhook remains the only downgrade boundary.
+    """
+    session = event_data.get("object", {})
+    tenant_id = (
+        session.get("client_reference_id")
+        or (session.get("metadata") or {}).get("tenant_id")
+        or await _resolve_tenant(session)
+    )
+    subscription_id = session.get("subscription") or ""
+    if not tenant_id:
+        logger.warning(
+            "checkout.session.async_payment_failed: cannot resolve tenant; "
+            "subscription status not updated"
+        )
+        return
+
+    customer_id = session.get("customer") or ""
+    contact_email = (
+        session.get("customer_details", {}).get("email", "")
+        or (session.get("metadata") or {}).get("contact_email", "")
+    )
+    # update_subscription_state is intentionally UPDATE-only in the database
+    # path. Async failures can arrive before checkout completion has inserted
+    # the billing account, so establish the customer/subscription mapping first
+    # or the past_due state is silently lost.
+    if customer_id or subscription_id:
+        await stripe_repository.update_customer_mapping(
+            tenant_id=tenant_id,
+            stripe_customer_id=customer_id or None,
+            stripe_subscription_id=subscription_id or None,
+            contact_email=contact_email or None,
+        )
+    if subscription_id:
+        await stripe_repository.update_subscription_state(
+            tenant_id=tenant_id,
+            stripe_subscription_id=subscription_id,
+            subscription_status="past_due",
+        )
+    metrics.increment("stripe_webhook_checkout_async_payment_failed")
+    logger.warning(
+        "checkout.session.async_payment_failed: tenant=%s subscription=%s; "
+        "left subscription recoverable as past_due",
+        tenant_id,
+        subscription_id,
     )
 
 
@@ -466,6 +631,8 @@ async def _handle_invoice_finalized(event_data: dict[str, Any]) -> None:
 
 _HANDLERS = {
     "checkout.session.completed": _handle_checkout_session_completed,
+    "checkout.session.async_payment_succeeded": _handle_checkout_session_async_payment_succeeded,
+    "checkout.session.async_payment_failed": _handle_checkout_session_async_payment_failed,
     "customer.subscription.created": _handle_subscription_created,
     "customer.subscription.updated": _handle_subscription_updated,
     "customer.subscription.deleted": _handle_subscription_deleted,

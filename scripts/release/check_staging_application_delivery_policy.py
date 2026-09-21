@@ -17,6 +17,14 @@ APPLY_MANIFEST = ROOT / "config/staging_apply_iam_policy.yaml"
 WORKFLOW = ROOT / ".github/workflows/deploy.yml"
 
 EXPECTED = {
+    "ecr:GetAuthorizationToken",
+    "ecr:BatchCheckLayerAvailability",
+    "ecr:BatchGetImage",
+    "ecr:CompleteLayerUpload",
+    "ecr:DescribeImages",
+    "ecr:InitiateLayerUpload",
+    "ecr:PutImage",
+    "ecr:UploadLayerPart",
     "ecs:RunTask",
     "ecs:DescribeTasks",
     "s3:ListBucket",
@@ -38,6 +46,9 @@ CLI_TO_IAM = {
     ("s3", "sync"): {"s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject"},
     ("s3", "cp"): {"s3:PutObject"},
     ("ssm", "get-parameter"): {"ssm:GetParameter"},
+    # deploy.yml verifies the exact assumed role before each mutating phase;
+    # this read is already covered by the base staging apply contract.
+    ("sts", "get-caller-identity"): {"sts:GetCallerIdentity"},
 }
 
 
@@ -109,12 +120,19 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("unreviewed staging application-delivery actions: " + ", ".join(unexpected))
 
     by_sid = {statement["sid"]: statement for statement in document["statements"]}
+    auth = by_sid.get("AuthorizeStagingEcrClient")
+    publish_image = by_sid.get("PublishStagingBackendImage")
     expected_cluster = "arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging"
     expected_task_definition = "arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*"
     expected_tasks = "arn:aws:ecs:us-east-1:${account_id}:task/AETHER-staging/*"
     run = by_sid.get("RunStagingApplicationTasks")
     inspect = by_sid.get("InspectStagingApplicationTasks")
     publish = by_sid.get("PublishStagingStaticArtifacts")
+    if not auth or auth["resource"] != "*" or auth.get("scope") != "global-read-required-by-api":
+        raise SystemExit("AuthorizeStagingEcrClient must use the account-level ECR auth scope")
+    expected_backend_repo = "arn:aws:ecr:us-east-1:${account_id}:repository/aether-backend"
+    if not publish_image or publish_image["resource"] != expected_backend_repo:
+        raise SystemExit("PublishStagingBackendImage must be limited to the immutable backend repository")
     if not run or run["resource"] != [expected_task_definition, expected_cluster]:
         raise SystemExit("RunStagingApplicationTasks has an unexpected resource scope")
     if run.get("conditions") != {"ArnEquals": {"ecs:cluster": expected_cluster}}:

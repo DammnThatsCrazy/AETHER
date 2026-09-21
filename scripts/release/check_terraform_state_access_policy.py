@@ -18,6 +18,7 @@ EXPECTED = {
     "s3:DeleteObject",
     "s3:GetBucketVersioning",
     "s3:GetBucketLocation",
+    "s3:GetEncryptionConfiguration",
     "dynamodb:GetItem",
     "dynamodb:PutItem",
     "dynamodb:DeleteItem",
@@ -104,7 +105,7 @@ def main() -> int:
         for error in errors:
             print(f"::error::{error}")
         return 1
-    print("Terraform state access policy valid: 9 explicit least-privilege actions")
+    print("Terraform state access policy valid: 10 explicit least-privilege actions")
     return 0
 
 

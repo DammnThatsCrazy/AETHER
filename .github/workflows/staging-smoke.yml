@@ -8,6 +8,10 @@ name: Staging Smoke Test (Proof Gate)
 # "proof" step that confirms staging smoke tests pass and produces a
 # release-proof report artifact.
 #
+# It is intentionally dispatch-only. A push to main can start the immutable
+# build and infrastructure evidence, but it must not probe a sleeping or
+# not-yet-provisioned staging endpoint and report that as a smoke failure.
+#
 # BLOCKING BEHAVIOR (release approval):
 #   - smoke-staging ... P0 smoke failure BLOCKS release approval.
 #                       If the staging smoke tests fail, the release gate
@@ -31,6 +35,12 @@ on:
         type: string
         default: 'staging'
         required: false
+      deployment_lane:
+        description: 'Staging lane; pilot keeps Aether smoke coverage and defers Kyber/GCP/Google identity'
+        type: choice
+        options: [full, pilot]
+        default: full
+        required: true
       proof_tenant_id:
         description: 'Proof tenant ID for smoke test authentication'
         type: string
@@ -41,13 +51,6 @@ on:
         type: string
         default: 'proof-lab'
         required: false
-  push:
-    branches: [main]
-    paths:
-      - 'services/backend/**'
-      - 'packages/shared/**'
-      - 'packages/web/**'
-
 permissions:
   contents: read
 
@@ -67,15 +70,123 @@ jobs:
     name: Preflight — Check Staging Secrets
     environment: staging
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deployment-lane contract dependency
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate the staging deployment-lane contract and static runtime wiring
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_lane_contract.py \
+            --profile staging \
+            --deployment-lane "$DEPLOYMENT_LANE" \
+            --check-runtime-wiring
+      - name: Configure AWS inspection credentials for the pilot lane
+        if: inputs.deployment_lane == 'pilot'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # The existing read-only AetherStagingPlan role performs IAM
+          # metadata inspection; the secret role remains value-readable only.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify staging IAM inspection role assumption
+        if: inputs.deployment_lane == 'pilot'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+      - name: Verify the effective secret preflight IAM contract
+        if: inputs.deployment_lane == 'pilot'
+        env:
+          TARGET_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_apply_policy.py --role-arn "$TARGET_ROLE_ARN" --manifest config/staging_secret_preflight_iam_policy.yaml --expected-role AetherStagingSecretPreflight --required-policy-suffix AetherStagingSecretPreflightContract
+      - name: Configure AWS secret preflight credentials for the pilot lane
+        if: inputs.deployment_lane == 'pilot'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify secret preflight role assumption and policy
+        if: inputs.deployment_lane == 'pilot'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_secret_preflight_policy.py
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role="$(jq -r .Arn <<<"$caller_json")"
+          caller_role="${caller_role#*:assumed-role/}"
+          caller_role="${caller_role%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::secret preflight account mismatch'; exit 1; }
+          test "$caller_role" = AetherStagingSecretPreflight || { echo '::error::unexpected secret preflight role'; exit 1; }
+      - name: Verify pilot ECS-mounted secret payloads
+        if: inputs.deployment_lane == 'pilot'
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_secret_payload_contract.py --lane pilot
+      - name: Configure the read-only staging plan role for ECS metadata
+        if: inputs.deployment_lane == 'pilot'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # The secret preflight role is intentionally value-readable only.
+          # Switch to the existing read-only plan role for ECS metadata rather
+          # than widening the secret role with DescribeServices permissions.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify the read-only ECS metadata role
+        if: inputs.deployment_lane == 'pilot'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role="$(jq -r .Arn <<<"$caller_json")"
+          caller_role="${caller_role#*:assumed-role/}"
+          caller_role="${caller_role%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::ECS metadata role account mismatch'; exit 1; }
+          test "$caller_role" = AetherStagingPlan || { echo '::error::unexpected ECS metadata read role'; exit 1; }
+          echo 'Verified ECS metadata checks use the read-only AetherStagingPlan role.'
+      - name: Verify pilot ECS task-definition lane
+        if: inputs.deployment_lane == 'pilot'
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_task_definition_contract.py --lane pilot
       - name: Check the canonical staging proof inputs
         id: check
         env:
           TARGET_ENVIRONMENT: ${{ inputs.environment || 'staging' }}
-          AETHER_API_URL: ${{ vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME }}
+          AETHER_API_URL: ${{ vars.AETHER_API_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           AETHER_API_KEY: ${{ secrets.SMOKE_API_KEY }}
           PROOF_TENANT_ID: ${{ inputs.proof_tenant_id || 'aether-proof-tenant' }}
           PROOF_WORKSPACE_ID: ${{ inputs.proof_workspace_id || 'proof-lab' }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           test "$TARGET_ENVIRONMENT" = staging || {
@@ -84,12 +195,33 @@ jobs:
           test -n "${AETHER_API_URL:-}" || {
             echo "::error::AETHER_API_URL is missing; set repository variable AETHER_API_URL or secret TF_DOMAIN_NAME"; exit 1;
           }
+          case "$AETHER_API_URL" in
+            https://*) ;;
+            *) echo '::error::AETHER_API_URL must be an HTTPS URL, not a bare host'; exit 1 ;;
+          esac
           test -n "${AETHER_API_KEY:-}" || {
             echo "::error::AETHER_API_KEY is missing; configure SMOKE_API_KEY"; exit 1;
           }
           test -n "${PROOF_TENANT_ID:-}" || { echo '::error::PROOF_TENANT_ID is empty'; exit 1; }
           test -n "${PROOF_WORKSPACE_ID:-}" || { echo '::error::PROOF_WORKSPACE_ID is empty'; exit 1; }
+          case "$DEPLOYMENT_LANE" in
+            full|pilot) ;;
+            *) echo "::error::deployment_lane must be full or pilot, got ${DEPLOYMENT_LANE}"; exit 1 ;;
+          esac
           echo 'Canonical staging proof inputs are configured; secret values were not printed.'
+
+      - name: Validate the Kyber workforce identity contract
+        if: inputs.deployment_lane != 'pilot'
+        env:
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_kyber_staging_contract.py \
+            --require-public-client-id \
+            --evidence-out kyber-staging-contract.json
 
   # -------------------------------------------------------------------
   # smoke-staging — P0 smoke test against the staging environment.
@@ -112,9 +244,18 @@ jobs:
     environment: staging
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Python for the Stripe catalog validator
+        if: inputs.deployment_lane == 'pilot'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -130,14 +271,113 @@ jobs:
       - name: Install dependencies (pnpm)
         run: pnpm install
 
+      - name: Install the Stripe catalog validator
+        if: inputs.deployment_lane == 'pilot'
+        run: python -m pip install --disable-pip-version-check "stripe>=10.0.0"
+
+      - name: Configure AWS secret preflight credentials for the pilot Stripe smoke
+        if: inputs.deployment_lane == 'pilot'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Load the pilot Stripe test key without logging it
+        if: inputs.deployment_lane == 'pilot'
+        run: |
+          set -euo pipefail
+          stripe_key="$(aws secretsmanager get-secret-value \
+            --region us-east-1 \
+            --secret-id aether/stripe-secret-key \
+            --query SecretString \
+            --output text)"
+          case "$stripe_key" in
+            sk_test_*) ;;
+            *) echo '::error::pilot Stripe secret is not a test-mode key'; exit 1 ;;
+          esac
+          echo "::add-mask::$stripe_key"
+          printf 'STRIPE_SECRET_KEY=%s\n' "$stripe_key" >> "$GITHUB_ENV"
+
+      - name: Load pilot Stripe prices without logging values
+        if: inputs.deployment_lane == 'pilot'
+        run: |
+          set -euo pipefail
+          load_price() {
+            local variable="$1"
+            local secret_name="$2"
+            local price_id
+            price_id="$(aws secretsmanager get-secret-value \
+              --region us-east-1 \
+              --secret-id "aether/$secret_name" \
+              --query SecretString \
+              --output text)"
+            case "$price_id" in
+              price_*) ;;
+              *) echo "::error::$secret_name is not a Stripe price ID"; exit 1 ;;
+            esac
+            echo "::add-mask::$price_id"
+            printf '%s=%s\n' "$variable" "$price_id" >> "$GITHUB_ENV"
+          }
+          load_optional_price() {
+            local variable="$1"
+            local secret_name="$2"
+            local price_id
+            local error_file
+            error_file="$(mktemp)"
+            if price_id="$(aws secretsmanager get-secret-value \
+              --region us-east-1 \
+              --secret-id "aether/$secret_name" \
+              --query SecretString \
+              --output text 2>"$error_file")"; then
+              case "$price_id" in
+                price_*) ;;
+                *) sed -n '1,120p' "$error_file" >&2; rm -f "$error_file"; echo "::error::$secret_name is not a Stripe price ID"; exit 1 ;;
+              esac
+              echo "::add-mask::$price_id"
+              printf '%s=%s\n' "$variable" "$price_id" >> "$GITHUB_ENV"
+            elif grep -q 'ResourceNotFoundException' "$error_file"; then
+              echo "Optional Stripe price secret aether/$secret_name is not configured; validation will skip it."
+            else
+              sed -n '1,120p' "$error_file" >&2
+              rm -f "$error_file"
+              echo "::error::could not read optional Stripe price secret aether/$secret_name"; exit 1
+            fi
+            rm -f "$error_file"
+          }
+          load_price STRIPE_PRICE_ALPHA stripe-price-alpha
+          load_price STRIPE_PRICE_BETA stripe-price-beta
+          load_price STRIPE_PRICE_GAMMA stripe-price-gamma
+          load_price STRIPE_PRICE_DELTA stripe-price-delta
+          load_optional_price STRIPE_PRICE_EPSILON stripe-price-epsilon
+          load_optional_price STRIPE_PRICE_OMICRON stripe-price-omicron
+          load_optional_price STRIPE_PRICE_OMEGA stripe-price-omega
+
+      - name: Validate pilot Stripe prices against the configured test account
+        if: inputs.deployment_lane == 'pilot'
+        run: python scripts/validate_stripe.py --skip-webhook
+
       - name: Run staging smoke test
         env:
-          AETHER_API_URL: ${{ vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME }}
+          AETHER_API_URL: ${{ vars.AETHER_API_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           AETHER_API_KEY: ${{ secrets.SMOKE_API_KEY }}
           PROOF_TENANT_ID: ${{ inputs.proof_tenant_id || 'aether-proof-tenant' }}
           PROOF_WORKSPACE_ID: ${{ inputs.proof_workspace_id || 'proof-lab' }}
           AETHER_ENV: staging
         run: pnpm smoke:staging
+
+      - name: Probe the live Kyber workforce identity edge
+        if: inputs.deployment_lane != 'pilot'
+        env:
+          AETHER_API_URL: ${{ vars.AETHER_API_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+        run: |
+          set -euo pipefail
+          mkdir -p reports/release-readiness
+          python scripts/release/probe_kyber_staging_identity.py \
+            --base-url "$AETHER_API_URL" \
+            --evidence-out reports/release-readiness/kyber-identity-probe.json
 
       - name: Upload smoke report artifact
         if: always()
@@ -191,7 +431,7 @@ jobs:
 
       - name: Generate release proof report
         env:
-          AETHER_API_URL: ${{ vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME }}
+          AETHER_API_URL: ${{ vars.AETHER_API_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           AETHER_API_KEY: ${{ secrets.SMOKE_API_KEY }}
           PROOF_TENANT_ID: ${{ inputs.proof_tenant_id || 'aether-proof-tenant' }}
           PROOF_WORKSPACE_ID: ${{ inputs.proof_workspace_id || 'proof-lab' }}

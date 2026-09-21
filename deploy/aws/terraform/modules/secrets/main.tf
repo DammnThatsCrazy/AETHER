@@ -140,6 +140,31 @@ locals {
     "stripe-webhook-secret" = {
       description = "Stripe webhook endpoint signing secret"
     }
+    # Price IDs are non-secret identifiers, but they are kept in the same
+    # Secrets Manager contract so ECS receives one reviewed, rotated mapping
+    # for every self-service plan tier without putting provider configuration
+    # into Terraform state or a task definition environment value.
+    "stripe-price-alpha" = {
+      description = "Stripe Price ID for the Alpha self-service plan"
+    }
+    "stripe-price-beta" = {
+      description = "Stripe Price ID for the Beta self-service plan"
+    }
+    "stripe-price-gamma" = {
+      description = "Stripe Price ID for the Gamma self-service plan"
+    }
+    "stripe-price-delta" = {
+      description = "Stripe Price ID for the Delta self-service plan"
+    }
+    "stripe-price-epsilon" = {
+      description = "Stripe Price ID for the Epsilon contract plan"
+    }
+    "stripe-price-omicron" = {
+      description = "Stripe Price ID for the Omicron contract plan"
+    }
+    "stripe-price-omega" = {
+      description = "Stripe Price ID for the Omega contract plan"
+    }
     "oracle-signer-private-key" = {
       description = "Private key for the AETHER oracle signing service"
     }

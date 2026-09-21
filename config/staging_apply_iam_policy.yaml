@@ -74,6 +74,7 @@ statements:
   - sid: ConfigureStagingSecretRotation
     actions:
       - secretsmanager:RotateSecret
+      - secretsmanager:CancelRotateSecret
     resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
     scope: staging-name-prefix
   - sid: TagStagingParameters
@@ -142,10 +143,22 @@ statements:
     actions:
       - kms:GenerateDataKey
       - kms:Decrypt
+      - kms:Encrypt
     resource: arn:aws:kms:us-east-1:${account_id}:key/*
     scope: staging-kms-resource-tag
     conditions:
       aws:ResourceTag/Environment: staging
+  - sid: ReencryptLegacyStagingSecrets
+    actions:
+      - kms:Decrypt
+    resource: '*'
+    scope: staging-secret-legacy-rekey
+    conditions:
+      kms:ViaService: secretsmanager.us-east-1.amazonaws.com
+      kms:EncryptionContext:SecretARN: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
+    condition_operators:
+      kms:ViaService: StringEquals
+      kms:EncryptionContext:SecretARN: ArnLike
   - sid: EnableStagingKeyRotation
     actions:
       - kms:EnableKeyRotation
@@ -244,6 +257,13 @@ statements:
     conditions:
       iam:AWSServiceName: ecs.amazonaws.com
     scope: ecs-service-linked-role-only
+  - sid: EnsureEcsApplicationAutoScalingServiceLinkedRole
+    actions:
+      - iam:CreateServiceLinkedRole
+    resource: '*'
+    conditions:
+      iam:AWSServiceName: ecs.application-autoscaling.amazonaws.com
+    scope: ecs-application-autoscaling-service-linked-role-only
   - sid: ReadEcsServiceLinkedRole
     actions:
       - iam:GetRole
@@ -513,6 +533,7 @@ statements:
       - rds:DescribeDBClusterParameterGroups
       - rds:DescribeDBClusterParameters
       - rds:DescribeDBInstances
+      - rds:DescribeGlobalClusters
       - rds:ListTagsForResource
     resource: '*'
     scope: staging-write-required-by-api
@@ -633,6 +654,11 @@ statements:
       - application-autoscaling:UntagResource
     resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
     scope: staging-autoscaling-targets
+  - sid: ReadStagingAutoScalingTags
+    actions:
+      - application-autoscaling:ListTagsForResource
+    resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
+    scope: staging-autoscaling-targets
   # ----- SSM Parameters (root main.tf) -----
   - sid: ManageStagingParameters
     actions:
@@ -648,13 +674,19 @@ statements:
     resource: '*'
     scope: global-read-required-by-api
   # ----- Amplify Hosting (root main.tf) -----
-  # Staging uses Amplify default domains. Custom-domain associations are
-  # production-only and therefore are not included in this staging contract.
+  # Staging reuses the already-verified staging.olympuslabsml.com
+  # associations. Squarespace remains authoritative for the DNS records; this
+  # contract covers only the Amplify association resource itself.
   - sid: CreateStagingAmplifyApps
     actions:
       - amplify:CreateApp
     resource: '*'
     scope: amplify-create-required-by-api
+  - sid: DiscoverStagingAmplifyApps
+    actions:
+      - amplify:ListApps
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: ManageStagingAmplifyApps
     actions:
       - amplify:GetApp
@@ -671,6 +703,25 @@ statements:
       - amplify:DeleteBranch
     resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
     scope: staging-amplify-branches
+  - sid: ManageStagingAmplifyJobs
+    actions:
+      - amplify:StartJob
+      - amplify:ListJobs
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-branches
+  - sid: ReadStagingAmplifyJobs
+    actions:
+      - amplify:GetJob
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*/jobs/*
+    scope: staging-amplify-jobs
+  - sid: ManageStagingAmplifyDomains
+    actions:
+      - amplify:CreateDomainAssociation
+      - amplify:GetDomainAssociation
+      - amplify:UpdateDomainAssociation
+      - amplify:DeleteDomainAssociation
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*
+    scope: staging-amplify-domains
   - sid: TagStagingAmplifyResources
     actions:
       - amplify:TagResource

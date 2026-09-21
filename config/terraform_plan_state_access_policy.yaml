@@ -1,0 +1,36 @@
+# Read-only Terraform backend access for the dedicated staging plan role.
+# Apply and state-migration roles use terraform_state_access_policy.yaml, which
+# additionally includes state-object writes. The plan role still needs lock
+# coordination to prevent concurrent state use, but cannot write state objects.
+version: 1
+scope: terraform-plan-state-backend
+state_bucket: aether-terraform-state
+state_lock_table: aether-terraform-locks
+statements:
+  - sid: ListProfileStatePrefix
+    actions:
+      - s3:ListBucket
+    resource: arn:aws:s3:::aether-terraform-state
+    conditions:
+      StringLike:
+        s3:prefix:
+          - profiles/*
+    scope: profile-state-prefix-only
+  - sid: ReadProfileStateObjects
+    actions:
+      - s3:GetObject
+    resource: arn:aws:s3:::aether-terraform-state/profiles/*
+    scope: profile-state-prefix-only
+  - sid: ReadStateBucketMetadata
+    actions:
+      - s3:GetBucketVersioning
+      - s3:GetBucketLocation
+    resource: arn:aws:s3:::aether-terraform-state
+    scope: state-bucket-metadata
+  - sid: LockProfileState
+    actions:
+      - dynamodb:GetItem
+      - dynamodb:PutItem
+      - dynamodb:DeleteItem
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/aether-terraform-locks
+    scope: state-lock-table-only

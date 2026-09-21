@@ -11,6 +11,18 @@ on:
         options: [staging, production]
         default: staging
         required: true
+      deployment_lane:
+        description: "Staging delivery lane; pilot defers only Kyber/GCP/Google identity gates"
+        type: choice
+        options: [full, pilot]
+        default: full
+        required: true
+      delivery_mode:
+        description: "Build-only publishes the immutable release without touching ECS; deploy performs the reviewed rollout"
+        type: choice
+        options: [deploy, build-only]
+        default: deploy
+        required: false
       source_run_id:
         description: Successful staging build run containing the release manifest (required for production)
         type: string
@@ -158,6 +170,42 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
+      - name: Validate deployment lane and canonical environment
+        env:
+          TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          DELIVERY_MODE: ${{ github.event_name == 'push' && 'deploy' || inputs.delivery_mode || 'deploy' }}
+        run: |
+          set -euo pipefail
+          case "$DEPLOYMENT_LANE" in
+            full|pilot) ;;
+            *) echo "::error::deployment_lane must be full or pilot, got ${DEPLOYMENT_LANE}"; exit 1 ;;
+          esac
+          if [ "$DEPLOYMENT_LANE" = pilot ] && [ "$TARGET_ENV" != staging ]; then
+            echo '::error::deployment_lane=pilot is valid only with environment=staging'
+            exit 1
+          fi
+          case "$DELIVERY_MODE" in
+            deploy|build-only) ;;
+            *) echo "::error::delivery_mode must be deploy or build-only, got ${DELIVERY_MODE}"; exit 1 ;;
+          esac
+          if [ "$TARGET_ENV" = production ] && [ "$DELIVERY_MODE" != deploy ]; then
+            echo '::error::build-only delivery is limited to staging'
+            exit 1
+          fi
+      - name: Install workflow validation dependencies
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate the staging deployment-lane contract and static runtime wiring
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        env:
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_lane_contract.py \
+            --profile staging \
+            --deployment-lane "$DEPLOYMENT_LANE" \
+            --check-runtime-wiring
       - name: Validate the staging application-delivery IAM contract
         if: github.event_name == 'push' || inputs.environment == 'staging'
         run: python scripts/release/check_staging_application_delivery_policy.py
@@ -166,6 +214,30 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Verify the assumed staging deploy role
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || {
+            echo '::error::staging delivery role account does not match AWS_DEPLOY_ROLE_ARN'; exit 1;
+          }
+          test "$caller_role_path" = "$expected_role_path" || {
+            echo '::error::staging delivery assumed an unexpected AWS role'; exit 1;
+          }
+          test "$caller_role_path" = AetherStagingDeploy || {
+            echo '::error::staging delivery must use AetherStagingDeploy'; exit 1;
+          }
+          echo 'Verified staging delivery credentials resolve to AetherStagingDeploy in the expected account.'
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
       - name: Reuse existing immutable backend image when present
@@ -240,6 +312,17 @@ jobs:
           digest="${EXISTING_DIGEST:-${RACE_DIGEST:-${BUILT_DIGEST:-}}}"
           test -n "$digest"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Verify backend image carries this commit provenance
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        env:
+          BACKEND_DIGEST: ${{ steps.backend-digest.outputs.digest }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_image_provenance.py \
+            --repository aether-backend \
+            --digest "$BACKEND_DIGEST" \
+            --expected-commit "$EXPECTED_COMMIT"
       - name: Validate published backend migration runtime
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
@@ -271,16 +354,35 @@ jobs:
           VITE_AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE || 'https://api.aether.io' }}
           AETHER_AUTH0_CLIENT_ID: ${{ secrets.AETHER_AUTH0_CLIENT_ID }}
           AETHER_API_BASE_URL: ${{ vars.AETHER_API_BASE_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
           KYBER_AUTH0_CLIENT_ID: ${{ secrets.KYBER_AUTH0_CLIENT_ID }}
           KYBER_API_BASE_URL: ${{ vars.KYBER_API_BASE_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           KYBER_WS_BASE_URL: ${{ vars.KYBER_WS_BASE_URL || format('wss://{0}', secrets.TF_DOMAIN_NAME) }}
-          KYBER_GOOGLE_CLIENT_ID: ${{ vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID }}
+          # Google workforce identity is required only for the full staging
+          # lane. Keep the pilot build from resolving or depending on the
+          # deferred credential at all.
+          KYBER_GOOGLE_CLIENT_ID: ${{ (github.event_name == 'push' || inputs.deployment_lane != 'pilot') && (vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID) || '' }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
-          test -n "${KYBER_GOOGLE_CLIENT_ID:-}" || {
-            echo '::error::KYBER_GOOGLE_CLIENT_ID is required for the staging Kyber SPA build; configure the approved Google Workspace OAuth client ID before delivery.'
-            exit 1
-          }
+          case "$DEPLOYMENT_LANE" in
+            full)
+              python scripts/release/check_kyber_staging_contract.py \
+                --require-public-client-id \
+                --evidence-out kyber-staging-contract.json
+              ;;
+            pilot)
+              # Keep the release schema artifact complete while making the
+              # deferral explicit. The pilot never publishes or probes Kyber;
+              # this marker is evidence, not a fake identity configuration.
+              cat > kyber-staging-contract.json <<'JSON'
+          {"contract":"kyber-workforce-identity","version":1,"profile":"staging","deployment_lane":"pilot","deferred":true,"deferred_gates":["kyber_operator_workforce_identity","gcp_hosting","google_credentials"],"secret_values_read":false}
+          JSON
+              ;;
+            *) echo "::error::unsupported deployment_lane ${DEPLOYMENT_LANE}"; exit 1 ;;
+          esac
           npm ci
           # The frontends import @aether/shared from the local workspace.
           # npm ci installs dependencies but does not build that workspace,
@@ -301,18 +403,28 @@ jobs:
             VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
             npm --workspace frontend/aether run build
-          VITE_KYBER_ENV=staging \
-            VITE_AETHER_ENDPOINT="$KYBER_API_BASE_URL" \
-            VITE_GRAPHQL_URL="$KYBER_API_BASE_URL/v1/analytics/graphql" \
-            VITE_OIDC_AUTHORITY="https://accounts.google.com" \
-            VITE_OIDC_CLIENT_ID="$KYBER_GOOGLE_CLIENT_ID" \
-            VITE_OIDC_REDIRECT_URI="$KYBER_API_BASE_URL/v1/kyber/auth/callback" \
-            VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID" \
-            VITE_API_BASE_URL="$KYBER_API_BASE_URL" \
-            VITE_WS_BASE_URL="$KYBER_WS_BASE_URL" \
-            npm --workspace frontend/kyber run build
+          if [ "$DEPLOYMENT_LANE" = full ]; then
+            VITE_KYBER_ENV=staging \
+              VITE_AETHER_ENDPOINT="$KYBER_API_BASE_URL" \
+              VITE_GRAPHQL_URL="$KYBER_API_BASE_URL/v1/analytics/graphql" \
+              VITE_OIDC_AUTHORITY="https://accounts.google.com" \
+              VITE_OIDC_CLIENT_ID="$KYBER_GOOGLE_CLIENT_ID" \
+              VITE_OIDC_REDIRECT_URI="$KYBER_API_BASE_URL/v1/kyber/auth/callback" \
+              VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID" \
+              VITE_API_BASE_URL="$KYBER_API_BASE_URL" \
+              VITE_WS_BASE_URL="$KYBER_WS_BASE_URL" \
+              npm --workspace frontend/kyber run build
+          else
+            rm -rf frontend/kyber-pilot-deferred
+            mkdir -p frontend/kyber-pilot-deferred
+            printf '%s\n' 'Kyber workforce identity is intentionally deferred in the lean AWS pilot lane.' > frontend/kyber-pilot-deferred/README.txt
+          fi
           tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C frontend/aether/dist .
-          tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber/dist .
+          if [ "$DEPLOYMENT_LANE" = full ]; then
+            tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber/dist .
+          else
+            tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber-pilot-deferred .
+          fi
           tar --sort=name --mtime='UTC 1970-01-01' -czf migrations.tar.gz \
             'services/backend/alembic.ini' 'services/backend/alembic'
           cp config/runtime_deployment.yaml runtime_deployment.yaml
@@ -321,6 +433,7 @@ jobs:
         env:
           BACKEND_DIGEST: ${{ steps.backend-digest.outputs.digest }}
           REGISTRY: ${{ steps.ecr.outputs.registry }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -330,6 +443,7 @@ jobs:
           data = {
             'schema_version': 1, 'commit_sha': os.environ['GITHUB_SHA'],
             'workflow_run_id': os.environ['GITHUB_RUN_ID'], 'profile': 'staging',
+            'deployment_lane': os.environ['DEPLOYMENT_LANE'],
             'artifacts': {
               'backend_image': {'uri': f"{os.environ['REGISTRY']}/aether-backend@{os.environ['BACKEND_DIGEST']}", 'digest': os.environ['BACKEND_DIGEST']},
               'aether_spa': {'file': 'aether-spa.tar.gz', 'digest': digest('aether-spa.tar.gz')},
@@ -356,6 +470,7 @@ jobs:
             kyber-spa.tar.gz
             migrations.tar.gz
             runtime_deployment.yaml
+            kyber-staging-contract.json
           if-no-files-found: error
           retention-days: 30
 
@@ -454,6 +569,7 @@ jobs:
             kyber-spa.tar.gz
             migrations.tar.gz
             runtime_deployment.yaml
+            kyber-staging-contract.json
           retention-days: 1
 
   deploy:
@@ -468,6 +584,7 @@ jobs:
     # an attempted runtime rollout before Terraform has provisioned services.
     if: >-
       always() && !cancelled() && needs.delivery-armed.outputs.armed == 'true'
+      && (github.event_name == 'push' || inputs.delivery_mode == 'deploy')
       && (github.event_name == 'workflow_dispatch' || vars.STAGING_RUNTIME_ENABLED == 'true')
       && ((needs.build.result == 'success' && needs.acquire-release.result == 'skipped')
           || (needs.acquire-release.result == 'success' && needs.build.result == 'skipped'))
@@ -483,10 +600,41 @@ jobs:
         with: {python-version: '3.11'}
       - name: Install workflow Python dependencies
         run: pip install pyyaml
+      - name: Validate staging credential shape before delivery
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        env:
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL }}
+          TF_AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          TF_AUTH0_MANAGEMENT_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+          TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ secrets.KYBER_GOOGLE_CLIENT_ID }}
+          KYBER_GOOGLE_CLIENT_SECRET: ${{ secrets.KYBER_GOOGLE_CLIENT_SECRET }}
+          TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_credential_contract.py --lane "$DEPLOYMENT_LANE"
       - uses: actions/download-artifact@v4
         with:
           name: ${{ needs.acquire-release.result == 'success' && 'approved-release' || format('release-{0}', github.sha) }}
       - name: Verify release immediately before mutation
+        env:
+          EXPECTED_DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           CHECKSUM=$(cat release.json.sha256)
@@ -504,11 +652,57 @@ jobs:
             --manifest release.json --candidate release-candidate.json \
             --expected-sha "$SHA" \
             --lockfile package-lock.json --lockfile pyproject.toml
+          EXPECTED_DEPLOYMENT_LANE="$EXPECTED_DEPLOYMENT_LANE" python - <<'PY'
+          import json, os, sys
+          manifest = json.load(open("release.json", encoding="utf-8"))
+          expected = os.environ["EXPECTED_DEPLOYMENT_LANE"]
+          actual = manifest.get("deployment_lane", "full")
+          if actual != expected:
+              sys.exit(f"::error::release deployment_lane={actual} does not match requested {expected}")
+          if expected == "pilot" and manifest.get("profile") != "staging":
+              sys.exit("::error::pilot delivery must carry profile=staging")
+          print(f"release lane verified: {actual}")
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Verify the assumed staging deploy role before ECS mutation
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || {
+            echo '::error::staging ECS role account does not match AWS_DEPLOY_ROLE_ARN'; exit 1;
+          }
+          test "$caller_role_path" = "$expected_role_path" || {
+            echo '::error::staging ECS assumed an unexpected AWS role'; exit 1;
+          }
+          test "$caller_role_path" = AetherStagingDeploy || {
+            echo '::error::staging ECS delivery must use AetherStagingDeploy'; exit 1;
+          }
+          echo 'Verified staging ECS delivery credentials resolve to AetherStagingDeploy in the expected account.'
+      - name: Verify the current staging task-definition lane before mutation
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        env:
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          # The rollout below clones each live task definition and changes only
+          # its image and AETHER_ROLE. Prove that the source revision already
+          # belongs to the requested lane so an earlier pilot/full rollout
+          # cannot silently carry the wrong Stripe, Kyber, or secret shape.
+          python scripts/release/check_staging_task_definition_contract.py \
+            --lane "$DEPLOYMENT_LANE"
       - name: Apply packaged migrations, then register exact task revision for every profile service
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
@@ -654,9 +848,14 @@ jobs:
       - name: Publish private static SPA origins
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
-          for app in aether kyber; do
+          apps=(aether)
+          if [ "$DEPLOYMENT_LANE" = full ]; then
+            apps+=(kyber)
+          fi
+          for app in "${apps[@]}"; do
             bucket_var=$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')
             bucket=$(aws ssm get-parameter --name "/aether/${TARGET_ENV}/${bucket_var}" --query Parameter.Value --output text)
             mkdir -p "dist-$app"; tar -xzf "$app-spa.tar.gz" -C "dist-$app"

@@ -1,0 +1,235 @@
+name: Bind and deploy production Aether status
+
+# The legacy public status app was created as a manual/static Amplify app. This
+# workflow makes its provenance durable: every main push binds that exact app to
+# this repository, keeps main in PRODUCTION stage, and starts a commit-pinned
+# release job. It never changes DNS; Squarespace remains the DNS authority.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      expected_commit_sha:
+        description: "Exact main SHA to deploy (defaults to this workflow SHA)"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  checks: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: amplify-status-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AMPLIFY_REPOSITORY: https://github.com/DammnThatsCrazy/AETHER
+  AMPLIFY_APP_NAME: aether-status
+
+jobs:
+  verify-main-integration:
+    name: Verify Main integration authority for exact commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - name: Wait for the exact commit's integration authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$EXPECTED_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' || {
+            echo '::error::expected status commit must be a 40-character lowercase Git SHA'; exit 1;
+          }
+          deadline=$((SECONDS + 2040))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            runs_json="$(gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_COMMIT_SHA/check-runs?per_page=100")"
+            status="$(jq -r '[.check_runs[] | select(.name == "Main integration authority")] | sort_by(.started_at) | last | .status // "missing"' <<<"$runs_json")"
+            conclusion="$(jq -r '[.check_runs[] | select(.name == "Main integration authority")] | sort_by(.started_at) | last | .conclusion // "missing"' <<<"$runs_json")"
+            if [ "$status" = completed ]; then
+              test "$conclusion" = success || {
+                echo "::error::Main integration authority concluded $conclusion for $EXPECTED_COMMIT_SHA"; exit 1;
+              }
+              echo "Main integration authority is green for $EXPECTED_COMMIT_SHA."
+              exit 0
+            fi
+            echo "Main integration authority is $status for $EXPECTED_COMMIT_SHA; waiting."
+            sleep 15
+          done
+          echo "::error::Main integration authority did not complete within the 34-minute verification window for $EXPECTED_COMMIT_SHA"
+          exit 1
+
+  deploy:
+    name: Bind status app and deploy exact main SHA
+    needs: verify-main-integration
+    if: needs.verify-main-integration.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_commit_sha || github.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify the assumed staging deploy role
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || {
+            echo '::error::status deployment role account does not match AWS_DEPLOY_ROLE_ARN'; exit 1;
+          }
+          test "$caller_role_path" = "$expected_role_path" || {
+            echo '::error::status deployment assumed an unexpected AWS role'; exit 1;
+          }
+          test "$caller_role_path" = AetherStagingDeploy || {
+            echo '::error::status deployment must use AetherStagingDeploy in the staging account'; exit 1;
+          }
+          echo 'Verified status deployment credentials resolve to AetherStagingDeploy in the expected account.'
+
+      - name: Resolve the exact status app and validate deployment inputs
+        id: inputs
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha || github.sha }}
+          AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$EXPECTED_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' || {
+            echo '::error::expected_commit_sha must be a 40-character lowercase Git SHA'; exit 1;
+          }
+          test -n "$AMPLIFY_GITHUB_ACCESS_TOKEN" || {
+            echo '::error::TF_AMPLIFY_GITHUB_ACCESS_TOKEN is required to bind the Amplify app to GitHub'; exit 1;
+          }
+          if [[ "$AMPLIFY_GITHUB_ACCESS_TOKEN" =~ [[:space:]] ]]; then
+            echo '::error::TF_AMPLIFY_GITHUB_ACCESS_TOKEN contains whitespace'; exit 1;
+          fi
+          mapfile -t app_ids < <(aws amplify list-apps --max-results 100 \
+            --query "apps[?name=='${AMPLIFY_APP_NAME}'].appId" --output text | tr '\t' '\n' | awk 'NF')
+          test "${#app_ids[@]}" -eq 1 || {
+            echo "::error::expected exactly one Amplify app named ${AMPLIFY_APP_NAME}; found ${#app_ids[@]}"; exit 1;
+          }
+          printf 'app_id=%s\n' "${app_ids[0]}" >> "$GITHUB_OUTPUT"
+          printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Bind the existing status app to the canonical repository
+        env:
+          APP_ID: ${{ steps.inputs.outputs.app_id }}
+          AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          status_build_spec="$(mktemp)"
+          trap 'rm -f "$status_build_spec"' EXIT
+          cat > "$status_build_spec" <<'YAML'
+          version: 1
+          applications:
+            - appRoot: frontend/status
+              frontend:
+                buildPath: /
+                phases:
+                  preBuild:
+                    commands:
+                      - npm ci
+                  build:
+                    commands:
+                      - npm run build --workspace=frontend/status
+                artifacts:
+                  baseDirectory: frontend/status/dist
+                  files:
+                    - '**/*'
+                cache:
+                  paths:
+                    - node_modules/**/*
+          YAML
+          aws amplify update-app \
+            --app-id "$APP_ID" \
+            --repository "$AMPLIFY_REPOSITORY" \
+            --access-token "$AMPLIFY_GITHUB_ACCESS_TOKEN" \
+            --build-spec "$(cat "$status_build_spec")" \
+            --enable-branch-auto-build \
+            >/dev/null
+          aws amplify update-branch \
+            --app-id "$APP_ID" \
+            --branch-name main \
+            --stage PRODUCTION \
+            --enable-auto-build \
+            --environment-variables 'AETHER_ENV=production,VITE_STATUS_API_URL=https://api.olympuslabsml.com/health,VITE_STATUS_DOCS_URL=https://docs.olympuslabsml.com,VITE_STATUS_AETHER_MARKETING_URL=https://aether.olympuslabsml.com' \
+            >/dev/null
+          echo 'Bound the existing status app to the reviewed repository, canonical status build, runtime links, and PRODUCTION main branch.'
+
+      - name: Start the commit-pinned Amplify release
+        id: job
+        env:
+          APP_ID: ${{ steps.inputs.outputs.app_id }}
+          EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
+        run: |
+          set -euo pipefail
+          job_id="$(aws amplify start-job \
+            --app-id "$APP_ID" \
+            --branch-name main \
+            --job-type RELEASE \
+            --commit-id "$EXPECTED_COMMIT_SHA" \
+            --query 'jobSummary.jobId' --output text)"
+          test -n "$job_id" && test "$job_id" != None || {
+            echo '::error::Amplify did not return a status deployment job ID'; exit 1;
+          }
+          printf 'job_id=%s\n' "$job_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the exact status deployment
+        env:
+          APP_ID: ${{ steps.inputs.outputs.app_id }}
+          EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
+          JOB_ID: ${{ steps.job.outputs.job_id }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 2400))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            job_json="$(aws amplify get-job --app-id "$APP_ID" --branch-name main --job-id "$JOB_ID")"
+            status="$(jq -r '.job.summary.status // empty' <<<"$job_json")"
+            commit="$(jq -r '.job.summary.commitId // empty' <<<"$job_json")"
+            case "$status" in
+              SUCCEED)
+                test "$commit" = "$EXPECTED_COMMIT_SHA" || {
+                  echo '::error::Amplify status deployment succeeded for a different commit'; exit 1;
+                }
+                echo "Aether status deployed successfully for ${EXPECTED_COMMIT_SHA}."
+                exit 0
+                ;;
+              FAILED|CANCELLED|CANCELLING)
+                echo "::error::Amplify status deployment ended with ${status}"; exit 1
+                ;;
+              *)
+                echo "Aether status deployment job ${JOB_ID} is ${status:-UNKNOWN}; waiting"
+                sleep 15
+                ;;
+            esac
+          done
+          echo '::error::Aether status deployment exceeded the 40-minute deadline'; exit 1
+
+      - name: Verify production status provenance and branch stage
+        run: |
+          set -euo pipefail
+          python scripts/release/check_amplify_app_contract.py \
+            --mode production-status \
+            --expected-commit '${{ steps.inputs.outputs.expected_commit_sha }}'

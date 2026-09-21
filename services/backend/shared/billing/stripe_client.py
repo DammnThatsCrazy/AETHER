@@ -43,7 +43,9 @@ def capability_status() -> dict[str, Any]:
     missing: list[str] = []
     if not STRIPE_SDK_AVAILABLE:
         missing.append("stripe_sdk")
-    # Self-serve tier prices are required; contract tier prices are optional.
+    # Alpha–Delta are the self-service checkout tiers. Epsilon/Omicron/Omega
+    # remain supported for contract/operator flows, but their Stripe Price IDs
+    # are optional in the pilot lane because those tiers are not self-service.
     for field, value in (
         ("secret_key", cfg.secret_key),
         ("webhook_secret", cfg.webhook_secret),

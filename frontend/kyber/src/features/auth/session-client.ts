@@ -7,7 +7,14 @@
  * them to the browser. The browser's entire role is "follow the redirect".
  */
 
-import { KYBER_AUTH_ENDPOINTS, requestJson, requestVoid, resolveControlPlaneBase } from '@kyber/lib/auth';
+import {
+  KYBER_AUTH_ENDPOINTS,
+  requestJson,
+  requestVoid,
+  resolveControlPlaneBase,
+  clearSessionCsrfToken,
+  setSessionCsrfToken,
+} from '@kyber/lib/auth';
 import type { KyberPrincipalView, KyberSessionView, WebAuthnAssertionOptions } from '@kyber/types';
 import { parseAssertionOptions, parsePrincipal, parseSession } from './schemas';
 
@@ -16,11 +23,22 @@ export async function fetchPrincipal(signal?: AbortSignal): Promise<KyberPrincip
 }
 
 export async function fetchSession(signal?: AbortSignal): Promise<KyberSessionView> {
-  return requestJson(KYBER_AUTH_ENDPOINTS.session, parseSession, { signal });
+  return requestJson(
+    KYBER_AUTH_ENDPOINTS.session,
+    (raw) => {
+      const body = raw !== null && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+      const meta = body.meta !== null && typeof body.meta === 'object'
+        ? body.meta as Record<string, unknown>
+        : {};
+      setSessionCsrfToken(typeof meta.csrf_token === 'string' ? meta.csrf_token : null);
+      return parseSession(raw);
+    },
+    { signal },
+  );
 }
 
 /**
- * Build the login URL. `return_to` is a *path*, never an absolute URL, so a
+ * Build the login URL. `next` is a *path*, never an absolute URL, so a
  * crafted link cannot turn the backend into an open redirector.
  */
 export function buildLoginUrl(returnTo?: string): string {
@@ -28,7 +46,7 @@ export function buildLoginUrl(returnTo?: string): string {
   const path = KYBER_AUTH_ENDPOINTS.login;
   const safeReturn = sanitiseReturnTo(returnTo);
   if (safeReturn === null) return `${base}${path}`;
-  return `${base}${path}?return_to=${encodeURIComponent(safeReturn)}`;
+  return `${base}${path}?next=${encodeURIComponent(safeReturn)}`;
 }
 
 export function sanitiseReturnTo(returnTo: string | undefined): string | null {
@@ -45,7 +63,11 @@ export function startLogin(returnTo?: string): void {
 }
 
 export async function endSession(): Promise<void> {
-  await requestVoid(KYBER_AUTH_ENDPOINTS.logout, { method: 'POST' });
+  try {
+    await requestVoid(KYBER_AUTH_ENDPOINTS.logout, { method: 'POST' });
+  } finally {
+    clearSessionCsrfToken();
+  }
 }
 
 export async function requestStepUpOptions(): Promise<WebAuthnAssertionOptions> {

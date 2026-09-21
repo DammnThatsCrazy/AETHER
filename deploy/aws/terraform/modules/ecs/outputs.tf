@@ -38,6 +38,40 @@ output "backend_task_definition_arn" {
   value       = aws_ecs_task_definition.backend.arn
 }
 
+output "stripe_billing_enabled" {
+  description = "Whether the ECS backend task is configured for Stripe billing"
+  value       = var.stripe_billing_enabled
+}
+
+output "backend_secret_environment_names" {
+  description = "Configuration-derived primary environment names injected into the backend task; optional rotation-overlap mounts are excluded"
+  value = sort(concat(
+    [
+      "JWT_SECRET",
+      "BYOK_ENCRYPTION_KEY",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET",
+      "ORACLE_SIGNER_PRIVATE_KEY",
+      "WATERMARK_SECRET_KEY",
+      "CANARY_SECRET_SEED",
+      "EXTRACTION_CANARY_SEED",
+      "SDK_CONFIG_SECRET",
+      "FIRST_ADMIN_BOOTSTRAP_TOKEN",
+    ],
+    var.deployment_lane == "pilot" ? [] : [
+      "KYBER_GOOGLE_CLIENT_ID",
+      "KYBER_GOOGLE_CLIENT_SECRET",
+    ],
+    var.stripe_billing_enabled ? [
+      "STRIPE_PRICE_ALPHA",
+      "STRIPE_PRICE_BETA",
+      "STRIPE_PRICE_GAMMA",
+      "STRIPE_PRICE_DELTA",
+    ] : [],
+    var.enable_elasticache ? ["REDIS_PASSWORD"] : [],
+  ))
+}
+
 output "runtime_role_service_names" {
   description = "AETHER_ROLE token -> ECS service name for every non-API runtime service (one key per service, so a consolidated profile has one entry hosting several roles)"
   value       = { for key, service in aws_ecs_service.runtime_service : key => service.name }

@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:624c173cc5db243ffebeb2284532a75f195d4918622160e586b7d90cb569f946"
+  ".github/workflows/repo-health.yml": "sha256:25509a6611112c2cafb9136940b9b31f02fde4d77d8f358a67cda260a7eb7754"
   ".pre-commit-config.yaml": "sha256:e1c5169ee1d1f2923709f37a21c664cf898cb4c3b40ab908be2f9068dd7a0aca"
   "Makefile": "sha256:46548f585191a40c899c17436645d11ba885f16cc7799c4af05cff8e619eacc7"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"

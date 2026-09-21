@@ -74,6 +74,46 @@ statements:
     resource: '*'
     scope: global-read-required-by-api
 
+  # ----- Amplify Hosting (root main.tf) -----
+  - sid: DiscoverStagingAmplifyApps
+    actions:
+      - amplify:ListApps
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadStagingAmplifyApps
+    actions:
+      - amplify:GetApp
+      - amplify:ListBranches
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*
+    scope: staging-amplify-apps
+  - sid: ReadStagingAmplifyBranches
+    actions:
+      - amplify:GetBranch
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-branches
+  - sid: ReadStagingAmplifyTags
+    actions:
+      - amplify:ListTagsForResource
+    resource:
+      - arn:aws:amplify:us-east-1:${account_id}:apps/*
+      - arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-apps-and-branches
+  - sid: ReadStagingAmplifyDomains
+    actions:
+      - amplify:GetDomainAssociation
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*
+    scope: staging-amplify-domains
+  - sid: ReadStagingAmplifyJobs
+    actions:
+      - amplify:ListJobs
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-branches
+  - sid: ReadStagingAmplifyJob
+    actions:
+      - amplify:GetJob
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*/jobs/*
+    scope: staging-amplify-jobs
+
   # ----- ECS (module.ecs) -----
   - sid: ReadStagingEcsServices
     actions:
@@ -90,6 +130,11 @@ statements:
       - application-autoscaling:DescribeScalingPolicies
     resource: '*'
     scope: global-read-required-by-api
+  - sid: ReadStagingAutoScalingTags
+    actions:
+      - application-autoscaling:ListTagsForResource
+    resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
+    scope: staging-autoscaling-targets
 
   # ----- IAM roles read (module.ecs, module.ml_drift_lambda) -----
   - sid: ReadStagingTaskRoles
@@ -108,6 +153,27 @@ statements:
       - iam:GetRole
     resource: arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
     scope: ecs-service-linked-role-only
+  - sid: AuditStagingWorkflowRoles
+    actions:
+      - iam:GetRole
+      - iam:GetRolePolicy
+      - iam:ListAttachedRolePolicies
+      - iam:ListRolePolicies
+      - iam:ListInstanceProfilesForRole
+    resource:
+      - arn:aws:iam::${account_id}:role/AetherStagingPlan
+      - arn:aws:iam::${account_id}:role/AetherStagingDeploy
+      - arn:aws:iam::${account_id}:role/AetherStagingLifecycle
+      - arn:aws:iam::${account_id}:role/AetherStagingSecretPreflight
+    scope: staging-workflow-role-audit
+  - sid: ReadStagingWorkflowManagedPolicies
+    actions:
+      - iam:GetPolicy
+      - iam:GetPolicyVersion
+    resource:
+      - arn:aws:iam::${account_id}:policy/AetherStagingDeployContract*
+      - arn:aws:iam::${account_id}:policy/AetherStagingApplyMissingOps
+    scope: staging-workflow-policy-audit
   - sid: VerifyTerraformStateAccess
     actions:
       - iam:SimulatePrincipalPolicy

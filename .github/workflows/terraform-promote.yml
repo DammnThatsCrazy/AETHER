@@ -13,6 +13,12 @@ on:
         options: [staging, production-lean, production-scale, enterprise-isolated, demo, preview]
         default: staging
         required: true
+      deployment_lane:
+        description: "Deployment lane. `pilot` is valid only with profile=staging and defers Kyber/GCP gates."
+        type: choice
+        options: [full, pilot]
+        default: full
+        required: true
       action:
         type: choice
         options: [plan, apply]
@@ -37,6 +43,11 @@ on:
         type: choice
         options: [awake, asleep]
         default: awake
+        required: false
+      secret_preflight_required:
+        description: "Keep application-secret preflight enabled; only sleep plans/applies may set this false"
+        type: boolean
+        default: true
         required: false
       staging_listener_target_group_arn:
         description: "Optional existing maintenance target-group ARN for a reviewed staging backend replacement transition"
@@ -67,8 +78,85 @@ env:
   AWS_REGION: us-east-1
   TF_DIR: deploy/aws/terraform
 jobs:
+  staging-secret-payload-preflight:
+    name: Verify staging secret payloads before plan or apply
+    if: inputs.profile == 'staging' && inputs.secret_preflight_required
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions: {contents: read, id-token: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Configure AWS inspection credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # IAM policy inspection is deliberately performed by the separate
+          # infrastructure inspection role. The secret role is value-readable
+          # only and must not be widened with iam:List*/Get* permissions.
+          # The dedicated staging plan role is the metadata-only IAM auditor.
+          # Keep the shared infrastructure credential out of this contract so
+          # the audit path remains explicit and the secret role stays value-only.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify staging IAM inspection role assumption
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+      - name: Verify the effective secret preflight IAM contract
+        env:
+          TARGET_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_apply_policy.py --role-arn "$TARGET_ROLE_ARN" --manifest config/staging_secret_preflight_iam_policy.yaml --expected-role AetherStagingSecretPreflight --required-policy-suffix AetherStagingSecretPreflightContract
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify secret preflight role assumption and policy
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_secret_preflight_policy.py
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role="$(jq -r .Arn <<<"$caller_json")"
+          caller_role="${caller_role#*:assumed-role/}"
+          caller_role="${caller_role%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::secret preflight account mismatch'; exit 1; }
+          test "$caller_role" = AetherStagingSecretPreflight || { echo '::error::unexpected secret preflight role'; exit 1; }
+      - name: Verify raw secret payloads and staging Stripe mode
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_secret_payload_contract.py \
+            --lane '${{ inputs.deployment_lane || 'full' }}'
+
   plan:
-    if: inputs.action == 'plan'
+    needs: [staging-secret-payload-preflight]
+    if: >-
+      always()
+      && inputs.action == 'plan'
+      && (inputs.profile != 'staging'
+          || inputs.staging_state == 'asleep'
+          || inputs.secret_preflight_required == false
+          || needs.staging-secret-payload-preflight.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions: {contents: read, id-token: write}
@@ -89,6 +177,7 @@ jobs:
       AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
+      TF_VAR_kyber_google_hosted_domain: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
       # The custom KMS key policy must name the protected staging apply role as
       # an explicit administrator. Keep the value in the encrypted secret
       # store; the ARN is non-sensitive, but the repository variable was never
@@ -97,6 +186,11 @@ jobs:
       TF_VAR_kms_key_admin_role_arns: '${{ inputs.profile == ''staging'' && format(''["{0}"]'', secrets.AWS_TERRAFORM_APPLY_ROLE_ARN) || ''[]'' }}'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A moving dispatch ref is not the reviewed source. When the caller
+          # supplies an exact SHA, fetch that commit before any plan checks so
+          # a branch advance cannot turn a valid handoff into a false mismatch.
+          ref: ${{ inputs.expected_commit_sha || github.sha }}
       - name: Verify the requested plan commit
         if: inputs.expected_commit_sha != ''
         env:
@@ -122,10 +216,85 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Validate deployment lane and canonical profile pairing
+        env:
+          PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          case "$DEPLOYMENT_LANE" in
+            full|pilot) ;;
+            *) echo "::error::deployment_lane must be full or pilot, got ${DEPLOYMENT_LANE}"; exit 1 ;;
+          esac
+          if [ "$DEPLOYMENT_LANE" = pilot ] && [ "$PROFILE" != staging ]; then
+            echo '::error::deployment_lane=pilot is valid only with the canonical profile=staging'
+            exit 1
+          fi
+      - name: Require secret-preflight bypass to be sleep-only
+        if: inputs.profile == 'staging' && inputs.secret_preflight_required == false
+        env:
+          STAGING_STATE: ${{ inputs.staging_state }}
+        run: |
+          set -euo pipefail
+          test "$STAGING_STATE" = asleep || {
+            echo '::error::secret_preflight_required=false is only valid for a plan with staging_state=asleep'; exit 1;
+          }
       - name: Install plan-validation dependencies
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate staging credential shape before planning
+        if: inputs.profile == 'staging'
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL }}
+          TF_AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          TF_AUTH0_MANAGEMENT_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+          TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ secrets.KYBER_GOOGLE_CLIENT_ID }}
+          KYBER_GOOGLE_CLIENT_SECRET: ${{ secrets.KYBER_GOOGLE_CLIENT_SECRET }}
+          TF_BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_credential_contract.py --lane "$DEPLOYMENT_LANE"
+      - name: Validate the staging deployment-lane contract and static runtime wiring
+        if: inputs.profile == 'staging'
+        env:
+          PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_lane_contract.py \
+            --profile "$PROFILE" \
+            --deployment-lane "$DEPLOYMENT_LANE" \
+            --check-runtime-wiring
+      - name: Validate the reviewed Kyber workforce identity contract
+        if: inputs.profile == 'staging' && inputs.deployment_lane != 'pilot'
+        env:
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_kyber_staging_contract.py \
+            --require-public-client-id \
+            --evidence-out "${TF_DIR}/reviewed.kyber-contract.json"
       - name: Validate the reviewed Terraform state access contract
         run: |
           set -euo pipefail
@@ -151,6 +320,7 @@ jobs:
           TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           missing=()
@@ -197,10 +367,48 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Verify effective staging plan IAM contract
+        if: inputs.profile == 'staging'
+        env:
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          # The checked-in manifest is reviewed intent; this read-only check
+          # proves the assumed role actually realizes it before Terraform can
+          # refresh state or produce a reviewed plan. It catches stale external
+          # policy attachments, including ECR digest-read drift, at the role
+          # boundary instead of after a remote-plan command fails.
+          python scripts/release/verify_effective_staging_apply_policy.py \
+            --role-arn "$AWS_TERRAFORM_PLAN_ROLE_ARN" \
+            --manifest config/staging_plan_iam_policy.yaml \
+            --supplemental-manifest config/terraform_plan_state_access_policy.yaml \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --state-lock-table "$TF_LOCK_TABLE" \
+            --state-profile "${{ inputs.profile }}" \
+            --expected-role AetherStagingPlan \
+            --required-policy-suffix AetherStagingPlanContract
+      - name: Verify required staging secret metadata before planning
+        if: inputs.profile == 'staging' && inputs.staging_state != 'asleep'
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          # This is metadata-only: the plan role proves every secret that the
+          # selected ECS lane mounts already has a live AWSCURRENT version.
+          # Values are never read. Keeping this gate before Terraform plan
+          # prevents a plan from approving an otherwise guaranteed task-start
+          # failure or a secret create/import collision.
+          python scripts/release/check_staging_lane_contract.py \
+            --profile staging \
+            --deployment-lane "$DEPLOYMENT_LANE" \
+            --require-aws-staging-secrets
       - name: Verify the assumed plan role matches the encrypted secret
         env:
           EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           caller_json="$(aws sts get-caller-identity --output json)"
@@ -236,6 +444,14 @@ jobs:
             *)
               echo "::error::unsupported profile ${PROFILE}"; exit 1 ;;
           esac
+          if [ "$PROFILE" = staging ]; then
+            test -n "${{ inputs.expected_commit_sha }}" \
+              || { echo '::error::staging plans require expected_commit_sha so the image tag is bound to the reviewed checkout'; exit 1; }
+            python scripts/release/check_staging_image_provenance.py \
+              --repository aether-backend \
+              --digest "$BACKEND_IMAGE_DIGEST" \
+              --expected-commit "${{ inputs.expected_commit_sha }}"
+          fi
       - name: Record reviewed maintenance listener input
         env:
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
@@ -249,6 +465,7 @@ jobs:
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           STAGING_STATE: ${{ inputs.staging_state }}
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
           COMMIT_SHA: ${{ github.sha }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
@@ -271,6 +488,82 @@ jobs:
             echo '::error::legacy backend target-group state address remains; run the confirmation-gated terraform-state-migrate workflow and regenerate the reviewed plan'
             exit 1
           fi
+          if [ "$PROFILE" = staging ] && [ "$DEPLOYMENT_LANE" = pilot ]; then
+            # The pilot preflight proves that all four self-service price secrets already
+            # exist remotely. Require their canonical Terraform owners before
+            # creating the plan as well: otherwise a secure bootstrap between
+            # plan and apply would make the saved plan try to create a secret
+            # that now exists, producing the exact stale-plan/resource-exists
+            # loop this workflow is designed to prevent.
+            required_pilot_secret_names=(
+              stripe-price-alpha
+              stripe-price-beta
+              stripe-price-gamma
+              stripe-price-delta
+            )
+            for name in "${required_pilot_secret_names[@]}"; do
+              address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]"
+              grep -Fxq "$address" "$state_list_file" || {
+                echo "::error::pilot plan requires ${address} in staging Terraform state; populate the secret securely, run staging-state-reconcile, then create a fresh plan"
+                exit 1
+              }
+            done
+            echo 'Verified all pilot Stripe price secrets are canonical Terraform state owners before planning.'
+          fi
+          required_staging_secret_names=(
+            jwt-secret
+            byok-encryption-key
+            stripe-secret-key
+            stripe-webhook-secret
+            oracle-signer-private-key
+            watermark-secret-key
+            canary-secret-seed
+            extraction-canary-seed
+            sdk-config-secret
+            first-admin-bootstrap-token
+            jwt-secret-previous
+            byok-encryption-key-previous
+          )
+          if [ "$PROFILE" = staging ] && [ "$DEPLOYMENT_LANE" = full ]; then
+            required_staging_secret_names+=(kyber-google-client-id kyber-google-client-secret)
+          elif [ "$PROFILE" = staging ] && [ "$DEPLOYMENT_LANE" = pilot ]; then
+            required_staging_secret_names+=(
+              stripe-price-alpha
+              stripe-price-beta
+              stripe-price-gamma
+              stripe-price-delta
+            )
+          fi
+          if [ "$PROFILE" = staging ]; then
+            for app_key in olympus-marketing aether-marketing docs aether-app status; do
+              address="aws_amplify_domain_association.frontend[\"${app_key}\"]"
+              grep -Fxq "$address" "$state_list_file" || {
+                echo "::error::staging plan requires ${address} in staging Terraform state; verify the existing Squarespace-backed association, run staging-state-reconcile with staging.olympuslabsml.com, then create a fresh plan"
+                exit 1
+              }
+            done
+            for name in "${required_staging_secret_names[@]}"; do
+              address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]"
+              if [ "$name" = jwt-secret-previous ]; then
+                address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous'
+              elif [ "$name" = byok-encryption-key-previous ]; then
+                address='module.secrets.aws_secretsmanager_secret.byok_key_previous'
+              fi
+              grep -Fxq "$address" "$state_list_file" || {
+                echo "::error::required staging secret aether/${name} is not at its canonical Terraform state address ${address}; run staging-state-reconcile and create a fresh plan"
+                exit 1
+              }
+            done
+            for address in \
+              module.secrets.aws_kms_key.secrets \
+              module.secrets.aws_kms_alias.secrets; do
+              grep -Fxq "$address" "$state_list_file" || {
+                echo "::error::staging Secrets Manager KMS resource ${address} is not in Terraform state; reconcile it before creating a plan"
+                exit 1
+              }
+            done
+            echo 'Verified all required staging secret resources and their Secrets Manager CMK are canonical Terraform state owners before planning.'
+          fi
           terraform validate
           # staging_state is recorded alongside the plan so a reviewer can see
           # which shape was approved. It is load-bearing, not decorative: apply
@@ -282,11 +575,13 @@ jobs:
           # review is the one that was requested. It is a plan-time input only:
           # apply consumes the stored plan and cannot reshape it.
           printf '%s\n' "${STAGING_STATE}" > reviewed.staging-state
+          printf '%s\n' "${DEPLOYMENT_LANE}" > reviewed.deployment-lane
           terraform plan -input=false -lock-timeout=5m \
             -var-file="profiles/${PROFILE}.tfvars" \
             -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
             -var "ml_image_digest=${ML_IMAGE_DIGEST}" \
             -var "staging_state=${STAGING_STATE}" \
+            -var "deployment_lane=${DEPLOYMENT_LANE}" \
             -var "staging_listener_target_group_arn=${STAGING_LISTENER_TARGET_GROUP_ARN}" \
             -out=reviewed.tfplan
           terraform show -json reviewed.tfplan > plan-raw.json
@@ -400,7 +695,17 @@ jobs:
           retention-days: 1
 
   apply:
-    if: inputs.action == 'apply'
+    needs: [staging-secret-payload-preflight]
+    # Do not authorize an apply from the requested staging_state input. The
+    # reviewed artifact is the authority for the plan shape; the only
+    # job-level preflight bypass is the explicit sleep-only flag, which is
+    # checked again against reviewed.staging-state below.
+    if: >-
+      always()
+      && inputs.action == 'apply'
+      && (inputs.profile != 'staging'
+          || inputs.secret_preflight_required == false
+          || needs.staging-secret-payload-preflight.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     # Per-profile environments: each profile carries its own reviewers and
@@ -422,6 +727,7 @@ jobs:
           PLAN_RUN_ID: ${{ inputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
           PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id required'; exit 1; }
@@ -430,6 +736,14 @@ jobs:
             staging|production-lean|production-scale|enterprise-isolated|demo|preview) ;;
             *) echo "::error::unknown profile ${PROFILE}"; exit 1 ;;
           esac
+          case "$DEPLOYMENT_LANE" in
+            full|pilot) ;;
+            *) echo "::error::deployment_lane must be full or pilot, got ${DEPLOYMENT_LANE}"; exit 1 ;;
+          esac
+          if [ "$DEPLOYMENT_LANE" = pilot ] && [ "$PROFILE" != staging ]; then
+            echo '::error::deployment_lane=pilot is valid only with the canonical profile=staging'
+            exit 1
+          fi
       - name: Require the complete apply credential set
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -477,6 +791,7 @@ jobs:
         id: reviewed
         env:
           PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
@@ -486,6 +801,7 @@ jobs:
           for artefact in \
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
+            reviewed.deployment-lane \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -509,6 +825,25 @@ jobs:
             awake|asleep) ;;
             *) echo "::error::reviewed.staging-state is '${reviewed_staging_state}', not awake or asleep"; exit 1 ;;
           esac
+
+          reviewed_deployment_lane="$(cat reviewed.deployment-lane)"
+          if [ "$reviewed_deployment_lane" != "$DEPLOYMENT_LANE" ]; then
+            echo "::error::plan was reviewed for deployment_lane=${reviewed_deployment_lane}, dispatched for ${DEPLOYMENT_LANE}"
+            exit 1
+          fi
+
+          if [ "$PROFILE" = staging ] && [ "$DEPLOYMENT_LANE" != pilot ]; then
+            test -s reviewed.kyber-contract.json \
+              || { echo '::error::reviewed plan is missing Kyber workforce identity evidence'; exit 1; }
+            jq -e '
+              .contract == "kyber-workforce-identity" and
+              .version == 1 and
+              .profile == "staging" and
+              .secret_values_read == false and
+              .google_client_secret_source == "aws_secrets_manager:aether/kyber-google-client-secret"
+            ' reviewed.kyber-contract.json >/dev/null \
+              || { echo '::error::reviewed Kyber workforce identity evidence is missing or invalid'; exit 1; }
+          fi
 
           reviewed_profile="$(cat reviewed.profile)"
           if [ "$reviewed_profile" != "$PROFILE" ]; then
@@ -586,7 +921,20 @@ jobs:
             printf 'commit=%s\n' "$reviewed_commit"
             printf 'terraform_version=%s\n' "$reviewed_tf_version"
             printf 'listener_target_group_arn=%s\n' "$reviewed_listener_arn"
+            printf 'deployment_lane=%s\n' "$reviewed_deployment_lane"
+            printf 'staging_state=%s\n' "$reviewed_staging_state"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Require secret-preflight bypass to be backed by an asleep reviewed plan
+        if: inputs.profile == 'staging' && inputs.secret_preflight_required == false
+        env:
+          REVIEWED_STAGING_STATE: ${{ steps.reviewed.outputs.staging_state }}
+        run: |
+          set -euo pipefail
+          test "$REVIEWED_STAGING_STATE" = asleep || {
+            echo '::error::secret_preflight_required=false is only valid when the reviewed plan records staging_state=asleep'; exit 1;
+          }
+
       # Bind the apply to the plan's OWN commit, not the dispatch ref. The ref
       # may have moved since review; github.sha says nothing about which code
       # the reviewed plan was built from.
@@ -719,13 +1067,22 @@ jobs:
         if: inputs.profile == 'staging'
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
           python scripts/release/verify_effective_staging_apply_policy.py \
             --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
-            --manifest config/staging_apply_iam_policy.yaml
+            --manifest config/staging_apply_iam_policy.yaml \
+            --supplemental-manifest config/staging_application_delivery_iam_policy.yaml \
+            --supplemental-manifest config/terraform_state_access_policy.yaml \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --state-lock-table "$TF_LOCK_TABLE" \
+            --state-profile "${{ inputs.profile }}"
       - name: Verify required staging secrets have current versions
-        if: inputs.profile == 'staging'
+        if: inputs.profile == 'staging' && steps.reviewed.outputs.staging_state != 'asleep'
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           # Terraform creates the named Secrets Manager resources, but never
@@ -746,9 +1103,17 @@ jobs:
             first-admin-bootstrap-token
             jwt-secret-previous
             byok-encryption-key-previous
-            kyber-google-client-id
-            kyber-google-client-secret
           )
+          if [ "$DEPLOYMENT_LANE" = full ]; then
+            required_secrets+=(kyber-google-client-id kyber-google-client-secret)
+          else
+            required_secrets+=(
+              stripe-price-alpha
+              stripe-price-beta
+              stripe-price-gamma
+              stripe-price-delta
+            )
+          fi
           for name in "${required_secrets[@]}"; do
             describe_file="$(mktemp)"
             if ! aws secretsmanager describe-secret \
@@ -807,6 +1172,24 @@ jobs:
             echo 'Verified the existing canonical Aurora RDS-managed credential is active; its value was not read.'
           fi
           rm -f "$rds_metadata" "$rds_error"
+      - name: Require complete pilot Stripe wiring and current-version price secrets
+        if: >-
+          inputs.profile == 'staging'
+          && inputs.deployment_lane == 'pilot'
+          && steps.reviewed.outputs.staging_state != 'asleep'
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
+        run: |
+          set -euo pipefail
+          # This is the last fail-closed gate before Terraform can mutate AWS.
+          # It checks the exact reviewed source wiring and read-only Secrets
+          # Manager metadata plus the current Stripe price-ID format. Values
+          # are used only for validation and are never printed or persisted.
+          python scripts/release/check_staging_lane_contract.py \
+            --profile staging \
+            --deployment-lane "$DEPLOYMENT_LANE" \
+            --check-runtime-wiring \
+            --require-aws-price-secrets
       - name: Validate reviewed staging maintenance target group
         if: inputs.profile == 'staging'
         env:
@@ -1148,6 +1531,53 @@ jobs:
           esac
           printf '%s\n' "$backend_host" > reviewed.api-host
           printf '%s\n' "$alb_dns" > reviewed.alb-dns
+      - name: Verify applied staging frontend runtime links
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # Terraform updates the branch-level variables that the built SPA
+          # receives. Verify those live values before publishing apply evidence;
+          # the normal lifecycle preflight still performs the stronger
+          # repository/job/domain provenance check before smoke.
+          python scripts/release/check_amplify_app_contract.py \
+            --mode staging-runtime
+      - name: Verify applied staging Aurora safety controls
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # Staging is persistent even though compute sleeps. The reviewed
+          # apply must leave the canonical Aurora cluster encrypted, protected
+          # from deletion, and backed by an active RDS-managed credential.
+          for attempt in $(seq 1 30); do
+            cluster_json="$(aws rds describe-db-clusters \
+              --db-cluster-identifier AETHER-staging-aurora --output json)"
+            if jq -e '
+              (.DBClusters | length) == 1 and
+              .DBClusters[0].StorageEncrypted == true and
+              .DBClusters[0].DeletionProtection == true and
+              .DBClusters[0].MasterUserSecret.SecretStatus == "active"
+            ' <<<"$cluster_json" >/dev/null; then
+              echo 'Verified canonical staging Aurora encryption, deletion protection, and active RDS credential.'
+              exit 0
+            fi
+            if [ "$attempt" -lt 30 ]; then
+              sleep 10
+            fi
+          done
+          echo '::error::canonical staging Aurora did not reach the reviewed safety shape after apply'
+          exit 1
+      - name: Verify applied staging ECS task-definition lane
+        if: inputs.profile == 'staging'
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          # Terraform and the delivery workflow must converge the registered
+          # revisions, not merely the source module. This metadata-only gate
+          # proves the live API and lean-worker tasks match the selected lane
+          # and that secret values are never read.
+          python scripts/release/check_staging_task_definition_contract.py \
+            --lane "$DEPLOYMENT_LANE"
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-apply-evidence-${{ github.run_id }}

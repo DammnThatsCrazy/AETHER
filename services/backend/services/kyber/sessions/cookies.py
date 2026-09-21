@@ -99,7 +99,13 @@ def _set(response: Any, name: str, value: str, max_age: Optional[int]) -> None:
 
 
 def _clear(response: Any, name: str) -> None:
-    response.delete_cookie(name, path=_COOKIE_PATH)
+    # Deletion is another Set-Cookie operation. Preserve the __Host- security
+    # attributes so browsers accept the tombstone instead of retaining the
+    # session or CSRF cookie after logout.
+    response.delete_cookie(
+        name,
+        **{key: value for key, value in cookie_attributes().items() if key != "max_age"},
+    )
 
 
 def set_session_cookie(response: Any, token: str, *, max_age: Optional[int] = None) -> None:

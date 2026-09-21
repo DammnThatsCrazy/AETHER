@@ -233,6 +233,7 @@ def test_deploy_gates_on_readiness_and_golden_path_smoke():
 def test_staging_delivery_validates_its_runtime_iam_delta_and_api_host_fallback():
     workflow = _workflow("deploy.yml")
     assert "check_staging_application_delivery_policy.py" in workflow
+    assert "python -m pip install --disable-pip-version-check pyyaml" in workflow
     assert "vars.ALB_DNS_NAME || secrets.TF_DOMAIN_NAME" in workflow
     assert "aws ecs run-task" in workflow
     assert "aws ecs describe-tasks" in workflow
@@ -240,20 +241,240 @@ def test_staging_delivery_validates_its_runtime_iam_delta_and_api_host_fallback(
     assert "aws s3 cp" in workflow
 
 
+def test_staging_delivery_rejects_a_live_task_lane_mismatch_before_mutation():
+    workflow = _workflow("deploy.yml")
+    lane_check = workflow.index("Verify the current staging task-definition lane before mutation")
+    mutation = workflow.index("Apply packaged migrations, then register exact task revision")
+    assert lane_check < mutation
+    assert "check_staging_task_definition_contract.py" in workflow[lane_check:mutation]
+    assert "DEPLOYMENT_LANE" in workflow[lane_check:mutation]
+
+
 def test_staging_smoke_uses_the_authoritative_proof_environment_and_fails_closed():
     workflow = _workflow("staging-smoke.yml")
+    assert "  push:" not in workflow
+    assert "workflow_dispatch:" in workflow
     assert "environment: staging" in workflow
     assert "AETHER_API_URL" in workflow
     assert "AETHER_API_KEY" in workflow
     assert "PROOF_TENANT_ID" in workflow
     assert "PROOF_WORKSPACE_ID" in workflow
-    assert "vars.AETHER_API_URL || secrets.TF_DOMAIN_NAME" in workflow
+    assert "vars.AETHER_API_URL || format('https://{0}', secrets.TF_DOMAIN_NAME)" in workflow
     assert "secrets.SMOKE_API_KEY" in workflow
     assert "needs.preflight.result == 'success'" in workflow
     assert "skipping staging smoke test" not in workflow
     assert "AETHER_STAGING_URL" not in workflow
     assert "secrets.PROOF_TENANT_ID" not in workflow
     assert "secrets.PROOF_WORKSPACE_ID" not in workflow
+    assert "check_staging_secret_payload_contract.py --lane pilot" in workflow
+    assert "secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN" in workflow
+    assert "secrets.AWS_TERRAFORM_PLAN_ROLE_ARN" in workflow
+    assert "AetherStagingPlan" in workflow
+    assert "check_staging_task_definition_contract.py --lane pilot" in workflow
+    assert "Load the pilot Stripe test key without logging it" in workflow
+    assert 'echo "::add-mask::$stripe_key"' in workflow
+    assert "STRIPE_SECRET_KEY" in workflow
+
+
+def test_staging_build_only_release_is_available_without_ecs_mutation():
+    deploy = _workflow_yaml("deploy.yml")
+    deploy_text = _workflow("deploy.yml")
+    triggers = deploy.get("on", deploy.get(True))
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    assert inputs["delivery_mode"]["options"] == ["deploy", "build-only"]
+    assert "build-only delivery is limited to staging" in deploy_text
+    assert "inputs.delivery_mode == 'deploy'" in deploy_text
+
+    lifecycle = _workflow("staging-lifecycle.yml")
+    assert "Successful `Immutable delivery` build-only or deployed run" in lifecycle
+    assert "Build immutable release once" in lifecycle
+    assert "has no successful immutable build job" in lifecycle
+
+
+def test_stripe_smoke_uses_form_encoded_confirmed_test_payment():
+    smoke = (ROOT / "scripts/smoke/stripe-connector.ts").read_text(encoding="utf-8")
+    assert "URLSearchParams" in smoke
+    assert "application/x-www-form-urlencoded" in smoke
+    assert "JSON.stringify(payload)" not in smoke
+    assert "path.replace(/^\\/+/, '')" in smoke
+    assert "https://api.stripe.com/v1/" in smoke
+    assert "payment_method: 'pm_card_visa'" in smoke
+    assert "confirm: true" in smoke
+    assert "expand[]=latest_charge" in smoke
+
+
+def test_production_status_workflow_binds_the_canonical_build_and_runtime_links():
+    workflow = _workflow("amplify-status-production.yml")
+    assert "--repository \"$AMPLIFY_REPOSITORY\"" in workflow
+    assert "appRoot: frontend/status" in workflow
+    assert "npm run build --workspace=frontend/status" in workflow
+    assert "VITE_STATUS_API_URL=https://api.olympuslabsml.com/health" in workflow
+    assert "VITE_STATUS_DOCS_URL=https://docs.olympuslabsml.com" in workflow
+    assert "VITE_STATUS_AETHER_MARKETING_URL=https://aether.olympuslabsml.com" in workflow
+    assert "--stage PRODUCTION" in workflow
+
+
+def test_production_status_waits_for_exact_main_integration_authority():
+    document = _workflow_yaml("amplify-status-production.yml")
+    workflow = _workflow("amplify-status-production.yml")
+    gate = document["jobs"]["verify-main-integration"]
+    deploy = document["jobs"]["deploy"]
+    assert gate["name"] == "Verify Main integration authority for exact commit"
+    assert "checks: read" in workflow
+    assert "Main integration authority" in workflow
+    assert deploy["needs"] == "verify-main-integration"
+    assert deploy["if"] == "needs.verify-main-integration.result == 'success'"
+    assert "commits/$EXPECTED_COMMIT_SHA/check-runs" in workflow
+    assert "conclusion" in workflow
+
+
+def test_staging_secret_policy_audits_use_the_separate_inspection_role():
+    for name in ("terraform-promote.yml", "pilot-staging.yml", "staging-smoke.yml"):
+        document = _workflow_yaml(name)
+        text = _workflow(name)
+        assert document["jobs"]
+        assert "AWS_TERRAFORM_PLAN_ROLE_ARN" in text
+        assert "verify_effective_staging_apply_policy.py" in text
+        assert "Verify staging IAM inspection role assumption" in text
+        assert text.index("Configure AWS inspection credentials") < text.rindex(
+            "AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN"
+        ), name
+        assert "AetherStagingSecretPreflightContract" in text
+        assert "role-to-assume: " + "$" + "{{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}" in text
+
+    lifecycle = _workflow_yaml("staging-lifecycle.yml")
+    lifecycle_text = _workflow("staging-lifecycle.yml")
+    assert lifecycle["jobs"]["select-profile"]["steps"]
+    assert (
+        "TARGET_ROLE_ARN: "
+        + "$"
+        + "{{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}"
+        in lifecycle_text
+    )
+    assert "role-to-assume: " + "$" + "{{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}" in lifecycle_text
+    assert "Verify staging IAM inspection role assumption" in lifecycle_text
+    assert lifecycle_text.index("verify_effective_staging_lifecycle_policy.py") < lifecycle_text.index(
+        "Verify lifecycle role assumption before dispatch"
+    )
+    assert "if: inputs.action == 'apply-wake' || inputs.action == 'full-rehearsal'" in lifecycle_text
+
+
+def test_sleep_paths_do_not_depend_on_application_secret_values():
+    promote = _workflow_yaml("terraform-promote.yml")
+    promote_text = _workflow("terraform-promote.yml")
+    preflight = promote["jobs"]["staging-secret-payload-preflight"]
+    apply_if = promote["jobs"]["apply"]["if"]
+    assert preflight["if"] == "inputs.profile == 'staging' && inputs.secret_preflight_required"
+    assert "inputs.staging_state == 'asleep'" in promote_text
+    assert "steps.reviewed.outputs.staging_state != 'asleep'" in promote_text
+    assert "inputs.secret_preflight_required == false" in apply_if
+    assert "inputs.staging_state == 'asleep'" not in apply_if
+
+    lifecycle_text = _workflow("staging-lifecycle.yml")
+    assert "-f staging_state=asleep" in lifecycle_text
+    assert "no verified sleep plan_run_id" in lifecycle_text
+
+
+def test_pilot_sleep_paths_skip_non_cleanup_preflights_but_keep_authority():
+    document = _workflow_yaml("pilot-staging.yml")
+    text = _workflow("pilot-staging.yml")
+    credential_job = document["jobs"]["credential-preflight"]
+    secret_job = document["jobs"]["secret-payload-preflight"]
+    amplify_job = document["jobs"]["amplify-preflight"]
+    assert "inputs.action != 'plan-sleep'" in credential_job["if"]
+    assert "inputs.action != 'apply-sleep'" in credential_job["if"]
+    assert "inputs.action != 'plan-sleep'" in secret_job["if"]
+    assert "inputs.action != 'apply-sleep'" in secret_job["if"]
+    assert "secret-payload-preflight.result == 'skipped'" in text
+    assert "inputs.action != 'plan-sleep'" in amplify_job["if"]
+    assert "inputs.action != 'apply-sleep'" in amplify_job["if"]
+    dispatch_if = document["jobs"]["dispatch-authority"]["if"]
+    for job_name in ("amplify-preflight", "dispatch-authority"):
+        job = document["jobs"][job_name]
+        assert job["if"].startswith("always()")
+        assert "secret-payload-preflight" in job["needs"]
+    assert "credential-preflight.result == 'skipped'" in dispatch_if
+    assert "amplify-preflight.result == 'skipped'" in dispatch_if
+
+
+def test_staging_reconciliation_discovers_all_managed_price_resources():
+    text = _workflow("staging-state-reconcile.yml")
+    for name in (
+        "stripe-price-alpha",
+        "stripe-price-beta",
+        "stripe-price-gamma",
+        "stripe-price-delta",
+        "stripe-price-epsilon",
+        "stripe-price-omicron",
+        "stripe-price-omega",
+    ):
+        assert name in text
+    assert "Discover pre-existing Stripe price secrets for state reconciliation" in text
+    assert "steps.discover-price-secrets.outputs.secret_names" in text
+    assert "ResourceNotFoundException" in text
+    assert "the secret value was not read" in text
+
+
+def test_legacy_price_secrets_have_an_explicit_metadata_only_rekey_path():
+    text = _workflow("staging-state-reconcile.yml")
+    assert "migrate_legacy_secret_kms" in text
+    assert "confirm_legacy_secret_kms" in text
+    assert "MIGRATE-STAGING-SECRETS" in text
+    assert 'aws secretsmanager update-secret' in text
+    assert '--kms-key-id "$STAGING_SECRETS_KMS_KEY_ARN"' in text
+    assert "secretsmanager get-secret-value" not in text
+
+
+def test_pilot_dispatch_binds_to_the_exact_created_run():
+    text = _workflow("pilot-staging.yml")
+    assert "before_id" not in text
+    assert "workflow_runs[0]" not in text
+    assert text.count("actions/runs/([0-9]+)") == text.count("gh workflow run")
+    assert "dispatch did not return its created run URL" in text
+
+
+def test_pilot_smoke_validates_the_configured_stripe_price_catalog():
+    text = _workflow("staging-smoke.yml")
+    assert "Load pilot Stripe prices without logging values" in text
+    assert "Validate pilot Stripe prices against the configured test account" in text
+    assert "python scripts/validate_stripe.py --skip-webhook" in text
+    for variable in (
+        "STRIPE_PRICE_ALPHA",
+        "STRIPE_PRICE_BETA",
+        "STRIPE_PRICE_GAMMA",
+        "STRIPE_PRICE_DELTA",
+        "STRIPE_PRICE_EPSILON",
+        "STRIPE_PRICE_OMICRON",
+        "STRIPE_PRICE_OMEGA",
+    ):
+        assert variable in text
+    assert "load_optional_price" in text
+    assert "ResourceNotFoundException" in text
+
+
+def test_infrastructure_staging_audits_the_dedicated_plan_role():
+    text = _workflow("infrastructure.yml")
+    document = _workflow_yaml("infrastructure.yml")
+    assert (
+        "AWS_TERRAFORM_PLAN_ROLE_ARN: "
+        + "$"
+        + "{{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}"
+        in text
+    )
+    staging_gate = text[text.index("Verify effective staging plan IAM contract"):]
+    assert "--role-arn \"$AWS_TERRAFORM_PLAN_ROLE_ARN\"" in staging_gate
+    assert "--expected-role AetherStagingPlan" in staging_gate
+    assert (
+        "role-to-assume: "
+        + "${{ matrix.profile == 'staging' && secrets.AWS_TERRAFORM_PLAN_ROLE_ARN || secrets.AWS_INFRA_ROLE_ARN }}"
+        in text
+    )
+    triggers = document.get("on", document.get(True))
+    dispatch_inputs = triggers["workflow_dispatch"]["inputs"]
+    assert dispatch_inputs["deployment_lane"]["default"] == "pilot"
+    assert "--lane \"$DEPLOYMENT_LANE\"" in text
+    remote_plan = _job_script(document, "remote-plan")
+    assert 'plan_args+=("-var=deployment_lane=${DEPLOYMENT_LANE}")' in remote_plan
 
 
 def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
@@ -433,6 +654,22 @@ def test_ttl_guards_are_loud_noops_without_the_lifecycle_role():
         assert "NOT a claim" in notice
 
 
+def test_staging_ttl_guard_inspects_lifecycle_policy_with_plan_role_first():
+    text = _workflow("staging-ttl-guard.yml")
+    assert "AWS_TERRAFORM_PLAN_ROLE_ARN" in text
+    assert "AetherStagingPlan" in text
+    assert text.index("Configure AWS inspection credentials") < text.index(
+        "Verify effective lifecycle IAM policy before enforcement"
+    )
+    assert text.index("Verify effective lifecycle IAM policy before enforcement") < text.index(
+        "Configure AWS lifecycle credentials"
+    )
+    assert text.index("Verify staging IAM inspection role assumption") < text.index(
+        "Verify effective lifecycle IAM policy before enforcement"
+    )
+    assert "Verify lifecycle role assumption before TTL enforcement" in text
+
+
 def test_staging_ttl_guard_blocking_alert_keys_on_armed_output_not_readings():
     """The blocking alert runs unconditionally and keys its not-armed branch on
     the armed output directly — never on the lease readings being unset. An
@@ -459,28 +696,17 @@ def test_ephemeral_ttl_guard_blocking_alert_only_when_armed_and_expired():
 
 
 def test_infrastructure_promotion_gate_reports_not_armed_without_credentials():
-    """A credential-less push to main must go green with a loud not-armed
-    notice — never fail the run — and the enforce step must run fail-closed
-    only when the complete credential set is present. A failed probe publishes
-    no output and must not be misattributed to missing credentials, so the
-    notice also requires the probe job to have succeeded."""
+    """A credentialed remote-plan dispatch must fail closed at its final gate."""
     doc = _workflow_yaml("infrastructure.yml")
     steps = doc["jobs"]["require-production-credentials"]["steps"]
-
-    not_armed = next(
-        s for s in steps if "not armed" in s.get("name", "").lower()
-    )
-    assert "needs.remote-plan-readiness.result == 'success'" in not_armed["if"]
-    assert "needs.remote-plan-readiness.outputs.configured != 'true'" in not_armed["if"]
-    assert "NOT promotable" in not_armed["run"]
-    assert "NO-OP" in not_armed["run"]
-
     enforce = next(
         s for s in steps if s.get("name") == "Enforce credentialed remote plans"
     )
-    assert "needs.remote-plan-readiness.outputs.configured == 'true'" in enforce["if"]
-    # The enforce step still carries all three fail-closed checks.
-    assert enforce["run"].count("exit 1") == 3
+    assert enforce["if"] == "always()"
+    assert "READINESS_RESULT" in enforce["env"]
+    assert "CONFIGURED" in enforce["env"]
+    # The enforce step carries all three fail-closed checks.
+    assert enforce["run"].count("exit 1") == 4
 
 
 # ---------------------------------------------------------------------------
@@ -819,26 +1045,26 @@ def test_infrastructure_remote_plan_rejects_a_stale_backend_digest_on_main():
     script = validation["run"]
     assert "aws ecr describe-images" in script
     assert "--image-ids imageDigest=\"$APPROVED_BACKEND_DIGEST\"" in script
-    assert "--image-ids imageTag=\"$GITHUB_SHA\"" in script
-    assert '"$GITHUB_EVENT_NAME" = push' in script
-    assert '"$GITHUB_REF" = refs/heads/main' in script
-    assert "TF_BACKEND_IMAGE_DIGEST is stale" in script
+    assert "--image-ids imageTag=\"$EXPECTED_COMMIT_SHA\"" in script
+    assert '"$GITHUB_EVENT_NAME" = push' not in script
+    assert '"$GITHUB_REF" = refs/heads/main' not in script
+    assert "TF_BACKEND_IMAGE_DIGEST is stale" not in script
+    assert "EXPECTED_COMMIT_SHA" in script
 
 
-def test_infrastructure_requires_credentialed_remote_plans_on_pushes_to_main():
+def test_infrastructure_requires_explicit_credentialed_remote_plan_dispatch():
     doc = _workflow_yaml("infrastructure.yml")
     remote_plan = doc["jobs"]["remote-plan"]
-    assert remote_plan["if"] == "needs.remote-plan-readiness.outputs.configured == 'true'"
+    assert remote_plan["if"] == "github.event_name == 'workflow_dispatch' && needs.remote-plan-readiness.outputs.configured == 'true'"
 
     gate = doc["jobs"]["require-production-credentials"]
     assert set(gate["needs"]) == {"remote-plan-readiness", "plan", "remote-plan"}
-    assert "github.event_name == 'push'" in gate["if"]
-    assert "github.ref == 'refs/heads/main'" in gate["if"]
+    assert gate["if"] == "always() && github.event_name == 'workflow_dispatch'"
     script = _job_script(doc, "require-production-credentials")
     for guarded in ('"$CONFIGURED" != \'true\'', '"$PLAN_RESULT" != \'success\'',
                     '"$REMOTE_PLAN_RESULT" != \'success\''):
         assert guarded in script, f"promotability gate no longer checks {guarded}"
-    assert script.count("exit 1") == 3
+    assert script.count("exit 1") == 4
 
 
 def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
@@ -852,11 +1078,13 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
         for name in probe_step["env"]
         if name not in {
             "AWS_INFRA_ROLE_ARN",
-            "TF_BACKEND_IMAGE_DIGEST",
+            "BACKEND_IMAGE_DIGEST",
+            "EXPECTED_COMMIT_SHA",
             "TF_ML_IMAGE_DIGEST",
         }
     }
-    assert len(shared) == 11
+    assert len(shared) == 12
+    assert "AWS_TERRAFORM_PLAN_ROLE_ARN" in shared
     assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN" in probe_step["env"]
     assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN \\\n" in probe_step["run"]
 
@@ -928,6 +1156,7 @@ PLAN_EVIDENCE = {
     "reviewed.tfplan.sha256": "sha256sum reviewed.tfplan > reviewed.tfplan.sha256",
     "reviewed.commit": 'printf \'%s\\n\' "$COMMIT_SHA" > reviewed.commit',
     "reviewed.profile": 'printf \'%s\\n\' "$PROFILE" > reviewed.profile',
+    "reviewed.deployment-lane": 'printf \'%s\\n\' "${DEPLOYMENT_LANE}" > reviewed.deployment-lane',
     "reviewed.state-key": (
         'printf \'%s\\n\' "profiles/${PROFILE}/terraform.tfstate" > reviewed.state-key'
     ),

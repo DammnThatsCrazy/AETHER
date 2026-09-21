@@ -208,12 +208,14 @@ class FakeResponse:
     def __init__(self) -> None:
         self.cookies: dict[str, dict[str, Any]] = {}
         self.deleted: list[str] = []
+        self.deleted_options: dict[str, dict[str, Any]] = {}
 
     def set_cookie(self, name: str, value: str, **kwargs: Any) -> None:
         self.cookies[name] = {"value": value, **kwargs}
 
     def delete_cookie(self, name: str, **kwargs: Any) -> None:
         self.deleted.append(name)
+        self.deleted_options[name] = kwargs
 
 
 # ── Harness ──────────────────────────────────────────────────────────────────
@@ -365,6 +367,21 @@ async def test_secure_is_only_relaxed_in_local_dev_and_test(monkeypatch):
     response = FakeResponse()
     cookies.set_session_cookie(response, "kses_deadbeef")
     assert response.cookies[cookies.SESSION_COOKIE_NAME]["secure"] is True
+
+
+async def test_host_prefixed_cookie_deletion_preserves_security_attributes(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    response = FakeResponse()
+
+    cookies.clear_kyber_cookies(response)
+
+    assert response.deleted == [cookies.SESSION_COOKIE_NAME, cookies.CSRF_COOKIE_NAME]
+    for name in response.deleted:
+        options = response.deleted_options[name]
+        assert options["path"] == "/"
+        assert options["secure"] is True
+        assert options["httponly"] is True
+        assert options["samesite"] == "strict"
 
 
 async def test_session_token_is_read_from_cookie_header_and_bearer(monkeypatch):

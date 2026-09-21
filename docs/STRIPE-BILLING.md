@@ -9,13 +9,17 @@ since_version: "0.1.0"
 source_files:
   - services/backend/shared/billing/stripe_client.py
   - services/backend/services/billing/routes.py
+  - services/backend/services/admin/webhook_routes.py
   - services/backend/shared/plans/catalog.py
+  - scripts/validate_stripe.py
 canonical_owner: billing@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
+  "scripts/validate_stripe.py": "sha256:a51619588351a11b1da4c2596d0ec352e31898cbd9a418b266a6558880208d67"
+  "services/backend/services/admin/webhook_routes.py": "sha256:3aba83f48123dd7b459cfb03b4727e3fe6707036dac99487c24fb67a68e01096"
   "services/backend/services/billing/routes.py": "sha256:c5da14570c9272a06f1e9b3f296ac7892d33916d94d31c4fcfd3421bb1956429"
-  "services/backend/shared/billing/stripe_client.py": "sha256:2f1f6f6fa308966e61557addd32a15ef2bfac6f09a679e235c88db4a240e1a8a"
+  "services/backend/shared/billing/stripe_client.py": "sha256:6b218eea6bf9dffd0e398722948813ccea454863270693c8200cd278ab0b1742"
   "services/backend/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
 ---
 # Stripe Billing — Aether Alpha–Omega Integration
@@ -40,26 +44,29 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
 1. **Create Stripe Products & recurring Prices** for each self-serve plan:
    - **Alpha** (Free) → recurring subscription Price
    - **Beta** ($299/mo) → recurring subscription Price
-   - **Gamma** ($599/mo) → recurring subscription Price
-   - **Delta** ($1,999/mo) → recurring subscription Price
+   - **Gamma** ($899/mo) → recurring subscription Price
+   - **Delta** ($3,449/mo) → recurring subscription Price
 
    Contract tiers (Epsilon, Omicron, Omega) are provisioned through the
-   admin operator path and do not require self-serve Stripe Prices.
+   admin operator path and do not require self-serve Stripe Prices. Their
+   mappings may be added later when those operator-managed flows are enabled.
 
    Pricing lives in `shared/plans/catalog.py::PLAN_CATALOG`. Aether does
    **not** ship hard-coded Stripe Price IDs; the operator must paste them
    into env vars below.
 
-2. **Set the Price IDs in env**:
+2. **Set the Price IDs in env**. Alpha–Delta are the self-serve Checkout
+   tiers. Epsilon, Omicron, and Omega are optional contract-tier mappings. The
+   pilot staging lane requires the four self-service IDs and can accept the
+   optional contract mappings without making them a self-service dependency:
    ```env
    STRIPE_PRICE_ALPHA=price_xxx_alpha
    STRIPE_PRICE_BETA=price_xxx_beta
    STRIPE_PRICE_GAMMA=price_xxx_gamma
    STRIPE_PRICE_DELTA=price_xxx_delta
-   # Contract tiers (optional — only if billing contract tiers through Stripe):
-   # STRIPE_PRICE_EPSILON=price_xxx_epsilon
-   # STRIPE_PRICE_OMICRON=price_xxx_omicron
-   # STRIPE_PRICE_OMEGA=price_xxx_omega
+   STRIPE_PRICE_EPSILON=price_xxx_epsilon
+   STRIPE_PRICE_OMICRON=price_xxx_omicron
+   STRIPE_PRICE_OMEGA=price_xxx_omega
    ```
 
 3. **(Optional) Overage Price** — only if you want to charge Aether overage
@@ -75,6 +82,8 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
    - URL: `POST https://<your-host>/v1/admin/billing/stripe/webhook`
    - Subscribed events:
      - `checkout.session.completed`
+     - `checkout.session.async_payment_succeeded`
+     - `checkout.session.async_payment_failed`
      - `customer.subscription.created`
      - `customer.subscription.updated`
      - `customer.subscription.deleted`
@@ -104,7 +113,7 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
 | `STRIPE_SECRET_KEY` | Stripe API secret. Required in non-local when enabled. |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for webhook signature verification. |
 | `STRIPE_PRICE_ALPHA..DELTA` | Recurring subscription Price IDs for self-serve plans. |
-| `STRIPE_PRICE_EPSILON/OMICRON/OMEGA` | (Optional) Price IDs for contract tiers. |
+| `STRIPE_PRICE_EPSILON/OMICRON/OMEGA` | Optional contract-tier Price IDs for operator-managed flows. |
 | `STRIPE_OVERAGE_PRICE_ID` | OPTIONAL Price ID for overage line items. |
 | `STRIPE_CHECKOUT_SUCCESS_URL` | Redirect URL after successful Checkout. |
 | `STRIPE_CHECKOUT_CANCEL_URL` | Redirect URL on cancelled Checkout. |
@@ -112,9 +121,10 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
 
 In **non-local** environments with `STRIPE_BILLING_ENABLED=true`, the secret
 key, webhook secret, the four self-serve Price IDs (Alpha–Delta), and the
-checkout/portal URLs are required — `Settings.__post_init__` raises
-`RuntimeError` if any are missing. Contract tier Price IDs are optional.
-In **local** mode, they may be unset.
+checkout/portal URLs are required. Contract-tier IDs are optional unless an
+operator-managed tier is being activated; `Settings.__post_init__` raises
+`RuntimeError` if a required value is missing. In **local** mode, they may be
+unset.
 
 ---
 
@@ -147,6 +157,8 @@ event (`customer.subscription.updated`). Specifically:
 | Event | Action |
 | --- | --- |
 | `checkout.session.completed` | Persist `stripe_customer_id` + `stripe_subscription_id`. **Plan_tier is NOT changed.** |
+| `checkout.session.async_payment_succeeded` | Repair the customer/subscription mapping when needed, record the settled subscription state, and send delayed activation once; the validated Checkout-requested tier is used only for that interim email. Subscription events remain authoritative for `plan_tier`. |
+| `checkout.session.async_payment_failed` | Upsert the customer/subscription mapping before recording `past_due`, so a failure delivered before checkout completion is not lost. |
 | `customer.subscription.created` | Sync subscription state. Update `plan_tier` only if status is `active`/`trialing` and the price matches a configured `STRIPE_PRICE_*`. |
 | `customer.subscription.updated` | **Authoritative.** Map subscription item Price ID back to PlanTier; on `active`/`trialing` update `plan_tier`, status, current_period_end. On `canceled`/`unpaid`/`incomplete_expired` downgrade to alpha. On `past_due` keep current plan. |
 | `customer.subscription.deleted` | Mark canceled, downgrade to alpha. |

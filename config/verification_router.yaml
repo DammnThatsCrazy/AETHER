@@ -87,7 +87,7 @@ checks:
 domains:
   delivery:
     owner: platform
-    paths: [Makefile, scripts/**, config/**, .github/workflows/**]
+    paths: [Makefile, scripts/**, config/**, .github/workflows/**, .env*.example]
     checks: [toolchain, repository_metadata, delivery_metadata]
     path_checks:
       .github/workflows/**: [workflow_authority]

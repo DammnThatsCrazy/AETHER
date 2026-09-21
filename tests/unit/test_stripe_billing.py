@@ -115,6 +115,7 @@ class TestStripeSettings:
             # tests/security/test_kyber_gate_migration.py — this test must trip
             # only the guard it is actually testing.
             KYBER_GOOGLE_CLIENT_ID="test-kyber-client-id",
+            KYBER_GOOGLE_CLIENT_SECRET="fake-client-secret-value",
             KYBER_GOOGLE_REDIRECT_URI="https://kyber.test.invalid/v1/kyber/auth/callback",
             KYBER_WEBAUTHN_RP_ID="kyber.test.invalid",
             KYBER_WEBAUTHN_ORIGIN="https://kyber.test.invalid",
@@ -147,6 +148,7 @@ class TestStripeSettings:
             # tests/security/test_kyber_gate_migration.py — this test must trip
             # only the guard it is actually testing.
             KYBER_GOOGLE_CLIENT_ID="test-kyber-client-id",
+            KYBER_GOOGLE_CLIENT_SECRET="fake-client-secret-value",
             KYBER_GOOGLE_REDIRECT_URI="https://kyber.test.invalid/v1/kyber/auth/callback",
             KYBER_WEBAUTHN_RP_ID="kyber.test.invalid",
             KYBER_WEBAUTHN_ORIGIN="https://kyber.test.invalid",
@@ -162,6 +164,57 @@ class TestStripeSettings:
             mod = _reload_settings()
             assert mod.settings.stripe_billing.price_gamma == "price_gamma"
             assert mod.settings.stripe_billing.overage_invoicing_enabled is False
+
+    def test_pilot_staging_boots_without_google_workforce_credentials(self, monkeypatch):
+        _set_env(
+            monkeypatch,
+            AETHER_ENV="staging",
+            AETHER_ROLE="api",
+            DEPLOYMENT_PROFILE="staging",
+            DEPLOYMENT_LANE="pilot",
+            JWT_SECRET="set",
+            DATABASE_URL="postgresql://aether:test@localhost:5432/aether",
+            WATERMARK_SECRET_KEY="test-watermark-secret-key-for-tests",
+            CANARY_SECRET_SEED="test-canary-secret-seed-for-tests",
+            EXTRACTION_CANARY_SEED="test-extraction-canary-seed-for-tests",
+            SDK_CONFIG_SECRET="test-sdk-config-secret-for-tests",
+            POLICY_ENFORCEMENT_ENABLED="true",
+            ROUTE_REGISTRY_ENFORCED="true",
+            KYBER_OPERATOR_GATE_ENFORCED="true",
+            KYBER_WORKFORCE_IDENTITY_ENABLED="false",
+            KYBER_DEVICE_TRUST_REQUIRED="false",
+            KYBER_BACKEND_AUTHZ_ENFORCED="false",
+            KYBER_SCOPE_V2_ENABLED="false",
+            KYBER_STEP_UP_REQUIRED="false",
+            KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED="false",
+            KYBER_BOOTSTRAP_ENABLED="false",
+            STRIPE_BILLING_ENABLED="true",
+            STRIPE_SECRET_KEY="sk_test_x",
+            STRIPE_WEBHOOK_SECRET="whsec_x",
+            STRIPE_PRICE_ALPHA="price_alpha123",
+            STRIPE_PRICE_BETA="price_beta123",
+            STRIPE_PRICE_GAMMA="price_gamma123",
+            STRIPE_PRICE_DELTA="price_delta123",
+            STRIPE_PRICE_EPSILON="price_epsilon123",
+            STRIPE_PRICE_OMICRON="price_omicron123",
+            STRIPE_PRICE_OMEGA="price_omega123",
+            STRIPE_CHECKOUT_SUCCESS_URL="https://aether.test/billing/success",
+            STRIPE_CHECKOUT_CANCEL_URL="https://aether.test/billing/cancel",
+            STRIPE_PORTAL_RETURN_URL="https://aether.test/billing",
+        )
+        for name in (
+            "KYBER_GOOGLE_CLIENT_ID",
+            "KYBER_GOOGLE_CLIENT_SECRET",
+            "KYBER_GOOGLE_REDIRECT_URI",
+            "KYBER_WEBAUTHN_RP_ID",
+            "KYBER_WEBAUTHN_ORIGIN",
+        ):
+            monkeypatch.delenv(name, raising=False)
+        with backend_path():
+            mod = _reload_settings()
+            assert mod.settings.runtime.deployment_lane == "pilot"
+            assert mod.settings.kyber_workforce.workforce_identity_enabled is False
+            assert mod.settings.stripe_billing.price_omega == "price_omega123"
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +393,146 @@ class TestWebhookHandling:
             assert acct["plan_tier"] == "alpha"
             assert acct["stripe_customer_id"] == "cus_3"
             assert acct["stripe_subscription_id"] == "sub_3"
+
+    def test_async_checkout_payment_success_reuses_checkout_mapping(self, monkeypatch):
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            stripe_repository._reset_in_memory_for_tests()
+            wh = importlib.import_module("services.admin.webhook_routes")
+            asyncio.run(wh._HANDLERS["checkout.session.async_payment_succeeded"]({
+                "object": {
+                    "customer": "cus_async",
+                    "subscription": "sub_async",
+                    "client_reference_id": "t-async",
+                    "metadata": {"tenant_id": "t-async"},
+                },
+            }))
+            acct = asyncio.run(stripe_repository.get_billing_account("t-async"))
+            assert acct["stripe_customer_id"] == "cus_async"
+            assert acct["stripe_subscription_id"] == "sub_async"
+            assert acct["subscription_status"] == "active"
+            assert wh._HANDLERS["checkout.session.async_payment_succeeded"] is not wh._handle_checkout_session_completed
+
+    def test_delayed_checkout_activation_email_waits_for_async_success(self, monkeypatch):
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            from shared.email import email_service
+
+            stripe_repository._reset_in_memory_for_tests()
+            send_email = AsyncMock()
+            monkeypatch.setattr(email_service, "send_email", send_email)
+            wh = importlib.import_module("services.admin.webhook_routes")
+            tenant_id = "t-async-email"
+
+            asyncio.run(wh._handle_checkout_session_completed({
+                "object": {
+                    "customer": "cus_async_email",
+                    "subscription": "sub_async_email",
+                    "client_reference_id": tenant_id,
+                    "payment_status": "unpaid",
+                    "metadata": {
+                        "tenant_id": tenant_id,
+                        "requested_plan_tier": "gamma",
+                        "contact_email": "pilot@example.com",
+                    },
+                },
+            }))
+            send_email.assert_not_awaited()
+
+            asyncio.run(wh._handle_checkout_session_async_payment_succeeded({
+                "object": {
+                    "customer": "cus_async_email",
+                    "subscription": "sub_async_email",
+                    "client_reference_id": tenant_id,
+                    "metadata": {"tenant_id": tenant_id},
+                },
+            }))
+            send_email.assert_awaited_once()
+
+    def test_async_checkout_payment_failure_marks_subscription_past_due(self, monkeypatch):
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            stripe_repository._reset_in_memory_for_tests()
+            wh = importlib.import_module("services.admin.webhook_routes")
+            asyncio.run(wh._HANDLERS["checkout.session.async_payment_failed"]({
+                "object": {
+                    "customer": "cus_async_failed",
+                    "subscription": "sub_async_failed",
+                    "client_reference_id": "t-async-failed",
+                    "metadata": {"tenant_id": "t-async-failed"},
+                },
+            }))
+            acct = asyncio.run(stripe_repository.get_billing_account("t-async-failed"))
+            assert acct["subscription_status"] == "past_due"
+
+    def test_async_checkout_payment_failure_upserts_mapping_before_state_update(self, monkeypatch):
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            wh = importlib.import_module("services.admin.webhook_routes")
+            mapping = AsyncMock()
+            state = AsyncMock()
+            monkeypatch.setattr(wh.stripe_repository, "update_customer_mapping", mapping)
+            monkeypatch.setattr(wh.stripe_repository, "update_subscription_state", state)
+
+            asyncio.run(wh._handle_checkout_session_async_payment_failed({
+                "object": {
+                    "customer": "cus_async_failed_first",
+                    "subscription": "sub_async_failed_first",
+                    "client_reference_id": "t-async-failed-first",
+                    "metadata": {
+                        "tenant_id": "t-async-failed-first",
+                        "contact_email": "pilot@example.com",
+                    },
+                },
+            }))
+
+            mapping.assert_awaited_once_with(
+                tenant_id="t-async-failed-first",
+                stripe_customer_id="cus_async_failed_first",
+                stripe_subscription_id="sub_async_failed_first",
+                contact_email="pilot@example.com",
+            )
+            state.assert_awaited_once_with(
+                tenant_id="t-async-failed-first",
+                stripe_subscription_id="sub_async_failed_first",
+                subscription_status="past_due",
+            )
+
+    def test_async_checkout_activation_email_uses_requested_tier_before_default(self, monkeypatch):
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            from shared.email import email_service
+
+            stripe_repository._reset_in_memory_for_tests()
+            send_email = AsyncMock()
+            monkeypatch.setattr(email_service, "send_email", send_email)
+            wh = importlib.import_module("services.admin.webhook_routes")
+            asyncio.run(wh._handle_checkout_session_async_payment_succeeded({
+                "object": {
+                    "customer": "cus_async_gamma",
+                    "subscription": "sub_async_gamma",
+                    "client_reference_id": "t-async-gamma",
+                    "metadata": {
+                        "tenant_id": "t-async-gamma",
+                        "requested_plan_tier": "gamma",
+                        "contact_email": "pilot@example.com",
+                    },
+                },
+            }))
+
+            send_email.assert_awaited_once()
+            assert send_email.await_args.kwargs["subject"] == (
+                "AETHER subscription activated — gamma"
+            )
 
     def test_invoice_paid_upserts_paid_invoice(self, monkeypatch):
         self._setup(monkeypatch)

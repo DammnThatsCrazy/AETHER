@@ -427,22 +427,32 @@ module "ecs" {
     aws.untagged = aws.untagged
   }
 
-  environment          = var.environment
-  project              = var.project
-  vpc_id               = module.vpc.vpc_id
-  task_subnets         = local.ecs_task_subnets
-  ecs_sg_id            = module.vpc.ecs_sg_id
-  ecr_backend_url      = module.ecr.repository_urls["aether-backend"]
-  backend_image_digest = var.backend_image_digest
-  ecr_ml_url           = module.ecr.repository_urls["aether-ml-serving"]
-  ml_image_digest      = var.ml_image_digest
-  alb_backend_tg_arn   = module.alb.backend_target_group_arn
-  alb_ml_tg_arn        = module.alb.ml_target_group_arn
-  database_host        = local.database_host
-  database_port        = local.database_port
-  database_name        = local.database_name
-  kyber_app_url        = var.kyber_app_url
-  api_base_url         = "https://${var.domain_name}"
+  environment                 = var.environment
+  project                     = var.project
+  vpc_id                      = module.vpc.vpc_id
+  task_subnets                = local.ecs_task_subnets
+  ecs_sg_id                   = module.vpc.ecs_sg_id
+  ecr_backend_url             = module.ecr.repository_urls["aether-backend"]
+  backend_image_digest        = var.backend_image_digest
+  ecr_ml_url                  = module.ecr.repository_urls["aether-ml-serving"]
+  ml_image_digest             = var.ml_image_digest
+  alb_backend_tg_arn          = module.alb.backend_target_group_arn
+  alb_ml_tg_arn               = module.alb.ml_target_group_arn
+  database_host               = local.database_host
+  database_port               = local.database_port
+  database_name               = local.database_name
+  kyber_app_url               = var.kyber_app_url
+  api_base_url                = "https://${var.domain_name}"
+  kyber_google_hosted_domain  = var.kyber_google_hosted_domain
+  deployment_profile          = var.deployment_profile
+  auth0_domain                = var.auth0_domain
+  auth0_api_audience          = var.auth0_api_audience
+  aether_app_url              = var.aether_app_url
+  deployment_lane             = var.deployment_lane
+  stripe_billing_enabled      = var.deployment_lane == "pilot"
+  stripe_checkout_success_url = "${var.aether_app_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"
+  stripe_checkout_cancel_url  = "${var.aether_app_url}/billing/cancel"
+  stripe_portal_return_url    = "${var.aether_app_url}/billing"
 
   # E3: Aurora Serverless v2 replaces RDS as the active database.
   # entrypoint.sh reads this ARN via DATABASE_URL_SECRET and builds DATABASE_URL.
@@ -663,7 +673,11 @@ module "auth0" {
   kyber_callback_urls       = ["${var.kyber_app_url}/callback"]
   kyber_logout_urls         = [var.kyber_app_url]
   kyber_web_origins         = [var.kyber_app_url]
-  enable_social_connections = var.enable_social_connections
+  # The pilot lane deliberately defers Google/GCP and every other external
+  # social-provider credential. Do not let the module default turn those
+  # optional connections back on with empty credentials; that would make a
+  # lean staging plan depend on providers that are explicitly out of scope.
+  enable_social_connections = var.deployment_lane == "pilot" ? false : var.enable_social_connections
 }
 
 # ---------------------------------------------------------------------------

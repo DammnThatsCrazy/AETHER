@@ -13,6 +13,7 @@ source_files:
   - cicd/aether-cicd/quality_gates/
   - .github/workflows/
   - scripts/release/verify_effective_staging_apply_policy.py
+  - scripts/release/check_staging_lane_contract.py
   - config/staging_apply_iam_policy.yaml
   - deploy/aws/terraform/modules/secrets/main.tf
   - deploy/aws/terraform/modules/ecr/main.tf
@@ -22,17 +23,18 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:ec3a1ea2f857979a558cd2bb5034f4aeb56644a372f683934234439e5e43a87d"
+  ".github/workflows/": "sha256:523e009985c22f1744774d28176efd7fa88c084df6a1209f3ef3093b1792c449"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
   "cicd/aether-cicd/stages/": "sha256:f26f7a608ed0d1cf1aff849650848b64958eba563c69ccb7f7d120726c767619"
-  "config/staging_apply_iam_policy.yaml": "sha256:87e3f96de932225bfb87344e93f7bea10338ce8189967a92d1aa829915ddbd47"
+  "config/staging_apply_iam_policy.yaml": "sha256:08b716e9ede615874b9e76767f6429f7f862df6535d3a3fe39bd37795e5b2f8c"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:e609cdfaaf5d9d384e213edf6f936b0045eac823cc38d432e75db464c8eb14ad"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:18b6900d5b62ac98c1bdcea37acd74cf05185e9b22161831f40d59a747c22383"
-  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
+  "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -152,6 +154,18 @@ re-plans.
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
 remote-ML profiles must provide one before apply or wake.
+The raw secret payload check is deliberately a separate, short-lived
+read-only preflight. It assumes `AetherStagingSecretPreflight`, which can read
+only the `aether/*` secret prefix and decrypt only the staging Secrets Manager
+CMK through its reviewed alias/tag conditions; the plan, deploy, and lifecycle
+roles do not receive `secretsmanager:GetSecretValue`. After apply, a
+metadata-only ECS task-definition gate proves that the running backend and
+worker revisions carry the selected pilot/full lane contract before smoke
+proceeds. The pilot smoke gate switches to the existing read-only
+`AetherStagingPlan` role for that ECS metadata check rather than widening the
+secret-value role. The immutable delivery path performs the same lane check
+before cloning a live task definition, closing the gap between a correct
+source plan and an old registered task definition still running in ECS.
 Before an apply, the promotion workflow parses the reviewed plan for ECR
 repositories in every shared-account profile (staging, demo, and preview) and
 fails closed when a same-name repository exists outside the reviewed state; it
@@ -175,8 +189,12 @@ the staging account and regional service endpoints.
 Role-name assertions are staging-only: every other profile is checked against
 its encrypted role ARN without being forced to use a staging role name. The
 staging effective-policy check also evaluates each reviewed action against its
-resource patterns and conditions and rejects any overlapping explicit Deny;
-an action name appearing in an unrelated statement is not sufficient. If a
+resource patterns and conditions, rejects any overlapping explicit Deny, and
+rejects attached Allow or NotAction statements that overlap a manifest's
+declared forbidden action set. Exact reviewed operations remain allowable when
+they are explicitly required by that manifest; a wildcard or broader attached
+grant is not. An action name appearing in an unrelated statement is not
+sufficient. If a
 policy uses a condition operator the checker cannot model, that Deny is
 treated as applicable and the preflight fails closed rather than allowing an
 unverified apply to proceed, but only after the Deny overlaps a reviewed
@@ -383,8 +401,9 @@ Two things get promoted, on two separate paths that must never be conflated: the
 The public web layer follows the infrastructure topology but has its own
 Amplify build path. `olympus-marketing`, `aether-marketing`, `docs`,
 `aether-app`, and `status` are connected to the checked-in monorepo build
-configuration; staging uses their Amplify default domains and production adds
-the reviewed `*.olympuslabsml.com` associations. The protected tenant and
+configuration; staging reuses the verified `*.staging.olympuslabsml.com`
+associations and production adds the reviewed `*.olympuslabsml.com` associations.
+The protected tenant and
 Kyber artifacts remain part of the immutable release and are published to
 their private S3 origins by the staging rehearsal. This keeps Kyber internal
 and prevents a public marketing build from being mistaken for an operator
@@ -392,17 +411,27 @@ deployment.
 
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
-| `deploy.yml` | push to `main`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; staging dispatch reuses the successful merged-main integration authority for the exact SHA and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
+| `deploy.yml` | push to `main`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; a staging dispatch may select `delivery_mode=build-only` to publish the verified immutable artifact without touching ECS, which breaks the asleep-staging/release circular dependency. The pilot full-rehearsal wrapper uses that build-only path when no approved release inputs were supplied; the lifecycle workflow accepts only a successful run with a successful immutable-build job. Staging dispatch reuses the successful merged-main integration authority for the exact SHA and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum; build-only is rejected for production. Before staging mutation, the deploy job verifies the currently registered task definitions already match the requested full/pilot lane, then registers one immutable task-definition revision per declared service; no rebuild occurs on promotion. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
 | `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the shared credential set exists (the ML image digest is additionally required only by production-scale and enterprise-isolated); ephemeral-class is deliberately excluded from remote-plan; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
-| `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. A full rehearsal binds the delivery run and `release.json` to the intended merged-main SHA, arms the bounded lease before apply, re-assumes the lifecycle role after the protected promotion wait, preserves the original lease anchor and extension count when refreshing after readiness, revalidates the lease before every mutating phase, publishes and verifies the exact AETHER/Kyber SPA archives, and cleans only a secret-free, run-scoped registration tenant marker. | no (delegates) |
-| `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Import-only reconciliation for an existing staging target group and/or the four reviewed Terraform ECR repositories. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact target/repository validation, the reviewed staging ECR KMS key for KMS-encrypted repositories, all required root-module URL/certificate/alert inputs, and the Auth0 provider environment used by ordinary remote plans; those credentials remain runner environment variables and never enter Terraform state or plan variables. If a repository exists at one unambiguous legacy staging address, the workflow validates all import prerequisites and every candidate status before adopting it with a state-only move to the canonical module address; it records the complete adoption set before moving anything, rejects tainted or otherwise non-managed legacy instances, treats an already-canonical healthy entry as a verified retry no-op, and fails closed on ambiguous duplicate ownership or demo/preview ownership. It also has a separate, confirmation-gated `untaint_ecr_repository_names` path for repositories already at the canonical staging address whose reviewed before/after attributes are identical but were left tainted by an interrupted replacement; that path verifies the live repository against the Terraform-managed KMS key in staging state, uses Terraform's top-level `untaint` command, and always requires a fresh reviewed plan. Aurora and DynamoDB monitoring are enabled with static profile decisions, so an unrelated state import never derives Terraform resource cardinality from unresolved resource IDs. Temporary local state snapshots are removed in one exit cleanup path. A fresh reviewed plan is required after any state change. The pre-existing `aether-backend` repository is intentionally immutable AES-256 because ECR encryption cannot be changed after creation; the other staging repositories remain KMS-encrypted. It never deletes or applies infrastructure. | no (state import/taint repair only) |
+| `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. Each handoff uses the exact run URL returned by GitHub and fails closed if no run ID is returned; it never guesses from a concurrent-run watermark. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. A full rehearsal accepts a successful immutable delivery or build-only run, verifies that the run contains a successful `Build immutable release once` job, binds its `release.json` to the intended merged-main SHA, arms the bounded lease before apply, re-assumes the lifecycle role after the protected promotion wait, preserves the original lease anchor and extension count when refreshing after readiness, revalidates the lease before every mutating phase, publishes and verifies the exact AETHER/Kyber SPA archives, and cleans only a secret-free, run-scoped registration tenant marker. | no (delegates) |
+| `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Reconciliation for an existing staging target group and/or the four reviewed Terraform ECR repositories. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact target/repository validation, the reviewed staging ECR KMS key for KMS-encrypted repositories, all required root-module URL/certificate/alert inputs, and the Auth0 provider environment used by ordinary remote plans; those credentials remain runner environment variables and never enter Terraform state or plan variables. If a repository exists at one unambiguous legacy staging address, the workflow validates all import prerequisites and every candidate status before adopting it with a state-only move to the canonical module address; it records the complete adoption set before moving anything, rejects tainted or otherwise non-managed legacy instances, treats an already-canonical healthy entry as a verified retry no-op, and fails closed on ambiguous duplicate ownership or demo/preview ownership. It also has a separate, confirmation-gated `untaint_ecr_repository_names` path for repositories already at the canonical staging address whose reviewed before/after attributes are identical but were left tainted by an interrupted replacement; that path verifies the live repository against the Terraform-managed KMS key in staging state, uses Terraform's top-level `untaint` command, and always requires a fresh reviewed plan. An explicitly confirmed `migrate_legacy_secret_kms=true` with `MIGRATE-STAGING-SECRETS` re-encrypts an allowed legacy AWS-managed-key secret under the reviewed staging CMK by metadata-only API calls; it never reads or changes plaintext. Aurora and DynamoDB monitoring are enabled with static profile decisions, so an unrelated state import never derives Terraform resource cardinality from unresolved resource IDs. Temporary local state snapshots are removed in one exit cleanup path. A fresh reviewed plan is required after any state change. The pre-existing `aether-backend` repository is intentionally immutable AES-256 because ECR encryption cannot be changed after creation; the other staging repositories remain KMS-encrypted. It never deletes or applies infrastructure. | no (state reconciliation only) |
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; it can scale ECS to zero and lower the ECS autoscaling floor, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
 
 | `repo-consistency.yml` | PR finalization (`ready_for_review`) / push to `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, binds the selected workspace archive and any selected backend image into one immutable candidate, verifies and materializes that candidate in the consumer job, executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. Draft pushes do not start this workflow. The broad `make ci-check` job is intentionally absent from the PR path after the completed selection observation window. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
 | `production-equivalent-ci.yml` | PR finalization (`ready_for_review`) / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every triggered event. On finalized PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
+
+Staging delivery and lifecycle workflows carry the same explicit
+`deployment_lane` token (`full` or `pilot`) through the immutable release,
+reviewed Terraform plan/apply, wake/sleep lifecycle and smoke gate. The
+canonical profile remains `staging` for both lanes. `full` retains all existing
+rehearsal and Kyber/workforce gates; `pilot` keeps the complete AWS-hosted
+Aether customer path and fail-closed Stripe/runtime checks while deferring only
+Kyber operator/workforce identity and GCP/Google hosting or credentials. A pilot
+path cannot proceed until the required Stripe ECS/bootstrap wiring and real
+test price secrets are present.
 
 The reviewed-promotion credential boundary is intentional: a `plan` action
 requires only the plan role and read-only planning inputs. The apply role is
@@ -421,13 +450,13 @@ four profiles produced a credentialed, policy- and cost-validated remote plan.
 Without that job a commit could land on `main` with every remote plan silently
 skipped and still be dispatched for promotion.
 
-**Not armed without the remote-plan credential set.** When the credential set
-is absent (a credential-less repository), `require-production-credentials`
-reports that it is a NO-OP — the commit is explicitly **NOT** promotable — and
-passes green, so a credential-less `main` is not permanently red. The job
-re-arms and fails closed on plan/remote-plan results the moment the full
-credential set is wired. The notice is the opposite of a promotability claim;
-it states that promotion is impossible until credentials exist.
+**Not armed without the remote-plan credential set.** Pushes and PR
+finalization keep the credentialed remote-plan lane held; they do not claim that
+a live plan exists. An explicit remote-plan dispatch must provide the exact
+immutable backend digest and commit SHA and must have the complete credential
+set. Missing or malformed inputs fail closed before any AWS or Terraform work,
+while the provider-mocked configuration plan remains available for repository
+evidence.
 
 The two evidence layers it publishes are not interchangeable:
 
@@ -470,6 +499,14 @@ promotion path.
 `staging_state` (`awake` | `asleep`) is a **plan-time** input, recorded next to
 the plan so a reviewer sees which shape was approved; an apply cannot reshape
 the stored plan.
+
+The pilot wrapper treats `plan-sleep` and `apply-sleep` as cleanup actions. It
+keeps the contract job and canonical authority dispatch, but skips credential,
+secret-payload and Amplify readiness checks that require application values or
+current app artifacts. A direct apply never trusts its requested
+`staging_state` input as a preflight bypass: only the explicit
+`secret_preflight_required=false` sleep flag can bypass that gate, and the
+reviewed plan artifact must independently record `staging_state=asleep`.
 
 The staging apply handoff has explicit preflight contracts. The staging
 workflow validates its reviewed IAM manifest and ensures the ECS service-linked

@@ -122,11 +122,12 @@ def _print_generated(dry_run: bool = False) -> None:
     print("# 3. Copy the signing secret shown after creation:")
     print("# STRIPE_WEBHOOK_SECRET=whsec_<from_stripe_dashboard>")
     print("#")
-    print("# 4. Create Products + Prices in Stripe for all plan tiers, then set:")
+    print("# 4. Create Products + Prices in Stripe for the self-service tiers, then set:")
     print("# STRIPE_PRICE_ALPHA=price_<alpha_price_id>")
     print("# STRIPE_PRICE_BETA=price_<beta_price_id>")
     print("# STRIPE_PRICE_GAMMA=price_<gamma_price_id>")
     print("# STRIPE_PRICE_DELTA=price_<delta_price_id>")
+    print("# Optional contract-tier mappings, only when those tiers are enabled:")
     print("# STRIPE_PRICE_EPSILON=price_<epsilon_price_id>")
     print("# STRIPE_PRICE_OMICRON=price_<omicron_price_id>")
     print("# STRIPE_PRICE_OMEGA=price_<omega_price_id>")
@@ -174,9 +175,6 @@ def _validate(env_path: str) -> bool:
         "STRIPE_PRICE_BETA",
         "STRIPE_PRICE_GAMMA",
         "STRIPE_PRICE_DELTA",
-        "STRIPE_PRICE_EPSILON",
-        "STRIPE_PRICE_OMICRON",
-        "STRIPE_PRICE_OMEGA",
     ]
 
     issues: list[str] = []

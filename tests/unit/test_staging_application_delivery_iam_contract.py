@@ -32,6 +32,10 @@ def test_delivery_manifest_scopes_runtime_tasks_and_static_assets() -> None:
         "arn:aws:s3:::aether-staging-*",
         "arn:aws:s3:::aether-staging-*/*",
     ]
+    assert by_sid["AuthorizeStagingEcrClient"]["resource"] == "*"
+    assert by_sid["PublishStagingBackendImage"]["resource"].endswith(
+        ":repository/aether-backend"
+    )
 
 
 def test_delivery_manifest_renders_to_an_aws_policy_document() -> None:

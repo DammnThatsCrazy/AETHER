@@ -402,6 +402,7 @@ _PROD_ENV = {
     "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED": "false",
     "KYBER_BOOTSTRAP_ENABLED": "false",
     "KYBER_GOOGLE_CLIENT_ID": "client-id",
+    "KYBER_GOOGLE_CLIENT_SECRET": "client-secret",
     "KYBER_GOOGLE_REDIRECT_URI": "https://kyber.example.com/auth/callback",
     "KYBER_WEBAUTHN_RP_ID": "kyber.example.com",
     "KYBER_WEBAUTHN_ORIGIN": "https://kyber.example.com",

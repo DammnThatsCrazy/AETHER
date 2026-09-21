@@ -1,0 +1,487 @@
+name: Lean AWS pilot staging
+
+# This is an additive, dispatch-only entry point for a complete Aether staging
+# provision. It never applies Terraform, mutates ECS, publishes an SPA, or
+# probes AWS itself. The existing reviewed authorities below remain the only
+# mutation paths, and all of them receive deployment_lane=pilot explicitly.
+#
+# PILOT_DEFERRED_GATES: kyber_operator_workforce_identity,gcp_hosting,google_credentials
+# Those are intentional pilot omissions. Aether backend, customer-facing
+# surfaces, durable state, Stripe, tenant isolation, observability, lifecycle,
+# redeploy, and smoke evidence remain in the path.
+# Canonical authority files:
+# .github/workflows/terraform-promote.yml
+# .github/workflows/deploy.yml
+# .github/workflows/staging-lifecycle.yml
+# .github/workflows/staging-smoke.yml
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Pilot staging action to dispatch through the canonical authority
+        type: choice
+        options: [validate, plan, apply, redeploy, smoke, full-rehearsal, plan-sleep, apply-sleep]
+        default: full-rehearsal
+        required: true
+      deployment_lane:
+        description: Explicit staging lane. This entry point accepts pilot only.
+        type: choice
+        options: [full, pilot]
+        default: pilot
+        required: true
+      backend_image_digest:
+        description: Immutable backend image digest for the reviewed staging plan
+        type: string
+        required: false
+      staging_secrets_kms_key_arn:
+        description: "Reviewed staging Secrets Manager CMK ARN or alias used by pilot state reconciliation"
+        type: string
+        default: "alias/aether-staging-secrets"
+        required: false
+      ml_image_digest:
+        description: Immutable ML serving digest when supplied by a remote-ML profile
+        type: string
+        required: false
+      release_run_id:
+        description: Successful immutable delivery or staging build-only run for full-rehearsal; omit both release inputs to build one automatically
+        type: string
+        required: false
+      release_manifest_checksum:
+        description: Approved release.json SHA256 for full-rehearsal
+        type: string
+        required: false
+      intended_release_sha:
+        description: Exact main SHA the reviewed release/plan must contain
+        type: string
+        required: false
+      plan_run_id:
+        description: Reviewed Terraform plan run ID for apply/validate/apply-sleep
+        type: string
+        required: false
+      plan_checksum:
+        description: Reviewed Terraform binary plan SHA256 for apply/apply-sleep
+        type: string
+        required: false
+      proof_tenant_id:
+        description: Proof tenant for the Aether smoke gate
+        type: string
+        default: aether-proof-tenant
+        required: false
+      proof_workspace_id:
+        description: Proof workspace for the Aether smoke gate
+        type: string
+        default: proof-lab
+        required: false
+      max_awake_hours:
+        description: Reviewed staging awake lease in hours (1-8)
+        type: string
+        default: "4"
+        required: false
+      promote_timeout_minutes:
+        description: Maximum wait for each dispatched canonical authority
+        type: string
+        default: "180"
+        required: false
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: pilot-staging-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    name: Validate pilot staging contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install contract validation dependency
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Fail closed on incomplete pilot wiring
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_lane_contract.py \
+            --profile staging \
+            --deployment-lane "$DEPLOYMENT_LANE" \
+            --check-runtime-wiring
+          python scripts/release/check_pilot_staging_contract.py \
+            --workflow .github/workflows/pilot-staging.yml \
+            --deployment_lane "$DEPLOYMENT_LANE" \
+            --evidence-out pilot-staging-contract.json
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: pilot-staging-contract-${{ github.run_id }}
+          path: pilot-staging-contract.json
+          if-no-files-found: error
+          retention-days: 30
+
+  credential-preflight:
+    name: Validate pilot credentials before dispatch
+    needs: contract
+    if: >-
+      needs.contract.result == 'success'
+      && inputs.action != 'plan-sleep'
+      && inputs.action != 'apply-sleep'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging-terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate all staging credential metadata
+        env:
+          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL }}
+          TF_AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          TF_AUTH0_MANAGEMENT_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+          TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          TF_BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_credential_contract.py --lane pilot
+
+  secret-payload-preflight:
+    name: Verify pilot secret payloads are ECS-safe
+    needs: [contract, credential-preflight]
+    if: >-
+      needs.contract.result == 'success'
+      && needs.credential-preflight.result == 'success'
+      && inputs.action != 'plan-sleep'
+      && inputs.action != 'apply-sleep'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Configure AWS inspection credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # AetherStagingPlan carries the reviewed read-only IAM metadata
+          # permissions needed to inspect the secret role before assumption.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify staging IAM inspection role assumption
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+      - name: Verify the effective secret preflight IAM contract
+        env:
+          TARGET_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_apply_policy.py --role-arn "$TARGET_ROLE_ARN" --manifest config/staging_secret_preflight_iam_policy.yaml --expected-role AetherStagingSecretPreflight --required-policy-suffix AetherStagingSecretPreflightContract
+      - name: Configure AWS secret preflight credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify secret preflight role assumption and policy
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_secret_preflight_policy.py
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role="$(jq -r .Arn <<<"$caller_json")"
+          caller_role="${caller_role#*:assumed-role/}"
+          caller_role="${caller_role%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::secret preflight account mismatch'; exit 1; }
+          test "$caller_role" = AetherStagingSecretPreflight || { echo '::error::unexpected secret preflight role'; exit 1; }
+      - name: Verify raw secret payloads and staging Stripe mode
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_secret_payload_contract.py --lane pilot
+
+  amplify-preflight:
+    name: Verify Amplify app ownership and current-head artifacts
+    needs: [contract, credential-preflight, secret-payload-preflight]
+    if: >-
+      always()
+      && needs.contract.result == 'success'
+      && inputs.action != 'plan-sleep'
+      && inputs.action != 'apply-sleep'
+      && needs.credential-preflight.result == 'success'
+      && needs.secret-payload-preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging-terraform
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Configure AWS read credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # Amplify verification is metadata-only and belongs on the same
+          # dedicated read-only plan role used by the staging audit gates.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify all staging Amplify apps and current-head jobs
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_amplify_app_contract.py \
+            --mode staging \
+            --expected-commit "$EXPECTED_COMMIT_SHA"
+      - name: Verify production status provenance and branch stage
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_amplify_app_contract.py \
+            --mode production-status \
+            --expected-commit "$EXPECTED_COMMIT_SHA"
+
+  dispatch-authority:
+    name: Dispatch canonical staging authority
+    needs: [contract, credential-preflight, secret-payload-preflight, amplify-preflight]
+    if: >-
+      always()
+      && needs.contract.result == 'success'
+      && (
+        needs.credential-preflight.result == 'success'
+        || (
+          (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
+          && needs.credential-preflight.result == 'skipped'
+        )
+      )
+      && (
+        needs.secret-payload-preflight.result == 'success'
+        || (
+          (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
+          && needs.secret-payload-preflight.result == 'skipped'
+        )
+      )
+      && (
+        needs.amplify-preflight.result == 'success'
+        || (
+          (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
+          && needs.amplify-preflight.result == 'skipped'
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      REF_NAME: ${{ github.ref_name }}
+      ACTION: ${{ inputs.action }}
+      DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
+      BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+      STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+      ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+      RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+      RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+      INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
+      PLAN_RUN_ID: ${{ inputs.plan_run_id }}
+      PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
+      PROOF_TENANT_ID: ${{ inputs.proof_tenant_id || 'aether-proof-tenant' }}
+      PROOF_WORKSPACE_ID: ${{ inputs.proof_workspace_id || 'proof-lab' }}
+      MAX_AWAKE_HOURS: ${{ inputs.max_awake_hours }}
+      PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+    steps:
+      - name: Dispatch and wait for the selected canonical authority
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$DEPLOYMENT_LANE" = pilot || {
+            echo '::error::pilot-staging.yml accepts deployment_lane=pilot only; full staging remains on its existing entry points'
+            exit 1
+          }
+          test "$REF_NAME" = main || {
+            echo "::error::pilot staging must run from main, not ${REF_NAME}"
+            exit 1
+          }
+
+          dispatch_and_wait() {
+            local workflow="$1"
+            shift
+            local dispatch_output run_id status conclusion deadline
+            # gh returns the created run URL when the dispatch is accepted.
+            # Use that exact ID; a before/after list watermark can bind this
+            # parent to an unrelated concurrent run on the same ref.
+            dispatch_output="$(gh workflow run "$workflow" --ref "$REF_NAME" "$@" 2>&1)"
+            printf '%s\n' "$dispatch_output"
+            run_id="$(printf '%s\n' "$dispatch_output" \
+              | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+            test -n "$run_id" || {
+              echo "::error::${workflow} dispatch did not return its created run URL; refusing ambiguous correlation"
+              exit 1
+            }
+            DISPATCHED_RUN_ID="$run_id"
+            deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
+            while :; do
+              status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+              if [ "$status" = completed ]; then
+                conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
+                test "$conclusion" = success || {
+                  echo "::error::${workflow} run ${run_id} concluded ${conclusion}"
+                  exit 1
+                }
+                echo "${workflow} run ${run_id} completed successfully"
+                return 0
+              fi
+              if [ "$(date -u +%s)" -ge "$deadline" ]; then
+                echo "::error::${workflow} run ${run_id} exceeded ${PROMOTE_TIMEOUT_MINUTES} minutes"
+                exit 1
+              fi
+              sleep 20
+            done
+          }
+
+          reconcile_pilot_price_secret_state() {
+            test -n "$BACKEND_IMAGE_DIGEST" || {
+              echo '::error::backend_image_digest is required before pilot Terraform planning so state reconciliation can validate the reviewed root module'
+              exit 1
+            }
+            test -n "$STAGING_SECRETS_KMS_KEY_ARN" || {
+              echo '::error::staging_secrets_kms_key_arn is required before pilot Terraform planning'
+              exit 1
+            }
+            dispatch_and_wait staging-state-reconcile.yml \
+              -f staging_secret_names='stripe-price-alpha,stripe-price-beta,stripe-price-gamma,stripe-price-delta' \
+              -f staging_secrets_kms_key_arn="$STAGING_SECRETS_KMS_KEY_ARN" \
+              -f migrate_legacy_secret_kms=true \
+              -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS \
+              -f staging_amplify_domain_name=staging.olympuslabsml.com \
+              -f confirm_staging_import=IMPORT-STAGING \
+              -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
+              -f expected_commit_sha="$INTENDED_RELEASE_SHA"
+          }
+
+          case "$ACTION" in
+            plan)
+              test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for pilot plan'; exit 1; }
+              reconcile_pilot_price_secret_state
+              dispatch_and_wait terraform-promote.yml \
+                -f profile=staging -f deployment_lane=pilot -f action=plan \
+                -f staging_state=awake -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
+                -f ml_image_digest="$ML_IMAGE_DIGEST" -f expected_commit_sha="$INTENDED_RELEASE_SHA"
+              ;;
+            apply)
+              test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id is required for pilot apply'; exit 1; }
+              test -n "$PLAN_CHECKSUM" || { echo '::error::plan_checksum is required for pilot apply'; exit 1; }
+              dispatch_and_wait terraform-promote.yml \
+                -f profile=staging -f deployment_lane=pilot -f action=apply \
+                -f plan_run_id="$PLAN_RUN_ID" -f plan_checksum="$PLAN_CHECKSUM"
+              ;;
+            redeploy)
+              dispatch_and_wait deploy.yml \
+                -f environment=staging -f deployment_lane=pilot
+              ;;
+            smoke)
+              dispatch_and_wait staging-smoke.yml \
+                -f environment=staging -f deployment_lane=pilot \
+                -f proof_tenant_id="$PROOF_TENANT_ID" -f proof_workspace_id="$PROOF_WORKSPACE_ID"
+              ;;
+            full-rehearsal)
+              if [ -z "$RELEASE_RUN_ID" ] && [ -z "$RELEASE_MANIFEST_CHECKSUM" ]; then
+                # A sleeping staging environment cannot produce a successful
+                # ECS deploy, but it can safely produce the exact immutable
+                # release that the lifecycle wake will later consume.
+                dispatch_and_wait deploy.yml \
+                  -f environment=staging -f deployment_lane=pilot \
+                  -f delivery_mode=build-only
+                RELEASE_RUN_ID="$DISPATCHED_RUN_ID"
+                release_dir="$RUNNER_TEMP/pilot-release"
+                mkdir -p "$release_dir"
+                gh run download "$RELEASE_RUN_ID" \
+                  --name "release-${INTENDED_RELEASE_SHA}" \
+                  --dir "$release_dir"
+                RELEASE_MANIFEST_CHECKSUM="$(cat "$release_dir/release.json.sha256")"
+              elif [ -z "$RELEASE_RUN_ID" ] || [ -z "$RELEASE_MANIFEST_CHECKSUM" ]; then
+                echo '::error::release_run_id and release_manifest_checksum must be supplied together'
+                exit 1
+              fi
+              dispatch_and_wait staging-lifecycle.yml \
+                -f action=full-rehearsal -f deployment_lane=pilot \
+                -f confirm_runtime_wake=true -f release_run_id="$RELEASE_RUN_ID" \
+                -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" \
+                -f intended_release_sha="$INTENDED_RELEASE_SHA" \
+                -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
+                -f ml_image_digest="$ML_IMAGE_DIGEST" \
+                -f max_awake_hours="$MAX_AWAKE_HOURS" \
+                -f promote_timeout_minutes="$PROMOTE_TIMEOUT_MINUTES"
+              ;;
+            validate)
+              test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id is required for pilot validate'; exit 1; }
+              dispatch_and_wait staging-lifecycle.yml \
+                -f action=validate -f deployment_lane=pilot -f plan_run_id="$PLAN_RUN_ID" \
+                -f plan_checksum="$PLAN_CHECKSUM" -f promote_timeout_minutes="$PROMOTE_TIMEOUT_MINUTES"
+              ;;
+            plan-sleep)
+              test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for pilot plan-sleep'; exit 1; }
+              dispatch_and_wait staging-lifecycle.yml \
+                -f action=plan-sleep -f deployment_lane=pilot \
+                -f backend_image_digest="$BACKEND_IMAGE_DIGEST" -f ml_image_digest="$ML_IMAGE_DIGEST" \
+                -f intended_release_sha="$INTENDED_RELEASE_SHA" -f promote_timeout_minutes="$PROMOTE_TIMEOUT_MINUTES"
+              ;;
+            apply-sleep)
+              test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for pilot apply-sleep'; exit 1; }
+              dispatch_and_wait staging-lifecycle.yml \
+                -f action=apply-sleep -f deployment_lane=pilot \
+                -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
+                -f ml_image_digest="$ML_IMAGE_DIGEST" -f intended_release_sha="$INTENDED_RELEASE_SHA" \
+                -f promote_timeout_minutes="$PROMOTE_TIMEOUT_MINUTES"
+              ;;
+            *)
+              echo "::error::unsupported pilot action ${ACTION}"
+              exit 1
+              ;;
+          esac

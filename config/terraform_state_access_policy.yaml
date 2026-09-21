@@ -1,6 +1,7 @@
 # Least-privilege backend access shared by the reviewed Terraform apply and
 # confirmation-gated state migration roles. The account-specific names are
 # resolved by the bootstrap; this manifest is the reviewable action contract.
+# Encrypted staging state also requires a bucket-encryption metadata read.
 version: 1
 scope: terraform-state-backend
 state_bucket: aether-terraform-state
@@ -26,6 +27,7 @@ statements:
     actions:
       - s3:GetBucketVersioning
       - s3:GetBucketLocation
+      - s3:GetEncryptionConfiguration
     resource: arn:aws:s3:::aether-terraform-state
     scope: state-bucket-metadata
   - sid: LockProfileState

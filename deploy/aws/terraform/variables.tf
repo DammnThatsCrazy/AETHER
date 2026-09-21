@@ -16,6 +16,19 @@ variable "deployment_profile" {
   }
 }
 
+variable "deployment_lane" {
+  type        = string
+  description = "Additive staging overlay. full preserves the complete rehearsal; pilot keeps the canonical staging profile while deferring Kyber workforce/GCP gates."
+  default     = "full"
+
+  validation {
+    condition = contains(["full", "pilot"], var.deployment_lane) && (
+      var.deployment_lane != "pilot" || var.deployment_profile == "staging"
+    )
+    error_message = "deployment_lane must be full or pilot; pilot is valid only with deployment_profile=staging."
+  }
+}
+
 # Backend releases are always pinned to an immutable digest. The optional ML
 # digest is profile-gated below because staging and production-lean run ML
 # inline and do not provision a dedicated ML image.
@@ -452,6 +465,17 @@ variable "kyber_app_url" {
   description = "Public URL of the Kyber operator console (e.g. https://kyber.olympuslabsml.com)"
 }
 
+variable "kyber_google_hosted_domain" {
+  type        = string
+  description = "Google Workspace domain accepted by the Kyber workforce OIDC flow"
+  default     = "olympuslabs.ai"
+
+  validation {
+    condition     = can(regex("^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\.[a-z]{2,}$", lower(trimspace(var.kyber_google_hosted_domain))))
+    error_message = "kyber_google_hosted_domain must be a concrete DNS domain such as olympuslabs.ai."
+  }
+}
+
 variable "api_cors_origins" {
   type        = list(string)
   description = "Optional explicit API CORS origin list. When empty, Terraform derives the canonical Aether, Kyber, and public Amplify origins."
@@ -489,7 +513,7 @@ variable "amplify_branch" {
 
 variable "amplify_custom_domain_enabled" {
   type        = bool
-  description = "Associate Amplify applications with the canonical public domain. Keep false for staging so staging uses Amplify default domains and cannot claim production DNS."
+  description = "Associate Amplify applications with the profile's canonical public domain. Squarespace remains authoritative when Route 53 hosting is disabled."
   default     = false
 }
 
@@ -501,7 +525,7 @@ variable "amplify_domain_name" {
 
 variable "status_api_url" {
   type        = string
-  description = "Public HTTPS health endpoint consumed by the status application. Leave empty until the target environment has a verified API hostname and certificate."
+  description = "Public HTTPS health endpoint consumed by the status application after the profile's API hostname, certificate, and CORS path are verified."
   default     = ""
 }
 

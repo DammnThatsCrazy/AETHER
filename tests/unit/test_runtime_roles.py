@@ -71,6 +71,7 @@ _SECRET_ENV = {
     # secrets above are satisfied: a runtime-role test must trip only the guard
     # it is actually testing.
     "KYBER_GOOGLE_CLIENT_ID": "test-kyber-client-id",
+    "KYBER_GOOGLE_CLIENT_SECRET": "test-kyber-client-secret",
     "KYBER_GOOGLE_REDIRECT_URI": "https://kyber.test.invalid/v1/kyber/auth/callback",
     "KYBER_WEBAUTHN_RP_ID": "kyber.test.invalid",
     "KYBER_WEBAUTHN_ORIGIN": "https://kyber.test.invalid",

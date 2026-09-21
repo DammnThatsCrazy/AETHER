@@ -205,6 +205,72 @@ variable "api_base_url" {
   }
 }
 
+variable "kyber_google_hosted_domain" {
+  type        = string
+  description = "Google Workspace hosted domain enforced by the backend-owned Kyber OIDC flow"
+  default     = "olympuslabs.ai"
+
+  validation {
+    condition     = can(regex("^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\.[a-z]{2,}$", lower(trimspace(var.kyber_google_hosted_domain))))
+    error_message = "kyber_google_hosted_domain must be a concrete DNS domain such as olympuslabs.ai."
+  }
+}
+
+variable "deployment_profile" {
+  type        = string
+  description = "Canonical deployment profile passed to the hosted backend runtime."
+}
+
+variable "auth0_domain" {
+  type        = string
+  description = "Auth0 tenant domain passed to the hosted backend token validator."
+}
+
+variable "auth0_api_audience" {
+  type        = string
+  description = "Auth0 API audience passed to the hosted backend token validator."
+}
+
+variable "aether_app_url" {
+  type        = string
+  description = "Canonical Aether customer-app origin used by backend email and billing links."
+}
+
+variable "deployment_lane" {
+  type        = string
+  description = "Deployment overlay selected by the reviewed staging plan."
+  default     = "full"
+
+  validation {
+    condition     = contains(["full", "pilot"], var.deployment_lane)
+    error_message = "deployment_lane must be full or pilot."
+  }
+}
+
+variable "stripe_billing_enabled" {
+  type        = bool
+  description = "Whether the task receives the complete self-service Stripe billing contract."
+  default     = false
+}
+
+variable "stripe_checkout_success_url" {
+  type        = string
+  description = "Stripe Checkout success URL for the customer-facing Aether app."
+  default     = ""
+}
+
+variable "stripe_checkout_cancel_url" {
+  type        = string
+  description = "Stripe Checkout cancellation URL for the customer-facing Aether app."
+  default     = ""
+}
+
+variable "stripe_portal_return_url" {
+  type        = string
+  description = "Stripe Billing Portal return URL for the customer-facing Aether app."
+  default     = ""
+}
+
 # The backend (api) task's sizing, baseline and autoscaling envelope carry no
 # defaults on purpose. They come from the api service in the schema-v2runtime
 # matrix via the root's local.api_* values, and a default here would be a

@@ -6,6 +6,7 @@ Aether Backend — Central Configuration
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -445,9 +446,10 @@ class StripeBillingConfig:
     amounts are NOT duplicated here — only the Stripe Price IDs themselves.
 
     In non-local environments with enabled=True, secret_key, webhook_secret,
-    price_alpha..price_omega, and checkout/portal URLs are required (validated in
-    Settings.__post_init__). In AETHER_ENV=local, missing values are tolerated
-    and provider operations return an explicit unavailable response.
+    the self-service price_alpha..price_delta set, and checkout/portal URLs are
+    required (validated in Settings.__post_init__). Contract-tier identifiers
+    remain optional operator mappings. In AETHER_ENV=local, missing values are
+    tolerated and provider operations return an explicit unavailable response.
 
     overage_price_id is OPTIONAL. It is only required when charging Aether
     overage through Stripe invoices. When absent, Stripe overage invoicing is
@@ -667,7 +669,14 @@ class KyberWorkforceConfig:
     google_client_id: str = _env("KYBER_GOOGLE_CLIENT_ID", "")
     google_client_secret: str = _env("KYBER_GOOGLE_CLIENT_SECRET", "")
     google_redirect_uri: str = _env("KYBER_GOOGLE_REDIRECT_URI", "")
-    google_hosted_domain: str = _env("KYBER_GOOGLE_HOSTED_DOMAIN", "")
+    # Deploy targets use the organization's Google Workspace domain by
+    # default; local/dev remain unset so their mock/local flows are not
+    # coupled to production identity configuration. Terraform injects the
+    # reviewed value explicitly for staging and production.
+    google_hosted_domain: str = _env(
+        "KYBER_GOOGLE_HOSTED_DOMAIN",
+        "olympuslabs.ai" if _KYBER_DEFAULT_ON else "",
+    )
     google_discovery_url: str = _env(
         "KYBER_GOOGLE_DISCOVERY_URL",
         "https://accounts.google.com/.well-known/openid-configuration",
@@ -743,6 +752,9 @@ class RuntimeConfig:
     aether_role: str = _env("AETHER_ROLE", "all")
     # Deployment profile label — drives compose/helm wiring & ops tooling.
     deployment_profile: str = _env("DEPLOYMENT_PROFILE", "local-live")
+    # Additive staging overlay. The canonical deployment profile remains
+    # `staging`; `pilot` only defers the private Kyber/GCP/Google gates.
+    deployment_lane: str = _env("DEPLOYMENT_LANE", "full")
 
     # Backend selectors — the concrete backend each subsystem binds to.
     database_backend: str = _env("DATABASE_BACKEND", "postgres")
@@ -2314,6 +2326,24 @@ class Settings:
         _is_non_local = self.env != Environment.LOCAL
         _is_prod = self.env == Environment.PRODUCTION
 
+        # A lane is an overlay, never a replacement deployment profile or a
+        # second state namespace. Keep this validation in the backend as well
+        # as in Terraform/workflows so a hand-launched task cannot boot with a
+        # profile/lane combination the reviewed path would reject.
+        if self.runtime.deployment_lane not in ("full", "pilot"):
+            raise RuntimeError(
+                "DEPLOYMENT_LANE must be full or pilot "
+                f"(got: {self.runtime.deployment_lane!r})"
+            )
+        if self.runtime.deployment_lane == "pilot" and not (
+            self.env == Environment.STAGING
+            and self.runtime.deployment_profile == "staging"
+        ):
+            raise RuntimeError(
+                "DEPLOYMENT_LANE=pilot requires AETHER_ENV=staging and "
+                "DEPLOYMENT_PROFILE=staging"
+            )
+
         # ── Pricing option ────────────────────────────────────────────────────
         if self.rate_limit.pricing_option not in ("A", "B", "C"):
             raise RuntimeError(
@@ -2405,7 +2435,38 @@ class Settings:
         # with its SSO / WebAuthn anchors unset. Dev/integration keep explicit
         # flag control.
         kw = self.kyber_workforce
-        if _is_deploy_target:
+        if _is_deploy_target and self.runtime.deployment_lane == "pilot":
+            # The pilot is still a full Aether backend/runtime deployment, but
+            # it is intentionally not a Kyber operator deployment. Keep the
+            # flags explicit and fail closed if a task definition accidentally
+            # re-enables the workforce plane or its bootstrap escape hatch.
+            _pilot_kyber_problems: list[str] = []
+            if kw.workforce_identity_enabled:
+                _pilot_kyber_problems.append(
+                    "KYBER_WORKFORCE_IDENTITY_ENABLED must be false in pilot lane"
+                )
+            for _name, _value in (
+                ("KYBER_DEVICE_TRUST_REQUIRED", kw.device_trust_required),
+                ("KYBER_BACKEND_AUTHZ_ENFORCED", kw.backend_authz_enforced),
+                ("KYBER_SCOPE_V2_ENABLED", kw.scope_v2_enabled),
+                ("KYBER_STEP_UP_REQUIRED", kw.step_up_required),
+            ):
+                if _value:
+                    _pilot_kyber_problems.append(f"{_name} must be false in pilot lane")
+            if kw.legacy_operator_identity_allowed:
+                _pilot_kyber_problems.append(
+                    "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED must be false in pilot lane"
+                )
+            if kw.bootstrap_enabled:
+                _pilot_kyber_problems.append(
+                    "KYBER_BOOTSTRAP_ENABLED must be false in pilot lane"
+                )
+            if _pilot_kyber_problems:
+                raise RuntimeError(
+                    "KYBER_WORKFORCE_DEFERRED_IN_PILOT: "
+                    + "; ".join(_pilot_kyber_problems)
+                )
+        elif _is_deploy_target:
             _kyber_problems: list[str] = []
             if not kw.workforce_identity_enabled:
                 _kyber_problems.append("KYBER_WORKFORCE_IDENTITY_ENABLED must be true")
@@ -2423,7 +2484,9 @@ class Settings:
             if kw.workforce_identity_enabled:
                 for _var, _value in (
                     ("KYBER_GOOGLE_CLIENT_ID", kw.google_client_id),
+                    ("KYBER_GOOGLE_CLIENT_SECRET", kw.google_client_secret),
                     ("KYBER_GOOGLE_REDIRECT_URI", kw.google_redirect_uri),
+                    ("KYBER_GOOGLE_HOSTED_DOMAIN", kw.google_hosted_domain),
                     ("KYBER_WEBAUTHN_RP_ID", kw.webauthn_rp_id),
                     ("KYBER_WEBAUTHN_ORIGIN", kw.webauthn_origin),
                 ):
@@ -2519,14 +2582,20 @@ class Settings:
                 missing.append("STRIPE_SECRET_KEY")
             if not sb.webhook_secret:
                 missing.append("STRIPE_WEBHOOK_SECRET")
-            if not sb.price_alpha:
-                missing.append("STRIPE_PRICE_ALPHA")
-            if not sb.price_beta:
-                missing.append("STRIPE_PRICE_BETA")
-            if not sb.price_gamma:
-                missing.append("STRIPE_PRICE_GAMMA")
-            if not sb.price_delta:
-                missing.append("STRIPE_PRICE_DELTA")
+            price_fields = (
+                ("STRIPE_PRICE_ALPHA", sb.price_alpha),
+                ("STRIPE_PRICE_BETA", sb.price_beta),
+                ("STRIPE_PRICE_GAMMA", sb.price_gamma),
+                ("STRIPE_PRICE_DELTA", sb.price_delta),
+            )
+            # Epsilon, Omicron, and Omega are contract tiers. They are not
+            # self-service Checkout products and remain optional operator-side
+            # mappings; the pilot lane's paid path is Alpha through Delta.
+            for field_name, price_id in price_fields:
+                if not price_id:
+                    missing.append(field_name)
+                elif not re.fullmatch(r"price_[A-Za-z0-9]+", price_id):
+                    missing.append(f"{field_name} (must match price_...)")
             if not sb.checkout_success_url:
                 missing.append("STRIPE_CHECKOUT_SUCCESS_URL")
             if not sb.checkout_cancel_url:

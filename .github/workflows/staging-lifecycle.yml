@@ -28,6 +28,12 @@ on:
           - full-rehearsal
         default: validate
         required: true
+      deployment_lane:
+        description: "Staging overlay lane; full preserves the existing rehearsal, pilot provisions complete lean customer staging"
+        type: choice
+        options: [full, pilot]
+        default: full
+        required: true
       confirm_runtime_wake:
         description: "Explicitly authorize starting staging ECS services (required for apply-wake/full-rehearsal)"
         type: boolean
@@ -41,8 +47,13 @@ on:
         description: Immutable backend image digest (sha256:...) — ignored when release_run_id is supplied
         type: string
         required: false
+      staging_secrets_kms_key_arn:
+        description: "Reviewed staging Secrets Manager CMK ARN or alias used by the pilot secret-state reconciliation"
+        type: string
+        default: "alias/aether-staging-secrets"
+        required: false
       release_run_id:
-        description: Successful `Immutable delivery` run holding release.json (required for full-rehearsal)
+        description: Successful `Immutable delivery` build-only or deployed run holding release.json (required for full-rehearsal)
         type: string
         required: false
       release_manifest_checksum:
@@ -116,6 +127,7 @@ jobs:
       apply_sleep: ${{ steps.route.outputs.apply_sleep }}
       rehearse: ${{ steps.route.outputs.rehearse }}
       awake_hours: ${{ steps.route.outputs.awake_hours }}
+      deployment_lane: ${{ steps.route.outputs.deployment_lane }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -132,6 +144,7 @@ jobs:
         env:
           ACTION: ${{ inputs.action }}
           CONFIRM_RUNTIME_WAKE: ${{ inputs.confirm_runtime_wake }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
         run: |
           set -euo pipefail
           test -f "${TF_DIR}/profiles/${STAGING_PROFILE}.tfvars" \
@@ -170,11 +183,23 @@ jobs:
           print(f"staging profile resolved: {profile}")
           PY
 
+      - name: Validate the requested staging deployment lane
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_lane_contract.py \
+            --profile "$STAGING_PROFILE" \
+            --deployment-lane "$DEPLOYMENT_LANE" \
+            --check-runtime-wiring
+
       - name: Preflight lifecycle and apply credentials
         if: inputs.action != 'validate' && inputs.action != 'plan-wake'
         env:
           ACTION: ${{ inputs.action }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           CONFIRM_RUNTIME_WAKE: ${{ inputs.confirm_runtime_wake }}
         run: |
@@ -189,12 +214,46 @@ jobs:
             *) echo '::error::AWS_STAGING_LIFECYCLE_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
           esac
           case "$ACTION" in
-            apply-wake|apply-sleep|full-rehearsal)
+            apply-wake|full-rehearsal)
+              test -n "${AWS_TERRAFORM_PLAN_ROLE_ARN:-}" \
+                || { echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is required before staging IAM policy inspection'; exit 1; }
+              case "$AWS_TERRAFORM_PLAN_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              test -n "${AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN:-}" \
+                || { echo '::error::AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN is required before validating staging secret payloads'; exit 1; }
+              case "$AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
               test -n "${AWS_TERRAFORM_APPLY_ROLE_ARN:-}" \
                 || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is required before a staging apply path'; exit 1; }
               case "$AWS_TERRAFORM_APPLY_ROLE_ARN" in
                 arn:aws:iam::????????????:role/*) ;;
                 *) echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              ;;
+            apply-sleep)
+              test -n "${AWS_TERRAFORM_PLAN_ROLE_ARN:-}" \
+                || { echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is required before staging IAM policy inspection'; exit 1; }
+              case "$AWS_TERRAFORM_PLAN_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              test -n "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
+                || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is required before a staging sleep apply'; exit 1; }
+              case "$AWS_TERRAFORM_APPLY_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              ;;
+            plan-sleep)
+              test -n "${AWS_TERRAFORM_PLAN_ROLE_ARN:-}" \
+                || { echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is required before staging IAM policy inspection'; exit 1; }
+              case "$AWS_TERRAFORM_PLAN_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
               esac
               ;;
           esac
@@ -203,6 +262,46 @@ jobs:
             echo '::error::runtime wake is disabled by default; set confirm_runtime_wake=true for an explicit staging wake authorization'
             exit 1
           fi
+
+      - name: Configure AWS inspection credentials
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # The lifecycle role is intentionally narrow and cannot inspect IAM
+          # policy attachments. Keep policy auditing on the separate
+          # infrastructure inspection role.
+          # AetherStagingPlan is the dedicated read-only inspector for role
+          # metadata and Amplify metadata. The lifecycle role must not inspect
+          # its own IAM contract, and the shared infrastructure credential is
+          # not part of this audit boundary.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Verify staging IAM inspection role assumption
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+
+      - name: Verify effective lifecycle IAM policy before dispatch
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          TARGET_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_lifecycle_policy.py --role-arn "$TARGET_ROLE_ARN"
 
       - name: Verify lifecycle role assumption before dispatch
         if: inputs.action != 'validate' && inputs.action != 'plan-wake'
@@ -232,6 +331,38 @@ jobs:
           test "$caller_role_path" = AetherStagingLifecycle || { echo '::error::lifecycle job assumed an unexpected IAM role'; exit 1; }
           echo 'Verified lifecycle credentials resolve to AetherStagingLifecycle in the expected account.'
 
+      - name: Configure AWS secret preflight credentials
+        if: inputs.action == 'apply-wake' || inputs.action == 'full-rehearsal'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Verify secret preflight role assumption and policy
+        if: inputs.action == 'apply-wake' || inputs.action == 'full-rehearsal'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_secret_preflight_policy.py
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role="$(jq -r .Arn <<<"$caller_json")"
+          caller_role="${caller_role#*:assumed-role/}"
+          caller_role="${caller_role%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::secret preflight account mismatch'; exit 1; }
+          test "$caller_role" = AetherStagingSecretPreflight || { echo '::error::unexpected secret preflight role'; exit 1; }
+      - name: Verify ECS-mounted staging secret payloads before dispatch
+        if: inputs.action == 'apply-wake' || inputs.action == 'full-rehearsal'
+        env:
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_secret_payload_contract.py \
+            --lane "$DEPLOYMENT_LANE"
+
       - name: Route the lifecycle action
         id: route
         env:
@@ -244,6 +375,7 @@ jobs:
           PLAN_RUN_ID: ${{ inputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
         run: |
           set -euo pipefail
           plan_wake=false
@@ -316,6 +448,7 @@ jobs:
             printf 'apply_sleep=%s\n' "$apply_sleep"
             printf 'rehearse=%s\n' "$rehearse"
             printf 'awake_hours=%s\n' "$MAX_AWAKE_HOURS"
+            printf 'deployment_lane=%s\n' "$DEPLOYMENT_LANE"
           } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
@@ -325,6 +458,45 @@ jobs:
   # isolation keys are generated per run; only the bootstrap admin key is a
   # durable external input.
   # ---------------------------------------------------------------------------
+  amplify-preflight:
+    name: Verify Amplify app ownership and current-head artifacts
+    needs: [select-profile]
+    if: >-
+      needs.select-profile.result == 'success'
+      && (needs.select-profile.outputs.plan_wake == 'true' || needs.select-profile.outputs.plan_sleep == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging-terraform
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Configure AWS read credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify all staging Amplify apps and current-head jobs
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_amplify_app_contract.py \
+            --mode staging \
+            --expected-commit "$EXPECTED_COMMIT_SHA"
+      - name: Verify production status provenance and branch stage
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_amplify_app_contract.py \
+            --mode production-status \
+            --expected-commit "$EXPECTED_COMMIT_SHA"
+
   preflight-rehearsal-inputs:
     name: Preflight full-rehearsal smoke inputs
     needs: [select-profile]
@@ -349,8 +521,8 @@ jobs:
   # ---------------------------------------------------------------------------
   wake-plan:
     name: Credentialed wake plan (reviewed promotion)
-    needs: [select-profile]
-    if: needs.select-profile.outputs.plan_wake == 'true'
+    needs: [select-profile, amplify-preflight]
+    if: needs.select-profile.outputs.plan_wake == 'true' && needs.amplify-preflight.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -407,6 +579,10 @@ jobs:
             echo "::error::release run ${RELEASE_RUN_ID} concluded ${run_conclusion}, not success"
             exit 1
           fi
+          jobs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_RUN_ID}/jobs?per_page=100")"
+          build_conclusion="$(jq -r '[.jobs[] | select(.name == "Build immutable release once") | .conclusion] | last // "missing"' <<<"$jobs_json")"
+          test "$build_conclusion" = success \
+            || { echo "::error::release run ${RELEASE_RUN_ID} has no successful immutable build job"; exit 1; }
           test "$run_head_sha" = "$INTENDED_RELEASE_SHA" \
             || { echo "::error::release run ${RELEASE_RUN_ID} head ${run_head_sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           cd "${RUNNER_TEMP}/release"
@@ -448,7 +624,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           STAGING_STATE: awake
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           BACKEND_IMAGE_DIGEST: ${{ steps.release.outputs.backend_image_digest }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
@@ -457,34 +635,75 @@ jobs:
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
             || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
-          # Run IDs increase monotonically per repository, so anything created
-          # after this watermark and on our ref is a candidate for our dispatch.
-          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
-            --jq '.workflow_runs[0].id // 0')"
-          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          reconcile_staging_state() {
+            local secret_names="$1"
+            local reconcile_workflow=staging-state-reconcile.yml
+            local reconcile_output reconcile_run_id reconcile_status reconcile_conclusion
+            local reconcile_wait_deadline
+            local -a reconcile_args
+            reconcile_args=(
+              -f staging_amplify_domain_name=staging.olympuslabsml.com
+              -f confirm_staging_import=IMPORT-STAGING
+              -f backend_image_digest="$BACKEND_IMAGE_DIGEST"
+              -f expected_commit_sha="$INTENDED_RELEASE_SHA"
+            )
+            if [ -n "$secret_names" ]; then
+              test -n "$STAGING_SECRETS_KMS_KEY_ARN" || {
+                echo '::error::staging_secrets_kms_key_arn is required for pilot state reconciliation'; exit 1;
+              }
+              reconcile_args+=(
+                -f staging_secret_names="$secret_names"
+                -f staging_secrets_kms_key_arn="$STAGING_SECRETS_KMS_KEY_ARN"
+                -f migrate_legacy_secret_kms=true
+                -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS
+              )
+            fi
+            reconcile_output="$(gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}" 2>&1)"
+            printf '%s\n' "$reconcile_output"
+            reconcile_run_id="$(printf '%s\n' "$reconcile_output" \
+              | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+            test -n "$reconcile_run_id" || {
+              echo "::error::${reconcile_workflow} dispatch did not return its created run URL; refusing ambiguous correlation"
+              exit 1
+            }
+            reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
+            while :; do
+              reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status')"
+              if [ "$reconcile_status" = completed ]; then
+                reconcile_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.conclusion')"
+                test "$reconcile_conclusion" = success || {
+                  echo "::error::${reconcile_workflow} run ${reconcile_run_id} concluded ${reconcile_conclusion}"; exit 1;
+                }
+                echo "${reconcile_workflow} run ${reconcile_run_id} completed successfully"
+                break
+              fi
+              if [ "$(date -u +%s)" -ge "$reconcile_wait_deadline" ]; then
+                echo "::error::${reconcile_workflow} run ${reconcile_run_id} exceeded ${PROMOTE_TIMEOUT_MINUTES} minutes"
+                exit 1
+              fi
+              sleep 20
+            done
+          }
+          if [ "$DEPLOYMENT_LANE" = pilot ]; then
+            reconcile_staging_state 'stripe-price-alpha,stripe-price-beta,stripe-price-gamma,stripe-price-delta'
+          else
+            reconcile_staging_state ''
+          fi
+          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
+            -f deployment_lane="$DEPLOYMENT_LANE" \
             -f staging_state="$STAGING_STATE" \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
-            -f expected_commit_sha="$INTENDED_RELEASE_SHA"
-          run_id=''
-          discover_deadline="$(( $(date -u +%s) + 300 ))"
-          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
-            mapfile -t candidates < <(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
-              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-            if [ "${#candidates[@]}" -gt 1 ]; then
-              echo "::error::ambiguous reviewed-plan runs (${candidates[*]}); refusing to guess"
-              exit 1
-            fi
-            if [ "${#candidates[@]}" -eq 1 ]; then
-              run_id="${candidates[0]}"
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id" || { echo '::error::dispatched reviewed plan never appeared'; exit 1; }
+            -f expected_commit_sha="$INTENDED_RELEASE_SHA" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || {
+            echo '::error::reviewed plan dispatch did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
           echo "reviewed plan run: ${run_id}"
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
@@ -518,6 +737,7 @@ jobs:
         id: verify
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           EXPECTED_STATE: awake
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
         run: |
@@ -526,6 +746,7 @@ jobs:
           for artefact in \
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
+            reviewed.deployment-lane \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -534,6 +755,8 @@ jobs:
             test -s "$artefact" || { echo "::error::reviewed plan is missing ${artefact}"; exit 1; }
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
+          test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
+            || { echo "::error::reviewed plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -615,6 +838,7 @@ jobs:
         id: reviewed
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           EXPECTED_CHECKSUM: ${{ needs.wake-plan.outputs.plan_checksum || inputs.plan_checksum }}
           EXPECTED_STATE: awake
         run: |
@@ -623,6 +847,7 @@ jobs:
           for artefact in \
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
+            reviewed.deployment-lane \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -631,6 +856,8 @@ jobs:
             test -s "$artefact" || { echo "::error::reviewed plan is missing ${artefact}"; exit 1; }
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
+          test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
+            || { echo "::error::reviewed plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -828,6 +1055,7 @@ jobs:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ needs.wake-validate.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ needs.wake-validate.outputs.plan_checksum }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -839,30 +1067,19 @@ jobs:
           # has already downloaded, checksummed and policy-validated.
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified plan_checksum'; exit 1; }
-          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
-            --jq '.workflow_runs[0].id // 0')"
-          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
+            -f deployment_lane="$DEPLOYMENT_LANE" \
             -f plan_run_id="$PLAN_RUN_ID" \
-            -f plan_checksum="$PLAN_CHECKSUM"
-          run_id=''
-          discover_deadline="$(( $(date -u +%s) + 300 ))"
-          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
-            mapfile -t candidates < <(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
-              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-            if [ "${#candidates[@]}" -gt 1 ]; then
-              echo "::error::ambiguous reviewed-apply runs (${candidates[*]}); refusing to guess"
-              exit 1
-            fi
-            if [ "${#candidates[@]}" -eq 1 ]; then
-              run_id="${candidates[0]}"
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id" || { echo '::error::dispatched reviewed apply never appeared'; exit 1; }
+            -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || {
+            echo '::error::dispatched reviewed apply did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
           echo "reviewed apply run: ${run_id}"
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
@@ -1029,6 +1246,7 @@ jobs:
       # the value is the certificate-covered API hostname, not *.elb.amazonaws.com.
       ALB_DNS_NAME: ${{ needs.wake-apply.outputs.api_host }}
       BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest }}
+      DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -1063,6 +1281,7 @@ jobs:
         env:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
           INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/release"
@@ -1088,7 +1307,7 @@ jobs:
             --lockfile package-lock.json \
             --lockfile pyproject.toml
           python - <<'PY'
-          import hashlib, json, pathlib, sys
+          import hashlib, json, os, pathlib, sys
           manifest = json.load(open("release.json"))
           for key in ("aether_spa", "kyber_spa", "migration_package", "configuration"):
               artefact = manifest["artifacts"][key]
@@ -1097,6 +1316,32 @@ jobs:
                   sys.exit(f"::error::{key} artifact digest mismatch")
           print("release artifact digests verified")
           PY
+          manifest_lane="$(python -c "import json; print(json.load(open('release.json')).get('deployment_lane', 'full'))")"
+          test "$manifest_lane" = "$DEPLOYMENT_LANE" \
+            || { echo "::error::release manifest deployment_lane=${manifest_lane} does not match ${DEPLOYMENT_LANE}"; exit 1; }
+          if [ "$DEPLOYMENT_LANE" = full ]; then
+            test -s kyber-staging-contract.json \
+              || { echo '::error::approved release is missing the Kyber workforce identity contract evidence'; exit 1; }
+            jq -e '
+              .contract == "kyber-workforce-identity" and
+              .version == 1 and
+              .profile == "staging" and
+              .secret_values_read == false and
+              .google_client_id_present == true and
+              .google_client_secret_source == "aws_secrets_manager:aether/kyber-google-client-secret"
+            ' kyber-staging-contract.json >/dev/null \
+              || { echo '::error::approved release Kyber workforce identity evidence is invalid'; exit 1; }
+          else
+            jq -e '
+              .contract == "kyber-workforce-identity" and
+              .version == 1 and
+              .profile == "staging" and
+              .deployment_lane == "pilot" and
+              .deferred == true and
+              .secret_values_read == false
+            ' kyber-staging-contract.json >/dev/null \
+              || { echo '::error::pilot release must carry explicit deferred Kyber evidence'; exit 1; }
+          fi
           image_uri="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['uri'])")"
           digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
           test "$digest" = "$BACKEND_IMAGE_DIGEST" \
@@ -1144,20 +1389,28 @@ jobs:
         # assumption about whatever happens to remain in the buckets.
         env:
           RELEASE_MANIFEST_SHA256: ${{ inputs.release_manifest_checksum }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/release"
           mkdir -p "${GITHUB_WORKSPACE}/artifacts/rehearsal"
           python - <<'PY'
-          import hashlib, json, pathlib, sys
+          import hashlib, json, os, pathlib, sys
           m = json.load(open("release.json"))
-          for key in ("aether_spa", "kyber_spa"):
+          keys = ["aether_spa"]
+          if os.environ.get("DEPLOYMENT_LANE") == "full":
+              keys.append("kyber_spa")
+          for key in keys:
               a = m["artifacts"][key]
               got = "sha256:" + hashlib.sha256(pathlib.Path(a["file"]).read_bytes()).hexdigest()
               if got != a["digest"]:
                   sys.exit(f"::error::{key} digest mismatch before publication")
           PY
-          for app in aether kyber; do
+          apps=(aether)
+          if [ "$DEPLOYMENT_LANE" = full ]; then
+            apps+=(kyber)
+          fi
+          for app in "${apps[@]}"; do
             archive_key="${app}_spa"
             archive="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['${archive_key}']['file'])")"
             expected="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['${archive_key}']['digest'])")"
@@ -1256,7 +1509,28 @@ jobs:
             status="$(curl -sS -o /dev/null -w '%{http_code}' "https://${ALB_DNS_NAME}${path}")"
             test "$status" = 200 || { echo "::error::${path} returned ${status}"; exit 1; }
           done
-          for app in aether kyber; do
+
+      - name: Probe the live Kyber workforce identity edge
+        env:
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+          KYBER_API_BASE_URL: ${{ format('https://{0}', needs.wake-apply.outputs.api_host) }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+        run: |
+          set -euo pipefail
+          apps=(aether)
+          if [ "$DEPLOYMENT_LANE" = full ]; then
+            python scripts/release/check_kyber_staging_contract.py \
+              --evidence-out artifacts/rehearsal/kyber-contract-live.json
+            python scripts/release/probe_kyber_staging_identity.py \
+              --base-url "https://${ALB_DNS_NAME}" \
+              --evidence-out artifacts/rehearsal/kyber-identity-probe.json
+            apps+=(kyber)
+          else
+            echo 'Kyber workforce identity and its Google/GCP prerequisites are deferred for the pilot lane.'
+          fi
+          for app in "${apps[@]}"; do
             bucket_var="$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')"
             bucket="$(aws ssm get-parameter --name "/aether/${STAGING_ENV}/${bucket_var}" \
               --query Parameter.Value --output text)"
@@ -1868,7 +2142,7 @@ jobs:
   # ---------------------------------------------------------------------------
   sleep:
     name: Fail-safe sleep (always)
-    needs: [select-profile, wake-plan, wake-validate, wake-apply, rehearse]
+    needs: [select-profile, amplify-preflight, wake-plan, wake-validate, wake-apply, rehearse]
     if: always() && needs.select-profile.outputs.plan_sleep == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -1975,8 +2249,10 @@ jobs:
         if: steps.already.outputs.asleep != 'true'
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
           REF_NAME: ${{ github.ref_name }}
@@ -1984,32 +2260,76 @@ jobs:
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
             || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
-          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
-            --jq '.workflow_runs[0].id // 0')"
-          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          reconcile_staging_state() {
+            local secret_names="$1"
+            local reconcile_workflow=staging-state-reconcile.yml
+            local reconcile_output reconcile_run_id reconcile_status reconcile_conclusion
+            local reconcile_wait_deadline
+            local -a reconcile_args
+            reconcile_args=(
+              -f staging_amplify_domain_name=staging.olympuslabsml.com
+              -f confirm_staging_import=IMPORT-STAGING
+              -f backend_image_digest="$BACKEND_IMAGE_DIGEST"
+              -f expected_commit_sha="$EXPECTED_COMMIT_SHA"
+            )
+            if [ -n "$secret_names" ]; then
+              test -n "$STAGING_SECRETS_KMS_KEY_ARN" || {
+                echo '::error::staging_secrets_kms_key_arn is required for pilot sleep-plan state reconciliation'; exit 1;
+              }
+              reconcile_args+=(
+                -f staging_secret_names="$secret_names"
+                -f staging_secrets_kms_key_arn="$STAGING_SECRETS_KMS_KEY_ARN"
+                -f migrate_legacy_secret_kms=true
+                -f confirm_legacy_secret_kms=MIGRATE-STAGING-SECRETS
+              )
+            fi
+            reconcile_output="$(gh workflow run "$reconcile_workflow" --ref "$REF_NAME" "${reconcile_args[@]}" 2>&1)"
+            printf '%s\n' "$reconcile_output"
+            reconcile_run_id="$(printf '%s\n' "$reconcile_output" \
+              | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+            test -n "$reconcile_run_id" || {
+              echo "::error::${reconcile_workflow} dispatch did not return its created run URL; refusing ambiguous correlation"
+              exit 1
+            }
+            reconcile_wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
+            while :; do
+              reconcile_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.status')"
+              if [ "$reconcile_status" = completed ]; then
+                reconcile_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${reconcile_run_id}" --jq '.conclusion')"
+                test "$reconcile_conclusion" = success || {
+                  echo "::error::${reconcile_workflow} run ${reconcile_run_id} concluded ${reconcile_conclusion}"; exit 1;
+                }
+                echo "${reconcile_workflow} run ${reconcile_run_id} completed successfully"
+                break
+              fi
+              if [ "$(date -u +%s)" -ge "$reconcile_wait_deadline" ]; then
+                echo "::error::${reconcile_workflow} run ${reconcile_run_id} exceeded ${PROMOTE_TIMEOUT_MINUTES} minutes"
+                exit 1
+              fi
+              sleep 20
+            done
+          }
+          if [ "$DEPLOYMENT_LANE" = pilot ]; then
+            reconcile_staging_state 'stripe-price-alpha,stripe-price-beta,stripe-price-gamma,stripe-price-delta'
+          else
+            reconcile_staging_state ''
+          fi
+          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
+            -f deployment_lane="$DEPLOYMENT_LANE" \
             -f staging_state=asleep \
+            -f secret_preflight_required=false \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
-            -f expected_commit_sha="$EXPECTED_COMMIT_SHA"
-          run_id=''
-          discover_deadline="$(( $(date -u +%s) + 300 ))"
-          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
-            mapfile -t candidates < <(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
-              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-            if [ "${#candidates[@]}" -gt 1 ]; then
-              echo "::error::ambiguous reviewed sleep-plan runs (${candidates[*]}); refusing to guess"
-              exit 1
-            fi
-            if [ "${#candidates[@]}" -eq 1 ]; then
-              run_id="${candidates[0]}"
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id" || { echo '::error::dispatched reviewed sleep plan never appeared'; exit 1; }
+            -f expected_commit_sha="$EXPECTED_COMMIT_SHA" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || {
+            echo '::error::reviewed sleep plan dispatch did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
@@ -2044,6 +2364,7 @@ jobs:
         if: steps.sleep-plan.outputs.plan_run_id != ''
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           EXPECTED_STATE: asleep
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
         run: |
@@ -2053,6 +2374,7 @@ jobs:
           for artefact in \
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
+            reviewed.deployment-lane \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -2061,6 +2383,8 @@ jobs:
             test -s "$artefact" || { echo "::error::reviewed sleep plan is missing ${artefact}"; exit 1; }
           done
           test "$(cat reviewed.profile)" = "$PROFILE"
+          test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
+            || { echo "::error::reviewed sleep plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -2153,6 +2477,7 @@ jobs:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ steps.sleep-plan.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ steps.sleep-verify.outputs.plan_checksum }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -2161,30 +2486,20 @@ jobs:
             || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified sleep plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified sleep plan_checksum'; exit 1; }
-          before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
-            --jq '.workflow_runs[0].id // 0')"
-          gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
+          dispatch_output="$(gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
+            -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f secret_preflight_required=false \
             -f plan_run_id="$PLAN_RUN_ID" \
-            -f plan_checksum="$PLAN_CHECKSUM"
-          run_id=''
-          discover_deadline="$(( $(date -u +%s) + 300 ))"
-          while [ "$(date -u +%s)" -lt "$discover_deadline" ]; do
-            mapfile -t candidates < <(gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?event=workflow_dispatch&per_page=50" \
-              --jq "[.workflow_runs[] | select(.id > ${before_id} and .head_branch == \"${REF_NAME}\") | .id] | .[]")
-            if [ "${#candidates[@]}" -gt 1 ]; then
-              echo "::error::ambiguous reviewed sleep-apply runs (${candidates[*]}); refusing to guess"
-              exit 1
-            fi
-            if [ "${#candidates[@]}" -eq 1 ]; then
-              run_id="${candidates[0]}"
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id" || { echo '::error::dispatched reviewed sleep apply never appeared'; exit 1; }
+            -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || {
+            echo '::error::dispatched reviewed sleep apply did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
           wait_deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
           conclusion=''
           while :; do
@@ -2478,7 +2793,7 @@ jobs:
   # ---------------------------------------------------------------------------
   outcome:
     name: Lifecycle outcome (never masks a failure)
-    needs: [select-profile, wake-plan, wake-validate, preflight-rehearsal-inputs, wake-apply, rehearse, sleep]
+    needs: [select-profile, amplify-preflight, wake-plan, wake-validate, preflight-rehearsal-inputs, wake-apply, rehearse, sleep]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -2486,6 +2801,7 @@ jobs:
       - name: Re-raise any phase failure
         env:
           SELECT_RESULT: ${{ needs.select-profile.result }}
+          AMPLIFY_PREFLIGHT_RESULT: ${{ needs.amplify-preflight.result }}
           WAKE_PLAN_RESULT: ${{ needs.wake-plan.result }}
           WAKE_VALIDATE_RESULT: ${{ needs.wake-validate.result }}
           PREFLIGHT_RESULT: ${{ needs.preflight-rehearsal-inputs.result }}
@@ -2501,7 +2817,7 @@ jobs:
         run: |
           set -euo pipefail
           failed=()
-          for phase in select-profile:"$SELECT_RESULT" wake-plan:"$WAKE_PLAN_RESULT" \
+          for phase in select-profile:"$SELECT_RESULT" amplify-preflight:"$AMPLIFY_PREFLIGHT_RESULT" wake-plan:"$WAKE_PLAN_RESULT" \
                        wake-validate:"$WAKE_VALIDATE_RESULT" preflight-rehearsal-inputs:"$PREFLIGHT_RESULT" \
                        wake-apply:"$WAKE_APPLY_RESULT" \
                        rehearse:"$REHEARSE_RESULT" sleep:"$SLEEP_RESULT"

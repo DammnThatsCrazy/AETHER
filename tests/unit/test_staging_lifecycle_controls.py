@@ -53,6 +53,7 @@ REVIEWED_EVIDENCE = (
     "reviewed.tfplan.sha256",
     "reviewed.commit",
     "reviewed.profile",
+    "reviewed.deployment-lane",
     "reviewed.terraform-version",
     "reviewed.lock.sha256",
     "reviewed.state-key",
@@ -120,10 +121,21 @@ def _dispatch_invocations(run: str) -> list[str]:
     """Each `gh workflow run ...` invocation, backslash-continuations joined."""
     joined = re.sub(r"\\\n\s*", " ", run)
     return [
-        line.strip()
+        line.strip()[line.index("gh workflow run") :]
         for line in joined.splitlines()
-        if line.strip().startswith("gh workflow run")
+        if "gh workflow run" in line
     ]
+
+
+def test_lifecycle_dispatches_bind_to_the_run_returned_by_github() -> None:
+    """Concurrent workflow dispatches must never be matched by a watermark."""
+    text = _workflow(LIFECYCLE)
+    assert "before_id" not in text
+    assert "reconcile_before_id" not in text
+    assert "select(.id >" not in text
+    assert text.count("actions/runs/([0-9]+)") == text.count("gh workflow run")
+    assert text.count("did not return its created run URL") >= 1
+    assert text.count("refusing ambiguous correlation") >= 1
 
 
 def _referenced_text(doc: dict) -> str:
@@ -315,9 +327,18 @@ def test_every_terraform_mutation_is_a_dispatch_of_the_reviewed_workflow():
     dispatches = _dispatch_steps(doc)
     assert dispatches, "the lifecycle no longer reaches terraform-promote at all"
     for job, step in dispatches:
-        invocations = _dispatch_invocations(step["run"])
-        assert invocations, f"{job}:{step.get('name')} has no parseable dispatch"
-        for invocation in invocations:
+            invocations = _dispatch_invocations(step["run"])
+            assert invocations, f"{job}:{step.get('name')} has no parseable dispatch"
+            for invocation in invocations:
+                if '"$reconcile_workflow"' in invocation:
+                    # The workflow builds a quoted argument array before the
+                    # dispatch so secret names and KMS ARNs cannot be split by
+                    # shell word parsing. Inspect the complete function body,
+                    # not only the parser's abbreviated invocation token.
+                    assert "staging_secret_names=" in step["run"]
+                    assert "staging_secrets_kms_key_arn" in step["run"]
+                    assert "confirm_staging_import=IMPORT-STAGING" in step["run"]
+                    continue
             assert '"$PROMOTE_WORKFLOW"' in invocation, (
                 f"{job} dispatches something other than the reviewed workflow: {invocation}"
             )
@@ -809,6 +830,7 @@ def test_sleep_runs_under_always():
         "wake-validate",
         "wake-apply",
         "rehearse",
+        "amplify-preflight",
     }
     # And the steps that stop cost run even when an earlier sleep step failed.
     for step_id in ("last-resort", "residual", "report"):

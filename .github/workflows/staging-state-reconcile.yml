@@ -1,9 +1,12 @@
 name: Reconcile staging Terraform state
 
-# This is a deliberately manual, import-only escape hatch for resources that
+# This is a deliberately manual reconciliation escape hatch for resources that
 # already exist in the staging account but are absent from the reviewed state.
-# It never deletes, replaces, or applies Terraform resources. Importing changes
-# state, so the reviewed plan must be regenerated after this workflow succeeds.
+# It never deletes, replaces, or applies Terraform resources. When explicitly
+# confirmed, it may re-encrypt a legacy AWS-managed-key staging secret under
+# the reviewed CMK without reading or changing its plaintext value. Importing
+# or re-encrypting changes state, so the reviewed plan must be regenerated after
+# this workflow succeeds.
 
 on:
   workflow_dispatch:
@@ -29,7 +32,20 @@ on:
         required: false
         type: string
       staging_secrets_kms_key_arn:
-        description: "Exact reviewed staging Secrets Manager CMK ARN; required when importing staging secrets"
+        description: "Reviewed staging Secrets Manager CMK ARN or alias; required when importing staging secrets"
+        required: false
+        type: string
+      migrate_legacy_secret_kms:
+        description: "Allow legacy AWS-managed-key staging secrets to be re-encrypted under the reviewed CMK"
+        required: false
+        default: false
+        type: boolean
+      confirm_legacy_secret_kms:
+        description: "Type MIGRATE-STAGING-SECRETS when the legacy secret re-encryption path is reviewed"
+        required: false
+        type: string
+      staging_amplify_domain_name:
+        description: "Exact verified staging Amplify domain to import (staging.olympuslabsml.com)"
         required: false
         type: string
       confirm_staging_import:
@@ -39,6 +55,10 @@ on:
       backend_image_digest:
         description: "Approved immutable backend digest (sha256:...) for module validation"
         required: true
+        type: string
+      expected_commit_sha:
+        description: "Exact source commit that must tag the approved backend image"
+        required: false
         type: string
 
 permissions:
@@ -64,6 +84,10 @@ jobs:
     environment: staging-terraform
     steps:
       - uses: actions/checkout@v4
+        with:
+          # State reconciliation must use the same source commit whose image
+          # provenance and reviewed Terraform state are being repaired.
+          ref: ${{ inputs.expected_commit_sha || github.sha }}
       - uses: hashicorp/setup-terraform@v3
       - uses: actions/setup-python@v5
         with:
@@ -109,6 +133,146 @@ jobs:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: us-east-1
 
+      - name: Verify backend image provenance before state mutation
+        if: inputs.expected_commit_sha != ''
+        env:
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_image_provenance.py \
+            --repository aether-backend \
+            --digest "$BACKEND_IMAGE_DIGEST" \
+            --expected-commit "$EXPECTED_COMMIT_SHA"
+
+      - name: Resolve the reviewed staging Secrets Manager CMK
+        if: inputs.staging_secret_names != ''
+        env:
+          STAGING_SECRETS_KMS_KEY_REF: ${{ inputs.staging_secrets_kms_key_arn }}
+        run: |
+          set -euo pipefail
+          key_ref="${STAGING_SECRETS_KMS_KEY_REF:-}"
+          test -n "$key_ref" || {
+            echo '::error::staging_secrets_kms_key_arn is required when importing staging secrets'; exit 1;
+          }
+          case "$key_ref" in
+            alias/aether-staging-secrets|arn:aws:kms:us-east-1:*:key/*) ;;
+            *) echo '::error::staging_secrets_kms_key_arn must be alias/aether-staging-secrets or a us-east-1 CMK ARN'; exit 1 ;;
+          esac
+          resolved_key_arn="$(aws kms describe-key --key-id "$key_ref" --query 'KeyMetadata.Arn' --output text)"
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          case "$resolved_key_arn" in
+            arn:aws:kms:us-east-1:${account_id}:key/*) ;;
+            *) echo '::error::resolved staging Secrets Manager CMK is not a us-east-1 key in the current account'; exit 1 ;;
+          esac
+          printf 'STAGING_SECRETS_KMS_KEY_ARN=%s\n' "$resolved_key_arn" >> "$GITHUB_ENV"
+          echo 'Resolved the reviewed staging Secrets Manager CMK reference to the current account key; key values were not read.'
+
+      - name: Discover pre-existing Stripe price secrets for state reconciliation
+        id: discover-price-secrets
+        env:
+          REQUESTED_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          MIGRATE_LEGACY_SECRET_KMS: ${{ inputs.migrate_legacy_secret_kms }}
+          CONFIRM_LEGACY_SECRET_KMS: ${{ inputs.confirm_legacy_secret_kms }}
+        run: |
+          set -euo pipefail
+          normalize_secret_names() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | sort -u
+          }
+          requested_names_file="$(mktemp)"
+          names_file="$(mktemp)"
+          metadata_file=""
+          error_file=""
+          trap 'rm -f "$requested_names_file" "$names_file" "$metadata_file" "$error_file"' EXIT
+          normalize_secret_names "$REQUESTED_SECRET_NAMES" >"$requested_names_file"
+          cp "$requested_names_file" "$names_file"
+          discovered_kms=""
+          migrate_legacy_secret_kms="${MIGRATE_LEGACY_SECRET_KMS:-false}"
+          case "$migrate_legacy_secret_kms" in
+            true|false) ;;
+            *) echo '::error::migrate_legacy_secret_kms must be a boolean'; exit 1 ;;
+          esac
+          if [ "$migrate_legacy_secret_kms" = true ]; then
+            test "${CONFIRM_LEGACY_SECRET_KMS:-}" = "MIGRATE-STAGING-SECRETS" || {
+              echo '::error::legacy secret re-encryption requires confirmation MIGRATE-STAGING-SECRETS'; exit 1;
+            }
+          elif [ -n "${CONFIRM_LEGACY_SECRET_KMS:-}" ]; then
+            echo '::error::confirm_legacy_secret_kms is only valid with migrate_legacy_secret_kms=true'; exit 1
+          fi
+          for name in \
+            stripe-price-alpha stripe-price-beta stripe-price-gamma stripe-price-delta \
+            stripe-price-epsilon stripe-price-omicron stripe-price-omega
+          do
+            metadata_file="$(mktemp)"
+            error_file="$(mktemp)"
+            if aws secretsmanager describe-secret \
+              --region us-east-1 \
+              --secret-id "aether/$name" \
+              --output json >"$metadata_file" 2>"$error_file"; then
+              actual_name="$(jq -r '.Name // empty' "$metadata_file")"
+              test "$actual_name" = "aether/$name" || {
+                echo "::error::discovered secret metadata name '$actual_name' does not match aether/$name"; exit 1;
+              }
+              kms_ref="$(jq -r '.KmsKeyId // empty' "$metadata_file")"
+              if [ -z "$kms_ref" ]; then
+                test "$migrate_legacy_secret_kms" = true || {
+                  echo "::error::existing aether/$name uses the AWS-managed Secrets Manager key; review and enable the explicit legacy re-encryption path before import"; exit 1;
+                }
+                test -n "${STAGING_SECRETS_KMS_KEY_ARN:-}" || {
+                  echo '::error::a reviewed staging Secrets Manager CMK is required to re-encrypt a legacy secret'; exit 1;
+                }
+                aws secretsmanager update-secret \
+                  --region us-east-1 \
+                  --secret-id "aether/$name" \
+                  --kms-key-id "$STAGING_SECRETS_KMS_KEY_ARN" \
+                  --query ARN --output text >/dev/null
+                aws secretsmanager describe-secret \
+                  --region us-east-1 \
+                  --secret-id "aether/$name" \
+                  --output json >"$metadata_file"
+                kms_ref="$(jq -r '.KmsKeyId // empty' "$metadata_file")"
+                test -n "$kms_ref" || {
+                  echo "::error::legacy aether/$name re-encryption did not produce a customer-managed KMS reference"; exit 1;
+                }
+                echo "Re-encrypted legacy metadata for aether/$name under the reviewed staging CMK; the secret value was not read or changed."
+              fi
+              kms_arn="$(aws kms describe-key --region us-east-1 --key-id "$kms_ref" --query 'KeyMetadata.Arn' --output text)"
+              test -n "$kms_arn" && test "$kms_arn" != None || {
+                echo "::error::could not resolve the KMS key for aether/$name"; exit 1;
+              }
+              if [ -z "$discovered_kms" ]; then
+                discovered_kms="$kms_arn"
+              else
+                test "$discovered_kms" = "$kms_arn" || {
+                  echo '::error::pre-existing Stripe price secrets use different KMS keys; refusing a mixed-key state import'; exit 1;
+                }
+              fi
+              printf '%s\n' "$name" >>"$names_file"
+              echo "Discovered existing metadata for aether/$name; the secret value was not read."
+            elif grep -q 'ResourceNotFoundException' "$error_file"; then
+              :
+            else
+              cat "$error_file" >&2
+              echo "::error::could not determine whether aether/$name exists"; exit 1
+            fi
+            rm -f "$metadata_file" "$error_file"
+            metadata_file=""
+            error_file=""
+          done
+          staging_kms="$(printenv STAGING_SECRETS_KMS_KEY_ARN || true)"
+          if [ -n "$discovered_kms" ]; then
+            if [ -n "$staging_kms" ]; then
+              test "$staging_kms" = "$discovered_kms" || {
+                echo '::error::pre-existing Stripe price secrets are encrypted with a different staging Secrets Manager CMK'; exit 1;
+              }
+            else
+              printf 'STAGING_SECRETS_KMS_KEY_ARN=%s\n' "$discovered_kms" >>"$GITHUB_ENV"
+            fi
+          fi
+          effective_names="$(sort -u "$names_file" | paste -sd, -)"
+          requested_names="$(sort -u "$requested_names_file" | paste -sd, -)"
+          printf 'secret_names=%s\n' "$effective_names" >>"$GITHUB_OUTPUT"
+          printf 'required_secret_names=%s\n' "$requested_names" >>"$GITHUB_OUTPUT"
       - name: Verify effective Terraform state permissions
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -132,16 +296,19 @@ jobs:
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
-          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
-          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+          STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
+          STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = "IMPORT-STAGING" || {
             echo "::error::Refusing import: confirmation must be IMPORT-STAGING"; exit 1;
           }
-          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES" || {
-            echo '::error::Refusing reconciliation: provide target_group_arn, ecr_repository_names, untaint_ecr_repository_names, or staging_secret_names'; exit 1;
+          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES$STAGING_AMPLIFY_DOMAIN_NAME" || {
+            echo '::error::Refusing reconciliation: provide a reviewed target group, ECR repository, secret, or Amplify domain import target'; exit 1;
           }
+          if [ -n "$STAGING_AMPLIFY_DOMAIN_NAME" ] && [ "$STAGING_AMPLIFY_DOMAIN_NAME" != "staging.olympuslabsml.com" ]; then
+            echo '::error::Refusing reconciliation: only the verified staging.olympuslabsml.com Amplify domain may be imported'; exit 1;
+          fi
           normalize_repositories() {
             printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
           }
@@ -251,10 +418,10 @@ jobs:
           fi
 
       - name: Validate existing staging secret metadata before state mutation
-        if: inputs.staging_secret_names != ''
+        if: steps.discover-price-secrets.outputs.secret_names != ''
         env:
-          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
-          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+          STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
+          REQUIRED_STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.required_secret_names }}
         run: |
           set -euo pipefail
           test -n "$STAGING_SECRETS_KMS_KEY_ARN" || {
@@ -301,19 +468,20 @@ jobs:
             printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
           }
           normalized_secrets="$(normalize_secret_names "$STAGING_SECRET_NAMES")"
+          required_secrets="$(normalize_secret_names "$REQUIRED_STAGING_SECRET_NAMES")"
           test -n "$normalized_secrets" || {
             echo '::error::staging_secret_names must contain at least one secret key'; exit 1;
           }
           IFS=',' read -ra secrets <<< "$normalized_secrets"
           for name in "${secrets[@]}"; do
             case "$name" in
-              jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret|jwt-secret-previous|byok-encryption-key-previous) ;;
+              jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret|jwt-secret-previous|byok-encryption-key-previous) ;;
               *) echo "::error::Refusing secret import: '$name' is not a reviewed staging secret"; exit 1 ;;
             esac
             describe_file="$(mktemp)"
             aws secretsmanager describe-secret --secret-id "aether/$name" --output json >"$describe_file" || {
               rm -f "$describe_file"
-              echo "::error::required staging secret aether/$name was not found or is not readable"; exit 1;
+              echo "::error::existing staging secret aether/$name was not found or is not readable"; exit 1;
             }
             actual_name="$(jq -r '.Name // empty' "$describe_file")"
             test "$actual_name" = "aether/$name" || {
@@ -338,14 +506,21 @@ jobs:
               rm -f "$describe_file"
               echo "::error::secret aether/$name is encrypted with a different CMK; refusing silent re-encryption"; exit 1;
             }
-            jq -e 'any((.VersionIdsToStages // {})[]; index("AWSCURRENT") != null)' "$describe_file" >/dev/null || {
-              rm -f "$describe_file"
-              echo "::error::secret aether/$name has no AWSCURRENT version; populate it through the secure secret bootstrap before import"; exit 1;
-            }
             jq -e '(.DeletedDate // null) == null' "$describe_file" >/dev/null || {
               rm -f "$describe_file"
               echo "::error::secret aether/$name is pending deletion; restore or replace it before import"; exit 1;
             }
+            case ",$required_secrets," in
+              *,${name},*)
+                jq -e 'any((.VersionIdsToStages // {})[]; index("AWSCURRENT") != null)' "$describe_file" >/dev/null || {
+                  rm -f "$describe_file"
+                  echo "::error::required secret aether/$name has no AWSCURRENT version; populate it through the secure secret bootstrap before import"; exit 1;
+                }
+                ;;
+              *)
+                echo "Optional contract-tier metadata aether/$name has no required AWSCURRENT check; importing only its resource metadata."
+                ;;
+            esac
             rm -f "$describe_file"
           done
           echo 'Validated staging secret names, CMK ownership, and AWSCURRENT metadata without reading plaintext values.'
@@ -363,6 +538,62 @@ jobs:
             -backend-config="key=profiles/staging/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
+
+      - name: Validate existing staging Amplify domain associations before state mutation
+        if: inputs.staging_amplify_domain_name != ''
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
+        run: |
+          set -euo pipefail
+          test "$STAGING_AMPLIFY_DOMAIN_NAME" = staging.olympuslabsml.com || {
+            echo '::error::only staging.olympuslabsml.com is an approved staging Amplify domain'; exit 1;
+          }
+          state_list_file="$(mktemp)"
+          trap 'rm -f "$state_list_file"' EXIT
+          terraform state list >"$state_list_file"
+          declare -A app_subdomains=(
+            [olympus-marketing]=www
+            [aether-marketing]=aether
+            [docs]=docs
+            [aether-app]=app
+            [status]=status
+          )
+          for app_key in "${!app_subdomains[@]}"; do
+            app_address="module.frontends.aws_amplify_app.frontend[\"${app_key}\"]"
+            if ! grep -Fxq "$app_address" "$state_list_file"; then
+              app_address="aws_amplify_app.frontend[\"${app_key}\"]"
+            fi
+            grep -Fxq "$app_address" "$state_list_file" || {
+              echo "::error::staging Amplify app ${app_key} is not in Terraform state; refusing domain import"; exit 1;
+            }
+            app_id="$(terraform state show -no-color "$app_address" \
+              | sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\{0,1\}\([^"[:space:]]*\)"\{0,1\}/\1/p' \
+              | head -n 1)"
+            test -n "$app_id" || { echo "::error::could not resolve Amplify app ID for ${app_key}"; exit 1; }
+            association_file="$(mktemp)"
+            aws amplify get-domain-association \
+              --app-id "$app_id" \
+              --domain-name "$STAGING_AMPLIFY_DOMAIN_NAME" \
+              --output json >"$association_file" || {
+                rm -f "$association_file"
+                echo "::error::verified staging Amplify domain association is missing for ${app_key}; refusing to create a duplicate"; exit 1;
+              }
+            status="$(jq -r '.domainAssociation.domainStatus // empty' "$association_file")"
+            test "$status" = AVAILABLE || {
+              rm -f "$association_file"
+              echo "::error::staging Amplify domain association for ${app_key} is not AVAILABLE (status=${status:-unknown})"; exit 1;
+            }
+            prefix="${app_subdomains[$app_key]}"
+            jq -e --arg prefix "$prefix" \
+              'any((.subDomains // [])[]; .subDomainSetting.prefix == $prefix and .verified == true)' \
+              "$association_file" >/dev/null || {
+                rm -f "$association_file"
+                echo "::error::staging Amplify domain association for ${app_key} lacks the reviewed ${prefix} subdomain"; exit 1;
+              }
+            rm -f "$association_file"
+          done
+          echo 'Verified all five existing staging Amplify domain associations and their reviewed subdomains; no DNS or domain values were changed.'
 
       - name: Verify imported repositories use the state-managed ECR key
         if: inputs.ecr_repository_names != '' || inputs.untaint_ecr_repository_names != ''
@@ -673,8 +904,8 @@ jobs:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
-          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
-          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+          STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
+          STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
           TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
@@ -758,6 +989,44 @@ jobs:
             done
             echo "Cleared taint only for the explicitly reviewed staging ECR repositories. Generate a fresh reviewed plan before any apply."
           fi
+          if [ -n "$STAGING_AMPLIFY_DOMAIN_NAME" ]; then
+            declare -A app_subdomains=(
+              [olympus-marketing]=www
+              [aether-marketing]=aether
+              [docs]=docs
+              [aether-app]=app
+              [status]=status
+            )
+            for app_key in "${!app_subdomains[@]}"; do
+              app_address="module.frontends.aws_amplify_app.frontend[\"${app_key}\"]"
+              if ! grep -Fxq "$app_address" "$state_list_file"; then
+                app_address="aws_amplify_app.frontend[\"${app_key}\"]"
+              fi
+              grep -Fxq "$app_address" "$state_list_file" || {
+                echo "::error::staging Amplify app ${app_key} is not in Terraform state; refusing domain import"; exit 1;
+              }
+              app_id="$(terraform state show -no-color "$app_address" \
+                | sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\{0,1\}\([^"[:space:]]*\)"\{0,1\}/\1/p' \
+                | head -n 1)"
+              address="aws_amplify_domain_association.frontend[\"${app_key}\"]"
+              if grep -Fxq "$address" "$state_list_file"; then
+                state_domain="$(terraform state show -no-color "$address" \
+                  | sed -n 's/^[[:space:]]*domain_name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' \
+                  | head -n 1)"
+                test "$state_domain" = "$STAGING_AMPLIFY_DOMAIN_NAME" || {
+                  echo "::error::canonical Amplify domain state for ${app_key} points to ${state_domain}, not ${STAGING_AMPLIFY_DOMAIN_NAME}"; exit 1;
+                }
+                echo "Amplify domain association for ${app_key} is already at the canonical state address; no import needed."
+              else
+                terraform import -input=false \
+                  -var-file=profiles/staging.tfvars \
+                  -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                  "$address" "${app_id}/${STAGING_AMPLIFY_DOMAIN_NAME}"
+              fi
+              terraform state list >"$state_list_file"
+            done
+            echo 'Imported only the verified staging Amplify domain-association metadata; Squarespace DNS was not changed.'
+          fi
           if [ -n "$STAGING_SECRET_NAMES" ]; then
             normalize_secret_names() {
               printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
@@ -816,7 +1085,7 @@ jobs:
             terraform state list >"$state_list_file"
             for name in "${secrets[@]}"; do
               case "$name" in
-                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret)
+                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret)
                   address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]" ;;
                 jwt-secret-previous) address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous' ;;
                 byok-encryption-key-previous) address='module.secrets.aws_secretsmanager_secret.byok_key_previous' ;;
@@ -846,7 +1115,8 @@ jobs:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
-          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
+          STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
         run: |
           set -euo pipefail
           state_list_file="$(mktemp)"
@@ -887,13 +1157,18 @@ jobs:
             IFS=',' read -ra secrets <<< "$normalized_secrets"
             for name in "${secrets[@]}"; do
               case "$name" in
-                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret)
+                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret)
                   address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]" ;;
                 jwt-secret-previous) address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous' ;;
                 byok-encryption-key-previous) address='module.secrets.aws_secretsmanager_secret.byok_key_previous' ;;
                 *) echo "::error::Refusing checksum: '$name' is not a reviewed staging secret"; exit 1 ;;
               esac
               grep -Fx "$address" "$state_list_file"
+            done
+          fi
+          if [ -n "${STAGING_AMPLIFY_DOMAIN_NAME:-}" ]; then
+            for app_key in olympus-marketing aether-marketing docs aether-app status; do
+              grep -Fx "aws_amplify_domain_association.frontend[\"${app_key}\"]" "$state_list_file"
             done
           fi
           terraform state pull > reconciled-staging-state.json

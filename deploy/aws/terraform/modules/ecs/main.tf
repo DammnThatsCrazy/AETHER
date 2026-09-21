@@ -275,7 +275,7 @@ resource "aws_iam_role_policy" "task" {
           Action = [
             "secretsmanager:GetSecretValue",
           ]
-          Resource = local.readable_secret_arns
+          Resource = local.task_readable_secret_arns
         },
       ])),
       jsondecode(jsonencode(local.sqs_statements)),
@@ -294,13 +294,31 @@ locals {
   kyber_app_origin = trimsuffix(trimspace(var.kyber_app_url), "/")
   kyber_rp_id      = regex("^https://([^/:]+)", local.kyber_app_origin)[0]
   api_base_origin  = trimsuffix(trimspace(var.api_base_url), "/")
+  pilot_lane       = var.deployment_lane == "pilot"
 
   # Kyber is a backend-owned Google OIDC + WebAuthn flow. Keep the deployment
   # anchors in the reviewed task definition so every API and worker process
   # receives the same fail-closed workforce contract. The client ID and secret
   # remain Secrets Manager references below; no credential value enters the
   # Terraform plan or task definition JSON.
-  kyber_runtime_environment = [
+  # The full lane keeps the existing workforce contract. The pilot lane still
+  # ships the same backend and worker topology, but explicitly disables the
+  # private Kyber workforce plane so Google/OIDC/WebAuthn credentials are not
+  # mounted or required on a customer-facing-only deployment. Route policy
+  # enforcement remains on in both lanes.
+  kyber_runtime_environment = local.pilot_lane ? [
+    { name = "KYBER_WORKFORCE_IDENTITY_ENABLED", value = "false" },
+    { name = "KYBER_DEVICE_TRUST_REQUIRED", value = "false" },
+    { name = "KYBER_BACKEND_AUTHZ_ENFORCED", value = "false" },
+    { name = "KYBER_SCOPE_V2_ENABLED", value = "false" },
+    { name = "KYBER_STEP_UP_REQUIRED", value = "false" },
+    { name = "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED", value = "false" },
+    { name = "KYBER_BOOTSTRAP_ENABLED", value = "false" },
+    { name = "KYBER_SESSION_COOKIE_SECURE", value = "true" },
+    { name = "POLICY_ENFORCEMENT_ENABLED", value = "true" },
+    { name = "ROUTE_REGISTRY_ENFORCED", value = "true" },
+    { name = "KYBER_OPERATOR_GATE_ENFORCED", value = "true" },
+    ] : [
     { name = "KYBER_WORKFORCE_IDENTITY_ENABLED", value = "true" },
     { name = "KYBER_DEVICE_TRUST_REQUIRED", value = "true" },
     { name = "KYBER_BACKEND_AUTHZ_ENFORCED", value = "true" },
@@ -309,9 +327,14 @@ locals {
     { name = "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED", value = "false" },
     { name = "KYBER_BOOTSTRAP_ENABLED", value = "false" },
     { name = "KYBER_SESSION_COOKIE_SECURE", value = "true" },
+    # Mutating browser requests are exact-origin checked. This value is
+    # derived from the same Terraform input as WebAuthn, so a deployed task
+    # cannot silently start with an empty Kyber origin allow-list.
+    { name = "KYBER_ALLOWED_ORIGINS", value = local.kyber_app_origin },
     { name = "POLICY_ENFORCEMENT_ENABLED", value = "true" },
     { name = "ROUTE_REGISTRY_ENFORCED", value = "true" },
     { name = "KYBER_OPERATOR_GATE_ENFORCED", value = "true" },
+    { name = "KYBER_GOOGLE_HOSTED_DOMAIN", value = trimspace(var.kyber_google_hosted_domain) },
     # The callback is a backend route, so it must use the API origin rather
     # than the browser origin. WebAuthn remains bound to the Kyber SPA origin.
     { name = "KYBER_GOOGLE_REDIRECT_URI", value = "${local.api_base_origin}/v1/kyber/auth/callback" },
@@ -319,14 +342,47 @@ locals {
     { name = "KYBER_WEBAUTHN_ORIGIN", value = local.kyber_app_origin },
   ]
 
+  # Pilot billing is direct Aether Checkout + Portal billing, not the deferred
+  # Kyber revops/provider-sync surface. URLs are derived from the canonical
+  # Aether origin so a plan cannot point a paid pilot at a local default.
+  stripe_runtime_environment = [
+    { name = "DEPLOYMENT_LANE", value = var.deployment_lane },
+    { name = "STRIPE_BILLING_ENABLED", value = var.stripe_billing_enabled ? "true" : "false" },
+  ]
+  stripe_runtime_environment_with_urls = var.stripe_billing_enabled ? concat(
+    local.stripe_runtime_environment,
+    [
+      { name = "STRIPE_CHECKOUT_SUCCESS_URL", value = var.stripe_checkout_success_url },
+      { name = "STRIPE_CHECKOUT_CANCEL_URL", value = var.stripe_checkout_cancel_url },
+      { name = "STRIPE_PORTAL_RETURN_URL", value = var.stripe_portal_return_url },
+    ],
+  ) : local.stripe_runtime_environment
+
   # Secrets the tasks are allowed to read. The Redis AUTH token is only
   # reachable when ElastiCache is part of the profile, so lean tasks hold no
   # permission for a secret they never mount.
   readable_secret_arns = concat(
     [
       for name, arn in var.secret_arns : arn
-      if var.enable_elasticache || name != "redis-auth-token"
+      if(!local.pilot_lane || (name != "kyber-google-client-id" && name != "kyber-google-client-secret")) &&
+      (var.enable_elasticache || name != "redis-auth-token")
     ],
+    [for arn in values(var.companion_secret_arns) : arn],
+  )
+
+  # Secret injection is performed by the ECS execution role. The application
+  # task role does not need to fetch the Google OIDC credentials directly;
+  # exclude those two ARNs from its Secrets Manager policy while preserving
+  # their mounted environment references below.
+  task_readable_secret_arns = concat(
+    [
+      for name, arn in var.secret_arns : arn
+      if name != "kyber-google-client-id" && name != "kyber-google-client-secret" &&
+      (var.enable_elasticache || name != "redis-auth-token")
+    ],
+    # Companion values are read by the rotation-aware application code during
+    # the overlap window. Narrowing the Google credentials must not remove
+    # that pre-existing permission or make a secret rotation fail at runtime.
     [for arn in values(var.companion_secret_arns) : arn],
   )
 
@@ -347,9 +403,24 @@ locals {
       EXTRACTION_CANARY_SEED      = lookup(var.secret_arns, "extraction-canary-seed", "")
       SDK_CONFIG_SECRET           = lookup(var.secret_arns, "sdk-config-secret", "")
       FIRST_ADMIN_BOOTSTRAP_TOKEN = lookup(var.secret_arns, "first-admin-bootstrap-token", "")
-      KYBER_GOOGLE_CLIENT_ID      = lookup(var.secret_arns, "kyber-google-client-id", "")
-      KYBER_GOOGLE_CLIENT_SECRET  = lookup(var.secret_arns, "kyber-google-client-secret", "")
     },
+    # Full staging keeps the two workforce credentials in the ECS execution
+    # role's secret injection set. Pilot deliberately omits them; the backend
+    # runtime contract above disables the workforce plane in that lane.
+    local.pilot_lane ? {} : {
+      KYBER_GOOGLE_CLIENT_ID     = lookup(var.secret_arns, "kyber-google-client-id", "")
+      KYBER_GOOGLE_CLIENT_SECRET = lookup(var.secret_arns, "kyber-google-client-secret", "")
+    },
+    # Alpha through Delta are the self-service Checkout tiers. Epsilon,
+    # Omicron, and Omega are contract tiers and remain optional operator-side
+    # mappings; keeping their empty stubs out of the task prevents ECS from
+    # treating an unpopulated contract secret as a runtime dependency.
+    var.stripe_billing_enabled ? {
+      STRIPE_PRICE_ALPHA   = lookup(var.secret_arns, "stripe-price-alpha", "")
+      STRIPE_PRICE_BETA    = lookup(var.secret_arns, "stripe-price-beta", "")
+      STRIPE_PRICE_GAMMA   = lookup(var.secret_arns, "stripe-price-gamma", "")
+      STRIPE_PRICE_DELTA   = lookup(var.secret_arns, "stripe-price-delta", "")
+    } : {},
     # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
     # Only mounted when ElastiCache exists; every task (API and workers)
     # shares this block, so an unconditional mapping would pin the
@@ -378,6 +449,20 @@ locals {
       valueFrom = lookup(var.secret_arns, "jwt-secret", "")
     },
   ]
+
+  backend_secret_mounts_complete = alltrue([
+    for mount in local.backend_secrets_block : trimspace(mount.valueFrom) != ""
+  ])
+
+  stripe_runtime_contract_complete = !var.stripe_billing_enabled || alltrue([
+    trimspace(var.stripe_checkout_success_url) != "",
+    trimspace(var.stripe_checkout_cancel_url) != "",
+    trimspace(var.stripe_portal_return_url) != "",
+  ])
+
+  ml_secret_mounts_complete = alltrue([
+    for mount in local.ml_secrets_block : trimspace(mount.valueFrom) != ""
+  ])
 }
 
 # --------------------------------------------------------------------------
@@ -392,6 +477,17 @@ resource "aws_ecs_task_definition" "backend" {
   memory                   = var.backend_memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
+
+  lifecycle {
+    precondition {
+      condition     = local.backend_secret_mounts_complete
+      error_message = "Every backend ECS secret mount required by the selected deployment lane must resolve to a non-empty Secrets Manager ARN."
+    }
+    precondition {
+      condition     = local.stripe_runtime_contract_complete
+      error_message = "Pilot ECS tasks require concrete Stripe Checkout success, cancel, and Billing Portal return URLs."
+    }
+  }
 
   container_definitions = jsonencode([
     {
@@ -410,6 +506,10 @@ resource "aws_ecs_task_definition" "backend" {
         [
           { name = "APP_ENV", value = var.environment },
           { name = "AETHER_ENV", value = var.environment },
+          { name = "DEPLOYMENT_PROFILE", value = var.deployment_profile },
+          { name = "AUTH0_DOMAIN", value = var.auth0_domain },
+          { name = "AUTH0_API_AUDIENCE", value = var.auth0_api_audience },
+          { name = "APP_URL", value = var.aether_app_url },
           { name = "DATABASE_HOST", value = var.database_host },
           { name = "DATABASE_PORT", value = tostring(var.database_port) },
           { name = "DATABASE_NAME", value = var.database_name },
@@ -427,7 +527,13 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "ML_SERVING_URL", value = var.ml_serving_url },
           { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
         ],
-        local.kyber_runtime_environment,
+        concat(
+          local.kyber_runtime_environment,
+          local.stripe_runtime_environment_with_urls,
+          [
+            { name = "CREDENTIAL_CIPHER", value = var.credential_kms_key_id != "" ? "aws_kms" : "local" },
+          ],
+        ),
         # Provider-credential envelope-encryption CMK. The backend's
         # AwsKmsEnvelopeCredentialCipher reads this key id to call
         # kms:GenerateDataKey / kms:Decrypt. Only injected when the profile
@@ -607,6 +713,16 @@ resource "aws_ecs_task_definition" "runtime_service" {
   memory                   = each.value.memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
+  lifecycle {
+    precondition {
+      condition     = local.backend_secret_mounts_complete
+      error_message = "Every runtime ECS secret mount required by the selected deployment lane must resolve to a non-empty Secrets Manager ARN."
+    }
+    precondition {
+      condition     = local.stripe_runtime_contract_complete
+      error_message = "Pilot runtime ECS tasks require concrete Stripe Checkout success, cancel, and Billing Portal return URLs."
+    }
+  }
   container_definitions = jsonencode([{
     name      = each.key
     image     = "${var.ecr_backend_url}@${var.backend_image_digest}"
@@ -616,6 +732,10 @@ resource "aws_ecs_task_definition" "runtime_service" {
       [
         { name = "APP_ENV", value = var.environment },
         { name = "AETHER_ENV", value = var.environment },
+        { name = "DEPLOYMENT_PROFILE", value = var.deployment_profile },
+        { name = "AUTH0_DOMAIN", value = var.auth0_domain },
+        { name = "AUTH0_API_AUDIENCE", value = var.auth0_api_audience },
+        { name = "APP_URL", value = var.aether_app_url },
         { name = "DATABASE_HOST", value = var.database_host },
         { name = "DATABASE_PORT", value = tostring(var.database_port) },
         { name = "DATABASE_NAME", value = var.database_name },
@@ -625,7 +745,13 @@ resource "aws_ecs_task_definition" "runtime_service" {
         { name = "ANALYTICS_BACKEND", value = var.analytics_backend },
         { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
       ],
-      local.kyber_runtime_environment,
+      concat(
+        local.kyber_runtime_environment,
+        local.stripe_runtime_environment_with_urls,
+        [
+          { name = "CREDENTIAL_CIPHER", value = var.credential_kms_key_id != "" ? "aws_kms" : "local" },
+        ],
+      ),
       # Provider-credential envelope-encryption CMK (mirrors the API task).
       var.credential_kms_key_id != "" ? [
         { name = "CREDENTIAL_KMS_KEY_ID", value = var.credential_kms_key_id },
@@ -881,6 +1007,13 @@ resource "aws_ecs_task_definition" "ml" {
   memory                   = var.ml_memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
+
+  lifecycle {
+    precondition {
+      condition     = local.ml_secret_mounts_complete
+      error_message = "The ML ECS task JWT secret mount must resolve to a non-empty Secrets Manager ARN."
+    }
+  }
 
   container_definitions = jsonencode([
     {

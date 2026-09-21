@@ -7,6 +7,22 @@ profile: staging
 role: AetherStagingDeploy
 region: us-east-1
 statements:
+  - sid: AuthorizeStagingEcrClient
+    actions:
+      - ecr:GetAuthorizationToken
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: PublishStagingBackendImage
+    actions:
+      - ecr:BatchCheckLayerAvailability
+      - ecr:BatchGetImage
+      - ecr:CompleteLayerUpload
+      - ecr:DescribeImages
+      - ecr:InitiateLayerUpload
+      - ecr:PutImage
+      - ecr:UploadLayerPart
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-backend
+    scope: staging-backend-image
   - sid: RunStagingApplicationTasks
     actions:
       - ecs:RunTask

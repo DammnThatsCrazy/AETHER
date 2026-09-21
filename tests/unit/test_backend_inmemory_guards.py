@@ -49,6 +49,7 @@ def test_shared_store_rejects_inmemory_outside_local(monkeypatch):
     # tests/security/test_kyber_gate_migration.py — this test must trip only
     # the guard it is actually testing.
     monkeypatch.setenv("KYBER_GOOGLE_CLIENT_ID", "test-kyber-client-id")
+    monkeypatch.setenv("KYBER_GOOGLE_CLIENT_SECRET", "test-kyber-client-secret")
     monkeypatch.setenv("KYBER_GOOGLE_REDIRECT_URI", "https://kyber.test.invalid/v1/kyber/auth/callback")
     monkeypatch.setenv("KYBER_WEBAUTHN_RP_ID", "kyber.test.invalid")
     monkeypatch.setenv("KYBER_WEBAUTHN_ORIGIN", "https://kyber.test.invalid")
@@ -201,6 +202,7 @@ def test_shared_store_uses_dynamodb_for_the_lean_cache_backend(monkeypatch):
     monkeypatch.setenv("EXTRACTION_CANARY_SEED", "test-extraction-canary-seed-for-tests")
     monkeypatch.setenv("SDK_CONFIG_SECRET", "test-sdk-config-secret-for-tests")
     monkeypatch.setenv("KYBER_GOOGLE_CLIENT_ID", "test-kyber-client-id")
+    monkeypatch.setenv("KYBER_GOOGLE_CLIENT_SECRET", "test-kyber-client-secret")
     monkeypatch.setenv(
         "KYBER_GOOGLE_REDIRECT_URI",
         "https://kyber.test.invalid/v1/kyber/auth/callback",
@@ -257,6 +259,7 @@ def test_journey_store_rejects_inmemory_outside_local(monkeypatch):
     # tests/security/test_kyber_gate_migration.py — this test must trip only
     # the guard it is actually testing.
     monkeypatch.setenv("KYBER_GOOGLE_CLIENT_ID", "test-kyber-client-id")
+    monkeypatch.setenv("KYBER_GOOGLE_CLIENT_SECRET", "test-kyber-client-secret")
     monkeypatch.setenv("KYBER_GOOGLE_REDIRECT_URI", "https://kyber.test.invalid/v1/kyber/auth/callback")
     monkeypatch.setenv("KYBER_WEBAUTHN_RP_ID", "kyber.test.invalid")
     monkeypatch.setenv("KYBER_WEBAUTHN_ORIGIN", "https://kyber.test.invalid")
@@ -291,6 +294,7 @@ def test_journey_store_uses_dynamodb_for_staging_and_preserves_tenant_isolation(
         "EXTRACTION_CANARY_SEED": "test-extraction-canary-seed-for-tests",
         "SDK_CONFIG_SECRET": "test-sdk-config-secret-for-tests",
         "KYBER_GOOGLE_CLIENT_ID": "test-kyber-client-id",
+        "KYBER_GOOGLE_CLIENT_SECRET": "test-kyber-client-secret",
         "KYBER_GOOGLE_REDIRECT_URI": "https://kyber.test.invalid/v1/kyber/auth/callback",
         "KYBER_WEBAUTHN_RP_ID": "kyber.test.invalid",
         "KYBER_WEBAUTHN_ORIGIN": "https://kyber.test.invalid",
@@ -345,6 +349,7 @@ def test_journey_store_uses_redis_for_scale_profiles_and_preserves_tenant_isolat
         "EXTRACTION_CANARY_SEED": "test-extraction-canary-seed-for-tests",
         "SDK_CONFIG_SECRET": "test-sdk-config-secret-for-tests",
         "KYBER_GOOGLE_CLIENT_ID": "test-kyber-client-id",
+        "KYBER_GOOGLE_CLIENT_SECRET": "test-kyber-client-secret",
         "KYBER_GOOGLE_REDIRECT_URI": "https://kyber.test.invalid/v1/kyber/auth/callback",
         "KYBER_WEBAUTHN_RP_ID": "kyber.test.invalid",
         "KYBER_WEBAUTHN_ORIGIN": "https://kyber.test.invalid",
@@ -399,6 +404,7 @@ def test_hosted_redis_store_is_constructible_with_auth_without_memory_fallback(m
         "EXTRACTION_CANARY_SEED": "test-extraction-canary-seed-for-tests",
         "SDK_CONFIG_SECRET": "test-sdk-config-secret-for-tests",
         "KYBER_GOOGLE_CLIENT_ID": "test-kyber-client-id",
+        "KYBER_GOOGLE_CLIENT_SECRET": "test-kyber-client-secret",
         "KYBER_GOOGLE_REDIRECT_URI": "https://kyber.test.invalid/v1/kyber/auth/callback",
         "KYBER_WEBAUTHN_RP_ID": "kyber.test.invalid",
         "KYBER_WEBAUTHN_ORIGIN": "https://kyber.test.invalid",

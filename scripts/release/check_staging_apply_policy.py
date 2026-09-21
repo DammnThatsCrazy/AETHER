@@ -66,6 +66,7 @@ REQUIRED_ACTIONS = {
     "secretsmanager:UpdateSecret",
     "secretsmanager:DeleteSecret",
     "secretsmanager:RotateSecret",
+    "secretsmanager:CancelRotateSecret",
     "secretsmanager:ListSecrets",
     # SSM
     "ssm:AddTagsToResource",
@@ -77,6 +78,7 @@ REQUIRED_ACTIONS = {
     "ssm:DescribeParameters",
     # Amplify Hosting
     "amplify:CreateApp",
+    "amplify:ListApps",
     "amplify:GetApp",
     "amplify:UpdateApp",
     "amplify:DeleteApp",
@@ -85,6 +87,13 @@ REQUIRED_ACTIONS = {
     "amplify:GetBranch",
     "amplify:UpdateBranch",
     "amplify:DeleteBranch",
+    "amplify:StartJob",
+    "amplify:ListJobs",
+    "amplify:GetJob",
+    "amplify:CreateDomainAssociation",
+    "amplify:GetDomainAssociation",
+    "amplify:UpdateDomainAssociation",
+    "amplify:DeleteDomainAssociation",
     "amplify:TagResource",
     "amplify:UntagResource",
     "amplify:ListTagsForResource",
@@ -100,6 +109,7 @@ REQUIRED_ACTIONS = {
     "kms:PutKeyPolicy",
     "kms:GenerateDataKey",
     "kms:Decrypt",
+    "kms:Encrypt",
     "kms:GetKeyRotationStatus",
     "kms:EnableKeyRotation",
     "kms:ScheduleKeyDeletion",
@@ -213,6 +223,7 @@ REQUIRED_ACTIONS = {
     "rds:DescribeDBClusterParameterGroups",
     "rds:DescribeDBClusterParameters",
     "rds:DescribeDBInstances",
+    "rds:DescribeGlobalClusters",
     "rds:ListTagsForResource",
     # DynamoDB
     "dynamodb:ListTagsOfResource",
@@ -273,6 +284,7 @@ REQUIRED_ACTIONS = {
     "application-autoscaling:UntagResource",
     "application-autoscaling:DescribeScalableTargets",
     "application-autoscaling:DescribeScalingPolicies",
+    "application-autoscaling:ListTagsForResource",
     # IAM
     "iam:CreateServiceLinkedRole",
     "iam:GetRole",
@@ -457,6 +469,7 @@ ALLOWED_GLOBAL_ACTIONS = {
     "rds:DescribeDBClusterParameterGroups",
     "rds:DescribeDBClusterParameters",
     "rds:DescribeDBInstances",
+    "rds:DescribeGlobalClusters",
     "rds:ListTagsForResource",
     # CloudWatch
     "cloudwatch:PutMetricAlarm",
@@ -490,6 +503,7 @@ ALLOWED_GLOBAL_ACTIONS = {
     "iam:SimulatePrincipalPolicy",
     # KMS
     "kms:GetKeyRotationStatus",
+    "kms:Decrypt",
     "kms:ScheduleKeyDeletion",
     "kms:CreateKey",
     "kms:ListAliases",
@@ -498,6 +512,7 @@ ALLOWED_GLOBAL_ACTIONS = {
     # Amplify CreateApp has no resource-level ARN; the app and branch
     # operations below remain resource-scoped.
     "amplify:CreateApp",
+    "amplify:ListApps",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -524,6 +539,8 @@ _SECRET_ARN = "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
 _SSM_PARAM = "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*"
 _AMPLIFY_APPS = "arn:aws:amplify:us-east-1:${account_id}:apps/*"
 _AMPLIFY_BRANCHES = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*"
+_AMPLIFY_DOMAINS = "arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*"
+_AMPLIFY_JOBS = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*/jobs/*"
 _DYNAMO_TABLE = "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*"
 _SQS_QUEUE = "arn:aws:sqs:us-east-1:${account_id}:AETHER-staging-*"
 _EVENTS_RULE = "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*"
@@ -596,7 +613,7 @@ def main() -> int:
                 fail(f"global resource scope is not allowed for {action}")
         if resource == "*" and not (
             statement.get("scope", "").endswith("required-by-api")
-            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess", "CreateStagingKmsKeys"}
+            or sid in {"EnsureEcsServiceLinkedRole", "EnsureEcsApplicationAutoScalingServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess", "CreateStagingKmsKeys", "ReencryptLegacyStagingSecrets"}
         ):
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
@@ -636,13 +653,28 @@ def main() -> int:
         if "kms:PutKeyPolicy" in statement_actions:
             if resource != _KMS_KEY or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:PutKeyPolicy must use a staging KMS key ARN and resource-tag condition")
-        for _kms_data_action in ("kms:GenerateDataKey", "kms:Decrypt"):
+        for _kms_data_action in ("kms:GenerateDataKey", "kms:Decrypt", "kms:Encrypt"):
             if _kms_data_action in statement_actions:
+                if _kms_data_action == "kms:Decrypt" and resource == "*":
+                    conditions = statement.get("conditions") or {}
+                    operators = statement.get("condition_operators") or {}
+                    if conditions != {
+                        "kms:ViaService": "secretsmanager.us-east-1.amazonaws.com",
+                        "kms:EncryptionContext:SecretARN": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+                    } or operators != {
+                        "kms:ViaService": "StringEquals",
+                        "kms:EncryptionContext:SecretARN": "ArnLike",
+                    }:
+                        fail("legacy secret re-key decrypt must be constrained to Secrets Manager and aether/* encryption context")
+                    continue
                 if resource != _KMS_KEY or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                     fail(f"{_kms_data_action} must use a staging KMS key ARN and resource-tag condition")
         if "iam:CreateServiceLinkedRole" in statement_actions:
-            if (statement.get("conditions") or {}).get("iam:AWSServiceName") != "ecs.amazonaws.com":
-                fail("iam:CreateServiceLinkedRole must be restricted to ECS")
+            if (statement.get("conditions") or {}).get("iam:AWSServiceName") not in {
+                "ecs.amazonaws.com",
+                "ecs.application-autoscaling.amazonaws.com",
+            }:
+                fail("iam:CreateServiceLinkedRole must be restricted to ECS service-linked roles")
 
     expected_resources: dict[str, str | list[str]] = {}
 
@@ -684,6 +716,7 @@ def main() -> int:
         "secretsmanager:GetResourcePolicy", "secretsmanager:ListSecretVersionIds",
         "secretsmanager:CreateSecret", "secretsmanager:UpdateSecret",
         "secretsmanager:DeleteSecret", "secretsmanager:RotateSecret",
+        "secretsmanager:CancelRotateSecret",
     ):
         expected_resources[_sm] = _SECRET_ARN
     expected_resources["secretsmanager:ListSecrets"] = "*"
@@ -711,6 +744,17 @@ def main() -> int:
         "amplify:UpdateBranch", "amplify:DeleteBranch",
     ):
         expected_resources[_amplify_branch] = _AMPLIFY_BRANCHES
+    expected_resources["amplify:ListApps"] = "*"
+    for _amplify_job_branch in (
+        "amplify:StartJob", "amplify:ListJobs",
+    ):
+        expected_resources[_amplify_job_branch] = _AMPLIFY_BRANCHES
+    expected_resources["amplify:GetJob"] = _AMPLIFY_JOBS
+    for _amplify_domain in (
+        "amplify:CreateDomainAssociation", "amplify:GetDomainAssociation",
+        "amplify:UpdateDomainAssociation", "amplify:DeleteDomainAssociation",
+    ):
+        expected_resources[_amplify_domain] = _AMPLIFY_DOMAINS
     expected_resources["amplify:TagResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
     expected_resources["amplify:UntagResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
     expected_resources["amplify:ListTagsForResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
@@ -726,7 +770,7 @@ def main() -> int:
     for _kms in (
         "kms:DescribeKey", "kms:GetKeyPolicy", "kms:ListResourceTags",
         "kms:CreateGrant", "kms:PutKeyPolicy",
-        "kms:GenerateDataKey", "kms:Decrypt",
+        "kms:GenerateDataKey", "kms:Decrypt", "kms:Encrypt",
     ):
         expected_resources[_kms] = _KMS_KEY
     expected_resources["kms:GetKeyRotationStatus"] = "*"
@@ -887,6 +931,9 @@ def main() -> int:
     expected_resources["application-autoscaling:UntagResource"] = (
         "arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*"
     )
+    expected_resources["application-autoscaling:ListTagsForResource"] = (
+        "arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*"
+    )
 
     # EventBridge
     for _evt in (
@@ -940,6 +987,19 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": ["monitoring.rds.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
+        elif action == "iam:CreateServiceLinkedRole":
+            expected_service_names = {
+                "ecs.amazonaws.com",
+                "ecs.application-autoscaling.amazonaws.com",
+            }
+            actual_service_names = {
+                (statement.get("conditions") or {}).get("iam:AWSServiceName")
+                for statement in matching
+            }
+            if len(matching) != 2 or any(statement.get("resource") != "*" for statement in matching):
+                fail("iam:CreateServiceLinkedRole must use one global statement per reviewed ECS service")
+            if actual_service_names != expected_service_names:
+                fail("iam:CreateServiceLinkedRole must cover only the reviewed ECS service names")
         elif action == "iam:GetRole":
             slr_arn = "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
             single_resources = {s.get("resource") for s in matching if isinstance(s.get("resource"), str)}
@@ -963,6 +1023,24 @@ def main() -> int:
             role_sets = {frozenset(s.get("resource") or []) for s in matching}
             if role_sets != {frozenset(_LAMBDA_ROLE_ARNS), frozenset(_INFRA_ROLE_ARNS)}:
                 fail(f"{action} must cover exactly the staging Lambda and infrastructure roles")
+        elif action == "kms:Decrypt":
+            staging_matches = [
+                statement for statement in matching
+                if statement.get("resource") == _KMS_KEY
+            ]
+            legacy_matches = [
+                statement for statement in matching
+                if statement.get("resource") == "*"
+            ]
+            if len(staging_matches) != 1 or len(legacy_matches) != 1:
+                fail("kms:Decrypt must have one staging-key grant and one confirmation-gated legacy-secret grant")
+            if (staging_matches[0].get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("staging kms:Decrypt must be limited to staging-tagged keys")
+            if (legacy_matches[0].get("conditions") or {}) != {
+                "kms:ViaService": "secretsmanager.us-east-1.amazonaws.com",
+                "kms:EncryptionContext:SecretARN": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+            }:
+                fail("legacy kms:Decrypt must be limited to Secrets Manager aether/* encryption context")
         elif action == "kms:CreateGrant":
             if len(matching) != 1 or matching[0].get("resource") != expected or (matching[0].get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:CreateGrant must be limited to staging-tagged keys")

@@ -20,9 +20,9 @@ Usage:
     # Preview secret paths without writing (dry-run)
     python scripts/bootstrap_aws_secrets.py --env staging --dry-run
 
-    # Set a single secret by name (useful for Stripe keys that come from the dashboard)
-    python scripts/bootstrap_aws_secrets.py --env production \\
-        --set STRIPE_SECRET_KEY=sk_live_xxx
+    # Set a single secret by name. Prefer --from-env for real values because
+    # command-line arguments can be captured by shell history or process lists.
+    python scripts/bootstrap_aws_secrets.py --env staging --from-env .env.staging
 
 Prerequisites:
     pip install boto3
@@ -31,6 +31,11 @@ Prerequisites:
       - secretsmanager:PutSecretValue
       - secretsmanager:DescribeSecret
 
+Security note:
+    Do not paste secret values into chat or place them in command-line
+    arguments. Use a local, permission-restricted env file or an interactive
+    secure injection path, and remove the file after the write is verified.
+
 Secret paths (stored as individual SecretString, matching Terraform):
     aether/jwt-secret
     aether/byok-encryption-key
@@ -38,9 +43,12 @@ Secret paths (stored as individual SecretString, matching Terraform):
     aether/canary-secret-seed
     aether/extraction-canary-seed
     aether/oracle-signer-private-key
-    aether/grafana-admin-password
+    aether/sdk-config-secret
+    aether/first-admin-bootstrap-token (manual — one-time staging bootstrap)
     aether/stripe-secret-key          (manual — from Stripe Dashboard)
     aether/stripe-webhook-secret      (manual — from Stripe Dashboard)
+    aether/stripe-price-{alpha,beta,gamma,delta,epsilon,omicron,omega}
+                                      (manual — from Stripe Dashboard)
     aether/kyber-google-client-id     (manual — from Google Cloud OAuth)
     aether/kyber-google-client-secret (manual — from Google Cloud OAuth)
 """
@@ -49,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import secrets
 import sys
 from pathlib import Path
@@ -64,7 +73,7 @@ _ENV_VAR_TO_SECRET_PATH: dict[str, str] = {
     "EXTRACTION_CANARY_SEED": "extraction-canary-seed",
     "SDK_CONFIG_SECRET": "sdk-config-secret",
     "ORACLE_SIGNER_PRIVATE_KEY": "oracle-signer-private-key",
-    "GRAFANA_ADMIN_PASSWORD": "grafana-admin-password",
+    "FIRST_ADMIN_BOOTSTRAP_TOKEN": "first-admin-bootstrap-token",
     "STRIPE_SECRET_KEY": "stripe-secret-key",
     "STRIPE_WEBHOOK_SECRET": "stripe-webhook-secret",
     "STRIPE_PRICE_ALPHA": "stripe-price-alpha",
@@ -87,7 +96,29 @@ _AUTO_GENERATED = {
     "EXTRACTION_CANARY_SEED",
     "SDK_CONFIG_SECRET",
     "ORACLE_SIGNER_PRIVATE_KEY",
-    "GRAFANA_ADMIN_PASSWORD",
+}
+
+_STRIPE_PRICE_ENV_VARS = (
+    "STRIPE_PRICE_ALPHA",
+    "STRIPE_PRICE_BETA",
+    "STRIPE_PRICE_GAMMA",
+    "STRIPE_PRICE_DELTA",
+    "STRIPE_PRICE_EPSILON",
+    "STRIPE_PRICE_OMICRON",
+    "STRIPE_PRICE_OMEGA",
+)
+_STRIPE_PRICE_RE = re.compile(r"^price_[A-Za-z0-9]+$")
+_STRIPE_PRICE_PLACEHOLDERS = {
+    "price_alpha",
+    "price_beta",
+    "price_gamma",
+    "price_delta",
+    "price_epsilon",
+    "price_omicron",
+    "price_omega",
+    "price_placeholder",
+    "price_example",
+    "price_test",
 }
 
 
@@ -117,7 +148,6 @@ def _generate_all() -> dict[str, str]:
         "EXTRACTION_CANARY_SEED": secrets.token_urlsafe(32),
         "SDK_CONFIG_SECRET": secrets.token_urlsafe(48),
         "ORACLE_SIGNER_PRIVATE_KEY": _generate_eth_private_key(),
-        "GRAFANA_ADMIN_PASSWORD": secrets.token_urlsafe(24),
     }
 
 
@@ -145,24 +175,61 @@ def _parse_set_args(set_args: list[str]) -> dict[str, str]:
     return result
 
 
+def _validate_manual_values(values: dict[str, str]) -> None:
+    """Validate provider identifiers before any Secrets Manager write.
+
+    The value itself is never printed. Keeping this check at the secure write
+    boundary lets CI prove only metadata while ensuring this bootstrap path
+    cannot store a made-up price identifier.
+    """
+    invalid = [
+        name
+        for name in _STRIPE_PRICE_ENV_VARS
+        if values.get(name)
+        and (
+            not _STRIPE_PRICE_RE.fullmatch(values[name])
+            or values[name] in _STRIPE_PRICE_PLACEHOLDERS
+        )
+    ]
+    if invalid:
+        raise SystemExit(
+            "ERROR: Stripe price IDs must be real price_... identifiers; "
+            f"invalid fields: {', '.join(invalid)}"
+        )
+
+
 def _push_secret(
     client: object,
     secret_path: str,
     value: str,
     dry_run: bool,
     tags: list[dict],
+    kms_key_id: str,
+    *,
+    preserve_existing: bool = False,
 ) -> str:
-    """Create or update a secret. Returns 'created', 'updated', or 'dry-run'."""
+    """Create/update a secret without accidental generated-secret rotation."""
     if dry_run:
         return "dry-run"
 
     try:
-        client.describe_secret(SecretId=secret_path)  # type: ignore[attr-defined]
+        metadata = client.describe_secret(SecretId=secret_path)  # type: ignore[attr-defined]
         exists = True
     except client.exceptions.ResourceNotFoundException:  # type: ignore[attr-defined]
+        metadata = {}
         exists = False
 
     if exists:
+        if metadata.get("DeletedDate") is not None:
+            raise SystemExit(
+                f"ERROR: {secret_path} is pending deletion; restore it before bootstrap"
+            )
+        versions = metadata.get("VersionIdsToStages") or {}
+        has_current = any(
+            "AWSCURRENT" in (stages or []) for stages in versions.values()
+        )
+        if preserve_existing and has_current:
+            return "preserved"
         client.put_secret_value(  # type: ignore[attr-defined]
             SecretId=secret_path,
             SecretString=value,
@@ -172,6 +239,7 @@ def _push_secret(
         client.create_secret(  # type: ignore[attr-defined]
             Name=secret_path,
             SecretString=value,
+            KmsKeyId=kms_key_id,
             Tags=tags,
         )
         return "created"
@@ -184,6 +252,8 @@ def run(
     dry_run: bool,
     aws_region: Optional[str],
     skip_manual: bool,
+    kms_key_id: Optional[str],
+    rotate_generated: bool = False,
 ) -> None:
     try:
         import boto3
@@ -192,14 +262,25 @@ def run(
         sys.exit(1)
 
     region = aws_region or os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-    client = boto3.client("secretsmanager", region_name=region)
+    effective_kms_key_id = kms_key_id or f"alias/aether-{env}-secrets"
+    # A dry-run is intentionally credential-free: it enumerates the exact
+    # write targets without constructing an AWS client or touching the network.
+    client = None if dry_run else boto3.client("secretsmanager", region_name=region)
 
-    # Build value map: generated + optional env-file overrides + CLI overrides
+    # Build value map: generated + optional env-file overrides + CLI overrides.
+    # Generated values are intentionally not treated as rotation requests. A
+    # plain bootstrap invocation must be safe to re-run while adding a manual
+    # provider value; otherwise it would silently replace the live JWT/BYOK/
+    # signing material on every invocation.
     values = _generate_all()
+    explicit_values: set[str] = set()
     if from_env:
         file_vals = _load_env_file(from_env)
         values.update(file_vals)
+        explicit_values.update(file_vals)
+    explicit_values.update(set_overrides)
     values.update(set_overrides)
+    _validate_manual_values(values)
 
     tags = [
         {"Key": "Project", "Value": "aether"},
@@ -213,6 +294,7 @@ def run(
     print(f"  Region : {region}")
     print(f"  Env tag: {env}")
     print(f"  Prefix : {prefix}  (matches Terraform: aether/<name>)")
+    print(f"  KMS    : {effective_kms_key_id}  (matches Terraform secret CMK)")
     print(f"  Source : {'generated' if not from_env else from_env}")
     print()
 
@@ -235,9 +317,27 @@ def run(
                 skipped.append(env_var)
             continue
 
-        action = _push_secret(client, secret_path, value, dry_run, tags)
-        results[secret_path] = action
-        symbol = {"created": "+", "updated": "~", "dry-run": "?"}.get(action, " ")
+        action = _push_secret(
+            client,
+            secret_path,
+            value,
+            dry_run,
+            tags,
+            effective_kms_key_id,
+            preserve_existing=(
+                env_var in _AUTO_GENERATED
+                and env_var not in explicit_values
+                and not rotate_generated
+            ),
+        )
+        if action != "preserved":
+            results[secret_path] = action
+        symbol = {
+            "created": "+",
+            "updated": "~",
+            "preserved": "=",
+            "dry-run": "?",
+        }.get(action, " ")
         print(f"  [{symbol}] {secret_path}  ({action})")
 
     print()
@@ -273,7 +373,7 @@ def main() -> None:
     parser.add_argument(
         "--env", required=True,
         choices=["staging", "production"],
-        help="Target environment (aether/<env>/ prefix in Secrets Manager).",
+        help="Target environment (resources use the aether/ prefix and an Environment tag).",
     )
     parser.add_argument(
         "--from-env", metavar="ENV_FILE",
@@ -292,8 +392,17 @@ def main() -> None:
         help="AWS region (default: AWS_DEFAULT_REGION env var or us-east-1).",
     )
     parser.add_argument(
+        "--kms-key-id",
+        metavar="KMS_KEY_ID",
+        help="KMS key ARN or alias for newly created secrets (default: alias/aether-<env>-secrets).",
+    )
+    parser.add_argument(
         "--skip-manual", action="store_true",
         help="Silently skip secrets that have no value (e.g. Stripe keys).",
+    )
+    parser.add_argument(
+        "--rotate-generated", action="store_true",
+        help="Explicitly rotate existing auto-generated secrets; default bootstrap preserves them.",
     )
     args = parser.parse_args()
 
@@ -305,6 +414,8 @@ def main() -> None:
         dry_run=args.dry_run,
         aws_region=args.region,
         skip_manual=args.skip_manual,
+        kms_key_id=args.kms_key_id,
+        rotate_generated=args.rotate_generated,
     )
 
 

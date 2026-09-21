@@ -73,11 +73,12 @@ build status for each surface.
 
 The public web provisioning path is now part of the AWS deployment contract:
 `olympus-marketing`, `aether-marketing`, `docs`, `aether-app`, and `status` are
-separate Amplify applications. Staging uses their Amplify default domains;
-`production-lean` associates `www`, `aether`, `docs`, `app`, and `status` under
-`olympuslabsml.com` and exports the association CNAME targets for the
-authoritative Squarespace DNS. No credentialed AWS apply has run yet, so these
-are implemented targets rather than live-origin claims. Kyber remains outside
+separate Amplify applications. Staging reuses the verified `www`, `aether`,
+`docs`, `app`, and `status` associations under `staging.olympuslabsml.com`;
+`production-lean` associates the same surfaces under `olympuslabsml.com` and
+exports the association CNAME targets for the authoritative Squarespace DNS.
+The live staging associations are imported into Terraform state before the next
+reviewed plan. Kyber remains outside
 this public set and has no public DNS record by default.
 
 The authentication routes belong to the **Aether public** surface

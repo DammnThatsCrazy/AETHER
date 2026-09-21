@@ -15,7 +15,7 @@
  */
 
 import https from 'node:https';
-import { URL } from 'node:url';
+import { URL, URLSearchParams } from 'node:url';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -120,7 +120,7 @@ interface StripeResponse {
 function stripeRequest(
   method: string,
   path: string,
-  payload?: unknown
+  payload?: Record<string, string | number | boolean>
 ): Promise<StripeResponse> {
   const key = requireEnv('STRIPE_SECRET_KEY');
   if (!key.startsWith('sk_test_')) {
@@ -128,9 +128,15 @@ function stripeRequest(
       'STRIPE_SECRET_KEY must be a Stripe test-mode secret key (sk_test_...)'
     );
   }
-  const url = new URL(path, 'https://api.stripe.com/v1/');
+  // URL treats a leading slash as an absolute host path. Normalize it away so
+  // every request remains under Stripe's versioned /v1 API prefix.
+  const url = new URL(path.replace(/^\/+/, ''), 'https://api.stripe.com/v1/');
   return new Promise((resolve, reject) => {
-    const body = payload ? JSON.stringify(payload) : '';
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(payload ?? {})) {
+      params.set(key, String(value));
+    }
+    const body = params.toString();
     const options: https.RequestOptions = {
       hostname: url.hostname,
       port: 443,
@@ -182,10 +188,14 @@ async function createStripePaymentIntent(
     amount: 2000, // $20.00 USD
     currency: 'usd',
     customer: customerId,
+    payment_method: 'pm_card_visa',
     description: 'FPS-061 smoke test payment intent',
     confirm: true,
   });
   if (!res.id) throw new Error('Stripe payment intent creation returned no id');
+  if (res.status !== 'succeeded') {
+    throw new Error(`Stripe payment intent did not succeed (status=${res.status})`);
+  }
   console.log(`  Created Stripe payment intent: ${res.id} (status=${res.status})`);
   return res.id as string;
 }
@@ -194,10 +204,18 @@ async function createStripeRefund(
   paymentIntentId: string
 ): Promise<string> {
   // Refunds are created against charges; find the charge from the PI.
-  const piRes = await stripeRequest('GET', `/payment_intents/${paymentIntentId}`);
+  const piRes = await stripeRequest(
+    'GET',
+    `/payment_intents/${encodeURIComponent(paymentIntentId)}?expand[]=latest_charge`,
+  );
+  const latestCharge = piRes.latest_charge;
   const chargeId =
-    (piRes as { charges?: { data?: Array<{ id?: string }> } }).charges
-      ?.data?.[0]?.id;
+    typeof latestCharge === 'string'
+      ? latestCharge
+      : typeof latestCharge === 'object' && latestCharge !== null
+        ? (latestCharge as { id?: string }).id
+        : (piRes as { charges?: { data?: Array<{ id?: string }> } }).charges
+            ?.data?.[0]?.id;
   if (!chargeId) throw new Error('No charge found for payment intent');
 
   const res = await stripeRequest('POST', '/refunds', {
