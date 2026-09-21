@@ -566,6 +566,9 @@ _INFRA_ROLE_ARNS = {
     "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role",
     "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role",
 }
+_AMPLIFY_DOMAIN_ROLE_ARN = (
+    "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role"
+)
 _LAMBDA_FN_ARNS = {
     "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
     "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
@@ -619,8 +622,17 @@ def main() -> int:
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
             passed_to = (statement.get("conditions") or {}).get("iam:PassedToService")
-            if passed_to not in (["ecs-tasks.amazonaws.com"], ["vpc-flow-logs.amazonaws.com"], ["lambda.amazonaws.com"], ["monitoring.rds.amazonaws.com"]):
-                fail("iam:PassRole must be limited to the approved ECS, VPC flow-logs, Lambda, or RDS monitoring service principals")
+            if passed_to not in (
+                ["ecs-tasks.amazonaws.com"],
+                ["vpc-flow-logs.amazonaws.com"],
+                ["lambda.amazonaws.com"],
+                ["monitoring.rds.amazonaws.com"],
+                ["amplify.amazonaws.com"],
+            ):
+                fail(
+                    "iam:PassRole must be limited to the approved ECS, VPC flow-logs, "
+                    "Lambda, RDS monitoring, or Amplify service principals"
+                )
         if "kms:ScheduleKeyDeletion" in statement_actions:
             if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:ScheduleKeyDeletion must use an enforceable staging KMS tag condition")
@@ -973,6 +985,7 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role",
             }
             if {s.get("resource") for s in matching} != expected_scopes:
                 fail("iam:PassRole has an unexpected resource scope")
@@ -987,6 +1000,7 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda": ["lambda.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation": ["lambda.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": ["monitoring.rds.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": ["amplify.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
         elif action == "iam:CreateServiceLinkedRole":
@@ -1010,7 +1024,9 @@ def main() -> int:
                 r = s.get("resource")
                 if isinstance(r, list):
                     list_resources.update(r)
-            if single_resources != {slr_arn} or list_resources != (_LAMBDA_ROLE_ARNS | _INFRA_ROLE_ARNS):
+            if single_resources != {slr_arn} or list_resources != (
+                _LAMBDA_ROLE_ARNS | _INFRA_ROLE_ARNS | {_AMPLIFY_DOMAIN_ROLE_ARN}
+            ):
                 fail("iam:GetRole has an unexpected resource scope")
         elif action == "lambda:TagResource":
             if len(matching) != 1 or set(matching[0].get("resource") or []) != _LAMBDA_FN_ARNS:
