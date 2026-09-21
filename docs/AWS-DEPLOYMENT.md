@@ -41,7 +41,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:8ec4732e36ddb39d2d02ddaddcf90a6da076703f15378f382c99082b9309bd5f"
+  ".github/workflows/amplify-status-production.yml": "sha256:27f4406eba37e22b5b31b34e2b7d26cad02b5e8a765ee17fae77e74dc71019a1"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
@@ -497,7 +497,12 @@ workflow binds the existing public status app to this repository, pins its
 `main` branch to `PRODUCTION`, deploys the exact main SHA, and verifies the
 production runtime links and the AVAILABLE verified `status` subdomain on
 `olympuslabsml.com`; its AWS caller is required to be
-`AetherStagingDeploy`.
+`AetherStagingDeploy`. Because this app was historically created by a manual
+static deployment, the workflow has a guarded one-time migration step: when
+the exact `aether-status` app is still unconnected to a repository, it removes
+only that app's legacy branch metadata before binding the repository and
+creating or updating production `main`. Once the app is repository-backed, the
+workflow never deletes branches and simply updates the existing branch.
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the
 generated staging Amplify app and branch ARN families, and scopes custom-domain
