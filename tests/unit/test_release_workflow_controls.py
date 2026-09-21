@@ -311,6 +311,7 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "--repository \"$AMPLIFY_REPOSITORY\"" in workflow
     assert "Assess status app state before repository binding" in workflow
     assert "bootstrap_required=true" in workflow
+    assert "repository-backed but its canonical domain mapping is not restored yet" in workflow
     assert "Complete one-time status app bootstrap" in workflow
     assert "aws amplify list-domain-associations" in workflow
     assert 'domain_names_json="$(aws amplify list-domain-associations' in workflow

@@ -187,6 +187,11 @@ jobs:
           test -z "$unexpected_branches" || {
             echo "::error::repository-backed aether-status has unexpected manual branches: ${unexpected_branches}"; exit 1;
           }
+          if [ "$domain_has_mappings" = false ]; then
+            echo 'The status app is repository-backed but its canonical domain mapping is not restored yet; this run will stop before release.'
+            printf 'bootstrap_required=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           printf 'bootstrap_required=false\n' >> "$GITHUB_OUTPUT"
           echo 'Status app is repository-backed with only the canonical main branch; CI will verify its domain mapping without mutating it.'
 
