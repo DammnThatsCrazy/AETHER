@@ -329,6 +329,10 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "appRoot: frontend/status" in workflow
     assert "npm run build --workspace=frontend/status" in workflow
     assert "VITE_STATUS_API_URL=https://api.olympuslabsml.com/health" in workflow
+    assert "aws amplify list-jobs" in workflow
+    assert "Reusing active Amplify status deployment job" in workflow
+    assert "already have pending or running jobs" in workflow
+    assert "commitId == $expected" in workflow
     assert "VITE_STATUS_DOCS_URL=https://docs.olympuslabsml.com" in workflow
     assert "VITE_STATUS_AETHER_MARKETING_URL=https://aether.olympuslabsml.com" in workflow
     assert "--stage PRODUCTION" in workflow

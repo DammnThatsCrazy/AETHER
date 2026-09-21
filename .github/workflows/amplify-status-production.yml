@@ -280,14 +280,61 @@ jobs:
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
         run: |
           set -euo pipefail
-          job_id="$(aws amplify start-job \
-            --app-id "$APP_ID" \
-            --branch-name main \
-            --job-type RELEASE \
-            --commit-id "$EXPECTED_COMMIT_SHA" \
-            --query 'jobSummary.jobId' --output text)"
+          # Repository-bound Amplify apps can auto-start a release for the push
+          # before this workflow reaches the deploy job. Reusing the exact
+          # commit's active job avoids Amplify's one-job-per-branch race while
+          # preserving exact-commit provenance. If another commit is active,
+          # wait for that job to clear before starting this reviewed commit.
+          active_statuses='["PENDING", "QUEUED", "PROVISIONING", "RUNNING"]'
+          job_id=""
+          deadline=$((SECONDS + 2400))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            jobs_json="$(aws amplify list-jobs \
+              --app-id "$APP_ID" \
+              --branch-name main \
+              --max-results 50 \
+              --output json)"
+            job_id="$(jq -r --arg expected "$EXPECTED_COMMIT_SHA" --argjson active "$active_statuses" \
+              '[.jobSummaries[] | select(.commitId == $expected and (.status as $status | $active | index($status) != null))] \
+              | sort_by((.jobId | tonumber)) | last | .jobId // empty' <<<"$jobs_json")"
+            if [ -n "$job_id" ]; then
+              echo "Reusing active Amplify status deployment job ${job_id} for ${EXPECTED_COMMIT_SHA}."
+              break
+            fi
+
+            active_count="$(jq --argjson active "$active_statuses" \
+              '[.jobSummaries[] | select(.status as $status | $active | index($status) != null)] | length' <<<"$jobs_json")"
+            if [ "$active_count" -gt 0 ]; then
+              echo "Another Amplify status deployment is active; waiting for the branch to become available."
+              sleep 15
+              continue
+            fi
+
+            start_output="$(mktemp)"
+            if aws amplify start-job \
+              --app-id "$APP_ID" \
+              --branch-name main \
+              --job-type RELEASE \
+              --commit-id "$EXPECTED_COMMIT_SHA" \
+              --query 'jobSummary.jobId' --output text >"$start_output" 2>&1; then
+              job_id="$(tr -d '[:space:]' <"$start_output")"
+              rm -f "$start_output"
+              break
+            else
+              start_status=$?
+              if grep -Fq 'already have pending or running jobs' "$start_output"; then
+                echo 'Amplify reported a concurrent branch job after the availability check; rechecking for the exact commit.'
+                rm -f "$start_output"
+                sleep 5
+                continue
+              fi
+              cat "$start_output" >&2
+              rm -f "$start_output"
+              exit "$start_status"
+            fi
+          done
           test -n "$job_id" && test "$job_id" != None || {
-            echo '::error::Amplify did not return a status deployment job ID'; exit 1;
+            echo '::error::Amplify did not provide an active or newly-created status deployment job ID'; exit 1;
           }
           printf 'job_id=%s\n' "$job_id" >> "$GITHUB_OUTPUT"
 

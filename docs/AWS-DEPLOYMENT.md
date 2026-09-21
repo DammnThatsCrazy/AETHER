@@ -41,7 +41,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:426d990822ec754ec5483283198814eaa6d0405f3eafef38e113d9592da2c6ce"
+  ".github/workflows/amplify-status-production.yml": "sha256:31e5e4f91a0b404e0d239db3127247990fcef706791ae9c46e812f7e4a9623cd"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
@@ -509,6 +509,11 @@ branches or call `UpdateDomainAssociation`; they verify the AVAILABLE
 association and canonical `main` mapping before release. Amplify performs a
 dependent `iam:PassRole` authorization for domain mutations, so the status
 workflow intentionally does not make that API call from its OIDC deploy role.
+Because a repository-bound app can auto-start the branch build for a pushed
+commit, the workflow first reuses an active job for the exact reviewed SHA,
+waits for any unrelated active branch job to clear, and only then starts a
+new release when needed. This prevents Amplify's one-job-per-branch race
+without weakening exact-commit provenance.
 The dedicated empty `AETHER-staging-amplify-domain-role` remains constrained
 to Amplify-only trust for the staging infrastructure contract, has no
 permissions or Route 53 access, and Squarespace remains authoritative.
