@@ -45,6 +45,11 @@ SECRET_ENV_TO_CANONICAL_NAME = {
 SECRET_ARN_RE = re.compile(
     r"^arn:aws:secretsmanager:(?P<region>[^:]+):(?P<account>\d{12}):secret:(?P<resource>[^:]+)(?::.*)?$"
 )
+# Secrets Manager app ARNs use a six-character alphanumeric suffix when AWS
+# disambiguates a generated resource from its canonical name. Keep that
+# exception exact so a sibling name such as jwt-secret-previous-AbCd12 cannot
+# pass the jwt-secret mount check merely because it shares a text prefix.
+SECRET_GENERATED_SUFFIX_RE = re.compile(r"^[A-Za-z0-9]{6}$")
 DATABASE_SECRET_RESOURCE_PREFIX = "rds!cluster-"
 
 SERVICES = {
@@ -179,10 +184,11 @@ def _secret_mount_errors(
 ) -> list[str]:
     """Validate the complete ARN identity for one ECS secret mount.
 
-    Secrets Manager app ARNs include a generated suffix after the canonical
-    name. The suffix is accepted, but the environment variable must still map
-    to its own reviewed name; a valid-looking ARN for a sibling secret is not
-    sufficient. Aurora's managed master secret is the one deliberate
+    Secrets Manager app ARNs may include an exact six-character generated
+    suffix after the canonical name. That suffix is accepted, but the
+    environment variable must still map to its own reviewed name; a
+    valid-looking ARN for a sibling secret is not sufficient. Aurora's managed
+    master secret is the one deliberate
     exception: Terraform exposes it as DATABASE_URL_SECRET and AWS names it
     with the rds!cluster- resource prefix rather than aether/.
     """
@@ -213,10 +219,11 @@ def _secret_mount_errors(
     if canonical_name is None:
         return [f"{service}: secret mount {env_name} is not in the reviewed ECS secret mapping"]
     expected_resource = f"aether/{canonical_name}"
-    if resource != expected_resource and not resource.startswith(f"{expected_resource}-"):
+    generated_suffix = resource.removeprefix(f"{expected_resource}-")
+    if resource != expected_resource and not SECRET_GENERATED_SUFFIX_RE.fullmatch(generated_suffix):
         errors.append(
             f"{service}: secret mount {env_name} must reference {expected_resource} "
-            "(with an optional Secrets Manager suffix)"
+            "(with an optional six-character Secrets Manager suffix)"
         )
     return errors
 

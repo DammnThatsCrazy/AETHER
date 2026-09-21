@@ -361,28 +361,38 @@ def test_sleep_paths_do_not_depend_on_application_secret_values():
     promote = _workflow_yaml("terraform-promote.yml")
     promote_text = _workflow("terraform-promote.yml")
     preflight = promote["jobs"]["staging-secret-payload-preflight"]
+    apply_if = promote["jobs"]["apply"]["if"]
     assert preflight["if"] == "inputs.profile == 'staging' && inputs.secret_preflight_required"
     assert "inputs.staging_state == 'asleep'" in promote_text
     assert "steps.reviewed.outputs.staging_state != 'asleep'" in promote_text
+    assert "inputs.secret_preflight_required == false" in apply_if
+    assert "inputs.staging_state == 'asleep'" not in apply_if
 
     lifecycle_text = _workflow("staging-lifecycle.yml")
     assert "-f staging_state=asleep" in lifecycle_text
     assert "no verified sleep plan_run_id" in lifecycle_text
 
 
-def test_pilot_sleep_paths_skip_secret_payload_preflight_but_keep_authority():
+def test_pilot_sleep_paths_skip_non_cleanup_preflights_but_keep_authority():
     document = _workflow_yaml("pilot-staging.yml")
     text = _workflow("pilot-staging.yml")
+    credential_job = document["jobs"]["credential-preflight"]
     secret_job = document["jobs"]["secret-payload-preflight"]
+    amplify_job = document["jobs"]["amplify-preflight"]
+    assert "inputs.action != 'plan-sleep'" in credential_job["if"]
+    assert "inputs.action != 'apply-sleep'" in credential_job["if"]
     assert "inputs.action != 'plan-sleep'" in secret_job["if"]
     assert "inputs.action != 'apply-sleep'" in secret_job["if"]
     assert "secret-payload-preflight.result == 'skipped'" in text
+    assert "inputs.action != 'plan-sleep'" in amplify_job["if"]
+    assert "inputs.action != 'apply-sleep'" in amplify_job["if"]
+    dispatch_if = document["jobs"]["dispatch-authority"]["if"]
     for job_name in ("amplify-preflight", "dispatch-authority"):
         job = document["jobs"][job_name]
         assert job["if"].startswith("always()")
         assert "secret-payload-preflight" in job["needs"]
-        assert "inputs.action == 'plan-sleep'" in job["if"]
-        assert "inputs.action == 'apply-sleep'" in job["if"]
+    assert "credential-preflight.result == 'skipped'" in dispatch_if
+    assert "amplify-preflight.result == 'skipped'" in dispatch_if
 
 
 def test_staging_reconciliation_discovers_all_managed_price_resources():

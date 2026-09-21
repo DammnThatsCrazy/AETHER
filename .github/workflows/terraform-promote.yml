@@ -685,11 +685,14 @@ jobs:
 
   apply:
     needs: [staging-secret-payload-preflight]
+    # Do not authorize an apply from the requested staging_state input. The
+    # reviewed artifact is the authority for the plan shape; the only
+    # job-level preflight bypass is the explicit sleep-only flag, which is
+    # checked again against reviewed.staging-state below.
     if: >-
       always()
       && inputs.action == 'apply'
       && (inputs.profile != 'staging'
-          || inputs.staging_state == 'asleep'
           || inputs.secret_preflight_required == false
           || needs.staging-secret-payload-preflight.result == 'success')
     runs-on: ubuntu-latest

@@ -128,7 +128,10 @@ jobs:
   credential-preflight:
     name: Validate pilot credentials before dispatch
     needs: contract
-    if: needs.contract.result == 'success'
+    if: >-
+      needs.contract.result == 'success'
+      && inputs.action != 'plan-sleep'
+      && inputs.action != 'apply-sleep'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: staging-terraform
@@ -242,14 +245,10 @@ jobs:
     if: >-
       always()
       && needs.contract.result == 'success'
+      && inputs.action != 'plan-sleep'
+      && inputs.action != 'apply-sleep'
       && needs.credential-preflight.result == 'success'
-      && (
-        needs.secret-payload-preflight.result == 'success'
-        || (
-          (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
-          && needs.secret-payload-preflight.result == 'skipped'
-        )
-      )
+      && needs.secret-payload-preflight.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: staging-terraform
@@ -291,13 +290,25 @@ jobs:
     if: >-
       always()
       && needs.contract.result == 'success'
-      && needs.credential-preflight.result == 'success'
-      && needs.amplify-preflight.result == 'success'
+      && (
+        needs.credential-preflight.result == 'success'
+        || (
+          (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
+          && needs.credential-preflight.result == 'skipped'
+        )
+      )
       && (
         needs.secret-payload-preflight.result == 'success'
         || (
           (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
           && needs.secret-payload-preflight.result == 'skipped'
+        )
+      )
+      && (
+        needs.amplify-preflight.result == 'success'
+        || (
+          (inputs.action == 'plan-sleep' || inputs.action == 'apply-sleep')
+          && needs.amplify-preflight.result == 'skipped'
         )
       )
     runs-on: ubuntu-latest

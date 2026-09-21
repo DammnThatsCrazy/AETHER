@@ -608,6 +608,45 @@ def test_effective_policy_checker_constrains_required_action_grants() -> None:
         ],
         required,
     ) == []
+
+    pass_role_required = [
+        (
+            "iam:PassRole",
+            "arn:aws:iam::544471417928:role/AETHER-staging-ecs-task-role",
+            {"iam:PassedToService": ["ecs-tasks.amazonaws.com"]},
+        ),
+        (
+            "iam:PassRole",
+            "arn:aws:iam::544471417928:role/AETHER-staging-drift-lambda",
+            {"iam:PassedToService": ["lambda.amazonaws.com"]},
+        ),
+    ]
+    assert module._required_action_scope_errors(
+        [
+            {
+                "Effect": "Allow",
+                "Action": "iam:PassRole",
+                "Resource": "arn:aws:iam::544471417928:role/AETHER-staging-ecs-task-role",
+                "Condition": {
+                    "StringEquals": {"iam:PassedToService": "lambda.amazonaws.com"}
+                },
+            }
+        ],
+        pass_role_required,
+    )
+    assert module._required_action_scope_errors(
+        [
+            {
+                "Effect": "Allow",
+                "Action": "iam:PassRole",
+                "Resource": "arn:aws:iam::544471417928:role/AETHER-staging-ecs-task-role",
+                "Condition": {
+                    "StringEquals": {"iam:PassedToService": "ecs-tasks.amazonaws.com"}
+                },
+            }
+        ],
+        pass_role_required,
+    ) == []
     assert module._operation_is_covered(
         {
             "Effect": "Allow",

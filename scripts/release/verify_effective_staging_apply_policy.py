@@ -259,17 +259,18 @@ def _required_action_scope_errors(
             if "NotResource" in statement:
                 errors.add(f"{action} uses NotResource outside reviewed scope")
                 continue
+            # Resource and condition restrictions are one reviewed scope. Do
+            # not match a resource from one scope with conditions from another
+            # (for example, an ECS task role with a Lambda service condition).
             if not all(
-                any(_resource_pattern_is_within(resource, reviewed) for reviewed, _ in scopes)
+                any(
+                    _resource_pattern_is_within(resource, reviewed)
+                    and _condition_scope_is_within(statement.get("Condition"), conditions)
+                    for reviewed, conditions in scopes
+                )
                 for resource in resources
             ):
-                errors.add(f"{action} grants a resource broader than its reviewed scope")
-                continue
-            if not any(
-                _condition_scope_is_within(statement.get("Condition"), conditions)
-                for _, conditions in scopes
-            ):
-                errors.add(f"{action} grants conditions broader than its reviewed scope")
+                errors.add(f"{action} grants a resource/condition pair broader than its reviewed scope")
     return sorted(errors)
 
 

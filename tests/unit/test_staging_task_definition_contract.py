@@ -126,6 +126,51 @@ def test_pilot_rejects_a_swapped_stripe_price_mount():
     )
 
 
+def test_pilot_accepts_exact_six_character_generated_secret_suffix():
+    original = _client()
+
+    def generated_suffix(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            container = payload["taskDefinition"]["containerDefinitions"][0]
+            for mount in container["secrets"]:
+                if mount["name"] == "STRIPE_PRICE_ALPHA":
+                    mount["valueFrom"] = (
+                        "arn:aws:secretsmanager:us-east-1:111122223333:secret:"
+                        "aether/stripe-price-alpha-AbCd12"
+                    )
+        return payload
+
+    assert checker.contract_errors(
+        lane="pilot",
+        client=generated_suffix,
+        expected_account_id="111122223333",
+    ) == []
+
+
+def test_pilot_rejects_a_sibling_secret_with_a_shared_prefix():
+    original = _client()
+
+    def sibling_secret(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            container = payload["taskDefinition"]["containerDefinitions"][0]
+            for mount in container["secrets"]:
+                if mount["name"] == "JWT_SECRET":
+                    mount["valueFrom"] = (
+                        "arn:aws:secretsmanager:us-east-1:111122223333:secret:"
+                        "aether/jwt-secret-previous-AbCd12"
+                    )
+        return payload
+
+    errors = checker.contract_errors(
+        lane="pilot",
+        client=sibling_secret,
+        expected_account_id="111122223333",
+    )
+    assert any("JWT_SECRET" in error and "aether/jwt-secret" in error for error in errors)
+
+
 def test_pilot_rejects_secret_mounts_from_wrong_account_or_region():
     original = _client()
 

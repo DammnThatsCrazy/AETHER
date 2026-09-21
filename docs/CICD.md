@@ -23,7 +23,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:622189f9fff76c6fb758645db4c4b9b97e860ac9e23a640c9870234758be45bc"
+  ".github/workflows/": "sha256:defbbc3847bcf4c7d65a2917e46cc50a7ed265d397748c3ea99ee27cd079d2f0"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -34,7 +34,7 @@ source_hashes:
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
-  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:191b549ac243bacbbe9587bc4c2458e9fd9df2071837ea420807b941a9362663"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:f4676aa2112dfd97b8edcdb0f93d3dd95dc16b0407e7518656f5edca363e9192"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -499,6 +499,14 @@ promotion path.
 `staging_state` (`awake` | `asleep`) is a **plan-time** input, recorded next to
 the plan so a reviewer sees which shape was approved; an apply cannot reshape
 the stored plan.
+
+The pilot wrapper treats `plan-sleep` and `apply-sleep` as cleanup actions. It
+keeps the contract job and canonical authority dispatch, but skips credential,
+secret-payload and Amplify readiness checks that require application values or
+current app artifacts. A direct apply never trusts its requested
+`staging_state` input as a preflight bypass: only the explicit
+`secret_preflight_required=false` sleep flag can bypass that gate, and the
+reviewed plan artifact must independently record `staging_state=asleep`.
 
 The staging apply handoff has explicit preflight contracts. The staging
 workflow validates its reviewed IAM manifest and ensures the ECS service-linked

@@ -40,7 +40,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:4ca6bc9d2ea9e2f79496a7bcd9ad0f06a78bf1fdddc6c274bc73d58dd573dd7a"
   ".github/workflows/staging-state-reconcile.yml": "sha256:7ba3e90901a412665672efee443f21f3dacb95044e4633f01c35c86fc77cdc18"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
-  ".github/workflows/terraform-promote.yml": "sha256:4e6ce2c97d6a9d32da0d42fd5c57912be0bfc1ccdbff50294cd6979f95d80477"
+  ".github/workflows/terraform-promote.yml": "sha256:a0f6fc6d330226e1f8631e871ecbd1ebfff22b0a07a26a34cb1aa396a943c9ef"
   "config/staging_apply_iam_policy.yaml": "sha256:d38ec524f261e3e749869437484a82995253ed591445362a9e8c445bcb967ced"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
   "config/staging_plan_iam_policy.yaml": "sha256:ae444db9fb3ce03c0a230cfe1062610aac5e31dc39cf00fa51675b7cb6d53db9"
@@ -57,8 +57,8 @@ source_hashes:
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:68d70ad0a009244251eb3caec93186be55415685600c3f590270ffb05e0680ea"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:c8141f446dec7c3b8b7ec8a5b1cf48b10ae2c6140524257eecc3aff2554a78c7"
-  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:191b549ac243bacbbe9587bc4c2458e9fd9df2071837ea420807b941a9362663"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:c741b3fe45139c8493818dd2184c5ea530a44225eaa38a8ad435576d5273508e"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:f4676aa2112dfd97b8edcdb0f93d3dd95dc16b0407e7518656f5edca363e9192"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
 ---
@@ -713,6 +713,10 @@ waits for) the ECS service-linked role before capacity-provider operations and
 verifies the Auth0 management token has every scope required by the reviewed
 Auth0 resources. These checks fail closed; a missing external-provider scope
 or service prerequisite is a blocked apply, not a partial deployment.
+For sleep cleanup applies, the wrapper may skip value-dependent preflights, but
+the apply job accepts only the explicit `secret_preflight_required=false`
+bypass after its downloaded reviewed artifact proves `staging_state=asleep`;
+the dispatch's requested state is not trusted for that decision.
 
 Terraform backend access is a separate reviewed contract in
 `config/terraform_state_access_policy.yaml`. The confirmation-gated state

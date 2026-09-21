@@ -31,11 +31,11 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:8ec4732e36ddb39d2d02ddaddcf90a6da076703f15378f382c99082b9309bd5f"
-  ".github/workflows/pilot-staging.yml": "sha256:7cee7b824dfcacb0a1a1159289ab569562950366dfb239de4d22fb3f2db72c70"
+  ".github/workflows/pilot-staging.yml": "sha256:100c4c73873dc64ae13f3987dfce4b26a771a6e031992f5a6a9d231bd4d559d2"
   ".github/workflows/staging-lifecycle.yml": "sha256:4ca6bc9d2ea9e2f79496a7bcd9ad0f06a78bf1fdddc6c274bc73d58dd573dd7a"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
-  ".github/workflows/terraform-promote.yml": "sha256:4e6ce2c97d6a9d32da0d42fd5c57912be0bfc1ccdbff50294cd6979f95d80477"
+  ".github/workflows/terraform-promote.yml": "sha256:a0f6fc6d330226e1f8631e871ecbd1ebfff22b0a07a26a34cb1aa396a943c9ef"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
@@ -48,7 +48,7 @@ source_hashes:
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:c8141f446dec7c3b8b7ec8a5b1cf48b10ae2c6140524257eecc3aff2554a78c7"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:c741b3fe45139c8493818dd2184c5ea530a44225eaa38a8ad435576d5273508e"
 ---
 
 # Staging Wake / Sleep
@@ -197,6 +197,14 @@ Epsilon, Omicron, and Omega remain contract-tier operator mappings and are not
 part of the self-service pilot critical path. The secure bootstrap rejects
 malformed or placeholder values before writing them; the workflow preflight
 reads metadata only and never prints or invents a price ID.
+
+The pilot wrapper treats `plan-sleep` and `apply-sleep` as cleanup actions:
+after the contract job, it skips credential, secret-payload and Amplify
+readiness checks that require application values or current app artifacts, then
+still dispatches the canonical lifecycle authority. A direct apply cannot use
+the requested `staging_state` input to bypass a preflight; only the explicit
+sleep-only `secret_preflight_required=false` flag is accepted, and the apply
+must prove that the reviewed plan artifact itself records `staging_state=asleep`.
 
 ## Wake
 
