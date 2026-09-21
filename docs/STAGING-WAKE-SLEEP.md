@@ -30,7 +30,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:8ec4732e36ddb39d2d02ddaddcf90a6da076703f15378f382c99082b9309bd5f"
+  ".github/workflows/amplify-status-production.yml": "sha256:27f4406eba37e22b5b31b34e2b7d26cad02b5e8a765ee17fae77e74dc71019a1"
   ".github/workflows/pilot-staging.yml": "sha256:6f01ef3271178d33d925e108f7a0d71f2ad16240f345accbc866bc7f9533a47b"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
@@ -351,6 +351,15 @@ you, now reconcile" or "I could not clean up, intervene manually".
 `action=full-rehearsal` runs wake → rehearse → sleep. The `rehearse` job is the
 only job in the workflow behind a GitHub environment (`staging`); the apply
 approvals live in `terraform-promote.yml`.
+
+The public production status app is established separately from the staging
+runtime wake. On a merged `main` push, `amplify-status-production.yml` waits
+for the exact main integration authority, then binds `aether-status` to the
+repository, recreates its production `main` branch when migrating the legacy
+manual deployment, deploys the exact merge SHA, and verifies the public
+`status.olympuslabsml.com` association. A repository-backed status app is
+updated in place on later runs; it is never treated as a staging ECS or
+Terraform mutation.
 
 Steps, in order, with what each proves:
 
