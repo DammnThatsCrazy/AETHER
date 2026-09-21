@@ -102,6 +102,16 @@ def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def _repository_identity(value: Any) -> str:
+    """Compare GitHub repository URLs without treating harmless API casing as drift."""
+    if not isinstance(value, str):
+        return ""
+    normalized = value.strip().rstrip("/")
+    if normalized.casefold().endswith(".git"):
+        normalized = normalized[:-4]
+    return normalized.casefold()
+
+
 def _public_cname(hostname: str) -> str:
     """Return the public CNAME target without reading any application data."""
     result = subprocess.run(
@@ -195,7 +205,7 @@ def _check_app(
     app_id = app.get("appId")
     if not isinstance(app_id, str) or not app_id:
         return [f"Amplify app {name} has no appId"]
-    if app.get("repository") != REPOSITORY:
+    if _repository_identity(app.get("repository")) != _repository_identity(REPOSITORY):
         errors.append(f"Amplify app {name} is not connected to the reviewed repository")
     if app.get("platform") != "WEB":
         errors.append(f"Amplify app {name} is not a WEB app")

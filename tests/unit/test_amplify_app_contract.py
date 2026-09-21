@@ -102,6 +102,11 @@ def test_staging_and_production_status_contracts_accept_exact_metadata():
     assert checker.contract_errors(mode="production-status", expected_commit=COMMIT, client=client) == []
 
 
+def test_repository_contract_accepts_amplify_github_url_casing_and_git_suffix():
+    client = _client(production_repository="https://github.com/dammnthatscrazy/aether.git/")
+    assert checker.contract_errors(mode="production-status", expected_commit=COMMIT, client=client) == []
+
+
 def test_production_status_rejects_manual_or_stale_provenance():
     errors = checker.contract_errors(
         mode="production-status",
