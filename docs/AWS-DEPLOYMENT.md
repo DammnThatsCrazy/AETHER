@@ -41,7 +41,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:27f4406eba37e22b5b31b34e2b7d26cad02b5e8a765ee17fae77e74dc71019a1"
+  ".github/workflows/amplify-status-production.yml": "sha256:13f0f45b7ec99218f0a003b16ca477fe317c411018ec30b1955a9b9e585d649b"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
@@ -501,8 +501,13 @@ production runtime links and the AVAILABLE verified `status` subdomain on
 static deployment, the workflow has a guarded one-time migration step: when
 the exact `aether-status` app is still unconnected to a repository, it removes
 only that app's legacy branch metadata before binding the repository and
-creating or updating production `main`. Once the app is repository-backed, the
-workflow never deletes branches and simply updates the existing branch.
+creating or updating production `main`. If a legacy branch is still referenced
+by a live custom-domain association, the workflow first moves only that
+association to a workflow-owned temporary branch, restores it to canonical
+`main` after binding, and removes the temporary branch. Retries also repair an
+interrupted migration without deleting normal repository-backed branches. Once
+the app is repository-backed, the workflow never deletes normal branches and
+simply updates the existing branch.
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the
 generated staging Amplify app and branch ARN families, and scopes custom-domain

@@ -134,10 +134,12 @@ jobs:
           printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Migrate legacy manual status branches before repository binding
+        id: migrate
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
         run: |
           set -euo pipefail
+          migration_branch='status-repository-migration'
           app_json="$(aws amplify get-app --app-id "$APP_ID")"
           app_name="$(jq -r '.app.name // empty' <<<"$app_json")"
           repository="$(jq -r '.app.repository // empty' <<<"$app_json")"
@@ -145,20 +147,116 @@ jobs:
             echo "::error::refusing to migrate unexpected Amplify app ${app_name}"; exit 1;
           }
 
-          # Amplify will not attach a manually deployed app to a repository
-          # while any legacy branch exists. This is a one-time, metadata-only
-          # migration guarded by the exact unconnected public status app. Once
-          # the app is repository-backed, never delete a branch here.
+          legacy_branches_json="$(aws amplify list-branches --app-id "$APP_ID" --max-results 50 \
+            --query 'branches[].branchName' --output json)"
+          mapfile -t legacy_branches < <(jq -r '.[]' <<<"$legacy_branches_json")
+          domain_state="$(mktemp)"
+          trap 'rm -f "$domain_state" "$domain_state.next"' EXIT
+          printf '[]\n' > "$domain_state"
+          wait_for_domain_association() {
+            local domain_name="$1"
+            local deadline=$((SECONDS + 180))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              local status
+              status="$(aws amplify get-domain-association \
+                --app-id "$APP_ID" --domain-name "$domain_name" \
+                --query 'domainAssociation.domainStatus' --output text)"
+              case "$status" in
+                AVAILABLE) return 0 ;;
+                FAILED|ERROR|CANCELLED)
+                  echo "::error::Amplify domain association ${domain_name} entered ${status}"; return 1 ;;
+                *) sleep 5 ;;
+              esac
+            done
+            echo "::error::Amplify domain association ${domain_name} did not become AVAILABLE"; return 1
+          }
+
+          # A manually deployed status branch may be the target of the live
+          # status subdomain. Amplify rejects DeleteBranch for that branch
+          # until the domain association no longer points at it. Record the
+          # canonical restoration and temporarily move only affected mappings
+          # to a workflow-owned branch. The compact state contains no secrets.
+          mapfile -t domain_names < <(
+            aws amplify list-domain-associations --app-id "$APP_ID" --max-results 50 \
+              --query 'domainAssociations[].domainName' --output text | tr '\t' '\n' | awk 'NF'
+          )
+          for domain_name in "${domain_names[@]}"; do
+            domain_json="$(aws amplify get-domain-association \
+              --app-id "$APP_ID" --domain-name "$domain_name")"
+            settings="$(jq -c '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(. != null))' <<<"$domain_json")"
+            if [ -n "$repository" ]; then
+              affected="$(jq -c --arg migration "$migration_branch" \
+                'map(select(.branchName == $migration))' <<<"$settings")"
+            else
+              affected="$(jq -c --argjson branches "$legacy_branches_json" \
+                'map(select(.branchName as $branch | ($branches | index($branch)) != null))' <<<"$settings")"
+            fi
+            if [ "$affected" = '[]' ]; then
+              continue
+            fi
+            migration_settings="$(jq -c --arg migration "$migration_branch" \
+              --argjson branches "$legacy_branches_json" \
+              'map(if (.branchName as $branch | ($branches | index($branch)) != null) then .branchName = $migration else . end)' \
+              <<<"$settings")"
+            restore_settings="$(jq -c --arg migration "$migration_branch" \
+              --argjson branches "$legacy_branches_json" \
+              'map(if .branchName == $migration or (.branchName as $branch | ($branches | index($branch)) != null) then .branchName = "main" else . end)' \
+              <<<"$settings")"
+            jq --arg domain_name "$domain_name" \
+              --argjson migration_settings "$migration_settings" \
+              --argjson restore_settings "$restore_settings" \
+              '. + [{domainName: $domain_name, migrationSettings: $migration_settings, restoreSettings: $restore_settings}]' \
+              "$domain_state" > "$domain_state.next"
+            mv "$domain_state.next" "$domain_state"
+          done
+
+          if [ "$(jq 'length' "$domain_state")" -eq 0 ]; then
+            printf 'domain_state_b64=\n' >> "$GITHUB_OUTPUT"
+          else
+            domain_state_b64="$(base64 "$domain_state" | tr -d '\n')"
+            printf 'domain_state_b64=%s\n' "$domain_state_b64" >> "$GITHUB_OUTPUT"
+          fi
+          if aws amplify get-branch --app-id "$APP_ID" --branch-name "$migration_branch" >/dev/null 2>&1; then
+            printf 'cleanup_migration_branch=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'cleanup_migration_branch=false\n' >> "$GITHUB_OUTPUT"
+          fi
+
+          # Once repository-backed, never delete a normal branch here. A
+          # retry may still need to restore a domain mapping left by an
+          # interrupted migration, which the next step handles after binding.
           if [ -n "$repository" ]; then
-            echo 'Status app is already repository-backed; no legacy branch migration is needed.'
+            echo 'Status app is already repository-backed; no legacy branch deletion is needed.'
             exit 0
           fi
 
-          mapfile -t legacy_branches < <(
-            aws amplify list-branches --app-id "$APP_ID" --max-results 50 \
-              --query 'branches[].branchName' --output text | tr '\t' '\n' | awk 'NF'
-          )
+          if [ "$(jq 'length' "$domain_state")" -gt 0 ]; then
+            if ! aws amplify get-branch --app-id "$APP_ID" --branch-name "$migration_branch" >/dev/null 2>&1; then
+              echo "Creating temporary Amplify branch ${migration_branch} to detach live status domains."
+              aws amplify create-branch \
+                --app-id "$APP_ID" \
+                --branch-name "$migration_branch" \
+                --stage PRODUCTION \
+                --no-enable-auto-build \
+                >/dev/null
+            fi
+            while IFS= read -r record; do
+              domain_name="$(jq -r '.domainName' <<<"$record")"
+              migration_settings="$(jq -c '.migrationSettings' <<<"$record")"
+              echo "Temporarily moving ${domain_name} status mappings to ${migration_branch}."
+              aws amplify update-domain-association \
+                --app-id "$APP_ID" \
+                --domain-name "$domain_name" \
+                --sub-domain-settings "$migration_settings" \
+                >/dev/null
+              wait_for_domain_association "$domain_name"
+            done < <(jq -c '.[]' "$domain_state")
+          fi
+
           for branch_name in "${legacy_branches[@]}"; do
+            if [ "$branch_name" = "$migration_branch" ]; then
+              continue
+            fi
             echo "Removing legacy manually deployed Amplify branch ${branch_name}."
             aws amplify delete-branch \
               --app-id "$APP_ID" \
@@ -216,6 +314,58 @@ jobs:
             aws amplify create-branch "${branch_args[@]}" >/dev/null
           fi
           echo 'Bound the existing status app to the reviewed repository, canonical status build, runtime links, and PRODUCTION main branch.'
+
+      - name: Restore status domain mappings and remove migration branch
+        if: steps.migrate.outputs.domain_state_b64 != '' || steps.migrate.outputs.cleanup_migration_branch == 'true'
+        env:
+          APP_ID: ${{ steps.inputs.outputs.app_id }}
+          DOMAIN_STATE_B64: ${{ steps.migrate.outputs.domain_state_b64 }}
+          CLEANUP_MIGRATION_BRANCH: ${{ steps.migrate.outputs.cleanup_migration_branch }}
+        run: |
+          set -euo pipefail
+          migration_branch='status-repository-migration'
+          domain_state="$(mktemp)"
+          trap 'rm -f "$domain_state"' EXIT
+          wait_for_domain_association() {
+            local domain_name="$1"
+            local deadline=$((SECONDS + 180))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              local status
+              status="$(aws amplify get-domain-association \
+                --app-id "$APP_ID" --domain-name "$domain_name" \
+                --query 'domainAssociation.domainStatus' --output text)"
+              case "$status" in
+                AVAILABLE) return 0 ;;
+                FAILED|ERROR|CANCELLED)
+                  echo "::error::Amplify domain association ${domain_name} entered ${status}"; return 1 ;;
+                *) sleep 5 ;;
+              esac
+            done
+            echo "::error::Amplify domain association ${domain_name} did not become AVAILABLE"; return 1
+          }
+          if [ -n "$DOMAIN_STATE_B64" ]; then
+            printf '%s' "$DOMAIN_STATE_B64" | base64 --decode > "$domain_state"
+            while IFS= read -r record; do
+              domain_name="$(jq -r '.domainName' <<<"$record")"
+              restore_settings="$(jq -c '.restoreSettings' <<<"$record")"
+              echo "Restoring ${domain_name} status mappings to the canonical main branch."
+              aws amplify update-domain-association \
+                --app-id "$APP_ID" \
+                --domain-name "$domain_name" \
+                --sub-domain-settings "$restore_settings" \
+                >/dev/null
+              wait_for_domain_association "$domain_name"
+            done < <(jq -c '.[]' "$domain_state")
+          fi
+          if [ "$CLEANUP_MIGRATION_BRANCH" = 'true' ] && \
+             aws amplify get-branch --app-id "$APP_ID" --branch-name "$migration_branch" >/dev/null 2>&1; then
+            echo "Removing temporary Amplify branch ${migration_branch}."
+            aws amplify delete-branch \
+              --app-id "$APP_ID" \
+              --branch-name "$migration_branch" \
+              >/dev/null
+          fi
+          echo 'Status domain mappings and temporary migration state are clean.'
 
       - name: Start the commit-pinned Amplify release
         id: job
