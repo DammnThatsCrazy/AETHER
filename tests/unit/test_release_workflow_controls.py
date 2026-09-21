@@ -309,6 +309,8 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "Migrate legacy manual status branches before repository binding" in workflow
     assert "aws amplify delete-branch" in workflow
     assert "aws amplify list-domain-associations" in workflow
+    assert 'domain_names_json="$(aws amplify list-domain-associations' in workflow
+    assert "--output json)" in workflow
     assert "aws amplify update-domain-association" in workflow
     assert "status-repository-migration" in workflow
     assert "Restore status domain mappings and remove migration branch" in workflow

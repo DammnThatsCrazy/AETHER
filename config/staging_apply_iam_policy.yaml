@@ -718,6 +718,7 @@ statements:
     actions:
       - amplify:CreateDomainAssociation
       - amplify:GetDomainAssociation
+      - amplify:ListDomainAssociations
       - amplify:UpdateDomainAssociation
       - amplify:DeleteDomainAssociation
     resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*
