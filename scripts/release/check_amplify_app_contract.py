@@ -9,8 +9,8 @@ otherwise easy to miss explicit:
   use ``main`` as a development branch, and have a successful job for the
   reviewed commit; and
 * the separate public status app must be connected to this repository, keep its
-  ``main`` branch in ``PRODUCTION`` stage, and have a successful job for the
-  same reviewed commit.
+  ``main`` branch in ``PRODUCTION`` stage, have a successful job for the same
+  reviewed commit, and expose a live custom-domain CNAME.
 """
 
 from __future__ import annotations
@@ -77,6 +77,7 @@ PRODUCTION_STATUS_ENVIRONMENT = {
 }
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
+DnsResolver = Callable[[str], str]
 
 
 def fail(message: str) -> NoReturn:
@@ -99,6 +100,23 @@ def aws_json(args: list[str], *, runner: Runner = subprocess.run) -> Mapping[str
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
+
+
+def _public_cname(hostname: str) -> str:
+    """Return the public CNAME target without reading any application data."""
+    result = subprocess.run(
+        ["dig", "+short", "CNAME", hostname],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ""
+    for line in result.stdout.splitlines():
+        value = line.strip().rstrip(".").lower()
+        if value:
+            return value
+    return ""
 
 
 def _apps_by_name(client: AwsCall) -> tuple[dict[str, Mapping[str, Any]], list[str]]:
@@ -168,6 +186,7 @@ def _check_app(
     check_job_provenance: bool = True,
     check_domain: bool = True,
     domain_name: str | None = None,
+    dns_resolver: DnsResolver = _public_cname,
     client: AwsCall,
 ) -> list[str]:
     errors: list[str] = []
@@ -234,9 +253,21 @@ def _check_app(
             and _mapping(item.get("subDomainSetting")).get("prefix") == subdomain_prefix
             and _mapping(item.get("subDomainSetting")).get("branchName") == "main"
         ] if isinstance(subdomains, list) else []
-        if not matching or matching[0].get("verified") is not True:
+        live_dns = False
+        if matching and matching[0].get("verified") is not True:
+            dns_record = matching[0].get("dnsRecord")
+            expected_target = (
+                str(dns_record).rsplit(" ", 1)[-1].rstrip(".").lower()
+                if isinstance(dns_record, str) and dns_record.strip()
+                else ""
+            )
+            live_dns = bool(
+                expected_target
+                and dns_resolver(f"{subdomain_prefix}.{requested_domain}") == expected_target
+            )
+        if not matching or (matching[0].get("verified") is not True and not live_dns):
             errors.append(
-                f"Amplify app {name} {domain_label} domain lacks an AVAILABLE {subdomain_prefix} subdomain"
+                f"Amplify app {name} {domain_label} domain lacks an AVAILABLE {subdomain_prefix} subdomain with a live DNS target"
             )
     return errors
 
@@ -246,6 +277,7 @@ def contract_errors(
     mode: str,
     expected_commit: str | None = None,
     check_runtime_environment: bool = False,
+    dns_resolver: DnsResolver = _public_cname,
     client: AwsCall,
 ) -> list[str]:
     errors: list[str] = []
@@ -277,6 +309,7 @@ def contract_errors(
                     check_job_provenance=not runtime_only,
                     check_domain=not runtime_only,
                     client=client,
+                    dns_resolver=dns_resolver,
                 )
             )
     elif mode == "production-status":
@@ -290,6 +323,7 @@ def contract_errors(
                 expected_branch_environment=PRODUCTION_STATUS_ENVIRONMENT,
                 domain_name=PRODUCTION_DOMAIN,
                 client=client,
+                dns_resolver=dns_resolver,
             )
         )
     else:

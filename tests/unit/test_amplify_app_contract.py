@@ -30,6 +30,8 @@ def _client(
     production_repository: str = checker.REPOSITORY,
     production_commit: str | None = COMMIT,
     domain_branch: str = "main",
+    domain_verified: bool = True,
+    domain_dns_record: str | None = None,
 ):
     apps = []
     for name, app_id in APP_IDS.items():
@@ -79,7 +81,12 @@ def _client(
                     "subDomains": [
                         {
                             "subDomainSetting": {"prefix": prefix, "branchName": domain_branch},
-                            "verified": True,
+                            "verified": domain_verified,
+                            **(
+                                {"dnsRecord": domain_dns_record}
+                                if domain_dns_record is not None
+                                else {}
+                            ),
                         }
                     ],
                 }
@@ -130,6 +137,19 @@ def test_production_status_requires_the_canonical_status_hostname_mapping():
         client=_client(domain_branch="preview"),
     )
     assert any("production domain lacks an AVAILABLE status subdomain" in error for error in errors)
+
+
+def test_production_status_accepts_live_dns_when_legacy_verified_bit_is_stale():
+    errors = checker.contract_errors(
+        mode="production-status",
+        expected_commit=COMMIT,
+        client=_client(
+            domain_verified=False,
+            domain_dns_record="status CNAME d1589n0luhr9u1.cloudfront.net",
+        ),
+        dns_resolver=lambda hostname: "d1589n0luhr9u1.cloudfront.net",
+    )
+    assert errors == []
 
 
 def test_staging_domain_requires_the_main_branch_mapping():
