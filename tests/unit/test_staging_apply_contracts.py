@@ -1046,6 +1046,9 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert amplify_domain["conditions"]["iam:PassedToService"] == [
         "amplify.amazonaws.com"
     ]
+    assert amplify_domain["condition_operators"] == {
+        "iam:PassedToService": "ForAnyValue:StringEquals"
+    }
     domain_role_read = next(
         s for s in statements if s["sid"] == "ReadStagingAmplifyDomainRole"
     )
