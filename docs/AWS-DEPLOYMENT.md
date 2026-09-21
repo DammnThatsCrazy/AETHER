@@ -47,7 +47,7 @@ source_hashes:
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:3a9c3ef5b991d6c592d51e0eb69dc29a28177fd42be95c72215ffc4e8e340e1a"
-  "config/staging_apply_iam_policy.yaml": "sha256:6ec3751054d671e460187b6953b1484a15feefde0e9dc8068ab9e4c51aee9a01"
+  "config/staging_apply_iam_policy.yaml": "sha256:f9c5b8d7d008a288017888a0579ec4fa528213bca7290a31905a010866aa1d0a"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
   "config/staging_plan_iam_policy.yaml": "sha256:f310130204a44c99dbb3e9b16d47471b4eb575a2fb974b5936bc1fe93a90796f"
   "config/staging_plan_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
@@ -513,7 +513,9 @@ that permission limited to the exact
 `AETHER-staging-amplify-domain-role`, whose trust is restricted to
 `amplify.amazonaws.com` and which has no Route 53 permissions because
 Squarespace remains authoritative and auto-subdomain creation is disabled.
-The workflow verifies that role before changing any domain mapping.
+The policy uses `ForAnyValue:StringEquals` for Amplify's multivalued
+`iam:PassedToService` context, and the workflow verifies that role before
+changing any domain mapping.
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the
 generated staging Amplify app and branch ARN families, and scopes custom-domain

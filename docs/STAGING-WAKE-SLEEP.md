@@ -359,8 +359,9 @@ repository, recreates its production `main` branch when migrating the legacy
 manual deployment, deploys the exact merge SHA, and verifies the public
 `status.olympuslabsml.com` association. Before changing a domain mapping, the
 workflow verifies and passes the dedicated empty
-`AETHER-staging-amplify-domain-role`; Squarespace remains authoritative and
-auto-subdomain creation is disabled. A repository-backed status app is
+`AETHER-staging-amplify-domain-role`; its pass-role grant uses the reviewed
+`ForAnyValue:StringEquals` `iam:PassedToService` restriction. Squarespace
+remains authoritative and auto-subdomain creation is disabled. A repository-backed status app is
 updated in place on later runs; it is never treated as a staging ECS or
 Terraform mutation.
 

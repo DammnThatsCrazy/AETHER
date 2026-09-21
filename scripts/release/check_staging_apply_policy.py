@@ -1003,6 +1003,20 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": ["amplify.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
+            expected_operators = {
+                s.get("resource"): (s.get("condition_operators") or {}).get("iam:PassedToService")
+                for s in matching
+            }
+            if expected_operators != {
+                "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role": None,
+                "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role": None,
+                "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role": None,
+                "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda": None,
+                "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation": None,
+                "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": None,
+                "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role": "ForAnyValue:StringEquals",
+            }:
+                fail("iam:PassRole condition operators do not match the reviewed service bindings")
         elif action == "iam:CreateServiceLinkedRole":
             expected_service_names = {
                 "ecs.amazonaws.com",
