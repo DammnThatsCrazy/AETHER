@@ -238,6 +238,40 @@ jobs:
             echo '::error::staging delivery must use AetherStagingDeploy'; exit 1;
           }
           echo 'Verified staging delivery credentials resolve to AetherStagingDeploy in the expected account.'
+      - name: Verify live ECR image permissions before build
+        if: github.event_name == 'push' || inputs.environment == 'staging'
+        env:
+          ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          repository_arn="arn:aws:ecr:${AWS_REGION}:${account_id}:repository/aether-backend"
+          simulate_allowed() {
+            local resource="$1"
+            shift
+            local result
+            result="$(aws iam simulate-principal-policy \
+              --policy-source-arn "$ROLE_ARN" \
+              --action-names "$@" \
+              --resource-arns "$resource" \
+              --output json)"
+            if ! jq -e 'all(.EvaluationResults[]; .EvalDecision == "allowed")' <<<"$result" >/dev/null; then
+              echo "::error::staging deploy role is missing one or more required ECR permissions for ${resource}"
+              jq -r '.EvaluationResults[] | [.EvalActionName, .EvalDecision] | @tsv' <<<"$result"
+              exit 1
+            fi
+          }
+          simulate_allowed '*' ecr:GetAuthorizationToken
+          simulate_allowed "$repository_arn" \
+            ecr:BatchCheckLayerAvailability \
+            ecr:BatchGetImage \
+            ecr:CompleteLayerUpload \
+            ecr:DescribeImages \
+            ecr:GetDownloadUrlForLayer \
+            ecr:InitiateLayerUpload \
+            ecr:PutImage \
+            ecr:UploadLayerPart
+          echo 'Verified live staging ECR authorization, image pull, and image publish permissions.'
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
       - name: Reuse existing immutable backend image when present

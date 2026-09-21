@@ -3,9 +3,11 @@ from pathlib import Path
 import yaml
 
 from scripts.release.check_staging_application_delivery_policy import (
+    DOCKER_PULL_ECR_ACTIONS,
     EXPECTED,
     main,
     render_policy_document,
+    workflow_actions,
 )
 
 
@@ -36,6 +38,12 @@ def test_delivery_manifest_scopes_runtime_tasks_and_static_assets() -> None:
     assert by_sid["PublishStagingBackendImage"]["resource"].endswith(
         ":repository/aether-backend"
     )
+    assert DOCKER_PULL_ECR_ACTIONS <= set(by_sid["PublishStagingBackendImage"]["actions"])
+
+
+def test_delivery_checker_inventories_docker_pull_ecr_operations() -> None:
+    workflow = ROOT / ".github/workflows/deploy.yml"
+    assert DOCKER_PULL_ECR_ACTIONS <= workflow_actions(workflow)
 
 
 def test_delivery_manifest_renders_to_an_aws_policy_document() -> None:
