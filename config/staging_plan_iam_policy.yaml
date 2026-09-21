@@ -101,6 +101,7 @@ statements:
   - sid: ReadStagingAmplifyDomains
     actions:
       - amplify:GetDomainAssociation
+      - amplify:ListDomainAssociations
     resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*
     scope: staging-amplify-domains
   - sid: ReadStagingAmplifyJobs

@@ -41,15 +41,15 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:968e70cd07571e1b7254634f551da7de562270776d99da773788fda3d1524699"
+  ".github/workflows/amplify-status-production.yml": "sha256:09bc5c70f390eccc27425610c12eb2b61abc36bce4c913789098b60dbaebc9ae"
   ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
   ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:3a9c3ef5b991d6c592d51e0eb69dc29a28177fd42be95c72215ffc4e8e340e1a"
-  "config/staging_apply_iam_policy.yaml": "sha256:08b716e9ede615874b9e76767f6429f7f862df6535d3a3fe39bd37795e5b2f8c"
+  "config/staging_apply_iam_policy.yaml": "sha256:d14f7804003bdb11a1343ab1a86e2a4f522a9e98b02e651b374216fc5b87807a"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
-  "config/staging_plan_iam_policy.yaml": "sha256:f1250de0704163b777dcbd345e7fa0f8e21e0caf4ef0bef761d123430795ae10"
+  "config/staging_plan_iam_policy.yaml": "sha256:f310130204a44c99dbb3e9b16d47471b4eb575a2fb974b5936bc1fe93a90796f"
   "config/staging_plan_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"

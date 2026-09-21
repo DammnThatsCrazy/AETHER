@@ -1085,6 +1085,7 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
         "amplify:TagResource",
         "amplify:CreateDomainAssociation",
         "amplify:GetDomainAssociation",
+        "amplify:ListDomainAssociations",
         "amplify:UpdateDomainAssociation",
         "amplify:DeleteDomainAssociation",
     ):
@@ -1106,6 +1107,7 @@ def test_staging_amplify_contract_is_scoped_to_apps_and_branches() -> None:
     assert branch_ops["resource"] == branches
     domain_ops = next(s for s in statements if s["sid"] == "ManageStagingAmplifyDomains")
     assert domain_ops["resource"] == domains
+    assert "amplify:ListDomainAssociations" in domain_ops["actions"]
     tags = next(s for s in statements if s["sid"] == "TagStagingAmplifyResources")
     assert tags["resource"] == [apps, branches]
 

@@ -92,6 +92,7 @@ REQUIRED_ACTIONS = {
     "amplify:GetJob",
     "amplify:CreateDomainAssociation",
     "amplify:GetDomainAssociation",
+    "amplify:ListDomainAssociations",
     "amplify:UpdateDomainAssociation",
     "amplify:DeleteDomainAssociation",
     "amplify:TagResource",
@@ -752,6 +753,7 @@ def main() -> int:
     expected_resources["amplify:GetJob"] = _AMPLIFY_JOBS
     for _amplify_domain in (
         "amplify:CreateDomainAssociation", "amplify:GetDomainAssociation",
+        "amplify:ListDomainAssociations",
         "amplify:UpdateDomainAssociation", "amplify:DeleteDomainAssociation",
     ):
         expected_resources[_amplify_domain] = _AMPLIFY_DOMAINS

@@ -176,10 +176,10 @@ jobs:
           # until the domain association no longer points at it. Record the
           # canonical restoration and temporarily move only affected mappings
           # to a workflow-owned branch. The compact state contains no secrets.
-          mapfile -t domain_names < <(
-            aws amplify list-domain-associations --app-id "$APP_ID" --max-results 50 \
-              --query 'domainAssociations[].domainName' --output text | tr '\t' '\n' | awk 'NF'
-          )
+          domain_names_json="$(aws amplify list-domain-associations \
+            --app-id "$APP_ID" --max-results 50 \
+            --query 'domainAssociations[].domainName' --output json)"
+          mapfile -t domain_names < <(jq -r '.[]' <<<"$domain_names_json")
           for domain_name in "${domain_names[@]}"; do
             domain_json="$(aws amplify get-domain-association \
               --app-id "$APP_ID" --domain-name "$domain_name")"
