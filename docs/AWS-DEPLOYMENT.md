@@ -45,7 +45,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:76f1276ca4b4de812f864f8c6884154592630847eddbcd4fc7fc90d897713729"
   ".github/workflows/staging-state-reconcile.yml": "sha256:dab1992f55fccca3a322cef100cae00d2215f3fcbf83b0dc656eef5523b2ad1e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
-  ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
+  ".github/workflows/terraform-promote.yml": "sha256:d9ed5913e51aaf87f530c0096797c0bfb25773d5e8bdc389c525e31fb82becb7"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:4a311f675ceb344018a5037f936da7b482d381f5a5628d0f03562ff4628ba802"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
