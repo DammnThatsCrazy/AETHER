@@ -153,6 +153,25 @@ def test_staging_plan_role_can_audit_workflow_role_contracts_without_view_only()
     assert "AetherStagingApplyMissingOps" in policy_audit["resource"][1]
 
 
+def test_staging_apply_role_can_audit_its_effective_policy_without_mutation() -> None:
+    manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+    by_sid = {statement["sid"]: statement for statement in manifest["statements"]}
+    role_audit = by_sid["AuditStagingApplyRoleContract"]
+    assert set(role_audit["actions"]) == {
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+    }
+    assert role_audit["resource"] == "arn:aws:iam::${account_id}:role/AetherStagingDeploy"
+    policy_audit = by_sid["ReadStagingApplyManagedPolicies"]
+    assert set(policy_audit["actions"]) == {"iam:GetPolicy", "iam:GetPolicyVersion"}
+    assert policy_audit["resource"] == [
+        "arn:aws:iam::${account_id}:policy/AetherStagingDeployContract*",
+        "arn:aws:iam::${account_id}:policy/AetherStagingApplyMissingOps",
+    ]
+
+
 def test_staging_plan_trust_is_limited_to_reviewed_github_subjects() -> None:
     trust = json.loads(
         (ROOT / "config/staging_plan_trust_policy.json").read_text(encoding="utf-8")

@@ -751,6 +751,26 @@ statements:
       - sts:GetCallerIdentity
     resource: '*'
     scope: global-read-required-by-api
+  # The effective-policy gate executes under AetherStagingDeploy itself. Keep
+  # its bootstrap read surface explicit so the gate can inspect the exact
+  # role, its attached/inline policies, and their policy versions before any
+  # Terraform mutation. These reads do not grant role-management authority.
+  - sid: AuditStagingApplyRoleContract
+    actions:
+      - iam:GetRole
+      - iam:GetRolePolicy
+      - iam:ListAttachedRolePolicies
+      - iam:ListRolePolicies
+    resource: arn:aws:iam::${account_id}:role/AetherStagingDeploy
+    scope: staging-apply-role-self-audit
+  - sid: ReadStagingApplyManagedPolicies
+    actions:
+      - iam:GetPolicy
+      - iam:GetPolicyVersion
+    resource:
+      - arn:aws:iam::${account_id}:policy/AetherStagingDeployContract*
+      - arn:aws:iam::${account_id}:policy/AetherStagingApplyMissingOps
+    scope: staging-apply-policy-self-audit
   # ----- IAM infrastructure roles (module.ecs, module.vpc, module.aurora) -----
   - sid: ManageStagingInfraRoles
     actions:
