@@ -367,6 +367,16 @@ def test_staging_secret_policy_audits_use_the_separate_inspection_role():
         assert "AetherStagingSecretPreflightContract" in text
         assert "role-to-assume: " + "$" + "{{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}" in text
 
+    promote_preflight_steps = _workflow_yaml("terraform-promote.yml")["jobs"][
+        "staging-secret-payload-preflight"
+    ]["steps"]
+    install_step = next(
+        step
+        for step in promote_preflight_steps
+        if step.get("name") == "Install secret preflight dependency"
+    )
+    assert "python -m pip install --disable-pip-version-check pyyaml" in install_step["run"]
+
     lifecycle = _workflow_yaml("staging-lifecycle.yml")
     lifecycle_text = _workflow("staging-lifecycle.yml")
     assert lifecycle["jobs"]["select-profile"]["steps"]
