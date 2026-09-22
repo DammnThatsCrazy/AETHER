@@ -24,7 +24,7 @@ estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:7f242e763de139f16a451fc060bb8201211cf3b729a1e721b404eb65030af4b0"
-  ".github/workflows/terraform-promote.yml": "sha256:d9ed5913e51aaf87f530c0096797c0bfb25773d5e8bdc389c525e31fb82becb7"
+  ".github/workflows/terraform-promote.yml": "sha256:1e1929f5d8508e20be6068680b5859cda27cf0ffabaa14d734789b7833b2f322"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"

@@ -1562,8 +1562,13 @@ jobs:
           # packaged head, so it is the authoritative revision verification.
           status="$(curl -sS -o artifacts/rehearsal/ready.json -w '%{http_code}' \
             "https://${ALB_DNS_NAME}/v1/ready")"
-          test "$status" = 200 \
-            || { echo "::error::/v1/ready returned ${status} after migrations"; exit 1; }
+          if [ "$status" != 200 ]; then
+            echo "::error::/v1/ready returned ${status} after migrations"
+            # The response contains status/detail fields only; retain it as
+            # sanitized evidence so the failing dependency is actionable.
+            jq . artifacts/rehearsal/ready.json || true
+            exit 1
+          fi
           python - <<'PY'
           import json, sys
           body = json.load(open("artifacts/rehearsal/ready.json"))

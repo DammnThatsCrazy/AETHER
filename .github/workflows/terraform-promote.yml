@@ -1580,6 +1580,17 @@ jobs:
           # and that secret values are never read.
           python scripts/release/check_staging_task_definition_contract.py \
             --lane "$DEPLOYMENT_LANE"
+      - name: Verify applied staging ECS cache IAM permissions
+        if: inputs.profile == 'staging'
+        working-directory: deploy/aws/terraform
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          task_role_arn="$(terraform output -raw ecs_task_role_arn)"
+          table_name="$(terraform output -raw dynamodb_cache_table_name)"
+          python ../../../scripts/release/check_staging_runtime_iam.py \
+            --role-arn "$task_role_arn" \
+            --table-arn "arn:aws:dynamodb:${AWS_REGION}:${account_id}:table/${table_name}"
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-apply-evidence-${{ github.run_id }}
