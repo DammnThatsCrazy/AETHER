@@ -11,6 +11,7 @@ source_files:
   - .github/workflows/staging-ttl-guard.yml
   - .github/workflows/terraform-promote.yml
   - .github/workflows/pilot-staging.yml
+  - .github/workflows/reconcile-staging-plan-role.yml
   - .github/workflows/staging-smoke.yml
   - .github/workflows/amplify-status-production.yml
   - config/runtime_deployment.yaml
@@ -24,22 +25,28 @@ source_files:
   - scripts/release/check_staging_secret_payload_contract.py
   - scripts/release/check_staging_secret_preflight_policy.py
   - scripts/release/check_staging_task_definition_contract.py
+  - scripts/release/reconcile_staging_plan_role.py
   - config/staging_secret_preflight_iam_policy.yaml
   - config/staging_secret_preflight_trust_policy.json
+  - config/staging_plan_iam_policy.yaml
+  - config/terraform_plan_state_access_policy.yaml
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
-  ".github/workflows/pilot-staging.yml": "sha256:66836a9604a251df686f9cc3dac0966b9eec2624ace5ad317b78c1c55e961cc2"
-  ".github/workflows/staging-lifecycle.yml": "sha256:76f1276ca4b4de812f864f8c6884154592630847eddbcd4fc7fc90d897713729"
+  ".github/workflows/pilot-staging.yml": "sha256:f867617c5264ca3167d74cd906ccf51ca5ab8ac18f198679adbed57c997fce1d"
+  ".github/workflows/reconcile-staging-plan-role.yml": "sha256:7b918d20c0faa31debbbb4cf8c4521336916657d8c01eb6e8aa4211c6dfc6afa"
+  ".github/workflows/staging-lifecycle.yml": "sha256:83b502cd011df0ee3140e6efb966130239c919b209b41b24c8301b7d7c01848f"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:d9ed5913e51aaf87f530c0096797c0bfb25773d5e8bdc389c525e31fb82becb7"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/staging_plan_iam_policy.yaml": "sha256:e4c818162c2ede98217a53c123c2581bcf771cc9e2d1ccf58e048fff591598c3"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
+  "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
@@ -49,6 +56,7 @@ source_hashes:
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:c741b3fe45139c8493818dd2184c5ea530a44225eaa38a8ad435576d5273508e"
+  "scripts/release/reconcile_staging_plan_role.py": "sha256:6a798e87971807d6ffe5450a7a205e2c7f53b21030c0b6d1cba2f8b32e7687a3"
 ---
 
 # Staging Wake / Sleep

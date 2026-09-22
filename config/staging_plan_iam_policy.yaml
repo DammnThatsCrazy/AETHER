@@ -249,6 +249,7 @@ statements:
       - rds:DescribeDBClusterParameterGroups
       - rds:DescribeDBClusterParameters
       - rds:DescribeDBInstances
+      - rds:DescribeGlobalClusters
       - rds:ListTagsForResource
     resource: '*'
     scope: global-read-required-by-api
