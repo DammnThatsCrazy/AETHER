@@ -28,7 +28,7 @@ def _env() -> dict[str, str]:
         "TF_AMPLIFY_GITHUB_ACCESS_TOKEN": "github_pat_example",
         "TF_AETHER_APP_URL": "https://app.staging.olympuslabsml.com",
         "TF_KYBER_APP_URL": "https://kyber.staging.olympuslabsml.com",
-        "STAGING_ADMIN_API_KEY": "admin-key",
+        "STAGING_ADMIN_API_KEY": "ak_" + "a" * 24,
         "SMOKE_API_KEY": "smoke-key",
         "KYBER_GOOGLE_CLIENT_ID": "google-client-id",
         "KYBER_GOOGLE_CLIENT_SECRET": "google-client-secret",
@@ -55,6 +55,13 @@ def test_rejects_wrong_host_and_role_without_printing_values():
     assert any("TF_DOMAIN_NAME" in error for error in errors)
     assert any("AWS_DEPLOY_ROLE_ARN" in error for error in errors)
     assert "not-an-arn" not in " ".join(errors)
+
+
+def test_rejects_the_bootstrap_token_or_other_non_api_key_as_staging_admin_key():
+    env = _env()
+    env["STAGING_ADMIN_API_KEY"] = "bootstrap-token-value"
+    errors = checker.credential_errors(lane="pilot", env=env)
+    assert any("STAGING_ADMIN_API_KEY" in error for error in errors)
 
 
 def test_full_requires_google_credentials():

@@ -51,6 +51,7 @@ def _client(*, pilot: bool = True):
             if pilot:
                 environment.update(
                     {
+                        "FIRST_ADMIN_BOOTSTRAP_EMAIL": "ops@olympuslabsml.com",
                         "STRIPE_CHECKOUT_SUCCESS_URL": "https://app.staging.olympuslabsml.com/billing/success",
                         "STRIPE_CHECKOUT_CANCEL_URL": "https://app.staging.olympuslabsml.com/billing/cancel",
                         "STRIPE_PORTAL_RETURN_URL": "https://app.staging.olympuslabsml.com/billing",
@@ -76,6 +77,23 @@ def test_pilot_accepts_exact_customer_facing_task_shape():
 
 def test_full_accepts_exact_workforce_task_shape():
     assert checker.contract_errors(lane="full", client=_client(pilot=False)) == []
+
+
+def test_pilot_requires_the_first_admin_bootstrap_email():
+    original = _client()
+
+    def missing_email(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            container = payload["taskDefinition"]["containerDefinitions"][0]
+            container["environment"] = [
+                item for item in container["environment"]
+                if item["name"] != "FIRST_ADMIN_BOOTSTRAP_EMAIL"
+            ]
+        return payload
+
+    errors = checker.contract_errors(lane="pilot", client=missing_email)
+    assert any("first-admin bootstrap email is missing" in error for error in errors)
 
 
 def test_pilot_rejects_old_full_lane_mounts():

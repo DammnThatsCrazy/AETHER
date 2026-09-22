@@ -427,27 +427,32 @@ module "ecs" {
     aws.untagged = aws.untagged
   }
 
-  environment                 = var.environment
-  project                     = var.project
-  vpc_id                      = module.vpc.vpc_id
-  task_subnets                = local.ecs_task_subnets
-  ecs_sg_id                   = module.vpc.ecs_sg_id
-  ecr_backend_url             = module.ecr.repository_urls["aether-backend"]
-  backend_image_digest        = var.backend_image_digest
-  ecr_ml_url                  = module.ecr.repository_urls["aether-ml-serving"]
-  ml_image_digest             = var.ml_image_digest
-  alb_backend_tg_arn          = module.alb.backend_target_group_arn
-  alb_ml_tg_arn               = module.alb.ml_target_group_arn
-  database_host               = local.database_host
-  database_port               = local.database_port
-  database_name               = local.database_name
-  kyber_app_url               = var.kyber_app_url
-  api_base_url                = "https://${var.domain_name}"
-  kyber_google_hosted_domain  = var.kyber_google_hosted_domain
-  deployment_profile          = var.deployment_profile
-  auth0_domain                = var.auth0_domain
-  auth0_api_audience          = var.auth0_api_audience
-  aether_app_url              = var.aether_app_url
+  environment                = var.environment
+  project                    = var.project
+  vpc_id                     = module.vpc.vpc_id
+  task_subnets               = local.ecs_task_subnets
+  ecs_sg_id                  = module.vpc.ecs_sg_id
+  ecr_backend_url            = module.ecr.repository_urls["aether-backend"]
+  backend_image_digest       = var.backend_image_digest
+  ecr_ml_url                 = module.ecr.repository_urls["aether-ml-serving"]
+  ml_image_digest            = var.ml_image_digest
+  alb_backend_tg_arn         = module.alb.backend_target_group_arn
+  alb_ml_tg_arn              = module.alb.ml_target_group_arn
+  database_host              = local.database_host
+  database_port              = local.database_port
+  database_name              = local.database_name
+  kyber_app_url              = var.kyber_app_url
+  api_base_url               = "https://${var.domain_name}"
+  kyber_google_hosted_domain = var.kyber_google_hosted_domain
+  deployment_profile         = var.deployment_profile
+  auth0_domain               = var.auth0_domain
+  auth0_api_audience         = var.auth0_api_audience
+  aether_app_url             = var.aether_app_url
+  # The pilot lane is staging-only and keeps the one-time first-admin route
+  # armed behind its Secrets Manager token and durable single-use marker. The
+  # approved operator address reuses the required alert recipient; no secret
+  # value enters Terraform state or the task definition.
+  first_admin_bootstrap_email = var.deployment_lane == "pilot" ? var.alert_email : ""
   deployment_lane             = var.deployment_lane
   stripe_billing_enabled      = var.deployment_lane == "pilot"
   stripe_checkout_success_url = "${var.aether_app_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"

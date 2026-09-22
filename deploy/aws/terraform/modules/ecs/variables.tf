@@ -236,6 +236,12 @@ variable "aether_app_url" {
   description = "Canonical Aether customer-app origin used by backend email and billing links."
 }
 
+variable "first_admin_bootstrap_email" {
+  type        = string
+  description = "Approved operator email used by the staging-only first-admin bootstrap route. Empty outside the pilot lane."
+  default     = ""
+}
+
 variable "deployment_lane" {
   type        = string
   description = "Deployment overlay selected by the reviewed staging plan."

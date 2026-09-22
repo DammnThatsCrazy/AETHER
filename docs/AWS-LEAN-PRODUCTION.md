@@ -29,7 +29,7 @@ source_hashes:
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/DECOMMISSION.md": "sha256:f1199d32b3e315cd78dcc4beaf3589ac46fc69134ea7083ce5698c270ab2f377"
-  "deploy/aws/terraform/main.tf": "sha256:1e688d149d4f6650de0b938ac8dd3c8144ec62d1cb4fa364a8237760cc9961dd"
+  "deploy/aws/terraform/main.tf": "sha256:98340a8e6edfc1fee941455fc776b6835d497b6b5128175f216629edd71b6e25"
   "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
@@ -384,6 +384,11 @@ from Secrets Manager, while the Google callback is fixed to the API origin
 (`https://<api-domain>/v1/kyber/auth/callback`) and WebAuthn remains bound to
 the Kyber application origin. This keeps the operator browser surface and the
 backend identity exchange on their intended trust boundaries.
+
+The shared Terraform root also contains a pilot-only staging first-admin
+overlay. It is not part of `production-lean`: outside the `pilot` deployment
+lane the bootstrap route is explicitly disabled and its approved email is
+empty, so production-lean receives no staging bootstrap behavior.
 
 ### Apply
 

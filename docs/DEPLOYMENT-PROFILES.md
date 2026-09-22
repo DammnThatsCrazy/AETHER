@@ -14,7 +14,7 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:1e688d149d4f6650de0b938ac8dd3c8144ec62d1cb4fa364a8237760cc9961dd"
+  "deploy/aws/terraform/main.tf": "sha256:98340a8e6edfc1fee941455fc776b6835d497b6b5128175f216629edd71b6e25"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:e609cdfaaf5d9d384e213edf6f936b0045eac823cc38d432e75db464c8eb14ad"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
@@ -157,7 +157,11 @@ list for this reason, while production profiles still require it.
 Paid accounts may proceed after the normal policy and cost gates. State
 reconciliation can import pre-existing Secrets Manager metadata only after
 verifying the exact staging CMK and `AWSCURRENT` version; values are populated
-through the separate secure bootstrap and are never read by CI.
+through the separate secure bootstrap and are never read by CI. For the
+pilot's first-admin handoff, the AWS Secrets Manager bootstrap token and the
+durable GitHub `STAGING_ADMIN_API_KEY` are separate credentials: the pilot task
+arms the one-time route, and the lifecycle validates the returned `ak_...` key
+against `/v1/me` with admin scope before rehearsal mutation.
 The staging ECS API and consolidated worker mount the Google workforce client
 ID and secret from those reviewed secret records. Workforce enforcement,
 backend authorization, device trust, scope v2, and step-up are explicitly on;

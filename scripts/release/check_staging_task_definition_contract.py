@@ -103,6 +103,7 @@ REQUIRED_ENV = {
 PILOT_ENV = {
     "DEPLOYMENT_LANE": "pilot",
     "STRIPE_BILLING_ENABLED": "true",
+    "FIRST_ADMIN_BOOTSTRAP_ENABLED": "true",
     "KYBER_WORKFORCE_IDENTITY_ENABLED": "false",
     "KYBER_DEVICE_TRUST_REQUIRED": "false",
     "KYBER_BACKEND_AUTHZ_ENFORCED": "false",
@@ -115,6 +116,7 @@ PILOT_ENV = {
 FULL_ENV = {
     "DEPLOYMENT_LANE": "full",
     "STRIPE_BILLING_ENABLED": "false",
+    "FIRST_ADMIN_BOOTSTRAP_ENABLED": "false",
     "KYBER_WORKFORCE_IDENTITY_ENABLED": "true",
     "KYBER_DEVICE_TRUST_REQUIRED": "true",
     "KYBER_BACKEND_AUTHZ_ENFORCED": "true",
@@ -287,6 +289,8 @@ def contract_errors(
             if not environment.get(name, "").strip():
                 errors.append(f"{service}: required non-empty runtime variable {name} is missing")
         if lane == "pilot":
+            if not environment.get("FIRST_ADMIN_BOOTSTRAP_EMAIL", "").strip():
+                errors.append(f"{service}: pilot first-admin bootstrap email is missing")
             for name in ("STRIPE_CHECKOUT_SUCCESS_URL", "STRIPE_CHECKOUT_CANCEL_URL", "STRIPE_PORTAL_RETURN_URL"):
                 if not environment.get(name, "").startswith("https://app.staging.olympuslabsml.com/"):
                     errors.append(f"{service}: {name} is not a staging HTTPS billing URL")

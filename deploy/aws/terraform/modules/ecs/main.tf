@@ -363,6 +363,18 @@ locals {
     ],
   ) : local.stripe_runtime_environment
 
+  # Pilot staging must be able to complete the documented one-time first-admin
+  # handoff after a fresh or recovered database. The route remains staging
+  # only, requires the mounted high-entropy token and allowlisted address, and
+  # is permanently single-use at the database layer. Full and production
+  # lanes keep it explicitly disabled.
+  first_admin_bootstrap_runtime_environment = local.pilot_lane ? [
+    { name = "FIRST_ADMIN_BOOTSTRAP_ENABLED", value = "true" },
+    { name = "FIRST_ADMIN_BOOTSTRAP_EMAIL", value = trimspace(var.first_admin_bootstrap_email) },
+    ] : [
+    { name = "FIRST_ADMIN_BOOTSTRAP_ENABLED", value = "false" },
+  ]
+
   # Secrets the tasks are allowed to read. The Redis AUTH token is only
   # reachable when ElastiCache is part of the profile, so lean tasks hold no
   # permission for a secret they never mount.
@@ -465,6 +477,8 @@ locals {
     trimspace(var.stripe_portal_return_url) != "",
   ])
 
+  first_admin_bootstrap_contract_complete = !local.pilot_lane || trimspace(var.first_admin_bootstrap_email) != ""
+
   ml_secret_mounts_complete = alltrue([
     for mount in local.ml_secrets_block : trimspace(mount.valueFrom) != ""
   ])
@@ -491,6 +505,10 @@ resource "aws_ecs_task_definition" "backend" {
     precondition {
       condition     = local.stripe_runtime_contract_complete
       error_message = "Pilot ECS tasks require concrete Stripe Checkout success, cancel, and Billing Portal return URLs."
+    }
+    precondition {
+      condition     = local.first_admin_bootstrap_contract_complete
+      error_message = "Pilot ECS tasks require a non-empty approved first-admin bootstrap email."
     }
   }
 
@@ -535,6 +553,7 @@ resource "aws_ecs_task_definition" "backend" {
         concat(
           local.kyber_runtime_environment,
           local.stripe_runtime_environment_with_urls,
+          local.first_admin_bootstrap_runtime_environment,
           [
             { name = "CREDENTIAL_CIPHER", value = var.credential_kms_key_id != "" ? "aws_kms" : "local" },
           ],
@@ -727,6 +746,10 @@ resource "aws_ecs_task_definition" "runtime_service" {
       condition     = local.stripe_runtime_contract_complete
       error_message = "Pilot runtime ECS tasks require concrete Stripe Checkout success, cancel, and Billing Portal return URLs."
     }
+    precondition {
+      condition     = local.first_admin_bootstrap_contract_complete
+      error_message = "Pilot runtime ECS tasks require a non-empty approved first-admin bootstrap email."
+    }
   }
   container_definitions = jsonencode([{
     name      = each.key
@@ -753,6 +776,7 @@ resource "aws_ecs_task_definition" "runtime_service" {
       concat(
         local.kyber_runtime_environment,
         local.stripe_runtime_environment_with_urls,
+        local.first_admin_bootstrap_runtime_environment,
         [
           { name = "CREDENTIAL_CIPHER", value = var.credential_kms_key_id != "" ? "aws_kms" : "local" },
         ],
