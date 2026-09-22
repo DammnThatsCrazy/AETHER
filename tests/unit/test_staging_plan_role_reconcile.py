@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/release/reconcile_staging_plan_role.py"
 WORKFLOW = ROOT / ".github/workflows/reconcile-staging-plan-role.yml"
+TRUST_POLICY = ROOT / "config/staging_plan_reconcile_trust_policy.json"
+CALLER_POLICY = ROOT / "config/staging_plan_reconcile_iam_policy.json"
 
 
 def _module():
@@ -151,11 +154,38 @@ def test_reconciliation_workflow_is_dispatch_only_and_non_terraform() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "RECONCILE-STAGING-PLAN-IAM" in text
     assert "reconcile_staging_plan_role.py" in text
-    assert "AWS_INFRA_ROLE_ARN" in text
+    assert "AWS_STAGING_PLAN_RECONCILE_ROLE_ARN" in text
+    assert "AetherStagingPlanReconcile" in text
+    assert "--skip-verification" in text
+    assert "Switch to the read-only plan role" in text
+    assert "AWS_INFRA_ROLE_ARN" not in text
     assert 'GITHUB_REF_NAME" = main' in text
     assert "terraform apply" not in text
     assert "get-secret-value" not in text
     assert "batch-get-secret-value" not in text
+
+
+def test_reconciliation_caller_contract_is_exact_and_narrow() -> None:
+    trust = json.loads(TRUST_POLICY.read_text(encoding="utf-8"))
+    caller = json.loads(CALLER_POLICY.read_text(encoding="utf-8"))
+
+    statement = trust["Statement"][0]
+    assert statement["Principal"]["Federated"].endswith(
+        "/token.actions.githubusercontent.com"
+    )
+    assert statement["Condition"]["StringLike"][
+        "token.actions.githubusercontent.com:sub"
+    ] == "repo:DammnThatsCrazy/AETHER:environment:staging-terraform"
+
+    statements = {item["Sid"]: item for item in caller["Statement"]}
+    assert set(statements) == {
+        "ReadTargetPlanRoleMetadata",
+        "ReconcileTargetPlanContract",
+    }
+    assert statements["ReconcileTargetPlanContract"]["Action"] == "iam:PutRolePolicy"
+    assert statements["ReconcileTargetPlanContract"]["Resource"].endswith(
+        ":role/AetherStagingPlan"
+    )
 
 
 def test_lifecycle_entrypoints_verify_live_plan_role_before_dispatch() -> None:

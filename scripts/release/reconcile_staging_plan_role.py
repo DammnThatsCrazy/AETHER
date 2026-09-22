@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Reconcile and verify the externally managed staging Terraform plan role.
 
-The staging plan role is intentionally outside Terraform state.  This command
+The staging plan role is intentionally outside Terraform state. This command
 is the narrow, confirmation-gated bridge between the reviewed
-``config/staging_plan_iam_policy.yaml`` contract and that live role.  It only
-updates one inline policy on ``AetherStagingPlan`` and then delegates to the
-existing effective-policy verifier.  It never reads application secret
-values, changes infrastructure, or grants Terraform mutation permissions.
+``config/staging_plan_iam_policy.yaml`` contract and that live role. It only
+updates one inline policy on ``AetherStagingPlan``. Verification can run in a
+separate read-only session so the bootstrap role never needs broader audit
+permissions. It never reads application secret values, changes infrastructure,
+or grants Terraform mutation permissions.
 """
 
 from __future__ import annotations
@@ -255,6 +256,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state-bucket", required=True)
     parser.add_argument("--state-lock-table", required=True)
     parser.add_argument("--confirmation", required=True)
+    parser.add_argument(
+        "--skip-verification",
+        action="store_true",
+        help="Apply the reviewed policy only; verify under the read-only plan role.",
+    )
     parser.add_argument("--verification-attempts", type=int, default=6)
     parser.add_argument("--verification-delay-seconds", type=float, default=5.0)
     args = parser.parse_args(argv)
@@ -316,17 +322,26 @@ def main(argv: list[str] | None = None) -> int:
         if policy_path:
             Path(policy_path).unlink(missing_ok=True)
 
-    print(f"Applied the reviewed {EXPECTED_POLICY_NAME} policy to {EXPECTED_ROLE}; verifying effective coverage.")
-    _verify_effective_policy(
-        role_arn=args.role_arn,
-        manifest=args.manifest,
-        supplemental_manifest=args.supplemental_manifest,
-        state_bucket=args.state_bucket,
-        state_lock_table=args.state_lock_table,
-        attempts=args.verification_attempts,
-        delay_seconds=args.verification_delay_seconds,
-    )
-    print(f"Verified the effective {EXPECTED_ROLE} read-only plan contract.")
+    if args.skip_verification:
+        print(
+            f"Applied the reviewed {EXPECTED_POLICY_NAME} policy to {EXPECTED_ROLE}; "
+            "verification is deferred to the read-only plan-role session."
+        )
+    else:
+        print(
+            f"Applied the reviewed {EXPECTED_POLICY_NAME} policy to {EXPECTED_ROLE}; "
+            "verifying effective coverage."
+        )
+        _verify_effective_policy(
+            role_arn=args.role_arn,
+            manifest=args.manifest,
+            supplemental_manifest=args.supplemental_manifest,
+            state_bucket=args.state_bucket,
+            state_lock_table=args.state_lock_table,
+            attempts=args.verification_attempts,
+            delay_seconds=args.verification_delay_seconds,
+        )
+        print(f"Verified the effective {EXPECTED_ROLE} read-only plan contract.")
     return 0
 
 

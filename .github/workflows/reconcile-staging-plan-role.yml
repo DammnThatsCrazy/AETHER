@@ -3,7 +3,9 @@ name: Reconcile staging plan IAM role
 # AetherStagingPlan is externally managed rather than Terraform-owned. This
 # workflow is the only checked-in path allowed to reconcile its reviewed,
 # read-only contract. It is intentionally separate from Terraform promotion:
-# it can repair plan-time IAM drift, but it cannot apply infrastructure.
+# it can repair plan-time IAM drift, but it cannot apply infrastructure. The
+# bootstrap write uses a dedicated AetherStagingPlanReconcile role; the
+# effective-policy audit then switches back to the read-only plan role.
 
 on:
   workflow_dispatch:
@@ -62,12 +64,12 @@ jobs:
 
       - name: Validate the infrastructure reconciliation credential shape
         env:
-          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          AWS_STAGING_PLAN_RECONCILE_ROLE_ARN: ${{ secrets.AWS_STAGING_PLAN_RECONCILE_ROLE_ARN }}
         run: |
           set -euo pipefail
-          case "${AWS_INFRA_ROLE_ARN:-}" in
-            arn:aws:iam::????????????:role/*) ;;
-            *) echo '::error::AWS_INFRA_ROLE_ARN must be a concrete IAM role ARN'; exit 1 ;;
+          case "${AWS_STAGING_PLAN_RECONCILE_ROLE_ARN:-}" in
+            arn:aws:iam::????????????:role/AetherStagingPlanReconcile) ;;
+            *) echo '::error::AWS_STAGING_PLAN_RECONCILE_ROLE_ARN must target AetherStagingPlanReconcile'; exit 1 ;;
           esac
 
       - uses: actions/setup-python@v5
@@ -77,13 +79,22 @@ jobs:
       - name: Install manifest validation dependency
         run: python -m pip install --disable-pip-version-check pyyaml
 
-      - name: Configure AWS infrastructure credentials
+      - name: Configure the dedicated reconciliation credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_STAGING_PLAN_RECONCILE_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Reconcile and verify the reviewed plan-role policy
+      - name: Verify the dedicated reconciliation caller
+        run: |
+          set -euo pipefail
+          caller_arn="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$caller_arn" in
+            arn:aws:sts::????????????:assumed-role/AetherStagingPlanReconcile/*) ;;
+            *) echo '::error::reconciliation caller is not AetherStagingPlanReconcile'; exit 1 ;;
+          esac
+
+      - name: Reconcile the reviewed plan-role policy
         env:
           AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
@@ -105,5 +116,34 @@ jobs:
             --state-bucket "$TF_STATE_BUCKET" \
             --state-lock-table "$TF_LOCK_TABLE" \
             --confirmation "$CONFIRMATION" \
+            --skip-verification \
             --verification-attempts 8 \
             --verification-delay-seconds 5
+
+      - name: Switch to the read-only plan role for effective verification
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify the effective reviewed plan-role policy
+        env:
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          caller_role="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$caller_role" in
+            arn:aws:sts::????????????:assumed-role/AetherStagingPlan/*) ;;
+            *) echo '::error::effective plan verification must use AetherStagingPlan'; exit 1 ;;
+          esac
+          python scripts/release/verify_effective_staging_apply_policy.py \
+            --role-arn "$AWS_TERRAFORM_PLAN_ROLE_ARN" \
+            --manifest config/staging_plan_iam_policy.yaml \
+            --supplemental-manifest config/terraform_plan_state_access_policy.yaml \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --state-lock-table "$TF_LOCK_TABLE" \
+            --state-profile staging \
+            --expected-role AetherStagingPlan \
+            --required-policy-suffix AetherStagingPlanContract
