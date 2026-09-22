@@ -635,7 +635,15 @@ jobs:
       - name: Install workflow Python dependencies
         run: pip install pyyaml
       - name: Validate staging credential shape before delivery
-        if: github.event_name == 'push' || inputs.environment == 'staging'
+        # A build-only release is deliberately non-mutating: it creates the
+        # immutable image and artifacts that are needed to deploy the pilot
+        # task.  The durable admin key cannot exist until that task is live
+        # and the one-time first-admin bootstrap has run, so requiring it here
+        # would make the handoff impossible.  Live staging delivery still
+        # validates the key before any ECS mutation.
+        if: >-
+          github.event_name == 'push'
+          || (inputs.environment == 'staging' && inputs.delivery_mode != 'build-only')
         env:
           DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
           AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}

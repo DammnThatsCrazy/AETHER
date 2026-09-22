@@ -294,6 +294,19 @@ def test_staging_build_only_release_is_available_without_ecs_mutation():
     assert "has no successful immutable build job" in lifecycle
 
 
+def test_build_only_does_not_require_post_bootstrap_admin_key():
+    deploy = _workflow_yaml("deploy.yml")
+    credential_step = next(
+        step
+        for step in deploy["jobs"]["deploy"]["steps"]
+        if step.get("name") == "Validate staging credential shape before delivery"
+    )
+    condition = credential_step["if"]
+    assert "inputs.environment == 'staging'" in condition
+    assert "inputs.delivery_mode != 'build-only'" in condition
+    assert "STAGING_ADMIN_API_KEY" in credential_step["env"]
+
+
 def test_stripe_smoke_uses_form_encoded_confirmed_test_payment():
     smoke = (ROOT / "scripts/smoke/stripe-connector.ts").read_text(encoding="utf-8")
     assert "URLSearchParams" in smoke

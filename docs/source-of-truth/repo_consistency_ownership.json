@@ -792,6 +792,7 @@
         "contracts/delivery/*performance*.schema.json",
         "scripts/aggregate_verification_evidence.py",
         "scripts/lib/ci_performance.py",
+        "scripts/lib/processes.py",
         "scripts/suite_worker.py",
         "scripts/universal_fast.py",
         "scripts/validate_ci_execution_contracts.py",

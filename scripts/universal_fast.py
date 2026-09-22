@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.lib.verification_router import load_router_registry  # noqa: E402
+from scripts.lib.processes import run_with_timeout, timeout_output  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -46,11 +47,21 @@ def main(argv: list[str] | None = None) -> int:
         command = list(check.command)
         if command and command[0] == "python":
             command[0] = sys.executable
-        process = subprocess.run(command, cwd=ROOT, env={**os.environ, "CI": os.environ.get("CI", "true")}, text=True, capture_output=True, check=False, timeout=check.runtime_budget_seconds)
-        output = (process.stdout or "") + (process.stderr or "")
+        try:
+            process = run_with_timeout(
+                command,
+                cwd=ROOT,
+                env={**os.environ, "CI": os.environ.get("CI", "true")},
+                timeout=check.runtime_budget_seconds,
+            )
+            output = (process.stdout or "") + (process.stderr or "")
+            returncode = process.returncode
+        except subprocess.TimeoutExpired as exc:
+            output = timeout_output(exc)
+            returncode = 124
         print(output, end="")
-        checks.append({"check": check_id, "status": "PASS" if process.returncode == 0 else "FAILED", "returncode": process.returncode, "seconds": time.monotonic() - check_started, "output_tail": output[-2000:]})
-        if process.returncode:
+        checks.append({"check": check_id, "status": "PASS" if returncode == 0 else "FAILED", "returncode": returncode, "seconds": time.monotonic() - check_started, "output_tail": output[-2000:]})
+        if returncode:
             status = "FAILED"
     elapsed = time.monotonic() - started
     payload = {

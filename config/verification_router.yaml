@@ -190,6 +190,7 @@ global_scopes:
       - scripts/lib/impact_graph.py
       - scripts/lib/build_selection.py
       - scripts/lib/test_suites.py
+      - scripts/lib/processes.py
       - scripts/validate_ci_control_toolchain.py
     checks:
       - repository_metadata
