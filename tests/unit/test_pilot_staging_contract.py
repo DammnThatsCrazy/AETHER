@@ -53,6 +53,8 @@ def test_pilot_entrypoint_is_dispatch_only_and_uses_the_shared_lane_token():
     assert "PILOT_DEFERRED_GATES" in text
     assert "check_staging_lane_contract.py" in text
     assert "check_pilot_staging_contract.py" in text
+    assert "Require merged-main authority" in text
+    assert 'GITHUB_REF_NAME" = main' in text
     assert "staging-state-reconcile.yml" in text
     assert "reconcile_pilot_price_secret_state" in text
     assert "IMPORT-STAGING" in text
@@ -112,6 +114,11 @@ def test_pilot_planning_paths_reconcile_price_secret_state_before_planning():
         assert "staging_secret_names=" in workflow
         assert "staging_secrets_kms_key_arn" in workflow
         assert "IMPORT-STAGING" in workflow
+        assert "verify_effective_staging_apply_policy.py" in workflow
+        assert "config/staging_plan_iam_policy.yaml" in workflow
+        assert "config/terraform_plan_state_access_policy.yaml" in workflow
+        assert "AetherStagingPlanContract" in workflow
+        assert "Require merged-main authority" in workflow
     assert "--require-aws-staging-secrets" in promote
     assert "required_staging_secret_names" in promote
     assert "module.secrets.aws_kms_key.secrets" in promote

@@ -252,6 +252,31 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
                 "module.secrets.aws_kms_alias.secrets",
             ),
         ),
+        (
+            "pilot plan-role drift gate",
+            workflow_text,
+            (
+                "verify_effective_staging_apply_policy.py",
+                "config/staging_plan_iam_policy.yaml",
+                "config/terraform_plan_state_access_policy.yaml",
+                "AetherStagingPlanContract",
+            ),
+        ),
+        (
+            "merged-main authority gate",
+            workflow_text,
+            ("Require merged-main authority", 'GITHUB_REF_NAME" = main'),
+        ),
+        (
+            "lifecycle plan-role drift gate",
+            lifecycle_text,
+            (
+                "verify_effective_staging_apply_policy.py",
+                "config/staging_plan_iam_policy.yaml",
+                "config/terraform_plan_state_access_policy.yaml",
+                "AetherStagingPlanContract",
+            ),
+        ),
     ):
         missing = _missing_all(text, tokens)
         if missing:

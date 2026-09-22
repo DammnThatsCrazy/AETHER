@@ -130,6 +130,12 @@ jobs:
       deployment_lane: ${{ steps.route.outputs.deployment_lane }}
     steps:
       - uses: actions/checkout@v4
+      - name: Require merged-main authority
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = main || {
+            echo '::error::staging lifecycle must be dispatched from merged main'; exit 1;
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -294,6 +300,27 @@ jobs:
           test "$caller_account" = "$expected_account" || { echo '::error::IAM inspection account mismatch'; exit 1; }
           test "$caller_role_path" = "$expected_role_path" || { echo '::error::IAM inspection role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
           test "$caller_role_path" = AetherStagingPlan || { echo '::error::IAM inspection must use AetherStagingPlan'; exit 1; }
+
+      - name: Verify effective staging plan IAM contract before dispatch
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          # The role is externally managed, so the checked-in manifest alone
+          # is not proof. Refuse every lifecycle dispatch until the live
+          # AetherStagingPlan role covers the exact reviewed contract.
+          python scripts/release/verify_effective_staging_apply_policy.py \
+            --role-arn "$AWS_TERRAFORM_PLAN_ROLE_ARN" \
+            --manifest config/staging_plan_iam_policy.yaml \
+            --supplemental-manifest config/terraform_plan_state_access_policy.yaml \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --state-lock-table "$TF_LOCK_TABLE" \
+            --state-profile staging \
+            --expected-role AetherStagingPlan \
+            --required-policy-suffix AetherStagingPlanContract
 
       - name: Verify effective lifecycle IAM policy before dispatch
         if: inputs.action != 'validate' && inputs.action != 'plan-wake'

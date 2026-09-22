@@ -1,0 +1,109 @@
+name: Reconcile staging plan IAM role
+
+# AetherStagingPlan is externally managed rather than Terraform-owned. This
+# workflow is the only checked-in path allowed to reconcile its reviewed,
+# read-only contract. It is intentionally separate from Terraform promotion:
+# it can repair plan-time IAM drift, but it cannot apply infrastructure.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit_sha:
+        description: Exact merged-main SHA whose reviewed IAM manifest is being applied
+        type: string
+        required: true
+      confirmation:
+        description: Type RECONCILE-STAGING-PLAN-IAM to authorize the narrow policy update
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-plan-role-reconciliation
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  reconcile:
+    name: Apply and verify reviewed AetherStagingPlan policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging-terraform
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the exact merged-main revision
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Verify the requested revision is current main
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = main || {
+            echo '::error::staging plan-role reconciliation must be dispatched from main'; exit 1;
+          }
+          printf '%s' "$EXPECTED_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' || {
+            echo '::error::expected_commit_sha must be a 40-character lowercase commit SHA'; exit 1;
+          }
+          head_sha="$(git rev-parse HEAD)"
+          test "$head_sha" = "$EXPECTED_COMMIT_SHA" || {
+            echo "::error::checked-out main is ${head_sha}, expected ${EXPECTED_COMMIT_SHA}; refuse stale reconciliation"; exit 1;
+          }
+          echo "Reconciliation is bound to merged main ${head_sha}."
+
+      - name: Validate the infrastructure reconciliation credential shape
+        env:
+          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          case "${AWS_INFRA_ROLE_ARN:-}" in
+            arn:aws:iam::????????????:role/*) ;;
+            *) echo '::error::AWS_INFRA_ROLE_ARN must be a concrete IAM role ARN'; exit 1 ;;
+          esac
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install manifest validation dependency
+        run: python -m pip install --disable-pip-version-check pyyaml
+
+      - name: Configure AWS infrastructure credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Reconcile and verify the reviewed plan-role policy
+        env:
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test -n "${AWS_TERRAFORM_PLAN_ROLE_ARN:-}" || {
+            echo '::error::AWS_TERRAFORM_PLAN_ROLE_ARN is required'; exit 1;
+          }
+          test -n "${TF_STATE_BUCKET:-}" || {
+            echo '::error::TF_STATE_BUCKET is required for post-reconciliation verification'; exit 1;
+          }
+          test -n "${TF_LOCK_TABLE:-}" || {
+            echo '::error::TF_LOCK_TABLE is required for post-reconciliation verification'; exit 1;
+          }
+          python scripts/release/reconcile_staging_plan_role.py \
+            --role-arn "$AWS_TERRAFORM_PLAN_ROLE_ARN" \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --state-lock-table "$TF_LOCK_TABLE" \
+            --confirmation "$CONFIRMATION" \
+            --verification-attempts 8 \
+            --verification-delay-seconds 5

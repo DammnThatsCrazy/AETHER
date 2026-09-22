@@ -31,6 +31,7 @@ STATE_POLICY = ROOT / "config/terraform_state_access_policy.yaml"
 STATE_POLICY_CHECKER = ROOT / "scripts/release/check_terraform_state_access_policy.py"
 STATE_ROLE_CHECKER = ROOT / "scripts/release/verify_terraform_state_role.py"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
+PLAN_POLICY = ROOT / "config/staging_plan_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
 EFFECTIVE_POLICY_CHECKER = ROOT / "scripts/release/verify_effective_staging_apply_policy.py"
 
@@ -1125,6 +1126,15 @@ def test_staging_amplify_contract_is_scoped_to_apps_and_branches() -> None:
     assert "amplify:ListDomainAssociations" in domain_ops["actions"]
     tags = next(s for s in statements if s["sid"] == "TagStagingAmplifyResources")
     assert tags["resource"] == [apps, branches]
+
+
+def test_staging_plan_manifest_covers_aurora_global_cluster_refresh() -> None:
+    """Terraform's Aurora data refresh must be authorized before the plan runs."""
+    manifest = yaml.safe_load(PLAN_POLICY.read_text(encoding="utf-8"))
+    rds = next(s for s in manifest["statements"] if s["sid"] == "ReadStagingRdsResources")
+
+    assert "rds:DescribeGlobalClusters" in rds["actions"]
+    assert rds["resource"] == "*"
 
 
 def test_passrole_resource_principal_pairs_are_not_swappable(tmp_path: Path) -> None:

@@ -36,9 +36,11 @@ authorities:
     purpose: plan_and_apply_infrastructure
     workflows:
       - .github/workflows/infrastructure.yml
+      - .github/workflows/reconcile-staging-plan-role.yml
       - .github/workflows/terraform-promote.yml
     required_commands:
       - terraform plan
+      - scripts/release/reconcile_staging_plan_role.py
   - id: promotion
     owner: release@aether
     purpose: promote_exact_candidate

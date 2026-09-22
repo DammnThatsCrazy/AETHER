@@ -99,6 +99,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Require merged-main authority
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = main || {
+            echo '::error::pilot staging must be dispatched from merged main'; exit 1;
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -216,6 +222,25 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/release/verify_effective_staging_apply_policy.py --role-arn "$TARGET_ROLE_ARN" --manifest config/staging_secret_preflight_iam_policy.yaml --expected-role AetherStagingSecretPreflight --required-policy-suffix AetherStagingSecretPreflightContract
+      - name: Verify the effective staging plan IAM contract
+        env:
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          # The parent gate must catch external plan-role drift before it can
+          # dispatch lifecycle or Terraform promotion. This is metadata-only;
+          # it never reads application secret values.
+          python scripts/release/verify_effective_staging_apply_policy.py \
+            --role-arn "$AWS_TERRAFORM_PLAN_ROLE_ARN" \
+            --manifest config/staging_plan_iam_policy.yaml \
+            --supplemental-manifest config/terraform_plan_state_access_policy.yaml \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --state-lock-table "$TF_LOCK_TABLE" \
+            --state-profile staging \
+            --expected-role AetherStagingPlan \
+            --required-policy-suffix AetherStagingPlanContract
       - name: Configure AWS secret preflight credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
