@@ -649,6 +649,7 @@ jobs:
             local -a reconcile_args
             reconcile_args=(
               -f staging_amplify_domain_name=staging.olympuslabsml.com
+              -f repair_staging_amplify_subdomains=REPAIR-STAGING-AMPLIFY
               -f confirm_staging_import=IMPORT-STAGING
               -f backend_image_digest="$BACKEND_IMAGE_DIGEST"
               -f expected_commit_sha="$INTENDED_RELEASE_SHA"
@@ -2274,6 +2275,7 @@ jobs:
             local -a reconcile_args
             reconcile_args=(
               -f staging_amplify_domain_name=staging.olympuslabsml.com
+              -f repair_staging_amplify_subdomains=REPAIR-STAGING-AMPLIFY
               -f confirm_staging_import=IMPORT-STAGING
               -f backend_image_digest="$BACKEND_IMAGE_DIGEST"
               -f expected_commit_sha="$EXPECTED_COMMIT_SHA"

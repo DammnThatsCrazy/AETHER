@@ -457,6 +457,20 @@ def test_staging_reconciliation_discovers_all_managed_price_resources():
     assert "the secret value was not read" in text
 
 
+def test_staging_reconciliation_repairs_only_reviewed_amplify_main_mappings():
+    reconcile = _workflow("staging-state-reconcile.yml")
+    lifecycle = _workflow("staging-lifecycle.yml")
+    assert "repair_staging_amplify_subdomains" in reconcile
+    assert "REPAIR-STAGING-AMPLIFY" in reconcile
+    assert "update-domain-association" in reconcile
+    assert "sub-domain-settings" in reconcile
+    assert ".domainAssociation.subDomains" in reconcile
+    assert "never creates/deletes an association or changes Squarespace DNS" in reconcile
+    assert "wait_for_reviewed_mapping" in reconcile
+    assert "-f repair_staging_amplify_subdomains=REPAIR-STAGING-AMPLIFY" in lifecycle
+    assert lifecycle.count("-f repair_staging_amplify_subdomains=REPAIR-STAGING-AMPLIFY") == 2
+
+
 def test_legacy_price_secrets_have_an_explicit_metadata_only_rekey_path():
     text = _workflow("staging-state-reconcile.yml")
     assert "migrate_legacy_secret_kms" in text
