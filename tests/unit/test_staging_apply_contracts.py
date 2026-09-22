@@ -23,6 +23,7 @@ ALB = TF / "modules/alb/main.tf"
 PROFILE_PLAN = TF / "tests/profile_plan.tftest.hcl"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
+STAGING_LIFECYCLE = ROOT / ".github/workflows/staging-lifecycle.yml"
 REPO_HEALTH = ROOT / ".github/workflows/repo-health.yml"
 STATE_MIGRATION_WORKFLOW = ROOT / ".github/workflows/terraform-state-migrate.yml"
 STATE_RECONCILE_WORKFLOW = ROOT / ".github/workflows/staging-state-reconcile.yml"
@@ -34,6 +35,7 @@ POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 PLAN_POLICY = ROOT / "config/staging_plan_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
 EFFECTIVE_POLICY_CHECKER = ROOT / "scripts/release/verify_effective_staging_apply_policy.py"
+RUNTIME_IAM_CHECKER = ROOT / "scripts/release/check_staging_runtime_iam.py"
 
 
 def test_repo_health_push_and_pr_runs_cannot_cancel_each_other() -> None:
@@ -314,6 +316,79 @@ def test_backend_task_definition_has_an_explicit_api_runtime_role() -> None:
     end = ecs.index('resource "aws_ecs_service" "backend"', start)
     backend = ecs[start:end]
     assert '{ name = "AETHER_ROLE", value = "api" }' in backend
+
+
+def test_staging_cache_readiness_permission_is_applied_and_verified() -> None:
+    """The live task role must be able to run the cache readiness probe."""
+    ecs = (TF / "modules/ecs/main.tf").read_text(encoding="utf-8")
+    cache_start = ecs.index("dynamodb_statements")
+    cache_end = ecs.index("neptune_statements", cache_start)
+    cache_policy = ecs[cache_start:cache_end]
+    assert '"dynamodb:DescribeTable"' in cache_policy
+
+    outputs = (TF / "outputs.tf").read_text(encoding="utf-8")
+    assert 'output "ecs_task_role_arn"' in outputs
+    assert "value       = module.ecs.task_role_arn" in outputs
+
+    checker = RUNTIME_IAM_CHECKER.read_text(encoding="utf-8")
+    for action in (
+        "dynamodb:DescribeTable",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem",
+    ):
+        assert action in checker
+    assert "simulate-principal-policy" in checker
+
+    promote = PROMOTE.read_text(encoding="utf-8")
+    cache_gate = promote[promote.index("Verify applied staging ECS cache IAM permissions") :]
+    assert "working-directory: deploy/aws/terraform" in cache_gate
+    assert "terraform output -raw ecs_task_role_arn" in cache_gate
+    assert "terraform output -raw dynamodb_cache_table_name" in cache_gate
+    assert "check_staging_runtime_iam.py" in cache_gate
+
+    lifecycle = STAGING_LIFECYCLE.read_text(encoding="utf-8")
+    ready_guard = lifecycle[lifecycle.index('status="$(curl -sS -o artifacts/rehearsal/ready.json') :]
+    assert 'if [ "$status" != 200 ]' in ready_guard
+    assert "jq . artifacts/rehearsal/ready.json" in ready_guard
+
+
+def test_staging_cache_iam_checker_fails_closed_on_denied_action() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "check_staging_runtime_iam", RUNTIME_IAM_CHECKER
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        evaluations = [
+            {
+                "EvalActionName": action,
+                "EvalDecision": "implicitDeny" if action.endswith("DescribeTable") else "allowed",
+            }
+            for action in module.REQUIRED_CACHE_ACTIONS
+        ]
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"EvaluationResults": evaluations}),
+            stderr="",
+        )
+
+    errors = module.simulate_cache_policy(
+        "arn:aws:iam::544471417928:role/AETHER-staging-ecs-task-role",
+        "arn:aws:dynamodb:us-east-1:544471417928:table/AETHER-staging-cache",
+        runner=runner,
+    )
+    assert errors == [
+        "dynamodb:DescribeTable on arn:aws:dynamodb:us-east-1:544471417928:table/AETHER-staging-cache is implicitdeny, expected allowed"
+    ]
 
 
 def test_provider_mocked_profile_plans_cover_the_untagged_aws_alias() -> None:

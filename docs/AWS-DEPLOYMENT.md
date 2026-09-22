@@ -26,6 +26,7 @@ source_files:
   - scripts/release/check_staging_secret_payload_contract.py
   - scripts/release/check_staging_secret_preflight_policy.py
   - scripts/release/check_staging_task_definition_contract.py
+  - scripts/release/check_staging_runtime_iam.py
   - config/staging_secret_preflight_iam_policy.yaml
   - config/staging_secret_preflight_trust_policy.json
   - config/staging_plan_iam_policy.yaml
@@ -47,10 +48,10 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:70800e35f605c2dd9050b6be4530ce6904b3a341fbf956ece70ef7fabdd6aeb8"
+  ".github/workflows/staging-lifecycle.yml": "sha256:30ca1d62db017da0e6f7c090f1686317b529645e50703fbdff24b1147a6069e9"
   ".github/workflows/staging-state-reconcile.yml": "sha256:dab1992f55fccca3a322cef100cae00d2215f3fcbf83b0dc656eef5523b2ad1e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
-  ".github/workflows/terraform-promote.yml": "sha256:d9ed5913e51aaf87f530c0096797c0bfb25773d5e8bdc389c525e31fb82becb7"
+  ".github/workflows/terraform-promote.yml": "sha256:1e1929f5d8508e20be6068680b5859cda27cf0ffabaa14d734789b7833b2f322"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:4fed4eaf122b29db49acd252c2b07487ac3e33fc88925b17a0de7ad34bf31ab7"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:54940e08e76cc81c5cab2248f6f75968a25675c83049d46cc5d5eacca797d880"
@@ -65,12 +66,13 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:a09051a5238503afe9910d1fd3546dade8727611626eb769251795628dc60eb4"
+  "deploy/aws/terraform/": "sha256:e43361b08acd3f9fc35705964ceb5734da7cd84aecbb32b435f483fafc082293"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:01bbce3783d9c0a59d480e96fc05e2b98e2d3126660805304d8bfee6337d8bd2"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:8e8076392342c7ac6302e3f7c2e79b5ce536cf9035981e35a7ba10d33bfe694f"
+  "scripts/release/check_staging_runtime_iam.py": "sha256:282362ca53e7032591ed17dab3c01b4db6e37fa1a95ea86cbd2fd4f26b064e14"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:c741b3fe45139c8493818dd2184c5ea530a44225eaa38a8ad435576d5273508e"
@@ -166,6 +168,17 @@ policy, render the checked-in manifest for the account and confirm it with IAM
 simulation; the live role must match the rendered statements exactly. State
 reconciliation is always followed by a fresh plan; no plan generated before an
 import or untaint may be reused.
+
+After a staging apply, the promotion workflow derives the exact ECS application
+task role and DynamoDB cache table from Terraform outputs and runs
+`scripts/release/check_staging_runtime_iam.py`. Its IAM simulation covers the
+cache operations used by the backend, including `dynamodb:DescribeTable`, before
+the lifecycle can start the rehearsal. This closes the gap where the table and
+migration task are healthy but the application task cannot complete its cache
+readiness probe. If `/v1/ready` is non-200 after migrations, the lifecycle keeps
+the sanitized readiness response in its rehearsal evidence so the failing
+dependency is identified in the same run.
+
 The plan role is externally managed rather than Terraform-owned, so changing
 its reviewed manifest is not enough by itself. The confirmation-gated
 `.github/workflows/reconcile-staging-plan-role.yml` workflow must be run from

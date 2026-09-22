@@ -73,6 +73,11 @@ output "dynamodb_cache_table_name" {
   value       = module.dynamodb_cache.table_name
 }
 
+output "ecs_task_role_arn" {
+  description = "ECS application task role ARN used by the backend and runtime services"
+  value       = module.ecs.task_role_arn
+}
+
 output "neptune_endpoint" {
   description = "Neptune cluster writer endpoint (empty string when the profile keeps the graph in Aurora Postgres)"
   value       = local.neptune_endpoint

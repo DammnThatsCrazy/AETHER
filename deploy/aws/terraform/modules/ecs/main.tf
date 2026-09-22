@@ -219,6 +219,11 @@ locals {
       Sid    = "DynamoDBCacheAccess"
       Effect = "Allow"
       Action = [
+        # The backend readiness probe calls DescribeTable before any cache
+        # operation. Keep this in the same table-scoped grant as the data
+        # actions so a healthy DynamoDB cache cannot be reported as
+        # unreachable solely because its task role cannot inspect the table.
+        "dynamodb:DescribeTable",
         "dynamodb:GetItem",
         "dynamodb:PutItem",
         "dynamodb:UpdateItem",
@@ -416,10 +421,10 @@ locals {
     # mappings; keeping their empty stubs out of the task prevents ECS from
     # treating an unpopulated contract secret as a runtime dependency.
     var.stripe_billing_enabled ? {
-      STRIPE_PRICE_ALPHA   = lookup(var.secret_arns, "stripe-price-alpha", "")
-      STRIPE_PRICE_BETA    = lookup(var.secret_arns, "stripe-price-beta", "")
-      STRIPE_PRICE_GAMMA   = lookup(var.secret_arns, "stripe-price-gamma", "")
-      STRIPE_PRICE_DELTA   = lookup(var.secret_arns, "stripe-price-delta", "")
+      STRIPE_PRICE_ALPHA = lookup(var.secret_arns, "stripe-price-alpha", "")
+      STRIPE_PRICE_BETA  = lookup(var.secret_arns, "stripe-price-beta", "")
+      STRIPE_PRICE_GAMMA = lookup(var.secret_arns, "stripe-price-gamma", "")
+      STRIPE_PRICE_DELTA = lookup(var.secret_arns, "stripe-price-delta", "")
     } : {},
     # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
     # Only mounted when ElastiCache exists; every task (API and workers)
