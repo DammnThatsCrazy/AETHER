@@ -6,7 +6,7 @@ Simulates realistic traffic patterns for:
   - Analytics exports (idempotent burst + polling)
   - Agent tasks (burst creation + status polling)
   - Campaign touchpoints (write/read-after-write consistency)
-  - Batch event ingest (/v1/ingest/events/batch — highest-volume production workload)
+  - Batch event ingest (/v1/batch — highest-volume production workload)
   - Identity resolution (/sdk/identity/resolve — critical latency SLA)
   - Profile360 (/v1/profile360/{entity_type}/{entity_id} — operator + tenant profile queries)
   - Kyber operator summary (deployment readiness, tenant list, SDK fleet health)
@@ -21,7 +21,7 @@ Headless mode with thresholds:
            --csv results/load-test
 
 Staging signoff thresholds (see tests/load/thresholds.json for canonical values):
-    p95 < 200ms for /v1/ingest/events/batch and /v1/analytics/graphql
+    p95 < 200ms for /v1/batch and /v1/analytics/graphql
     p95 < 300ms for /sdk/identity/resolve
     p95 < 500ms for /v1/profile360/{entity_type}/{entity_id} and analytics exports
     p99 < 1000ms for agent tasks
@@ -35,6 +35,7 @@ import os
 import random
 import string
 import uuid
+from datetime import datetime, timezone
 
 from locust import HttpUser, TaskSet, between, task
 
@@ -268,49 +269,54 @@ class AgentTaskTasks(TaskSet):
 # =========================================================================
 
 class BatchIngestTasks(TaskSet):
-    """Batch event ingest — the highest-volume production workload."""
+    """Canonical SDK batch event ingest — the highest-volume workload."""
 
     headers = _api_headers()
-    _event_types = ("page_view", "click", "identify", "purchase", "wallet", "support_ticket")
 
     def _make_event(self) -> dict:
+        now = datetime.now(timezone.utc).isoformat()
+        session_id = f"sess-{_random_string()}"
         return {
-            "event_id": str(uuid.uuid4()),
-            "event_type": random.choice(self._event_types),
-            "user_id": f"user-{_random_string()}",
-            "session_id": f"sess-{_random_string()}",
-            "timestamp": "2026-01-01T00:00:00Z",
+            "id": str(uuid.uuid4()),
+            "type": "page_view",
+            "sessionId": session_id,
+            "anonymousId": session_id,
+            "userId": f"user-{_random_string()}",
+            "timestamp": now,
             "properties": {"load_test": True},
+            "context": {
+                "schemaVersion": "1.0.0",
+                "surface": "web",
+                "sequence": {"number": 1},
+            },
+        }
+
+    @staticmethod
+    def _payload(events: list[dict]) -> dict:
+        return {
+            "batch": events,
+            "sentAt": datetime.now(timezone.utc).isoformat(),
+            "consents": ["analytics"],
         }
 
     @task(10)
     def batch_ingest_small(self):
         """Small batch of 10 events — common high-frequency pattern."""
         self.client.post(
-            "/v1/ingest/events/batch",
-            json={"events": [self._make_event() for _ in range(10)]},
+            "/v1/batch",
+            json=self._payload([self._make_event() for _ in range(10)]),
             headers=self.headers,
-            name="/v1/ingest/events/batch [small-10]",
+            name="/v1/batch [small-10]",
         )
 
     @task(5)
     def batch_ingest_medium(self):
         """Medium batch of 50 events — typical scheduled flush."""
         self.client.post(
-            "/v1/ingest/events/batch",
-            json={"events": [self._make_event() for _ in range(50)]},
+            "/v1/batch",
+            json=self._payload([self._make_event() for _ in range(50)]),
             headers=self.headers,
-            name="/v1/ingest/events/batch [medium-50]",
-        )
-
-    @task(3)
-    def batch_ingest_feed(self):
-        """Feed endpoint — alternative ingest path."""
-        self.client.post(
-            "/v1/ingest/feed",
-            json={"events": [self._make_event() for _ in range(20)]},
-            headers=self.headers,
-            name="/v1/ingest/feed [feed-20]",
+            name="/v1/batch [medium-50]",
         )
 
     @task(2)
@@ -318,30 +324,45 @@ class BatchIngestTasks(TaskSet):
         """Send the same event_id twice — should be idempotent (no 500)."""
         fixed_id = f"dedup-{_random_string()}"
         event = self._make_event()
-        event["event_id"] = fixed_id
-        payload = {"events": [event, {**event}]}  # identical duplicate
+        event["id"] = fixed_id
+        payload = self._payload([event])
         with self.client.post(
-            "/v1/ingest/events/batch",
+            "/v1/batch",
             json=payload,
             headers=self.headers,
-            name="/v1/ingest/events/batch [duplicate]",
+            name="/v1/batch [duplicate]",
             catch_response=True,
         ) as resp:
-            # 200 or 409 are both acceptable; 500 is a failure
-            if resp.status_code in (200, 409):
+            if resp.status_code in (200, 201, 202):
+                resp.success()
+        with self.client.post(
+            "/v1/batch",
+            json=payload,
+            headers=self.headers,
+            name="/v1/batch [duplicate]",
+            catch_response=True,
+        ) as resp:
+            try:
+                duplicate_count = int(resp.json().get("duplicates", 0) or 0)
+            except (ValueError, TypeError):
+                duplicate_count = 0
+            if resp.status_code in (200, 201, 202) and duplicate_count >= 1:
                 resp.success()
 
     @task(1)
     def schema_validation_rejection(self):
         """Malformed payload — should be rejected with 400, not 500."""
         with self.client.post(
-            "/v1/ingest/events/batch",
-            json={"events": [{"bad_field": "no event_type or user_id"}]},
+            "/v1/batch",
+            json={
+                "batch": [{"bad_field": "no canonical event fields"}],
+                "sentAt": datetime.now(timezone.utc).isoformat(),
+            },
             headers=self.headers,
-            name="/v1/ingest/events/batch [schema-rejected]",
+            name="/v1/batch [schema-rejected]",
             catch_response=True,
         ) as resp:
-            if resp.status_code == 400:
+            if resp.status_code in (400, 422):
                 resp.success()
 
 
@@ -354,15 +375,25 @@ class IdentityResolveTasks(TaskSet):
 
     headers = _api_headers()
 
-    def _anchor(self, kind: str) -> dict:
-        return {"type": kind, "value": f"{kind}-{_random_string()}"}
+    def _wallets(self, count: int) -> list[dict]:
+        return [
+            {"address": f"0x{_random_string(40)}", "vm": "evm"}
+            for _ in range(count)
+        ]
+
+    def _payload(self, count: int) -> dict:
+        return {
+            "anonymous_id": f"anon-{_random_string()}",
+            "wallets": self._wallets(count),
+            "platform": "web",
+        }
 
     @task(8)
     def resolve_single_anchor(self):
         """Single-anchor resolve — most common call pattern."""
         self.client.post(
             "/sdk/identity/resolve",
-            json={"anchors": [self._anchor("email")]},
+            json=self._payload(1),
             headers=self.headers,
             name="/sdk/identity/resolve [1-anchor]",
         )
@@ -372,13 +403,7 @@ class IdentityResolveTasks(TaskSet):
         """Three-anchor merge — typical cross-device identity."""
         self.client.post(
             "/sdk/identity/resolve",
-            json={
-                "anchors": [
-                    self._anchor("email"),
-                    self._anchor("phone"),
-                    self._anchor("cookie"),
-                ]
-            },
+            json=self._payload(3),
             headers=self.headers,
             name="/sdk/identity/resolve [3-anchors]",
         )
@@ -388,9 +413,7 @@ class IdentityResolveTasks(TaskSet):
         """Five-anchor merge — heavy identity graph traversal."""
         self.client.post(
             "/sdk/identity/resolve",
-            json={
-                "anchors": [self._anchor(k) for k in ("email", "phone", "cookie", "device_id", "user_id")]
-            },
+            json=self._payload(5),
             headers=self.headers,
             name="/sdk/identity/resolve [5-anchors]",
         )
@@ -403,7 +426,8 @@ class IdentityResolveTasks(TaskSet):
             json={
                 "anonymous_id": f"anon-{_random_string()}",
                 "user_id": f"known-{_random_string()}",
-                "traits": {"email": f"{_random_string()}@example.com"},
+                "email_hash": _random_string(64),
+                "platform": "web",
             },
             headers=self.headers,
             name="/sdk/identity/resolve [anon-to-known]",

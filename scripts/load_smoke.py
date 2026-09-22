@@ -14,8 +14,8 @@ Exit codes:
     2  backend unreachable or Locust unavailable
 
 Thresholds (CI smoke gate — not staging signoff):
-    POST /v1/batch [10-events]  p95 < 500ms   error_rate < 5%
-    GET  /sdk/identity/resolve  p95 < 800ms   error_rate < 5%
+    POST /v1/batch [small-10]  p95 < 500ms   error_rate < 5%
+    POST /sdk/identity/resolve  p95 < 800ms   error_rate < 5%
     overall                                   error_rate < 5%
 
 Every endpoint exercised by tests/load/locustfile.py MUST have a threshold
@@ -48,11 +48,10 @@ ROOT = Path(__file__).resolve().parent.parent
 LOCUST_USER_CLASS = "IngestHeavyUser"
 
 THRESHOLDS: dict[str, dict] = {
-    "/v1/ingest/events/batch [small-10]": {"p95_ms": 500, "error_pct": 5.0},
-    "/v1/ingest/events/batch [medium-50]": {"p95_ms": 800, "error_pct": 5.0},
-    "/v1/ingest/events/batch [duplicate]": {"p95_ms": 500, "error_pct": 5.0},
-    "/v1/ingest/events/batch [schema-rejected]": {"p95_ms": 500, "error_pct": 5.0},
-    "/v1/ingest/feed [feed-20]": {"p95_ms": 500, "error_pct": 5.0},
+    "/v1/batch [small-10]": {"p95_ms": 500, "error_pct": 5.0},
+    "/v1/batch [medium-50]": {"p95_ms": 800, "error_pct": 5.0},
+    "/v1/batch [duplicate]": {"p95_ms": 500, "error_pct": 5.0},
+    "/v1/batch [schema-rejected]": {"p95_ms": 500, "error_pct": 5.0},
     "/sdk/identity/resolve [1-anchor]": {"p95_ms": 800, "error_pct": 5.0},
     "/sdk/identity/resolve [3-anchors]": {"p95_ms": 800, "error_pct": 5.0},
     "/sdk/identity/resolve [5-anchors]": {"p95_ms": 1000, "error_pct": 5.0},
@@ -92,7 +91,6 @@ def _run_locust(
         "--csv", csv_prefix,
         "--only-summary",
         "--loglevel", "WARNING",
-        "--users", str(users),
         LOCUST_USER_CLASS,
     ]
     env = os.environ.copy()

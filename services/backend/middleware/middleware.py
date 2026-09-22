@@ -1150,20 +1150,76 @@ def _matched_route_template(app: FastAPI, scope: dict) -> Optional[str]:
 
     Middleware runs outside Starlette's router, so ``scope['route']`` is not
     reliably populated yet.  Matching here ensures literal tenant/entity IDs
-    never become authorization inputs.
+    never become authorization inputs.  Recent FastAPI versions defer
+    ``include_router`` registrations behind ``_IncludedRouter`` wrappers;
+    those wrappers report ``Match.FULL`` themselves but have no path.  Never
+    treat that wrapper match as the route: resolve its effective leaf
+    contexts first, otherwise enforced deployments fail-closed with
+    ``ROUTE_POLICY_UNKNOWN_ROUTE`` for every request, including public health
+    probes.
     """
     from starlette.routing import Match
 
     existing = scope.get("route")
-    if existing is not None:
-        return getattr(existing, "path", None)
-    for route in app.routes:
-        try:
-            match, _ = route.matches(scope)
-        except (AttributeError, KeyError, TypeError):
-            continue
-        if match is Match.FULL:
-            return getattr(route, "path", None)
+
+    existing_path = getattr(existing, "path", None)
+    if isinstance(existing_path, str):
+        return existing_path
+
+    def match_routes(routes, prefix: str = "") -> Optional[str]:
+        for route in routes:
+            # FastAPI 0.141+ keeps included routers as lazy wrappers.  Their
+            # effective contexts carry the fully prefixed leaf path and the
+            # correct method/path matcher.
+            effective_contexts = getattr(route, "effective_route_contexts", None)
+            if callable(effective_contexts):
+                try:
+                    contexts = effective_contexts()
+                except (AttributeError, KeyError, TypeError, ValueError):
+                    contexts = ()
+                for context in contexts:
+                    try:
+                        match, _ = context.matches(scope)
+                    except (AttributeError, KeyError, TypeError, ValueError):
+                        continue
+                    if match is Match.FULL:
+                        path = getattr(context, "path", None)
+                        if isinstance(path, str) and path:
+                            return path
+                continue
+
+            try:
+                match, _ = route.matches(scope)
+            except (AttributeError, KeyError, TypeError, ValueError):
+                match = Match.NONE
+            if match is Match.FULL:
+                path = getattr(route, "path", None)
+                if isinstance(path, str):
+                    return prefix + path
+
+            # Compatibility for framework versions that expose nested routers
+            # without effective_route_contexts().
+            original_router = getattr(route, "original_router", None)
+            if original_router is not None:
+                context = getattr(route, "include_context", None)
+                nested_prefix = prefix + (getattr(context, "prefix", "") or "")
+                found = match_routes(
+                    getattr(original_router, "routes", ()) or (), nested_prefix
+                )
+                if found is not None:
+                    return found
+
+            nested_routes = getattr(route, "routes", None)
+            if nested_routes:
+                found = match_routes(nested_routes, prefix + (getattr(route, "path", "") or ""))
+                if found is not None:
+                    return found
+
+        return None
+
+    matched = match_routes(getattr(app, "routes", ()) or ())
+    if matched is not None:
+        return matched
     return None
 
 

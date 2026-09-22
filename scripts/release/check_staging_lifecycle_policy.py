@@ -23,7 +23,7 @@ EXPECTED = {
     "ecs:DescribeTaskDefinition", "ecs:DescribeTasks", "ecs:StopTask", "ecs:UpdateService", "ecs:RunTask", "iam:PassRole",
     "ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter",
     "s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
-    "logs:DescribeLogGroups", "cloudwatch:ListMetrics",
+    "logs:DescribeLogGroups", "logs:GetLogEvents", "cloudwatch:ListMetrics",
     "application-autoscaling:DescribeScalableTargets",
     "application-autoscaling:RegisterScalableTarget", "sts:GetCallerIdentity",
 }
@@ -106,6 +106,7 @@ CLI_TO_IAM = {
     ("s3", "cp"): {"s3:PutObject"},
     ("s3api", "head-object"): {"s3:GetObject"},
     ("logs", "describe-log-groups"): {"logs:DescribeLogGroups"},
+    ("logs", "get-log-events"): {"logs:GetLogEvents"},
     ("cloudwatch", "list-metrics"): {"cloudwatch:ListMetrics"},
     ("application-autoscaling", "describe-scalable-targets"):
         {"application-autoscaling:DescribeScalableTargets"},
