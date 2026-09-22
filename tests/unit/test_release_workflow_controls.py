@@ -431,6 +431,14 @@ def test_pilot_secret_payload_preflight_installs_its_yaml_dependency():
     assert "python -m pip install --disable-pip-version-check pyyaml" in install_step["run"]
 
 
+def test_staging_amplify_preflights_wait_for_the_reviewed_commit_build():
+    for workflow_name in ("pilot-staging.yml", "staging-lifecycle.yml"):
+        text = _workflow(workflow_name)
+        assert text.count("--wait-for-current-job") == 2
+        assert text.count("--job-timeout-seconds 900") == 2
+        assert text.count("--job-poll-seconds 15") == 2
+
+
 def test_staging_reconciliation_discovers_all_managed_price_resources():
     text = _workflow("staging-state-reconcile.yml")
     for name in (
