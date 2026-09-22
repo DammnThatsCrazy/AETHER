@@ -30,6 +30,8 @@ source_files:
   - config/staging_secret_preflight_trust_policy.json
   - config/staging_plan_iam_policy.yaml
   - config/staging_plan_trust_policy.json
+  - config/staging_plan_reconcile_iam_policy.json
+  - config/staging_plan_reconcile_trust_policy.json
   - config/staging_apply_iam_policy.yaml
   - config/staging_application_delivery_iam_policy.yaml
   - config/terraform_state_access_policy.yaml
@@ -44,7 +46,7 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
-  ".github/workflows/reconcile-staging-plan-role.yml": "sha256:7b918d20c0faa31debbbb4cf8c4521336916657d8c01eb6e8aa4211c6dfc6afa"
+  ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:83b502cd011df0ee3140e6efb966130239c919b209b41b24c8301b7d7c01848f"
   ".github/workflows/staging-state-reconcile.yml": "sha256:dab1992f55fccca3a322cef100cae00d2215f3fcbf83b0dc656eef5523b2ad1e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
@@ -53,6 +55,8 @@ source_hashes:
   "config/staging_apply_iam_policy.yaml": "sha256:4a311f675ceb344018a5037f936da7b482d381f5a5628d0f03562ff4628ba802"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
   "config/staging_plan_iam_policy.yaml": "sha256:e4c818162c2ede98217a53c123c2581bcf771cc9e2d1ccf58e048fff591598c3"
+  "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
+  "config/staging_plan_reconcile_trust_policy.json": "sha256:4d413822419f32fb1cd82b99f8cabbda1b66a72c02f819d65b0213d15b14001a"
   "config/staging_plan_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
@@ -71,7 +75,7 @@ source_hashes:
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:c741b3fe45139c8493818dd2184c5ea530a44225eaa38a8ad435576d5273508e"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
-  "scripts/release/reconcile_staging_plan_role.py": "sha256:6a798e87971807d6ffe5450a7a205e2c7f53b21030c0b6d1cba2f8b32e7687a3"
+  "scripts/release/reconcile_staging_plan_role.py": "sha256:0e886d472c9a6e4d317c4b0ae627461a5ce2af8caf548290a37a8f28708a9c5c"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
@@ -166,10 +170,12 @@ The plan role is externally managed rather than Terraform-owned, so changing
 its reviewed manifest is not enough by itself. The confirmation-gated
 `.github/workflows/reconcile-staging-plan-role.yml` workflow must be run from
 the exact current `main` SHA; it renders the reviewed
-`AetherStagingPlanContract` into the target account, updates only that inline
-read-only policy through `AWS_INFRA_ROLE_ARN`, and immediately verifies the
-effective policy, including Terraform state access. It never reads application
-secret values and never applies Terraform. Pilot and lifecycle entry gates run
+`AetherStagingPlanContract` into the target account through the dedicated
+`AetherStagingPlanReconcile` role in `AWS_STAGING_PLAN_RECONCILE_ROLE_ARN`, and
+then switches to the read-only `AetherStagingPlan` role to verify the effective
+policy, including Terraform state access. The bootstrap role can update only
+that one inline policy; it cannot inspect application secrets or apply
+Terraform. Pilot and lifecycle entry gates run
 the same effective-policy verification before dispatching any child plan, so
 external IAM drift stops at the boundary instead of surfacing as a later
 Terraform 403.

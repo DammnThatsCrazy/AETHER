@@ -94,10 +94,12 @@ applies. The `apply-production-lean` job that once auto-applied on every push to
 Before the first staging plan after an IAM-manifest change, or whenever the
 external plan role may have drifted, dispatch
 `reconcile-staging-plan-role.yml` from the exact current `main` SHA with the
-`RECONCILE-STAGING-PLAN-IAM` confirmation. It updates only the reviewed,
-read-only `AetherStagingPlanContract` policy and verifies effective coverage;
-it does not apply Terraform or read secret values. Do not start a staging
-provisioning run until that reconciliation succeeds.
+`RECONCILE-STAGING-PLAN-IAM` confirmation. It uses the dedicated
+`AWS_STAGING_PLAN_RECONCILE_ROLE_ARN` bootstrap role to update only the
+reviewed, read-only `AetherStagingPlanContract` policy, then verifies effective
+coverage under `AetherStagingPlan`; it does not apply Terraform or read secret
+values. Do not start a staging provisioning run until that reconciliation
+succeeds.
 
 1. Dispatch **Reviewed Terraform promotion** (`terraform-promote.yml`) with
    `action=plan`, the target `profile`, the approved `backend_image_digest` and

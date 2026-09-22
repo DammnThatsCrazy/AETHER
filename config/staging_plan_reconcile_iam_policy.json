@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadTargetPlanRoleMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies"
+      ],
+      "Resource": "arn:aws:iam::544471417928:role/AetherStagingPlan"
+    },
+    {
+      "Sid": "ReconcileTargetPlanContract",
+      "Effect": "Allow",
+      "Action": "iam:PutRolePolicy",
+      "Resource": "arn:aws:iam::544471417928:role/AetherStagingPlan"
+    }
+  ]
+}
