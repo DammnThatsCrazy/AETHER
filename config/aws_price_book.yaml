@@ -176,6 +176,10 @@ zero_cost_types:
   # publication rather than treated as a hidden fixed zero.
   - aws_amplify_app
   - aws_amplify_branch
+  # A domain association is also an Amplify control-plane record. Hosting,
+  # build, request, and transfer usage is observed separately after
+  # publication; the association itself carries no fixed AWS charge.
+  - aws_amplify_domain_association
   - aws_caller_identity
   - aws_region
   - aws_availability_zones
