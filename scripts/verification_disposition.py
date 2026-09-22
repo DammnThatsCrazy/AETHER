@@ -40,6 +40,7 @@ from scripts.lib.impact_graph import (  # noqa: E402
 )
 from scripts.lib.build_selection import select_builds  # noqa: E402
 from scripts.lib.test_suites import TestSuite, build_command, load_suites  # noqa: E402
+from scripts.lib.processes import run_with_timeout, timeout_output  # noqa: E402
 from scripts.lib.verification_router import (  # noqa: E402
     CheckDefinition,
     VerificationRouterConfig,
@@ -200,13 +201,10 @@ def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
         )
     started = time.monotonic()
     try:
-        proc = subprocess.run(
+        proc = run_with_timeout(
             _resolve_command(check.command),
             cwd=ROOT,
             env={**os.environ, "CI": os.environ.get("CI", "true")},
-            text=True,
-            capture_output=True,
-            check=False,
             timeout=check.timeout_seconds,
         )
         output = (proc.stdout or "") + (proc.stderr or "")
@@ -223,9 +221,7 @@ def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
             release_class=check.release_class,
         )
     except subprocess.TimeoutExpired as exc:
-        output = ((exc.stdout or "") if isinstance(exc.stdout, str) else "") + (
-            (exc.stderr or "") if isinstance(exc.stderr, str) else ""
-        )
+        output = timeout_output(exc)
         return CommandResult(
             check_id=check.check_id,
             lane=check.lane,

@@ -29,6 +29,7 @@ CONTROL_PLANE_SCRIPTS = (
     "scripts/lib/verification_router.py",
     "scripts/lib/build_selection.py",
     "scripts/lib/test_suites.py",
+    "scripts/lib/processes.py",
     "scripts/lib/ci_performance.py",
     "scripts/aggregate_verification_evidence.py",
     "scripts/suite_worker.py",

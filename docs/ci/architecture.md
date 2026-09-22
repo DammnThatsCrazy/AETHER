@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior, ops]
 status: stable
 since_version: "0.1.0"
-source_files: [.github/workflows/repo-consistency.yml, .github/workflows/repo-health.yml, scripts/verification_disposition.py, scripts/impact_graph.py, config/impact_graph.json, scripts/staging_preflight.py, scripts/lib/preflight_dynamodb.py]
+source_files: [.github/workflows/repo-consistency.yml, .github/workflows/repo-health.yml, scripts/verification_disposition.py, scripts/suite_worker.py, scripts/universal_fast.py, scripts/lib/processes.py, scripts/impact_graph.py, config/impact_graph.json, scripts/staging_preflight.py, scripts/lib/preflight_dynamodb.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
@@ -85,6 +85,12 @@ The `--fail-on-unresolved` flag on `impact_graph.py` is deliberate: a changed
 file the graph cannot map to a known component fails the job rather than
 silently being routed to the loosest lane. This keeps the routing fail-closed
 as the repo grows.
+
+Every bounded control-plane command runs in its own process group through
+`scripts/lib/processes.py`. When a hard runtime budget expires, the runner
+terminates the complete group before publishing a timeout result. This is
+important for isolated pytest suites: killing only the wrapper can leave
+descendant workers alive and contaminate the next verification run.
 
 ## Blocking vs. advisory vs. release-only
 

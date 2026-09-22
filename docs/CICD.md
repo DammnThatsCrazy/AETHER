@@ -94,6 +94,10 @@ pass.
 Each selected Node worker installs the lockfile and builds `packages/shared`
 before its workspace suite so generated contract twins are available without
 requiring a broad application build.
+Every bounded suite and universal-fast command runs in its own process group;
+when a hard budget expires, the shared control-plane runner terminates that
+group before emitting timeout evidence. This prevents descendant pytest
+workers from surviving a timed-out wrapper and contaminating a later check.
 
 The canonical CI performance policy targets classifier p95 <= 30 seconds,
 universal-fast p95 <= 60 seconds, ordinary PR p50 <= 300 seconds and p95 <=

@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.lib.test_suites import build_command, load_suites  # noqa: E402
+from scripts.lib.processes import run_with_timeout, timeout_output  # noqa: E402
 
 
 def _number(value: str | float | int) -> float:
@@ -53,19 +54,16 @@ def run_worker(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         output = ""
         returncode = 0
         try:
-            process = subprocess.run(
+            process = run_with_timeout(
                 _resolve_command(build_command(suite)),
                 cwd=ROOT,
                 env={**os.environ, "CI": os.environ.get("CI", "true")},
-                text=True,
-                capture_output=True,
-                check=False,
                 timeout=int(suite.hard_runtime_budget_seconds),
             )
             output = (process.stdout or "") + (process.stderr or "")
             returncode = process.returncode
         except subprocess.TimeoutExpired as exc:
-            output = ((exc.stdout or "") if isinstance(exc.stdout, str) else "") + ((exc.stderr or "") if isinstance(exc.stderr, str) else "")
+            output = timeout_output(exc)
             returncode = 124
         except OSError as exc:
             output = str(exc)
