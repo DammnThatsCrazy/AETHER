@@ -422,6 +422,15 @@ def test_pilot_sleep_paths_skip_non_cleanup_preflights_but_keep_authority():
     assert "amplify-preflight.result == 'skipped'" in dispatch_if
 
 
+def test_pilot_secret_payload_preflight_installs_its_yaml_dependency():
+    document = _workflow_yaml("pilot-staging.yml")
+    steps = document["jobs"]["secret-payload-preflight"]["steps"]
+    install_step = next(
+        step for step in steps if step.get("name") == "Install secret preflight dependency"
+    )
+    assert "python -m pip install --disable-pip-version-check pyyaml" in install_step["run"]
+
+
 def test_staging_reconciliation_discovers_all_managed_price_resources():
     text = _workflow("staging-state-reconcile.yml")
     for name in (
