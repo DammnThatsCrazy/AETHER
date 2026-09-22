@@ -102,6 +102,29 @@ def test_staging_and_production_status_contracts_accept_exact_metadata():
     assert checker.contract_errors(mode="production-status", expected_commit=COMMIT, client=client) == []
 
 
+def test_staging_contract_waits_for_an_active_reviewed_commit_job():
+    base_client = _client()
+    statuses = iter(("RUNNING", "SUCCEED"))
+    sleeps: list[float] = []
+
+    def client(args: list[str]) -> dict[str, Any]:
+        payload = base_client(args)
+        if args[:2] == ["amplify", "list-jobs"] and args[args.index("--app-id") + 1] == "d-olympus":
+            payload["jobSummaries"][0]["status"] = next(statuses)
+        return payload
+
+    assert checker.contract_errors(
+        mode="staging",
+        expected_commit=COMMIT,
+        wait_for_current_job=True,
+        job_timeout_seconds=30,
+        job_poll_seconds=5,
+        sleeper=sleeps.append,
+        client=client,
+    ) == []
+    assert sleeps == [5]
+
+
 def test_repository_contract_accepts_amplify_github_url_casing_and_git_suffix():
     client = _client(production_repository="https://github.com/dammnthatscrazy/aether.git/")
     assert checker.contract_errors(mode="production-status", expected_commit=COMMIT, client=client) == []

@@ -19,6 +19,7 @@ import argparse
 import re
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Mapping
 from typing import Any, NoReturn
 
@@ -27,6 +28,11 @@ REPOSITORY = "https://github.com/DammnThatsCrazy/AETHER"
 STAGING_DOMAIN = "staging.olympuslabsml.com"
 PRODUCTION_DOMAIN = "olympuslabsml.com"
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+ACTIVE_JOB_STATUSES = frozenset(
+    {"CREATED", "PENDING", "PROVISIONING", "QUEUED", "RUNNING"}
+)
+DEFAULT_JOB_TIMEOUT_SECONDS = 900.0
+DEFAULT_JOB_POLL_SECONDS = 15.0
 
 STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
     "AETHER-staging-olympus-marketing": {
@@ -78,6 +84,8 @@ PRODUCTION_STATUS_ENVIRONMENT = {
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
 DnsResolver = Callable[[str], str]
+Sleeper = Callable[[float], None]
+Clock = Callable[[], float]
 
 
 def fail(message: str) -> NoReturn:
@@ -184,6 +192,55 @@ def _latest_job(
     return max(normalized, key=job_number), []
 
 
+def _wait_for_current_commit_job(
+    *,
+    name: str,
+    app_id: str,
+    branch_name: str,
+    expected_commit: str | None,
+    job: Mapping[str, Any] | None,
+    client: AwsCall,
+    timeout_seconds: float,
+    poll_seconds: float,
+    sleeper: Sleeper,
+    clock: Clock,
+) -> tuple[Mapping[str, Any] | None, list[str]]:
+    """Wait for an active job only when it is the reviewed commit.
+
+    A push to ``main`` can start an Amplify auto-build immediately before the
+    staging gate runs. Treating that expected active job as a failed contract
+    creates a race and invites unsafe retries. A job for another commit is
+    still a hard provenance error and is never waited out.
+    """
+    if (
+        expected_commit is None
+        or job is None
+        or job.get("commitId") != expected_commit
+        or job.get("status") not in ACTIVE_JOB_STATUSES
+    ):
+        return job, []
+
+    deadline = clock() + timeout_seconds
+    current = job
+    while current.get("status") in ACTIVE_JOB_STATUSES:
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return current, [
+                f"Amplify app {name} latest {branch_name} job for the reviewed commit "
+                f"remained {current.get('status')!r} after {timeout_seconds:g} seconds"
+            ]
+        sleeper(min(poll_seconds, remaining))
+        current, job_errors = _latest_job(app_id, branch_name, client)
+        if job_errors:
+            return current, job_errors
+        if current is None:
+            return None, [
+                f"Amplify app {name} {branch_name} job disappeared while waiting "
+                "for the reviewed commit"
+            ]
+    return current, []
+
+
 def _check_app(
     *,
     name: str,
@@ -194,6 +251,11 @@ def _check_app(
     expected_branch_environment: Mapping[str, str] | None = None,
     required_branch_environment_keys: tuple[str, ...] = (),
     check_job_provenance: bool = True,
+    wait_for_current_job: bool = False,
+    job_timeout_seconds: float = DEFAULT_JOB_TIMEOUT_SECONDS,
+    job_poll_seconds: float = DEFAULT_JOB_POLL_SECONDS,
+    sleeper: Sleeper = time.sleep,
+    clock: Clock = time.monotonic,
     check_domain: bool = True,
     domain_name: str | None = None,
     dns_resolver: DnsResolver = _public_cname,
@@ -231,6 +293,21 @@ def _check_app(
     if check_job_provenance:
         job, job_errors = _latest_job(app_id, "main", client)
         errors.extend(f"Amplify app {name}: {error}" for error in job_errors)
+        if job is not None:
+            if wait_for_current_job:
+                job, wait_errors = _wait_for_current_commit_job(
+                    name=name,
+                    app_id=app_id,
+                    branch_name="main",
+                    expected_commit=expected_commit,
+                    job=job,
+                    client=client,
+                    timeout_seconds=job_timeout_seconds,
+                    poll_seconds=job_poll_seconds,
+                    sleeper=sleeper,
+                    clock=clock,
+                )
+                errors.extend(f"Amplify app {name}: {error}" for error in wait_errors)
         if job is not None:
             if job.get("status") != "SUCCEED":
                 errors.append(f"Amplify app {name} latest main job is {job.get('status')!r}, not SUCCEED")
@@ -287,6 +364,11 @@ def contract_errors(
     mode: str,
     expected_commit: str | None = None,
     check_runtime_environment: bool = False,
+    wait_for_current_job: bool = False,
+    job_timeout_seconds: float = DEFAULT_JOB_TIMEOUT_SECONDS,
+    job_poll_seconds: float = DEFAULT_JOB_POLL_SECONDS,
+    sleeper: Sleeper = time.sleep,
+    clock: Clock = time.monotonic,
     dns_resolver: DnsResolver = _public_cname,
     client: AwsCall,
 ) -> list[str]:
@@ -317,6 +399,11 @@ def contract_errors(
                         else ()
                     ),
                     check_job_provenance=not runtime_only,
+                    wait_for_current_job=wait_for_current_job,
+                    job_timeout_seconds=job_timeout_seconds,
+                    job_poll_seconds=job_poll_seconds,
+                    sleeper=sleeper,
+                    clock=clock,
                     check_domain=not runtime_only,
                     client=client,
                     dns_resolver=dns_resolver,
@@ -332,6 +419,11 @@ def contract_errors(
                 subdomain_prefix="status",
                 expected_branch_environment=PRODUCTION_STATUS_ENVIRONMENT,
                 domain_name=PRODUCTION_DOMAIN,
+                wait_for_current_job=wait_for_current_job,
+                job_timeout_seconds=job_timeout_seconds,
+                job_poll_seconds=job_poll_seconds,
+                sleeper=sleeper,
+                clock=clock,
                 client=client,
                 dns_resolver=dns_resolver,
             )
@@ -350,12 +442,34 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Require the reviewed staging branch runtime links (never reads secrets)",
     )
+    parser.add_argument(
+        "--wait-for-current-job",
+        action="store_true",
+        help="Wait for an active Amplify job when it is for the reviewed commit",
+    )
+    parser.add_argument(
+        "--job-timeout-seconds",
+        type=float,
+        default=DEFAULT_JOB_TIMEOUT_SECONDS,
+        help="Maximum time to wait for an active reviewed-commit job",
+    )
+    parser.add_argument(
+        "--job-poll-seconds",
+        type=float,
+        default=DEFAULT_JOB_POLL_SECONDS,
+        help="Delay between Amplify job status checks while waiting",
+    )
     args = parser.parse_args(argv)
+    if args.job_timeout_seconds <= 0 or args.job_poll_seconds <= 0:
+        parser.error("job timeout and poll intervals must be positive")
     try:
         errors = contract_errors(
             mode=args.mode,
             expected_commit=args.expected_commit,
             check_runtime_environment=args.check_runtime_environment or args.mode == "staging-runtime",
+            wait_for_current_job=args.wait_for_current_job,
+            job_timeout_seconds=args.job_timeout_seconds,
+            job_poll_seconds=args.job_poll_seconds,
             client=lambda request: aws_json(request),
         )
     except RuntimeError as exc:

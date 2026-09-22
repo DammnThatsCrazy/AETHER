@@ -487,7 +487,10 @@ jobs:
           set -euo pipefail
           python scripts/release/check_amplify_app_contract.py \
             --mode staging \
-            --expected-commit "$EXPECTED_COMMIT_SHA"
+            --expected-commit "$EXPECTED_COMMIT_SHA" \
+            --wait-for-current-job \
+            --job-timeout-seconds 900 \
+            --job-poll-seconds 15
       - name: Verify production status provenance and branch stage
         env:
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
@@ -495,7 +498,10 @@ jobs:
           set -euo pipefail
           python scripts/release/check_amplify_app_contract.py \
             --mode production-status \
-            --expected-commit "$EXPECTED_COMMIT_SHA"
+            --expected-commit "$EXPECTED_COMMIT_SHA" \
+            --wait-for-current-job \
+            --job-timeout-seconds 900 \
+            --job-poll-seconds 15
 
   preflight-rehearsal-inputs:
     name: Preflight full-rehearsal smoke inputs

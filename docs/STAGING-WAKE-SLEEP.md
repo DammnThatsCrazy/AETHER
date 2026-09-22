@@ -31,8 +31,8 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
-  ".github/workflows/pilot-staging.yml": "sha256:d5eb82da6adb11d982bd37d947d2b364358f47a5dbaf73f5500e3a24b78e2945"
-  ".github/workflows/staging-lifecycle.yml": "sha256:30db90946b2611fb62cf4ec64600b353b046312869b97f927fb5e4632205e4ff"
+  ".github/workflows/pilot-staging.yml": "sha256:66836a9604a251df686f9cc3dac0966b9eec2624ace5ad317b78c1c55e961cc2"
+  ".github/workflows/staging-lifecycle.yml": "sha256:3286f066f1658c8b931e1b8db3965883431c9aad886a94d09c7c96ebdf77960d"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
@@ -43,7 +43,7 @@ source_hashes:
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
-  "scripts/release/check_amplify_app_contract.py": "sha256:d58fd3bcdfd6a512f5ca66a4812aec6c18f45ed964d9f13bff42b8f5ebd2c2fa"
+  "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
@@ -202,6 +202,15 @@ reconcile path can re-encrypt it with an explicit
 `migrate_legacy_secret_kms=true` and `MIGRATE-STAGING-SECRETS` confirmation;
 the migration uses metadata-only Secrets Manager calls and does not read the
 secret value.
+
+The staging Amplify preflight is also race-safe for a merged `main` push. The
+five customer-facing apps can auto-start their reviewed-commit builds before
+the pilot wrapper reaches its provenance gate, so the gate waits for an active
+job only when its commit is exactly the reviewed SHA. It polls for up to 15
+minutes, then requires a terminal `SUCCEED` status and the exact commit; an
+active job for another commit, a failed build, or a timeout remains a hard
+failure. This keeps the process bounded without accepting stale or unverified
+artifacts.
 
 The pilot wrapper treats `plan-sleep` and `apply-sleep` as cleanup actions:
 after the contract job, it skips credential, secret-payload and Amplify
