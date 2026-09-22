@@ -48,7 +48,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:30ca1d62db017da0e6f7c090f1686317b529645e50703fbdff24b1147a6069e9"
+  ".github/workflows/staging-lifecycle.yml": "sha256:41aa3dcc1b0f66134df921b6fed1b6e3af2f1b61c1ce29cf27f9d447978bcbc8"
   ".github/workflows/staging-state-reconcile.yml": "sha256:dab1992f55fccca3a322cef100cae00d2215f3fcbf83b0dc656eef5523b2ad1e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:1e1929f5d8508e20be6068680b5859cda27cf0ffabaa14d734789b7833b2f322"
@@ -66,16 +66,16 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:e43361b08acd3f9fc35705964ceb5734da7cd84aecbb32b435f483fafc082293"
+  "deploy/aws/terraform/": "sha256:3827877fe77dc575bf6e02492fe8d71aced5a74be9fa1a47b6a47ae45961736a"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:01bbce3783d9c0a59d480e96fc05e2b98e2d3126660805304d8bfee6337d8bd2"
-  "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
+  "scripts/release/check_staging_credential_contract.py": "sha256:362d1558681bfd2ae4fa48eb2f135aca86b6b04db9e341ae31f183f501dee8ea"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:8e8076392342c7ac6302e3f7c2e79b5ce536cf9035981e35a7ba10d33bfe694f"
   "scripts/release/check_staging_runtime_iam.py": "sha256:282362ca53e7032591ed17dab3c01b4db6e37fa1a95ea86cbd2fd4f26b064e14"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:c741b3fe45139c8493818dd2184c5ea530a44225eaa38a8ad435576d5273508e"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:edfa749aba1fc6e49eb1a2c6a58d3ef36b78f2c084cd3644441eac090a740435"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:0e886d472c9a6e4d317c4b0ae627461a5ce2af8caf548290a37a8f28708a9c5c"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
@@ -144,8 +144,10 @@ before the first load balancer exists. The same lifecycle creates run-scoped
 rehearsal tenants and
 API keys after wake, masks those keys in the runner, and deletes or deactivates
 every marker-recorded tenant during its always-run cleanup. The only durable
-rehearsal credential is the encrypted staging admin bootstrap key, which is
-supplied out of band and never generated or echoed by CI.
+rehearsal credential is the encrypted `STAGING_ADMIN_API_KEY`, an `ak_...` key
+created by the one-time staging first-admin route and supplied out of band;
+the AWS `FIRST_ADMIN_BOOTSTRAP_TOKEN` remains a separate Secrets Manager
+handoff credential and is never generated, copied into GitHub, or echoed by CI.
 
 The lifecycle and apply contracts are intentionally separate. `AetherStagingPlan`
 owns remote plan and read-only state access and is the dedicated metadata-only
@@ -797,8 +799,12 @@ if any of the four real self-service Stripe test price secrets is missing or
 stale. The full lane does not require those pilot-only price secrets; it
 requires the twelve base application secrets plus the two Kyber workforce
 secrets. The secure bootstrap rejects malformed or placeholder IDs before
-writing them; the workflow preflight reads metadata only and never invents,
-reads, or prints a price ID.
+writing them; the pilot task also arms the staging-only first-admin route from
+the Secrets Manager token and approved alert email. The operator stores its
+one-time returned `ak_...` key as `STAGING_ADMIN_API_KEY`; the lifecycle checks
+that key against `/v1/me` with admin scope before any rehearsal mutation. The
+workflow preflight reads metadata only and never invents, reads, or prints a
+price ID or credential value.
 
 ### Staging apply prerequisites and collision safety
 

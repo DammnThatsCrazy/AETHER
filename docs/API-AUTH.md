@@ -46,10 +46,14 @@ same credential invalidation contract but deliberately retains tenant data for
 recovery.
 
 The staging smoke harness uses two credentials with different boundaries. The
-run-scoped tenant key is limited to data-plane checks. The encrypted
-`STAGING_ADMIN_API_KEY` is supplied only to the diagnostics probes and the
-run-scoped bootstrap/cleanup calls; it is never written to an artifact or used
-as the tenant's application credential. A successful destructive cleanup must
+run-scoped tenant key is limited to data-plane checks. The encrypted durable
+`STAGING_ADMIN_API_KEY` is the `ak_...` key returned by the one-time first-admin
+bootstrap; it is validated against `/v1/me` with admin scope after wake and is
+then supplied only to the diagnostics probes and the run-scoped bootstrap/cleanup
+calls. It is never written to an artifact or used as the tenant's application
+credential. The AWS `FIRST_ADMIN_BOOTSTRAP_TOKEN` is a separate one-time
+Secrets Manager credential and is never copied into the GitHub admin-key secret.
+A successful destructive cleanup must
 return its complete erasure receipt, including consent/DSR, ingestion and
 analytics records, profiles, and graph projection data. Billing and immutable
 security-audit evidence remain retained under policy.

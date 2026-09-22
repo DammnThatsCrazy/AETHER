@@ -25,7 +25,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:6c756a117b6758c770db06719c70b7e133ea5ba9121ec9ded4f01f6642c3f411"
+  ".github/workflows/": "sha256:76b0b76784794d3b2040ee5b02bc78f6b7b11338557d7a523798b924fbe81716"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -221,21 +221,28 @@ normalizes IAM action names case-insensitively, and carries the paired alias
 request context into both KMS `CreateAlias` resource checks.
 
 Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
-staging-environment preflight. It requires one encrypted, pre-existing
-`STAGING_ADMIN_API_KEY` bootstrap credential. The certificate-covered API
-hostname and raw ALB name are captured from the reviewed Terraform apply output
-after the load balancer exists. Since external DNS is not managed by Terraform,
-promotion publishes both without making a completed apply fail on propagation;
-the lifecycle performs the fail-closed hostname-to-ALB resolution check before
-readiness, the awake lease, and the
+staging-environment preflight. It requires one encrypted, pre-existing,
+durable `STAGING_ADMIN_API_KEY` whose shape is `ak_` plus 24 alphanumeric
+characters. This is the key returned by the one-time first-admin bootstrap;
+the AWS `FIRST_ADMIN_BOOTSTRAP_TOKEN` is never valid in the GitHub secret. After
+wake, the lifecycle calls `/v1/me` with that key and requires HTTP 200 plus
+`is_admin=true` before any static publication, migration, or rehearsal tenant
+mutation. The certificate-covered API hostname and raw ALB name are captured
+from the reviewed Terraform apply output after the load balancer exists. Since
+external DNS is not managed by Terraform, promotion publishes both without
+making a completed apply fail on propagation; the lifecycle performs the
+fail-closed hostname-to-ALB resolution check before readiness, the awake lease,
+and the
 primary rehearsal and isolation API keys are generated through the admin
 tenant/key routes as run-scoped tenants after wake; they are masked, never
-uploaded, and are deleted or deactivated by the always-run cleanup. This removes
-the circular requirement for an ALB value
-and long-lived test keys before the first apply while keeping the admin
-bootstrap credential fail-closed. Plan-only and non-rehearsal actions remain
-available without that runtime input, but a full rehearsal fails before
-apply-wake rather than waking an environment that cannot be tested. Both the
+uploaded, and are deleted or deactivated by the always-run cleanup. The pilot
+Terraform overlay arms the staging-only first-admin route with its mounted AWS
+token and the approved `TF_ALERT_EMAIL`; the durable database marker makes the
+route single-use. This removes the circular requirement for an ALB value and
+long-lived test keys before the first apply while keeping the admin handoff
+fail-closed. Plan-only and non-rehearsal actions remain available without that
+runtime input, but a full rehearsal fails before apply-wake rather than waking
+an environment that cannot be tested. Both the
 lifecycle and TTL cleanup paths also fail closed: an absent SSM lease is treated
 as already asleep, while an access, throttling, or other deletion error fails
 the run so unknown cleanup state cannot be reported as success. The TTL guard

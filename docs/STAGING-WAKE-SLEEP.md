@@ -39,7 +39,7 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
   ".github/workflows/pilot-staging.yml": "sha256:f867617c5264ca3167d74cd906ccf51ca5ab8ac18f198679adbed57c997fce1d"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:30ca1d62db017da0e6f7c090f1686317b529645e50703fbdff24b1147a6069e9"
+  ".github/workflows/staging-lifecycle.yml": "sha256:41aa3dcc1b0f66134df921b6fed1b6e3af2f1b61c1ce29cf27f9d447978bcbc8"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:1e1929f5d8508e20be6068680b5859cda27cf0ffabaa14d734789b7833b2f322"
@@ -55,11 +55,11 @@ source_hashes:
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
-  "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
+  "scripts/release/check_staging_credential_contract.py": "sha256:362d1558681bfd2ae4fa48eb2f135aca86b6b04db9e341ae31f183f501dee8ea"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:c741b3fe45139c8493818dd2184c5ea530a44225eaa38a8ad435576d5273508e"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:edfa749aba1fc6e49eb1a2c6a58d3ef36b78f2c084cd3644441eac090a740435"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:0e886d472c9a6e4d317c4b0ae627461a5ce2af8caf548290a37a8f28708a9c5c"
 ---
 
@@ -465,7 +465,7 @@ Steps, in order, with what each proves:
    separate WebAuthn origin. This prevents a green infrastructure plan from
    producing the earlier task-start failure caused by missing workforce
    identity anchors.
-5. **Tenant isolation.** The run uses the encrypted staging admin bootstrap
+5. **Tenant isolation.** The run uses the encrypted durable staging admin
    key to create two fresh, free, run-scoped tenants and one API key for each.
    The raw keys are masked and held only in the runner environment; they are
    never committed or uploaded. Their `tenant_id` values must differ. A
@@ -473,9 +473,11 @@ Steps, in order, with what each proves:
    200 is a breach and fails the run. An unauthenticated `/v1/me` must fail
    closed.
 6. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
-   `scripts/smoke_test.py` (the tenant key covers data-plane checks and the
-   encrypted `STAGING_ADMIN_API_KEY` is supplied only to the two admin
-   diagnostics probes), then explicit probes for auth, consent/privacy
+   `scripts/smoke_test.py` (the tenant key covers data-plane checks; the
+   encrypted durable `STAGING_ADMIN_API_KEY` (`ak_` plus 24 alphanumeric
+   characters) is supplied only after the post-wake `/v1/me` admin validation,
+   then to the two admin diagnostics probes), then explicit probes for
+   auth, consent/privacy
    (records, retention manifest, DSR), ingestion, **queue-worker drain**
    (polls analytics for the ingested event for up to 300 s; failure to drain is
    reported as the `lean-worker` execution group not draining — this is the

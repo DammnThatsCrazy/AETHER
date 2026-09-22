@@ -23,6 +23,7 @@ URL_RE = re.compile(r"^https://[A-Za-z0-9.-]+(?::\d+)?(?:/[^\s]*)?$")
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 ACM_RE = re.compile(r"^arn:aws:acm:us-east-1:\d{12}:certificate/[0-9a-f-]+$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+STAGING_ADMIN_KEY_RE = re.compile(r"^ak_[A-Za-z0-9]{24}$")
 
 
 ROLE_VARS = (
@@ -79,6 +80,11 @@ def credential_errors(
     _require_nonempty(values, ROLE_VARS + COMMON_VARS, errors)
     if lane == "pilot":
         _require_nonempty(values, PILOT_SECRET_VARS, errors)
+        admin_key = _value(values, "STAGING_ADMIN_API_KEY")
+        if admin_key and not STAGING_ADMIN_KEY_RE.fullmatch(admin_key):
+            errors.append(
+                "STAGING_ADMIN_API_KEY must be the durable ak_ API key returned by first-admin bootstrap"
+            )
     else:
         _require_nonempty(values, FULL_GOOGLE_VARS, errors)
 

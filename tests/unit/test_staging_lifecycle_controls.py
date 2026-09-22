@@ -662,6 +662,17 @@ def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tena
     assert names.index("Revalidate awake lease before static publication") < names.index(
         "Publish and verify the approved static SPA artifacts"
     )
+    assert names.index("Verify the exact immutable application artifact is what staging runs") < names.index(
+        "Verify the durable staging admin credential before mutation"
+    ) < names.index("Revalidate awake lease before static publication")
+    admin_probe = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Verify the durable staging admin credential before mutation"
+    )["run"]
+    assert "/v1/me" in admin_probe
+    assert '"X-API-Key"' in admin_probe
+    assert "data.get(\"is_admin\") is not True" in admin_probe
+    assert "replace it through the documented first-admin handoff" in admin_probe
     assert "Publish and verify the approved static SPA artifacts" in names
     assert "aws s3 sync" in script
     cleanup = next(

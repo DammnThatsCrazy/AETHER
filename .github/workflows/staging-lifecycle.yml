@@ -542,12 +542,14 @@ jobs:
     env:
       STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
     steps:
-      - name: Require the bootstrap admin key
+      - name: Require the durable staging admin key
         run: |
           set -euo pipefail
           test -n "${STAGING_ADMIN_API_KEY:-}" \
-            || { echo '::error::STAGING_ADMIN_API_KEY is required as the one-time staging bootstrap credential before a full rehearsal'; exit 1; }
-          echo 'Staging bootstrap credential is present; ALB and test keys are created or resolved after the reviewed wake.'
+            || { echo '::error::STAGING_ADMIN_API_KEY is required as the durable staging admin credential before a full rehearsal'; exit 1; }
+          [[ "$STAGING_ADMIN_API_KEY" =~ ^ak_[A-Za-z0-9]{24}$ ]] \
+            || { echo '::error::STAGING_ADMIN_API_KEY must be the durable ak_ API key returned by the one-time first-admin bootstrap; the AWS bootstrap token is not valid here'; exit 1; }
+          echo 'Durable staging admin credential is present; the live admin check and run-scoped test keys execute after the reviewed wake.'
 
   # ---------------------------------------------------------------------------
   # Phase 2 — credentialed wake plan, produced by the reviewed promotion workflow.
@@ -1408,6 +1410,54 @@ jobs:
             fi
           done
           echo "staging runs the approved immutable release"
+
+      - name: Verify the durable staging admin credential before mutation
+        env:
+          ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+          request = urllib.request.Request(
+              f"{base}/v1/me",
+              headers={
+                  "Accept": "application/json",
+                  "X-API-Key": os.environ["ADMIN_API_KEY"],
+              },
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  status = response.status
+                  body = response.read()
+          except urllib.error.HTTPError as error:
+              # Never echo the provider response: it can contain account data.
+              status = error.code
+              error.close()
+              body = b""
+          except (urllib.error.URLError, TimeoutError) as error:
+              print(f"::error::staging admin credential probe could not reach /v1/me: {type(error).__name__}")
+              sys.exit(1)
+
+          if status != 200:
+              print(f"::error::STAGING_ADMIN_API_KEY was rejected by /v1/me with HTTP {status}; replace it through the documented first-admin handoff")
+              sys.exit(1)
+          try:
+              payload = json.loads(body or b"{}")
+              data = payload.get("data", payload)
+          except (TypeError, ValueError):
+              print("::error::staging /v1/me returned a non-JSON response for the durable admin credential")
+              sys.exit(1)
+          if not isinstance(data, dict) or not isinstance(data.get("tenant_id"), str) or data.get("is_admin") is not True:
+              print("::error::STAGING_ADMIN_API_KEY authenticated but is not the durable staging admin credential")
+              sys.exit(1)
+          print("durable staging admin credential authenticated with admin scope")
+          PY
 
       - name: Revalidate awake lease before static publication
         # Static publication mutates the staging origins. Re-check the lease

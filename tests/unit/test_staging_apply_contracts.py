@@ -309,6 +309,21 @@ def test_kyber_workforce_runtime_contract_is_explicit_and_secret_backed() -> Non
     assert "backend_secret_mounts_complete" in ecs
 
 
+def test_pilot_first_admin_handoff_is_explicit_and_staging_only() -> None:
+    ecs = (TF / "modules/ecs/main.tf").read_text(encoding="utf-8")
+    root = (TF / "main.tf").read_text(encoding="utf-8")
+    variables = (TF / "modules/ecs/variables.tf").read_text(encoding="utf-8")
+    assert "first_admin_bootstrap_email = var.deployment_lane == \"pilot\" ? var.alert_email : \"\"" in root
+    assert 'first_admin_bootstrap_runtime_environment = local.pilot_lane ? [' in ecs
+    assert '{ name = "FIRST_ADMIN_BOOTSTRAP_ENABLED", value = "true" }' in ecs
+    assert '{ name = "FIRST_ADMIN_BOOTSTRAP_ENABLED", value = "false" }' in ecs
+    assert '{ name = "FIRST_ADMIN_BOOTSTRAP_EMAIL", value = trimspace(var.first_admin_bootstrap_email) }' in ecs
+    assert "first_admin_bootstrap_contract_complete = !local.pilot_lane" in ecs
+    assert "Pilot ECS tasks require a non-empty approved first-admin bootstrap email." in ecs
+    assert 'variable "first_admin_bootstrap_email"' in variables
+    assert ecs.count("local.first_admin_bootstrap_runtime_environment") == 2
+
+
 def test_backend_task_definition_has_an_explicit_api_runtime_role() -> None:
     """The Terraform-managed public task must not inherit the local `all` default."""
     ecs = (TF / "modules/ecs/main.tf").read_text(encoding="utf-8")
