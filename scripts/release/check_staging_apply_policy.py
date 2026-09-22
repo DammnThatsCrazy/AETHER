@@ -289,6 +289,8 @@ REQUIRED_ACTIONS = {
     # IAM
     "iam:CreateServiceLinkedRole",
     "iam:GetRole",
+    "iam:GetPolicy",
+    "iam:GetPolicyVersion",
     "iam:PassRole",
     "iam:CreateRole",
     "iam:DeleteRole",
@@ -359,6 +361,11 @@ _IAM_ROLE_MANAGEMENT_ACTIONS = {
     "iam:ListAttachedRolePolicies",
     "iam:ListRolePolicies",
     "iam:ListInstanceProfilesForRole",
+}
+_IAM_ROLE_SELF_AUDIT_ACTIONS = {
+    "iam:GetRolePolicy",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListRolePolicies",
 }
 ALLOWED_GLOBAL_ACTIONS = {
     # EC2 / VPC write (API requires '*')
@@ -569,6 +576,11 @@ _INFRA_ROLE_ARNS = {
 _AMPLIFY_DOMAIN_ROLE_ARN = (
     "arn:aws:iam::${account_id}:role/AETHER-staging-amplify-domain-role"
 )
+_STAGING_APPLY_ROLE_ARN = "arn:aws:iam::${account_id}:role/AetherStagingDeploy"
+_STAGING_APPLY_MANAGED_POLICY_ARNS = [
+    "arn:aws:iam::${account_id}:policy/AetherStagingDeployContract*",
+    "arn:aws:iam::${account_id}:policy/AetherStagingApplyMissingOps",
+]
 _LAMBDA_FN_ARNS = {
     "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
     "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
@@ -965,6 +977,8 @@ def main() -> int:
     expected_resources["iam:CreateServiceLinkedRole"] = "*"
     expected_resources["iam:SimulatePrincipalPolicy"] = "*"
     expected_resources["iam:GetRole"] = "exact-staging-role-read-bindings"
+    expected_resources["iam:GetPolicy"] = _STAGING_APPLY_MANAGED_POLICY_ARNS
+    expected_resources["iam:GetPolicyVersion"] = _STAGING_APPLY_MANAGED_POLICY_ARNS
     expected_resources["iam:PassRole"] = "exact-staging-role-bindings"
     expected_resources["lambda:TagResource"] = "exact-staging-lambda-bindings"
     for action in _LAMBDA_MANAGEMENT_ACTIONS:
@@ -1038,8 +1052,10 @@ def main() -> int:
                 r = s.get("resource")
                 if isinstance(r, list):
                     list_resources.update(r)
-            if single_resources != {slr_arn} or list_resources != (
-                _LAMBDA_ROLE_ARNS | _INFRA_ROLE_ARNS | {_AMPLIFY_DOMAIN_ROLE_ARN}
+            if single_resources != {slr_arn, _STAGING_APPLY_ROLE_ARN} or list_resources != (
+                _LAMBDA_ROLE_ARNS
+                | _INFRA_ROLE_ARNS
+                | {_AMPLIFY_DOMAIN_ROLE_ARN}
             ):
                 fail("iam:GetRole has an unexpected resource scope")
         elif action == "lambda:TagResource":
@@ -1052,8 +1068,21 @@ def main() -> int:
             if len(matching) != 1 or matching[0].get("resource") != expected:
                 fail("lambda:InvokeFunction must cover only the staging secret-rotation function")
         elif action in _IAM_ROLE_MANAGEMENT_ACTIONS:
-            role_sets = {frozenset(s.get("resource") or []) for s in matching}
-            if role_sets != {frozenset(_LAMBDA_ROLE_ARNS), frozenset(_INFRA_ROLE_ARNS)}:
+            role_sets = {
+                frozenset(
+                    [s["resource"]]
+                    if isinstance(s.get("resource"), str)
+                    else (s.get("resource") or [])
+                )
+                for s in matching
+            }
+            expected_role_sets = {
+                frozenset(_LAMBDA_ROLE_ARNS),
+                frozenset(_INFRA_ROLE_ARNS),
+            }
+            if action in _IAM_ROLE_SELF_AUDIT_ACTIONS:
+                expected_role_sets.add(frozenset({_STAGING_APPLY_ROLE_ARN}))
+            if role_sets != expected_role_sets:
                 fail(f"{action} must cover exactly the staging Lambda and infrastructure roles")
         elif action == "kms:Decrypt":
             staging_matches = [

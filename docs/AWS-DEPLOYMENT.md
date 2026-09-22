@@ -52,7 +52,7 @@ source_hashes:
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:d9ed5913e51aaf87f530c0096797c0bfb25773d5e8bdc389c525e31fb82becb7"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
-  "config/staging_apply_iam_policy.yaml": "sha256:4a311f675ceb344018a5037f936da7b482d381f5a5628d0f03562ff4628ba802"
+  "config/staging_apply_iam_policy.yaml": "sha256:4fed4eaf122b29db49acd252c2b07487ac3e33fc88925b17a0de7ad34bf31ab7"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
   "config/staging_plan_iam_policy.yaml": "sha256:e4c818162c2ede98217a53c123c2581bcf771cc9e2d1ccf58e048fff591598c3"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
@@ -208,6 +208,15 @@ protected SPAs; the workflow checks that contract before it assumes
 all applicable contracts and rejects any attached Allow action outside their
 union, so a new AWS call or attachment must be added deliberately to a reviewed
 contract before a run can proceed.
+
+The apply-role effective-policy check runs after the workflow assumes
+`AetherStagingDeploy`, so that role must also have the narrowly scoped
+self-audit reads declared by `AuditStagingApplyRoleContract` and
+`ReadStagingApplyManagedPolicies`. Those reads cover only the apply role and
+the reviewed `AetherStagingDeployContract*` / `AetherStagingApplyMissingOps`
+managed-policy names; they do not grant IAM role mutation. This bootstrap
+surface is part of the apply contract because omitting it would prevent the
+fail-closed verifier from inspecting the policy it is about to trust.
 
 ECS task execution roles do not receive account-wide KMS access. The
 `KMSDecrypt` statement contains only the required decrypt operation, while the
