@@ -42,8 +42,8 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
-  ".github/workflows/staging-lifecycle.yml": "sha256:3286f066f1658c8b931e1b8db3965883431c9aad886a94d09c7c96ebdf77960d"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:fa364d4bafd7f9adcebd7b303345f96be8e07250662d977d191adf81e0916931"
+  ".github/workflows/staging-lifecycle.yml": "sha256:76f1276ca4b4de812f864f8c6884154592630847eddbcd4fc7fc90d897713729"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:dab1992f55fccca3a322cef100cae00d2215f3fcbf83b0dc656eef5523b2ad1e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
@@ -487,7 +487,12 @@ The apex domain remains on Squarespace and redirects to the canonical
 Amplify when the custom-domain association is enabled. Staging uses the five
 verified `*.staging.olympuslabsml.com` associations; the import-only state
 reconciliation workflow adopts those live associations before the reviewed
-plan. Production-lean leaves Squarespace authoritative by default; the
+plan. If an existing association is missing one of the five reviewed `main`
+prefixes, the lifecycle passes the explicit `REPAIR-STAGING-AMPLIFY` token;
+reconciliation preserves the association, adds only the missing reviewed
+mapping, waits for `AVAILABLE` and DNS verification, and then imports state.
+It never creates or deletes a domain association and never changes Squarespace
+DNS. Production-lean leaves Squarespace authoritative by default; the
 Amplify association's DNS targets are exported for the controlled manual DNS
 change. The public status application consumes its profile's verified
 `status_api_url`; a missing or unverified API origin renders an explicit

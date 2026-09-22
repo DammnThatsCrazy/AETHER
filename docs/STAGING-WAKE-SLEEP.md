@@ -32,7 +32,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
   ".github/workflows/pilot-staging.yml": "sha256:66836a9604a251df686f9cc3dac0966b9eec2624ace5ad317b78c1c55e961cc2"
-  ".github/workflows/staging-lifecycle.yml": "sha256:3286f066f1658c8b931e1b8db3965883431c9aad886a94d09c7c96ebdf77960d"
+  ".github/workflows/staging-lifecycle.yml": "sha256:76f1276ca4b4de812f864f8c6884154592630847eddbcd4fc7fc90d897713729"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
   ".github/workflows/terraform-promote.yml": "sha256:2a41dc438ae0fdea7b1e78537affd2344697c32d0d8b78cbf9c64c5d2d1fbd0f"

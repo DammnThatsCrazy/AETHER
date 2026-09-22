@@ -6,7 +6,9 @@ name: Reconcile staging Terraform state
 # confirmed, it may re-encrypt a legacy AWS-managed-key staging secret under
 # the reviewed CMK without reading or changing its plaintext value. Importing
 # or re-encrypting changes state, so the reviewed plan must be regenerated after
-# this workflow succeeds.
+# this workflow succeeds. An explicitly authorized Amplify repair may also add
+# a missing reviewed `main` subdomain mapping to an existing association; it
+# never creates/deletes an association or changes Squarespace DNS.
 
 on:
   workflow_dispatch:
@@ -48,8 +50,12 @@ on:
         description: "Exact verified staging Amplify domain to import (staging.olympuslabsml.com)"
         required: false
         type: string
+      repair_staging_amplify_subdomains:
+        description: "Type REPAIR-STAGING-AMPLIFY to add only missing reviewed main subdomain mappings to an existing staging association"
+        required: false
+        type: string
       confirm_staging_import:
-        description: "Type IMPORT-STAGING to authorize this import-only action"
+        description: "Type IMPORT-STAGING to authorize this state reconciliation action"
         required: true
         type: string
       backend_image_digest:
@@ -544,14 +550,53 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         env:
           STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
+          REPAIR_STAGING_AMPLIFY_SUBDOMAINS: ${{ inputs.repair_staging_amplify_subdomains }}
         run: |
           set -euo pipefail
           test "$STAGING_AMPLIFY_DOMAIN_NAME" = staging.olympuslabsml.com || {
             echo '::error::only staging.olympuslabsml.com is an approved staging Amplify domain'; exit 1;
           }
+          repair_requested=false
+          if [ -n "${REPAIR_STAGING_AMPLIFY_SUBDOMAINS:-}" ]; then
+            test "$REPAIR_STAGING_AMPLIFY_SUBDOMAINS" = REPAIR-STAGING-AMPLIFY || {
+              echo '::error::Amplify subdomain repair requires the exact REPAIR-STAGING-AMPLIFY confirmation'; exit 1;
+            }
+            repair_requested=true
+          fi
           state_list_file="$(mktemp)"
           trap 'rm -f "$state_list_file"' EXIT
           terraform state list >"$state_list_file"
+          reviewed_settings='[
+            {"prefix":"www","branchName":"main"},
+            {"prefix":"aether","branchName":"main"},
+            {"prefix":"docs","branchName":"main"},
+            {"prefix":"app","branchName":"main"},
+            {"prefix":"status","branchName":"main"}
+          ]'
+          wait_for_reviewed_mapping() {
+            local app_id="$1"
+            local prefix="$2"
+            local deadline=$((SECONDS + 900))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              association_json="$(aws amplify get-domain-association \
+                --app-id "$app_id" \
+                --domain-name "$STAGING_AMPLIFY_DOMAIN_NAME" \
+                --output json)"
+              current_status="$(jq -r '.domainAssociation.domainStatus // empty' <<<"$association_json")"
+              case "$current_status" in
+                FAILED|CANCELLED|CANCELLING)
+                  echo "::error::staging Amplify domain association for ${prefix} ended with status=${current_status}"; return 1
+                  ;;
+              esac
+              if [ "$current_status" = AVAILABLE ] && jq -e --arg prefix "$prefix" \
+                'any((.domainAssociation.subDomains // [])[]; .subDomainSetting.prefix == $prefix and .subDomainSetting.branchName == "main" and .verified == true)' \
+                <<<"$association_json" >/dev/null; then
+                return 0
+              fi
+              sleep 15
+            done
+            echo "::error::staging Amplify domain association for ${prefix} did not become AVAILABLE with a verified main mapping within 900 seconds"; return 1
+          }
           declare -A app_subdomains=(
             [olympus-marketing]=www
             [aether-marketing]=aether
@@ -585,15 +630,38 @@ jobs:
               echo "::error::staging Amplify domain association for ${app_key} is not AVAILABLE (status=${status:-unknown})"; exit 1;
             }
             prefix="${app_subdomains[$app_key]}"
-            jq -e --arg prefix "$prefix" \
-              'any((.subDomains // [])[]; .subDomainSetting.prefix == $prefix and .verified == true)' \
-              "$association_file" >/dev/null || {
+            if ! jq -e --arg prefix "$prefix" \
+              'any((.domainAssociation.subDomains // [])[]; .subDomainSetting.prefix == $prefix and .subDomainSetting.branchName == "main" and .verified == true)' \
+              "$association_file" >/dev/null; then
+              if [ "$repair_requested" != true ]; then
                 rm -f "$association_file"
-                echo "::error::staging Amplify domain association for ${app_key} lacks the reviewed ${prefix} subdomain"; exit 1;
-              }
-            rm -f "$association_file"
+                echo "::error::staging Amplify domain association for ${app_key} lacks the reviewed ${prefix} main subdomain; rerun the reviewed reconciliation with REPAIR-STAGING-AMPLIFY"; exit 1;
+              fi
+              settings="$(jq -c --argjson desired "$reviewed_settings" '
+                [(.domainAssociation.subDomains // [])[]?.subDomainSetting, $desired[]]
+                | map(select(type == "object" and .prefix != null and .branchName != null))
+                | reduce .[] as $item
+                    ({}; .[($item.prefix + "\u0000" + $item.branchName)] =
+                      {prefix: $item.prefix, branchName: $item.branchName})
+                | [.[]]
+              ' "$association_file")"
+              aws amplify update-domain-association \
+                --app-id "$app_id" \
+                --domain-name "$STAGING_AMPLIFY_DOMAIN_NAME" \
+                --sub-domain-settings "$settings" \
+                --output json >/dev/null
+              echo "Requested the reviewed ${prefix} main subdomain mapping for existing ${app_key}; waiting for Amplify verification."
+              rm -f "$association_file"
+              wait_for_reviewed_mapping "$app_id" "$prefix"
+            else
+              rm -f "$association_file"
+            fi
           done
-          echo 'Verified all five existing staging Amplify domain associations and their reviewed subdomains; no DNS or domain values were changed.'
+          if [ "$repair_requested" = true ]; then
+            echo 'Verified all five staging Amplify associations and reviewed main subdomains; only missing mappings were repaired and Squarespace DNS was not changed.'
+          else
+            echo 'Verified all five existing staging Amplify domain associations and their reviewed main subdomains; no DNS or domain values were changed.'
+          fi
 
       - name: Verify imported repositories use the state-managed ECR key
         if: inputs.ecr_repository_names != '' || inputs.untaint_ecr_repository_names != ''
