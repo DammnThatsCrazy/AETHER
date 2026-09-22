@@ -42,6 +42,9 @@ def test_lifecycle_manifest_uses_task_specific_scopes() -> None:
             "ecs:cluster": "arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging",
         }
     }
+    assert by_sid["ReadStagingLogEvents"]["resource"] == (
+        "arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*:log-stream:*"
+    )
 
 
 def test_lifecycle_manifest_uses_aws_global_api_scopes() -> None:
@@ -50,6 +53,7 @@ def test_lifecycle_manifest_uses_aws_global_api_scopes() -> None:
     assert by_sid["ListStagingServices"]["resource"] == "*"
     assert by_sid["InspectStagingTaskDefinitions"]["resource"] == "*"
     assert by_sid["InspectStagingLogs"]["resource"] == "*"
+    assert by_sid["ReadStagingLogEvents"]["resource"] != "*"
     assert by_sid["InspectStagingAutoscalingTargets"]["resource"] == "*"
     assert by_sid["PreventAutoscalingRevival"]["resource"] == "*"
 
@@ -68,6 +72,9 @@ def test_lifecycle_manifest_renders_to_an_aws_policy_document() -> None:
     by_sid = {statement["Sid"]: statement for statement in rendered["Statement"]}
     assert by_sid["InspectStagingTaskDefinitions"]["Resource"] == "*"
     assert by_sid["InspectStagingLogs"]["Resource"] == "*"
+    assert by_sid["ReadStagingLogEvents"]["Resource"] == (
+        "arn:aws:logs:us-east-1:544471417928:log-group:/ecs/AETHER-staging/*:log-stream:*"
+    )
     assert by_sid["PassOnlyStagingTaskRoles"]["Condition"] == {
         "StringEquals": {"iam:PassedToService": ["ecs-tasks.amazonaws.com"]}
     }

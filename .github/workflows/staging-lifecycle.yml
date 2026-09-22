@@ -1289,7 +1289,13 @@ jobs:
       - name: Install rehearsal dependencies
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check pyyaml
+          # The rehearsal invokes scripts/load_smoke.py, which launches the
+          # selected Locust user class directly.  Keep the load runner
+          # explicit here so a clean GitHub runner cannot reach the load gate
+          # with a missing module and report a misleading staging failure.
+          python -m pip install --disable-pip-version-check \
+            pyyaml \
+            'locust>=2.31,<3'
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
@@ -1518,8 +1524,40 @@ jobs:
             artifacts/rehearsal/migration-task.json >/dev/null \
             || { echo '::error::migration task evidence does not show a stopped task'; exit 1; }
           exit_code="$(jq -er '.tasks[0].containers[0].exitCode // empty' artifacts/rehearsal/migration-task.json)"
-          test "$exit_code" = 0 || { echo "::error::migration task failed (exit ${exit_code})"; exit 1; }
-          printf 'exit_code=%s\n' "$exit_code" >> artifacts/rehearsal/migrations.txt
+          stopped_reason="$(jq -r '.tasks[0].stoppedReason // empty' artifacts/rehearsal/migration-task.json)"
+          stop_code="$(jq -r '.tasks[0].stopCode // empty' artifacts/rehearsal/migration-task.json)"
+          container_reason="$(jq -r '.tasks[0].containers[0].reason // empty' artifacts/rehearsal/migration-task.json)"
+          printf 'exit_code=%s\nstop_code=%s\nstopped_reason=%s\ncontainer_reason=%s\n' \
+            "$exit_code" "$stop_code" "$stopped_reason" "$container_reason" \
+            >> artifacts/rehearsal/migrations.txt
+          if [ "$exit_code" != 0 ]; then
+            echo "::error::migration task failed (exit ${exit_code}; stop_code=${stop_code}; stopped_reason=${stopped_reason:-unknown}; container_reason=${container_reason:-unknown})"
+            # Keep failure output useful without uploading raw container logs:
+            # application logs can contain provider-controlled values.  Only
+            # sanitized migration/error lines are retained as evidence.
+            task_id="${task_arn##*/}"
+            log_group="$(aws ecs describe-task-definition --task-definition "$task_def" \
+              --query 'taskDefinition.containerDefinitions[0].logConfiguration.options."awslogs-group"' --output text)"
+            stream_prefix="$(aws ecs describe-task-definition --task-definition "$task_def" \
+              --query 'taskDefinition.containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix"' --output text)"
+            log_stream="${stream_prefix}/${container}/${task_id}"
+            raw_log="${RUNNER_TEMP}/migration-log.raw"
+            sanitized_log="artifacts/rehearsal/migration-log-diagnostic.txt"
+            if aws logs get-log-events --log-group-name "$log_group" --log-stream-name "$log_stream" \
+              --start-from-head --query 'events[].message' --output text > "$raw_log" 2>/dev/null; then
+              sed -E \
+                -e 's#(postgres(ql)?://[^:@[:space:]]+:)[^@[:space:]]+@#\1[REDACTED]@#g' \
+                -e 's#((password|secret|token|api[_-]?key|private[_-]?key)[=:][^[:space:]]+)#\2=[REDACTED]#Ig' \
+                "$raw_log" | rg -i 'alembic|migration|traceback|exception|error|failed|duplicate|permission|denied|timeout|database|postgres' \
+                | tail -80 > "$sanitized_log" || true
+            fi
+            if [ -s "$sanitized_log" ]; then
+              cat "$sanitized_log"
+            else
+              echo '::warning::migration task logs were unavailable or contained no sanitized error lines'
+            fi
+            exit 1
+          fi
           # /v1/ready fails unless the database alembic revision equals the
           # packaged head, so it is the authoritative revision verification.
           status="$(curl -sS -o artifacts/rehearsal/ready.json -w '%{http_code}' \
@@ -1772,6 +1810,7 @@ jobs:
             | tee artifacts/rehearsal/smoke.txt
           python - <<'PY'
           import json, os, sys, time, urllib.error, urllib.request, uuid
+          from datetime import datetime, timezone
 
           base = f"https://{os.environ['ALB_DNS_NAME']}"
           key = os.environ["REHEARSAL_TENANT_API_KEY"]
@@ -1807,7 +1846,7 @@ jobs:
           # manifest is served.
           subject = f"rehearsal-{uuid.uuid4().hex}"
           call("POST", "/v1/consent/records", body={
-              "user_id": subject, "purpose": "analytics", "granted": True,
+              "user_id": subject, "purposes": ["analytics"], "granted": True,
               "source": "staging-rehearsal",
           }, expect={200, 201})
           call("GET", f"/v1/consent/records/{subject}", expect={200})
@@ -1816,11 +1855,26 @@ jobs:
                expect={200, 201, 202})
           results["consent_privacy"] = "ok"
 
-          # ingestion — the feed accepts a well-formed event.
+          # ingestion — the canonical SDK batch accepts a fully enveloped event.
+          # The older /v1/sdk/events alias is not a mounted ingestion route and
+          # /v1/ingest/feed is a server-side provider-feed contract, not an SDK
+          # event envelope.
           event_id = str(uuid.uuid4())
-          call("POST", "/v1/ingest/feed", body={
-              "events": [{"event_id": event_id, "event_type": "rehearsal.ping",
-                          "user_id": subject, "properties": {"run": os.environ["GITHUB_RUN_ID"]}}],
+          session_id = f"rehearsal-{uuid.uuid4().hex}"
+          sent_at = datetime.now(timezone.utc).isoformat()
+          call("POST", "/v1/batch", body={
+              "batch": [{
+                  "id": event_id, "type": "page_view", "timestamp": sent_at,
+                  "sessionId": session_id, "anonymousId": session_id,
+                  "userId": subject,
+                  "properties": {"run": os.environ["GITHUB_RUN_ID"]},
+                  "context": {
+                      "schemaVersion": "1.0.0", "surface": "web",
+                      "sequence": {"number": 1},
+                  },
+              }],
+              "sentAt": sent_at,
+              "consents": ["analytics"],
           }, expect={200, 201, 202})
           results["ingestion"] = "ok"
 
@@ -1830,8 +1884,9 @@ jobs:
           drained = False
           while time.time() < deadline:
               status, payload = call("POST", "/v1/analytics/events/query",
-                                     body={"filters": {"event_id": event_id}, "limit": 1})
-              if status == 200 and json.dumps(payload).count(event_id):
+                                     body={"session_id": session_id, "limit": 1})
+              payload_blob = json.dumps(payload)
+              if status == 200 and (event_id in payload_blob or session_id in payload_blob):
                   drained = True
                   break
               time.sleep(15)
@@ -1839,13 +1894,15 @@ jobs:
               sys.exit("::error::the lean-worker execution group did not drain the ingested event")
           results["queue_worker"] = "ok"
 
-          # graph write and read.
-          call("POST", "/v1/graph/observations", body={
-              "entity_id": subject, "observation_type": "rehearsal",
-              "payload": {"run": os.environ["GITHUB_RUN_ID"]},
-          }, expect={200, 201, 202})
+          # graph — exercise the canonical capability discovery and the
+          # tenant-scoped universal query contract. There is no public
+          # /v1/graph/observations route; tenant graph writes are produced by
+          # the ingestion/projector path and must not be faked by the rehearsal.
           call("GET", "/v1/graph/capabilities", expect={200})
-          call("POST", "/v1/graph/query", body={"entity_id": subject, "limit": 10}, expect={200})
+          call("POST", "/v1/graph/query", body={
+              "tenant_id": os.environ["REHEARSAL_TENANT_ID"],
+              "anchors": [], "depth": 1, "limit": 10,
+          }, expect={200})
           results["graph"] = "ok"
 
           # analytics / materialisation.
@@ -1924,6 +1981,7 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           import json, os, sys, urllib.error, urllib.request, uuid
+          from datetime import datetime, timezone
 
           base = f"https://{os.environ['ALB_DNS_NAME']}"
           key = os.environ["REHEARSAL_TENANT_API_KEY"]
@@ -1939,27 +1997,47 @@ jobs:
                   req.add_header(name, value)
               try:
                   with urllib.request.urlopen(req, timeout=30) as resp:
-                      return resp.status
+                      return resp.status, json.loads(resp.read() or b"{}")
               except urllib.error.HTTPError as exc:
-                  return exc.code
+                  try:
+                      return exc.code, json.loads(exc.read() or b"{}")
+                  except ValueError:
+                      return exc.code, {}
 
           # A malformed payload must be rejected as a client error, never as a 5xx.
-          status = call("POST", "/v1/ingest/feed", body={"events": "not-a-list"})
+          now = datetime.now(timezone.utc).isoformat()
+          status, _ = call("POST", "/v1/batch", body={
+              "batch": "not-a-list", "sentAt": now,
+          })
           if status >= 500:
-              sys.exit(f"::error::malformed ingest produced a server error ({status})")
+              sys.exit(f"::error::malformed batch produced a server error ({status})")
           if status < 400:
-              sys.exit(f"::error::malformed ingest was accepted ({status})")
+              sys.exit(f"::error::malformed batch was accepted ({status})")
 
           # A retried write with the same event id must be idempotent, not doubled.
           event_id = str(uuid.uuid4())
-          payload = {"events": [{"event_id": event_id, "event_type": "rehearsal.retry",
-                                 "user_id": f"retry-{event_id}", "properties": {}}]}
-          first = call("POST", "/v1/ingest/feed", body=payload)
-          second = call("POST", "/v1/ingest/feed", body=payload)
+          session_id = f"retry-{uuid.uuid4().hex}"
+          payload = {
+              "batch": [{
+                  "id": event_id, "type": "page_view", "timestamp": now,
+                  "sessionId": session_id, "anonymousId": session_id,
+                  "properties": {"run": os.environ["GITHUB_RUN_ID"]},
+                  "context": {
+                      "schemaVersion": "1.0.0", "surface": "web",
+                      "sequence": {"number": 1},
+                  },
+              }],
+              "sentAt": now,
+              "consents": ["analytics"],
+          }
+          first, _first_body = call("POST", "/v1/batch", body=payload)
+          second, second_body = call("POST", "/v1/batch", body=payload)
           if first >= 400:
               sys.exit(f"::error::first retry-probe write failed ({first})")
           if second >= 500:
               sys.exit(f"::error::retried write produced a server error ({second})")
+          if int(second_body.get("duplicates", 0) or 0) < 1:
+              sys.exit("::error::retried write was not reported as a duplicate")
           print(f"failure/retry checks passed (malformed={status}, retry={first}/{second})")
           PY
 

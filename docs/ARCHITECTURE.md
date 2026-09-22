@@ -19,7 +19,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/": "sha256:36ba3883b69547e3da32726f271844c9632d0d197720ebff1933b66d58222e22"
   "services/backend/main.py": "sha256:7f7f8efc68276c89f61cd6c02079f60869959da6b0c5788b46ab8c06aa7eb32d"
-  "services/backend/middleware/middleware.py": "sha256:c12b53ada8326e45252d90ce7060914c7961ae549f0f0d8e2bdf50daca42c553"
+  "services/backend/middleware/middleware.py": "sha256:09a1dee6007cc06adcd8b67d379278b1edf2a4c311e562470ffbab3bb3d84b99"
 ---
 # Aether vNext — Architecture Guide
 

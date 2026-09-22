@@ -20,7 +20,9 @@ import argparse
 import json
 import sys
 import time
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -44,6 +46,32 @@ class SmokeRunner:
     verbose: bool
     diagnostics_api_key: str = ""
     results: list[CheckResult] = field(default_factory=list)
+
+    @staticmethod
+    def _canonical_event(event_type: str, properties: dict) -> dict:
+        """Build the deployed canonical SDK batch envelope.
+
+        The staging and production profiles enforce the envelope fields for
+        release-critical event families.  Keeping this helper aligned with
+        ``services.backend.services.ingestion.batch.BatchRequest`` prevents the
+        smoke test from probing a retired ``/v1/sdk/events`` alias or sending
+        legacy fields that the canonical ingestion route rejects.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        session_id = f"smoke-{uuid.uuid4().hex}"
+        return {
+            "id": str(uuid.uuid4()),
+            "type": event_type,
+            "timestamp": now,
+            "sessionId": session_id,
+            "anonymousId": session_id,
+            "properties": properties,
+            "context": {
+                "schemaVersion": "1.0.0",
+                "surface": "web",
+                "sequence": {"number": 1},
+            },
+        }
 
     def _get(
         self,
@@ -184,23 +212,21 @@ class SmokeRunner:
 
     def check_sdk_ingestion(self) -> None:
         def run() -> tuple[bool, str]:
+            event = self._canonical_event(
+                "page_view", {"source": "smoke_test", "path": "/smoke"}
+            )
             payload = {
-                "events": [
-                    {
-                        "event_type": "smoke_test_ping",
-                        "timestamp": int(time.time() * 1000),
-                        "properties": {"source": "smoke_test"},
-                    }
-                ]
+                "batch": [event],
+                "sentAt": event["timestamp"],
+                "consents": ["analytics"],
             }
-            status, _ = self._post("/v1/sdk/events", payload)
+            status, _ = self._post("/v1/batch", payload)
             if status in (200, 201, 202):
                 return True, f"HTTP {status}"
             if status in (401, 403):
                 return False, f"HTTP {status} — check API key / auth config"
-            # 404 means route not mounted (config issue), anything else unexpected
-            return status in (200, 201, 202, 204), f"HTTP {status}"
-        self.check("POST /v1/sdk/events (ingestion golden path)", run)
+            return False, f"HTTP {status} — canonical batch ingestion rejected"
+        self.check("POST /v1/batch (canonical SDK ingestion)", run)
 
     def check_version_header(self) -> None:
         def run() -> tuple[bool, str]:
@@ -221,36 +247,39 @@ class SmokeRunner:
         """Verify Web2-only events (no wallet/chain fields) are accepted without error."""
         def run() -> tuple[bool, str]:
             web2_events = [
-                {
-                    "event_type": "page_view",
-                    "timestamp": int(time.time() * 1000),
-                    "properties": {"path": "/products/widget-pro", "referrer": "/home"},
-                },
-                {
-                    "event_type": "checkout_started",
-                    "timestamp": int(time.time() * 1000),
-                    "properties": {"cart_value": 149.99, "currency": "USD", "item_count": 3},
-                },
-                {
-                    "event_type": "signup",
-                    "timestamp": int(time.time() * 1000),
-                    "properties": {"method": "email", "plan": "pro"},
-                },
+                self._canonical_event(
+                    "page_view",
+                    {"path": "/products/widget-pro", "referrer": "/home"},
+                ),
+                self._canonical_event(
+                    "checkout_started",
+                    {"cart_value": 149.99, "currency": "USD", "item_count": 3},
+                ),
+                self._canonical_event(
+                    "signup_completed", {"method": "email", "plan": "pro"}
+                ),
             ]
-            status, body = self._post("/v1/sdk/events", {"events": web2_events})
+            status, body = self._post(
+                "/v1/batch",
+                {
+                    "batch": web2_events,
+                    "sentAt": datetime.now(timezone.utc).isoformat(),
+                    "consents": ["analytics", "commerce"],
+                },
+            )
             if status in (200, 201, 202, 204):
                 return True, f"HTTP {status} — {len(web2_events)} Web2 events accepted"
             if status in (401, 403):
                 return False, f"HTTP {status} — check API key"
-            # 400 would indicate the backend rejected Web2-only events (a regression)
-            if status == 400:
+            # 4xx indicates the backend rejected the canonical Web2 envelope.
+            if status in (400, 422):
                 try:
                     detail = json.loads(body).get("detail") or json.loads(body).get("message", "")
-                    return False, f"HTTP 400 — Web2 events rejected: {detail}"
+                    return False, f"HTTP {status} — Web2 events rejected: {detail}"
                 except (json.JSONDecodeError, AttributeError):
-                    return False, f"HTTP 400 — Web2 events rejected"
+                    return False, f"HTTP {status} — Web2 events rejected"
             return False, f"HTTP {status}"
-        self.check("POST /v1/sdk/events (Web2-only path — no wallet/chain fields)", run)
+        self.check("POST /v1/batch (Web2-only path — no wallet/chain fields)", run)
 
     def check_capabilities_endpoint(self) -> None:
         """Verify the capabilities discovery endpoint is available and returns expected fields."""

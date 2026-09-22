@@ -130,6 +130,30 @@ def test_service_credential_requires_explicit_scope():
         assert _is_denial(_hook()(_req(), "/v1/profile/{entity_id}", context))
 
 
+def test_enforced_mode_resolves_lazy_included_router_for_public_health():
+    """FastAPI's lazy router wrappers must not turn a known route into 403."""
+    from fastapi import APIRouter, FastAPI
+    from fastapi.testclient import TestClient
+
+    import middleware.middleware as mw
+
+    app = FastAPI()
+    mw.register_middleware(app)
+    router = APIRouter()
+
+    @router.get("/v1/health")
+    async def health():
+        return {"status": "healthy"}
+
+    app.include_router(router)
+
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        response = TestClient(app).get("/v1/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+
+
 # ── Publishable keys ─────────────────────────────────────────────────────────
 #
 # A publishable key ships inside a page's HTML via the CDN loader, so it is

@@ -584,6 +584,18 @@ def test_full_rehearsal_runs_every_declared_phase():
         assert surface in script.lower(), f"the rehearsal never touches {surface}"
     assert "RUN_MIGRATIONS" in script, "migrations are not run as a one-off task"
     assert "/v1/ready" in script, "the migration revision is never verified"
+    assert 'call("POST", "/v1/batch", body=' in script, (
+        "the rehearsal does not exercise the canonical SDK batch contract"
+    )
+    assert 'call("POST", "/v1/ingest/feed"' not in script, (
+        "the rehearsal is using the server-side feed contract as an SDK probe"
+    )
+    assert '"tenant_id": os.environ["REHEARSAL_TENANT_ID"]' in script, (
+        "the graph query is not explicitly tenant-scoped"
+    )
+    assert '"purposes": ["analytics"]' in script, (
+        "the consent probe does not use the canonical purposes field"
+    )
     assert 'call("GET", "/models", expect={200})' in script, (
         "inline ML serving is not probed through its mounted in-process route"
     )
