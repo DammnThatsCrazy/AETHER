@@ -946,9 +946,11 @@ validate-ephemeral-budget: ## Plan-policy + cost gate for demo and preview, off 
 		--out-dir reports/cost/preview
 
 test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile module cardinality
-	cd "$(TF_DIR)" && terraform init -backend=false -input=false >/dev/null && \
-		terraform validate && \
-		terraform test -filter=tests/profile_plan.tftest.hcl -no-color
+	cd "$(TF_DIR)" && \
+		task_tf_data_dir="$(abspath $(TF_DIR)/.terraform/profile-test-data)" && \
+		TF_DATA_DIR="$$task_tf_data_dir" terraform init -backend=false -input=false >/dev/null && \
+		TF_DATA_DIR="$$task_tf_data_dir" terraform validate && \
+		TF_DATA_DIR="$$task_tf_data_dir" terraform test -filter=tests/profile_plan.tftest.hcl -no-color
 
 test-runtime-topology: ## Execution-group topology: every worker role owned by exactly one service
 	$(GATE_PY) -m pytest tests/unit/test_runtime_topology.py tests/unit/test_runtime_execution_groups.py -q

@@ -16,7 +16,7 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:122b4db9bed9f32963471c04f5c56dbf418af5751aaf0208a4afba563769467e"
-  "Makefile": "sha256:46548f585191a40c899c17436645d11ba885f16cc7799c4af05cff8e619eacc7"
+  "Makefile": "sha256:9af64c644383d641d428f479fbbde0a9edf3b7cfb07e383ab6c281d1b9596336"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:3973482780754878fd56b1d7018d86bc1c48c9b4e2aa701a7ddb8336c3d0b924"
   "scripts/repo_doctor.py": "sha256:96a8ef3a60787275ff29edbe11697865ad5ea9bd1e01025e1a7f5ce030481c57"
 ---
@@ -62,6 +62,11 @@ without running the full application, ML, or security toolchain preflight.
 Repository-doctor Python subprocesses inherit the interpreter running
 `scripts/repo_doctor.py` (normally `.venv/bin/python` through the Makefile), so
 the canonical gate does not depend on a separate bare `python` executable.
+
+`make test-terraform-profiles` uses a dedicated `TF_DATA_DIR` with
+`terraform init -backend=false`; cached remote-backend metadata from another
+Terraform command therefore cannot make provider-mocked profile tests depend
+on AWS credentials or remote state.
 
 The canonical CI gate also validates the impact-aware verification router, the
 environment capability requirement registry, the GitHub-only deployment

@@ -309,6 +309,56 @@ def test_terraform_root_declared_by_the_contracts_file_exists():
     assert (declared / "profiles.tf").exists()
 
 
+def test_auth0_pilot_database_connection_association_is_aether_only():
+    auth0 = (TERRAFORM_ROOT / "modules/auth0/main.tf").read_text()
+    root = (TERRAFORM_ROOT / "main.tf").read_text()
+
+    singular = re.findall(
+        r'resource\s+"auth0_connection_client"\s+"([^"]+)"\s*\{([^}]*)\}',
+        auth0,
+        re.DOTALL,
+    )
+    database_associations = [
+        (name, body) for name, body in singular
+        if "auth0_connection.database.id" in body
+    ]
+    assert len(database_associations) == 1
+    name, body = database_associations[0]
+    assert name == "aether_db"
+    assert "auth0_client.aether.id" in body
+    assert "enabled_clients" not in body
+    assert not re.search(
+        r'resource\s+"auth0_connection_clients"\s+"[^"]+"\s*\{[^}]*'
+        r'auth0_connection\.database\.id',
+        auth0,
+        re.DOTALL,
+    ), "the pilot must not own or rewrite the database connection's complete client set"
+    for legacy_name in ("aether_db", "kyber_db"):
+        assert re.search(
+            rf'removed\s*\{{\s*from\s*=\s*module\.auth0\.'
+            rf'auth0_connection_clients\.{legacy_name}'
+            rf'\s*lifecycle\s*\{{\s*destroy\s*=\s*false\s*\}}\s*\}}',
+            root,
+            re.DOTALL,
+        ), f"legacy full-set address {legacy_name} must be forgotten without remote deletion"
+
+
+def test_untagged_scaling_targets_preserve_non_staging_tags_without_staging_tag_race():
+    ecs = (TERRAFORM_ROOT / "modules/ecs/main.tf").read_text()
+    for name in ("runtime_service", "backend", "ml"):
+        match = re.search(
+            rf'resource\s+"aws_appautoscaling_target"\s+"{name}"\s*\{{(.*?)\n\}}',
+            ecs,
+            re.DOTALL,
+        )
+        assert match, f"scaling target {name} is missing"
+        block = match.group(1)
+        assert "provider           = aws.untagged" in block
+        assert 'tags = var.environment == "staging" ? {} : {' in block
+        assert 'ManagedBy   = "Terraform"' in block
+        assert "ignore_changes = [tags]" in block
+
+
 def test_permitted_in_never_contradicts_a_profile_that_forbids_the_key():
     """`permitted_in` is documentation; it must not disagree with the policy."""
     for key, rule in CONTRACTS["forbidden_resources"].items():

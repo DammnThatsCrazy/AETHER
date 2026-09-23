@@ -227,6 +227,27 @@ def test_fargate_task_without_size_fails_closed(tmp_path: Path) -> None:
     )
 
 
+def test_fargate_cost_counts_desired_tasks_not_capacity_provider_base() -> None:
+    resource = _resource(
+        "module.ecs.aws_ecs_service.backend",
+        "aws_ecs_service",
+        {
+            "cpu": 1024,
+            "memory": 2048,
+            "desired_count": 0,
+            "capacity_provider_strategy": [
+                {"capacity_provider": "FARGATE", "base": 1, "weight": 100}
+            ],
+        },
+    )
+    amount, detail = MODULE.price_fixed_resource(
+        resource, PRICE_BOOK["fixed_resources"]["aws_ecs_service"], 40.0
+    )
+    assert amount == 0.0
+    assert detail["desired_count"] == 0.0
+    assert detail["capacity_provider_base_count"] == 1.0
+
+
 def test_unpriced_baseline_is_not_certified_as_within_budget(tmp_path: Path) -> None:
     """With anything unpriced the baseline is a lower bound, never a pass."""
     inv = _write_inventory(tmp_path, "production-lean", [

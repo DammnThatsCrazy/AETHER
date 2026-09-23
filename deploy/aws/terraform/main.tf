@@ -178,6 +178,10 @@ module "rds" {
 module "aurora" {
   source = "./modules/aurora"
   count  = local.enable_aurora ? 1 : 0
+  providers = {
+    aws          = aws
+    aws.untagged = aws.untagged
+  }
 
   environment  = var.environment
   project      = var.project
@@ -190,6 +194,10 @@ module "aurora" {
   # Staging uses the provider-supported Serverless v2 auto-pause field. Warm
   # production profiles leave this null and keep their configured floor.
   auto_pause_seconds = var.environment == "staging" ? 300 : null
+  # The separately created legacy staging cluster is retained, but staging
+  # must own its auto-pause configuration in Terraform so it cannot silently
+  # return to a permanent 0.5-ACU floor.
+  manage_legacy_staging_cluster = var.deployment_profile == "staging"
 
   backup_retention_days = var.aurora_backup_retention_days
   # Staging is persistent state too: the reviewed lifecycle sleeps ECS, it
@@ -198,6 +206,12 @@ module "aurora" {
   deletion_protection = var.environment == "production" || var.environment == "staging"
   express_mode        = var.aurora_express_mode
 }
+
+# The cluster predates Terraform ownership and is deliberately imported by the
+# confirmation-gated staging-state-reconcile workflow. The subsequent normal
+# promotion plan is the only operation that changes its Serverless v2 scale
+# floor; this resource is not a new database and must never be created or
+# destroyed by Terraform.
 
 # ---------------------------------------------------------------------------
 # 4b. ElastiCache Redis — production-scale / enterprise-isolated only.
@@ -675,14 +689,34 @@ module "auth0" {
   aether_logout_urls   = [var.aether_app_url]
   aether_web_origins   = [var.aether_app_url]
 
-  kyber_callback_urls       = ["${var.kyber_app_url}/callback"]
-  kyber_logout_urls         = [var.kyber_app_url]
-  kyber_web_origins         = [var.kyber_app_url]
+  kyber_callback_urls = ["${var.kyber_app_url}/callback"]
+  kyber_logout_urls   = [var.kyber_app_url]
+  kyber_web_origins   = [var.kyber_app_url]
   # The pilot lane deliberately defers Google/GCP and every other external
   # social-provider credential. Do not let the module default turn those
   # optional connections back on with empty credentials; that would make a
   # lean staging plan depend on providers that are explicitly out of scope.
   enable_social_connections = var.deployment_lane == "pilot" ? false : var.enable_social_connections
+}
+
+# Release the two legacy full-set Auth0 resources without deleting any remote
+# client associations. The singular Aether association resource now appends
+# only Aether's database-connection access; all other existing associations
+# remain untouched by the pilot plan.
+removed {
+  from = module.auth0.auth0_connection_clients.aether_db
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.auth0.auth0_connection_clients.kyber_db
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -904,28 +938,34 @@ resource "aws_amplify_branch" "main" {
   framework = "React"
   stage     = var.environment == "production" ? "PRODUCTION" : "DEVELOPMENT"
 
-  environment_variables = {
-    AETHER_ENV          = var.environment
-    VITE_STATUS_API_URL = each.key == "status" ? var.status_api_url : ""
-    VITE_STATUS_DOCS_URL = each.key == "status" ? (
-      var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
-      ? "https://docs.${var.amplify_domain_name}"
-      : "https://${aws_amplify_app.frontend["docs"].default_domain}"
-    ) : ""
-    VITE_STATUS_AETHER_MARKETING_URL = each.key == "status" ? (
-      var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
-      ? "https://aether.${var.amplify_domain_name}"
-      : "https://${aws_amplify_app.frontend["aether-marketing"].default_domain}"
-    ) : ""
-    VITE_AETHER_ENV         = each.key == "aether-app" ? var.environment : ""
-    VITE_API_BASE_URL       = each.key == "aether-app" ? "https://${var.domain_name}" : ""
-    VITE_AETHER_ENDPOINT    = each.key == "aether-app" ? "https://${var.domain_name}" : ""
-    VITE_AUTH0_DOMAIN       = each.key == "aether-app" ? var.auth0_domain : ""
-    VITE_AUTH0_CLIENT_ID    = each.key == "aether-app" ? module.auth0.aether_client_id : ""
-    VITE_AUTH0_AUDIENCE     = each.key == "aether-app" ? var.auth0_api_audience : ""
-    VITE_AUTH0_REDIRECT_URI = each.key == "aether-app" ? "${var.aether_app_url}/callback" : ""
-    VITE_AUTH0_LOGOUT_URI   = each.key == "aether-app" ? "${var.aether_app_url}/login" : ""
-  }
+  environment_variables = merge(
+    {
+      AETHER_ENV = var.environment
+    },
+    each.key == "aether-app" ? {
+      VITE_AETHER_ENV         = var.environment
+      VITE_API_BASE_URL       = "https://${var.domain_name}"
+      VITE_AETHER_ENDPOINT    = "https://${var.domain_name}"
+      VITE_AUTH0_DOMAIN       = var.auth0_domain
+      VITE_AUTH0_CLIENT_ID    = module.auth0.aether_client_id
+      VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
+      VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
+      VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
+    } : {},
+    each.key == "status" ? {
+      VITE_STATUS_API_URL = var.status_api_url
+      VITE_STATUS_DOCS_URL = (
+        var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
+        ? "https://docs.${var.amplify_domain_name}"
+        : "https://${aws_amplify_app.frontend["docs"].default_domain}"
+      )
+      VITE_STATUS_AETHER_MARKETING_URL = (
+        var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
+        ? "https://aether.${var.amplify_domain_name}"
+        : "https://${aws_amplify_app.frontend["aether-marketing"].default_domain}"
+      )
+    } : {}
+  )
 
   tags = {
     Name        = "${each.value.name}-${var.amplify_branch}"

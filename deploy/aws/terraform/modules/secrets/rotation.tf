@@ -203,7 +203,7 @@ locals {
 resource "aws_secretsmanager_secret_rotation" "this" {
   for_each = local.rotatable_secrets
 
-  secret_id           = aws_secretsmanager_secret.this[each.key].id
+  secret_id           = aws_secretsmanager_secret.this[each.key].arn
   rotation_lambda_arn = aws_lambda_function.rotation.arn
   rotate_immediately  = false
 

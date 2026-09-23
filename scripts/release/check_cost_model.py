@@ -241,12 +241,22 @@ def price_fixed_resource(
         count_attr = entry.get("count_attribute", "desired_count")
         found = _num(values.get(count_attr))
         count = found if found is not None else float(entry.get("default_count", 1))
+        provider_strategy = values.get("capacity_provider_strategy") or []
+        provider_base_count = max(
+            (_num(provider.get("base")) or 0.0
+             for provider in provider_strategy if isinstance(provider, dict)),
+            default=0.0,
+        )
         vcpu = cpu / 1024.0
         gib = memory / 1024.0
         hourly = vcpu * float(entry["vcpu_hour"]) + gib * float(entry["gb_hour"])
         return hourly * multiplier * count, {
             "pricing_model": model, "vcpu": vcpu, "gib": gib,
-            "desired_count": count, "hourly_per_task": _round(hourly),
+            "desired_count": count,
+            # Report placement policy for review, but never treat it as a
+            # running/billable task count. Only desired_count prices Fargate.
+            "capacity_provider_base_count": provider_base_count,
+            "hourly_per_task": _round(hourly),
         }
 
     if model == "capacity_units":

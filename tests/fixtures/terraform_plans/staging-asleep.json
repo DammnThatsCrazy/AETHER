@@ -242,6 +242,61 @@
                 "instance_class": "db.serverless",
                 "engine": "aurora-postgresql"
               }
+            },
+            {
+              "address": "module.aurora[0].aws_rds_cluster.legacy_staging[0]",
+              "mode": "managed",
+              "type": "aws_rds_cluster",
+              "name": "legacy_staging",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "id": "aether-staging",
+                "cluster_identifier": "aether-staging",
+                "engine": "aurora-postgresql",
+                "engine_version": "16.10",
+                "engine_mode": "provisioned",
+                "database_name": "aether",
+                "master_username": "aether_admin",
+                "port": 5432,
+                "availability_zones": [
+                  "us-east-1a",
+                  "us-east-1b",
+                  "us-east-1c"
+                ],
+                "serverlessv2_scaling_configuration": [
+                  {
+                    "min_capacity": 0,
+                    "max_capacity": 2,
+                    "seconds_until_auto_pause": 300
+                  }
+                ],
+                "storage_encrypted": true,
+                "kms_key_id": "arn:aws:kms:us-east-1:544471417928:key/ab7b4816-932b-459e-b0f1-38e5fdf23500",
+                "db_subnet_group_name": "aether-staging-aurora",
+                "vpc_security_group_ids": [
+                  "sg-0f61eda4b4344368e"
+                ],
+                "backup_retention_period": 1,
+                "preferred_backup_window": "06:42-07:12",
+                "preferred_maintenance_window": "mon:03:34-mon:04:04",
+                "copy_tags_to_snapshot": false,
+                "db_cluster_parameter_group_name": "default.aurora-postgresql16",
+                "enabled_cloudwatch_logs_exports": [],
+                "deletion_protection": false,
+                "iam_database_authentication_enabled": false,
+                "enable_http_endpoint": false,
+                "tags": {
+                  "Project": "AETHER",
+                  "Environment": "staging",
+                  "ManagedBy": "claude-staging-provision"
+                },
+                "tags_all": {
+                  "Project": "AETHER",
+                  "Environment": "staging",
+                  "ManagedBy": "claude-staging-provision"
+                }
+              }
             }
           ]
         },
@@ -2768,6 +2823,115 @@
         "before_sensitive": false,
         "after_sensitive": {}
       }
+    },
+    {
+      "address": "module.aurora[0].aws_rds_cluster.legacy_staging[0]",
+      "mode": "managed",
+      "type": "aws_rds_cluster",
+      "name": "legacy_staging",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "id": "aether-staging",
+          "cluster_identifier": "aether-staging",
+          "engine": "aurora-postgresql",
+          "engine_version": "16.10",
+          "engine_mode": "provisioned",
+          "database_name": "aether",
+          "master_username": "aether_admin",
+          "port": 5432,
+          "availability_zones": [
+            "us-east-1a",
+            "us-east-1b",
+            "us-east-1c"
+          ],
+          "serverlessv2_scaling_configuration": [
+            {
+              "min_capacity": 0.5,
+              "max_capacity": 2
+            }
+          ],
+          "storage_encrypted": true,
+          "kms_key_id": "arn:aws:kms:us-east-1:544471417928:key/ab7b4816-932b-459e-b0f1-38e5fdf23500",
+          "db_subnet_group_name": "aether-staging-aurora",
+          "vpc_security_group_ids": [
+            "sg-0f61eda4b4344368e"
+          ],
+          "backup_retention_period": 1,
+          "preferred_backup_window": "06:42-07:12",
+          "preferred_maintenance_window": "mon:03:34-mon:04:04",
+          "copy_tags_to_snapshot": false,
+          "db_cluster_parameter_group_name": "default.aurora-postgresql16",
+          "enabled_cloudwatch_logs_exports": [],
+          "deletion_protection": false,
+          "iam_database_authentication_enabled": false,
+          "enable_http_endpoint": false,
+          "tags": {
+            "Project": "AETHER",
+            "Environment": "staging",
+            "ManagedBy": "claude-staging-provision"
+          },
+          "tags_all": {
+            "Project": "AETHER",
+            "Environment": "staging",
+            "ManagedBy": "claude-staging-provision"
+          }
+        },
+        "after": {
+          "id": "aether-staging",
+          "cluster_identifier": "aether-staging",
+          "engine": "aurora-postgresql",
+          "engine_version": "16.10",
+          "engine_mode": "provisioned",
+          "database_name": "aether",
+          "master_username": "aether_admin",
+          "port": 5432,
+          "availability_zones": [
+            "us-east-1a",
+            "us-east-1b",
+            "us-east-1c"
+          ],
+          "serverlessv2_scaling_configuration": [
+            {
+              "min_capacity": 0,
+              "max_capacity": 2,
+              "seconds_until_auto_pause": 300
+            }
+          ],
+          "storage_encrypted": true,
+          "kms_key_id": "arn:aws:kms:us-east-1:544471417928:key/ab7b4816-932b-459e-b0f1-38e5fdf23500",
+          "db_subnet_group_name": "aether-staging-aurora",
+          "vpc_security_group_ids": [
+            "sg-0f61eda4b4344368e"
+          ],
+          "backup_retention_period": 1,
+          "preferred_backup_window": "06:42-07:12",
+          "preferred_maintenance_window": "mon:03:34-mon:04:04",
+          "copy_tags_to_snapshot": false,
+          "db_cluster_parameter_group_name": "default.aurora-postgresql16",
+          "enabled_cloudwatch_logs_exports": [],
+          "deletion_protection": false,
+          "iam_database_authentication_enabled": false,
+          "enable_http_endpoint": false,
+          "tags": {
+            "Project": "AETHER",
+            "Environment": "staging",
+            "ManagedBy": "claude-staging-provision"
+          },
+          "tags_all": {
+            "Project": "AETHER",
+            "Environment": "staging",
+            "ManagedBy": "claude-staging-provision"
+          }
+        },
+        "after_unknown": {},
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.aurora[0]"
     }
   ]
 }

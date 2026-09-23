@@ -162,7 +162,7 @@ variables {
   alert_email          = "terraform-ci@aether.invalid"
   aether_app_url       = "https://app.ci.aether.invalid"
   kyber_app_url        = "https://kyber.ci.aether.invalid"
-  status_api_url        = "https://api.ci.aether.invalid/health"
+  status_api_url       = "https://api.ci.aether.invalid/health"
   auth0_domain         = "tenant.ci.aether.invalid"
   # Provider-mocked plans still validate the AWS Amplify schema. This is a
   # test-only shape value; hosted plans must provide the encrypted repository
@@ -398,8 +398,10 @@ run "staging_pilot_profile_plan" {
       var.deployment_lane == "pilot",
       module.auth0.social_connections_enabled == false,
       module.ecs.stripe_billing_enabled == true,
+      local.api_capacity_provider.base_count == 0,
+      local.runtime_service_settings["lean-worker"].capacity_provider.base_count == 0,
     ])
-    error_message = "The pilot overlay is not constrained to staging, does not disable optional social connections, or does not enable Stripe billing."
+    error_message = "The pilot overlay is not constrained to staging, does not disable optional social connections, does not enable Stripe billing, or changes ECS capacity-provider strategy."
   }
 
   assert {
@@ -427,6 +429,35 @@ run "staging_pilot_profile_plan" {
       contains(module.ecs.runtime_service_names, "AETHER-staging-lean-worker"),
     ])
     error_message = "The pilot overlay provisions a deferred heavy subsystem or loses the consolidated lean-worker runtime."
+  }
+}
+
+run "staging_pilot_asleep_profile_plan" {
+  command = plan
+
+  variables {
+    deployment_profile  = "staging"
+    deployment_lane     = "pilot"
+    environment         = "staging"
+    staging_state       = "asleep"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    aurora_express_mode = true
+    skip_aurora         = true
+    log_retention_days  = 3
+  }
+
+  assert {
+    condition = alltrue([
+      module.ecs.backend_service_desired_count == 0,
+      module.ecs.runtime_service_desired_counts["lean-worker"] == 0,
+      module.ecs.backend_autoscaling_bounds.min == 0,
+      local.runtime_service_settings["lean-worker"].autoscaling.min_capacity == 0,
+      local.api_capacity_provider.base_count == 0,
+      local.runtime_service_settings["lean-worker"].capacity_provider.base_count == 0,
+    ])
+    error_message = "Pilot sleep must zero task counts and autoscaling floors without changing the stable capacity-provider strategy."
   }
 }
 

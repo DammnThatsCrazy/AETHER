@@ -14,13 +14,13 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:98340a8e6edfc1fee941455fc776b6835d497b6b5128175f216629edd71b6e25"
+  "deploy/aws/terraform/main.tf": "sha256:bf10f2d9387089182a77eb4dbadfc96a1ef9ebf435c73cd53e62f0363746eb0d"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
-  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:e609cdfaaf5d9d384e213edf6f936b0045eac823cc38d432e75db464c8eb14ad"
+  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:60020108f7a0ab17d66aac2e4fd2f890e02cd8291629ed5387bdc18390dbbc29"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
-  "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239"
-  "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
+  "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:ddc4bacad8ec5aa6047433d330c95afbcda39924c71f3d2c3a2f810ee6437eda"
+  "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
   "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
   "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
@@ -284,10 +284,10 @@ delete/recreate plan.
 | **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |
 | **Selection** | `terraform plan -var-file=profiles/staging.tfvars`, or `.github/workflows/staging-lifecycle.yml`, which dispatches `terraform-promote.yml` for every mutation. `environment = "staging"` is set explicitly; the root default is `production`. |
 | **Deployment lane** | `deployment_lane=full` preserves this existing release rehearsal. `deployment_lane=pilot` is an additive, complete lean AWS staging lane that keeps `deployment_profile=staging` and the unchanged `profiles/staging/terraform.tfstate` state key; it does not create a second Terraform profile or state namespace. |
-| **Pilot contract** | Pilot retains all five public Aether/Olympus surfaces, the AWS backend, durable Aurora/persistence, networking, Secrets Manager, tenant isolation, Stripe billing/webhooks/entitlements, CloudWatch observability, lifecycle/redeploy controls, migrations and full smoke coverage. Only Kyber operator/workforce identity and GCP/Google hosting/credentials are deferred. `scripts/release/check_staging_lane_contract.py` fails closed until ECS/bootstrap Stripe wiring is complete and the four real self-service Stripe test price secrets (`aether/stripe-price-{alpha,beta,gamma,delta}`) have populated current versions; Epsilon/Omicron/Omega remain optional contract-tier mappings. Bootstrap validates identifiers before write and no price IDs are invented. |
+| **Pilot contract** | Pilot retains all five public Aether/Olympus surfaces, the AWS backend, durable Aurora/persistence, networking, Secrets Manager, tenant isolation, Stripe billing/webhooks/entitlements, CloudWatch observability, lifecycle/redeploy controls, migrations and full smoke coverage. Only Kyber operator/workforce identity and GCP/Google hosting/credentials are deferred. The existing Kyber Auth0 client association is preserved by the one shared enabled-client-set resource; its duplicate Terraform state address is forgotten without destroying remote state. Pilot plans fail closed on ECS service replacement or capacity-provider strategy drift, autoscaling-target replacement or identity/role/maximum-capacity drift, Application Auto Scaling ownership-tag drift, destructive Aether Auth0 changes, or Auth0 mutations outside the Aether path. `scripts/release/check_staging_lane_contract.py` fails closed until ECS/bootstrap Stripe wiring is complete and the four real self-service Stripe test price secrets (`aether/stripe-price-{alpha,beta,gamma,delta}`) have populated current versions; Epsilon/Omicron/Omega remain optional contract-tier mappings. Bootstrap validates identifiers before write and no price IDs are invented. |
 | **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, private S3 SPA artifacts + SSM pointers, five Amplify public web apps, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. The reviewed paid-account staging profile uses the customer-managed Aurora KMS key; free-tier rehearsals may set `aurora_express_mode = true` or `skip_aurora = true` according to the account-plan guard. Aurora and Postgres graph remain omitted from the staging `required_resources` list only so a free-tier rehearsal can defer them safely. |
 | **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks when awake: `api` (1 vCPU / 2 GiB, max 2) and `lean-worker` (1 vCPU / 4 GiB, max 2) hosting all eight worker roles. `staging_state: asleep` drives every desired count **and every autoscaling floor** to zero. |
-| **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. Aurora auto-pauses at 0 ACU while asleep. |
+| **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. The canonical and retained legacy staging Aurora clusters use 0–2 ACU and auto-pause after 300 idle seconds; storage and other non-compute charges continue. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. Tasks carry a public IP on the task ENI for egress; inbound is governed entirely by the task security group, which accepts traffic only from the ALB. |
 | **Cost posture** | Target USD 25/month, hard ceiling USD 50/month, against a declared `maximum_scheduled_awake_hours_per_month: 40`. Hourly resources are prorated by awake hours; per-month charges (KMS keys, secrets, alarms) accrue regardless of sleep. See [Cost Optimization](COST-OPTIMIZATION.md). |
 | **TTL / lifecycle** | An awake lease is written to SSM at wake (1–8 h, default 4). `.github/workflows/staging-ttl-guard.yml` runs hourly, treats a missing or unparseable lease as **expired**, scales services to zero and drops autoscaling floors, then fails the run so the lapse is visible. Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN` — it then has no credential to read the lease or enforce the TTL, reports it is a NO-OP and passes green, which is **not** a claim that staging is asleep; it re-arms fail-closed the moment the role is wired. Full procedure: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md). |
@@ -409,19 +409,22 @@ exception: `api` is served by the Terraform-provisioned
 ### `staging_state`
 
 `staging` declares a `staging_state` block with `awake` (multiplier 1) and
-`asleep` (multiplier 0). The multiplier is applied in `profiles.tf` to three
-values, and all three are load-bearing:
+`asleep` (multiplier 0). Both lanes scale `desired_count` and autoscaling
+`min_capacity`; full also scales capacity-provider `base_count`, while pilot
+pins that field to zero in both states to keep the ECS service strategy
+invariant:
 
 | Scaled | Why |
 |---|---|
 | `desired_count` | The obvious one, and on its own not enough. |
 | autoscaling `min_capacity` | Application Auto Scaling clamps a service back up to its floor. A floor of 1 against a desired count of 0 revives the task within a cooldown, so staging never sleeps while appearing to. |
-| capacity provider `base_count` | A guaranteed on-demand floor under a desired count of 0 is what `check_delivery_topology.py` rejects as `CAPACITY_BASE_EXCEEDS_DESIRED`. |
+| capacity provider `base_count` | Full lane scales the guaranteed floor and rejects `base_count > desired_count`; pilot holds the FARGATE strategy at base 0 because strategy changes force service replacement. |
 
 `max_capacity` is deliberately **not** scaled: the ceiling is a static safety
 bound on the shape, and collapsing it would erase the reviewed envelope from a
-sleeping plan. An asleep environment therefore owns exactly the same services as
-an awake one and wakes by flipping one input, not by planning a different shape.
+sleeping plan. Pilot asleep/awake plans therefore retain the same services and
+capacity-provider strategy; `check_terraform_plan_policy.py` blocks apply if a
+pilot plan includes service replacement or managed scaling-tag removal.
 
 `staging_state` is a **plan-time input** to `terraform-promote.yml`. An apply
 consumes the stored plan and cannot reshape it. Profiles with no `staging_state`

@@ -1465,12 +1465,337 @@ def _resolve_out_dir(raw: str) -> Path:
     return path if path.is_absolute() else repo_root() / path
 
 
+PILOT_AUTH0_MUTABLE_ADDRESSES = frozenset({
+    "module.auth0.auth0_client.aether",
+    "module.auth0.auth0_client_grant.aether_api",
+    "module.auth0.auth0_connection_client.aether_db",
+})
+PILOT_AUTH0_STATE_ONLY_REMOVALS = frozenset({
+    "module.auth0.auth0_connection_clients.aether_db",
+    "module.auth0.auth0_connection_clients.kyber_db",
+})
+LEGACY_STAGING_AURORA_ADDRESS = (
+    "module.aurora[0].aws_rds_cluster.legacy_staging[0]"
+)
+LEGACY_STAGING_AURORA_SCALING = {
+    "min_capacity": 0,
+    "max_capacity": 2,
+    "seconds_until_auto_pause": 300,
+}
+
+
+def _without_unknown_values(value: Any, unknown: Any) -> Any:
+    """Remove only leaves Terraform marks unknown after apply.
+
+    This lets the lifecycle guard compare every known before/after attribute
+    without treating computed provider-only fields as mutations. It does not
+    suppress a known value merely because another sibling is unknown.
+    """
+    if unknown is True:
+        return _PLAN_UNKNOWN
+    if isinstance(value, dict):
+        markers = unknown if isinstance(unknown, dict) else {}
+        result: dict[str, Any] = {}
+        for key, child in value.items():
+            projected = _without_unknown_values(child, markers.get(key))
+            if projected is not _PLAN_UNKNOWN:
+                result[key] = projected
+        return result
+    if isinstance(value, list):
+        markers = unknown if isinstance(unknown, list) else []
+        result = []
+        for index, child in enumerate(value):
+            marker = markers[index] if index < len(markers) else None
+            projected = _without_unknown_values(child, marker)
+            if projected is not _PLAN_UNKNOWN:
+                result.append(projected)
+        return result
+    return value
+
+
+_PLAN_UNKNOWN = object()
+
+
+def _legacy_aurora_scaling(values: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the one configured Serverless v2 block, or None if malformed."""
+    raw = values.get("serverlessv2_scaling_configuration")
+    if not isinstance(raw, list) or len(raw) != 1 or not isinstance(raw[0], dict):
+        return None
+    return raw[0]
+
+
+def staging_legacy_aurora_safety_violations(
+    plan: dict[str, Any],
+) -> list[str]:
+    """Fail closed unless the existing staging DB receives only auto-pause config.
+
+    The state-reconcile workflow imports the old cluster, but the infrastructure
+    mutation must still be constrained by the exact reviewed Terraform plan.
+    This protects against accidental recreation, replacement, deletion, duplicate
+    state ownership, or drift to any attribute other than the intended scale
+    range and idle-pause interval.
+    """
+    violations: list[str] = []
+    planned = _walk_planned_values(
+        (plan.get("planned_values") or {}).get("root_module") or {}
+    )
+    matching = [
+        (address, resource)
+        for address, resource in planned.items()
+        if resource.get("type") == "aws_rds_cluster"
+        and (resource.get("values") or {}).get("cluster_identifier") == "aether-staging"
+    ]
+    if len(matching) != 1 or matching[0][0] != LEGACY_STAGING_AURORA_ADDRESS:
+        addresses = ", ".join(sorted(address for address, _ in matching)) or "none"
+        violations.append(
+            "aether-staging must have exactly one planned owner at "
+            f"{LEGACY_STAGING_AURORA_ADDRESS}; found {addresses}"
+        )
+        return violations
+
+    noncanonical_changes = []
+    for item in plan.get("resource_changes") or []:
+        if not isinstance(item, dict) or item.get("type") != "aws_rds_cluster":
+            continue
+        change = item.get("change") or {}
+        if any(
+            isinstance(change.get(side), dict)
+            and change[side].get("cluster_identifier") == "aether-staging"
+            for side in ("before", "after")
+        ) and item.get("address") != LEGACY_STAGING_AURORA_ADDRESS:
+            noncanonical_changes.append(str(item.get("address") or "<unknown-address>"))
+    if noncanonical_changes:
+        violations.append(
+            "the legacy cluster has noncanonical resource changes: "
+            + ", ".join(sorted(set(noncanonical_changes)))
+        )
+        return violations
+
+    planned_values = matching[0][1].get("values") or {}
+    if planned_values.get("cluster_identifier") != "aether-staging":
+        violations.append("canonical legacy Aurora address does not identify aether-staging")
+    if _legacy_aurora_scaling(planned_values) != LEGACY_STAGING_AURORA_SCALING:
+        violations.append(
+            "planned legacy Aurora capacity must be min=0, max=2, "
+            "seconds_until_auto_pause=300"
+        )
+
+    changes = [
+        item for item in (plan.get("resource_changes") or [])
+        if isinstance(item, dict)
+        and item.get("mode", "managed") == "managed"
+        and item.get("address") == LEGACY_STAGING_AURORA_ADDRESS
+    ]
+    if len(changes) > 1:
+        violations.append("legacy Aurora has duplicate resource change entries")
+        return violations
+    if not changes:
+        return violations
+
+    change = changes[0].get("change") or {}
+    actions = [str(action) for action in (change.get("actions") or [])]
+    if actions == ["no-op"]:
+        return violations
+    if actions != ["update"]:
+        violations.append(
+            "legacy Aurora may only be a no-op or a scaling-only update; "
+            f"planned actions were {actions or 'missing'}"
+        )
+        return violations
+
+    before = change.get("before")
+    after = change.get("after")
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        violations.append("legacy Aurora update is missing complete before/after values")
+        return violations
+    if before.get("cluster_identifier") != "aether-staging":
+        violations.append("legacy Aurora update before-state is not aether-staging")
+    if after.get("cluster_identifier") != "aether-staging":
+        violations.append("legacy Aurora update after-state is not aether-staging")
+
+    before_scaling = _legacy_aurora_scaling(before)
+    after_scaling = _legacy_aurora_scaling(after)
+    if after_scaling != LEGACY_STAGING_AURORA_SCALING:
+        violations.append(
+            "legacy Aurora update does not set min=0, max=2, "
+            "seconds_until_auto_pause=300"
+        )
+    if before_scaling == LEGACY_STAGING_AURORA_SCALING:
+        violations.append("legacy Aurora update does not change the approved scaling configuration")
+    elif before_scaling is None or before_scaling.get("max_capacity") != 2 or (
+        before_scaling.get("min_capacity") not in (0, 0.5)
+    ) or before_scaling.get("seconds_until_auto_pause") not in (None, 300):
+        violations.append(
+            "legacy Aurora before-state is outside the reviewed 0.5-or-0 ACU, "
+            "max-2 transition"
+        )
+
+    after_unknown = change.get("after_unknown") or {}
+    changed_attributes: list[str] = []
+    for attribute in set(before) | set(after):
+        if attribute == "serverlessv2_scaling_configuration":
+            continue
+        unknown = after_unknown.get(attribute) if isinstance(after_unknown, dict) else None
+        old_value = _without_unknown_values(before.get(attribute), unknown)
+        new_value = _without_unknown_values(after.get(attribute), unknown)
+        if old_value != new_value:
+            changed_attributes.append(attribute)
+    if changed_attributes:
+        violations.append(
+            "legacy Aurora update changes non-scaling attributes: "
+            + ", ".join(sorted(changed_attributes))
+        )
+    return violations
+
+
+def check_staging_legacy_aurora_safety(
+    r: Reporter,
+    results: list[dict[str, Any]],
+    profile: str,
+    plan: dict[str, Any],
+) -> None:
+    """Require the preserved legacy cluster's exact no-op/auto-pause plan shape."""
+    if profile != "staging":
+        return
+    name = "staging.legacy_aurora_autopause_scope"
+    findings = staging_legacy_aurora_safety_violations(plan)
+    if findings:
+        message = "; ".join(findings)
+        r.fail(message)
+        _record(results, name, False, message, findings=findings)
+    else:
+        detail = (
+            "the existing aether-staging cluster has one canonical state owner, "
+            "the reviewed auto-pause configuration, and no unrelated planned changes"
+        )
+        r.ok(detail)
+        _record(results, name, True, detail, address=LEGACY_STAGING_AURORA_ADDRESS)
+
+
+def pilot_plan_safety_violations(plan: dict[str, Any]) -> dict[str, list[str]]:
+    """Return fail-closed pilot findings before any staging apply is dispatched.
+
+    Pilot wake/sleep may change ECS desired counts and autoscaling floors, but
+    it must not replace services or scaling targets, strip workflow-managed
+    ownership tags, or delete/mutate Auth0 surfaces outside Aether's required
+    path. The only Auth0 state exceptions are removed-block migrations for the
+    two legacy full-set database association addresses; they are state-only
+    with ``destroy = false`` and are represented by Terraform's ``forget``
+    action. A ``delete`` action is a remote mutation and must never be accepted.
+    """
+    violations: dict[str, list[str]] = {
+        "pilot.ecs_service_replacement": [],
+        "pilot.ecs_capacity_provider_drift": [],
+        "pilot.autoscaling_target_replacement": [],
+        "pilot.autoscaling_target_shape_drift": [],
+        "pilot.autoscaling_tag_drift": [],
+        "pilot.auth0_scope": [],
+        "pilot.auth0_destructive_change": [],
+    }
+    for item in plan.get("resource_changes") or []:
+        if not isinstance(item, dict) or item.get("mode", "managed") != "managed":
+            continue
+        address = str(item.get("address") or "<unknown-address>")
+        resource_type = str(item.get("type") or "")
+        change = item.get("change") or {}
+        actions = change.get("actions") or []
+
+        if resource_type == "aws_ecs_service":
+            if "delete" in actions:
+                violations["pilot.ecs_service_replacement"].append(address)
+            before, after = change.get("before"), change.get("after")
+            if (isinstance(before, dict) and isinstance(after, dict)
+                    and before.get("capacity_provider_strategy")
+                    != after.get("capacity_provider_strategy")):
+                violations["pilot.ecs_capacity_provider_drift"].append(address)
+
+        if resource_type == "aws_appautoscaling_target":
+            if "delete" in actions:
+                violations["pilot.autoscaling_target_replacement"].append(address)
+            before, after = change.get("before"), change.get("after")
+            if isinstance(before, dict) and isinstance(after, dict):
+                changed_shape = [
+                    attribute for attribute in (
+                        "resource_id", "scalable_dimension", "service_namespace",
+                        "role_arn", "max_capacity",
+                    )
+                    if before.get(attribute) != after.get(attribute)
+                ]
+                if changed_shape:
+                    violations["pilot.autoscaling_target_shape_drift"].append(
+                        f"{address} ({', '.join(changed_shape)})"
+                    )
+                changed_tags = [
+                    attribute for attribute in ("tags", "tags_all")
+                    if before.get(attribute) != after.get(attribute)
+                ]
+                if changed_tags:
+                    violations["pilot.autoscaling_tag_drift"].append(
+                        f"{address} ({', '.join(changed_tags)})"
+                    )
+
+        if address.startswith("module.auth0.") and actions != ["no-op"]:
+            if (address in PILOT_AUTH0_STATE_ONLY_REMOVALS
+                    and actions == ["forget"]):
+                continue
+            if address not in PILOT_AUTH0_MUTABLE_ADDRESSES:
+                violations["pilot.auth0_scope"].append(address)
+            elif "delete" in actions:
+                violations["pilot.auth0_destructive_change"].append(address)
+
+    return {key: sorted(set(addresses)) for key, addresses in violations.items()}
+
+
+def check_pilot_staging_plan_safety(
+    r: Reporter,
+    results: list[dict[str, Any]],
+    profile: str,
+    deployment_lane: str,
+    plan: dict[str, Any],
+) -> None:
+    """Gate the pilot lane on stable ECS, tag and deferred-Auth0 plan shape."""
+    if deployment_lane != "pilot":
+        return
+    if profile != "staging":
+        message = "deployment_lane=pilot is valid only with profile=staging"
+        r.fail(message)
+        _record(results, "pilot.profile", False, message, profile=profile)
+        return
+
+    findings = pilot_plan_safety_violations(plan)
+    details = {
+        "pilot.ecs_service_replacement":
+            "pilot lifecycle plan must not replace an ECS service; change only desired counts and floors",
+        "pilot.ecs_capacity_provider_drift":
+            "pilot lifecycle plan must preserve the ECS capacity-provider strategy",
+        "pilot.autoscaling_target_replacement":
+            "pilot lifecycle plan must preserve existing Application Auto Scaling target identity",
+        "pilot.autoscaling_target_shape_drift":
+            "pilot lifecycle plan must preserve autoscaling target identity, role, and maximum capacity",
+        "pilot.autoscaling_tag_drift":
+            "pilot lifecycle plan must preserve workflow-managed Application Auto Scaling ownership tags",
+        "pilot.auth0_scope":
+            "pilot plan may change only the Aether Auth0 path; Kyber and deferred provider resources stay untouched",
+        "pilot.auth0_destructive_change":
+            "pilot plan must not delete or replace an Aether Auth0 resource",
+    }
+    for name, addresses in findings.items():
+        label = details[name]
+        if addresses:
+            message = f"{label}: {', '.join(addresses[:8])}"
+            r.fail(message)
+            _record(results, name, False, message, addresses=addresses)
+        else:
+            r.ok(label)
+            _record(results, name, True, label)
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Assert a Terraform plan satisfies its deployment profile's cost policy.",
     )
     parser.add_argument("--profile", required=True,
                         help="Deployment profile name from config/deployment_profiles.yaml")
+    parser.add_argument("--deployment-lane", choices=("full", "pilot"), default="full",
+                        help="Deployment lane; pilot adds lifecycle-specific safety checks")
     parser.add_argument("--plan-json", required=True,
                         help="Path to `terraform show -json <planfile>` output")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR,
@@ -1545,6 +1870,9 @@ def check(argv: list[str] | None = None) -> int:
 
     results: list[dict[str, Any]] = []
     _record(results, "plan_shape", True, f"format_version {fmt}")
+    check_staging_legacy_aurora_safety(r, results, profile, plan)
+    check_pilot_staging_plan_safety(
+        r, results, profile, args.deployment_lane, plan)
 
     try:
         resources = enumerate_resources(plan)

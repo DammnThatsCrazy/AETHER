@@ -11,16 +11,16 @@ canonical_owner: platform@aether
 estimated_read_minutes: 16
 toc_depth: 3
 source_hashes:
-  "config/aws_price_book.yaml": "sha256:a9fd5672d05e523b3afcb2af235a3eba5bff36facad4e9e92e1381f408363f07"
+  "config/aws_price_book.yaml": "sha256:b449237c5d4b11622f0f35278b3f5a22a17b39b1cea74a53596b6af94ba2d3dc"
   "config/cost_exceptions.yaml": "sha256:029e003d3340de68c683a2f212edd3ceb13b6de01e5f6e70ddd44bdecda78ce2"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "scripts/release/check_cost_model.py": "sha256:74cd3c9db8489aa4fb3d67153a882dbe5cded4d257cddafcc202d1a25a7897f2"
+  "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
+  "scripts/release/check_cost_model.py": "sha256:389df39c07cf6a679c6802a8926c1759f2c42e645cd53be681c70b52ca724941"
   "scripts/release/check_cost_policy.py": "sha256:2e547cdb3ce200a9f067b2a930a54ca622f29952fe4138693d942ddc1ec54e12"
   "scripts/release/check_cost_policy_terraform.py": "sha256:a5f13e165442fecaef55109efbffe2d73897f589235f254a47f8b3185c806594"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:942a10349eab14782c7f98b04e2d13201434ceeb06908c1439c6727869f3269b"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:2ec8dd99f19cbd907b44106b877e2a98ead7d53547ce7e815f86e9de2b8c49ef"
 ---
 
 # Cost Optimization
@@ -40,6 +40,11 @@ Two kinds of enforcement live in this system and must never be conflated:
 
 A plan can satisfy the shape policy and still blow the budget (an oversized
 instance class inside an allowed resource type), so both gates are required.
+For the pilot staging lane, the plan checker also rejects ECS-service
+replacement or capacity-provider-strategy drift, autoscaling-target
+replacement or identity/role/maximum-capacity drift, workflow-managed tag
+drift, and Auth0 mutations outside the preserved Aether path before an apply
+is dispatched.
 
 ## Cost targets
 
@@ -124,6 +129,11 @@ change is also a cost change.
 Fargate is **121.10** of the 188.93 — 64% of the fixed baseline. Aurora's floor
 is 23%. Those two lines are the entire optimisation surface; everything else
 sums to 24.03.
+
+The release cost model prices ECS Fargate from task CPU, memory and
+`desired_count`. A capacity-provider strategy's `base` is reported for review
+but is not an additional running task or a second billable count; staging pilot
+keeps it at zero across wake/sleep and scales only desired tasks.
 
 ### Usage-variable band
 

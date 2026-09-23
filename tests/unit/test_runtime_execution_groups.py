@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 
 BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
 if BACKEND not in sys.path:
@@ -273,6 +274,18 @@ def test_lean_worker_owns_the_union_of_every_dedicated_role():
     for role in WORKER_ROLES:
         dedicated |= set(specs_for_role(role, names))
     assert lean == dedicated == set(names)
+
+
+def test_staging_service_map_boots_the_real_consolidated_worker_group():
+    root = Path(__file__).resolve().parents[2]
+    runtime = yaml.safe_load(
+        (root / "config/runtime_deployment.yaml").read_text(encoding="utf-8")
+    )
+    staging_services = runtime["profiles"]["staging"]["services"]
+    assert set(staging_services) == {"api", "lean-worker"}
+    assert set(staging_services["lean-worker"]["roles"]) == set(roles_in("lean-worker"))
+    assert set(staging_services["lean-worker"]["roles"]) == set(WORKER_ROLES)
+    assert staging_services["api"]["roles"] == ["api"]
 
 
 def test_lean_worker_consumer_specs_equal_union_of_dedicated_roles():

@@ -32,7 +32,7 @@ on:
         description: "Staging overlay lane; full preserves the existing rehearsal, pilot provisions complete lean customer staging"
         type: choice
         options: [full, pilot]
-        default: full
+        default: pilot
         required: true
       confirm_runtime_wake:
         description: "Explicitly authorize starting staging ECS services (required for apply-wake/full-rehearsal)"
@@ -939,11 +939,13 @@ jobs:
       - name: Validate the reviewed plan against policy
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
         run: |
           set -euo pipefail
           mkdir -p artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
+            --deployment-lane "$DEPLOYMENT_LANE" \
             --plan-json "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json" \
             | tee artifacts/wake-plan-policy.txt
           test -s artifacts/profile-resource-inventory.json
@@ -2574,6 +2576,7 @@ jobs:
           mkdir -p artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
+            --deployment-lane "$DEPLOYMENT_LANE" \
             --plan-json "${plan_dir}/reviewed.tfplan.json" \
             | tee artifacts/sleep-plan-policy.txt
           PLAN_JSON="${plan_dir}/reviewed.tfplan.json" python - <<'PY'

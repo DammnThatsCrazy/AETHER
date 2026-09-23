@@ -472,6 +472,40 @@ def test_staging_plan_and_apply_preflight_admin_bootstrap_prerequisites():
     )
 
 
+def test_staging_admin_key_handoff_is_verified_and_used_by_later_rehearsal_steps():
+    document = _workflow_yaml("staging-lifecycle.yml")
+    lifecycle_text = _workflow("staging-lifecycle.yml")
+    located = []
+    for job_name, job in document["jobs"].items():
+        steps = job.get("steps", [])
+        bootstrap_index = next((
+            index for index, step in enumerate(steps)
+            if step.get("name") == "Verify or bootstrap the durable admin credential after readiness"
+        ), None)
+        if bootstrap_index is not None:
+            located.append((job_name, steps, bootstrap_index))
+
+    assert len(located) == 1
+    _job_name, steps, bootstrap_index = located[0]
+    credential_step = steps[bootstrap_index]
+    assert credential_step["env"]["EXISTING_STAGING_ADMIN_API_KEY"] == (
+        "${{ secrets.STAGING_ADMIN_API_KEY }}"
+    )
+    assert "--allow-bootstrap --confirm-single-use" in credential_step["run"]
+
+    tenant_index = next(
+        index for index, step in enumerate(steps)
+        if step.get("name") == "Bootstrap run-scoped rehearsal tenants and API keys"
+    )
+    assert tenant_index > bootstrap_index
+    assert "STAGING_ADMIN_API_KEY" in steps[tenant_index]["run"]
+    helper_text = (ROOT / "scripts/release/bootstrap_staging_admin_key.py").read_text()
+    assert 'handle.write(f"STAGING_ADMIN_API_KEY={api_key}\\n")' in helper_text
+    assert not re.search(r"(?<![A-Z0-9_])ADMIN_API_KEY", lifecycle_text), (
+        "the lifecycle must not fall back to the stale ADMIN_API_KEY name"
+    )
+
+
 def test_pilot_sleep_paths_skip_non_cleanup_preflights_but_keep_authority():
     document = _workflow_yaml("pilot-staging.yml")
     text = _workflow("pilot-staging.yml")
@@ -527,6 +561,33 @@ def test_staging_reconciliation_discovers_all_managed_price_resources():
     assert "steps.discover-price-secrets.outputs.secret_names" in text
     assert "ResourceNotFoundException" in text
     assert "the secret value was not read" in text
+
+
+def test_legacy_aurora_state_reconciliation_is_exact_and_isolated():
+    document = _workflow_yaml("staging-state-reconcile.yml")
+    trigger_config = document.get("on", document.get(True))
+    inputs = trigger_config["workflow_dispatch"]["inputs"]
+    assert inputs["legacy_aurora_identifier"]["required"] is False
+    assert inputs["confirm_legacy_aurora_import"]["required"] is False
+    assert "aether-staging only" in inputs["legacy_aurora_identifier"]["description"]
+    assert "IMPORT-LEGACY-STAGING-AURORA" in inputs["confirm_legacy_aurora_import"]["description"]
+
+    text = _workflow("staging-state-reconcile.yml")
+    assert (
+        "- name: Discover pre-existing Stripe price secrets for state reconciliation\n"
+        "        if: inputs.legacy_aurora_identifier == ''"
+    ) in text
+    assert "Legacy Aurora adoption must be an isolated state-reconciliation request" in text
+    assert "Only aether-staging is an approved target" in text or "only aether-staging is an approved target" in text
+    assert "aether-staging already has an owner in ${profile} Terraform state" in text
+    assert "module.aurora[0].aws_rds_cluster.legacy_staging[0]" in text
+    assert 'terraform import -input=false' in text
+    assert 'aws rds modify-db-cluster' not in text
+    assert 'aws rds delete-db-cluster' not in text
+
+    promotion = _workflow("terraform-promote.yml")
+    assert "staging requires the existing aether-staging cluster" in promotion
+    assert "does not identify the preserved aether-staging cluster" in promotion
 
 
 def test_staging_reconciliation_repairs_only_reviewed_amplify_main_mappings():
@@ -603,6 +664,24 @@ def test_infrastructure_staging_audits_the_dedicated_plan_role():
     assert "--lane \"$DEPLOYMENT_LANE\"" in text
     remote_plan = _job_script(document, "remote-plan")
     assert 'plan_args+=("-var=deployment_lane=${DEPLOYMENT_LANE}")' in remote_plan
+
+
+def test_staging_lifecycle_defaults_to_pilot_and_promotion_default_is_profile_safe():
+    lifecycle_triggers = _workflow_yaml("staging-lifecycle.yml").get("on")
+    if lifecycle_triggers is None:
+        lifecycle_triggers = _workflow_yaml("staging-lifecycle.yml").get(True)
+    lifecycle_inputs = lifecycle_triggers["workflow_dispatch"]["inputs"]
+    assert lifecycle_inputs["deployment_lane"]["default"] == "pilot"
+
+    promotion_triggers = _workflow_yaml("terraform-promote.yml").get("on")
+    if promotion_triggers is None:
+        promotion_triggers = _workflow_yaml("terraform-promote.yml").get(True)
+    promotion_inputs = promotion_triggers["workflow_dispatch"]["inputs"]
+    assert promotion_inputs["deployment_lane"]["default"] == "full"
+    assert promotion_inputs["profile"]["options"] == [
+        "staging", "production-lean", "production-scale", "enterprise-isolated",
+        "demo", "preview",
+    ]
 
 
 def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():

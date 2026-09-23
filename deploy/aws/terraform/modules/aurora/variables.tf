@@ -52,6 +52,12 @@ variable "auto_pause_seconds" {
   }
 }
 
+variable "manage_legacy_staging_cluster" {
+  type        = bool
+  description = "Adopt the pre-existing aether-staging Aurora cluster so reviewed staging plans keep its data and enforce auto-pause."
+  default     = false
+}
+
 variable "backup_retention_days" {
   type        = number
   description = "Automated backup retention in days"

@@ -140,6 +140,9 @@ def test_staging_asleep_keeps_the_same_service_and_role_ownership():
     awake = topo.resolve_services(profile, "awake")
     assert sorted(asleep) == sorted(awake)
     assert {s: c["roles"] for s, c in asleep.items()} == {s: c["roles"] for s, c in awake.items()}
+    assert {s: c["capacity_provider"] for s, c in asleep.items()} == {
+        s: c["capacity_provider"] for s, c in awake.items()
+    }, "staging lifecycle must not reshape replacement-only ECS placement strategy"
     assert topo.role_ownership_errors("staging", asleep, _consts()) == []
 
 

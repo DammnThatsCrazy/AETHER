@@ -927,6 +927,22 @@ resource "aws_appautoscaling_target" "runtime_service" {
   resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.runtime_service[each.key].name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+
+  # Staging ownership tags are reconciled after registration to avoid the
+  # Application Auto Scaling TagResource race. Other profiles have no staging
+  # reconciler, so retain their Terraform ownership metadata explicitly.
+  tags = var.environment == "staging" ? {} : {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+
+  # Staging ownership tags are reconciled explicitly after the Terraform
+  # apply. Do not let the provider remove those externally managed tags while
+  # a service replacement temporarily deregisters its scalable target.
+  lifecycle {
+    ignore_changes = [tags]
+  }
 }
 
 # Target tracking on SQS backlog PER TASK.
@@ -1249,6 +1265,16 @@ resource "aws_appautoscaling_target" "backend" {
   resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.backend.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+
+  tags = var.environment == "staging" ? {} : {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+
+  lifecycle {
+    ignore_changes = [tags]
+  }
 }
 
 resource "aws_appautoscaling_policy" "backend_cpu" {
@@ -1298,6 +1324,16 @@ resource "aws_appautoscaling_target" "ml" {
   resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.ml[0].name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+
+  tags = var.environment == "staging" ? {} : {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+
+  lifecycle {
+    ignore_changes = [tags]
+  }
 }
 
 resource "aws_appautoscaling_policy" "ml_cpu" {
