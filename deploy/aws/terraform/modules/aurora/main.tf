@@ -204,6 +204,17 @@ resource "aws_rds_cluster" "legacy_staging" {
     ManagedBy   = "claude-staging-provision"
   }
 
+  # This imported cluster predates the managed staging profile. Keep its
+  # existing write-forwarding and final-snapshot settings instead of applying
+  # provider defaults during the scaling-only update.
+  lifecycle {
+    ignore_changes = [
+      enable_global_write_forwarding,
+      enable_local_write_forwarding,
+      skip_final_snapshot,
+    ]
+  }
+
   # Deletion and replacement are rejected by the staging plan-policy gate,
   # which also requires this exact address on every staging plan. Keeping the
   # guard in the plan authority lets the provider-mocked lifecycle tests tear
