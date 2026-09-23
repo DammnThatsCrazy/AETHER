@@ -173,7 +173,7 @@ jobs:
       - name: Validate deployment lane and canonical environment
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
-          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
           DELIVERY_MODE: ${{ github.event_name == 'push' && 'deploy' || inputs.delivery_mode || 'deploy' }}
         run: |
           set -euo pipefail
@@ -199,7 +199,7 @@ jobs:
       - name: Validate the staging deployment-lane contract and static runtime wiring
         if: github.event_name == 'push' || inputs.environment == 'staging'
         env:
-          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           python scripts/release/check_staging_lane_contract.py \
@@ -397,8 +397,8 @@ jobs:
           # Google workforce identity is required only for the full staging
           # lane. Keep the pilot build from resolving or depending on the
           # deferred credential at all.
-          KYBER_GOOGLE_CLIENT_ID: ${{ (github.event_name == 'push' || inputs.deployment_lane != 'pilot') && (vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID) || '' }}
-          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ (github.event_name != 'push' && inputs.deployment_lane != 'pilot') && (vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID) || '' }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           case "$DEPLOYMENT_LANE" in
@@ -467,7 +467,7 @@ jobs:
         env:
           BACKEND_DIGEST: ${{ steps.backend-digest.outputs.digest }}
           REGISTRY: ${{ steps.ecr.outputs.registry }}
-          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -645,7 +645,7 @@ jobs:
           github.event_name == 'push'
           || (inputs.environment == 'staging' && inputs.delivery_mode != 'build-only')
         env:
-          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
           AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
           AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -664,8 +664,8 @@ jobs:
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
-          KYBER_GOOGLE_CLIENT_ID: ${{ secrets.KYBER_GOOGLE_CLIENT_ID }}
-          KYBER_GOOGLE_CLIENT_SECRET: ${{ secrets.KYBER_GOOGLE_CLIENT_SECRET }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ (github.event_name != 'push' && inputs.deployment_lane != 'pilot') && secrets.KYBER_GOOGLE_CLIENT_ID || '' }}
+          KYBER_GOOGLE_CLIENT_SECRET: ${{ (github.event_name != 'push' && inputs.deployment_lane != 'pilot') && secrets.KYBER_GOOGLE_CLIENT_SECRET || '' }}
           TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
         run: |
           set -euo pipefail
@@ -677,7 +677,7 @@ jobs:
           name: ${{ needs.acquire-release.result == 'success' && 'approved-release' || format('release-{0}', github.sha) }}
       - name: Verify release immediately before mutation
         env:
-          EXPECTED_DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          EXPECTED_DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           CHECKSUM=$(cat release.json.sha256)
@@ -737,7 +737,7 @@ jobs:
       - name: Verify the current staging task-definition lane before mutation
         if: github.event_name == 'push' || inputs.environment == 'staging'
         env:
-          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           # The rollout below clones each live task definition and changes only
@@ -891,7 +891,7 @@ jobs:
       - name: Publish private static SPA origins
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
-          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           apps=(aether)
