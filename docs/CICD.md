@@ -25,7 +25,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:6c598367ff91b13c91601ab4939010b908fc571370f35b3516562f8d1c3eff07"
+  ".github/workflows/": "sha256:5aa341ce9a4649ea24432dc821616ca104b403da70f1777057adb4d08492d66b"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -436,6 +436,13 @@ Kyber artifacts remain part of the immutable release and are published to
 their private S3 origins by the staging rehearsal. This keeps Kyber internal
 and prevents a public marketing build from being mistaken for an operator
 deployment.
+
+Automatic `main` pushes now build and deploy the `pilot` staging lane, so the
+routine merge path does not pull deferred Kyber workforce or Google credentials
+back into the pilot critical path. A manual `deploy.yml` dispatch still defaults
+to `full`; choose `pilot` explicitly for a pilot staging dispatch, or use the
+`pilot-staging.yml` orchestration workflow for its credential, secret, Amplify,
+and release preflights.
 
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|

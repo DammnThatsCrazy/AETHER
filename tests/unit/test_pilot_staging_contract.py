@@ -130,12 +130,16 @@ def test_canonical_staging_authorities_accept_full_and_pilot(name):
     document = _workflow(name)
     inputs = (_on(document) or {}).get("workflow_dispatch", {}).get("inputs", {})
     assert inputs["deployment_lane"]["options"] == ["full", "pilot"]
-    assert inputs["deployment_lane"]["default"] == "full"
+    expected_default = "pilot" if name == "staging-lifecycle.yml" else "full"
+    assert inputs["deployment_lane"]["default"] == expected_default
 
 
-def test_full_staging_push_path_remains_full_and_profile_choices_do_not_fork():
+def test_main_push_uses_pilot_lane_and_profile_choices_do_not_fork():
     deploy = (WORKFLOWS / "deploy.yml").read_text(encoding="utf-8")
-    assert "github.event_name == 'push' && 'full'" in deploy
+    assert deploy.count("github.event_name == 'push' && 'pilot'") == 8
+    assert "github.event_name == 'push' && 'full'" not in deploy
+    assert "KYBER_GOOGLE_CLIENT_ID: ${{ (github.event_name != 'push'" in deploy
+    assert "KYBER_GOOGLE_CLIENT_SECRET: ${{ (github.event_name != 'push'" in deploy
     deploy_inputs = _on(_workflow("deploy.yml"))["workflow_dispatch"]["inputs"]
     assert deploy_inputs["delivery_mode"]["options"] == ["deploy", "build-only"]
     assert deploy_inputs["delivery_mode"]["default"] == "deploy"
