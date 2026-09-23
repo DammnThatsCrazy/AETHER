@@ -127,9 +127,12 @@ resource "auth0_client_grant" "aether_api" {
   scopes    = []
 }
 
-resource "auth0_connection_clients" "aether_db" {
-  connection_id   = auth0_connection.database.id
-  enabled_clients = [auth0_client.aether.id]
+resource "auth0_connection_client" "aether_db" {
+  # This resource appends only the customer-facing Aether client to the
+  # database connection. Other existing client associations remain outside
+  # the pilot lane's Terraform ownership and are not rewritten as a set.
+  connection_id = auth0_connection.database.id
+  client_id     = auth0_client.aether.id
 }
 
 # --------------------------------------------------------------------------
@@ -167,11 +170,6 @@ resource "auth0_client_grant" "kyber_api" {
   client_id = auth0_client.kyber.id
   audience  = auth0_resource_server.api.identifier
   scopes    = []
-}
-
-resource "auth0_connection_clients" "kyber_db" {
-  connection_id   = auth0_connection.database.id
-  enabled_clients = [auth0_client.kyber.id]
 }
 
 # --------------------------------------------------------------------------

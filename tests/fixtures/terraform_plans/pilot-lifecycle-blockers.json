@@ -1,0 +1,118 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.8",
+  "resource_changes": [
+    {
+      "address": "module.ecr.aws_ecr_repository.this[\"aether-backend\"]",
+      "mode": "managed",
+      "type": "aws_ecr_repository",
+      "name": "this",
+      "index": "aether-backend",
+      "change": {
+        "actions": ["no-op"],
+        "before": {"name": "aether-backend"},
+        "after": {"name": "aether-backend"}
+      }
+    },
+    {
+      "address": "module.ecs.aws_ecs_service.backend",
+      "mode": "managed",
+      "type": "aws_ecs_service",
+      "name": "backend",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": {
+          "desired_count": 0,
+          "capacity_provider_strategy": [{"capacity_provider": "FARGATE", "base": 0, "weight": 100}]
+        },
+        "after": {
+          "desired_count": 1,
+          "capacity_provider_strategy": [{"capacity_provider": "FARGATE", "base": 1, "weight": 100}]
+        },
+        "replace_paths": [["capacity_provider_strategy"]]
+      }
+    },
+    {
+      "address": "module.ecs.aws_appautoscaling_target.backend",
+      "mode": "managed",
+      "type": "aws_appautoscaling_target",
+      "name": "backend",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": {
+          "resource_id": "service/AETHER-staging/AETHER-staging-backend",
+          "scalable_dimension": "ecs:service:DesiredCount",
+          "service_namespace": "ecs",
+          "role_arn": "arn:aws:iam::544471417928:role/ecs-autoscaling",
+          "max_capacity": 2,
+          "tags": {"owner": "workflow"},
+          "tags_all": {"owner": "workflow"}
+        },
+        "after": {
+          "resource_id": "service/AETHER-staging/AETHER-staging-backend",
+          "scalable_dimension": "ecs:service:DesiredCount",
+          "service_namespace": "ecs",
+          "role_arn": "arn:aws:iam::544471417928:role/ecs-autoscaling",
+          "max_capacity": 3,
+          "tags": {},
+          "tags_all": {}
+        }
+      }
+    },
+    {
+      "address": "module.auth0.auth0_client.aether",
+      "mode": "managed",
+      "type": "auth0_client",
+      "name": "aether",
+      "change": {
+        "actions": ["delete"],
+        "before": {"name": "Aether"},
+        "after": null
+      }
+    },
+    {
+      "address": "module.auth0.auth0_client.kyber",
+      "mode": "managed",
+      "type": "auth0_client",
+      "name": "kyber",
+      "change": {
+        "actions": ["update"],
+        "before": {"name": "Kyber"},
+        "after": {"name": "Kyber pilot"}
+      }
+    },
+    {
+      "address": "module.auth0.auth0_connection_clients.kyber_db",
+      "mode": "managed",
+      "type": "auth0_connection_clients",
+      "name": "kyber_db",
+      "change": {
+        "actions": ["update"],
+        "before": {"enabled_clients": ["kyber"]},
+        "after": {"enabled_clients": []}
+      }
+    },
+    {
+      "address": "module.auth0.auth0_connection.database",
+      "mode": "managed",
+      "type": "auth0_connection",
+      "name": "database",
+      "change": {
+        "actions": ["update"],
+        "before": {"name": "Username-Password-Authentication"},
+        "after": {"name": "Username-Password-Authentication", "options": {"password_policy": "new-policy"}}
+      }
+    },
+    {
+      "address": "module.auth0.auth0_resource_server.api",
+      "mode": "managed",
+      "type": "auth0_resource_server",
+      "name": "api",
+      "change": {
+        "actions": ["update"],
+        "before": {"identifier": "https://api.example.test"},
+        "after": {"identifier": "https://api.example.test", "scopes": ["admin:read"]}
+      }
+    }
+  ]
+}

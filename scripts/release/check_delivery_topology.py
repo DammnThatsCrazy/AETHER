@@ -144,8 +144,12 @@ def resolve_services(profile: dict[str, Any], state: str | None = None) -> dict[
     ``None`` uses that block's ``default`` and is a no-op for profiles that
     declare no lifecycle. A state only scales counts — ``desired_count`` and
     the autoscaling floor — so a sleeping environment owns exactly the same
-    services and the same roles as an awake one. An undeclared state raises
-    rather than falling back, so a typo cannot silently resolve to "awake".
+    services, roles and capacity-provider strategy as an awake one. In
+    particular, changing the ECS service capacity-provider strategy is
+    replacement-only in Terraform's AWS provider; pilot staging pins that
+    strategy and uses desired_count as its sole task-capacity control. An
+    undeclared state raises rather than falling back, so a typo cannot silently
+    resolve to "awake".
     """
     services = {name: dict(cfg or {}) for name, cfg in (profile.get("services") or {}).items()}
     lifecycle = profile.get("staging_state") or {}

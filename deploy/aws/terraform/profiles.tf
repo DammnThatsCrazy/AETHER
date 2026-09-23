@@ -180,10 +180,13 @@ locals {
   #     1 against a desired count of 0 revives the task within a cooldown and
   #     staging never sleeps at all: the saving evaporates and the "no always-on
   #     staging compute" guarantee becomes false while looking satisfied.
-  #   capacity_provider base_count — the guaranteed on-demand floor. Leaving it
-  #     at 1 would declare a guaranteed task under a desired count of 0, which
-  #     is also what check_delivery_topology.py::capacity_errors rejects as
-  #     CAPACITY_BASE_EXCEEDS_DESIRED.
+  #   capacity_provider base_count — only for the full lane. Pilot staging
+  #     pins this strategy at base 0 for both lifecycle states. The pilot
+  #     topology uses one FARGATE provider at weight 100, so desired_count is
+  #     the sole task-capacity control. Scaling base_count between awake/asleep
+  #     changes aws_ecs_service.capacity_provider_strategy, which Terraform's
+  #     AWS provider treats as replacement-only; the former multiplier caused
+  #     both ECS services to be replaced on every wake and sleep.
   #
   # max_capacity is deliberately NOT scaled. The ceiling is a static safety
   # bound on the shape, not a statement of current capacity; collapsing it too
@@ -213,7 +216,7 @@ locals {
       desired_count = cfg.desired_count * local.staging_state_multiplier
       capacity_provider = {
         base       = cfg.capacity_provider.base
-        base_count = cfg.capacity_provider.base_count * local.staging_state_multiplier
+        base_count = var.deployment_lane == "pilot" ? 0 : cfg.capacity_provider.base_count * local.staging_state_multiplier
         surge      = cfg.capacity_provider.surge
       }
       autoscaling = {
@@ -250,7 +253,7 @@ locals {
   # outbox-relay outright, so the declared policy and the plan now agree.
   api_capacity_provider = {
     base       = local.api_service.capacity_provider.base
-    base_count = local.api_service.capacity_provider.base_count * local.staging_state_multiplier
+    base_count = var.deployment_lane == "pilot" ? 0 : local.api_service.capacity_provider.base_count * local.staging_state_multiplier
     surge      = local.api_service.capacity_provider.surge
   }
 

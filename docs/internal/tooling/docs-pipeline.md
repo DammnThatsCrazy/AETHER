@@ -24,7 +24,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/repo-health.yml": "sha256:25509a6611112c2cafb9136940b9b31f02fde4d77d8f358a67cda260a7eb7754"
   ".pre-commit-config.yaml": "sha256:e1c5169ee1d1f2923709f37a21c664cf898cb4c3b40ab908be2f9068dd7a0aca"
-  "Makefile": "sha256:46548f585191a40c899c17436645d11ba885f16cc7799c4af05cff8e619eacc7"
+  "Makefile": "sha256:9af64c644383d641d428f479fbbde0a9edf3b7cfb07e383ab6c281d1b9596336"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
@@ -148,6 +148,9 @@ make resolve-environment PROFILE=staging CAPABILITIES='vpc=PASS ...' # capabilit
 make validate-environment-requirements # validate capability/profile policy without cloud access
 make validate-delivery-workflow-authority # validate GitHub-only authority ownership map
 
+# Provider-mocked profile tests isolate Terraform's local data from remote state:
+make test-terraform-profiles
+
 # Staging orchestration can persist an identity-bound checkpoint for resume:
 make deploy-staging CANDIDATE=<json> PROFILE=staging OUTPUT=<json> STATE=<checkpoint.json> ENVIRONMENT_RESOLUTION=<json>
 
@@ -179,6 +182,10 @@ orchestrates all checks in a fixed deterministic order and exits non-zero
 on the first failure (or with `--continue-on-error`, after collecting all
 failures). This is the single command agents, developers, and CI should
 use for full consistency validation.
+
+The provider-mocked Terraform profile target uses a separate `TF_DATA_DIR`
+and initializes with `-backend=false`, so a cached remote S3 backend
+configuration cannot pull test validation into a credentialed AWS path.
 
 `make frontend-branding` is the fast focused frontend counterpart. It invokes
 `scripts/validate_frontend_branding.py`, which scans only explicitly migrated

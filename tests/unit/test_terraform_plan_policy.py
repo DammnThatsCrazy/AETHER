@@ -57,10 +57,12 @@ PRICE_BOOK = yaml.safe_load((ROOT / "config/aws_price_book.yaml").read_text())
 # Helpers
 # ---------------------------------------------------------------------------
 
-def run(profile: str, fixture: str, out_dir: Path) -> tuple[int, dict, dict]:
+def run(profile: str, fixture: str, out_dir: Path,
+        deployment_lane: str = "full") -> tuple[int, dict, dict]:
     """Run the gate over a fixture. Returns (exit code, result doc, inventory)."""
     code = MODULE.check([
         "--profile", profile,
+        "--deployment-lane", deployment_lane,
         "--plan-json", str(FIXTURES / fixture),
         "--out-dir", str(out_dir),
     ])
@@ -117,6 +119,129 @@ def test_staging_asleep_plan_passes(tmp_path):
     services = [r for r in inventory["resources"] if r["type"] == "aws_ecs_service"]
     assert services
     assert all(r["values"]["desired_count"] == 0 for r in services)
+
+
+def test_staging_plan_proves_legacy_aurora_auto_pause_scope(tmp_path):
+    code, result, _ = run("staging", "staging-awake.json", tmp_path)
+    assert code == 0, f"staging plan rejected: {failed_checks(result)}"
+    row = next(
+        item for item in result["results"]
+        if item["check"] == "staging.legacy_aurora_autopause_scope"
+    )
+    assert row["status"] == "pass"
+    assert row["address"] == MODULE.LEGACY_STAGING_AURORA_ADDRESS
+
+
+def _legacy_staging_plan() -> dict:
+    return json.loads((FIXTURES / "staging-awake.json").read_text())
+
+
+def _legacy_planned_resource(plan: dict) -> dict:
+    for module in plan["planned_values"]["root_module"]["child_modules"]:
+        for resource in module.get("resources", []):
+            if resource.get("address") == MODULE.LEGACY_STAGING_AURORA_ADDRESS:
+                return resource
+    raise AssertionError("legacy staging Aurora fixture resource is missing")
+
+
+def _legacy_resource_change(plan: dict) -> dict:
+    return next(
+        item for item in plan["resource_changes"]
+        if item.get("address") == MODULE.LEGACY_STAGING_AURORA_ADDRESS
+    )
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "missing_owner",
+        "duplicate_owner",
+        "noncanonical_destroy",
+        "wrong_identifier",
+        "wrong_minimum",
+        "missing_pause_interval",
+        "delete_or_replace",
+        "unrelated_cluster_drift",
+        "unexpected_before_scaling",
+    ],
+)
+def test_legacy_aurora_guard_rejects_incomplete_or_broad_plans(defect):
+    plan = _legacy_staging_plan()
+    resource = _legacy_planned_resource(plan)
+    change = _legacy_resource_change(plan)["change"]
+
+    if defect == "missing_owner":
+        for module in plan["planned_values"]["root_module"]["child_modules"]:
+            module["resources"] = [
+                item for item in module.get("resources", [])
+                if item.get("address") != MODULE.LEGACY_STAGING_AURORA_ADDRESS
+            ]
+    elif defect == "duplicate_owner":
+        duplicate = copy.deepcopy(resource)
+        duplicate["address"] = "module.aurora[0].aws_rds_cluster.duplicate[0]"
+        plan["planned_values"]["root_module"]["child_modules"][-1]["resources"].append(duplicate)
+    elif defect == "noncanonical_destroy":
+        duplicate_change = copy.deepcopy(_legacy_resource_change(plan))
+        duplicate_change["address"] = "module.aurora[0].aws_rds_cluster.orphan[0]"
+        duplicate_change["change"]["actions"] = ["delete"]
+        duplicate_change["change"]["after"] = None
+        plan["resource_changes"].append(duplicate_change)
+    elif defect == "wrong_identifier":
+        resource["values"]["cluster_identifier"] = "other-cluster"
+    elif defect == "wrong_minimum":
+        resource["values"]["serverlessv2_scaling_configuration"][0]["min_capacity"] = 0.5
+        change["after"]["serverlessv2_scaling_configuration"][0]["min_capacity"] = 0.5
+    elif defect == "missing_pause_interval":
+        resource["values"]["serverlessv2_scaling_configuration"][0].pop(
+            "seconds_until_auto_pause"
+        )
+        change["after"]["serverlessv2_scaling_configuration"][0].pop(
+            "seconds_until_auto_pause"
+        )
+    elif defect == "delete_or_replace":
+        change["actions"] = ["delete", "create"]
+    elif defect == "unrelated_cluster_drift":
+        change["after"]["vpc_security_group_ids"] = ["sg-unreviewed"]
+    elif defect == "unexpected_before_scaling":
+        change["before"]["serverlessv2_scaling_configuration"][0]["max_capacity"] = 8
+
+    findings = MODULE.staging_legacy_aurora_safety_violations(plan)
+    assert findings, f"expected {defect} to fail the legacy Aurora lifecycle guard"
+
+
+def test_legacy_aurora_guard_accepts_the_already_applied_noop_shape():
+    plan = _legacy_staging_plan()
+    change = _legacy_resource_change(plan)["change"]
+    change["actions"] = ["no-op"]
+    change["before"] = copy.deepcopy(change["after"])
+    assert MODULE.staging_legacy_aurora_safety_violations(plan) == []
+
+
+def test_valid_pilot_staging_plan_runs_the_lifecycle_tripwires(tmp_path):
+    code, result, _ = run(
+        "staging", "staging-awake.json", tmp_path, deployment_lane="pilot")
+    assert code == 0, f"valid pilot staging plan rejected: {failed_checks(result)}"
+    pilot_checks = {
+        item["check"] for item in result["results"]
+        if item["check"].startswith("pilot.")
+    }
+    assert pilot_checks == {
+        "pilot.ecs_service_replacement",
+        "pilot.ecs_capacity_provider_drift",
+        "pilot.autoscaling_target_replacement",
+        "pilot.autoscaling_target_shape_drift",
+        "pilot.autoscaling_tag_drift",
+        "pilot.auth0_scope",
+        "pilot.auth0_destructive_change",
+    }
+
+
+def test_pilot_lane_is_rejected_for_non_staging_profile(tmp_path):
+    code, result, _ = run(
+        "production-lean", "production-lean-valid.json", tmp_path,
+        deployment_lane="pilot")
+    assert code == 1
+    assert "pilot.profile" in failed_checks(result)
 
 
 def test_staging_awake_and_asleep_report_their_state(tmp_path):
@@ -869,6 +994,126 @@ def test_a_non_plan_json_document_is_a_usage_error(tmp_path):
     code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
                          "--out-dir", str(tmp_path)])
     assert code == MODULE.EXIT_USAGE
+
+
+def test_pilot_plan_tripwires_replacements_tag_drift_and_deferred_auth0_mutation():
+    plan = json.loads((FIXTURES / "pilot-lifecycle-blockers.json").read_text())
+    findings = MODULE.pilot_plan_safety_violations(plan)
+    assert findings == {
+        "pilot.ecs_service_replacement": ["module.ecs.aws_ecs_service.backend"],
+        "pilot.ecs_capacity_provider_drift": ["module.ecs.aws_ecs_service.backend"],
+        "pilot.autoscaling_target_replacement": [
+            "module.ecs.aws_appautoscaling_target.backend"
+        ],
+        "pilot.autoscaling_target_shape_drift": [
+            "module.ecs.aws_appautoscaling_target.backend (max_capacity)"
+        ],
+        "pilot.autoscaling_tag_drift": [
+            "module.ecs.aws_appautoscaling_target.backend (tags, tags_all)"
+        ],
+        "pilot.auth0_scope": [
+            "module.auth0.auth0_client.kyber",
+            "module.auth0.auth0_connection.database",
+            "module.auth0.auth0_connection_clients.kyber_db",
+            "module.auth0.auth0_resource_server.api",
+        ],
+        "pilot.auth0_destructive_change": ["module.auth0.auth0_client.aether"],
+    }
+
+
+def test_pilot_plan_allows_state_only_legacy_auth0_removals_and_aether_path():
+    plan = {
+        "resource_changes": [
+            {
+                "address": "module.auth0.auth0_connection_clients.aether_db",
+                "mode": "managed",
+                "type": "auth0_connection_clients",
+                "change": {"actions": ["forget"], "before": None, "after": None},
+            },
+            {
+                "address": "module.auth0.auth0_connection_clients.kyber_db",
+                "mode": "managed",
+                "type": "auth0_connection_clients",
+                "change": {"actions": ["forget"], "before": None, "after": None},
+            },
+            {
+                "address": "module.auth0.auth0_connection_client.aether_db",
+                "mode": "managed",
+                "type": "auth0_connection_client",
+                "change": {"actions": ["create"], "before": None, "after": {}},
+            },
+        ]
+    }
+    assert MODULE.pilot_plan_safety_violations(plan) == {
+        "pilot.ecs_service_replacement": [],
+        "pilot.ecs_capacity_provider_drift": [],
+        "pilot.autoscaling_target_replacement": [],
+        "pilot.autoscaling_target_shape_drift": [],
+        "pilot.autoscaling_tag_drift": [],
+        "pilot.auth0_scope": [],
+        "pilot.auth0_destructive_change": [],
+    }
+
+
+def test_pilot_plan_rejects_remote_delete_of_deferred_kyber_auth0_association():
+    plan = {
+        "resource_changes": [
+            {
+                "address": "module.auth0.auth0_connection_clients.kyber_db",
+                "mode": "managed",
+                "type": "auth0_connection_clients",
+                "change": {"actions": ["delete"], "before": {}, "after": None},
+            },
+            {
+                "address": "module.auth0.auth0_client.kyber",
+                "mode": "managed",
+                "type": "auth0_client",
+                "change": {"actions": ["update"], "before": {}, "after": {}},
+            },
+            {
+                "address": "module.auth0.auth0_connection.database",
+                "mode": "managed",
+                "type": "auth0_connection",
+                "change": {"actions": ["update"], "before": {}, "after": {}},
+            },
+            {
+                "address": "module.auth0.auth0_resource_server.api",
+                "mode": "managed",
+                "type": "auth0_resource_server",
+                "change": {"actions": ["update"], "before": {}, "after": {}},
+            },
+        ]
+    }
+    findings = MODULE.pilot_plan_safety_violations(plan)
+    assert findings["pilot.auth0_scope"] == [
+        "module.auth0.auth0_client.kyber",
+        "module.auth0.auth0_connection.database",
+        "module.auth0.auth0_connection_clients.kyber_db",
+        "module.auth0.auth0_resource_server.api",
+    ]
+
+
+def test_pilot_plan_allows_wake_min_capacity_change_with_stable_target_shape():
+    target = {
+        "resource_id": "service/AETHER-staging/AETHER-staging-backend",
+        "scalable_dimension": "ecs:service:DesiredCount",
+        "service_namespace": "ecs",
+        "role_arn": "arn:aws:iam::544471417928:role/ecs-autoscaling",
+        "min_capacity": 0,
+        "max_capacity": 2,
+        "tags": {"Environment": "staging"},
+        "tags_all": {"Environment": "staging"},
+    }
+    after = {**target, "min_capacity": 1}
+    findings = MODULE.pilot_plan_safety_violations({
+        "resource_changes": [{
+            "address": "module.ecs.aws_appautoscaling_target.backend",
+            "mode": "managed",
+            "type": "aws_appautoscaling_target",
+            "change": {"actions": ["update"], "before": target, "after": after},
+        }]
+    })
+    assert all(not addresses for addresses in findings.values())
 
 
 # ---------------------------------------------------------------------------

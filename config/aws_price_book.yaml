@@ -288,7 +288,8 @@ fixed_resources:
     # A 0.5 vCPU / 1GB task running 24/7 is ~$17.98/month. `desired_count` is
     # the FIXED floor — autoscaling above it is usage-variable and out of scope
     # for the ceiling, which is the honest reading: you are committing to the
-    # floor, not to the peak.
+    # floor, not to the peak. capacity_provider_strategy.base is a placement
+    # hint bounded by desired_count, not an independent running-task quantity.
     cpu_attribute: cpu
     memory_attribute: memory
     count_attribute: desired_count
@@ -296,7 +297,7 @@ fixed_resources:
     # x86 rates. ARM/Graviton Fargate is ~20% cheaper; using x86 over-estimates,
     # which is the safe direction.
     approximate: true
-    notes: x86 on-demand rates; desired_count is the fixed floor, not the peak.
+    notes: x86 on-demand rates; desired_count is the fixed floor, not the peak; capacity-provider base is not billed separately.
 
   aws_instance:
     cost_class: fixed

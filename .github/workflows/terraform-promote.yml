@@ -552,6 +552,17 @@ jobs:
             )
           fi
           if [ "$PROFILE" = staging ]; then
+            legacy_aurora_address='module.aurora[0].aws_rds_cluster.legacy_staging[0]'
+            grep -Fxq "$legacy_aurora_address" "$state_list_file" || {
+              echo "::error::staging requires the existing aether-staging cluster at ${legacy_aurora_address}; run the isolated legacy Aurora import reconciliation and generate a fresh plan"
+              exit 1
+            }
+            legacy_aurora_identifier="$(terraform state show -no-color "$legacy_aurora_address" \
+              | sed -n 's/^[[:space:]]*cluster_identifier[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')"
+            test "$legacy_aurora_identifier" = aether-staging || {
+              echo '::error::staging legacy Aurora state address does not identify the preserved aether-staging cluster'
+              exit 1
+            }
             for app_key in olympus-marketing aether-marketing docs aether-app status; do
               address="aws_amplify_domain_association.frontend[\"${app_key}\"]"
               grep -Fxq "$address" "$state_list_file" || {
@@ -644,11 +655,13 @@ jobs:
       - name: Validate reviewed plan against policy and cost model
         env:
           PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           mkdir -p artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
+            --deployment-lane "$DEPLOYMENT_LANE" \
             --plan-json "${TF_DIR}/reviewed.tfplan.json" \
             | tee "${TF_DIR}/reviewed.policy.txt"
           # The canonical resource inventory the policy validator emits travels
@@ -1330,11 +1343,13 @@ jobs:
       - name: Re-validate the reviewed plan against policy and cost model
         env:
           PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
           mkdir -p artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
+            --deployment-lane "$DEPLOYMENT_LANE" \
             --plan-json "${TF_DIR}/reviewed.tfplan.json"
           if python -c "import os, yaml; p = (yaml.safe_load(open('config/deployment_profiles.yaml')) or {}).get('profiles') or {}; raise SystemExit(0 if (p.get(os.environ['PROFILE']) or {}).get('budget') else 1)"; then
             python scripts/release/check_cost_model.py \
@@ -1589,9 +1604,12 @@ jobs:
               (.DBClusters | length) == 1 and
               .DBClusters[0].StorageEncrypted == true and
               .DBClusters[0].DeletionProtection == true and
+              .DBClusters[0].ServerlessV2ScalingConfiguration.MinCapacity == 0 and
+              .DBClusters[0].ServerlessV2ScalingConfiguration.MaxCapacity == 2 and
+              .DBClusters[0].ServerlessV2ScalingConfiguration.SecondsUntilAutoPause == 300 and
               .DBClusters[0].MasterUserSecret.SecretStatus == "active"
             ' <<<"$cluster_json" >/dev/null; then
-              echo 'Verified canonical staging Aurora encryption, deletion protection, and active RDS credential.'
+              echo 'Verified canonical staging Aurora encryption, deletion protection, active RDS credential, and the reviewed 0-2 ACU / 300-second auto-pause configuration.'
               exit 0
             fi
             if [ "$attempt" -lt 30 ]; then
@@ -1600,6 +1618,27 @@ jobs:
           done
           echo '::error::canonical staging Aurora did not reach the reviewed safety shape after apply'
           exit 1
+      - name: Verify applied legacy staging Aurora auto-pause configuration
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # This pre-existing data-bearing cluster has a separate state
+          # address. Verify Terraform applied only the reviewed scale shape;
+          # this checks metadata and never opens a database connection.
+          cluster_json="$(aws rds describe-db-clusters \
+            --db-cluster-identifier aether-staging --output json)"
+          jq -e '
+            (.DBClusters | length) == 1 and
+            .DBClusters[0].DBClusterIdentifier == "aether-staging" and
+            .DBClusters[0].Engine == "aurora-postgresql" and
+            .DBClusters[0].EngineVersion == "16.10" and
+            .DBClusters[0].ServerlessV2ScalingConfiguration.MinCapacity == 0 and
+            .DBClusters[0].ServerlessV2ScalingConfiguration.MaxCapacity == 2 and
+            .DBClusters[0].ServerlessV2ScalingConfiguration.SecondsUntilAutoPause == 300
+          ' <<<"$cluster_json" >/dev/null || {
+            echo '::error::legacy aether-staging did not reach the reviewed 0-2 ACU / 300-second auto-pause configuration'; exit 1;
+          }
+          echo 'Verified legacy aether-staging auto-pause configuration; no secret or database contents were read.'
       - name: Verify applied staging ECS task-definition lane
         if: inputs.profile == 'staging'
         env:

@@ -49,10 +49,10 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:4776c3007e597ed68e30fd17db7abfb7d67a612e0e3bf9cedba8c0d3850032a8"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:dab1992f55fccca3a322cef100cae00d2215f3fcbf83b0dc656eef5523b2ad1e"
+  ".github/workflows/staging-lifecycle.yml": "sha256:ec2dacca210770b944489a9fbc6ea9f71ba1812f0a827e992f358d9e8aacad3f"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:0f86b1f43ff85a1f9859f82d730428ede391c6a69fb54f9d7fcdf0cf09340a16"
   ".github/workflows/staging-ttl-guard.yml": "sha256:12dda5250bd9e6595958a9a4a67d0205e8256f90af723a90d3b3c444f8a52618"
-  ".github/workflows/terraform-promote.yml": "sha256:bc9bbef0250cb87c90e563903aada6b120a7278c3e3eaf64aff01293c11cf199"
+  ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:4fed4eaf122b29db49acd252c2b07487ac3e33fc88925b17a0de7ad34bf31ab7"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -67,7 +67,7 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:3827877fe77dc575bf6e02492fe8d71aced5a74be9fa1a47b6a47ae45961736a"
+  "deploy/aws/terraform/": "sha256:cf7c4f00a4db5475604012c4d22eff1fbd3c78244f6da693fb8dcd5acb860fcd"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:01bbce3783d9c0a59d480e96fc05e2b98e2d3126660805304d8bfee6337d8bd2"
@@ -816,6 +816,18 @@ scope before any rehearsal mutation. The
 workflow preflight reads metadata only and never invents, reads, or prints a
 price ID or credential value.
 
+Before a pilot Terraform apply, the plan-policy validator also rejects any
+`aws_ecs_service` or `aws_appautoscaling_target` replacement, Application Auto
+Scaling tag/tag-all drift, destructive Aether Auth0 change, or Auth0 change
+outside the Aether pilot path. The database connection's complete
+enabled-client set is not rewritten by the pilot: a singular
+`auth0_connection_client` appends only Aether's database association. Both
+legacy full-set resource addresses are forgotten with `destroy = false`,
+preserving every existing remote association. The guard rejects any other
+Auth0 mutation, including changes to deferred operator identity. Awake/asleep
+pilot plans keep capacity-provider strategy fixed and change only task counts
+and autoscaling floors.
+
 ### Staging apply prerequisites and collision safety
 
 The staging apply role is deliberately narrower than a general administrator.
@@ -893,7 +905,24 @@ detach-only apply first. The normal promotion workflow never invents a
 maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group or an exact reviewed ECR repository, and produce a fresh
-reviewed plan. If a repository already exists in staging state at a legacy
+reviewed plan. The legacy Aurora path is separate and exact: it accepts only
+`aether-staging` with the `IMPORT-LEGACY-STAGING-AURORA` confirmation, checks
+live cluster and writer metadata plus staging-state ownership, and imports only
+that cluster at
+`module.aurora[0].aws_rds_cluster.legacy_staging[0]`. The request must be
+isolated from ECR, secret, target-group, and Amplify imports, so it cannot
+silently reconcile unrelated state. Import is metadata/state-only and does not
+change AWS; `terraform-promote.yml` then requires the canonical address and
+generates a new plan. `check_terraform_plan_policy.py` requires exactly one
+owner and permits only the intended auto-pause capacity-range update (min 0,
+max 2, 300 seconds) or a no-op after it is applied. Creation, deletion,
+replacement, duplicate ownership, or unrelated cluster drift fails closed.
+After apply, the promotion gate independently verifies the canonical and
+retained legacy clusters both report min 0, max 2, and a 300-second pause
+interval; the canonical cluster must also retain encryption, deletion
+protection, and an active RDS-managed credential. These are metadata-only
+checks and do not connect to either database.
+If a repository already exists in staging state at a legacy
 Terraform address, the workflow adopts it only when exactly one staging owner
 is found, moving that state entry to the reviewed canonical module address;
 the complete digest, provider, and root-module input contract is validated

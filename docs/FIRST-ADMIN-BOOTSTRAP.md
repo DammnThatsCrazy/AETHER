@@ -18,9 +18,9 @@ source_files:
   - scripts/release/bootstrap_staging_admin_key.py
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
-  ".github/workflows/staging-lifecycle.yml": "sha256:4776c3007e597ed68e30fd17db7abfb7d67a612e0e3bf9cedba8c0d3850032a8"
-  ".github/workflows/terraform-promote.yml": "sha256:bc9bbef0250cb87c90e563903aada6b120a7278c3e3eaf64aff01293c11cf199"
-  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e65b5f4764f01521bd12000a4877cd73c31afdf54348f94301489c2d24558f1b"
+  ".github/workflows/staging-lifecycle.yml": "sha256:ec2dacca210770b944489a9fbc6ea9f71ba1812f0a827e992f358d9e8aacad3f"
+  ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
+  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:ca2a52de871d72661439c932674799164c893d893be54a3fffaf40e377a855a1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "services/backend/repositories/repos.py": "sha256:fbf464a1822f49d054e182223a14d0e6f7e36961dd16de95f41d0cf5eda174e3"
   "services/backend/services/auth/routes.py": "sha256:716020d7f01cd1309b397cb71acd3667f30b78bd7e2eebf39dd6cd90643425f5"
@@ -76,6 +76,13 @@ random disposable repository secret, deletes it, and confirms by listing
 secret names that it is absent. Failure at any part of either preflight blocks
 Terraform apply. Lifecycle-triggered and direct Terraform applies pass through
 the same gate.
+
+The pilot plan is also revalidated immediately before apply and fails closed if
+the wake/sleep plan would replace an ECS service or scaling target, remove
+workflow-managed Application Auto Scaling tags, delete an Aether Auth0 resource,
+or mutate deferred Auth0 resources. This guard protects the bootstrap lifecycle
+from partial infrastructure replacement; it does not change the one-time
+key/marker contract below.
 
 The reviewed Terraform plan has a lane-specific credential-shape contract. The
 pilot plan accepts a missing or stale `STAGING_ADMIN_API_KEY`, because the

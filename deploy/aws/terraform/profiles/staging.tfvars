@@ -41,8 +41,8 @@ skip_aurora         = false
 # for the status shell; state reconciliation imports the existing associations
 # before a reviewed plan is created.
 amplify_custom_domain_enabled = true
-amplify_domain_name            = "staging.olympuslabsml.com"
-status_api_url                 = "https://api.staging.olympuslabsml.com/health"
+amplify_domain_name           = "staging.olympuslabsml.com"
+status_api_url                = "https://api.staging.olympuslabsml.com/health"
 
 # Logs — short retention; INFO/DEBUG ship to S3.
 log_retention_days        = 3

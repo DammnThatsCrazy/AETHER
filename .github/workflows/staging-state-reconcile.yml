@@ -8,7 +8,9 @@ name: Reconcile staging Terraform state
 # or re-encrypting changes state, so the reviewed plan must be regenerated after
 # this workflow succeeds. An explicitly authorized Amplify repair may also add
 # a missing reviewed `main` subdomain mapping to an existing association; it
-# never creates/deletes an association or changes Squarespace DNS.
+# never creates/deletes an association or changes Squarespace DNS. The
+# isolated legacy Aurora path imports only `aether-staging` and does not modify
+# the AWS cluster.
 
 on:
   workflow_dispatch:
@@ -48,6 +50,14 @@ on:
         type: string
       staging_amplify_domain_name:
         description: "Exact verified staging Amplify domain to import (staging.olympuslabsml.com)"
+        required: false
+        type: string
+      legacy_aurora_identifier:
+        description: "Exact existing data-preserving staging cluster to adopt (aether-staging only)"
+        required: false
+        type: string
+      confirm_legacy_aurora_import:
+        description: "Type IMPORT-LEGACY-STAGING-AURORA to adopt only the existing legacy cluster into staging state"
         required: false
         type: string
       repair_staging_amplify_subdomains:
@@ -175,6 +185,7 @@ jobs:
           echo 'Resolved the reviewed staging Secrets Manager CMK reference to the current account key; key values were not read.'
 
       - name: Discover pre-existing Stripe price secrets for state reconciliation
+        if: inputs.legacy_aurora_identifier == ''
         id: discover-price-secrets
         env:
           REQUESTED_SECRET_NAMES: ${{ inputs.staging_secret_names }}
@@ -304,16 +315,97 @@ jobs:
           STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
           STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
           STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
+          LEGACY_AURORA_IDENTIFIER: ${{ inputs.legacy_aurora_identifier }}
+          CONFIRM_LEGACY_AURORA_IMPORT: ${{ inputs.confirm_legacy_aurora_import }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+          MIGRATE_LEGACY_SECRET_KMS: ${{ inputs.migrate_legacy_secret_kms }}
+          CONFIRM_LEGACY_SECRET_KMS: ${{ inputs.confirm_legacy_secret_kms }}
+          REPAIR_STAGING_AMPLIFY_SUBDOMAINS: ${{ inputs.repair_staging_amplify_subdomains }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = "IMPORT-STAGING" || {
             echo "::error::Refusing import: confirmation must be IMPORT-STAGING"; exit 1;
           }
-          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES$STAGING_AMPLIFY_DOMAIN_NAME" || {
+          if [ -n "${LEGACY_AURORA_IDENTIFIER:-}${CONFIRM_LEGACY_AURORA_IMPORT:-}" ]; then
+            test "$LEGACY_AURORA_IDENTIFIER" = "aether-staging" || {
+              echo '::error::Refusing legacy Aurora import: only aether-staging is an approved target'; exit 1;
+            }
+            test "$CONFIRM_LEGACY_AURORA_IMPORT" = "IMPORT-LEGACY-STAGING-AURORA" || {
+              echo '::error::Refusing legacy Aurora import: confirmation must be IMPORT-LEGACY-STAGING-AURORA'; exit 1;
+            }
+            test -z "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_ECR_KMS_KEY_ARN$STAGING_SECRET_NAMES$STAGING_AMPLIFY_DOMAIN_NAME$STAGING_SECRETS_KMS_KEY_ARN$REPAIR_STAGING_AMPLIFY_SUBDOMAINS$CONFIRM_LEGACY_SECRET_KMS" \
+              && test "${MIGRATE_LEGACY_SECRET_KMS:-false}" = false || {
+              echo '::error::Legacy Aurora adoption must be an isolated state-reconciliation request; do not combine it with other imports or repairs'; exit 1;
+            }
+          fi
+          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES$STAGING_AMPLIFY_DOMAIN_NAME$LEGACY_AURORA_IDENTIFIER" || {
             echo '::error::Refusing reconciliation: provide a reviewed target group, ECR repository, secret, or Amplify domain import target'; exit 1;
           }
+          if [ -n "${CONFIRM_LEGACY_AURORA_IMPORT:-}" ] && [ -z "${LEGACY_AURORA_IDENTIFIER:-}" ]; then
+            echo '::error::Refusing legacy Aurora import: the explicit target identifier is required with confirmation'; exit 1;
+          fi
           if [ -n "$STAGING_AMPLIFY_DOMAIN_NAME" ] && [ "$STAGING_AMPLIFY_DOMAIN_NAME" != "staging.olympuslabsml.com" ]; then
             echo '::error::Refusing reconciliation: only the verified staging.olympuslabsml.com Amplify domain may be imported'; exit 1;
+          fi
+          if [ -n "$LEGACY_AURORA_IDENTIFIER" ]; then
+            cluster_metadata_file="$(mktemp)"
+            instance_metadata_file="$(mktemp)"
+            trap 'rm -f "$cluster_metadata_file" "$instance_metadata_file"' EXIT
+            aws rds describe-db-clusters \
+              --region us-east-1 \
+              --db-cluster-identifier aether-staging \
+              --output json >"$cluster_metadata_file"
+            account_id="$(aws sts get-caller-identity --query Account --output text)"
+            expected_kms_arn="arn:aws:kms:us-east-1:${account_id}:key/ab7b4816-932b-459e-b0f1-38e5fdf23500"
+            jq -e --arg kms "$expected_kms_arn" '
+              (.DBClusters | length) == 1 and
+              (.DBClusters[0].DBClusterIdentifier == "aether-staging") and
+              (.DBClusters[0].Status == "available") and
+              (.DBClusters[0].Engine == "aurora-postgresql") and
+              (.DBClusters[0].EngineVersion == "16.10") and
+              (.DBClusters[0].EngineMode == "provisioned") and
+              (.DBClusters[0].DatabaseName == "aether") and
+              (.DBClusters[0].MasterUsername == "aether_admin") and
+              (.DBClusters[0].Port == 5432) and
+              ((.DBClusters[0].AvailabilityZones | sort) == ["us-east-1a", "us-east-1b", "us-east-1c"]) and
+              (.DBClusters[0].StorageEncrypted == true) and
+              (.DBClusters[0].KmsKeyId == $kms) and
+              (.DBClusters[0].DBSubnetGroup == "aether-staging-aurora") and
+              (([.DBClusters[0].VpcSecurityGroups[]?.VpcSecurityGroupId] | sort) == ["sg-0f61eda4b4344368e"]) and
+              (.DBClusters[0].BackupRetentionPeriod == 1) and
+              (.DBClusters[0].PreferredBackupWindow == "06:42-07:12") and
+              (.DBClusters[0].PreferredMaintenanceWindow == "mon:03:34-mon:04:04") and
+              (.DBClusters[0].CopyTagsToSnapshot == false) and
+              (.DBClusters[0].DeletionProtection == false) and
+              ((.DBClusters[0].EnableIAMDatabaseAuthentication // false) == false) and
+              (.DBClusters[0].HttpEndpointEnabled == false) and
+              ((.DBClusters[0].EnabledCloudwatchLogsExports // []) == []) and
+              ((.DBClusters[0].ServerlessV2ScalingConfiguration.MinCapacity == 0.5) or
+               (.DBClusters[0].ServerlessV2ScalingConfiguration.MinCapacity == 0)) and
+              (.DBClusters[0].ServerlessV2ScalingConfiguration.MaxCapacity == 2) and
+              ((.DBClusters[0].ServerlessV2ScalingConfiguration.SecondsUntilAutoPause == null) or
+               (.DBClusters[0].ServerlessV2ScalingConfiguration.SecondsUntilAutoPause == 300)) and
+              (([.DBClusters[0].TagList[]? | {Key, Value}] | sort_by(.Key)) ==
+               [{"Key":"Environment","Value":"staging"},{"Key":"ManagedBy","Value":"claude-staging-provision"},{"Key":"Project","Value":"AETHER"}])
+            ' "$cluster_metadata_file" >/dev/null || {
+              echo '::error::Refusing legacy Aurora import: live identity or protected cluster properties differ from the reviewed aether-staging contract'; exit 1;
+            }
+            aws rds describe-db-instances \
+              --region us-east-1 \
+              --filters Name=db-cluster-id,Values=aether-staging \
+              --output json >"$instance_metadata_file"
+            jq -e '
+              (.DBInstances | length) == 1 and
+              (.DBInstances[0].DBInstanceIdentifier == "aether-staging-instance-1") and
+              (.DBInstances[0].DBClusterIdentifier == "aether-staging") and
+              (.DBInstances[0].DBInstanceStatus == "available") and
+              (.DBInstances[0].DBInstanceClass == "db.serverless") and
+              (.DBInstances[0].AvailabilityZone == "us-east-1c") and
+              (.DBInstances[0].PubliclyAccessible == false)
+            ' "$instance_metadata_file" >/dev/null || {
+              echo '::error::Refusing legacy Aurora import: the existing writer instance does not match the reviewed staging contract'; exit 1;
+            }
+            echo 'Verified aether-staging identity, encryption, network, backups, tags, scale bounds, and writer metadata; no secret or database contents were read.'
           fi
           normalize_repositories() {
             printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
@@ -684,11 +776,13 @@ jobs:
           }
 
       - name: Refuse if an import target is already managed
+        id: check-import-target-ownership
         working-directory: ${{ env.TF_DIR }}
         env:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
+          LEGACY_AURORA_IDENTIFIER: ${{ inputs.legacy_aurora_identifier }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
         run: |
           set -euo pipefail
@@ -724,6 +818,41 @@ jobs:
           if ! terraform state pull >"$state_snapshot_file"; then
             echo '::error::Refusing import: could not read staging state to verify remote-object ownership'
             exit 1
+          fi
+          if [ -n "$LEGACY_AURORA_IDENTIFIER" ]; then
+            legacy_address='module.aurora[0].aws_rds_cluster.legacy_staging[0]'
+            legacy_owners="$(while IFS= read -r candidate; do
+              case "$candidate" in
+                *aws_rds_cluster.*)
+                  cluster_identifier="$(terraform state show -no-color "$candidate" 2>/dev/null \
+                    | sed -n 's/^[[:space:]]*cluster_identifier[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')"
+                  if [ "$cluster_identifier" = "$LEGACY_AURORA_IDENTIFIER" ]; then
+                    printf '%s\n' "$candidate"
+                  fi
+                  ;;
+              esac
+            done < "$state_list_file")"
+            legacy_owner_count="$(printf '%s\n' "$legacy_owners" | awk 'NF' | wc -l | tr -d ' ')"
+            if [ "$legacy_owner_count" -gt 1 ]; then
+              echo '::error::Refusing import: aether-staging already has multiple owners in staging Terraform state'; exit 1
+            fi
+            if grep -Fxq "$legacy_address" "$state_list_file"; then
+              canonical_identifier="$(terraform state show -no-color "$legacy_address" \
+                | sed -n 's/^[[:space:]]*cluster_identifier[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')"
+              test "$canonical_identifier" = "$LEGACY_AURORA_IDENTIFIER" || {
+                echo '::error::Refusing import: the canonical legacy Aurora address points to a different cluster'; exit 1;
+              }
+              test "$legacy_owner_count" -eq 1 || {
+                echo '::error::Refusing import: canonical legacy Aurora state is missing from the verified owner inventory'; exit 1;
+              }
+              echo '::notice::aether-staging is already at its canonical staging state address; retry is a verified no-op.'
+            elif [ "$legacy_owner_count" -eq 1 ]; then
+              legacy_owner="$(printf '%s\n' "$legacy_owners" | awk 'NF { print; exit }')"
+              printf 'legacy_aurora_state_owner=%s\n' "$legacy_owner" >>"$GITHUB_OUTPUT"
+              echo "::notice::aether-staging has one verified legacy state owner ($legacy_owner); it will be moved to the reviewed canonical address."
+            else
+              echo 'No staging Terraform state owner exists for aether-staging; the isolated reconciliation will import it at the canonical address.'
+            fi
           fi
           normalize_repositories() {
             printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
@@ -841,6 +970,11 @@ jobs:
               if [ -n "$TARGET_GROUP_ARN" ] && jq -e --arg arn "$TARGET_GROUP_ARN" \
                 'any(.resources[]?; any(.instances[]?.attributes.arn?; . == $arn))' "$state_file" >/dev/null; then
                 echo "::error::Refusing import: target-group ARN already appears in ${profile} state"; exit 1
+              fi
+              if [ -n "$LEGACY_AURORA_IDENTIFIER" ] && jq -e --arg identifier "$LEGACY_AURORA_IDENTIFIER" \
+                'any(.resources[]?; .type == "aws_rds_cluster" and any(.instances[]?.attributes.cluster_identifier?; . == $identifier))' \
+                "$state_file" >/dev/null; then
+                echo "::error::Refusing import: aether-staging already has an owner in ${profile} Terraform state"; exit 1
               fi
               if [ -n "$normalized_imports$normalized_untaints" ]; then
                 IFS=',' read -ra repositories <<< "$normalized_imports,$normalized_untaints"
@@ -974,6 +1108,8 @@ jobs:
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
           STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
+          LEGACY_AURORA_IDENTIFIER: ${{ inputs.legacy_aurora_identifier }}
+          LEGACY_AURORA_STATE_OWNER: ${{ steps.check-import-target-ownership.outputs.legacy_aurora_state_owner }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
           TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
@@ -1009,6 +1145,46 @@ jobs:
           state_list_file="$(mktemp)"
           trap 'rm -f "$state_list_file"' EXIT
           terraform state list >"$state_list_file"
+          if [ -n "$LEGACY_AURORA_IDENTIFIER" ]; then
+            test "$LEGACY_AURORA_IDENTIFIER" = "aether-staging" || {
+              echo '::error::Refusing legacy Aurora state reconciliation: target is not aether-staging'; exit 1;
+            }
+            legacy_address='module.aurora[0].aws_rds_cluster.legacy_staging[0]'
+            if grep -Fxq "$legacy_address" "$state_list_file"; then
+              cluster_identifier="$(terraform state show -no-color "$legacy_address" \
+                | sed -n 's/^[[:space:]]*cluster_identifier[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')"
+              test "$cluster_identifier" = "$LEGACY_AURORA_IDENTIFIER" || {
+                echo '::error::Refusing legacy Aurora state reconciliation: canonical address points at another cluster'; exit 1;
+              }
+              echo 'Legacy staging Aurora is already at its canonical state address; no state change is needed.'
+            elif [ -n "$LEGACY_AURORA_STATE_OWNER" ]; then
+              grep -Fxq "$LEGACY_AURORA_STATE_OWNER" "$state_list_file" || {
+                echo '::error::Refusing legacy Aurora state move: verified prior owner disappeared'; exit 1;
+              }
+              prior_identifier="$(terraform state show -no-color "$LEGACY_AURORA_STATE_OWNER" \
+                | sed -n 's/^[[:space:]]*cluster_identifier[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')"
+              test "$prior_identifier" = "$LEGACY_AURORA_IDENTIFIER" || {
+                echo '::error::Refusing legacy Aurora state move: prior owner no longer identifies aether-staging'; exit 1;
+              }
+              terraform state mv -lock-timeout=5m "$LEGACY_AURORA_STATE_OWNER" "$legacy_address"
+              echo 'Moved the unique existing aether-staging owner to its canonical address; no AWS resource was modified.'
+            else
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "$legacy_address" "$LEGACY_AURORA_IDENTIFIER"
+              echo 'Imported only aether-staging cluster metadata at its canonical state address; no AWS resource was modified.'
+            fi
+            terraform state list >"$state_list_file"
+            grep -Fxq "$legacy_address" "$state_list_file" || {
+              echo '::error::Legacy Aurora state reconciliation did not produce the canonical address'; exit 1;
+            }
+            cluster_identifier="$(terraform state show -no-color "$legacy_address" \
+              | sed -n 's/^[[:space:]]*cluster_identifier[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')"
+            test "$cluster_identifier" = "$LEGACY_AURORA_IDENTIFIER" || {
+              echo '::error::Legacy Aurora canonical state identity verification failed'; exit 1;
+            }
+          fi
           if [ -n "$TARGET_GROUP_ARN" ]; then
             target_group_address='module.alb.aws_lb_target_group.backend[0]'
             if grep -Fxq "$target_group_address" "$state_list_file"; then
@@ -1185,6 +1361,7 @@ jobs:
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           STAGING_SECRET_NAMES: ${{ steps.discover-price-secrets.outputs.secret_names }}
           STAGING_AMPLIFY_DOMAIN_NAME: ${{ inputs.staging_amplify_domain_name }}
+          LEGACY_AURORA_IDENTIFIER: ${{ inputs.legacy_aurora_identifier }}
         run: |
           set -euo pipefail
           state_list_file="$(mktemp)"
@@ -1238,6 +1415,15 @@ jobs:
             for app_key in olympus-marketing aether-marketing docs aether-app status; do
               grep -Fx "aws_amplify_domain_association.frontend[\"${app_key}\"]" "$state_list_file"
             done
+          fi
+          if [ -n "${LEGACY_AURORA_IDENTIFIER:-}" ]; then
+            legacy_address='module.aurora[0].aws_rds_cluster.legacy_staging[0]'
+            grep -Fx "$legacy_address" "$state_list_file"
+            cluster_identifier="$(terraform state show -no-color "$legacy_address" \
+              | sed -n 's/^[[:space:]]*cluster_identifier[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')"
+            test "$cluster_identifier" = "$LEGACY_AURORA_IDENTIFIER" || {
+              echo '::error::Refusing checksum: canonical state does not identify the requested legacy Aurora cluster'; exit 1;
+            }
           fi
           terraform state pull > reconciled-staging-state.json
           sha256sum reconciled-staging-state.json | tee reconciled-staging-state.sha256

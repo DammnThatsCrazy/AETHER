@@ -75,8 +75,9 @@ resource "aws_rds_cluster_parameter_group" "this" {
   }
 
   parameter {
-    name  = "shared_preload_libraries"
-    value = "pg_stat_statements"
+    name         = "shared_preload_libraries"
+    value        = "pg_stat_statements"
+    apply_method = "pending-reboot"
   }
 
   tags = {
@@ -153,6 +154,60 @@ resource "aws_rds_cluster" "this" {
   }
 
   depends_on = [aws_rds_cluster_parameter_group.this]
+}
+
+# This separate, pre-existing staging cluster remains a data-preserving legacy
+# resource. It is imported only by the confirmation-gated staging state
+# reconciliation workflow; the normal reviewed plan changes only the
+# Serverless v2 capacity range so the idle cluster can auto-pause.
+resource "aws_rds_cluster" "legacy_staging" {
+  count    = var.manage_legacy_staging_cluster ? 1 : 0
+  provider = aws.untagged
+
+  cluster_identifier = "aether-staging"
+  engine             = "aurora-postgresql"
+  engine_version     = "16.10"
+  engine_mode        = "provisioned"
+
+  database_name   = "aether"
+  master_username = "aether_admin"
+  port            = 5432
+
+  availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+
+  serverlessv2_scaling_configuration {
+    min_capacity             = 0
+    max_capacity             = 2
+    seconds_until_auto_pause = 300
+  }
+
+  storage_encrypted = true
+  kms_key_id        = "arn:aws:kms:us-east-1:544471417928:key/ab7b4816-932b-459e-b0f1-38e5fdf23500"
+
+  db_subnet_group_name   = "aether-staging-aurora"
+  vpc_security_group_ids = ["sg-0f61eda4b4344368e"]
+
+  backup_retention_period         = 1
+  preferred_backup_window         = "06:42-07:12"
+  preferred_maintenance_window    = "mon:03:34-mon:04:04"
+  copy_tags_to_snapshot           = false
+  db_cluster_parameter_group_name = "default.aurora-postgresql16"
+
+  enabled_cloudwatch_logs_exports     = []
+  deletion_protection                 = false
+  iam_database_authentication_enabled = false
+  enable_http_endpoint                = false
+
+  tags = {
+    Project     = "AETHER"
+    Environment = "staging"
+    ManagedBy   = "claude-staging-provision"
+  }
+
+  # Deletion and replacement are rejected by the staging plan-policy gate,
+  # which also requires this exact address on every staging plan. Keeping the
+  # guard in the plan authority lets the provider-mocked lifecycle tests tear
+  # down their temporary state without weakening any reviewed staging apply.
 }
 
 # --------------------------------------------------------------------------

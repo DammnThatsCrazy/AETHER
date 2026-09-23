@@ -259,8 +259,51 @@ def test_staging_aurora_safety_guard_indexes_dbclusters_array() -> None:
     guard = text[start:end]
     assert ".DBClusters[0].StorageEncrypted == true" in guard
     assert ".DBClusters[0].DeletionProtection == true" in guard
+    assert ".DBClusters[0].ServerlessV2ScalingConfiguration.MinCapacity == 0" in guard
+    assert ".DBClusters[0].ServerlessV2ScalingConfiguration.MaxCapacity == 2" in guard
+    assert ".DBClusters[0].ServerlessV2ScalingConfiguration.SecondsUntilAutoPause == 300" in guard
     assert ".DBClusters[0].MasterUserSecret.SecretStatus == \"active\"" in guard
     assert ".[0].StorageEncrypted" not in guard
+
+
+def test_staging_apply_verifies_legacy_aurora_auto_pause_without_reading_data() -> None:
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("Verify applied legacy staging Aurora auto-pause configuration")
+    end = text.index("Verify applied staging ECS task-definition lane", start)
+    guard = text[start:end]
+    assert "--db-cluster-identifier aether-staging" in guard
+    assert ".DBClusters[0].ServerlessV2ScalingConfiguration.MinCapacity == 0" in guard
+    assert ".DBClusters[0].ServerlessV2ScalingConfiguration.MaxCapacity == 2" in guard
+    assert ".DBClusters[0].ServerlessV2ScalingConfiguration.SecondsUntilAutoPause == 300" in guard
+    assert "never opens a database connection" in guard
+    assert "secretsmanager get-secret-value" not in guard.lower()
+
+
+def test_legacy_aurora_state_import_rejects_other_reconciliation_inputs() -> None:
+    text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    start = text.index(
+        'if [ -n "${LEGACY_AURORA_IDENTIFIER:-}${CONFIRM_LEGACY_AURORA_IMPORT:-}" ]; then'
+    )
+    end = text.index("          fi\n", start)
+    guard = text[start:end]
+    isolated_inputs = (
+        'test -z "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES'
+        '$STAGING_ECR_KMS_KEY_ARN$STAGING_SECRET_NAMES$STAGING_AMPLIFY_DOMAIN_NAME'
+        '$STAGING_SECRETS_KMS_KEY_ARN$REPAIR_STAGING_AMPLIFY_SUBDOMAINS'
+        '$CONFIRM_LEGACY_SECRET_KMS"'
+    )
+    assert isolated_inputs in guard
+    assert 'test "${MIGRATE_LEGACY_SECRET_KMS:-false}" = false' in guard
+
+
+def test_mocked_terraform_profile_tests_use_an_isolated_local_data_directory() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    target = makefile[makefile.index("test-terraform-profiles:"):]
+    target = target[:target.index("\ntest-runtime-topology:")]
+    assert "TF_DATA_DIR" in target
+    assert ".terraform/profile-test-data" in target
+    assert "-backend=false" in target
+    assert "terraform test -filter=tests/profile_plan.tftest.hcl" in target
 
 
 def test_pilot_price_secrets_are_bootstrapped_and_reconcilable() -> None:
@@ -933,7 +976,7 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
     assert "ecr_repository_names" in text
     assert 'required: false' in text
-    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES$STAGING_AMPLIFY_DOMAIN_NAME"' in text
+    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES$STAGING_AMPLIFY_DOMAIN_NAME$LEGACY_AURORA_IDENTIFIER"' in text
     assert "aether-backend|aether-ml-serving|aether-kyber|aether-aether" in text
     assert "module.ecr.aws_ecr_repository.this[\\\"${repository}\\\"]" in text
     assert "requires a fresh reviewed plan" in text or "fresh staging plan" in text

@@ -44,10 +44,10 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:4776c3007e597ed68e30fd17db7abfb7d67a612e0e3bf9cedba8c0d3850032a8"
+  ".github/workflows/staging-lifecycle.yml": "sha256:ec2dacca210770b944489a9fbc6ea9f71ba1812f0a827e992f358d9e8aacad3f"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:12dda5250bd9e6595958a9a4a67d0205e8256f90af723a90d3b3c444f8a52618"
-  ".github/workflows/terraform-promote.yml": "sha256:bc9bbef0250cb87c90e563903aada6b120a7278c3e3eaf64aff01293c11cf199"
+  ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -57,9 +57,9 @@ source_hashes:
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
-  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e65b5f4764f01521bd12000a4877cd73c31afdf54348f94301489c2d24558f1b"
-  "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
+  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:ca2a52de871d72661439c932674799164c893d893be54a3fffaf40e377a855a1"
+  "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:f08b229d63e97a9f7e37e07a6517c766a3de42d92578d19c7c713d9f111f346c"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
@@ -95,21 +95,33 @@ against `config/runtime_deployment.yaml` →
 `profiles.staging.staging_state.states.<state>.desired_count_multiplier`
 (`awake: 1`, `asleep: 0`).
 
-`profiles.tf` applies that multiplier to **four** things per service:
+`profiles.tf` applies that multiplier to task count and autoscaling floor for
+both lanes:
 
 - `desired_count`
 - the autoscaling **floor** (`min_capacity`)
-- the autoscaling **ceiling** (`max_capacity`)
-- the capacity provider's guaranteed `base_count`
 
-The ceiling and `base_count` are not decoration. The `api` service's
+The autoscaling ceiling (`max_capacity`) is deliberately unchanged; it is the
+static safety bound, not current capacity. In the full lane, Terraform also
+scales the capacity provider's guaranteed `base_count`. The **pilot** lane
+instead pins `base_count = 0` for both awake and asleep states: staging uses a
+single FARGATE provider at weight 100, so `desired_count` alone controls task
+capacity. This stable strategy is important because the AWS Terraform provider
+marks changes to `aws_ecs_service.capacity_provider_strategy` as
+replacement-only. Pilot plan policy fails before apply if an ECS service or
+scaling target would be replaced, scaling-target tags would be removed, an
+Aether Auth0 resource would be deleted, or a deferred Auth0 surface would be
+mutated.
+
+The floor and pilot's stable strategy are not decoration. The `api` service's
 `desired_count` is `ignore_changes`d in `modules/ecs` so an apply cannot fight
 Application Auto Scaling mid-scale-out; on an already-applied workspace the
 scaling target is the only lever that still reaches a running service. So
-`asleep` has to close the envelope to `0..0` — a ceiling above zero would let a
-stray backlog metric wake the environment behind the operator's back. And a
-guaranteed on-demand floor of 1 contradicts a desired count of 0;
-`scripts/release/check_delivery_topology.py` rejects `base_count > desired_count`.
+`asleep` has to set desired count and autoscaling floor to zero. Pilot's
+capacity-provider base stays zero in both states; `max_capacity` stays at the
+reviewed ceiling. For the full lane, a guaranteed on-demand floor of 1
+contradicts a desired count of 0; `scripts/release/check_delivery_topology.py`
+rejects `base_count > desired_count`.
 
 The consequence that matters operationally: **an asleep environment owns exactly
 the same services, the same roles and the same queues as an awake one.** Waking
@@ -118,6 +130,13 @@ the same consolidated 2-service shape as `production-lean` — `api` plus
 `lean-worker` hosting all eight worker roles — so the packing itself is
 rehearsed before production sees it, sized one step down at 1 vCPU / 4 GiB for
 the worker.
+
+The shared Auth0 database connection has one `auth0_connection_clients`
+Terraform owner because that resource controls the entire enabled-client set.
+The pilot state migration moves the Aether resource address and forgets the
+old Kyber duplicate with `destroy = false`; it preserves the existing remote
+Kyber association without running or provisioning Kyber's deferred operator
+workflows.
 
 ## Commands
 
@@ -204,8 +223,12 @@ both `awake` and `asleep` states.
 
 The canonical profile and state key do not change between staging lanes. Every
 staging lifecycle, delivery, promotion and smoke dispatch carries the explicit
-`deployment_lane` token (`full` or `pilot`). `full` keeps the existing rehearsal
-including Kyber/workforce checks. `pilot` is the complete lean AWS customer
+`deployment_lane` token (`full` or `pilot`). The staging lifecycle defaults to
+`pilot` and passes that value into each promotion; the multi-profile
+`terraform-promote.yml` dispatch defaults to `full` so non-staging profiles
+remain valid, and a direct staging promotion must explicitly select `pilot`.
+`full` keeps the existing rehearsal including Kyber/workforce checks. `pilot`
+is the complete lean AWS customer
 staging path: it still provisions and verifies the Aether backend and public
 surfaces, durable state, Stripe billing/webhooks/entitlements, tenant isolation,
 observability, migrations, lifecycle controls and smoke coverage; only Kyber
@@ -293,9 +316,27 @@ reviewed-plan machinery as a production apply.
 Aurora Serverless v2 with a zero floor **auto-pauses when idle**, so a woken
 staging environment starts with a paused database.
 
+Staging also retains a separate pre-existing Aurora cluster named
+`aether-staging`; it is not the Terraform-created `aether-staging-aurora`
+cluster. The one-time `staging-state-reconcile.yml` path accepts only that
+exact identifier plus the explicit `IMPORT-LEGACY-STAGING-AURORA` confirmation.
+It validates the live cluster and writer identity, imports metadata only, and
+does not alter data, credentials, encryption, networking, backups, tags, or AWS
+settings. The next ordinary reviewed staging plan must set this legacy
+cluster's capacity to min 0 / max 2 with a 300-second idle pause. Its plan gate
+rejects creation, deletion, replacement, duplicate ownership, or any unrelated
+attribute drift. The reviewed Terraform promotion—not the state import—is what
+applies that scale change, then verifies the exact auto-pause configuration on
+both the legacy cluster and the canonical Terraform-managed staging cluster.
+The scale checks are metadata-only and do not connect to the databases.
+Auto-pause removes idle compute charges, but storage
+and other non-compute charges continue; open database connections also prevent
+automatic pausing.
+
 This is intentional and is the single largest reason staging's budget is USD 25
-rather than production-lean's USD 150: an idle staging cluster costs nothing per
-hour. The operational consequence is a **cold start on the first database
+rather than production-lean's USD 150: paused Aurora instances incur no compute
+capacity charge while idle. Storage and other non-compute charges still accrue.
+The operational consequence is a **cold start on the first database
 connection after a wake**. Nothing in the workflow explicitly resumes the
 cluster; the first query does it. Expect the first `/v1/ready` probe and the
 migration task to absorb that latency, and do not treat a slow first response
