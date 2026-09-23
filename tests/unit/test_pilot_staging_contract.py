@@ -69,6 +69,59 @@ def test_pilot_entrypoint_is_dispatch_only_and_uses_the_shared_lane_token():
         assert forbidden not in text
 
 
+def test_pilot_credential_preflight_matches_each_action_to_its_real_inputs():
+    pilot = _workflow("pilot-staging.yml")
+    credential_step = next(
+        step
+        for step in pilot["jobs"]["credential-preflight"]["steps"]
+        if step.get("name") == "Validate all staging credential metadata"
+    )
+    script = credential_step["run"]
+    env = credential_step["env"]
+    assert "plan|apply|validate) credential_purpose=infrastructure" in script
+    assert "redeploy) credential_purpose=delivery" in script
+    assert "smoke) credential_purpose=smoke" in script
+    assert "full-rehearsal) credential_purpose=rehearsal" in script
+    assert "STAGING_ADMIN_API_KEY" not in env
+    assert 'inputs.action) && secrets.SMOKE_API_KEY ||' in env["SMOKE_API_KEY"]
+    assert '["redeploy","smoke"]' in env["SMOKE_API_KEY"]
+
+    dispatch = pilot["jobs"]["dispatch-authority"]
+    assert dispatch["env"]["GH_TOKEN"] == (
+        "${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}"
+    )
+    assert "github.token" not in dispatch["env"]["GH_TOKEN"]
+    assert "configure WORKFLOW_DISPATCH_TOKEN or TF_AMPLIFY_GITHUB_ACCESS_TOKEN" in dispatch["steps"][0]["run"]
+
+    terraform = _workflow("terraform-promote.yml")
+    plan_credential_check = next(
+        step for step in terraform["jobs"]["plan"]["steps"]
+        if step.get("name") == "Validate staging credential shape before planning"
+    )
+    assert "--purpose terraform-plan" in plan_credential_check["run"]
+    assert plan_credential_check["env"]["STAGING_ADMIN_API_KEY"] == (
+        "${{ secrets.STAGING_ADMIN_API_KEY }}"
+    )
+
+    infrastructure = _workflow("infrastructure.yml")
+    remote_plan_credential_check = next(
+        step for step in infrastructure["jobs"]["remote-plan"]["steps"]
+        if step.get("name") == "Validate staging credential shape before remote planning"
+    )
+    assert "--purpose terraform-plan" in remote_plan_credential_check["run"]
+    assert remote_plan_credential_check["env"]["STAGING_ADMIN_API_KEY"] == (
+        "${{ secrets.STAGING_ADMIN_API_KEY }}"
+    )
+    assert "SMOKE_API_KEY" not in remote_plan_credential_check["env"]
+    assert "Prove GitHub repository-secret access before pilot apply" not in (
+        WORKFLOWS / "pilot-staging.yml"
+    ).read_text(encoding="utf-8")
+
+    deploy_text = (WORKFLOWS / "deploy.yml").read_text(encoding="utf-8")
+    assert "--purpose delivery" in deploy_text
+    assert "STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}" not in deploy_text
+
+
 @pytest.mark.parametrize(
     "name",
     ("terraform-promote.yml", "deploy.yml", "staging-lifecycle.yml", "staging-smoke.yml"),

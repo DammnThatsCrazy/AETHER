@@ -47,10 +47,18 @@ COMMON_VARS = (
     "TF_AETHER_APP_URL",
     "TF_KYBER_APP_URL",
 )
-PILOT_SECRET_VARS = (
-    "STAGING_ADMIN_API_KEY",
-    "SMOKE_API_KEY",
-)
+PURPOSE_SECRET_VARS = {
+    "infrastructure": (),
+    # Terraform's staging plan is the last credential-shape gate before
+    # promotion. Pilot establishes its durable admin identity after readiness;
+    # full must already have the durable key at plan time.
+    "terraform-plan": (),
+    "delivery": ("SMOKE_API_KEY",),
+    "smoke": ("SMOKE_API_KEY",),
+    # Pilot rehearsals may establish the durable admin identity in-run after
+    # /v1/ready. Full rehearsals still require a pre-existing key below.
+    "rehearsal": (),
+}
 FULL_GOOGLE_VARS = (
     "KYBER_GOOGLE_CLIENT_ID",
     "KYBER_GOOGLE_CLIENT_SECRET",
@@ -70,22 +78,37 @@ def _require_nonempty(env: Mapping[str, str], names: tuple[str, ...], errors: li
 def credential_errors(
     *,
     lane: str,
+    purpose: str,
     env: Mapping[str, str] | None = None,
 ) -> list[str]:
     values = env if env is not None else os.environ
     errors: list[str] = []
     if lane not in {"full", "pilot"}:
         return [f"deployment lane must be full or pilot, got {lane!r}"]
+    if purpose not in PURPOSE_SECRET_VARS:
+        return [
+            "credential purpose must be one of infrastructure, terraform-plan, delivery, smoke, or rehearsal, "
+            f"got {purpose!r}"
+        ]
 
     _require_nonempty(values, ROLE_VARS + COMMON_VARS, errors)
-    if lane == "pilot":
-        _require_nonempty(values, PILOT_SECRET_VARS, errors)
-        admin_key = _value(values, "STAGING_ADMIN_API_KEY")
-        if admin_key and not STAGING_ADMIN_KEY_RE.fullmatch(admin_key):
+    # Deployment purpose determines its runtime credential requirements for
+    # both lanes. The full lane adds its Google workforce credentials below;
+    # it does not replace credentials consumed by delivery/smoke/rehearsal.
+    runtime_names = PURPOSE_SECRET_VARS[purpose]
+    _require_nonempty(values, runtime_names, errors)
+    admin_key = _value(values, "STAGING_ADMIN_API_KEY")
+    if purpose in {"rehearsal", "terraform-plan"} and lane == "full":
+        if not admin_key:
+            errors.append("missing credential STAGING_ADMIN_API_KEY")
+        elif not STAGING_ADMIN_KEY_RE.fullmatch(admin_key):
             errors.append(
                 "STAGING_ADMIN_API_KEY must be the durable ak_ API key returned by first-admin bootstrap"
             )
-    else:
+
+    if lane == "full":
+        # The full lane mounts Google workforce credentials in its runtime, so
+        # they remain required even for an infrastructure-only plan.
         _require_nonempty(values, FULL_GOOGLE_VARS, errors)
 
     for name in ROLE_VARS:
@@ -127,14 +150,27 @@ def credential_errors(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lane", choices=("full", "pilot"), required=True)
+    parser.add_argument(
+        "--purpose",
+        choices=tuple(PURPOSE_SECRET_VARS),
+        required=True,
+        help=(
+            "infrastructure validates provisioning inputs; terraform-plan also validates "
+            "the full-lane durable admin key; delivery, smoke, and rehearsal validate "
+            "the credentials required by that action"
+        ),
+    )
     args = parser.parse_args(argv)
-    errors = credential_errors(lane=args.lane)
+    errors = credential_errors(lane=args.lane, purpose=args.purpose)
     if errors:
         print("staging credential contract FAILED:", file=sys.stderr)
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print(f"staging credential contract valid: lane={args.lane}; values were not printed")
+    print(
+        f"staging credential contract valid: lane={args.lane}; "
+        f"purpose={args.purpose}; values were not printed"
+    )
     return 0
 
 

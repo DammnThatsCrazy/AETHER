@@ -479,11 +479,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
-  # Full-rehearsal bootstrap credentials are checked before any apply-wake
-  # dispatch. Plan-only runs remain usable without them. The ALB hostname is
-  # captured from the reviewed apply output after wake, and the rehearsal and
-  # isolation keys are generated per run; only the bootstrap admin key is a
-  # durable external input.
+  # Full-lane rehearsals require a pre-existing durable admin key before wake.
+  # Pilot rehearsals establish or resume that key only after migrations and
+  # runtime readiness, using the one-time token and durable marker. Run-scoped
+  # tenant/isolation keys are created only after that handoff.
   # ---------------------------------------------------------------------------
   amplify-preflight:
     name: Verify Amplify app ownership and current-head artifacts
@@ -540,16 +539,19 @@ jobs:
     permissions:
       contents: read
     env:
-      STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+      DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
     steps:
-      - name: Require the durable staging admin key
+      - name: Require a durable admin key for full-lane rehearsal
+        if: inputs.deployment_lane == 'full'
+        env:
+          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
           test -n "${STAGING_ADMIN_API_KEY:-}" \
-            || { echo '::error::STAGING_ADMIN_API_KEY is required as the durable staging admin credential before a full rehearsal'; exit 1; }
+            || { echo '::error::STAGING_ADMIN_API_KEY is required as the durable staging admin credential for the full lane'; exit 1; }
           [[ "$STAGING_ADMIN_API_KEY" =~ ^ak_[A-Za-z0-9]{24}$ ]] \
-            || { echo '::error::STAGING_ADMIN_API_KEY must be the durable ak_ API key returned by the one-time first-admin bootstrap; the AWS bootstrap token is not valid here'; exit 1; }
-          echo 'Durable staging admin credential is present; the live admin check and run-scoped test keys execute after the reviewed wake.'
+            || { echo '::error::STAGING_ADMIN_API_KEY must be the durable ak_ API key'; exit 1; }
+          echo 'Full-lane durable staging admin credential shape is valid.'
 
   # ---------------------------------------------------------------------------
   # Phase 2 — credentialed wake plan, produced by the reviewed promotion workflow.
@@ -593,7 +595,7 @@ jobs:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
         run: |
           set -euo pipefail
           if [ -z "$RELEASE_RUN_ID" ]; then
@@ -657,7 +659,7 @@ jobs:
       - name: Dispatch the reviewed wake plan and wait for it
         id: dispatch
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           STAGING_STATE: awake
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           BACKEND_IMAGE_DIGEST: ${{ steps.release.outputs.backend_image_digest }}
@@ -1066,6 +1068,13 @@ jobs:
       alb_dns: ${{ steps.outputs.outputs.alb_dns }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install autoscaling preflight dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyyaml boto3
       # Establish the bounded lease before any apply dispatch. If the apply
       # starts services but readiness later fails, the TTL guard is already
       # armed and the fail-safe sleep job has a concrete deadline to enforce.
@@ -1073,6 +1082,10 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Preflight staging autoscaling target ownership tags before wake
+        run: |
+          set -euo pipefail
+          python scripts/release/ensure_staging_autoscaling_target_tags.py --allow-missing-tags
       - name: Open the bounded awake lease before apply
         env:
           AWAKE_HOURS: ${{ needs.select-profile.outputs.awake_hours }}
@@ -1088,7 +1101,7 @@ jobs:
       - name: Dispatch the reviewed apply for the verified wake plan
         id: dispatch
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ needs.wake-validate.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ needs.wake-validate.outputs.plan_checksum }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
@@ -1149,7 +1162,7 @@ jobs:
       - name: Capture the applied certificate-covered API hostname
         id: outputs
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           APPLY_RUN_ID: ${{ steps.dispatch.outputs.apply_run_id }}
         run: |
           set -euo pipefail
@@ -1297,6 +1310,7 @@ jobs:
           # with a missing module and report a misleading staging failure.
           python -m pip install --disable-pip-version-check \
             pyyaml \
+            boto3 \
             'locust>=2.31,<3'
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -1411,53 +1425,10 @@ jobs:
           done
           echo "staging runs the approved immutable release"
 
-      - name: Verify the durable staging admin credential before mutation
-        env:
-          ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+      - name: Preflight staging autoscaling target ownership tags before rehearsal
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          import sys
-          import urllib.error
-          import urllib.request
-
-          base = f"https://{os.environ['ALB_DNS_NAME']}"
-          request = urllib.request.Request(
-              f"{base}/v1/me",
-              headers={
-                  "Accept": "application/json",
-                  "X-API-Key": os.environ["ADMIN_API_KEY"],
-              },
-          )
-          try:
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  status = response.status
-                  body = response.read()
-          except urllib.error.HTTPError as error:
-              # Never echo the provider response: it can contain account data.
-              status = error.code
-              error.close()
-              body = b""
-          except (urllib.error.URLError, TimeoutError) as error:
-              print(f"::error::staging admin credential probe could not reach /v1/me: {type(error).__name__}")
-              sys.exit(1)
-
-          if status != 200:
-              print(f"::error::STAGING_ADMIN_API_KEY was rejected by /v1/me with HTTP {status}; replace it through the documented first-admin handoff")
-              sys.exit(1)
-          try:
-              payload = json.loads(body or b"{}")
-              data = payload.get("data", payload)
-          except (TypeError, ValueError):
-              print("::error::staging /v1/me returned a non-JSON response for the durable admin credential")
-              sys.exit(1)
-          if not isinstance(data, dict) or not isinstance(data.get("tenant_id"), str) or data.get("is_admin") is not True:
-              print("::error::STAGING_ADMIN_API_KEY authenticated but is not the durable staging admin credential")
-              sys.exit(1)
-          print("durable staging admin credential authenticated with admin scope")
-          PY
+          python scripts/release/ensure_staging_autoscaling_target_tags.py
 
       - name: Revalidate awake lease before static publication
         # Static publication mutates the staging origins. Re-check the lease
@@ -1637,6 +1608,32 @@ jobs:
             test "$status" = 200 || { echo "::error::${path} returned ${status}"; exit 1; }
           done
 
+      - name: Verify or bootstrap the durable admin credential after readiness
+        env:
+          EXISTING_STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${ALB_DNS_NAME:-}" || { echo '::error::wake apply did not expose an API hostname'; exit 1; }
+          helper_args=(
+            --base-url "https://${ALB_DNS_NAME}"
+            --repo "$GITHUB_REPOSITORY"
+          )
+          if [ "$DEPLOYMENT_LANE" = pilot ]; then
+            bootstrap_token="$(aws secretsmanager get-secret-value \
+              --secret-id aether/first-admin-bootstrap-token \
+              --query SecretString --output text)"
+            test -n "$bootstrap_token" \
+              || { echo '::error::first-admin bootstrap token is unavailable'; exit 1; }
+            echo "::add-mask::${bootstrap_token}"
+            FIRST_ADMIN_BOOTSTRAP_TOKEN="$bootstrap_token" \
+              python scripts/release/bootstrap_staging_admin_key.py \
+                "${helper_args[@]}" --allow-bootstrap --confirm-single-use
+            unset bootstrap_token
+          else
+            python scripts/release/bootstrap_staging_admin_key.py "${helper_args[@]}"
+          fi
+
       - name: Probe the live Kyber workforce identity edge
         env:
           TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
@@ -1666,12 +1663,10 @@ jobs:
           done
 
       - name: Bootstrap run-scoped rehearsal tenants and API keys
-        env:
-          ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
           test -n "${ALB_DNS_NAME:-}" || { echo '::error::wake apply did not expose an ALB hostname'; exit 1; }
-          test -n "${ADMIN_API_KEY:-}" || { echo '::error::STAGING_ADMIN_API_KEY is required to bootstrap rehearsal tenants'; exit 1; }
+          test -n "${STAGING_ADMIN_API_KEY:-}" || { echo '::error::STAGING_ADMIN_API_KEY was not passed from the verified admin step'; exit 1; }
           mkdir -p artifacts/rehearsal
           python - <<'PY'
           import json, os, re, sys, urllib.error, urllib.request, uuid
@@ -1689,7 +1684,7 @@ jobs:
               data = json.dumps(body).encode() if body is not None else None
               request = urllib.request.Request(base + path, data=data, method=method)
               request.add_header("Accept", "application/json")
-              request.add_header("X-API-Key", os.environ["ADMIN_API_KEY"])
+              request.add_header("X-API-Key", os.environ["STAGING_ADMIN_API_KEY"])
               if data:
                   request.add_header("Content-Type", "application/json")
               try:
@@ -1851,15 +1846,13 @@ jobs:
           PY
 
       - name: Capability checks (auth, consent, ingestion, queue, graph, analytics, ML)
-        env:
-          SMOKE_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
           python scripts/staging_capability_matrix.py --json > artifacts/rehearsal/capability-matrix.json
           python scripts/smoke_test.py \
             --base-url "https://${ALB_DNS_NAME}" \
             --api-key "$REHEARSAL_TENANT_API_KEY" \
-            --admin-api-key "$SMOKE_ADMIN_API_KEY" \
+            --admin-api-key "$STAGING_ADMIN_API_KEY" \
             --web2 \
             --timeout 20 \
             | tee artifacts/rehearsal/smoke.txt
@@ -2205,16 +2198,14 @@ jobs:
 
       - name: Delete or expire the rehearsal tenant
         if: always()
-        env:
-          ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
           if [ ! -s artifacts/rehearsal/bootstrap-marker.json ] && [ ! -s artifacts/rehearsal/registration-marker.json ]; then
             echo 'no run-scoped tenant was created; nothing to remove'
             exit 0
           fi
-          test -n "${ADMIN_API_KEY:-}" \
-            || { echo '::error::STAGING_ADMIN_API_KEY is required to remove run-scoped rehearsal tenants'; exit 1; }
+          test -n "${STAGING_ADMIN_API_KEY:-}" \
+            || { echo '::error::verified STAGING_ADMIN_API_KEY is unavailable for run-scoped tenant cleanup'; exit 1; }
           python - <<'PY'
           import json, os, re, subprocess, sys
 
@@ -2249,7 +2240,7 @@ jobs:
               )
               completed = subprocess.run([
                   "curl", "-sS", "-o", response, "-w", "%{http_code}", "-X", method,
-                  "-H", f"X-API-Key: {os.environ['ADMIN_API_KEY']}", base + path,
+                  "-H", f"X-API-Key: {os.environ['STAGING_ADMIN_API_KEY']}", base + path,
               ], check=False, capture_output=True, text=True)
               if completed.returncode != 0:
                   return None, None, f"curl exit {completed.returncode}"
@@ -2415,7 +2406,7 @@ jobs:
         id: sleep-plan
         if: steps.already.outputs.asleep != 'true'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
@@ -2642,7 +2633,7 @@ jobs:
         id: sleep-apply
         if: needs.select-profile.outputs.apply_sleep == 'true' && steps.sleep-verify.outputs.plan_checksum != ''
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ steps.sleep-plan.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ steps.sleep-verify.outputs.plan_checksum }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}

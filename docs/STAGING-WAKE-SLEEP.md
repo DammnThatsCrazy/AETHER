@@ -16,11 +16,16 @@ source_files:
   - .github/workflows/amplify-status-production.yml
   - config/runtime_deployment.yaml
   - config/deployment_profiles.yaml
+  - config/staging_lifecycle_iam_policy.yaml
   - deploy/aws/terraform/profiles.tf
   - deploy/aws/terraform/variables.tf
   - deploy/aws/terraform/profiles/staging.tfvars
+  - deploy/aws/terraform/modules/ecs/main.tf
   - scripts/release/check_staging_lane_contract.py
   - scripts/release/check_staging_credential_contract.py
+  - scripts/release/check_staging_lifecycle_policy.py
+  - scripts/release/bootstrap_staging_admin_key.py
+  - scripts/release/ensure_staging_autoscaling_target_tags.py
   - scripts/release/check_amplify_app_contract.py
   - scripts/release/check_staging_secret_payload_contract.py
   - scripts/release/check_staging_secret_preflight_policy.py
@@ -37,29 +42,34 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
-  ".github/workflows/pilot-staging.yml": "sha256:f867617c5264ca3167d74cd906ccf51ca5ab8ac18f198679adbed57c997fce1d"
+  ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:41aa3dcc1b0f66134df921b6fed1b6e3af2f1b61c1ce29cf27f9d447978bcbc8"
+  ".github/workflows/staging-lifecycle.yml": "sha256:4776c3007e597ed68e30fd17db7abfb7d67a612e0e3bf9cedba8c0d3850032a8"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
-  ".github/workflows/terraform-promote.yml": "sha256:1e1929f5d8508e20be6068680b5859cda27cf0ffabaa14d734789b7833b2f322"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:12dda5250bd9e6595958a9a4a67d0205e8256f90af723a90d3b3c444f8a52618"
+  ".github/workflows/terraform-promote.yml": "sha256:bc9bbef0250cb87c90e563903aada6b120a7278c3e3eaf64aff01293c11cf199"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:e4c818162c2ede98217a53c123c2581bcf771cc9e2d1ccf58e048fff591598c3"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
   "config/staging_plan_reconcile_trust_policy.json": "sha256:4d413822419f32fb1cd82b99f8cabbda1b66a72c02f819d65b0213d15b14001a"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
+  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e65b5f4764f01521bd12000a4877cd73c31afdf54348f94301489c2d24558f1b"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
+  "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
-  "scripts/release/check_staging_credential_contract.py": "sha256:362d1558681bfd2ae4fa48eb2f135aca86b6b04db9e341ae31f183f501dee8ea"
+  "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
-  "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
+  "scripts/release/check_staging_lifecycle_policy.py": "sha256:f4efb779523227b55abd06bc217b0a824ae3c82bf632abcb6c18b01014b796c6"
+  "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:edfa749aba1fc6e49eb1a2c6a58d3ef36b78f2c084cd3644441eac090a740435"
+  "scripts/release/ensure_staging_autoscaling_target_tags.py": "sha256:2f0733c66a6df555537336d88edf30dab740b1d8c30bbaf8140bab9463cb6b00"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:0e886d472c9a6e4d317c4b0ae627461a5ce2af8caf548290a37a8f28708a9c5c"
 ---
 
@@ -356,9 +366,14 @@ gh workflow run staging-ttl-guard.yml -f mode=enforce
 ```
 
 When enforcement fires it, in order: refuses to act unless the cluster is
-literally `AETHER-staging`; sets every service's `--desired-count 0`; registers
-every matching scalable target at `--min-capacity 0`; deletes the lease; then
-re-reads the cluster to compute residual tasks.
+literally `AETHER-staging`; checks the exact scalable-target set and ownership
+tags; sets every service's `--desired-count 0`; registers every matching
+scalable target at `--min-capacity 0`; deletes the lease; then re-reads the
+cluster to compute residual tasks. Conflicting or missing target tags never
+produce a false green: the guard still attempts ECS scale-to-zero and task
+stopping, while failed autoscaling-floor enforcement remains visible. Missing
+tags are repaired only by the reviewed Terraform apply path, which verifies
+them after applying.
 
 **A successful enforcement makes the run red on purpose.** The guard emits an
 error telling the operator to run `staging-lifecycle.yml` with
@@ -394,85 +409,88 @@ no matching job exists.
 Steps, in order, with what each proves:
 
 1. **Exact-artifact verification.** `release.json` is validated against its
-   commit SHA and approved checksum; every artifact
-   (`aether_spa`, `kyber_spa`, `migration_package`, `configuration`) is
-   re-hashed and compared to its recorded digest; the manifest's backend digest
-   must equal the digest the applied wake plan pinned; and **every** running
-   ECS service's task definition image must equal the manifest's
-   `backend_image.uri`. Staging is proven to be running the exact artifact
-   under review, not a rebuild of it.
-2. **Static publication.** The lease is revalidated with at least five minutes
-   remaining, then the approved protected tenant `aether_spa` and internal
-   `kyber_spa` archives are unpacked and synchronized into their staging S3
-   origins with `aws s3 sync --delete`. `index.html` is uploaded with no-cache
-   headers, every object is read back, and the bucket contents are compared
-   byte-for-byte with the release artifact. This is a real staging mutation:
-   it requires the scoped S3 write permission and fails closed if the lease
-   expires or publication differs from the approved digest. The five public
-   Amplify applications (Olympus, Aether, docs, app, and status) are a
-   separate application-delivery surface; their branch builds and
-   verified `*.staging.olympuslabsml.com` domain checks belong to the Amplify
-   delivery/smoke workflows, not this private S3 publication phase.
-3. **Migrations.** A one-off Fargate task is launched from the
-   `AETHER-staging-backend` task definition with `RUN_MIGRATIONS=1`. The
-   release entrypoint runs `alembic upgrade head` and receives an explicit
+   commit SHA and approved checksum; each release artifact is re-hashed and
+   compared to its recorded digest; the manifest's backend digest must equal
+   the digest the applied wake plan pinned; and **every** running ECS service's
+   task-definition image must equal the manifest's `backend_image.uri`.
+   Staging is proven to be running the exact artifact under review, not a
+   rebuild of it.
+2. **Static publication.** After revalidating the awake lease with at least five
+   minutes remaining, the approved `aether_spa` archive is synchronized into
+   the Aether staging S3 origin. The `kyber_spa` archive is additionally
+   published only in the full lane; Kyber remains in the profile family but
+   its workforce identity and static surface are deferred from pilot staging.
+   `index.html` is uploaded with no-cache headers, every object is read back,
+   and the bucket is compared byte-for-byte with the approved artifact. This
+   mutation fails closed if the lease expires or publication differs from the
+   approved digest. The public Amplify apps (Olympus, Aether, docs, app, and
+   status) are a separate delivery surface: their exact-head builds and
+   staging-domain checks belong to the Amplify delivery/smoke workflows, not
+   this private S3 publication step.
+3. **Migrations.** After a second lease check, a one-off Fargate task is launched
+   from the `AETHER-staging-backend` task definition with `RUN_MIGRATIONS=1`.
+   The release entrypoint runs `alembic upgrade head` and receives an explicit
    `/bin/sh -c 'exit 0'` command override so it exits after migrations instead
-   of starting a second long-running API process. It is awaited with
-   `aws ecs wait tasks-stopped`, its stopped task and exit code are retained as
-   evidence, and it is required to exit 0. The resulting revision is then
-   verified over HTTP: a 200 from `/v1/ready` whose body mentions `alembic` or
-   `migration`.
-   On a `public_ip` profile the run-task network configuration needs
-   `assignPublicIp=ENABLED` — there is no NAT to egress through.
-4. **Readiness and frontend availability.** `/v1/health` and `/v1/ready` must
-   both return 200. For each of the protected `aether` and `kyber` artifacts,
-   the static bucket name is read from SSM
-   (`/aether/staging/AETHER_STATIC_BUCKET`,
-   `/aether/staging/KYBER_STATIC_BUCKET`) and `index.html` must exist. The
-   five public Amplify apps are checked by their own delivery/smoke gate; this
-   lifecycle phase does not claim to publish or verify those separate Amplify
-   domains. Staging intentionally does not attach the production custom domain
+   of starting a second long-running API process. The task must stop with exit
+   code 0, and its task/exit evidence is retained. On a `public_ip` profile the
+   run-task network configuration needs `assignPublicIp=ENABLED` — there is no
+   NAT to egress through. Migration success alone does not prove runtime
+   readiness.
+4. **Backend readiness.** After migrations, `/v1/health` and `/v1/ready` must
+   both return 200. A prior rehearsal completed migrations but `/v1/ready`
+   returned 503 because the ECS task role lacked table-scoped
+   `dynamodb:DescribeTable` for the configured staging cache. That permission
+   is now present in the Terraform task-role policy and has been verified in
+   the live policy; this history is not evidence of a successful rehearsal.
+5. **First-admin handoff (pilot only).** Only after migration and readiness
+   succeed does the lifecycle validate/reuse a working `STAGING_ADMIN_API_KEY`
+   or, when absent/stale and the durable database marker is unclaimed, create
+   one through the staging-only first-admin route. The helper stores a new key
+   as a GitHub repository secret before making the one-time request, then
+   verifies `/v1/me` reports admin scope. If an earlier attempt left a claimed
+   marker, the status endpoint compares the saved candidate against the marker
+   hash without returning either value: only the exact same candidate can
+   resume the idempotent request. A different/unverifiable candidate, uncertain
+   status, non-authentication error, or authenticated non-admin key fails
+   closed; never replace it with a different key. The full lane does not enable
+   this route and still requires a pre-existing durable `ak_...` admin key.
+6. **Lane-specific identity and static-origin checks.** Pilot checks Aether only
+   and explicitly defers Kyber workforce identity and its Google/GCP
+   prerequisites. The full lane additionally runs the Kyber workforce
+   identity contract and live identity probe, including the API callback
+   `https://<api-domain>/v1/kyber/auth/callback`; the Kyber SPA origin remains
+   the separate WebAuthn origin. Each selected lane's S3 static origin must
+   contain `index.html`. The five public Amplify apps have their own
+   delivery/smoke gate; this lifecycle step does not claim to publish or verify
+   those Amplify domains. Staging does not attach the production custom domain
    or a production status API URL.
-   Before apply, the promotion workflow verifies that every ECS-mounted
-   application Secrets Manager name has an `AWSCURRENT` version and, when the
-   canonical Aurora already exists, that its AWS-managed `MasterUserSecret`
-   reports `active`. Terraform creates the
-   encrypted secret stubs but never invents their values; bootstrap or import
-   those values through the secure operator procedure before a wake. The check
-   reads metadata only and never uploads or prints secret material. In the
-   pilot lane, the Kyber workforce pair (`aether/kyber-google-client-id` and
-   `aether/kyber-google-client-secret`) is intentionally deferred; the twelve
-   core application secrets and four real self-service Stripe test-price
-   secrets remain required, and the value-safe payload contract checks the
-   `sk_test_`, `whsec_`, and `price_` forms. In the full lane, the twelve base
-   application secrets and Kyber pair remain required, while the pilot-only
-   Stripe price secrets are not required. The
-   payload check assumes the dedicated `AetherStagingSecretPreflight` OIDC
-   role, whose reviewed reads are `secretsmanager:GetSecretValue` for the
-   `aether/*` prefix plus `kms:Decrypt` only for the staging Secrets Manager
-   CMK under its alias and environment-tag conditions. The lifecycle role
-   remains forbidden from reading secret values. The pilot smoke gate then
-   switches to the read-only `AetherStagingPlan` role for ECS
-   `DescribeServices`/`DescribeTaskDefinition` metadata; it never broadens the
-   secret preflight role. After a reviewed apply,
-   `check_staging_task_definition_contract.py`
-   reads only ECS metadata and proves both the API and `lean-worker` revisions
-   match the selected lane, including the pilot Stripe mounts and the absence
-   of deferred Kyber mounts. A stale registered revision is a hard failure,
-   not a successful source-only check. The
-   Google client must use the API callback
-   `https://<api-domain>/v1/kyber/auth/callback`; the Kyber SPA origin is the
-   separate WebAuthn origin. This prevents a green infrastructure plan from
-   producing the earlier task-start failure caused by missing workforce
-   identity anchors.
-5. **Tenant isolation.** The run uses the encrypted durable staging admin
+
+   Before apply, promotion separately verifies that every ECS-mounted
+   application secret has an `AWSCURRENT` version and, when canonical Aurora
+   exists, its AWS-managed `MasterUserSecret` reports `active`. Terraform
+   creates encrypted secret stubs but never invents values. The metadata check
+   does not print secret material. Pilot requires the core application secrets,
+   first-admin bootstrap token, and four real recurring Stripe test-price
+   secrets; Kyber Google credentials are deferred. Full requires the base
+   application secrets and Kyber pair, not the pilot-only Stripe price
+   secrets. Value-safe checks validate `sk_test_`, `whsec_`, and `price_`
+   formats, verify the Stripe test catalog, and use the dedicated
+   `AetherStagingSecretPreflight` role. The lifecycle role's only application
+   secret exception is `aether/first-admin-bootstrap-token-*`, with KMS decrypt
+   constrained to the staging CMK and Secrets Manager encryption context. The
+   pilot metadata smoke check uses the read-only `AetherStagingPlan` role; it
+   does not broaden the secret-preflight role. After apply,
+   `check_staging_task_definition_contract.py` verifies the registered API and
+   `lean-worker` task definitions match the selected lane, including pilot
+   Stripe mounts and absence of deferred Kyber mounts; a stale revision fails.
+7. **Tenant isolation.** The run uses the verified durable staging admin
    key to create two fresh, free, run-scoped tenants and one API key for each.
    The raw keys are masked and held only in the runner environment; they are
    never committed or uploaded. Their `tenant_id` values must differ. A
    cross-tenant read of the peer's consent records must return 401/403/404 — a
    200 is a breach and fails the run. An unauthenticated `/v1/me` must fail
    closed.
-6. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
+8. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
    `scripts/smoke_test.py` (the tenant key covers data-plane checks; the
    encrypted durable `STAGING_ADMIN_API_KEY` (`ak_` plus 24 alphanumeric
    characters) is supplied only after the post-wake `/v1/me` admin validation,
@@ -484,28 +502,28 @@ Steps, in order, with what each proves:
    check that proves consolidation actually works), graph, analytics, and
    inline ML (`/v1/ml/models` plus the unique in-process `/models` probe,
    since staging runs `remote_ml: false`).
-7. **Synthetic-seed exclusion and empty state.**
+9. **Synthetic-seed exclusion and empty state.**
    `scripts/validate_frontend_data_truth.py`, plus a probe that an unknown
    subject returns no records, plus a scan of the response for the markers
    `demo`, `synthetic`, `sample-tenant`, `lorem`.
-8. **Baseline load.** `scripts/load_smoke.py --users 10 --duration 60
+10. **Baseline load.** `scripts/load_smoke.py --users 10 --duration 60
    --api-key "$REHEARSAL_TENANT_API_KEY"`, so the load path exercises the same
    authenticated tenant contract as the capability probes.
-9. **Failure and retry.** A malformed ingest payload must be a 4xx — a 5xx is a
+11. **Failure and retry.** A malformed ingest payload must be a 4xx — a 5xx is a
    server error and a 2xx means it was accepted. A duplicate event must not
    produce a 5xx.
-10. **Rollback rehearsal.** Refuses to run outside the `AETHER-staging` cluster.
+12. **Rollback rehearsal.** Refuses to run outside the `AETHER-staging` cluster.
    Rolls `AETHER-staging-backend` back to the previous task-definition revision,
    waits for stability, asserts the rollback took effect and `/v1/health` is
    200, then restores the current revision and waits again. On the first
    approved revision there is no earlier task definition, so the step records
    `not_applicable` instead of fabricating a rollback; every later revision must
    execute and verify both rollback and roll-forward.
-11. **Evidence collection.** ECS service state, log groups, CloudWatch metrics,
+13. **Evidence collection.** ECS service state, log groups, CloudWatch metrics,
     `release.json`, and a cost-model run are collected with required AWS
     permissions. Missing or unreadable evidence is a rehearsal failure; no
     command is allowed to turn an evidence error into a false green.
-12. **Tenant cleanup.** Every run-scoped tenant recorded by the bootstrap or
+14. **Tenant cleanup.** Every run-scoped tenant recorded by the bootstrap or
     registration marker is removed with `DELETE /v1/admin/tenants/{id}`, falling
     back to `POST .../deactivate`. Both admin paths revoke durable API keys,
     invalidate and verify the Redis auth-cache entries, and revoke contained
@@ -623,10 +641,15 @@ bundle. `config/deployment_readiness.yaml` expects credentialed lifecycle
 evidence at `release-evidence/lifecycle/staging-wake.json`,
 `release-evidence/lifecycle/rehearsal-history.json` and
 `release-evidence/lifecycle/sleep-residual.json`; promoting a rehearsal's
-artifacts into that layout is a manual release-evidence step. A credentialed
-rehearsal has run, but the latest run failed during migration because the
-immutable backend image did not contain `psycopg2`; no successful full
-rehearsal has yet been recorded.
+artifacts into that layout is a manual release-evidence step. The latest
+credentialed full rehearsal completed the migration task, but `/v1/ready`
+returned 503 because the ECS task role lacked the staging cache table's
+`dynamodb:DescribeTable` permission. That permission is now in the reviewed
+Terraform policy and live role policy. Later pilot plan attempts failed before
+apply because the old main-branch credential gate required a pre-existing
+admin key that the pilot flow only creates after readiness. Lane-aware
+credential gating and the post-readiness first-admin handoff are implemented
+in the pending change; no successful full rehearsal is recorded yet.
 
 ## Incident handling
 

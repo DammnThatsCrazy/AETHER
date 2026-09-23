@@ -663,16 +663,28 @@ def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tena
         "Publish and verify the approved static SPA artifacts"
     )
     assert names.index("Verify the exact immutable application artifact is what staging runs") < names.index(
-        "Verify the durable staging admin credential before mutation"
-    ) < names.index("Revalidate awake lease before static publication")
-    admin_probe = next(
+        "Revalidate awake lease before static publication"
+    ) < names.index("Publish and verify the approved static SPA artifacts")
+    assert names.index("Publish and verify the approved static SPA artifacts") < names.index(
+        "Run migrations and verify the resulting revision"
+    ) < names.index("Backend readiness and frontend availability")
+    assert names.index("Backend readiness and frontend availability") < names.index(
+        "Verify or bootstrap the durable admin credential after readiness"
+    ) < names.index("Bootstrap run-scoped rehearsal tenants and API keys")
+    admin_step = next(
         s for s in _steps(doc, "rehearse")
-        if s.get("name") == "Verify the durable staging admin credential before mutation"
-    )["run"]
-    assert "/v1/me" in admin_probe
-    assert '"X-API-Key"' in admin_probe
-    assert "data.get(\"is_admin\") is not True" in admin_probe
-    assert "replace it through the documented first-admin handoff" in admin_probe
+        if s.get("name") == "Verify or bootstrap the durable admin credential after readiness"
+    )
+    assert "/v1/ready" in _job_script(doc, "rehearse")
+    assert "bootstrap_staging_admin_key.py" in admin_step["run"]
+    assert "--allow-bootstrap --confirm-single-use" in admin_step["run"]
+    assert "aether/first-admin-bootstrap-token" in admin_step["run"]
+    assert admin_step["env"]["GH_TOKEN"] == (
+        "${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}"
+    )
+    assert "secrets.STAGING_ADMIN_API_KEY" in admin_step["env"]["EXISTING_STAGING_ADMIN_API_KEY"]
+    assert "::add-mask::${bootstrap_token}" in admin_step["run"]
+    assert admin_step.get("continue-on-error", False) is not True
     assert "Publish and verify the approved static SPA artifacts" in names
     assert "aws s3 sync" in script
     cleanup = next(
@@ -697,16 +709,58 @@ def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tena
     assert 'json.dump(registration' not in script
     assert 'json.dump({"registration_completed": True, "tenant_id": registration_tenant_id}' in script
 
+    # Bootstrap failure must stop all normal rehearsal work. Cleanup is the
+    # only post-failure step permitted to run unconditionally.
+    admin_index = names.index("Verify or bootstrap the durable admin credential after readiness")
+    for step in _steps(doc, "rehearse")[admin_index + 1:]:
+        name = step.get("name", "")
+        assert step.get("continue-on-error", False) is not True, name
+        condition = str(step.get("if", "success()"))
+        if "always()" in condition:
+            assert name in {
+                "Collect logs, metrics, plans, test output and cost",
+                "Delete or expire the rehearsal tenant",
+            } or step.get("uses") == "actions/upload-artifact@v4", name
+        else:
+            assert "failure()" not in condition, name
+
 
 def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
     doc = _workflow_yaml(LIFECYCLE)
     workflow = _workflow(LIFECYCLE)
     preflight = doc["jobs"]["preflight-rehearsal-inputs"]
-    assert set(preflight.get("env", {})) == {"STAGING_ADMIN_API_KEY"}
+    assert set(preflight.get("env", {})) == {"DEPLOYMENT_LANE"}
+    full_key_preflight = next(
+        step for step in preflight["steps"]
+        if step.get("name") == "Require a durable admin key for full-lane rehearsal"
+    )
+    assert full_key_preflight["if"] == "inputs.deployment_lane == 'full'"
+    wake_apply_needs = doc["jobs"]["wake-apply"]["needs"]
+    assert "preflight-rehearsal-inputs" in wake_apply_needs
+    assert "needs.preflight-rehearsal-inputs.result == 'success'" in doc["jobs"]["wake-apply"]["if"]
     assert "vars.ALB_DNS_NAME" not in workflow
     assert "secrets.STAGING_REHEARSAL_TENANT_API_KEY" not in workflow
     assert "secrets.STAGING_ISOLATION_PEER_API_KEY" not in workflow
     assert "needs.wake-apply.outputs.api_host" in workflow
+    # The live secret expression is consumed once by the verifier/bootstrapper;
+    # all tenant, smoke, and cleanup steps use its masked GITHUB_ENV handoff.
+    consumers = [
+        step for step in _steps(doc, "rehearse")
+        if step.get("name") in {
+            "Bootstrap run-scoped rehearsal tenants and API keys",
+            "Capability checks (auth, consent, ingestion, queue, graph, analytics, ML)",
+            "Delete or expire the rehearsal tenant",
+        }
+    ]
+    assert len(consumers) == 3
+    assert all(
+        not any("secrets.STAGING_ADMIN_API_KEY" in str(value) for value in step.get("env", {}).values())
+        for step in consumers
+    )
+    assert all("STAGING_ADMIN_API_KEY" in step.get("run", "") for step in consumers)
+    helper_source = (ROOT / "scripts/release/bootstrap_staging_admin_key.py").read_text(encoding="utf-8")
+    assert "GITHUB_ENV" in helper_source
+    assert "::add-mask::" in helper_source
     wake_apply = doc["jobs"]["wake-apply"]
     assert wake_apply["outputs"]["api_host"] == "${{ steps.outputs.outputs.api_host }}"
     wake_script = _job_script(doc, "wake-apply")
@@ -801,9 +855,9 @@ def test_diagnostics_use_an_explicit_admin_smoke_credential():
     """Tenant data-plane keys must not be silently given admin diagnostics access."""
     doc = _workflow_yaml(LIFECYCLE)
     script = _job_script(doc, "rehearse")
-    assert "SMOKE_ADMIN_API_KEY" in script
+    assert "STAGING_ADMIN_API_KEY" in script
     assert "STAGING_ADMIN_API_KEY" in _referenced_text(doc)
-    assert '--admin-api-key "$SMOKE_ADMIN_API_KEY"' in script
+    assert '--admin-api-key "$STAGING_ADMIN_API_KEY"' in script
 
     smoke = (ROOT / "scripts" / "smoke_test.py").read_text(encoding="utf-8")
     assert "--admin-api-key" in smoke

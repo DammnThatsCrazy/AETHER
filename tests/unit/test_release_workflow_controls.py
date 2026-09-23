@@ -304,7 +304,8 @@ def test_build_only_does_not_require_post_bootstrap_admin_key():
     condition = credential_step["if"]
     assert "inputs.environment == 'staging'" in condition
     assert "inputs.delivery_mode != 'build-only'" in condition
-    assert "STAGING_ADMIN_API_KEY" in credential_step["env"]
+    assert "STAGING_ADMIN_API_KEY" not in credential_step["env"]
+    assert "--purpose delivery" in credential_step["run"]
 
 
 def test_stripe_smoke_uses_form_encoded_confirmed_test_payment():
@@ -421,6 +422,54 @@ def test_sleep_paths_do_not_depend_on_application_secret_values():
     lifecycle_text = _workflow("staging-lifecycle.yml")
     assert "-f staging_state=asleep" in lifecycle_text
     assert "no verified sleep plan_run_id" in lifecycle_text
+
+
+def test_staging_plan_and_apply_preflight_admin_bootstrap_prerequisites():
+    promote = _workflow_yaml("terraform-promote.yml")
+    plan = promote["jobs"]["plan"]
+    credential_step = next(
+        step for step in plan["steps"]
+        if step.get("name") == "Validate staging credential shape before planning"
+    )
+    assert "--purpose terraform-plan" in credential_step["run"]
+    assert credential_step["env"]["STAGING_ADMIN_API_KEY"] == (
+        "${{ secrets.STAGING_ADMIN_API_KEY }}"
+    )
+
+    preflight = promote["jobs"]["staging-secret-payload-preflight"]
+    payload_index = next(
+        index for index, step in enumerate(preflight["steps"])
+        if step.get("name") == "Verify raw secret payloads and staging Stripe mode"
+    )
+    github_index, github_step = next(
+        (index, step) for index, step in enumerate(preflight["steps"])
+        if step.get("name") == "Prove GitHub repository-secret access before pilot apply"
+    )
+    assert github_index > payload_index
+    assert "inputs.profile == 'staging'" in github_step["if"]
+    assert "inputs.deployment_lane == 'pilot'" in github_step["if"]
+    assert "inputs.action == 'apply'" in github_step["if"]
+    assert "inputs.secret_preflight_required" in github_step["if"]
+    assert github_step["env"]["GH_TOKEN"] == (
+        "${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}"
+    )
+    assert "GITHUB_TOKEN" not in github_step["env"]["GH_TOKEN"]
+    assert "--preflight-secret-write" in github_step["run"]
+    assert "staging-secret-payload-preflight.result == 'success'" in (
+        promote["jobs"]["apply"]["if"]
+    )
+
+    # The separate read-only remote planner must honor the same lane split;
+    # it is not an alternate way for the full lane to bypass durable-key shape.
+    infrastructure = _workflow_yaml("infrastructure.yml")
+    remote_plan_credential_step = next(
+        step for step in infrastructure["jobs"]["remote-plan"]["steps"]
+        if step.get("name") == "Validate staging credential shape before remote planning"
+    )
+    assert "--purpose terraform-plan" in remote_plan_credential_step["run"]
+    assert remote_plan_credential_step["env"]["STAGING_ADMIN_API_KEY"] == (
+        "${{ secrets.STAGING_ADMIN_API_KEY }}"
+    )
 
 
 def test_pilot_sleep_paths_skip_non_cleanup_preflights_but_keep_authority():

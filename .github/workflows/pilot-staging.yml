@@ -1,9 +1,11 @@
 name: Lean AWS pilot staging
 
 # This is an additive, dispatch-only entry point for a complete Aether staging
-# provision. It never applies Terraform, mutates ECS, publishes an SPA, or
-# probes AWS itself. The existing reviewed authorities below remain the only
-# mutation paths, and all of them receive deployment_lane=pilot explicitly.
+# provision. It never applies Terraform, mutates ECS, or publishes an SPA.
+# Its full-rehearsal preflight performs a disposable GitHub-secret write/delete
+# probe and verifies removal; persistent secret changes remain in the canonical
+# lifecycle workflow after readiness. Reviewed authorities below remain the
+# only AWS mutation paths, and all receive deployment_lane=pilot explicitly.
 #
 # PILOT_DEFERRED_GATES: kyber_operator_workforce_identity,gcp_hosting,google_credentials
 # Those are intentional pilot omissions. Aether backend, customer-facing
@@ -148,6 +150,8 @@ jobs:
           python-version: "3.11"
       - name: Validate all staging credential metadata
         env:
+          PILOT_ACTION: ${{ inputs.action }}
+          DEPLOYMENT_LANE: ${{ inputs.deployment_lane }}
           AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
           AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -165,12 +169,20 @@ jobs:
           TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
-          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
-          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          SMOKE_API_KEY: ${{ contains(fromJSON('["redeploy","smoke"]'), inputs.action) && secrets.SMOKE_API_KEY || '' }}
           TF_BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
         run: |
           set -euo pipefail
-          python scripts/release/check_staging_credential_contract.py --lane pilot
+          case "$PILOT_ACTION" in
+            plan|apply|validate) credential_purpose=infrastructure ;;
+            redeploy) credential_purpose=delivery ;;
+            smoke) credential_purpose=smoke ;;
+            full-rehearsal) credential_purpose=rehearsal ;;
+            *) echo "::error::unsupported pilot staging credential action: $PILOT_ACTION"; exit 1 ;;
+          esac
+          python scripts/release/check_staging_credential_contract.py \
+            --lane pilot \
+            --purpose "$credential_purpose"
 
   secret-payload-preflight:
     name: Verify pilot secret payloads are ECS-safe
@@ -350,7 +362,7 @@ jobs:
       contents: read
       actions: write
     env:
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
       GH_REPO: ${{ github.repository }}
       REF_NAME: ${{ github.ref_name }}
       ACTION: ${{ inputs.action }}
@@ -372,6 +384,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          test -n "${GH_TOKEN:-}" || {
+            echo '::error::configure WORKFLOW_DISPATCH_TOKEN or TF_AMPLIFY_GITHUB_ACCESS_TOKEN for pilot workflow dispatch'; exit 1;
+          }
 
           test "$DEPLOYMENT_LANE" = pilot || {
             echo '::error::pilot-staging.yml accepts deployment_lane=pilot only; full staging remains on its existing entry points'

@@ -132,6 +132,11 @@ def payload_errors(
         errors.append("aether/stripe-secret-key must use a Stripe test key in staging")
     if (value := values.get("stripe-webhook-secret")) and not value.startswith("whsec_"):
         errors.append("aether/stripe-webhook-secret must use a Stripe webhook signing secret")
+    if (value := values.get("first-admin-bootstrap-token")):
+        if len(value.strip()) < 32:
+            errors.append("aether/first-admin-bootstrap-token must be at least 32 characters")
+        if value != value.strip():
+            errors.append("aether/first-admin-bootstrap-token must not have leading or trailing whitespace")
     for name in PILOT_PRICE_SECRETS:
         value = values.get(name)
         if value and not value.startswith("price_"):

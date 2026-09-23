@@ -25,7 +25,9 @@ EXPECTED = {
     "s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
     "logs:DescribeLogGroups", "logs:GetLogEvents", "cloudwatch:ListMetrics",
     "application-autoscaling:DescribeScalableTargets",
+    "application-autoscaling:ListTagsForResource",
     "application-autoscaling:RegisterScalableTarget", "sts:GetCallerIdentity",
+    "secretsmanager:GetSecretValue", "kms:Decrypt",
 }
 
 # AWS evaluates these read/namespace APIs against `*`, even when the request
@@ -39,9 +41,47 @@ GLOBAL_RESOURCE_ACTIONS = {
     "logs:DescribeLogGroups",
     "cloudwatch:ListMetrics",
     "application-autoscaling:DescribeScalableTargets",
-    "application-autoscaling:RegisterScalableTarget",
     "sts:GetCallerIdentity",
 }
+
+STAGING_SCALABLE_TARGET_ARN = (
+    "arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*"
+)
+REGISTER_SCALABLE_TARGET_CONDITION_KEYS = {
+    "application-autoscaling:service-namespace",
+    "application-autoscaling:scalable-dimension",
+    "aws:ResourceTag/Environment",
+    "aws:ResourceTag/Project",
+}
+FIRST_ADMIN_BOOTSTRAP_SECRET_ARN_PATTERN = (
+    "arn:aws:secretsmanager:us-east-1:544471417928:secret:"
+    "aether/first-admin-bootstrap-token-*"
+)
+FIRST_ADMIN_BOOTSTRAP_KMS_KEY_ARN = (
+    "arn:aws:kms:us-east-1:544471417928:key/"
+    "91753780-d694-4e5a-9e80-7123af974554"
+)
+FIRST_ADMIN_BOOTSTRAP_KMS_CONDITIONS = {
+    "StringEquals": {
+        "kms:ViaService": "secretsmanager.us-east-1.amazonaws.com",
+    },
+    "StringLike": {
+        "kms:EncryptionContext:SecretARN": FIRST_ADMIN_BOOTSTRAP_SECRET_ARN_PATTERN,
+    },
+}
+ALLOWED_ACTION_EXCEPTION_CONTRACTS = {
+    "ReadFirstAdminBootstrapToken": {
+        "action": "secretsmanager:GetSecretValue",
+        "resource": FIRST_ADMIN_BOOTSTRAP_SECRET_ARN_PATTERN,
+        "conditions": None,
+    },
+    "DecryptFirstAdminBootstrapToken": {
+        "action": "kms:Decrypt",
+        "resource": FIRST_ADMIN_BOOTSTRAP_KMS_KEY_ARN,
+        "conditions": FIRST_ADMIN_BOOTSTRAP_KMS_CONDITIONS,
+    },
+}
+REQUIRED_FORBIDDEN_ACTION_PATTERNS = {"secretsmanager:*", "kms:*"}
 
 CONDITION_OPERATORS = {
     "ArnEquals",
@@ -110,8 +150,11 @@ CLI_TO_IAM = {
     ("cloudwatch", "list-metrics"): {"cloudwatch:ListMetrics"},
     ("application-autoscaling", "describe-scalable-targets"):
         {"application-autoscaling:DescribeScalableTargets"},
+    ("application-autoscaling", "list-tags-for-resource"):
+        {"application-autoscaling:ListTagsForResource"},
     ("application-autoscaling", "register-scalable-target"):
         {"application-autoscaling:RegisterScalableTarget"},
+    ("secretsmanager", "get-secret-value"): {"secretsmanager:GetSecretValue"},
     ("sts", "get-caller-identity"): {"sts:GetCallerIdentity"},
 }
 
@@ -179,11 +222,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
     missing = sorted(EXPECTED - actions)
     forbidden_patterns = doc.get("forbidden_actions", [])
-    forbidden = sorted(
-        action
-        for action in actions
-        if any(fnmatch.fnmatchcase(action, pattern) for pattern in forbidden_patterns)
-    )
+    if not isinstance(forbidden_patterns, list) or not all(
+        isinstance(pattern, str) for pattern in forbidden_patterns
+    ):
+        raise SystemExit("forbidden_actions must be a list of action patterns")
+    if not REQUIRED_FORBIDDEN_ACTION_PATTERNS <= set(forbidden_patterns):
+        raise SystemExit(
+            "forbidden_actions must keep Secrets Manager and KMS service-wide patterns forbidden"
+        )
     wildcard = sorted(a for a in actions if a.endswith(":*"))
     if missing:
         raise SystemExit("missing lifecycle actions: " + ", ".join(missing))
@@ -200,8 +246,87 @@ def main(argv: list[str] | None = None) -> int:
             "lifecycle actions requiring Resource '*' have incorrect scopes: "
             + ", ".join(global_scope_errors)
         )
+    statements = doc.get("statements", [])
+    statements_by_sid = {statement.get("sid"): statement for statement in statements}
+    if len(statements_by_sid) != len(statements):
+        raise SystemExit("lifecycle IAM statement SIDs must be unique")
+    autoscaling_statement = statements_by_sid.get("PreventAutoscalingRevival", {})
+    register_action = "application-autoscaling:RegisterScalableTarget"
+    if autoscaling_statement.get("resource") != STAGING_SCALABLE_TARGET_ARN:
+        raise SystemExit(
+            "PreventAutoscalingRevival must scope RegisterScalableTarget to scalable-target resources"
+        )
+    if autoscaling_statement.get("actions") != [register_action]:
+        raise SystemExit("PreventAutoscalingRevival must grant only RegisterScalableTarget")
+    if resource_by_action.get(register_action) != [STAGING_SCALABLE_TARGET_ARN]:
+        raise SystemExit("RegisterScalableTarget must be granted only on staging scalable-target ARNs")
+    condition_keys = {
+        f"{operator}:{key}"
+        for operator, values in (autoscaling_statement.get("conditions") or {}).items()
+        for key in values
+    }
+    unsupported = sorted(
+        key.split(":", 1)[1]
+        for key in condition_keys
+        if key.split(":", 1)[1] not in REGISTER_SCALABLE_TARGET_CONDITION_KEYS
+    )
+    expected_conditions = {
+        "StringEquals": {
+            "application-autoscaling:service-namespace": ["ecs"],
+            "application-autoscaling:scalable-dimension": ["ecs:service:DesiredCount"],
+            "aws:ResourceTag/Environment": ["staging"],
+            "aws:ResourceTag/Project": ["AETHER"],
+        }
+    }
+    actual_conditions = autoscaling_statement.get("conditions")
+    if unsupported or actual_conditions != expected_conditions:
+        detail = []
+        if unsupported:
+            detail.append("unsupported RegisterScalableTarget condition keys: " + ", ".join(unsupported))
+        if actual_conditions != expected_conditions:
+            detail.append("RegisterScalableTarget conditions must exactly match the staging namespace, dimension, and ownership tags")
+        raise SystemExit("invalid PreventAutoscalingRevival contract (" + "; ".join(detail) + ")")
+    tag_read = statements_by_sid.get("ReadStagingAutoscalingTargetTags", {})
+    list_tags_action = "application-autoscaling:ListTagsForResource"
+    if (
+        tag_read.get("actions") != [list_tags_action]
+        or tag_read.get("resource") != STAGING_SCALABLE_TARGET_ARN
+        or resource_by_action.get(list_tags_action) != [STAGING_SCALABLE_TARGET_ARN]
+    ):
+        raise SystemExit("ListTagsForResource must be scoped only to staging scalable-target ARNs")
+    declared_exceptions = doc.get("allowed_action_exceptions", [])
+    if (
+        not isinstance(declared_exceptions, list)
+        or not all(isinstance(sid, str) for sid in declared_exceptions)
+        or len(declared_exceptions) != len(set(declared_exceptions))
+        or set(declared_exceptions) != set(ALLOWED_ACTION_EXCEPTION_CONTRACTS)
+    ):
+        raise SystemExit(
+            "allowed_action_exceptions must name only the reviewed first-admin bootstrap statements"
+        )
+    for sid, contract in ALLOWED_ACTION_EXCEPTION_CONTRACTS.items():
+        statement = statements_by_sid.get(sid)
+        if (
+            statement is None
+            or statement.get("actions") != [contract["action"]]
+            or statement.get("resource") != contract["resource"]
+            or statement.get("conditions") != contract["conditions"]
+        ):
+            raise SystemExit(
+                f"{sid} must exactly match its reviewed first-admin bootstrap action, resource, and conditions"
+            )
+    forbidden = sorted(
+        f"{statement.get('sid', '<unknown>')}:{action}"
+        for statement in statements
+        for action in statement.get("actions", [])
+        if any(fnmatch.fnmatchcase(action, pattern) for pattern in forbidden_patterns)
+        and not (
+            statement.get("sid") in ALLOWED_ACTION_EXCEPTION_CONTRACTS
+            and action == ALLOWED_ACTION_EXCEPTION_CONTRACTS[statement["sid"]]["action"]
+        )
+    )
     if forbidden or wildcard:
-        raise SystemExit("wildcard/forbidden lifecycle actions: " + ", ".join(forbidden or wildcard))
+        raise SystemExit("wildcard/forbidden lifecycle actions: " + ", ".join(forbidden + wildcard))
     if args.render_output:
         if not args.account_id:
             raise SystemExit("--account-id is required with --render-output")

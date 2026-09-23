@@ -316,7 +316,6 @@ jobs:
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
           STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
-          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
           KYBER_GOOGLE_CLIENT_ID: ${{ secrets.KYBER_GOOGLE_CLIENT_ID }}
           KYBER_GOOGLE_CLIENT_SECRET: ${{ secrets.KYBER_GOOGLE_CLIENT_SECRET }}
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'pilot' }}
@@ -326,7 +325,9 @@ jobs:
             pilot|full) ;;
             *) echo "::error::deployment_lane must be pilot or full, got $DEPLOYMENT_LANE"; exit 1 ;;
           esac
-          python scripts/release/check_staging_credential_contract.py --lane "$DEPLOYMENT_LANE"
+          python scripts/release/check_staging_credential_contract.py \
+            --lane "$DEPLOYMENT_LANE" \
+            --purpose terraform-plan
 
       - name: Validate Amplify checkout token
         run: |

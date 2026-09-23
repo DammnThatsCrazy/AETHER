@@ -44,6 +44,7 @@ def _values() -> dict[str, str]:
     values.update({
         "stripe-secret-key": "sk_test_example",
         "stripe-webhook-secret": "whsec_example",
+        "first-admin-bootstrap-token": "x" * 32,
     })
     for name in checker.PILOT_PRICE_SECRETS:
         values[name] = f"price_{name.removeprefix('stripe-price-')}"
@@ -52,6 +53,26 @@ def _values() -> dict[str, str]:
 
 def test_pilot_accepts_raw_test_mode_payloads():
     assert checker.payload_errors(lane="pilot", runner=_runner(_values())) == []
+
+
+def test_pilot_preflight_reads_the_one_time_admin_bootstrap_secret():
+    assert "first-admin-bootstrap-token" in checker.required_secret_names("pilot")
+    errors = checker.payload_errors(
+        lane="pilot",
+        runner=_runner(_values(), missing={"first-admin-bootstrap-token"}),
+    )
+    assert any("first-admin-bootstrap-token" in error for error in errors)
+
+
+def test_pilot_preflight_checks_bootstrap_token_runtime_requirements():
+    values = _values()
+    values["first-admin-bootstrap-token"] = "x" * 31
+    errors = checker.payload_errors(lane="pilot", runner=_runner(values))
+    assert any("first-admin-bootstrap-token must be at least 32 characters" in error for error in errors)
+
+    values["first-admin-bootstrap-token"] = " " + ("x" * 32)
+    errors = checker.payload_errors(lane="pilot", runner=_runner(values))
+    assert any("must not have leading or trailing whitespace" in error for error in errors)
 
 
 def test_rejects_json_wrapped_payload_without_exposing_value():

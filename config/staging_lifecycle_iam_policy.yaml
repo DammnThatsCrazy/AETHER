@@ -1,7 +1,9 @@
 # Reviewed contract for the role used by staging-lifecycle.yml and
 # staging-ttl-guard.yml. This is deliberately separate from the Terraform
 # apply role: lifecycle may observe, wake, and sleep staging, but may not
-# provision infrastructure or read application secrets.
+# provision infrastructure or read application secrets. The only secret-value
+# exception is the one-time first-admin bootstrap token, scoped by its exact
+# Secrets Manager name prefix and matching Secrets Manager KMS context.
 version: 1
 profile: staging
 role: AetherStagingLifecycle
@@ -121,20 +123,41 @@ statements:
       - application-autoscaling:DescribeScalableTargets
     resource: '*'
     scope: global-read-required-by-api
+  - sid: ReadStagingAutoscalingTargetTags
+    actions:
+      - application-autoscaling:ListTagsForResource
+    resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
+    scope: staging-autoscaling-targets
   - sid: PreventAutoscalingRevival
     actions:
       - application-autoscaling:RegisterScalableTarget
-    resource: '*'
+    resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
     scope: staging-ecs-scalable-targets
     conditions:
       StringEquals:
-        application-autoscaling:ServiceNamespace:
+        application-autoscaling:service-namespace:
           - ecs
-        application-autoscaling:ScalableDimension:
+        application-autoscaling:scalable-dimension:
           - ecs:service:DesiredCount
+        aws:ResourceTag/Environment:
+          - staging
+        aws:ResourceTag/Project:
+          - AETHER
+  - sid: ReadFirstAdminBootstrapToken
+    actions:
+      - secretsmanager:GetSecretValue
+    resource: arn:aws:secretsmanager:us-east-1:544471417928:secret:aether/first-admin-bootstrap-token-*
+    scope: first-admin-bootstrap-token
+  - sid: DecryptFirstAdminBootstrapToken
+    actions:
+      - kms:Decrypt
+    resource: arn:aws:kms:us-east-1:544471417928:key/91753780-d694-4e5a-9e80-7123af974554
+    scope: first-admin-bootstrap-token-cmk
+    conditions:
+      StringEquals:
+        kms:ViaService: secretsmanager.us-east-1.amazonaws.com
       StringLike:
-        application-autoscaling:ResourceId:
-          - service/AETHER-staging/AETHER-staging-*
+        kms:EncryptionContext:SecretARN: arn:aws:secretsmanager:us-east-1:544471417928:secret:aether/first-admin-bootstrap-token-*
   - sid: ReadStagingBudgetLeaseEvidence
     actions:
       - sts:GetCallerIdentity
@@ -143,10 +166,13 @@ statements:
 
 forbidden_actions:
   - terraform:*
-  - secretsmanager:GetSecretValue
+  - secretsmanager:*
   - iam:CreateRole
   - iam:PutRolePolicy
   - iam:AttachRolePolicy
   - ec2:*
   - rds:*
-  - kms:Decrypt
+  - kms:*
+allowed_action_exceptions:
+  - ReadFirstAdminBootstrapToken
+  - DecryptFirstAdminBootstrapToken
