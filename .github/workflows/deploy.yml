@@ -663,14 +663,15 @@ jobs:
           TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
-          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
           KYBER_GOOGLE_CLIENT_ID: ${{ secrets.KYBER_GOOGLE_CLIENT_ID }}
           KYBER_GOOGLE_CLIENT_SECRET: ${{ secrets.KYBER_GOOGLE_CLIENT_SECRET }}
           TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
         run: |
           set -euo pipefail
-          python scripts/release/check_staging_credential_contract.py --lane "$DEPLOYMENT_LANE"
+          python scripts/release/check_staging_credential_contract.py \
+            --lane "$DEPLOYMENT_LANE" \
+            --purpose delivery
       - uses: actions/download-artifact@v4
         with:
           name: ${{ needs.acquire-release.result == 'success' && 'approved-release' || format('release-{0}', github.sha) }}

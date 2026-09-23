@@ -22,6 +22,7 @@ source_files:
   - scripts/release/reconcile_staging_plan_role.py
   - scripts/release/check_staging_lane_contract.py
   - scripts/release/check_staging_credential_contract.py
+  - scripts/release/bootstrap_staging_admin_key.py
   - scripts/release/check_amplify_app_contract.py
   - scripts/release/check_staging_secret_payload_contract.py
   - scripts/release/check_staging_secret_preflight_policy.py
@@ -48,13 +49,13 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:41aa3dcc1b0f66134df921b6fed1b6e3af2f1b61c1ce29cf27f9d447978bcbc8"
+  ".github/workflows/staging-lifecycle.yml": "sha256:4776c3007e597ed68e30fd17db7abfb7d67a612e0e3bf9cedba8c0d3850032a8"
   ".github/workflows/staging-state-reconcile.yml": "sha256:dab1992f55fccca3a322cef100cae00d2215f3fcbf83b0dc656eef5523b2ad1e"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:c441dd81c2354b8608cb362024f5d3431a380f26e1244eb433ba1e6882d386da"
-  ".github/workflows/terraform-promote.yml": "sha256:1e1929f5d8508e20be6068680b5859cda27cf0ffabaa14d734789b7833b2f322"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:12dda5250bd9e6595958a9a4a67d0205e8256f90af723a90d3b3c444f8a52618"
+  ".github/workflows/terraform-promote.yml": "sha256:bc9bbef0250cb87c90e563903aada6b120a7278c3e3eaf64aff01293c11cf199"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:4fed4eaf122b29db49acd252c2b07487ac3e33fc88925b17a0de7ad34bf31ab7"
-  "config/staging_lifecycle_iam_policy.yaml": "sha256:54940e08e76cc81c5cab2248f6f75968a25675c83049d46cc5d5eacca797d880"
+  "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:e4c818162c2ede98217a53c123c2581bcf771cc9e2d1ccf58e048fff591598c3"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
   "config/staging_plan_reconcile_trust_policy.json": "sha256:4d413822419f32fb1cd82b99f8cabbda1b66a72c02f819d65b0213d15b14001a"
@@ -67,13 +68,14 @@ source_hashes:
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:3827877fe77dc575bf6e02492fe8d71aced5a74be9fa1a47b6a47ae45961736a"
+  "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:01bbce3783d9c0a59d480e96fc05e2b98e2d3126660805304d8bfee6337d8bd2"
-  "scripts/release/check_staging_credential_contract.py": "sha256:362d1558681bfd2ae4fa48eb2f135aca86b6b04db9e341ae31f183f501dee8ea"
+  "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
-  "scripts/release/check_staging_lifecycle_policy.py": "sha256:8e8076392342c7ac6302e3f7c2e79b5ce536cf9035981e35a7ba10d33bfe694f"
+  "scripts/release/check_staging_lifecycle_policy.py": "sha256:f4efb779523227b55abd06bc217b0a824ae3c82bf632abcb6c18b01014b796c6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:282362ca53e7032591ed17dab3c01b4db6e37fa1a95ea86cbd2fd4f26b064e14"
-  "scripts/release/check_staging_secret_payload_contract.py": "sha256:74dca12d6b7606421bbd04d94c4698cc06b0d9f3774d03ba8402f5e27c2c9f52"
+  "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:edfa749aba1fc6e49eb1a2c6a58d3ef36b78f2c084cd3644441eac090a740435"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
@@ -148,6 +150,12 @@ rehearsal credential is the encrypted `STAGING_ADMIN_API_KEY`, an `ak_...` key
 created by the one-time staging first-admin route and supplied out of band;
 the AWS `FIRST_ADMIN_BOOTSTRAP_TOKEN` remains a separate Secrets Manager
 handoff credential and is never generated, copied into GitHub, or echoed by CI.
+After the initial pilot apply, the operator handoff first proves GitHub
+repository-secret write access with a disposable secret that is deleted and
+verified absent, then consumes the one-time route and writes the returned key
+directly to `STAGING_ADMIN_API_KEY`. The lifecycle validates it live through
+`/v1/me` before any publication, migration, or rehearsal-tenant mutation;
+planning and provisioning do not require this post-bootstrap runtime key.
 
 The lifecycle and apply contracts are intentionally separate. `AetherStagingPlan`
 owns remote plan and read-only state access and is the dedicated metadata-only
@@ -801,8 +809,10 @@ requires the twelve base application secrets plus the two Kyber workforce
 secrets. The secure bootstrap rejects malformed or placeholder IDs before
 writing them; the pilot task also arms the staging-only first-admin route from
 the Secrets Manager token and approved alert email. The operator stores its
-one-time returned `ak_...` key as `STAGING_ADMIN_API_KEY`; the lifecycle checks
-that key against `/v1/me` with admin scope before any rehearsal mutation. The
+generated `ak_...` key as `STAGING_ADMIN_API_KEY` before bootstrap; the
+token-protected route binds it to a durable marker, and identical retries
+return that same key. The lifecycle checks it against `/v1/me` with admin
+scope before any rehearsal mutation. The
 workflow preflight reads metadata only and never invents, reads, or prints a
 price ID or credential value.
 

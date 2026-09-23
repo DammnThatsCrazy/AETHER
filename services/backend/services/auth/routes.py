@@ -11,6 +11,7 @@ Public endpoints (no auth required):
   POST /v1/auth/login                 Email + password → new session API key
   POST /v1/auth/sso/callback          Auth0 JWT → AETHER tenant + API key
   GET  /v1/auth/sso/providers         List available SSO providers
+  GET/POST /v1/auth/bootstrap/first-admin  Staging-only, bootstrap-token protected
 
 Authenticated user endpoints:
   DELETE /v1/me/account               Self-service account-deletion workflow alias
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import uuid
 from typing import Optional
 
@@ -74,11 +76,45 @@ class FirstAdminBootstrapRequest(BaseModel):
     """Inputs for the one-time staging first-admin bootstrap.
 
     The email is not caller-selectable; it is compared to the server-side
-    allowlist.  The response contains the raw key exactly once.
+    allowlist. The response contains the submitted key so an identical
+    idempotent retry can recover from a lost HTTP response; a different key
+    or request cannot take over the durable claim.
     """
 
     name: str = Field(..., min_length=1, max_length=200)
     plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+    api_key: str
+
+
+@router.get("/v1/auth/bootstrap/first-admin")
+async def first_admin_bootstrap_status(request: Request):
+    """Expose only claim/retry state to a holder of the bootstrap token.
+
+    The helper uses this read-only check before replacing the durable GitHub
+    key. A key candidate is compared to the marker hash in constant time; the
+    endpoint never returns the hash or candidate value.
+    """
+    cfg = settings.trust_plane
+    if settings.env.value != "staging" or not cfg.first_admin_bootstrap_enabled:
+        raise ForbiddenError("First-admin bootstrap is disabled")
+    supplied_token = request.headers.get("x-aether-first-admin-bootstrap-token", "")
+    if not supplied_token or not cfg.first_admin_bootstrap_token or not hmac.compare_digest(
+        supplied_token, cfg.first_admin_bootstrap_token
+    ):
+        raise UnauthorizedError("Invalid first-admin bootstrap token")
+    marker = await _first_admin_bootstrap_repo.find_by_id("staging")
+    candidate = request.headers.get("x-aether-first-admin-candidate-key", "")
+    marker_hash = marker.get("key_hash") if isinstance(marker, dict) else None
+    candidate_matches = bool(
+        marker_hash
+        and re.fullmatch(r"ak_[A-Za-z0-9]{24}", candidate)
+        and hmac.compare_digest(
+            str(marker_hash), hashlib.sha256(candidate.encode()).hexdigest()
+        )
+    )
+    return APIResponse(
+        data={"claimed": marker is not None, "candidate_matches": candidate_matches}
+    ).to_dict()
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -136,7 +172,8 @@ async def bootstrap_first_admin(body: FirstAdminBootstrapRequest, request: Reque
     be reached before an Aether API key exists. It remains protected by a
     high-entropy Secrets Manager token, an allowlisted email, staging-only
     configuration, and a durable single-use claim. The plaintext key is
-    returned once and is never logged or persisted.
+    returned only to the authorized caller and is never logged or persisted
+    by this route. An identical retry returns the same candidate key.
     """
     cfg = settings.trust_plane
     if settings.env.value != "staging" or not cfg.first_admin_bootstrap_enabled:
@@ -152,23 +189,42 @@ async def bootstrap_first_admin(body: FirstAdminBootstrapRequest, request: Reque
     if not allowlisted_email:
         raise ForbiddenError("First-admin bootstrap is not configured")
 
-    tenant_id = str(uuid.uuid4())
-    user_id = str(uuid.uuid4())
-    raw_key = f"ak_{uuid.uuid4().hex[:24]}"
+    if not re.fullmatch(r"ak_[A-Za-z0-9]{24}", body.api_key):
+        raise BadRequestError("First-admin API key has an invalid format")
+
+    raw_key = body.api_key
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     plan_tier = body.plan_tier
+    tenant_id = str(uuid.uuid4())
 
-    # Claim before writes so a retry cannot create a second tenant/key. A
-    # failed request leaves a durable marker and therefore requires explicit
-    # operator review instead of allowing an unsafe replay.
+    # The caller creates and durably stores the random API key before calling
+    # this endpoint. The marker binds retries to that key hash and request
+    # metadata, so a dropped HTTP response can safely resume the same writes
+    # without minting a second tenant or credential.
     claimed = await _first_admin_bootstrap_repo.claim(
         "staging",
         email=allowlisted_email,
         tenant_id=tenant_id,
         key_hash=key_hash,
+        name=body.name,
+        plan_tier=plan_tier,
     )
     if not claimed:
-        raise ConflictError("The staging first-admin bootstrap has already been used")
+        existing = await _first_admin_bootstrap_repo.find_by_id("staging")
+        expected = {
+            "email": allowlisted_email,
+            "key_hash": key_hash,
+            "name": body.name,
+            "plan_tier": plan_tier,
+        }
+        if not existing or any(existing.get(key) != value for key, value in expected.items()):
+            raise ConflictError("The staging first-admin bootstrap is already bound to another request")
+        tenant_id = existing["tenant_id"]
+
+    user_id = str(uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f"aether:first-admin:staging:{tenant_id}:{allowlisted_email}",
+    ))
 
     await _repo.insert(tenant_id, {
         "name": body.name,
@@ -219,7 +275,7 @@ async def bootstrap_first_admin(body: FirstAdminBootstrapRequest, request: Reque
         "tenant_id": tenant_id,
         "api_key": raw_key,
         "permissions": list(_FIRST_ADMIN_PERMISSIONS),
-        "message": "Store this key securely — it will not be shown again.",
+        "message": "Store this key securely; an identical bootstrap retry returns the same key.",
     }).to_dict()
 
 

@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
   "services/backend/repositories/lake.py": "sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd"
-  "services/backend/repositories/repos.py": "sha256:f5629be5826c063f36f8ca3e04855d36a96306d8dfa7f11ba03f64fdeb9f8e7f"
+  "services/backend/repositories/repos.py": "sha256:fbf464a1822f49d054e182223a14d0e6f7e36961dd16de95f41d0cf5eda174e3"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -60,6 +60,7 @@ Tables are created automatically on first access. No migration tool is required 
 | `tenants` | `AdminRepository` | Admin service |
 | `users` | `UserRepository` | Auth (email+password signup, OTP, SSO via Auth0) |
 | `api_keys` | `APIKeyRepository` | Admin service |
+| `first_admin_bootstrap` | `FirstAdminBootstrapRepository` | Durable staging first-admin claim (key hash + request binding; identical retries only) |
 | `provider_usage` | `UsageMeter` | Provider gateway |
 | `investigations` | `InvestigationRepository` | Investigation service |
 | `governance_decisions` | `GovernanceRepository` | Governance service |

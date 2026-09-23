@@ -98,7 +98,7 @@ jobs:
       - name: Install guard dependencies
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check pyyaml
+          python -m pip install --disable-pip-version-check pyyaml boto3
       - name: Validate lifecycle IAM action contract
         run: python3 scripts/release/check_staging_lifecycle_policy.py
 
@@ -503,6 +503,11 @@ jobs:
           set -euo pipefail
           test "$STAGING_CLUSTER" = "AETHER-staging" \
             || { echo '::error::TTL enforcement refused outside the staging cluster'; exit 1; }
+          # Ownership drift must be visible, but it must never prevent this
+          # emergency path from reducing staging compute and autoscaling floors.
+          if ! python scripts/release/ensure_staging_autoscaling_target_tags.py; then
+            echo '::warning::staging autoscaling ownership-tag preflight failed; continuing TTL scale-to-zero cleanup'
+          fi
           # Fail closed: enforcement that could not read the service or task
           # inventory did not enforce anything, and must not exit green claiming
           # it did. Standalone tasks are stopped explicitly below; scaling only

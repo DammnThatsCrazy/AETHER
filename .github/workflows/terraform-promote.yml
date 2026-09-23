@@ -149,6 +149,20 @@ jobs:
           set -euo pipefail
           python scripts/release/check_staging_secret_payload_contract.py \
             --lane '${{ inputs.deployment_lane || 'full' }}'
+      - name: Prove GitHub repository-secret access before pilot apply
+        if: >-
+          inputs.profile == 'staging'
+          && inputs.deployment_lane == 'pilot'
+          && inputs.action == 'apply'
+          && inputs.secret_preflight_required
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python scripts/release/bootstrap_staging_admin_key.py \
+            --preflight-secret-write \
+            --repo "$TARGET_REPOSITORY"
 
   plan:
     needs: [staging-secret-payload-preflight]
@@ -266,14 +280,15 @@ jobs:
           TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
-          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
-          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
           KYBER_GOOGLE_CLIENT_ID: ${{ secrets.KYBER_GOOGLE_CLIENT_ID }}
           KYBER_GOOGLE_CLIENT_SECRET: ${{ secrets.KYBER_GOOGLE_CLIENT_SECRET }}
+          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
           TF_BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
         run: |
           set -euo pipefail
-          python scripts/release/check_staging_credential_contract.py --lane "$DEPLOYMENT_LANE"
+          python scripts/release/check_staging_credential_contract.py \
+            --lane "$DEPLOYMENT_LANE" \
+            --purpose terraform-plan
       - name: Validate the staging deployment-lane contract and static runtime wiring
         if: inputs.profile == 'staging'
         env:
@@ -974,7 +989,7 @@ jobs:
       - name: Install plan-validation dependencies
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check pyyaml
+          python -m pip install --disable-pip-version-check pyyaml boto3
       - name: Stage the reviewed plan before any AWS prerequisite mutation
         working-directory: deploy/aws/terraform
         run: |
@@ -1388,6 +1403,11 @@ jobs:
               exit 1
             fi
           done <<< "$ecr_creates"
+      - name: Preflight staging autoscaling target ownership tags
+        if: inputs.profile == 'staging' && steps.reviewed.outputs.staging_state != 'asleep'
+        run: |
+          set -euo pipefail
+          python scripts/release/ensure_staging_autoscaling_target_tags.py --allow-missing-tags
       - name: Ensure the ECS service-linked role exists before capacity providers
         # Every selectable profile provisions the ECS capacity-provider
         # resource. Bootstrap the account-level service-linked role before
@@ -1533,6 +1553,18 @@ jobs:
           esac
           printf '%s\n' "$backend_host" > reviewed.api-host
           printf '%s\n' "$alb_dns" > reviewed.alb-dns
+      - name: Apply missing staging autoscaling target ownership tags
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # Repair tags only after Terraform has successfully applied the
+          # reviewed staging plan; any failure keeps this promotion red.
+          python scripts/release/ensure_staging_autoscaling_target_tags.py --apply-missing-tags
+      - name: Verify staging autoscaling target ownership tags
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          python scripts/release/ensure_staging_autoscaling_target_tags.py
       - name: Verify applied staging frontend runtime links
         if: inputs.profile == 'staging'
         run: |

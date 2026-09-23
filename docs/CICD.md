@@ -25,7 +25,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:cc7bdf1700a4af730180ee459ea25b741c29c75bd74e9019f36d2b7a776cf004"
+  ".github/workflows/": "sha256:e0d9b30c59116b5e15fbdc88f7abd8e4d5556d88481547ff179db2dfcf20eeca"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -224,29 +224,34 @@ The checker also intersects identity policies with any permissions boundary,
 normalizes IAM action names case-insensitively, and carries the paired alias
 request context into both KMS `CreateAlias` resource checks.
 
-Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
-staging-environment preflight. It requires one encrypted, pre-existing,
-durable `STAGING_ADMIN_API_KEY` whose shape is `ak_` plus 24 alphanumeric
-characters. This is the key returned by the one-time first-admin bootstrap;
-the AWS `FIRST_ADMIN_BOOTSTRAP_TOKEN` is never valid in the GitHub secret. After
-wake, the lifecycle calls `/v1/me` with that key and requires HTTP 200 plus
-`is_admin=true` before any static publication, migration, or rehearsal tenant
-mutation. The certificate-covered API hostname and raw ALB name are captured
-from the reviewed Terraform apply output after the load balancer exists. Since
-external DNS is not managed by Terraform, promotion publishes both without
-making a completed apply fail on propagation; the lifecycle performs the
-fail-closed hostname-to-ALB resolution check before readiness, the awake lease,
-and the
-primary rehearsal and isolation API keys are generated through the admin
-tenant/key routes as run-scoped tenants after wake; they are masked, never
-uploaded, and are deleted or deactivated by the always-run cleanup. The pilot
+Before compute wakes, lane-specific credential and secret preflights run.
+Plan/apply/validate do not require a post-bootstrap pilot API key. The full lane
+requires a pre-existing encrypted `STAGING_ADMIN_API_KEY` in the durable
+`ak_` plus 24-alphanumeric-character form; its `/v1/me` admin scope is verified
+against the live staging database before rehearsal tenant mutations. The AWS
+`FIRST_ADMIN_BOOTSTRAP_TOKEN` is a separate one-time credential and is never a
+valid GitHub API key. The pilot lane deliberately does not require a durable
+admin key before planning or applying: after migrations and `/v1/ready` succeed,
+the helper reuses a valid existing key or, only when the durable marker is
+unclaimed, stores a generated key in GitHub before calling the one-time route.
+It then verifies admin scope. If a partial attempt already claimed the marker,
+only the same saved candidate can resume the idempotent request; a different or
+unverifiable candidate and other non-authentication errors fail closed without
+overwriting the key.
+The credential contract is action-specific: full rehearsal requires the
+durable admin key; pilot rehearsal obtains it after readiness; standalone smoke
+and live redeploy require `SMOKE_API_KEY`; rehearsal data-plane probes use
+isolated run-scoped tenant keys, not that durable smoke key. The certificate-
+covered API hostname and raw ALB name are captured from reviewed Terraform
+apply output. External DNS is not Terraform-managed, so promotion publishes
+those values without failing an otherwise completed apply on propagation; the
+lifecycle checks hostname-to-ALB resolution before runtime readiness and
+rehearsal. Run-scoped tenant and isolation keys are generated after the admin
+handoff, masked, never uploaded, and revoked by always-run cleanup. The pilot
 Terraform overlay arms the staging-only first-admin route with its mounted AWS
-token and the approved `TF_ALERT_EMAIL`; the durable database marker makes the
-route single-use. This removes the circular requirement for an ALB value and
-long-lived test keys before the first apply while keeping the admin handoff
-fail-closed. Plan-only and non-rehearsal actions remain available without that
-runtime input, but a full rehearsal fails before apply-wake rather than waking
-an environment that cannot be tested. Both the
+token and approved operator email; a durable database marker makes it
+single-use. This resolves the circular dependency between first apply and the
+admin key while preserving fail-closed behavior. Both the
 lifecycle and TTL cleanup paths also fail closed: an absent SSM lease is treated
 as already asleep, while an access, throttling, or other deletion error fails
 the run so unknown cleanup state cannot be reported as success. The TTL guard

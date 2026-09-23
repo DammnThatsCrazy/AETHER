@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:eb0658eb6cafedcd6e44b4a307ec06a7acb6aa8196d4f637213b82cf9d5e214e"
+  "services/backend/services/": "sha256:a1045e84a50852cb17a91268c092e5a39e5a0fed59eb8bdae50697b52b053683"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -157,6 +157,25 @@ subscription mapping before recording `past_due`, so an early failure is not
 lost when the billing-account row does not yet exist. For delayed success,
 subscription events remain authoritative for `plan_tier`; the validated tier
 requested by Checkout is used only for an interim activation notification.
+
+### Staging operator first-admin bootstrap (not a customer signup path)
+
+The pilot staging task may enable two token-protected bootstrap routes before
+an Aether API key exists. They are disabled outside staging and when the
+Terraform pilot overlay has not explicitly enabled them. Both require
+`X-Aether-First-Admin-Bootstrap-Token`; neither accepts ordinary API-key auth.
+The approved operator email is configured server-side and is never caller
+selectable.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/auth/bootstrap/first-admin` | GET | Return only whether the durable claim exists and whether the supplied `X-Aether-First-Admin-Candidate-Key` matches its stored hash; never returns the key or hash. |
+| `/v1/auth/bootstrap/first-admin` | POST | Create the staging tenant/admin using `{name, plan_tier, api_key}`. The caller generates and stores the candidate key before the request. The route stores only its hash and echoes the same candidate only to the token-authorized caller; an identical retry is idempotent, while a different key or request conflicts. |
+
+This operational endpoint is not part of customer registration. Keep the
+bootstrap token in Secrets Manager and the candidate API key in the protected
+GitHub repository secret; neither belongs in source, Terraform state, logs,
+or workflow artifacts.
 
 ### Self-service caller endpoints (`/v1/me/*`, API key required)
 

@@ -804,8 +804,9 @@ class FirstAdminBootstrapRepository(BaseRepository):
 
     The claim is keyed by environment and inserted with ``DO NOTHING`` so
     concurrent requests cannot mint two first-admin credentials.  The marker
-    is intentionally fail-closed: an interrupted bootstrap must be reviewed
-    and repaired by an operator rather than silently replayed.
+    binds the request to its key hash and metadata. Only an identical request
+    can resume after an interrupted write; a different request remains
+    fail-closed.
     """
 
     def __init__(self) -> None:
@@ -818,6 +819,8 @@ class FirstAdminBootstrapRepository(BaseRepository):
         email: str,
         tenant_id: str,
         key_hash: str,
+        name: str,
+        plan_tier: str,
     ) -> bool:
         record_id = environment.strip().lower()
         data = {
@@ -825,6 +828,8 @@ class FirstAdminBootstrapRepository(BaseRepository):
             "email": email.lower(),
             "tenant_id": tenant_id,
             "key_hash": key_hash,
+            "name": name,
+            "plan_tier": plan_tier,
         }
         pool = await self._ensure_pool()
         if pool is None:
