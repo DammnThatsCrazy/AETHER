@@ -20,7 +20,7 @@ source_hashes:
   "scripts/release/check_cost_model.py": "sha256:389df39c07cf6a679c6802a8926c1759f2c42e645cd53be681c70b52ca724941"
   "scripts/release/check_cost_policy.py": "sha256:2e547cdb3ce200a9f067b2a930a54ca622f29952fe4138693d942ddc1ec54e12"
   "scripts/release/check_cost_policy_terraform.py": "sha256:a5f13e165442fecaef55109efbffe2d73897f589235f254a47f8b3185c806594"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:2ec8dd99f19cbd907b44106b877e2a98ead7d53547ce7e815f86e9de2b8c49ef"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:760e99cc3192e70f508f75fd2e85d4a0825a895bc1f8e92f0f1f425c05d85ea6"
 ---
 
 # Cost Optimization
@@ -44,7 +44,10 @@ For the pilot staging lane, the plan checker also rejects ECS-service
 replacement or capacity-provider-strategy drift, autoscaling-target
 replacement or identity/role/maximum-capacity drift, workflow-managed tag
 drift, and Auth0 mutations outside the preserved Aether path before an apply
-is dispatched.
+is dispatched. It also requires one canonical owner for the retained staging
+Aurora cluster and restricts it to the 0–2 ACU / 300-second auto-pause change
+or a no-op; the provider's `0` pause sentinel is accepted only as a
+before-state representation, and existing non-scaling settings are preserved.
 
 ## Cost targets
 

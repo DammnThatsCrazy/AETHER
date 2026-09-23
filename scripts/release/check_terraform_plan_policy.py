@@ -1622,9 +1622,12 @@ def staging_legacy_aurora_safety_violations(
         )
     if before_scaling == LEGACY_STAGING_AURORA_SCALING:
         violations.append("legacy Aurora update does not change the approved scaling configuration")
+    # The AWS provider refreshes the legacy cluster's previously unset
+    # auto-pause interval as 0. Accept that representation only in before-state;
+    # the planned state above must still request the reviewed 300-second value.
     elif before_scaling is None or before_scaling.get("max_capacity") != 2 or (
         before_scaling.get("min_capacity") not in (0, 0.5)
-    ) or before_scaling.get("seconds_until_auto_pause") not in (None, 300):
+    ) or before_scaling.get("seconds_until_auto_pause") not in (None, 0, 300):
         violations.append(
             "legacy Aurora before-state is outside the reviewed 0.5-or-0 ACU, "
             "max-2 transition"

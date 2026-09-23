@@ -67,7 +67,7 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:cf7c4f00a4db5475604012c4d22eff1fbd3c78244f6da693fb8dcd5acb860fcd"
+  "deploy/aws/terraform/": "sha256:8e93086f42139303277ecc112e751e0b881b1c6c210311da0311e7e9f43b1666"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:01bbce3783d9c0a59d480e96fc05e2b98e2d3126660805304d8bfee6337d8bd2"
@@ -917,6 +917,11 @@ generates a new plan. `check_terraform_plan_policy.py` requires exactly one
 owner and permits only the intended auto-pause capacity-range update (min 0,
 max 2, 300 seconds) or a no-op after it is applied. Creation, deletion,
 replacement, duplicate ownership, or unrelated cluster drift fails closed.
+The imported resource intentionally ignores only its existing global/local
+write-forwarding and final-snapshot settings, so provider defaults cannot turn
+the scale-only plan into an unrelated database configuration change. The plan
+guard accepts the provider's `0` auto-pause value only as a legacy before-state
+representation; the desired state must still set 300 seconds.
 After apply, the promotion gate independently verifies the canonical and
 retained legacy clusters both report min 0, max 2, and a 300-second pause
 interval; the canonical cluster must also retain encryption, deletion

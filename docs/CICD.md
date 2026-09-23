@@ -32,7 +32,7 @@ source_hashes:
   "cicd/aether-cicd/stages/": "sha256:f26f7a608ed0d1cf1aff849650848b64958eba563c69ccb7f7d120726c767619"
   "config/delivery_workflow_authority.yaml": "sha256:7a23c16f192c2fcd9d742f25a447ac7a1d85659bdc51a303a1c61765a64332d6"
   "config/staging_apply_iam_policy.yaml": "sha256:4fed4eaf122b29db49acd252c2b07487ac3e33fc88925b17a0de7ad34bf31ab7"
-  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:60020108f7a0ab17d66aac2e4fd2f890e02cd8291629ed5387bdc18390dbbc29"
+  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:fcc3e84f90f6fb49d57f6e81bb31b5d5bb0c0febe1195c61512d45b40f23cb1c"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
@@ -479,6 +479,10 @@ cluster. It validates the exact live cluster identity and imports Terraform
 state only; it does not change the database. A fresh ordinary reviewed plan is
 required afterward, and the plan policy permits only the approved 0–2 ACU,
 300-second auto-pause update (or a no-op) with no unrelated cluster changes.
+The imported cluster's existing global/local write-forwarding and final-snapshot
+settings are explicitly preserved so provider defaults cannot widen that
+update. A provider-reported `0` auto-pause value is accepted only in the
+before-state; the desired state must still specify 300 seconds.
 
 The reviewed-promotion credential boundary is intentional: a `plan` action
 requires only the plan role and read-only planning inputs. The apply role is

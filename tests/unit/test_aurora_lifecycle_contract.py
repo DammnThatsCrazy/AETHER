@@ -47,6 +47,19 @@ def test_staging_aurora_has_the_aws_deletion_guard() -> None:
     assert 'deletion_protection = var.environment == "production" || var.environment == "staging"' in source
 
 
+def test_legacy_staging_aurora_preserves_unmanaged_existing_attributes() -> None:
+    source = (TF / "modules/aurora/main.tf").read_text(encoding="utf-8")
+    block = _resource_block(source, "aws_rds_cluster", "legacy_staging")
+    match = re.search(r"ignore_changes\s*=\s*\[(.*?)\]", block, re.DOTALL)
+    assert match, "legacy staging Aurora must preserve pre-existing provider attributes"
+    ignored = set(re.findall(r"[a-z][a-z0-9_]*", match.group(1)))
+    assert ignored == {
+        "enable_global_write_forwarding",
+        "enable_local_write_forwarding",
+        "skip_final_snapshot",
+    }
+
+
 def test_decommission_runbook_names_aurora_protection() -> None:
     source = (TF / "DECOMMISSION.md").read_text(encoding="utf-8")
     assert "`modules/aurora`" in source

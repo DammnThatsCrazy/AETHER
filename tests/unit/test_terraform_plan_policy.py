@@ -163,6 +163,7 @@ def _legacy_resource_change(plan: dict) -> dict:
         "delete_or_replace",
         "unrelated_cluster_drift",
         "unexpected_before_scaling",
+        "unexpected_before_pause_interval",
     ],
 )
 def test_legacy_aurora_guard_rejects_incomplete_or_broad_plans(defect):
@@ -204,9 +205,24 @@ def test_legacy_aurora_guard_rejects_incomplete_or_broad_plans(defect):
         change["after"]["vpc_security_group_ids"] = ["sg-unreviewed"]
     elif defect == "unexpected_before_scaling":
         change["before"]["serverlessv2_scaling_configuration"][0]["max_capacity"] = 8
+    elif defect == "unexpected_before_pause_interval":
+        change["before"]["serverlessv2_scaling_configuration"][0][
+            "seconds_until_auto_pause"
+        ] = 900
 
     findings = MODULE.staging_legacy_aurora_safety_violations(plan)
     assert findings, f"expected {defect} to fail the legacy Aurora lifecycle guard"
+
+
+def test_legacy_aurora_guard_accepts_provider_zero_pause_sentinel_before_update():
+    plan = _legacy_staging_plan()
+    change = _legacy_resource_change(plan)["change"]
+    before_scaling = change["before"]["serverlessv2_scaling_configuration"][0]
+    assert before_scaling["seconds_until_auto_pause"] == 0
+    assert change["after"]["serverlessv2_scaling_configuration"][0][
+        "seconds_until_auto_pause"
+    ] == 300
+    assert MODULE.staging_legacy_aurora_safety_violations(plan) == []
 
 
 def test_legacy_aurora_guard_accepts_the_already_applied_noop_shape():
