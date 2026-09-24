@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:f7ef63a028a78e55970825b24da99a083db2a7f6b9796f0b3df34f9831599f6e"
+  "services/backend/services/": "sha256:d023734900b62e1b8ac2b1bed0649b4551b7139a1f9be3da2e3da70b068bbc18"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1518,6 +1518,12 @@ authenticated tenant.
 Recorded events carry identifiers, event type/family, canonical UTC
 `occurred_at` / `received_at`, schema version and a scalar, PII-filtered
 `properties` subset; SDK `context` is never stored.
+
+A `POST /v1/consent/dsr` erasure (`request_type: "erasure"`, `user_id`, and
+optionally the subject's SDK `anonymous_id`) removes the subject's events and
+analytics session rollups in the requesting tenant through the durable
+`consent.erasure` job. Its `analytics_events` propagation step reports the
+erased row counts.
 
 ---
 

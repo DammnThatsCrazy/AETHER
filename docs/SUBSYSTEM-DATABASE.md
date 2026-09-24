@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
   "services/backend/repositories/lake.py": "sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd"
-  "services/backend/repositories/repos.py": "sha256:a025bae110bc577645acded5432ead7bf139cd5d2f252e6ddea6f896095fba5a"
+  "services/backend/repositories/repos.py": "sha256:8a3e6dfa6331ea90c484931ecf23c45458f20a412066ef7a2b2b726370aa07a5"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -116,6 +116,21 @@ Tables are created automatically on first access. No migration tool is required 
   frequent `top_event_types`, plus one count of analytics sessions updated in
   the window for `total_sessions`. `tenant_id=None` summarises all tenants
   (Kyber cross-tenant scope).
+- **DSR erasure:** `erase_subject(tenant_id, user_id, anonymous_id=None)`
+  backs the `analytics_events` DSR propagation component, run by the
+  `consent.erasure` job for `POST /v1/consent/dsr` erasure requests (the
+  request's optional `anonymous_id` is passed through). In one transaction and
+  always within the requesting tenant it hard-deletes (the tenant-erasure
+  semantics for these tables) every `events` row whose `user_id` or
+  `anonymous_id` is the subject's, and every analytics session rollup
+  attributed to either identity. A rollup attributed to another identity that
+  counted the subject's events is recomputed from its remaining events, or
+  deleted when none remain. Other users' sessions and other tenants' rows (even
+  with the same `user_id`) are never touched; a re-run erases nothing. The step
+  receipt is `records_impacted` = events + session rollups deleted and
+  `artifacts_impacted` = rollups recomputed, with the job id as the audit
+  pointer. The tenant's cached query results are then dropped; if that fails,
+  the step is marked `failed` and the job retries.
 
 ## Data Lake Repositories
 
