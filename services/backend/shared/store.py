@@ -294,6 +294,27 @@ class RedisStore(DurableStore):
 # DynamoDB Store (lean/staging production backend)
 # =========================================================================
 
+def _from_dynamodb_number(value):
+    """Undo boto3's ``Decimal`` number representation (legacy map elements)."""
+    from decimal import Decimal
+
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, dict):
+        return {k: _from_dynamodb_number(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_from_dynamodb_number(v) for v in value]
+    return value
+
+
+def _decode_dynamodb_list_item(item):
+    """A list element is JSON text; elements written before that encoding (native
+    DynamoDB maps, float-free by necessity) are still returned as plain dicts."""
+    if isinstance(item, str):
+        return json.loads(item)
+    return _from_dynamodb_number(item)
+
+
 class DynamoDBStore(DurableStore):
     """DynamoDB-backed durable store for profiles that replace Redis.
 
@@ -306,7 +327,16 @@ class DynamoDBStore(DurableStore):
     Items share the profile's cache table but use a store-specific key prefix,
     so they cannot collide with the cache client's entries. Values are JSON
     strings in the table's existing ``val`` attribute; list values use a
-    separate DynamoDB list attribute and the same namespaced key.
+    separate DynamoDB list attribute and the same namespaced key, and each list
+    element is likewise a JSON string.
+
+    Encoding list elements as JSON (exactly as ``RedisStore`` does with
+    ``rpush(json.dumps(value))``) rather than as native DynamoDB maps matters:
+    boto3's ``TypeSerializer`` rejects Python ``float`` ("Float types are not
+    supported. Use Decimal types instead.") and would hand numbers back as
+    ``Decimal``. Observability traces carry ``duration_ms`` floats, so every
+    trace append failed on the staging DynamoDB backend. JSON text keeps the
+    record byte-identical across the in-memory, Redis and DynamoDB stores.
     """
 
     def __init__(self, name: str, table_name: str):
@@ -402,12 +432,13 @@ class DynamoDBStore(DurableStore):
         return await self._run(_scan)
 
     async def append_list(self, key: str, value: dict) -> None:
+        encoded = json.dumps(value)
         await self._run(
             lambda: self._get_table().update_item(
                 Key={"cache_key": self._list_key(key)},
                 UpdateExpression="SET #items = list_append(if_not_exists(#items, :empty), :item)",
                 ExpressionAttributeNames={"#items": "items"},
-                ExpressionAttributeValues={":empty": [], ":item": [value]},
+                ExpressionAttributeValues={":empty": [], ":item": [encoded]},
             )
         )
 
@@ -420,7 +451,8 @@ class DynamoDBStore(DurableStore):
             )
         )
         items = (response.get("Item") or {}).get("items", [])
-        return items[-limit:] if limit > 0 else []
+        items = items[-limit:] if limit > 0 else []
+        return [_decode_dynamodb_list_item(item) for item in items]
 
     async def count(self, **filters) -> int:
         return len(await self.find(**filters))
