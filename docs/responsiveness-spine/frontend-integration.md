@@ -219,10 +219,10 @@ These live in the shared package and are imported by both aether and Kyber.
 ### Polling vs events
 
 The spine publishes event bus messages on state transitions:
-- `tenant.activation.updated`
-- `tenant.surface_readiness.updated`
-- `lens.projection.updated`
-- `background_job.updated`
+- `aether.tenant.activation.updated`
+- `aether.tenant.surface_readiness.updated`
+- `aether.lens.projection.updated`
+- `aether.background_job.updated`
 
 Frontend hooks can choose between:
 1. **Polling** — periodic refetch (e.g. every 30s) — simple, always fresh enough for dashboards.
@@ -254,7 +254,7 @@ function useResponsivenessEventDriven() {
     refetchInterval: false,
   });
 
-  usesubscribe('tenant.activation.updated', (event) => {
+  usesubscribe('aether.tenant.activation.updated', (event) => {
     if (event.tenant_id === currentTenantId) {
       queryClient.invalidateQueries({ queryKey: ['responsiveness', 'envelope'] });
     }

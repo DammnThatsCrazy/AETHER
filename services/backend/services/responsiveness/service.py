@@ -742,7 +742,11 @@ class ResponsivenessService:
     async def get_surface_readiness(self, tenant_id: str, surface: str) -> SurfaceReadiness:
         existing = await self._repo.get_surface_readiness(tenant_id, surface)
         if existing:
-            return SurfaceReadiness(**{k: v for k, v in existing.items() if k != "id"})
+            # Same stripped-``tenant_id`` payload as ``_load_milestone``.
+            return SurfaceReadiness(**{
+                **{k: v for k, v in existing.items() if k != "id"},
+                "tenant_id": tenant_id,
+            })
         readiness = await self.derive_surface_readiness(tenant_id, surface)
         await self._repo.put_surface_readiness(
             tenant_id, surface, readiness.to_dict()
@@ -917,7 +921,12 @@ class ResponsivenessService:
     async def _load_milestone(self, tenant_id: str) -> ActivationMilestone:
         row = await self._repo.get_activation_milestone(tenant_id)
         if row:
-            return ActivationMilestone(**row)
+            # ``ResponsivenessRepository._get`` strips the row-level metadata
+            # keys (``tenant_id`` included) from the stored payload, so the
+            # tenant the record is keyed by must be passed back explicitly —
+            # without it every milestone read after the first write raised
+            # ``missing 1 required positional argument: 'tenant_id'``.
+            return ActivationMilestone(**{**row, "tenant_id": tenant_id})
         return ActivationMilestone(tenant_id=tenant_id)
 
     async def _publish_activation_update(self, tenant_id: str) -> None:
@@ -926,8 +935,7 @@ class ResponsivenessService:
             from dependencies.providers import get_producer
 
             event = Event(
-                topic=getattr(Topic, "TENANT_ACTIVATION_UPDATED", None)
-                or Topic("tenant.activation.updated"),
+                topic=Topic.TENANT_ACTIVATION_UPDATED,
                 tenant_id=tenant_id,
                 source_service="responsiveness",
                 correlation_id="",
@@ -945,8 +953,7 @@ class ResponsivenessService:
             from dependencies.providers import get_producer
 
             event = Event(
-                topic=getattr(Topic, "TENANT_SURFACE_READINESS_UPDATED", None)
-                or Topic("tenant.surface_readiness.updated"),
+                topic=Topic.TENANT_SURFACE_READINESS_UPDATED,
                 tenant_id=tenant_id,
                 source_service="responsiveness",
                 correlation_id="",
@@ -964,8 +971,7 @@ class ResponsivenessService:
             from dependencies.providers import get_producer
 
             event = Event(
-                topic=getattr(Topic, "LENS_PROJECTION_UPDATED", None)
-                or Topic("lens.projection.updated"),
+                topic=Topic.LENS_PROJECTION_UPDATED,
                 tenant_id=tenant_id,
                 source_service="responsiveness",
                 correlation_id="",
@@ -983,8 +989,7 @@ class ResponsivenessService:
             from dependencies.providers import get_producer
 
             event = Event(
-                topic=getattr(Topic, "BACKGROUND_JOB_UPDATED", None)
-                or Topic("background_job.updated"),
+                topic=Topic.BACKGROUND_JOB_UPDATED,
                 tenant_id=tenant_id,
                 source_service="responsiveness",
                 correlation_id="",

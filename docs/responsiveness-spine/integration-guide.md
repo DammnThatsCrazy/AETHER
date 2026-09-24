@@ -84,7 +84,7 @@ except Exception as exc:
    - Sets `first_value_kind` = `"sdk_heartbeat"`
    - Sets `time_to_first_value_ms` = delta (if not already set)
    - Advances status from `not_started` → `partial_value`
-   - Publishes `tenant.activation.updated` event
+   - Publishes `aether.tenant.activation.updated` event
 4. Records the measurement via metrics: `aether_time_to_first_event_ack_ms`
 5. Persists the milestone via `repository.put_activation_milestone()`
 
@@ -150,7 +150,7 @@ if not _first_sample_emitted and events:
 2. Preserves `visible_status_updated_at` from the existing record (so the visible state doesn't flicker).
 3. Sets `visible_status_updated_at` = now on first call.
 4. Persists via `repository.put_provider_sync_state()`.
-5. Publishes `tenant.surface_readiness.updated` event with `provider_id`.
+5. Publishes `aether.tenant.surface_readiness.updated` event with `provider_id`.
 
 ### Status transitions
 

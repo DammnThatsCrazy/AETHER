@@ -88,7 +88,7 @@ await get_responsiveness_service().record_first_event_ack(
   - Sets `first_value_kind` = `"sdk_heartbeat"`
   - Sets `time_to_first_value_ms` = delta (if not already set)
   - Advances `status` from `not_started` → `partial_value`
-  - Publishes `tenant.activation.updated`
+  - Publishes `aether.tenant.activation.updated`
 
 **Why it matters:** This is the SDK's first experience of Aether working. The ACK latency tells the SDK "your event was received and accepted." If the first heartbeat becomes visible within 15 seconds of that ACK, the SDK has seen its first piece of visible value — and the milestone records that as the first-value moment with `first_value_kind = "sdk_heartbeat"`.
 
@@ -235,7 +235,7 @@ async def mark_first_value(
 - `first_value_kind` = kind (if not already set — once set, it's the _first_ value, so it doesn't change)
 - `time_to_first_value_ms` = now − `first_event_received_at` (if not already set)
 - `status` = `ready` if currently `partial_value`
-- Publishes `tenant.activation.updated`
+- Publishes `aether.tenant.activation.updated`
 
 **Why it matters:** `first_value_kind` is the spine's answer to "what was the first thing this tenant actually got value from?" A tenant whose first value is `sdk_heartbeat` had a fast, simple integration. A tenant whose first value is `graph_edge` went through the full graph pipeline. This kind is used by the frontend to show the right milestone narrative and by operators to understand integration patterns.
 
@@ -282,7 +282,7 @@ batch.py calls record_first_event_ack()
     │       ├── sets time_to_first_value_ms
     │       └── advances status → partial_value
     │
-    └── publishes tenant.activation.updated
+    └── publishes aether.tenant.activation.updated
 
 ... time passes ...
 
@@ -294,7 +294,7 @@ graph_projector.py calls mark_first_value(tenant_id, "graph_edge")
     ├── sets first_graph_edge_at
     ├── sets first_value_kind (if not already set — it IS already set to "sdk_heartbeat", so no change)
     ├── advances status → ready (if currently partial_value)
-    └── publishes tenant.activation.updated
+    └── publishes aether.tenant.activation.updated
 
 ... or ...
 
@@ -363,7 +363,7 @@ When the milestone changes, the service publishes a best-effort event:
 ```python
 # service.py — _publish_activation_update
 event = Event(
-    topic=Topic("tenant.activation.updated"),
+    topic=Topic.TENANT_ACTIVATION_UPDATED,
     tenant_id=tenant_id,
     source_service="responsiveness",
     correlation_id="",
