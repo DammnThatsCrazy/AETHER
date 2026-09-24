@@ -13,7 +13,7 @@ import uuid as _uuid
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from shared.common.common import (
     APIResponse, BadRequestError, NotFoundError,
@@ -24,7 +24,7 @@ from shared.logger.logger import get_logger, metrics
 from shared.observability import trace_request, emit_latency, record_graphql_query
 from shared.store import get_store
 from dependencies.providers import get_cache, get_registry
-from repositories.repos import AnalyticsRepository
+from repositories.repos import AnalyticsRepository, canonical_utc_timestamp
 from services.responsiveness.service import get_responsiveness_service
 
 logger = get_logger("aether.service.analytics")
@@ -45,11 +45,20 @@ def _get_repo(cache: CacheClient = Depends(get_cache)) -> AnalyticsRepository:
 
 class EventQuery(BaseModel):
     event_type: Optional[str] = None
+    # ISO-8601 datetime or date bounds on the event's occurred_at (inclusive;
+    # a date-only end_date covers the whole day).
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     user_id: Optional[str] = None
     session_id: Optional[str] = None
     limit: int = Field(default=50, ge=1, le=200)
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def _validate_bound(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            canonical_utc_timestamp(value)  # raises ValueError -> 422
+        return value
 
 
 class GraphQLRequest(BaseModel):
@@ -124,7 +133,7 @@ async def get_event(
 ):
     """Get a single event by ID (tenant-scoped)."""
     tenant = request.state.tenant
-    event = await repo.get_event(event_id)
+    event = await repo.get_event(event_id, tenant_id=tenant.tenant_id)
     if not event:
         raise NotFoundError("Event")
     # Enforce tenant isolation

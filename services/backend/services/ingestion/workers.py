@@ -10,6 +10,8 @@ Worker topology:
                        → silver_normalizer  → writes to silver_sdk_events
                        → silver_fact_projector → SilverDispatcher fan-out →
                          silver fact tables (+ canonical activity, graph queue)
+                       → analytics_event_recorder → events + sessions (the
+                         tenant analytics store AnalyticsRepository reads)
                        → identity_signal_emitter → publishes IDENTITY_RESOLVED
 
 These workers never mutate graph/profile directly; they emit signals that
@@ -18,7 +20,11 @@ the Profile360 and identity-resolution services consume.
 
 from __future__ import annotations
 
+import ipaddress
+import math
 import os
+import re
+from urllib.parse import urlsplit, urlunsplit
 
 from shared.backend_interpretation.flags import (
     outcome_truth_store_enabled,
@@ -176,6 +182,206 @@ async def silver_normalizer(event: Event) -> None:
             "silver_normalizer failed for event %s: %s", event_id, exc, exc_info=True
         )
         raise  # triggers DLQ in EventConsumer
+
+
+# ── Analytics event store projection ─────────────────────────────────────
+#
+# ``analytics_event_recorder`` is the only writer of the ``events`` and
+# ``sessions`` tables that ``AnalyticsRepository`` serves to
+# /v1/analytics/events/query, /v1/analytics/dashboard/summary and the
+# Profile 360 timeline. Like the Silver normalizer it persists a safe subset
+# only: identifiers, event type/family, canonical timestamps and scalar
+# properties that survive the PII filter below. ``context`` (IP, user agent,
+# device, locale, fingerprint signals) is never copied.
+
+ANALYTICS_MAX_PROPERTIES = 32
+ANALYTICS_MAX_PROPERTY_CHARS = 256
+
+# Property keys whose values identify a person or device. Matched against the
+# key's snake_case tokens, plus a compact-substring pass for run-together keys
+# (``userEmail``, ``billing_phone_number``, ``customerFirstName``).
+_ANALYTICS_PII_KEY_TOKENS = frozenset({
+    "email", "emails", "mail", "phone", "telephone", "tel", "mobile", "msisdn",
+    "ip", "ipv4", "ipv6", "address", "street", "postcode", "postal", "zip",
+    "zipcode", "dob", "birthday", "birthdate", "ssn", "passport", "fingerprint",
+    "latitude", "longitude", "lat", "lng", "lon", "geo", "geolocation",
+    "useragent", "ua",
+})
+_ANALYTICS_PII_KEY_SUBSTRINGS = (
+    "email", "phone", "fingerprint", "ipaddress", "useragent", "birthdate",
+    "dateofbirth", "firstname", "lastname", "fullname", "surname", "givenname",
+    "familyname",
+)
+_EMAIL_VALUE_RE = re.compile(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}")
+_IPV4_VALUE_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+
+def _is_pii_property_key(key: str) -> bool:
+    snake = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", str(key)).lower()
+    tokens = {token for token in re.split(r"[^a-z0-9]+", snake) if token}
+    compact = re.sub(r"[^a-z0-9]", "", snake)
+    return bool(tokens & _ANALYTICS_PII_KEY_TOKENS) or any(
+        fragment in compact for fragment in _ANALYTICS_PII_KEY_SUBSTRINGS
+    )
+
+
+def _safe_property_string(value: str) -> str | None:
+    """Return a persistence-safe string, or ``None`` to drop the property.
+
+    Email- and IP-shaped values are dropped whatever their key; URLs lose
+    their query string, fragment and credentials (where tokens and PII ride).
+    """
+    if value.lower().startswith(("http://", "https://")):
+        try:
+            parts = urlsplit(value)
+            host = parts.hostname or ""
+            netloc = f"{host}:{parts.port}" if parts.port else host
+        except ValueError:
+            return None
+        value = urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+    if _EMAIL_VALUE_RE.search(value) or _IPV4_VALUE_RE.search(value):
+        return None
+    try:
+        ipaddress.ip_address(value.strip())
+        return None
+    except ValueError:
+        pass
+    return value[:ANALYTICS_MAX_PROPERTY_CHARS]
+
+
+def safe_analytics_properties(properties: object) -> dict:
+    """Scalar, PII-filtered subset of SDK ``properties`` for the event store.
+
+    Keys the ingestion scrubber flags as sensitive (credentials, payment data,
+    free-text input), PII-named keys and fingerprint keys are dropped rather
+    than redacted; nested objects and lists are dropped; strings are bounded.
+    """
+    if not isinstance(properties, dict):
+        return {}
+    from services.ingestion.validation import scrub_sensitive_fields
+
+    scrubbed, _ = scrub_sensitive_fields(properties)
+    safe: dict = {}
+    for key, value in scrubbed.items():
+        if len(safe) >= ANALYTICS_MAX_PROPERTIES:
+            break
+        if not isinstance(key, str) or value == "[REDACTED]" or _is_pii_property_key(key):
+            continue
+        if value is None or isinstance(value, (bool, int)):
+            safe[key] = value
+        elif isinstance(value, float):
+            if math.isfinite(value):
+                safe[key] = value
+        elif isinstance(value, str):
+            cleaned = _safe_property_string(value)
+            if cleaned is not None:
+                safe[key] = cleaned
+    return safe
+
+
+def build_analytics_event_record(payload: dict, *, tenant_id: str, event_id: str) -> dict:
+    """Project a validated bus payload onto the analytics ``events`` row shape.
+
+    Field names match what ``AnalyticsRepository.query_events`` filters on
+    (``event_type``, ``user_id``, ``session_id``, ``anonymous_id``) and the
+    canonical ``occurred_at`` its ``start_date`` / ``end_date`` bounds use.
+    Follows the Silver normalizer's identity reads, including the
+    normalization-spine view when that flag is on.
+    """
+    from repositories.repos import canonical_utc_timestamp
+
+    view = to_observation_view(payload) if normalization_spine_enabled() else None
+    event_type = payload.get("event_type") or ""
+    user_id = payload.get("user_id")
+    anonymous_id = payload.get("anonymous_id")
+    session_id = payload.get("session_id")
+    occurred = payload.get("timestamp")
+    if view is not None:
+        user_id = view.user_id if view.user_id is not None else user_id
+        anonymous_id = view.anonymous_id if view.anonymous_id is not None else anonymous_id
+        session_id = view.session_id if view.session_id is not None else session_id
+        occurred = view.occurred_at if view.occurred_at is not None else occurred
+
+    received_at = payload.get("received_at")
+    occurred_at = None
+    for candidate in (occurred, received_at):
+        try:
+            occurred_at = canonical_utc_timestamp(candidate)
+        except (TypeError, ValueError):
+            occurred_at = None
+        if occurred_at:
+            break
+
+    record: dict = {
+        "tenant_id": tenant_id,
+        "event_id": str(event_id),
+        "event_type": event_type,
+        "event_family": payload.get("event_family") or "",
+        "occurred_at": occurred_at,
+        "schema_version": payload.get("schema_version", SCHEMA_VERSION),
+        "source": payload.get("source") or "sdk",
+        "properties": safe_analytics_properties(payload.get("properties")),
+    }
+    if received_at:
+        try:
+            record["received_at"] = canonical_utc_timestamp(received_at)
+        except (TypeError, ValueError):
+            pass
+    for key, value in (
+        ("session_id", session_id),
+        ("anonymous_id", anonymous_id),
+        ("user_id", user_id),
+    ):
+        if value:
+            record[key] = str(value)
+    return record
+
+
+_analytics_repository = None
+
+
+def _analytics_repo():
+    global _analytics_repository
+    if _analytics_repository is None:
+        from repositories.repos import AnalyticsRepository
+        from shared.cache.cache import CacheClient
+
+        # The recorder never touches the query cache; an unconnected client
+        # satisfies the constructor.
+        _analytics_repository = AnalyticsRepository(CacheClient())
+    return _analytics_repository
+
+
+async def analytics_event_recorder(event: Event) -> None:
+    """Record a validated SDK event in the tenant analytics event store.
+
+    Idempotent under SQS at-least-once delivery: the row id is derived from
+    ``(tenant_id, event_id)`` and inserted only if absent, and the session
+    rollup advances only when the event row is new (same transaction).
+    Relay (V2) and ingestion-replay deliveries are recorded too; a replayed
+    event that is already present is a no-op. Consent was enforced before
+    the event reached SDK_EVENTS_VALIDATED. Failures raise so the consumer
+    retries / dead-letters the message.
+    """
+    payload = event.payload or {}
+    tenant_id = event.tenant_id or payload.get("tenant_id", "")
+    event_id = payload.get("event_id") or event.event_id
+    if not tenant_id or not event_id:
+        metrics.increment("analytics_events_skipped_total", labels={"reason": "unscoped"})
+        return
+
+    record = build_analytics_event_record(payload, tenant_id=tenant_id, event_id=event_id)
+    try:
+        inserted = await _analytics_repo().record_processed_event(record)
+    except Exception as exc:
+        logger.error(
+            "analytics_event_recorder failed for event %s: %s", event_id, exc, exc_info=True
+        )
+        raise  # triggers retry / DLQ in EventConsumer
+    metrics.increment(
+        "analytics_events_recorded_total" if inserted else "analytics_events_duplicate_total",
+        labels={"tenant_id": tenant_id},
+    )
 
 
 def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
@@ -512,6 +718,10 @@ def attach_ingestion_workers(consumer: EventConsumer, producer: EventProducer) -
     # Silver fact projector — multi-projector dispatch into silver fact tables
     consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, silver_fact_projector)
     logger.info("Ingestion worker attached: silver_fact_projector → SDK_EVENTS_VALIDATED")
+
+    # Analytics event store — events + sessions rows the analytics API reads
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, analytics_event_recorder)
+    logger.info("Ingestion worker attached: analytics_event_recorder → SDK_EVENTS_VALIDATED")
 
     # Identity signal emitter (needs producer reference via partial)
     identity_handler = functools.partial(identity_signal_emitter, producer=producer)

@@ -17,6 +17,8 @@ import json
 import os
 import re
 from abc import ABC
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, TypeVar
 
 from shared.cache.cache import TTL, CacheClient, CacheKey
@@ -678,6 +680,87 @@ class IdentityRepository:
 # ANALYTICS REPOSITORY (TimescaleDB + Redis caching)
 # ═══════════════════════════════════════════════════════════════════════════
 
+#
+# The ``events`` and ``sessions`` JSONB tables are written by the
+# ``analytics_event_recorder`` projector (services/ingestion/workers.py), which
+# the ``stream-ingestion-projection`` consumer subscribes on
+# SDK_EVENTS_VALIDATED. Each processed SDK event becomes one ``events`` row
+# keyed by ``analytics_event_record_id(tenant_id, event_id)`` and advances one
+# ``sessions`` row keyed by ``analytics_session_record_id(tenant_id,
+# session_id)``. Both ids are tenant-scoped digests, so an at-least-once
+# redelivery lands on the same row and two tenants never share a row.
+
+ANALYTICS_EVENT_RECORD_TYPE = "analytics_event"
+ANALYTICS_SESSION_RECORD_TYPE = "analytics_session"
+# The dashboard summary window; ``period`` in the response names it.
+ANALYTICS_SUMMARY_WINDOW = timedelta(hours=24)
+ANALYTICS_SUMMARY_TOP_EVENT_TYPES = 10
+
+# Query keys that are request plumbing, never row predicates. ``limit`` rides
+# ``EventQuery.model_dump()``; treating it as ``data->>'limit' = '1'`` made
+# every limited query match nothing. ``tenant_id`` is bound from the
+# authenticated request and must not be overridable by query parameters.
+_ANALYTICS_NON_FILTER_KEYS = frozenset({"limit", "offset", "tenant_id"})
+_FILTER_KEY_RE = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*")
+_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_CANONICAL_TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
+
+
+def _tenant_scoped_digest(prefix: str, tenant_id: str, natural_id: str) -> str:
+    digest = hashlib.sha256(f"{tenant_id}\x1f{natural_id}".encode()).hexdigest()
+    return f"{prefix}_{digest[:32]}"
+
+
+def analytics_event_record_id(tenant_id: str, event_id: str) -> str:
+    """Deterministic, tenant-scoped ``events`` row id for an SDK event."""
+    return _tenant_scoped_digest("evt", tenant_id, event_id)
+
+
+def analytics_session_record_id(tenant_id: str, session_id: str) -> str:
+    """Deterministic, tenant-scoped ``sessions`` row id for an SDK session."""
+    return _tenant_scoped_digest("ses", tenant_id, session_id)
+
+
+def canonical_utc_timestamp(value: Any, *, end_of_day: bool = False) -> Optional[str]:
+    """Render ``value`` as fixed-width UTC ISO-8601 (``YYYY-MM-DDTHH:MM:SS.ffffffZ``).
+
+    Stored ``occurred_at`` values and query bounds share this spelling, so a
+    plain text comparison on ``data->>'occurred_at'`` is a chronological
+    comparison. A date-only bound (``YYYY-MM-DD``) covers the whole day:
+    midnight for a start bound, the last microsecond for an end bound. Naive
+    values are taken as UTC. Returns ``None`` for empty input and raises
+    ``ValueError`` for anything unparseable.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value).strip()
+        if _DATE_ONLY_RE.match(text):
+            parsed = datetime.fromisoformat(text)
+            if end_of_day:
+                parsed = parsed + timedelta(days=1) - timedelta(microseconds=1)
+        else:
+            if text.endswith(("Z", "z")):
+                text = text[:-1] + "+00:00"
+            parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime(_CANONICAL_TS_FORMAT)
+
+
+def _as_utc_datetime(value: Any) -> Optional[datetime]:
+    """Best-effort parse of a stored timestamp (``None`` when unparseable)."""
+    try:
+        canonical = canonical_utc_timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if canonical is None:
+        return None
+    return datetime.strptime(canonical, _CANONICAL_TS_FORMAT).replace(tzinfo=timezone.utc)
+
+
 class AnalyticsRepository:
     """Query engine for dashboards — uses TimescaleDB with Redis query caching."""
 
@@ -692,40 +775,151 @@ class AnalyticsRepository:
         query_params: dict,
         limit: int = 100,
     ) -> list[dict]:
+        """Tenant-scoped event query.
+
+        Equality filters (``event_type``, ``user_id``, ``session_id``, ...)
+        match the recorded row fields; ``start_date`` / ``end_date`` bound the
+        event's canonical ``occurred_at`` (inclusive; a date-only bound covers
+        the whole day). Non-empty results are cached for ``TTL.MEDIUM``. An
+        empty result is never cached, so a caller polling for an event that
+        is still in flight sees it on the first read after it lands.
+        """
+        params = dict(query_params or {})
+        occurred_from = canonical_utc_timestamp(params.pop("start_date", None))
+        occurred_to = canonical_utc_timestamp(
+            params.pop("end_date", None), end_of_day=True
+        )
+        for key in _ANALYTICS_NON_FILTER_KEYS:
+            params.pop(key, None)
         # Cache key must include `limit` — without it, a /sessions?limit=1 call
         # would otherwise serve its 1-event result to /platforms, /protocols,
         # /devices, /rewards (all of which call with the same {user_id} filter
         # but larger limits), making the rollups undercount.
         cache_key = CacheKey.analytics_query(
-            tenant_id, CacheKey.hash_query(f"{query_params}|limit={limit}")
+            tenant_id,
+            CacheKey.hash_query(
+                f"{sorted(params.items())}|from={occurred_from}"
+                f"|to={occurred_to}|limit={limit}"
+            ),
         )
         cached = await self.cache.get_json(cache_key)
         if cached:
             return cached
 
-        results = await self._events.find_many(
-            filters={"tenant_id": tenant_id, **query_params},
+        results = await self._events.query(
+            tenant_id,
+            params,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
             limit=limit,
         )
-        await self.cache.set_json(cache_key, results, TTL.MEDIUM)
+        if results:
+            await self.cache.set_json(cache_key, results, TTL.MEDIUM)
         return results
 
     async def record_event(self, event_id: str, data: dict) -> dict:
+        """Raw upsert under a caller-chosen id (fixtures and legacy callers).
+
+        The ingestion projector uses :meth:`record_processed_event`, which is
+        idempotent under redelivery and maintains the session rollup.
+        """
         return await self._events.insert(event_id, data)
 
-    async def get_event(self, event_id: str) -> dict:
+    async def record_processed_event(self, record: dict) -> bool:
+        """Insert a processed SDK event once and advance its session rollup.
+
+        ``record`` must carry ``tenant_id`` and ``event_id``; its row id is
+        :func:`analytics_event_record_id`. Returns ``True`` when the event was
+        newly recorded and ``False`` for a redelivery of an already-recorded
+        event, which changes nothing. On PostgreSQL the event insert and the
+        session increment commit in one transaction, so a session's
+        ``event_count`` counts each event exactly once.
+        """
+        tenant_id = str(record.get("tenant_id") or "")
+        event_id = str(record.get("event_id") or "")
+        if not tenant_id or not event_id:
+            raise ValueError("analytics event record requires tenant_id and event_id")
+        record_id = analytics_event_record_id(tenant_id, event_id)
+        session_id = record.get("session_id")
+        session_record_id = (
+            analytics_session_record_id(tenant_id, str(session_id)) if session_id else None
+        )
+        now = utc_now().isoformat()
+        row = {
+            **record,
+            "record_type": ANALYTICS_EVENT_RECORD_TYPE,
+            "id": record_id,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        pool = await self._events._ensure_pool()
+        if pool is None:
+            if record_id in self._events._store:
+                return False
+            self._events._store[record_id] = row
+            if session_record_id:
+                self._sessions.advance_in_memory(session_record_id, row, now)
+            return True
+
+        await self._events._ensure_table()
+        if session_record_id:
+            await self._sessions._ensure_table()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                inserted = await conn.fetchval(
+                    f"""INSERT INTO {self._events.table_name}
+                        (id, data, tenant_id, created_at, updated_at)
+                        VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                        ON CONFLICT (id) DO NOTHING
+                        RETURNING id""",
+                    record_id, json.dumps(row, default=str), tenant_id,
+                )
+                if inserted is None:
+                    return False
+                if session_record_id:
+                    await self._sessions.advance_sql(conn, session_record_id, row, now)
+        return True
+
+    async def get_event(self, event_id: str, tenant_id: Optional[str] = None) -> dict:
+        """Fetch one event.
+
+        With ``tenant_id`` the lookup first resolves the tenant-scoped record
+        id the projector writes, so another tenant's event is unreachable by
+        construction; a raw id is the fallback for rows written through
+        :meth:`record_event`.
+        """
+        if tenant_id:
+            record = await self._events.find_by_id(
+                analytics_event_record_id(tenant_id, event_id)
+            )
+            if record is not None:
+                return record
         return await self._events.find_by_id_or_fail(event_id)
 
     async def dashboard_summary(self, tenant_id: str | None = None) -> dict:
-        filters = {"tenant_id": tenant_id} if tenant_id else None
-        events = await self._events.count(filters=filters)
-        sessions = await self._sessions.count(filters=filters)
+        """Summary of the last 24h of processed events.
+
+        Computed from the store by aggregate queries bounded by the tenant
+        index and the 24h ``created_at`` window (when the event was processed,
+        which is server-authoritative, unlike the SDK timestamp):
+        ``total_events`` rows, ``total_sessions`` sessions seen in the window,
+        ``unique_users`` distinct ``user_id`` (falling back to
+        ``anonymous_id`` for unidentified visitors) and the ten most frequent
+        ``event_type`` values. ``tenant_id=None`` summarises every tenant (the
+        Kyber cross-tenant scope).
+        """
+        since = utc_now() - ANALYTICS_SUMMARY_WINDOW
+        events = await self._events.summary(
+            tenant_id, since, top_n=ANALYTICS_SUMMARY_TOP_EVENT_TYPES
+        )
+        sessions = await self._sessions.count_active(tenant_id, since)
         return {
             "period": "24h",
-            "total_events": events,
+            "total_events": events["total_events"],
             "total_sessions": sessions,
-            "unique_users": 0,
-            "top_event_types": [],
+            "unique_users": events["unique_users"],
+            "top_event_types": events["top_event_types"],
         }
 
 
@@ -889,14 +1083,247 @@ class _ProfileStore(BaseRepository):
         super().__init__("profiles")
 
 
+def _row_created_at(row: dict) -> Optional[datetime]:
+    return _as_utc_datetime(row.get("created_at"))
+
+
 class _EventStore(BaseRepository):
+    """Processed analytics events (JSONB ``events`` table)."""
+
     def __init__(self) -> None:
         super().__init__("events")
 
+    async def query(
+        self,
+        tenant_id: str,
+        equals: dict[str, Any],
+        *,
+        occurred_from: Optional[str] = None,
+        occurred_to: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Tenant-scoped equality + ``occurred_at`` range query, newest first.
+
+        An empty ``tenant_id`` returns nothing: analytics rows are never read
+        outside a tenant scope through this path. ``occurred_from`` /
+        ``occurred_to`` are canonical UTC strings (see
+        :func:`canonical_utc_timestamp`); rows without ``occurred_at`` never
+        satisfy a range bound.
+        """
+        if not tenant_id:
+            return []
+        for key in equals:
+            if not _FILTER_KEY_RE.fullmatch(key):
+                raise ValueError(f"Invalid filter key: {key!r}")
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            filters = {**equals, "tenant_id": tenant_id}
+            rows = [r for r in self._store.values() if _matches_filters(r, filters)]
+            if occurred_from is not None:
+                rows = [r for r in rows if (r.get("occurred_at") or "") >= occurred_from]
+            if occurred_to is not None:
+                rows = [
+                    r for r in rows
+                    if r.get("occurred_at") and r["occurred_at"] <= occurred_to
+                ]
+            rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+            return rows[:limit]
+
+        await self._ensure_table()
+        conditions = ["tenant_id = $1"]
+        params: list[Any] = [tenant_id]
+        for key, value in equals.items():
+            if value is None:
+                conditions.append(f"data->>'{key}' IS NULL")
+                continue
+            params.append(_jsonb_text(value))
+            conditions.append(f"data->>'{key}' = ${len(params)}")
+        if occurred_from is not None:
+            params.append(occurred_from)
+            conditions.append(f"data->>'occurred_at' >= ${len(params)}")
+        if occurred_to is not None:
+            params.append(occurred_to)
+            conditions.append(f"data->>'occurred_at' <= ${len(params)}")
+        params.append(limit)
+        rows = await pool.fetch(
+            f"""SELECT data FROM {self.table_name}
+                WHERE {' AND '.join(conditions)}
+                ORDER BY created_at DESC
+                LIMIT ${len(params)}""",
+            *params,
+        )
+        return [json.loads(row["data"]) for row in rows]
+
+    async def summary(
+        self, tenant_id: Optional[str], since: datetime, *, top_n: int
+    ) -> dict:
+        """Event count, distinct users and top event types since ``since``.
+
+        Two aggregate statements over the tenant's rows inside the window;
+        both are bounded by the ``tenant_id`` index and the ``created_at``
+        window rather than returning rows to the application.
+        """
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = [
+                r for r in self._store.values()
+                if (not tenant_id or r.get("tenant_id") == tenant_id)
+                and (_row_created_at(r) or since) >= since
+            ]
+            users = {
+                r.get("user_id") or r.get("anonymous_id")
+                for r in rows
+                if r.get("user_id") or r.get("anonymous_id")
+            }
+            counts = Counter(r.get("event_type") for r in rows if r.get("event_type"))
+            ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:top_n]
+            return {
+                "total_events": len(rows),
+                "unique_users": len(users),
+                "top_event_types": [
+                    {"event_type": et, "count": n} for et, n in ranked
+                ],
+            }
+
+        await self._ensure_table()
+        where = "created_at >= $1"
+        params: list[Any] = [since]
+        if tenant_id:
+            where += " AND tenant_id = $2"
+            params.append(tenant_id)
+        totals = await pool.fetchrow(
+            f"""SELECT COUNT(*) AS total_events,
+                       COUNT(DISTINCT COALESCE(
+                           NULLIF(data->>'user_id', ''),
+                           NULLIF(data->>'anonymous_id', '')
+                       )) AS unique_users
+                FROM {self.table_name} WHERE {where}""",
+            *params,
+        )
+        top = await pool.fetch(
+            f"""SELECT data->>'event_type' AS event_type, COUNT(*) AS count
+                FROM {self.table_name}
+                WHERE {where} AND COALESCE(data->>'event_type', '') <> ''
+                GROUP BY 1 ORDER BY 2 DESC, 1 ASC
+                LIMIT ${len(params) + 1}""",
+            *params, top_n,
+        )
+        return {
+            "total_events": int(totals["total_events"]) if totals else 0,
+            "unique_users": int(totals["unique_users"]) if totals else 0,
+            "top_event_types": [
+                {"event_type": r["event_type"], "count": int(r["count"])} for r in top
+            ],
+        }
+
 
 class _SessionStore(BaseRepository):
+    """Per-session rollup of processed analytics events.
+
+    The ``sessions`` table is shared with the fraud ``SessionRepository``, so
+    analytics rows carry ``record_type = 'analytics_session'`` and every
+    analytics read filters on it.
+    """
+
     def __init__(self) -> None:
         super().__init__("sessions")
+
+    @staticmethod
+    def _session_fields(event: dict) -> dict:
+        fields = {
+            "tenant_id": event["tenant_id"],
+            "session_id": event["session_id"],
+            "last_event_type": event.get("event_type"),
+        }
+        for key in ("user_id", "anonymous_id"):
+            if event.get(key):
+                fields[key] = event[key]
+        return fields
+
+    def advance_in_memory(self, record_id: str, event: dict, now: str) -> None:
+        seen_at = event.get("occurred_at") or canonical_utc_timestamp(now)
+        existing = self._store.get(record_id)
+        if existing is None:
+            self._store[record_id] = {
+                **self._session_fields(event),
+                "record_type": ANALYTICS_SESSION_RECORD_TYPE,
+                "id": record_id,
+                "first_seen_at": seen_at,
+                "last_seen_at": seen_at,
+                "event_count": 1,
+                "created_at": now,
+                "updated_at": now,
+            }
+            return
+        existing.update(self._session_fields(event))
+        existing["first_seen_at"] = min(existing.get("first_seen_at") or seen_at, seen_at)
+        existing["last_seen_at"] = max(existing.get("last_seen_at") or seen_at, seen_at)
+        existing["event_count"] = int(existing.get("event_count") or 0) + 1
+        existing["updated_at"] = now
+
+    async def advance_sql(self, conn: Any, record_id: str, event: dict, now: str) -> None:
+        """Upsert the session row and count one newly recorded event.
+
+        Runs on the caller's connection inside the event-insert transaction.
+        ``first_seen_at`` / ``last_seen_at`` are canonical UTC strings, so
+        ``LEAST`` / ``GREATEST`` on text are chronological; the tenant guard
+        keeps an (astronomically unlikely) digest collision from crossing
+        tenants.
+        """
+        seen_at = event.get("occurred_at") or canonical_utc_timestamp(now)
+        fields = self._session_fields(event)
+        initial = {
+            **fields,
+            "record_type": ANALYTICS_SESSION_RECORD_TYPE,
+            "id": record_id,
+            "first_seen_at": seen_at,
+            "last_seen_at": seen_at,
+            "event_count": 1,
+            "created_at": now,
+            "updated_at": now,
+        }
+        await conn.execute(
+            f"""INSERT INTO {self.table_name} AS s
+                    (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                    data = s.data || $4::jsonb || jsonb_build_object(
+                        'first_seen_at', LEAST(s.data->>'first_seen_at', $5::text),
+                        'last_seen_at', GREATEST(s.data->>'last_seen_at', $5::text),
+                        'event_count', COALESCE((s.data->>'event_count')::bigint, 0) + 1,
+                        'updated_at', $6::text
+                    ),
+                    updated_at = NOW()
+                WHERE s.tenant_id = EXCLUDED.tenant_id""",
+            record_id,
+            json.dumps(initial, default=str),
+            fields["tenant_id"],
+            json.dumps(fields, default=str),
+            seen_at,
+            now,
+        )
+
+    async def count_active(self, tenant_id: Optional[str], since: datetime) -> int:
+        """Analytics sessions with activity processed since ``since``."""
+        pool = await self._ensure_pool()
+        if pool is None:
+            return sum(
+                1 for r in self._store.values()
+                if r.get("record_type") == ANALYTICS_SESSION_RECORD_TYPE
+                and (not tenant_id or r.get("tenant_id") == tenant_id)
+                and (_as_utc_datetime(r.get("updated_at")) or since) >= since
+            )
+        await self._ensure_table()
+        where = "updated_at >= $1 AND data->>'record_type' = $2"
+        params: list[Any] = [since, ANALYTICS_SESSION_RECORD_TYPE]
+        if tenant_id:
+            where += " AND tenant_id = $3"
+            params.append(tenant_id)
+        row = await pool.fetchrow(
+            f"SELECT COUNT(*) AS cnt FROM {self.table_name} WHERE {where}", *params
+        )
+        return int(row["cnt"]) if row else 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
