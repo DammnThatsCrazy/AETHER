@@ -219,6 +219,17 @@ money and does NOT build a second money type. Under
 OFF (default) is byte-for-byte the historical behavior, and the legacy NOT NULL
 money columns keep pre-WS-D semantics.
 
+The revenue projector reads the amount from the first present key in
+`money.REVENUE_AMOUNT_KEYS`, in the same order on both paths: `revenue`,
+`amount`, `total`, `value`, `amount_usd`, `total_amount`.
+
+- `revenue` is the canonical order field. It is `Order.revenue` in
+  `packages/shared/ecommerce-types.ts`, and it is the key `ConversionProjector`
+  reads first for `canonical_conversions.gross_value`.
+- The mobile SDKs emit `total`.
+- Before `revenue` was added, an `order_completed` event with `revenue: 10`
+  projected `amount = 0.0`.
+
 ### Item 8 — Derived-truth mutation governance (row 658)
 
 `shared/backend_interpretation/governance.py` implements the blueprint rule that
