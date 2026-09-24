@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:e4cc04dbd619c3799c85239bef471364dbbf9f25ce00ca520d35e2386a0e5e7c"
+  ".github/workflows/": "sha256:06a03d6e6bc9809d7d99fe2646983d67cf9745e75305e0c61c8b1c0cb4577903"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -184,6 +184,11 @@ proceeds. The pilot smoke gate switches to the existing read-only
 secret-value role. The immutable delivery path performs the same lane check
 before cloning a live task definition, closing the gap between a correct
 source plan and an old registered task definition still running in ECS.
+Delivery clones the family's latest ACTIVE revision rather than the
+service's pointer, because a wake apply re-registers the backend family and
+deregisters the revision the service still runs, and it passes only
+`register-task-definition` input fields so read-only describe fields such as
+`deregisteredAt` cannot fail the rollout.
 Before an apply, the promotion workflow parses the reviewed plan for ECR
 repositories in every shared-account profile (staging, demo, and preview) and
 fails closed when a same-name repository exists outside the reviewed state; it

@@ -1983,3 +1983,42 @@ def test_the_recorded_staging_state_is_load_bearing_in_the_apply():
     # The required-evidence loop lists it, so an artifact missing it is refused.
     required = run.split("for artefact in", 1)[1].split("do", 1)[0]
     assert "reviewed.staging-state" in required
+
+
+def test_delivery_renders_registrable_task_definition_from_deregistered_revision():
+    """A wake apply deregisters the backend revision the service still runs.
+
+    Delivery must clone the family's latest ACTIVE revision and pass only
+    register-task-definition inputs; `deregisteredAt` once failed the rollout.
+    """
+    text = (WORKFLOW_DIR / "deploy.yml").read_text(encoding="utf-8")
+    assert 'describe-task-definition --task-definition "$family" --query taskDefinition > task.json' in text
+    program = re.search(r"jq --arg image \"\$IMAGE\" --arg role \"\$role\" '(.*?)' task\.json > rendered\.json", text, re.S)
+    assert program, "delivery no longer renders the task definition with jq"
+    described = {
+        "taskDefinitionArn": "arn:aws:ecs:us-east-1:1:task-definition/AETHER-staging-backend:29",
+        "family": "AETHER-staging-backend",
+        "revision": 29,
+        "status": "INACTIVE",
+        "deregisteredAt": "2026-09-23T20:03:28Z",
+        "registeredAt": "2026-09-23T04:26:51Z",
+        "registeredBy": "arn:aws:sts::1:assumed-role/AetherStagingDeploy/GitHubActions",
+        "requiresAttributes": [{"name": "ecs.capability.secrets.asm.environment-variables"}],
+        "compatibilities": ["EC2", "FARGATE"],
+        "someFutureReadOnlyField": True,
+        "cpu": "1024",
+        "memory": "2048",
+        "networkMode": "awsvpc",
+        "requiresCompatibilities": ["FARGATE"],
+        "containerDefinitions": [
+            {"name": "backend", "image": "old@sha256:aaa", "environment": [{"name": "AETHER_ROLE", "value": "stale"}]}
+        ],
+    }
+    rendered = json.loads(subprocess.run(
+        ["jq", "--arg", "image", "new@sha256:bbb", "--arg", "role", "api", program.group(1)],
+        input=json.dumps(described), capture_output=True, text=True, check=True,
+    ).stdout)
+    assert set(rendered) == {"family", "cpu", "memory", "networkMode", "requiresCompatibilities", "containerDefinitions"}
+    container = rendered["containerDefinitions"][0]
+    assert container["image"] == "new@sha256:bbb"
+    assert container["environment"] == [{"name": "AETHER_ROLE", "value": "api"}]
