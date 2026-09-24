@@ -16,12 +16,14 @@ source_files:
   - .github/workflows/staging-lifecycle.yml
   - .github/workflows/terraform-promote.yml
   - scripts/release/bootstrap_staging_admin_key.py
+  - scripts/release/check_staging_runtime_iam.py
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
-  ".github/workflows/staging-lifecycle.yml": "sha256:ec2dacca210770b944489a9fbc6ea9f71ba1812f0a827e992f358d9e8aacad3f"
+  ".github/workflows/staging-lifecycle.yml": "sha256:8e0b9e8d99134b40e399c6e33bc798a92b277f585de4030e68f53eb1b6c902e3"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:ca2a52de871d72661439c932674799164c893d893be54a3fffaf40e377a855a1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
+  "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/backend/repositories/repos.py": "sha256:fbf464a1822f49d054e182223a14d0e6f7e36961dd16de95f41d0cf5eda174e3"
   "services/backend/services/auth/routes.py": "sha256:716020d7f01cd1309b397cb71acd3667f30b78bd7e2eebf39dd6cd90643425f5"
 ---
@@ -62,6 +64,19 @@ key or request. A token-protected status read prevents overwriting an already
 claimed credential.
 
 ## Automated lifecycle
+
+Before a staging rehearsal dispatches a wake plan, the lifecycle workflow
+validates the exact release run and manifest, requires its commit and lane to
+match the selected main/profile inputs, verifies every packaged artifact
+checksum, and checks the lane's explicit identity evidence. It also validates
+the delivery and rehearsal credential contracts, confirms the configured
+`AetherStagingDeploy` principal and ECR pull policy, and checks the live ECS
+task-definition/secret-mount contract. It verifies the active staging
+DynamoDB cache table and simulates the live application task-role permissions
+against that exact table before planning a wake. The pilot lane additionally
+proves that the GitHub credential can create and remove the disposable secret
+used by the post-readiness admin bootstrap. Any failed gate stops before
+Terraform wake planning; none of these checks reads secret values.
 
 Before any staging apply, the canonical `terraform-promote.yml` workflow
 preflights the AWS one-time bootstrap secret and GitHub repository-secret

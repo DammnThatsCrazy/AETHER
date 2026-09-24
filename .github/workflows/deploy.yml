@@ -24,11 +24,11 @@ on:
         default: deploy
         required: false
       source_run_id:
-        description: Successful staging build run containing the release manifest (required for production)
+        description: Exact immutable release build to deploy (required for staging rehearsals and production)
         type: string
         required: false
       release_manifest_checksum:
-        description: Approved sha256 checksum of release.json (required for production)
+        description: Approved sha256 checksum of release.json (required with source_run_id)
         type: string
         required: false
 
@@ -149,16 +149,21 @@ jobs:
 
   build:
     name: Build immutable release once
-    needs: [require-ci-green, delivery-armed]
+    needs: [require-ci-green, delivery-armed, acquire-release]
     # NOT ARMED WITHOUT THE DEPLOY ROLE. The build pushes images to ECR, so
     # without the role there is nowhere to push and nothing to deploy; the job
-    # is skipped and delivery-not-armed reports it loudly. The moment the role
-    # is wired, the build runs exactly as before. The armed state is read from
-    # delivery-armed's output, because the secrets context is not available in
-    # a job `if:` condition.
+    # is skipped and delivery-not-armed reports it loudly. When an exact source
+    # run is supplied, acquire-release owns that already-built artifact and
+    # this job is skipped so the pipeline cannot silently build a different
+    # image. The armed state is read from delivery-armed's output because the
+    # secrets context is not available in a job `if:` condition.
     if: >-
+      always() && !cancelled()
+      &&
       (github.event_name == 'push' || inputs.environment == 'staging')
       && needs.delivery-armed.outputs.armed == 'true'
+      && needs.require-ci-green.result == 'success'
+      && needs.acquire-release.result == 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -525,7 +530,9 @@ jobs:
 
   acquire-release:
     name: Acquire approved staged release
-    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && (inputs.environment == 'production' || inputs.source_run_id != '')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -542,24 +549,45 @@ jobs:
           test -n "$SOURCE_RUN_ID" || { echo '::error::source_run_id is required'; exit 1; }
           test -n "$RELEASE_MANIFEST_CHECKSUM" || { echo '::error::release_manifest_checksum is required'; exit 1; }
       - name: Verify source run identity before trusting its artifacts
-        # The source run must be a successful run of THIS workflow file whose
-        # staging deploy job completed; otherwise its artifacts are untrusted.
+        # Staging may acquire only a successful immutable build for the exact
+        # current main SHA; production still requires a previously successful
+        # staging deployment. In both cases the source must be this workflow.
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          TARGET_ENV: ${{ inputs.environment }}
         run: |
           set -euo pipefail
           run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}")
           run_path=$(jq -r '.path' <<<"$run_json")
           run_conclusion=$(jq -r '.conclusion' <<<"$run_json")
+          run_head_sha=$(jq -r '.head_sha' <<<"$run_json")
+          run_head_branch=$(jq -r '.head_branch' <<<"$run_json")
           test "$run_path" = '.github/workflows/deploy.yml' || {
             echo "::error::source run ${SOURCE_RUN_ID} belongs to ${run_path}, not this workflow"; exit 1; }
           test "$run_conclusion" = 'success' || {
             echo "::error::source run ${SOURCE_RUN_ID} concluded ${run_conclusion}, not success"; exit 1; }
           jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100")
-          staging_ok=$(jq -r '[.jobs[] | select((.name | startswith("Deploy exact release (staging)")) and .conclusion == "success")] | length' <<<"$jobs_json")
-          test "$staging_ok" -ge 1 || {
-            echo "::error::source run ${SOURCE_RUN_ID} has no successful staging deploy job"; exit 1; }
+          if [ "$TARGET_ENV" = staging ]; then
+            test "$run_head_branch" = main || {
+              echo "::error::staging source run ${SOURCE_RUN_ID} is not from main"; exit 1; }
+            test "$run_head_sha" = "$GITHUB_SHA" || {
+              echo "::error::staging source run ${SOURCE_RUN_ID} head ${run_head_sha} is not this exact main SHA ${GITHUB_SHA}"; exit 1; }
+            build_ok=$(jq -r '[.jobs[] | select(.name == "Build immutable release once" and .conclusion == "success")] | length' <<<"$jobs_json")
+            test "$build_ok" -ge 1 || {
+              echo "::error::staging source run ${SOURCE_RUN_ID} has no successful immutable build job"; exit 1; }
+          else
+            staging_ok=$(jq -r '[.jobs[] | select(.name == "Deploy exact release" and .conclusion == "success")] | length' <<<"$jobs_json")
+            test "$staging_ok" -ge 1 || {
+              echo "::error::production source run ${SOURCE_RUN_ID} has no successful staging deploy job"; exit 1; }
+          fi
+      - uses: actions/download-artifact@v4
+        if: inputs.environment == 'production'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          name: deployment-evidence-${{ inputs.source_run_id }}
+          path: source-staging-evidence
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
@@ -569,9 +597,15 @@ jobs:
       - name: Verify approved manifest and every artifact
         env:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          TARGET_ENV: ${{ inputs.environment }}
         run: |
           set -euo pipefail
           SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
+          SOURCE_RUN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.head_sha')
+          test "$SHA" = "$SOURCE_RUN_SHA" || {
+            echo "::error::release manifest commit ${SHA} does not match source run head ${SOURCE_RUN_SHA}"; exit 1; }
           # The approved candidate may be older than the dispatch revision.
           # Verify it against the lockfiles from the source run, not whatever
           # happens to be current on the operator's checkout.
@@ -592,6 +626,21 @@ jobs:
               a=m['artifacts'][key]; actual='sha256:'+hashlib.sha256(pathlib.Path(a['file']).read_bytes()).hexdigest()
               if actual != a['digest']: raise SystemExit(f'{key} artifact checksum mismatch')
           PY
+          if [ "$TARGET_ENV" = production ]; then
+            evidence=source-staging-evidence/deployment-evidence.txt
+            test -s "$evidence" || {
+              echo '::error::production promotion requires deployment evidence from the staging source run'; exit 1; }
+            digest=$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")
+            for provenance in \
+              'environment=staging' \
+              'deployment_lane=full' \
+              "commit_sha=${SHA}" \
+              "release_manifest_checksum=${RELEASE_MANIFEST_CHECKSUM}" \
+              "backend_image_digest=${digest}"; do
+              grep -Fxq "$provenance" "$evidence" || {
+                echo "::error::staging source evidence does not prove ${provenance}"; exit 1; }
+            done
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: approved-release
@@ -607,7 +656,11 @@ jobs:
           retention-days: 1
 
   deploy:
-    name: Deploy exact release (${{ github.event_name == 'push' && 'staging' || inputs.environment }})
+    # Keep this identity stable: downstream promotion checks consume the
+    # Actions jobs API, which can return an unevaluated expression for a
+    # skipped conditional job. The target environment is already explicit in
+    # the run inputs and deployment evidence.
+    name: Deploy exact release
     needs: [build, acquire-release, delivery-armed]
     # NOT ARMED WITHOUT THE DEPLOY ROLE: skip the deploy when the role is
     # absent, and do not let a skipped build (also armed-gated) count as a
@@ -705,6 +758,22 @@ jobs:
           if expected == "pilot" and manifest.get("profile") != "staging":
               sys.exit("::error::pilot delivery must carry profile=staging")
           print(f"release lane verified: {actual}")
+      - name: Initialize exact deployment provenance evidence
+        env:
+          TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+          DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
+        run: |
+          set -euo pipefail
+          CHECKSUM=$(cat release.json.sha256)
+          SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
+          DIGEST=$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")
+          {
+            printf 'environment=%s\n' "$TARGET_ENV"
+            printf 'deployment_lane=%s\n' "$DEPLOYMENT_LANE"
+            printf 'commit_sha=%s\n' "$SHA"
+            printf 'release_manifest_checksum=%s\n' "$CHECKSUM"
+            printf 'backend_image_digest=%s\n' "$DIGEST"
+          } > deployment-evidence.txt
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -898,11 +967,22 @@ jobs:
           if [ "$DEPLOYMENT_LANE" = full ]; then
             apps+=(kyber)
           fi
+          assert_awake_lease() {
+            if [ "$TARGET_ENV" = staging ]; then
+              local lease_json
+              lease_json="$(aws ssm get-parameter --name /aether/staging/lifecycle/awake-until \
+                --query 'Parameter.Value' --output text)"
+              STAGING_AWAKE_LEASE_JSON="$lease_json" \
+                python scripts/release/check_staging_awake_lease.py
+            fi
+          }
           for app in "${apps[@]}"; do
             bucket_var=$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')
             bucket=$(aws ssm get-parameter --name "/aether/${TARGET_ENV}/${bucket_var}" --query Parameter.Value --output text)
             mkdir -p "dist-$app"; tar -xzf "$app-spa.tar.gz" -C "dist-$app"
+            assert_awake_lease
             aws s3 sync "dist-$app" "s3://$bucket" --delete --cache-control 'public,max-age=31536000,immutable' --exclude index.html
+            assert_awake_lease
             aws s3 cp "dist-$app/index.html" "s3://$bucket/index.html" --cache-control 'no-cache,no-store,must-revalidate'
           done
       - uses: actions/upload-artifact@v4

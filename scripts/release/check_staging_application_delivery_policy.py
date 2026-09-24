@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the supplemental IAM contract used by staging deploy.yml."""
+"""Validate staging delivery grants and the pre-wake cache-check permissions."""
 
 from __future__ import annotations
 
@@ -68,6 +68,18 @@ DOCKER_PUBLISH_ECR_ACTIONS = {
     "ecr:InitiateLayerUpload",
     "ecr:PutImage",
     "ecr:UploadLayerPart",
+}
+
+# staging-lifecycle.yml invokes this metadata-only cache checker under the
+# staging delivery role before any wake plan. These calls must remain covered
+# by the reviewed Terraform/apply role contract; they do not widen the
+# supplemental deployment-only policy.
+RUNTIME_PREFLIGHT_ACTIONS = {
+    "sts:GetCallerIdentity",
+    "ecs:DescribeServices",
+    "ecs:DescribeTaskDefinition",
+    "dynamodb:DescribeTable",
+    "iam:SimulatePrincipalPolicy",
 }
 
 
@@ -174,9 +186,13 @@ def main(argv: list[str] | None = None) -> int:
     base_actions = {
         action for statement in apply_document.get("statements", []) for action in statement.get("actions", [])
     }
-    missing_workflow = sorted(workflow_actions(args.workflow) - (base_actions | actions))
+    required_runtime = workflow_actions(args.workflow) | RUNTIME_PREFLIGHT_ACTIONS
+    missing_workflow = sorted(required_runtime - (base_actions | actions))
     if missing_workflow:
-        raise SystemExit("staging deploy workflow actions are not covered by either IAM contract: " + ", ".join(missing_workflow))
+        raise SystemExit(
+            "staging delivery or pre-wake cache-check actions are not covered by either IAM contract: "
+            + ", ".join(missing_workflow)
+        )
 
     if args.render_output:
         if not args.account_id:

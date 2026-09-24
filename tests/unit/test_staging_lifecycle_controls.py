@@ -339,12 +339,18 @@ def test_every_terraform_mutation_is_a_dispatch_of_the_reviewed_workflow():
                     assert "staging_secrets_kms_key_arn" in step["run"]
                     assert "confirm_staging_import=IMPORT-STAGING" in step["run"]
                     continue
-            assert '"$PROMOTE_WORKFLOW"' in invocation, (
-                f"{job} dispatches something other than the reviewed workflow: {invocation}"
-            )
-            assert '-f profile="$STAGING_PROFILE"' in invocation, (
-                f"{job} dispatches without pinning the staging profile"
-            )
+                if "deploy.yml" in invocation:
+                    assert job == "wake-apply"
+                    assert step.get("id") == "delivery"
+                    assert "-f delivery_mode=deploy" in invocation
+                    assert '-f source_run_id="$RELEASE_RUN_ID"' in invocation
+                    continue
+                assert '"$PROMOTE_WORKFLOW"' in invocation, (
+                    f"{job} dispatches something other than the reviewed workflow: {invocation}"
+                )
+                assert '-f profile="$STAGING_PROFILE"' in invocation, (
+                    f"{job} dispatches without pinning the staging profile"
+                )
     assert doc["env"]["PROMOTE_WORKFLOW"] == PROMOTE_WORKFLOW
     assert doc["env"]["PROMOTE_WORKFLOW_PATH"] == PROMOTE_PATH
 
@@ -490,6 +496,44 @@ def test_the_wake_plan_pins_the_approved_release_digest():
     )
 
 
+def test_rehearsal_release_must_match_this_main_sha_before_terraform_dispatch():
+    doc = _workflow_yaml(LIFECYCLE)
+    steps = _steps(doc, "wake-plan")
+    resolve_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Resolve the backend image digest from the approved release manifest"
+    )
+    resolve = steps[resolve_index]
+    script = resolve["run"]
+
+    assert resolve["env"]["REHEARSE"] == "${{ needs.select-profile.outputs.rehearse }}"
+    assert resolve["env"]["WORKFLOW_SHA"] == "${{ github.sha }}"
+    assert resolve["env"]["WORKFLOW_BRANCH"] == "${{ github.ref_name }}"
+    assert resolve["env"]["DEPLOYMENT_LANE"] == "${{ needs.select-profile.outputs.deployment_lane }}"
+    assert 'test "$WORKFLOW_BRANCH" = main' in script
+    assert 'test "$INTENDED_RELEASE_SHA" = "$WORKFLOW_SHA"' in script
+    assert 'test -n "$RELEASE_RUN_ID"' in script
+    assert 'test -n "$RELEASE_MANIFEST_CHECKSUM"' in script
+    assert 'run_head_branch="$(jq -r \'.head_branch\'' in script
+    assert 'test "$run_head_branch" = main && test "$run_head_sha" = "$WORKFLOW_SHA"' in script
+    assert 'manifest.get("profile") != "staging"' in script
+    assert 'manifest.get("deployment_lane", "full")' in script
+    assert 'actual_lane != expected_lane' in script
+    assert 'for key in ("aether_spa", "kyber_spa", "migration_package", "configuration")' in script
+    assert 'actual != artifact.get("digest")' in script
+    assert 'contract.get("deferred") is not True' in script
+
+    first_infrastructure_dispatch = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("run") and 'gh workflow run "$PROMOTE_WORKFLOW"' in step["run"]
+    )
+    assert resolve_index < first_infrastructure_dispatch, (
+        "the exact immutable release must be validated before any Terraform plan/apply dispatch"
+    )
+
+
 # ---------------------------------------------------------------------------
 # The pinned awake / asleep shape
 # ---------------------------------------------------------------------------
@@ -565,7 +609,7 @@ def test_full_rehearsal_runs_every_declared_phase():
     rehearsal = " | ".join(s.get("name", "") for s in _steps(doc, "rehearse")).lower()
     for fragment in (
         "immutable application artifact",
-        "migrations and verify the resulting revision",
+        "verify delivered migration and resulting database revision",
         "readiness and frontend availability",
         "tenant isolation",
         "capability checks",
@@ -582,7 +626,10 @@ def test_full_rehearsal_runs_every_declared_phase():
     # The capability sweep must cover each named surface.
     for surface in ("auth", "consent", "ingest", "queue", "graph", "analytics", "ml"):
         assert surface in script.lower(), f"the rehearsal never touches {surface}"
-    assert "RUN_MIGRATIONS" in script, "migrations are not run as a one-off task"
+    assert "deployment-evidence" in script, "canonical delivery evidence is not consumed"
+    assert "RUN_MIGRATIONS" not in script, "the rehearsal must not repeat canonical delivery migrations"
+    deploy = (WORKFLOW_DIR / "deploy.yml").read_text(encoding="utf-8")
+    assert '"alembic","upgrade","head"' in deploy.replace('\\"', '"')
     assert "/v1/ready" in script, "the migration revision is never verified"
     assert 'call("POST", "/v1/batch", body=' in script, (
         "the rehearsal does not exercise the canonical SDK batch contract"
@@ -659,18 +706,21 @@ def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tena
     assert "intended_release_sha" in _referenced_text(doc)
     assert ".head_sha" in script or ".head_sha" in _job_script(doc, "wake-plan")
     names = [s.get("name") for s in _steps(doc, "rehearse")]
-    assert names.index("Revalidate awake lease before static publication") < names.index(
-        "Publish and verify the approved static SPA artifacts"
+    assert names.index("Verify the exact immutable application artifact is what staging runs") < names.index(
+        "Verify canonical delivery published the approved static SPA artifacts"
     )
     assert names.index("Verify the exact immutable application artifact is what staging runs") < names.index(
-        "Revalidate awake lease before static publication"
-    ) < names.index("Publish and verify the approved static SPA artifacts")
-    assert names.index("Publish and verify the approved static SPA artifacts") < names.index(
-        "Run migrations and verify the resulting revision"
-    ) < names.index("Backend readiness and frontend availability")
+        "Verify canonical delivery published the approved static SPA artifacts"
+    ) < names.index("Verify delivered migration and resulting database revision")
+    assert names.index("Verify delivered migration and resulting database revision") < names.index(
+        "Backend readiness and frontend availability"
+    ) < names.index("Revalidate awake lease before rehearsal admin mutation")
     assert names.index("Backend readiness and frontend availability") < names.index(
-        "Verify or bootstrap the durable admin credential after readiness"
-    ) < names.index("Bootstrap run-scoped rehearsal tenants and API keys")
+        "Revalidate awake lease before rehearsal admin mutation"
+    ) < names.index("Verify or bootstrap the durable admin credential after readiness")
+    assert names.index("Revalidate awake lease before run-scoped tenant mutations") < names.index(
+        "Bootstrap run-scoped rehearsal tenants and API keys"
+    ) < names.index("Create the isolated rehearsal tenant and verify tenant isolation")
     admin_step = next(
         s for s in _steps(doc, "rehearse")
         if s.get("name") == "Verify or bootstrap the durable admin credential after readiness"
@@ -685,8 +735,32 @@ def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tena
     assert "secrets.STAGING_ADMIN_API_KEY" in admin_step["env"]["EXISTING_STAGING_ADMIN_API_KEY"]
     assert "::add-mask::${bootstrap_token}" in admin_step["run"]
     assert admin_step.get("continue-on-error", False) is not True
-    assert "Publish and verify the approved static SPA artifacts" in names
+    assert "Verify canonical delivery published the approved static SPA artifacts" in names
     assert "aws s3 sync" in script
+    static_step = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Verify canonical delivery published the approved static SPA artifacts"
+    )
+    assert 'aws s3 sync "s3://${bucket}" "$verify" --delete' in static_step["run"]
+    assert 'aws s3 sync "$dist" "s3://${bucket}"' not in static_step["run"]
+    assert "aws s3 cp" not in static_step["run"]
+    migration_step = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Verify delivered migration and resulting database revision"
+    )
+    assert "aws ecs run-task" not in migration_step["run"]
+    assert "RUN_MIGRATIONS" not in migration_step["run"]
+    assert "deployment-evidence-${{ needs.wake-apply.outputs.delivery_run_id }}" in _referenced_text(doc)
+    delivery_step = next(
+        s for s in _steps(doc, "wake-apply")
+        if s.get("id") == "delivery"
+    )
+    assert "gh workflow run deploy.yml" in delivery_step["run"]
+    assert "-f delivery_mode=deploy" in delivery_step["run"]
+    assert '-f source_run_id="$RELEASE_RUN_ID"' in delivery_step["run"]
+    assert '-f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM"' in delivery_step["run"]
+    assert "delivery_run_id" in (doc["jobs"]["wake-apply"].get("outputs") or {})
+    assert (doc["jobs"]["wake-apply"].get("permissions") or {}).get("actions") == "write"
     cleanup = next(
         s for s in _steps(doc, "rehearse")
         if s.get("name") == "Delete or expire the rehearsal tenant"
@@ -734,7 +808,7 @@ def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
         step for step in preflight["steps"]
         if step.get("name") == "Require a durable admin key for full-lane rehearsal"
     )
-    assert full_key_preflight["if"] == "inputs.deployment_lane == 'full'"
+    assert full_key_preflight["if"] == "needs.select-profile.outputs.deployment_lane == 'full'"
     wake_apply_needs = doc["jobs"]["wake-apply"]["needs"]
     assert "preflight-rehearsal-inputs" in wake_apply_needs
     assert "needs.preflight-rehearsal-inputs.result == 'success'" in doc["jobs"]["wake-apply"]["if"]
@@ -766,6 +840,41 @@ def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
     wake_script = _job_script(doc, "wake-apply")
     assert "gh run download" in wake_script
     assert "reviewed.api-host" in wake_script
+
+
+def test_live_cache_iam_is_checked_before_any_staging_wake():
+    doc = _workflow_yaml(LIFECYCLE)
+    workflow = _workflow(LIFECYCLE)
+    preflight = doc["jobs"]["preflight-rehearsal-inputs"]
+    steps = preflight["steps"]
+    assume_role_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Configure the staging delivery role before wake planning"
+    )
+    cache_gate_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "check_staging_runtime_iam.py" in step.get("run", "")
+    )
+    cache_gate = steps[cache_gate_index]
+
+    assert cache_gate_index > assume_role_index
+    assert "--live-ecs-cluster AETHER-staging" in cache_gate["run"]
+    assert "--expected-table-name AETHER-staging-cache" in cache_gate["run"]
+    assert "--region us-east-1" in cache_gate["run"]
+    assert "preflight-rehearsal-inputs" in doc["jobs"]["wake-apply"]["needs"]
+    assert "needs.preflight-rehearsal-inputs.result == 'success'" in doc["jobs"]["wake-apply"]["if"]
+    assert workflow.index("check_staging_runtime_iam.py") < workflow.index("name: Credentialed wake plan")
+
+    delivery_credentials = next(
+        step for step in steps
+        if step.get("name") == "Validate runtime, delivery policy, and all delivery credentials before wake planning"
+    )
+    for name in ("KYBER_GOOGLE_CLIENT_ID", "KYBER_GOOGLE_CLIENT_SECRET"):
+        expression = delivery_credentials["env"][name]
+        assert "env.DEPLOYMENT_LANE == 'pilot' && 'deferred'" in expression
+        assert f"secrets.{name}" in expression
 
 
 def test_promotion_publishes_certificate_covered_api_host_and_raw_alb_evidence():

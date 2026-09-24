@@ -285,6 +285,68 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
     # Explicit markers make the intentional boundary reviewable.  The pilot
     # workflow must not activate any Kyber/GCP gate just because a full workflow
     # contains one elsewhere in the repository.
+    try:
+        lifecycle_doc = yaml.safe_load(lifecycle_text) or {}
+        delivery_doc = yaml.safe_load(_read(ROOT / ".github/workflows/deploy.yml")) or {}
+    except yaml.YAMLError as exc:
+        errors.append(f"canonical staging delivery/lifecycle workflow is not valid YAML: {exc}")
+        lifecycle_doc = {}
+        delivery_doc = {}
+
+    wake_apply = ((lifecycle_doc.get("jobs") or {}).get("wake-apply") or {})
+    delivery_step = next(
+        (
+            step
+            for step in wake_apply.get("steps") or []
+            if step.get("id") == "delivery"
+        ),
+        {},
+    )
+    delivery_run = str(delivery_step.get("run") or "")
+    for required in (
+        "gh workflow run deploy.yml",
+        "-f delivery_mode=deploy",
+        '-f source_run_id="$RELEASE_RUN_ID"',
+        '-f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM"',
+        "delivery_run_id=%s",
+        "acquire_ok",
+        "build_skipped",
+        "deploy_ok",
+        'test "$run_sha" = "$INTENDED_RELEASE_SHA"',
+    ):
+        if required not in delivery_run:
+            errors.append(f"pilot lifecycle must hand the approved artifact to canonical delivery: missing {required}")
+
+    rehearsal_steps = ((lifecycle_doc.get("jobs") or {}).get("rehearse") or {}).get("steps") or []
+    evidence_download = next(
+        (
+            step
+            for step in rehearsal_steps
+            if step.get("with", {}).get("name")
+            == "deployment-evidence-${{ needs.wake-apply.outputs.delivery_run_id }}"
+        ),
+        {},
+    )
+    if evidence_download.get("with", {}).get("run-id") != "${{ needs.wake-apply.outputs.delivery_run_id }}":
+        errors.append("pilot rehearsal must consume deployment evidence from its exact canonical delivery run")
+    migration_step = next(
+        (
+            step
+            for step in rehearsal_steps
+            if step.get("name") == "Verify delivered migration and resulting database revision"
+        ),
+        {},
+    )
+    if "aws ecs run-task" in str(migration_step.get("run") or ""):
+        errors.append("pilot rehearsal must not run a second migration task after canonical delivery")
+    build_job = ((delivery_doc.get("jobs") or {}).get("build") or {})
+    if "acquire-release" not in (build_job.get("needs") or []):
+        errors.append("canonical delivery build must be gated by immutable source-artifact acquisition")
+
+    acquire = ((delivery_doc.get("jobs") or {}).get("acquire-release") or {})
+    if "inputs.source_run_id != ''" not in str(acquire.get("if") or ""):
+        errors.append("canonical delivery must acquire the exact release supplied to a staging rehearsal")
+
     if "PILOT_DEFERRED_GATES" not in workflow_text:
         errors.append("pilot path must declare PILOT_DEFERRED_GATES explicitly")
     for forbidden in (

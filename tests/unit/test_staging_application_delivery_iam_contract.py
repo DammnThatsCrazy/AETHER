@@ -5,6 +5,7 @@ import yaml
 from scripts.release.check_staging_application_delivery_policy import (
     DOCKER_PULL_ECR_ACTIONS,
     EXPECTED,
+    RUNTIME_PREFLIGHT_ACTIONS,
     main,
     render_policy_document,
     workflow_actions,
@@ -44,6 +45,15 @@ def test_delivery_manifest_scopes_runtime_tasks_and_static_assets() -> None:
 def test_delivery_checker_inventories_docker_pull_ecr_operations() -> None:
     workflow = ROOT / ".github/workflows/deploy.yml"
     assert DOCKER_PULL_ECR_ACTIONS <= workflow_actions(workflow)
+
+
+def test_runtime_preflight_uses_only_grants_already_in_the_reviewed_apply_contract() -> None:
+    apply_manifest = ROOT / "config/staging_apply_iam_policy.yaml"
+    document = yaml.safe_load(apply_manifest.read_text(encoding="utf-8"))
+    actions = {action for statement in document["statements"] for action in statement["actions"]}
+
+    assert RUNTIME_PREFLIGHT_ACTIONS <= actions
+    assert main(["--manifest", str(MANIFEST), "--apply-manifest", str(apply_manifest)]) == 0
 
 
 def test_delivery_manifest_renders_to_an_aws_policy_document() -> None:

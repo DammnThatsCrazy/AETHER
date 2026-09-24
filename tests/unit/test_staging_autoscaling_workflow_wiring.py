@@ -121,11 +121,11 @@ def test_lifecycle_preflights_before_wake_lease_and_full_rehearsal_mutation():
         rehearsal_steps,
         "Preflight staging autoscaling target ownership tags before rehearsal",
     )
-    publication_index, _ = _named_step(
-        rehearsal_steps, "Publish and verify the approved static SPA artifacts"
+    publication_index, publication = _named_step(
+        rehearsal_steps, "Verify canonical delivery published the approved static SPA artifacts"
     )
     migration_index, _ = _named_step(
-        rehearsal_steps, "Run migrations and verify the resulting revision"
+        rehearsal_steps, "Verify delivered migration and resulting database revision"
     )
     assert TAG_RECONCILER in rehearsal_preflight["run"]
     assert "--apply-missing-tags" not in rehearsal_preflight["run"]
@@ -133,6 +133,8 @@ def test_lifecycle_preflights_before_wake_lease_and_full_rehearsal_mutation():
     assert "boto3" in rehearsal_dependencies["run"]
     assert rehearsal_dependencies_index < rehearsal_preflight_index
     assert rehearsal_preflight_index < publication_index < migration_index
+    assert 'aws s3 sync "s3://${bucket}" "$verify" --delete' in publication["run"]
+    assert 'aws s3 sync "$dist" "s3://${bucket}"' not in publication["run"]
 
 
 def test_ttl_preflight_failure_cannot_block_emergency_scale_to_zero():
