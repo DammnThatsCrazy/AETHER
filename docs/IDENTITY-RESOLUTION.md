@@ -241,7 +241,7 @@ Production routes are served under `/v1/identity/` by `services/backend/services
 | `/v1/identity/reconciliation` | GET | Repository↔graph identity-edge drift for the tenant (`missing_in_graph` / `missing_in_repo`); `?refresh=true` forces a fresh check, else returns the latest persisted run (`read`) |
 | `/v1/admin/kyber/identity/reconciliation` | POST | Kyber-operator trigger to run edge reconciliation for a given `tenant_id` (`require_kyber_operator`) |
 | `/v1/identity/recompute` | POST | Recompute identity from stored signals |
-| `/v1/identity/health` | GET | Resolver health (DB ping, total entities, open conflicts, queue depth) |
+| `/v1/identity/health` | GET | Resolver health in the standard envelope (`IdentityHealthEnvelope`). `data.status` is `healthy` when the repository answers and the tenant counts read back, otherwise `degraded`. The counts are total entities/aliases/clusters, open conflicts and recent merges/splits. |
 | `/v1/identity/suppress` | POST | Suppress an identifier hash — revokes matching aliases + blocks future resolution (`write` permission) |
 | `/v1/identity/suppress/{suppression_id}` | DELETE | Revoke a suppression rule (`write` permission) |
 | `/v1/identity/suppressions` | GET | List active suppression rules for tenant |

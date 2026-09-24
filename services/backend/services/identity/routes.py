@@ -62,6 +62,7 @@ from .schemas import (
     IdentityFragmentSplitRequest,
     IdentityFragmentSplitResponse,
     IdentityGraphResponse,
+    IdentityHealthEnvelope,
     IdentityHealthResponse,
     IdentityMergeRequest,
     IdentityMergeResponse,
@@ -540,9 +541,14 @@ async def list_suppressions(
     return APIResponse(data={"suppressions": rules, "total": len(rules)}).to_dict()
 
 
-@router.get("/health", response_model=IdentityHealthResponse)
+@router.get("/health", response_model=IdentityHealthEnvelope)
 async def identity_health(request: Request) -> dict:
-    """Identity resolver health check — returns operational metrics."""
+    """Identity resolver health check — returns operational metrics.
+
+    ``data.status`` is ``healthy`` when the repository answers the ping and the
+    tenant's counts read back, ``degraded`` otherwise; the response is the
+    standard ``APIResponse`` envelope (``IdentityHealthEnvelope``).
+    """
     tenant = request.state.tenant
     repo = _get_resolution_repo()
 
