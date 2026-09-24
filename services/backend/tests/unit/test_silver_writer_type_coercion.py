@@ -19,6 +19,7 @@ these tables use, so the tests fail exactly the way Postgres did.
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -97,7 +98,7 @@ _SCHEMAS: dict[str, dict[str, str]] = {
 
 _ACCEPTS: dict[str, tuple[type, ...]] = {
     "text": (str,),
-    "uuid": (str,),
+    "uuid": (uuid.UUID,),  # validated before binding; a non-UUID id fails naming the column
     "jsonb": (str,),  # no jsonb codec registered: asyncpg wants JSON text
     "timestamp with time zone": (datetime,),
     "numeric": (Decimal, str, int, float),  # asyncpg parses numeric text
@@ -264,7 +265,7 @@ async def test_unrepresentable_value_fails_loudly_and_names_the_column(strict_po
         ("text", ["x", "y"], '["x", "y"]'),
         ("text", 7, "7"),
         ("uuid", "3f1e1c1a-6b8e-4c1e-9f3e-2d8a1b7c9e01",
-         "3f1e1c1a-6b8e-4c1e-9f3e-2d8a1b7c9e01"),
+         uuid.UUID("3f1e1c1a-6b8e-4c1e-9f3e-2d8a1b7c9e01")),
         ("ARRAY", ["a"], ["a"]),
         ("jsonb", None, None),
     ],
@@ -280,6 +281,7 @@ def test_coerce_value_matches_column_type(data_type, value, expected):
         ("integer", "1.5"),
         ("numeric", True),
         ("boolean", "maybe"),
+        ("uuid", "msg_not-a-uuid"),
     ],
 )
 def test_coerce_value_rejects_unrepresentable_values(data_type, value):

@@ -25,13 +25,16 @@ from services.measurement.repositories.activity_repo import ActivityRepository
 pytestmark = pytest.mark.asyncio
 
 
-async def _seed_activity(tenant_id: str, profile_id: str, status: str) -> None:
+async def _seed_activity(
+    tenant_id: str, profile_id: str | None, status: str, anonymous_id: str | None = None
+) -> None:
     activity_id = str(uuid4())
     await ActivityRepository().upsert({
         "activity_id": activity_id,
         "tenant_id": tenant_id,
         "idempotency_key": f"erasure-activity-{activity_id}",
         "profile_id": profile_id,
+        "anonymous_id": anonymous_id,
         "activity_family": "web2",
         "activity_type": "page_view",
         "activity_status": status,
@@ -53,3 +56,19 @@ async def test_erasure_tombstones_only_the_subjects_activity():
     assert not any(e.startswith("activity_tombstone") for e in result["errors"])
     assert await repo.list_by_profile(tenant_id, subject) == []
     assert len(await repo.list_by_profile(tenant_id, bystander)) == 2
+
+
+async def test_erasure_tombstones_activity_under_the_requested_anonymous_id():
+    tenant_id = f"tenant-{uuid4().hex[:8]}"
+    subject, anon, other_anon = f"alice-{uuid4().hex[:8]}", f"anon-{uuid4().hex[:8]}", f"anon-{uuid4().hex[:8]}"
+    await _seed_activity(tenant_id, subject, "observed")
+    await _seed_activity(tenant_id, None, "observed", anonymous_id=anon)
+    await _seed_activity(tenant_id, None, "observed", anonymous_id=other_anon)
+
+    result = await MeasurementPrivacyHandler().handle_erasure(tenant_id, subject, anon)
+
+    repo = ActivityRepository()
+    assert result["activities_tombstoned"] == 2
+    assert not any(e.startswith("anonymous_tombstone") for e in result["errors"])
+    assert await repo.list_by_profile(tenant_id, anon, identity_type="anonymous") == []
+    assert len(await repo.list_by_profile(tenant_id, other_anon, identity_type="anonymous")) == 1

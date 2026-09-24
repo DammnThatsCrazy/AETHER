@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:434b9436d3f9e0f3592c663aa846daccb4251d10f05e1714f0e2f40365c6d6c4"
+  "services/backend/services/": "sha256:a198e60dd31fe28a9da5f2177504d6aeab2a76e756e18e6f732b0ae14b8ead70"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1523,10 +1523,16 @@ A `POST /v1/consent/dsr` erasure (`request_type: "erasure"`, `user_id`, and
 optionally the subject's SDK `anonymous_id`) removes the subject's events and
 analytics session rollups in the requesting tenant through the durable
 `consent.erasure` job. Its `analytics_events` propagation step reports the
-erased row counts. The same job tombstones the subject's measurement
-touchpoints, conversions and canonical activity (`activities_tombstoned` in the
-measurement receipt) before rebuilding their journeys, so the rebuilt journey
-no longer contains the erased activity.
+erased row counts; if dropping the query cache fails after the rows are
+deleted, the retry keeps those counts instead of reporting zero. The same job
+tombstones the subject's measurement touchpoints, conversions and canonical
+activity, including anything recorded only under the request's `anonymous_id`
+(`activities_tombstoned` counts toward the measurement receipt), before
+rebuilding their journeys, so the rebuilt journey no longer contains the
+erased activity. The analytics projector skips any queued or redelivered event
+that an erasure submitted at or after its receipt covers, so broker retries
+cannot write erased events back; activity received after the request is
+recorded normally.
 
 ---
 

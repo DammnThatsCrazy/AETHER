@@ -1471,7 +1471,7 @@ jobs:
             -f environment=staging \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f delivery_mode=deploy \
-            -f rehearsal_smoke=true \
+            -f rehearsal_run_id="$GITHUB_RUN_ID" \
             -f source_run_id="$RELEASE_RUN_ID" \
             -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" 2>&1)"
           printf '%s\n' "$dispatch_output"

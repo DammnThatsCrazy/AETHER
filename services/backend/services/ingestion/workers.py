@@ -360,8 +360,9 @@ async def analytics_event_recorder(event: Event) -> None:
     rollup advances only when the event row is new (same transaction).
     Relay (V2) and ingestion-replay deliveries are recorded too; a replayed
     event that is already present is a no-op. Consent was enforced before
-    the event reached SDK_EVENTS_VALIDATED. Failures raise so the consumer
-    retries / dead-letters the message.
+    the event reached SDK_EVENTS_VALIDATED; an event an erasure DSR already
+    covers is skipped (``services.consent.erasure_fence``). Failures raise so
+    the consumer retries / dead-letters the message.
     """
     payload = event.payload or {}
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
@@ -371,6 +372,19 @@ async def analytics_event_recorder(event: Event) -> None:
         return
 
     record = build_analytics_event_record(payload, tenant_id=tenant_id, event_id=event_id)
+    # A queued or redelivered event must not write an erased subject back:
+    # skip it when an erasure DSR submitted at/after its receipt covers it.
+    # A lookup failure raises, so the message is retried rather than recorded.
+    from services.consent.erasure_fence import erasure_fences_event
+
+    if await erasure_fences_event(
+        tenant_id,
+        user_id=record.get("user_id"),
+        anonymous_id=record.get("anonymous_id"),
+        received_at=record.get("received_at") or record.get("occurred_at"),
+    ):
+        metrics.increment("analytics_events_skipped_total", labels={"reason": "erased_subject"})
+        return
     try:
         inserted = await _analytics_repo().record_processed_event(record)
     except Exception as exc:

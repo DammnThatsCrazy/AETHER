@@ -79,7 +79,9 @@ class MeasurementPrivacyHandler:
     see the truncation-detection block below.
     """
 
-    async def handle_erasure(self, tenant_id: str, user_id: str) -> dict[str, Any]:
+    async def handle_erasure(
+        self, tenant_id: str, user_id: str, anonymous_id: str | None = None
+    ) -> dict[str, Any]:
         touchpoint_count = 0
         conversion_count = 0
         activity_count = 0
@@ -202,10 +204,33 @@ class MeasurementPrivacyHandler:
             errors.append(f"activity_tombstone: {exc}")
             logger.error("DSR erasure activity tombstone failed: %s", exc, extra={"tenant_id": tenant_id})
 
+        # A DSR may also name the subject's pre-identification anonymous id;
+        # activity and touchpoints recorded only under it are erased too.
+        anonymous_id = anonymous_id if anonymous_id and anonymous_id != user_id else None
+        if anonymous_id:
+            try:
+                touchpoint_count += await _touchpoint_repo.tombstone_for_profile(
+                    tenant_id, anonymous_id
+                )
+                activity_count += await _activity_repo.tombstone_by_anonymous(
+                    tenant_id, anonymous_id
+                )
+            except Exception as exc:
+                errors.append(f"anonymous_tombstone: {exc}")
+                logger.error(
+                    "DSR erasure anonymous-id tombstone failed: %s", exc,
+                    extra={"tenant_id": tenant_id},
+                )
+
         try:
             from services.measurement.engine.journey_compiler import JourneyCompiler
             compiler = JourneyCompiler()
             await compiler.rebuild_affected_by_consent_change(tenant_id, user_id)
+            if anonymous_id:
+                await compiler.compile_for_profile(
+                    tenant_id, anonymous_id,
+                    identity_type="anonymous", trigger_reason="consent_change",
+                )
             journey_rebuild_triggered = True
         except Exception as exc:
             errors.append(f"journey_rebuild: {exc}")
@@ -269,7 +294,9 @@ class MeasurementPrivacyHandler:
 _handler = MeasurementPrivacyHandler()
 
 
-async def handle_erasure_background(tenant_id: str, user_id: str) -> dict[str, Any]:
+async def handle_erasure_background(
+    tenant_id: str, user_id: str, anonymous_id: str | None = None
+) -> dict[str, Any]:
     """Durable-job entry point for measurement erasure.
 
     Returns the per-store evidence dict (tombstone counts, journey-rebuild
@@ -279,6 +306,6 @@ async def handle_erasure_background(tenant_id: str, user_id: str) -> dict[str, A
     instead of silently losing the erasure (the old fire-and-forget path
     swallowed it).
     """
-    result = await _handler.handle_erasure(tenant_id, user_id)
+    result = await _handler.handle_erasure(tenant_id, user_id, anonymous_id)
     logger.info("DSR erasure complete: %s", result, extra={"tenant_id": tenant_id})
     return result

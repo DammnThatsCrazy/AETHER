@@ -455,3 +455,9 @@ def test_stream_ingestion_projection_subscribes_the_recorder():
         _Registry.consumer.subscriptions
     )
     assert spec.role == "stream-worker"
+
+
+def test_end_of_day_bound_on_the_last_representable_date():
+    # ``+ 1 day`` overflowed here, so an accepted end_date of 9999-12-31 was a 500.
+    assert canonical_utc_timestamp("9999-12-31", end_of_day=True) == "9999-12-31T23:59:59.999999Z"
+    assert canonical_utc_timestamp("2026-05-01", end_of_day=True) == "2026-05-01T23:59:59.999999Z"

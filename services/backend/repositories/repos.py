@@ -18,7 +18,7 @@ import os
 import re
 from abc import ABC
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Optional, TypeVar
 
 from shared.cache.cache import TTL, CacheClient, CacheKey
@@ -981,7 +981,8 @@ def canonical_utc_timestamp(value: Any, *, end_of_day: bool = False) -> Optional
         if _DATE_ONLY_RE.match(text):
             parsed = datetime.fromisoformat(text)
             if end_of_day:
-                parsed = parsed + timedelta(days=1) - timedelta(microseconds=1)
+                # The day's last microsecond; ``+ 1 day`` overflows on 9999-12-31.
+                parsed = datetime.combine(parsed.date(), time.max)
         else:
             if text.endswith(("Z", "z")):
                 text = text[:-1] + "+00:00"

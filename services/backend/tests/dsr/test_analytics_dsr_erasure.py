@@ -42,12 +42,15 @@ from services.consent.erasure_jobs import (  # noqa: E402
 )
 from services.consent.routes import DataSubjectRequest, submit_dsr  # noqa: E402
 from services.dsr_propagation.service import DSRPropagationService  # noqa: E402
+from services.ingestion import workers as ingestion_workers  # noqa: E402
 from services.ingestion.workers import build_analytics_event_record  # noqa: E402
+from services.jobs.handlers import JobContext  # noqa: E402
 from services.jobs.models import JobStatus  # noqa: E402
 from services.jobs.service import get_jobs_service  # noqa: E402
 from services.jobs.worker import JobWorker  # noqa: E402
 from services.measurement import privacy as privacy_mod  # noqa: E402
 from shared.cache.cache import CacheKey  # noqa: E402
+from shared.events.events import Event, Topic  # noqa: E402
 
 try:  # asyncpg ships with the backend runtime; guard so collection never fails.
     import asyncpg
@@ -357,3 +360,119 @@ def test_registered_component_is_the_tail_member():
     from services.dsr_propagation.models import DSR_COMPONENTS
 
     assert DSR_COMPONENTS[-1] == ANALYTICS_EVENTS_COMPONENT
+
+
+# ── 4. Retried erasure keeps the committed receipt ─────────────────────────────
+
+
+async def test_cache_failure_retry_keeps_the_committed_erasure_receipt(job_env, monkeypatch):
+    """The deletes commit before the cache is dropped. When invalidation fails,
+    the retry erases nothing, so it must add the first attempt's counts rather
+    than complete the component with a zero receipt."""
+    repo = AnalyticsRepository(job_env)
+    session = _uid("s")
+    await _record(repo, TENANT, session_id=session, user_id=USER)
+    await _record(repo, TENANT, session_id=session, user_id=USER)
+    real_delete = job_env.delete_pattern
+    calls = {"n": 0}
+
+    async def _flaky_delete(pattern):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("cache unavailable")
+        return await real_delete(pattern)
+
+    monkeypatch.setattr(job_env, "delete_pattern", _flaky_delete)
+    dsr = await _submit(TENANT)
+    assert await JobWorker().run_once() is True
+    step = await _step(dsr["propagation_request_id"])
+    assert step["status"] == "failed"
+    assert step["records_impacted"] == 3  # 2 events + 1 session, already deleted
+
+    handler = erasure_jobs.HANDLER_REGISTRY[erasure_jobs.ERASURE_JOB_TYPE]
+    ctx = JobContext(
+        job_id=dsr["erasure_job_id"], tenant_id=TENANT, correlation_id=dsr["dsr_id"],
+        worker_id="test_worker", heartbeat=AsyncMock(return_value=True),
+        emit_event=AsyncMock(return_value=None),
+    )
+    outcome = await handler(
+        {"dsr_id": dsr["dsr_id"], "user_id": USER,
+         "propagation_request_id": dsr["propagation_request_id"]},
+        ctx,
+    )
+    assert outcome.status == "succeeded"
+    step = await _step(dsr["propagation_request_id"])
+    assert step["status"] == "completed"
+    assert step["records_impacted"] == 3
+
+
+# ── 5. Erasure fence: queued events cannot undo an erasure ────────────────────
+
+
+async def _dsr_record(tenant_id: str, *, submitted_at: str, user_id=USER, anonymous_id=None):
+    dsr_id = str(uuid.uuid4())
+    await ConsentRepository().insert(f"dsr_{dsr_id}", {
+        "tenant_id": tenant_id, "dsr_id": dsr_id, "user_id": user_id,
+        "anonymous_id": anonymous_id, "request_type": "erasure",
+        "status": "completed", "submitted_at": submitted_at,
+    })
+
+
+def _validated(tenant_id: str, *, received_at: str, user_id=None, anonymous_id=None) -> Event:
+    return Event(
+        topic=Topic.SDK_EVENTS_VALIDATED, tenant_id=tenant_id, source_service="ingestion.batch",
+        payload={
+            "event_id": str(uuid.uuid4()), "tenant_id": tenant_id, "event_type": "page",
+            "event_family": "core", "session_id": _uid("s"), "user_id": user_id,
+            "anonymous_id": anonymous_id, "properties": {}, "timestamp": received_at,
+            "received_at": received_at, "schema_version": "1.0.0", "source": "sdk",
+        },
+    )
+
+
+@pytest.fixture
+def recorder_repo():
+    reset_in_memory_stores()
+    repo = AnalyticsRepository(_DictCache())
+    previous = ingestion_workers._analytics_repository
+    ingestion_workers._analytics_repository = repo
+    yield repo
+    ingestion_workers._analytics_repository = previous
+    reset_in_memory_stores()
+
+
+async def test_event_received_before_an_erasure_is_not_written_back(recorder_repo):
+    tenant = _uid("t")
+    await _dsr_record(tenant, submitted_at="2026-05-02T00:00:00+00:00")
+
+    await ingestion_workers.analytics_event_recorder(
+        _validated(tenant, received_at="2026-05-01T10:00:00Z", user_id=USER)
+    )
+
+    assert await _event_ids(recorder_repo, tenant) == set()
+
+
+async def test_anonymous_id_named_by_the_erasure_is_fenced(recorder_repo):
+    tenant = _uid("t")
+    await _dsr_record(tenant, submitted_at="2026-05-02T00:00:00+00:00", anonymous_id="anon-1")
+
+    await ingestion_workers.analytics_event_recorder(
+        _validated(tenant, received_at="2026-05-01T10:00:00Z", anonymous_id="anon-1")
+    )
+
+    assert await _event_ids(recorder_repo, tenant) == set()
+
+
+async def test_activity_after_the_erasure_and_other_subjects_are_recorded(recorder_repo):
+    tenant = _uid("t")
+    await _dsr_record(tenant, submitted_at="2026-05-02T00:00:00+00:00")
+    later = _validated(tenant, received_at="2026-05-03T10:00:00Z", user_id=USER)
+    other = _validated(tenant, received_at="2026-05-01T10:00:00Z", user_id="someone-else")
+    elsewhere = _validated(_uid("t"), received_at="2026-05-01T10:00:00Z", user_id=USER)
+
+    for event in (later, other, elsewhere):
+        await ingestion_workers.analytics_event_recorder(event)
+
+    assert await _event_ids(recorder_repo, tenant) == {
+        later.payload["event_id"], other.payload["event_id"]
+    }

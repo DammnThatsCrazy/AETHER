@@ -232,3 +232,17 @@ async def test_non_erasure_dsr_enqueues_nothing():
     assert "erasure_job_id" not in data
     jobs = await get_jobs_service().list_jobs(TENANT, job_type=ERASURE_JOB_TYPE)
     assert jobs == []
+
+
+async def test_measurement_receipt_counts_tombstoned_activity(monkeypatch):
+    """records_impacted is the measurement store's full receipt: touchpoints,
+    conversions and the canonical activity the erasure tombstoned."""
+    monkeypatch.setattr(
+        privacy_mod._activity_repo, "tombstone_by_profile", AsyncMock(return_value=4)
+    )
+    dsr = await _submit_erasure()
+    assert await JobWorker().run_once() is True
+
+    status = await DSRPropagationService().status(dsr["propagation_request_id"], tenant_id=TENANT)
+    step = next(c for c in status["components"] if c["component"] == MEASUREMENT_COMPONENT)
+    assert step["records_impacted"] == 3 + 2 + 4

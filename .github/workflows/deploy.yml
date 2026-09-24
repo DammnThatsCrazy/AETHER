@@ -31,10 +31,10 @@ on:
         description: Approved sha256 checksum of release.json (required with source_run_id)
         type: string
         required: false
-      rehearsal_smoke:
-        description: "Set only by staging-lifecycle full-rehearsal; its authenticated checks use run-scoped keys after first-admin bootstrap"
-        type: boolean
-        default: false
+      rehearsal_run_id:
+        description: "staging-lifecycle run that owns the golden-path smoke (set only by its rehearsal); verified live before the smoke is deferred"
+        type: string
+        default: ''
         required: false
 
 concurrency:
@@ -686,6 +686,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read  # verify the staging-lifecycle run that owns a deferred smoke
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -961,10 +962,32 @@ jobs:
         # The pilot rehearsal bootstraps the durable admin identity only after
         # this delivery, then runs authenticated capability checks with
         # run-scoped keys; the fixed SMOKE_API_KEY is not provisioned there.
-        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' && inputs.rehearsal_smoke
-        run: echo '::notice::golden-path smoke is owned by the staging rehearsal that dispatched this delivery'
+        # A dispatch input alone is caller-controlled, so the smoke is deferred
+        # only to a live staging-lifecycle run on this exact commit; anything
+        # else fails the delivery rather than skipping the smoke.
+        id: smoke_owner
+        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' && inputs.rehearsal_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REHEARSAL_RUN_ID: ${{ inputs.rehearsal_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REHEARSAL_RUN_ID" =~ ^[0-9]+$ ]] || {
+            echo "::error::rehearsal_run_id must be a numeric Actions run id"; exit 1; }
+          run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${REHEARSAL_RUN_ID}")
+          run_path=$(jq -r '.path' <<<"$run_json")
+          run_status=$(jq -r '.status' <<<"$run_json")
+          run_head_sha=$(jq -r '.head_sha' <<<"$run_json")
+          test "$run_path" = '.github/workflows/staging-lifecycle.yml' || {
+            echo "::error::run ${REHEARSAL_RUN_ID} belongs to ${run_path}, not staging-lifecycle"; exit 1; }
+          test "$run_status" = 'in_progress' || {
+            echo "::error::staging-lifecycle run ${REHEARSAL_RUN_ID} is ${run_status}, not in progress"; exit 1; }
+          test "$run_head_sha" = "$GITHUB_SHA" || {
+            echo "::error::staging-lifecycle run ${REHEARSAL_RUN_ID} is on ${run_head_sha}, not ${GITHUB_SHA}"; exit 1; }
+          echo "deferred=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::golden-path smoke is owned by staging-lifecycle run ${REHEARSAL_RUN_ID}"
       - name: Golden-path smoke test
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' && inputs.rehearsal_smoke) }}
+        if: steps.smoke_owner.outputs.deferred != 'true'
         env:
           ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME || secrets.TF_DOMAIN_NAME }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}

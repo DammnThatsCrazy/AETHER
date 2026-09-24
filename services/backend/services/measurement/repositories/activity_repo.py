@@ -288,27 +288,37 @@ class ActivityRepository:
         return [r["activity_id"] for r in rows]
 
     async def tombstone_by_profile(self, tenant_id: str, profile_id: str) -> int:
-        """Mark all activities for a profile as consent_restricted (DSR/consent revocation)."""
+        """Mark all activities for a profile as tombstoned (DSR/consent revocation)."""
+        return await self._tombstone_by_identity(tenant_id, "profile_id", profile_id)
+
+    async def tombstone_by_anonymous(self, tenant_id: str, anonymous_id: str) -> int:
+        """Mark all activities recorded under an anonymous id as tombstoned (DSR)."""
+        return await self._tombstone_by_identity(tenant_id, "anonymous_id", anonymous_id)
+
+    async def _tombstone_by_identity(self, tenant_id: str, column: str, value: str) -> int:
+        if column not in ("profile_id", "anonymous_id"):
+            raise ValueError(f"unsupported identity column: {column}")
         pool = await self._pool()
 
         if pool is None:
             count = 0
             for row in _local_store.values():
                 if (row.get("tenant_id") == tenant_id
-                        and row.get("profile_id") == profile_id):
+                        and row.get(column) == value
+                        and row.get("activity_status") not in ("tombstoned", "deleted")):
                     row["activity_status"] = "tombstoned"
                     count += 1
             return count
 
         async with pool.acquire() as conn:
             result = await conn.execute(
-                """
+                f"""
                 UPDATE canonical_activity
                 SET activity_status = 'tombstoned'
-                WHERE tenant_id = $1 AND profile_id = $2
+                WHERE tenant_id = $1 AND {column} = $2
                   AND activity_status NOT IN ('tombstoned', 'deleted')
                 """,
-                tenant_id, profile_id,
+                tenant_id, value,
             )
         try:
             return int(result.split()[-1])

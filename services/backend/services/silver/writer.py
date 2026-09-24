@@ -32,6 +32,7 @@ first-write-wins semantics.
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -244,7 +245,9 @@ def _coerce_value(table: str, column: str, data_type: str, value: Any) -> Any:
                 return value.isoformat()
             return str(value)
         if data_type == "uuid":
-            return str(value)
+            # Validate here so a non-UUID id fails with a coercion error that
+            # names the column, not an opaque driver DataError.
+            return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value).strip())
     except (ValueError, TypeError, InvalidOperation, OverflowError) as exc:
         raise ValueError(
             f"cannot coerce {table}.{column} ({data_type}) from "

@@ -299,6 +299,37 @@ async def _erase_location_plane(tenant_id: str, entity_id: str) -> dict[str, int
     return {LOCATION_FACTS_COMPONENT: revoked}
 
 
+class AnalyticsCacheInvalidationError(RuntimeError):
+    """The analytics rows were erased but the tenant query cache was not dropped.
+
+    Carries the store's receipt: the deletes have committed, so a retry erases
+    nothing and would otherwise record a zero receipt for the component.
+    """
+
+    def __init__(self, receipt: dict[str, int], cause: BaseException) -> None:
+        super().__init__(f"analytics query cache invalidation failed: {cause}")
+        self.receipt = receipt
+
+
+async def _prior_analytics_receipt(
+    propagation_request_id: str, tenant_id: str
+) -> dict[str, int]:
+    """Counts an earlier, unfinished attempt already recorded on the component."""
+    from services.dsr_propagation.service import dsr_propagation_service
+
+    status = await dsr_propagation_service.status(propagation_request_id, tenant_id=tenant_id)
+    step = next(
+        (c for c in status["components"] if c.get("component") == ANALYTICS_EVENTS_COMPONENT),
+        None,
+    )
+    if not step or step.get("status") == "completed":
+        return {"records_impacted": 0, "artifacts_impacted": 0}
+    return {
+        "records_impacted": int(step.get("records_impacted") or 0),
+        "artifacts_impacted": int(step.get("artifacts_impacted") or 0),
+    }
+
+
 async def _erase_analytics_plane(
     tenant_id: str, user_id: str, anonymous_id: str | None = None
 ) -> dict[str, int]:
@@ -307,7 +338,8 @@ async def _erase_analytics_plane(
     Delegates to ``AnalyticsRepository.erase_subject`` (tenant-scoped on every
     statement, idempotent, one transaction on PostgreSQL), then drops the
     tenant's cached ``/v1/analytics/events/query`` results. A cache failure
-    raises so the plane is marked ``failed`` and the job retries, rather than
+    raises ``AnalyticsCacheInvalidationError`` (carrying the committed receipt)
+    so the plane is marked ``failed`` and the job retries, rather than
     completing while a cached read could still serve an erased event.
 
     Returns the component receipt: ``records_impacted`` (events + session
@@ -321,11 +353,15 @@ async def _erase_analytics_plane(
     erased = await AnalyticsRepository(cache).erase_subject(
         tenant_id, user_id, anonymous_id
     )
-    await cache.delete_pattern(analytics_query_cache_pattern(tenant_id))
-    return {
+    receipt = {
         "records_impacted": erased["events_deleted"] + erased["sessions_deleted"],
         "artifacts_impacted": erased["sessions_recomputed"],
     }
+    try:
+        await cache.delete_pattern(analytics_query_cache_pattern(tenant_id))
+    except Exception as exc:
+        raise AnalyticsCacheInvalidationError(receipt, exc) from exc
+    return receipt
 
 
 def register_consent_erasure_handler() -> None:
@@ -354,10 +390,13 @@ def register_consent_erasure_handler() -> None:
                 tenant_id=ctx.tenant_id,
             )
 
-        result = await handle_erasure_background(ctx.tenant_id, user_id)
+        result = await handle_erasure_background(
+            ctx.tenant_id, user_id, str(payload.get("anonymous_id") or "") or None
+        )
         errors = [str(e) for e in (result.get("errors") or [])]
-        records_impacted = int(result.get("touchpoints_tombstoned") or 0) + int(
-            result.get("conversions_tombstoned") or 0
+        records_impacted = sum(
+            int(result.get(key) or 0)
+            for key in ("touchpoints_tombstoned", "conversions_tombstoned", "activities_tombstoned")
         )
 
         if propagation_request_id:
@@ -607,7 +646,13 @@ def register_consent_erasure_handler() -> None:
             # counts. One isolated try/except mirrors the geographic plane: a
             # failure marks the component ``failed`` and keeps the job
             # retryable (the deletes are idempotent).
+            # A retried attempt adds the counts an earlier attempt recorded
+            # before failing, so committed deletes are never reported as zero.
+            prior_analytics = {"records_impacted": 0, "artifacts_impacted": 0}
             try:
+                prior_analytics = await _prior_analytics_receipt(
+                    propagation_request_id, ctx.tenant_id
+                )
                 analytics_receipt = await _erase_analytics_plane(
                     ctx.tenant_id,
                     user_id,
@@ -618,12 +663,22 @@ def register_consent_erasure_handler() -> None:
                     ANALYTICS_EVENTS_COMPONENT,
                     "completed",
                     tenant_id=ctx.tenant_id,
-                    records_impacted=analytics_receipt["records_impacted"],
-                    artifacts_impacted=analytics_receipt["artifacts_impacted"],
+                    records_impacted=prior_analytics["records_impacted"]
+                    + analytics_receipt["records_impacted"],
+                    artifacts_impacted=prior_analytics["artifacts_impacted"]
+                    + analytics_receipt["artifacts_impacted"],
                     audit_event_id=ctx.job_id,
                 )
             except Exception as exc:  # noqa: BLE001 — isolate the analytics plane
                 errors.append(f"analytics: {exc}")
+                committed = (
+                    {
+                        key: prior_analytics[key] + exc.receipt[key]
+                        for key in ("records_impacted", "artifacts_impacted")
+                    }
+                    if isinstance(exc, AnalyticsCacheInvalidationError)
+                    else {}
+                )
                 try:
                     await dsr_propagation_service.mark_step(
                         propagation_request_id,
@@ -631,6 +686,7 @@ def register_consent_erasure_handler() -> None:
                         "failed",
                         tenant_id=ctx.tenant_id,
                         audit_event_id=ctx.job_id,
+                        **committed,
                     )
                 except Exception:  # noqa: BLE001 — never let marking abort
                     logger.warning(
