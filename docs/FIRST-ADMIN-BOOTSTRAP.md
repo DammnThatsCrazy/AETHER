@@ -19,12 +19,12 @@ source_files:
   - scripts/release/check_staging_runtime_iam.py
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
-  ".github/workflows/staging-lifecycle.yml": "sha256:f1ab81db40344d860bd39f8e562edcdb1ae12d0aaa66b19a4cd21adb7e8821d2"
+  ".github/workflows/staging-lifecycle.yml": "sha256:0cca221c0d5746517c1d2581014926eb0f905c739b42d680b3e4cdaac37b2f82"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:ca2a52de871d72661439c932674799164c893d893be54a3fffaf40e377a855a1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "services/backend/repositories/repos.py": "sha256:fbf464a1822f49d054e182223a14d0e6f7e36961dd16de95f41d0cf5eda174e3"
+  "services/backend/repositories/repos.py": "sha256:b7cf53497f7ee6cfd604cd5abbe1e64cce6f13661c1e9db922357f386a455682"
   "services/backend/services/auth/routes.py": "sha256:716020d7f01cd1309b397cb71acd3667f30b78bd7e2eebf39dd6cd90643425f5"
 ---
 
@@ -141,7 +141,11 @@ running task out of band.
 
 The fixed `SMOKE_API_KEY` remains required for the standalone smoke action and
 live redeploy action, but not for the full rehearsal because that path creates
-isolated run-scoped data-plane keys. Never put the raw admin key or AWS
+isolated run-scoped data-plane keys. The canonical delivery the rehearsal
+dispatches therefore names its own run as `rehearsal_run_id`. Delivery verifies
+that run is an in-progress `staging-lifecycle.yml` run on the same commit, then
+defers only its fixed-key golden-path smoke to the rehearsal's authenticated
+capability checks; if the check fails, delivery fails instead of skipping the smoke. Never put the raw admin key or AWS
 bootstrap token in source, plans, logs, or artifacts.
 
 If a retry is needed, reuse the same saved key and request from the helper. Do

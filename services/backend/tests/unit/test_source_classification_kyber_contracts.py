@@ -155,8 +155,21 @@ def test_main_mounts_kyber_router_and_registers_repair_handler_at_startup() -> N
 
     assert "from services.measurement.routes.kyber import router as measurement_kyber_router" in main_source
     assert "app.include_router(measurement_kyber_router)" in main_source
-    assert "from services.traffic.repair import register_source_classification_repair_handler" in main_source
-    assert "register_source_classification_repair_handler()" in main_source
+    # Startup registration is shared by the API lifespan and dedicated worker
+    # processes (run_role) through services/jobs/bootstrap.py.
+    bootstrap_source = (backend_root / "services" / "jobs" / "bootstrap.py").read_text(
+        encoding="utf-8"
+    )
+    run_role_source = (backend_root / "services" / "runtime" / "run_role.py").read_text(
+        encoding="utf-8"
+    )
+    assert "register_durable_job_handlers(settings)" in main_source
+    assert "register_durable_job_handlers(settings)" in run_role_source
+    assert (
+        "from services.traffic.repair import register_source_classification_repair_handler"
+        in bootstrap_source
+    )
+    assert "register_source_classification_repair_handler()" in bootstrap_source
 
 
 def test_repair_job_is_internal_only_and_registration_is_idempotent() -> None:

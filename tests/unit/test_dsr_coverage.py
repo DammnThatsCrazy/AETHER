@@ -71,3 +71,22 @@ def test_unwired_handler_fails(monkeypatch):
         gate, "_handler_marked_components", lambda root: original(root) - {"mobile_installations"}
     )
     assert gate.run(ROOT) != 0
+
+
+def test_analytics_event_store_is_registered_and_hook_named():
+    """The analytics event store (events + sessions) is bound by the same four
+    links: component registered, erase hook on repos.py, handler wiring and
+    hard-delete storage policies."""
+    assert "analytics_events" in gate._dsr_components(ROOT)
+    spec = gate.ANALYTICS_DSR_COVERAGE["analytics_events"]
+    assert spec["hook"] == "erase_subject"
+    assert gate._repo_defines_hook(ROOT, str(spec["repo"]), "erase_subject")
+    assert "analytics_events" in gate._handler_marked_components(ROOT)
+
+
+def test_missing_analytics_component_fails(monkeypatch):
+    original = gate._dsr_components
+    monkeypatch.setattr(
+        gate, "_dsr_components", lambda root: original(root) - {"analytics_events"}
+    )
+    assert gate.run(ROOT) != 0

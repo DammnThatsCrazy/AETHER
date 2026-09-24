@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
   "services/backend/repositories/lake.py": "sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd"
-  "services/backend/repositories/repos.py": "sha256:fbf464a1822f49d054e182223a14d0e6f7e36961dd16de95f41d0cf5eda174e3"
+  "services/backend/repositories/repos.py": "sha256:b7cf53497f7ee6cfd604cd5abbe1e64cce6f13661c1e9db922357f386a455682"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -44,15 +44,60 @@ CREATE INDEX IF NOT EXISTS idx_{table_name}_tenant
 ON {table_name} (tenant_id);
 ```
 
-Tables are created automatically on first access. No migration tool is required for the JSONB model.
+Tables are created automatically on first access when no migration has
+created them. Most tables are now owned by Alembic migrations; runtime
+auto-creation is only a bootstrap fallback for a table that doesn't exist yet:
+
+- `_ensure_table` runs under a per-table transaction-scoped advisory lock
+  (`pg_advisory_xact_lock(hashtextextended('aether.base_repository.ensure_table:<table>', 0))`).
+  Postgres `CREATE TABLE/INDEX IF NOT EXISTS` is not safe under concurrency:
+  the API and each worker loop build their own repository instances, and they
+  used to fail with `duplicate key value violates unique constraint
+  "pg_class_relname_nsp_index"` on a fresh database.
+- If the table already exists (for example `reward_delivery_jobs` from
+  `20260828_reward_delivery_tables`), no DDL is issued. The table keeps the
+  schema and indexes the migration gave it, and doesn't gain a duplicate
+  runtime `idx_<table>_tenant` index.
+
+### Explicit-column repositories
+
+Repositories whose migration creates named columns instead of a `data` JSONB
+column set `_jsonb_mode = False`. This applies to
+`NotificationIntelligenceRepository`, `OperatorActionRepository`,
+`TenantNotificationConfigRepository`, `UserNotificationChannelRepository`,
+`SlackOAuthStateRepository`, and the ten identity-resolution stores in
+`services/identity/repository.py`. For these tables the repository reads the column
+set and each column's `data_type` from `information_schema.columns` once per
+table and caches it. Writes and filters are then bound to the migrated types:
+
+- `find_many()` without `sort_by` orders by the repository's `_default_sort`.
+  `notification_intelligence_events` has `detected_at` and no `created_at`, so
+  it sorts by `detected_at`. If a caller asks for a sort column the table
+  doesn't have, the query falls back to `_default_sort`.
+- `insert()`/`update()` drop the `created_at`/`updated_at` stamps when the table
+  has no such column.
+- ISO-8601 strings for `timestamptz` columns are bound as aware UTC datetimes.
+  This uses the lenient rule in `shared.temporal.instant.coerce_utc_lenient`.
+- Only `json`/`jsonb` columns get a JSON cast. Array columns such as `text[]`
+  receive the Python list.
+- Boolean filters are bound as booleans.
+- json/jsonb columns are decoded on read.
+- A `None` for a `NOT NULL` column that has a server default is left out of
+  the write, so the default or the existing value applies.
+- `_payload_column` (optional) names a JSONB column that holds record keys the
+  table has no column for. On read it is unpacked back into the flat record,
+  and filters on those keys use `<payload>->>'key'`. Without it, an unknown key
+  still fails loudly in Postgres.
+- `_column_renames` (optional) maps a historical record key to the migrated
+  column name. Reads expose both names.
 
 ## Tables
 
 | Table | Repository Class | Used By |
 |-------|-----------------|---------|
 | `profiles` | `IdentityRepository` | Identity service |
-| `events` | `AnalyticsRepository` | Analytics service |
-| `sessions` | `AnalyticsRepository` | Analytics service |
+| `events` | `AnalyticsRepository` | Analytics service, Profile 360 timeline — one row per processed SDK event, written by the `analytics_event_recorder` stream projector |
+| `sessions` | `AnalyticsRepository` (rows with `record_type = analytics_session`), `SessionRepository` (fraud) | Analytics session rollup written by `analytics_event_recorder`; fraud detectors read their own rows by `entity_id` |
 | `campaigns` | `CampaignRepository` | Campaign service |
 | `consent_records` | `ConsentRepository` | Consent service |
 | `webhooks` | `WebhookRepository` | Notification service (legacy) |
@@ -86,6 +131,51 @@ Tables are created automatically on first access. No migration tool is required 
 - `SettlementEventRepository.list_for_agent(agent_id, tenant_id)`
 - `SettlementEventRepository.list_for_intent(intent_id, tenant_id)`
 - `DelegationRepository.active_for(grantee_entity_id, tenant_id)`
+
+### Analytics event store
+
+`AnalyticsRepository` reads the `events` and `sessions` tables; the
+`analytics_event_recorder` projector (`services/ingestion/workers.py`, on the
+`stream-ingestion-projection` consumer) is their only production writer.
+
+- **Row identity:** `analytics_event_record_id(tenant_id, event_id)` and
+  `analytics_session_record_id(tenant_id, session_id)` are tenant-scoped
+  SHA-256 digests. `record_processed_event` inserts the event with
+  `ON CONFLICT DO NOTHING` and, in the same transaction and only for a new
+  row, upserts the session rollup (`first_seen_at`, `last_seen_at`,
+  `event_count`), so at-least-once redelivery changes nothing.
+- **Event row:** `tenant_id`, `event_id`, `event_type`, `event_family`,
+  `session_id`, `anonymous_id`, `user_id`, `occurred_at` / `received_at`
+  (fixed-width UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`), `schema_version`, `source`
+  and a scalar, PII-filtered `properties` subset. SDK `context` is never stored.
+- **Queries:** `query_events(tenant_id, params, limit)` always binds the
+  request tenant (a `tenant_id` in `params` is ignored; an empty tenant returns
+  nothing), matches `event_type` / `user_id` / `session_id` / ... by equality,
+  and bounds `occurred_at` with `start_date` / `end_date` (inclusive; a
+  date-only bound covers the whole day). `limit` is never a row predicate.
+  Non-empty results are cached for 5 minutes; empty results are never cached.
+- **Dashboard summary:** `dashboard_summary(tenant_id)` runs two aggregate
+  statements over the tenant's `events` rows processed in the last 24 hours
+  (`created_at` window, bounded by the `tenant_id` index) for `total_events`,
+  `unique_users` (distinct `user_id`, else `anonymous_id`) and the ten most
+  frequent `top_event_types`, plus one count of analytics sessions updated in
+  the window for `total_sessions`. `tenant_id=None` summarises all tenants
+  (Kyber cross-tenant scope).
+- **DSR erasure:** `erase_subject(tenant_id, user_id, anonymous_id=None)`
+  backs the `analytics_events` DSR propagation component, run by the
+  `consent.erasure` job for `POST /v1/consent/dsr` erasure requests (the
+  request's optional `anonymous_id` is passed through). In one transaction and
+  always within the requesting tenant it hard-deletes (the tenant-erasure
+  semantics for these tables) every `events` row whose `user_id` or
+  `anonymous_id` is the subject's, and every analytics session rollup
+  attributed to either identity. A rollup attributed to another identity that
+  counted the subject's events is recomputed from its remaining events, or
+  deleted when none remain. Other users' sessions and other tenants' rows (even
+  with the same `user_id`) are never touched; a re-run erases nothing. The step
+  receipt is `records_impacted` = events + session rollups deleted and
+  `artifacts_impacted` = rollups recomputed, with the job id as the audit
+  pointer. The tenant's cached query results are then dropped; if that fails,
+  the step is marked `failed` and the job retries.
 
 ## Data Lake Repositories
 

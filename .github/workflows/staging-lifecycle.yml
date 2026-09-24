@@ -1471,6 +1471,7 @@ jobs:
             -f environment=staging \
             -f deployment_lane="$DEPLOYMENT_LANE" \
             -f delivery_mode=deploy \
+            -f rehearsal_run_id="$GITHUB_RUN_ID" \
             -f source_run_id="$RELEASE_RUN_ID" \
             -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" 2>&1)"
           printf '%s\n' "$dispatch_output"
@@ -1939,10 +1940,10 @@ jobs:
                       return value
               return None
 
-          def create_tenant(label):
+          def create_tenant(label, plan):
               _, payload = call("POST", "/v1/admin/tenants", body={
                   "name": f"Aether staging {label} {os.environ['GITHUB_RUN_ID']}",
-                  "plan": "free",
+                  "plan": plan,
                   "contact_email": f"aether-staging-{label.lower()}-{uuid.uuid4().hex}@staging.invalid",
                   "settings": {"lifecycle": "run-scoped-rehearsal"},
               }, expect={200, 201})
@@ -1953,10 +1954,10 @@ jobs:
               save_marker()
               return tenant_id
 
-          def create_key(tenant_id, label, permissions):
+          def create_key(tenant_id, label, permissions, tier):
               _, payload = call("POST", f"/v1/admin/tenants/{tenant_id}/api-keys", body={
                   "name": f"staging-rehearsal-{label.lower()}-{os.environ['GITHUB_RUN_ID']}",
-                  "tier": "free",
+                  "tier": tier,
                   "permissions": permissions,
               }, expect={200, 201})
               key = extract(payload, "api_key")
@@ -1966,13 +1967,16 @@ jobs:
               return key
 
           save_marker()
-          mine_id = create_tenant("Primary")
+          # The capability matrix exercises plan-gated services (graph
+          # Connectivity and ML Prediction require gamma), so the primary
+          # tenant is enterprise. The isolation peer only has to be refused.
+          mine_id = create_tenant("Primary", "enterprise")
           mine_key = create_key(mine_id, "Primary", [
               "read", "write", "ingest", "analytics", "analytics:export",
               "consent:manage", "billing",
-          ])
-          peer_id = create_tenant("Isolation")
-          peer_key = create_key(peer_id, "Isolation", ["read"])
+          ], "enterprise")
+          peer_id = create_tenant("Isolation", "free")
+          peer_key = create_key(peer_id, "Isolation", ["read"], "free")
           if mine_id == peer_id:
               sys.exit("::error::run-scoped rehearsal tenants must be distinct")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
@@ -2055,11 +2059,28 @@ jobs:
           if mine_id == peer_id:
               sys.exit("::error::the rehearsal tenant and the isolation peer are the same tenant")
 
-          # Cross-tenant read must be refused, not silently empty.
-          status, _ = call("GET", f"/v1/consent/records/{peer_id}", key=os.environ["REHEARSAL_TENANT_API_KEY"])
+          # Prove isolation with real data: the rehearsal tenant writes a
+          # consent record for a unique subject and reads it back; the peer
+          # tenant asking for that same subject must get a refusal or no
+          # record. /v1/consent/records/{user_id} is keyed by data subject and
+          # answers 200 {"consent": null} for subjects the caller's tenant does
+          # not hold, so a bare 200 is not by itself a breach.
+          probe_subject = f"rehearsal-isolation-{uuid.uuid4().hex}"
+          call("POST", "/v1/consent/records", key=os.environ["REHEARSAL_TENANT_API_KEY"], body={
+              "user_id": probe_subject, "purposes": ["analytics"], "granted": True,
+              "source": "staging-rehearsal-isolation",
+          }, expect={200, 201})
+          _, own = call("GET", f"/v1/consent/records/{probe_subject}",
+                        key=os.environ["REHEARSAL_TENANT_API_KEY"], expect={200})
+          if not (own.get("data") or {}).get("granted"):
+              sys.exit("::error::the rehearsal tenant cannot read back its own consent record")
+          status, leaked = call("GET", f"/v1/consent/records/{probe_subject}",
+                                key=os.environ["ISOLATION_PEER_API_KEY"])
           if status == 200:
-              sys.exit("::error::tenant isolation breach: peer tenant records are readable")
-          if status not in (401, 403, 404):
+              node = leaked.get("data", leaked)
+              if not isinstance(node, dict) or node.get("consent", None) is not None or node.get("granted") is not None or node.get("purposes"):
+                  sys.exit("::error::tenant isolation breach: the peer tenant can read another tenant's consent record")
+          elif status not in (401, 403, 404):
               sys.exit(f"::error::cross-tenant read returned an unexpected {status}")
 
           # Unauthenticated access is refused (fail-closed).
@@ -2136,9 +2157,9 @@ jobs:
           event_id = str(uuid.uuid4())
           session_id = f"rehearsal-{uuid.uuid4().hex}"
           sent_at = datetime.now(timezone.utc).isoformat()
-          call("POST", "/v1/batch", body={
+          _, ingested = call("POST", "/v1/batch", body={
               "batch": [{
-                  "id": event_id, "type": "page_view", "timestamp": sent_at,
+                  "id": event_id, "type": "page", "timestamp": sent_at,
                   "sessionId": session_id, "anonymousId": session_id,
                   "userId": subject,
                   "properties": {"run": os.environ["GITHUB_RUN_ID"]},
@@ -2150,6 +2171,11 @@ jobs:
               "sentAt": sent_at,
               "consents": ["analytics"],
           }, expect={200, 201, 202})
+          # /v1/batch answers 200 with per-event verdicts; a rejected event
+          # would otherwise surface only as a five-minute drain timeout.
+          if int(ingested.get("accepted", 0) or 0) != 1 or int(ingested.get("rejected", 0) or 0):
+              reasons = [e.get("reason") for e in ingested.get("events", []) if isinstance(e, dict)]
+              sys.exit(f"::error::canonical ingestion did not accept the rehearsal event: {reasons}")
           results["ingestion"] = "ok"
 
           # queue / worker — the consolidated lean-worker must drain the event the
@@ -2184,7 +2210,9 @@ jobs:
           results["analytics"] = "ok"
 
           # inline ML — staging runs remote_ml: false, so serving is in-process.
-          call("GET", "/v1/ml/models", expect={200})
+          _, models = call("GET", "/v1/ml/models", expect={200})
+          if not json.dumps(models.get("data", models)).count("model_id"):
+              sys.exit("::error::/v1/ml/models returned no registry models")
           # The gateway list endpoint can return registry-only data even when
           # the serving process is absent. Probe the unique /models route from
           # the mounted in-process router as well, so staging proves the inline
@@ -2289,12 +2317,22 @@ jobs:
               sys.exit(f"::error::malformed batch was accepted ({status})")
 
           # A retried write with the same event id must be idempotent, not doubled.
+          # Staging enforces authoritative consent, so the probe subject needs a
+          # server receipt or the event is rejected per event under HTTP 200.
           event_id = str(uuid.uuid4())
           session_id = f"retry-{uuid.uuid4().hex}"
+          retry_subject = f"rehearsal-retry-{uuid.uuid4().hex}"
+          consent_status, _ = call("POST", "/v1/consent/records", body={
+              "user_id": retry_subject, "purposes": ["analytics"], "granted": True,
+              "source": "staging-rehearsal-retry",
+          })
+          if consent_status not in (200, 201):
+              sys.exit(f"::error::retry-probe consent receipt could not be recorded ({consent_status})")
           payload = {
               "batch": [{
-                  "id": event_id, "type": "page_view", "timestamp": now,
+                  "id": event_id, "type": "page", "timestamp": now,
                   "sessionId": session_id, "anonymousId": session_id,
+                  "userId": retry_subject,
                   "properties": {"run": os.environ["GITHUB_RUN_ID"]},
                   "context": {
                       "schemaVersion": "1.0.0", "surface": "web",
@@ -2308,6 +2346,9 @@ jobs:
           second, second_body = call("POST", "/v1/batch", body=payload)
           if first >= 400:
               sys.exit(f"::error::first retry-probe write failed ({first})")
+          if int(_first_body.get("accepted", 0) or 0) != 1:
+              reasons = [e.get("reason") for e in _first_body.get("events", []) if isinstance(e, dict)]
+              sys.exit(f"::error::first retry-probe event was not accepted: {reasons}")
           if second >= 500:
               sys.exit(f"::error::retried write produced a server error ({second})")
           if int(second_body.get("duplicates", 0) or 0) < 1:

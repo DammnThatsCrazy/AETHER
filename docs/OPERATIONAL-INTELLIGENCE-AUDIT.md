@@ -13,13 +13,13 @@ source_hashes:
   "frontend/kyber/src/features/governance/use-governance.ts": "sha256:95866e0a4d641818054dea1a9c955de75e5c21449bba8687f97a7989b7b17474"
   "frontend/kyber/src/features/graph/use-graph-intelligence.ts": "sha256:9e9e9e76a87c02158860fc6ffa12d542be09d888de3dad5b43ce6c5b8232c57b"
   "frontend/kyber/src/features/investigation/use-investigations.ts": "sha256:70977dbe926bbf5a45ebb1ed1c5b115c7c4241fdb044e4c9341ce3ed37850207"
-  "services/backend/repositories/repos.py": "sha256:fbf464a1822f49d054e182223a14d0e6f7e36961dd16de95f41d0cf5eda174e3"
+  "services/backend/repositories/repos.py": "sha256:b7cf53497f7ee6cfd604cd5abbe1e64cce6f13661c1e9db922357f386a455682"
   "services/backend/services/events/routes.py": "sha256:1ede3d12a54845f33a149b13106b001a899c4b77c168c6d990023e836b59101f"
   "services/backend/services/events/worker.py": "sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363"
   "services/backend/services/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"
   "services/backend/services/investigation/routes.py": "sha256:885be3f6f0b9592dab4ab7ac2603568a06d6ed7406554202da046ee7facd339a"
   "services/backend/services/realtime/channel_hub.py": "sha256:c53cb1a1270ba4d2f19dac8b3db0ebc09ab60118fa7f176afd3e5e45363399c9"
-  "services/backend/shared/events/events.py": "sha256:c8bd9450991073d2dc7387cb621fd18e992a9f37e5b4ab1aea775f5bb2d0b17e"
+  "services/backend/shared/events/events.py": "sha256:8b8f303710a2d213fdc13f6fed05a900f0d3f50ba698223b1073ddc33dc86ffd"
 ---
 
 # Operational Intelligence — Stub vs. Production Audit

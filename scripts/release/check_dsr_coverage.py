@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Validate that every principal-scoped MOBILE table is reachable by a DSR erasure.
+"""Validate that every principal-scoped MOBILE table — and the analytics event
+store (``ANALYTICS_DSR_COVERAGE``) — is reachable by a DSR erasure.
 
 Erasability of mobile data is expressed in four otherwise-disconnected places:
 
@@ -76,6 +77,18 @@ MOBILE_DSR_COVERAGE: dict[str, dict[str, object]] = {
     },
 }
 
+# The analytics event store (not a mobile table, but bound by the same four links):
+# the ``analytics_event_recorder`` stream projector persists subject-keyed SDK events
+# (``user_id`` / ``anonymous_id``) and per-session rollups, which the
+# ``analytics_events`` component erases through ``AnalyticsRepository.erase_subject``.
+ANALYTICS_DSR_COVERAGE: dict[str, dict[str, object]] = {
+    "analytics_events": {
+        "repo": "repositories/repos.py",
+        "hook": "erase_subject",
+        "tables": ["events", "sessions"],
+    },
+}
+
 
 def _read(root: Path, rel: str) -> str:
     return (root / _BACKEND_REL / rel).read_text(encoding="utf-8")
@@ -140,12 +153,15 @@ def _policy_index(root: Path) -> dict[str, dict]:
 
 
 def run(root: Path) -> int:
-    r = Reporter("DSR MOBILE COVERAGE — every principal-scoped mobile table is erasable")
+    r = Reporter(
+        "DSR COVERAGE — every principal-scoped mobile table and the analytics "
+        "event store are erasable"
+    )
     components = _dsr_components(root)
     handler_literals = _handler_marked_components(root)
     policies = _policy_index(root)
 
-    for component, spec in MOBILE_DSR_COVERAGE.items():
+    for component, spec in {**MOBILE_DSR_COVERAGE, **ANALYTICS_DSR_COVERAGE}.items():
         repo_file = str(spec["repo"])
         hook = str(spec.get("hook", "delete_by_principal"))
         r.require(

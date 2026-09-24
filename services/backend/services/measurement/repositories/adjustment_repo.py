@@ -66,7 +66,7 @@ class AdjustmentRepository:
                 _parse_ts(row.get("occurred_at")),
                 row.get("reason"), row.get("source_event_id"),
                 row.get("connector_record_id"),
-                json.dumps(row.get("evidence_ids", [])),
+                json.dumps(row.get("evidence_ids", []), default=str),
                 key, row.get("schema_version", 1),
                 _parse_ts(row.get("created_at")),
             )

@@ -1,7 +1,7 @@
 """Alembic environment — Aether backend.
 
-Reads DATABASE_URL from the environment. asyncpg:// URLs are normalised to
-postgresql:// so SQLAlchemy's psycopg2 driver can be used for synchronous
+Reads DATABASE_URL from the environment. asyncpg:// and bare postgresql:// URLs
+are normalised to postgresql+psycopg2:// so the declared psycopg2 driver is used for synchronous
 migration execution (Alembic's standard approach).
 
 Usage:
@@ -75,6 +75,9 @@ def _get_url() -> str:
     # Normalise asyncpg:// → postgresql:// for synchronous migration execution.
     url = re.sub(r"^postgresql\+asyncpg://", "postgresql://", url)
     url = re.sub(r"^asyncpg://", "postgresql://", url)
+    # Pin the declared psycopg2 driver: SQLAlchemy 2.1 made psycopg (v3) the
+    # default for a bare postgresql:// URL, which the image does not install.
+    url = re.sub(r"^(postgres|postgresql)://", "postgresql+psycopg2://", url)
     return url
 
 

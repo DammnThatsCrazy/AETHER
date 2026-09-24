@@ -226,8 +226,6 @@ from services.account_organization.routes import router as account_organization_
 from services.account_lifecycle.routes import router as account_lifecycle_router
 from services.jobs.routes import router as jobs_router
 from services.jobs.kyber_routes import router as jobs_kyber_router
-from services.export import register_export_handlers
-from services.traffic.repair import register_source_classification_repair_handler
 from services.export.routes import router as exports_router
 from services.admin.routes import router as admin_router
 from services.traffic.routes import router as traffic_router
@@ -610,37 +608,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pass  # Noesis module not present in this build
 
     # Job handlers must be registered before the supervised job worker starts
-    # claiming, or already-enqueued export jobs would fail as unknown types.
-    register_export_handlers()
-    from services.imports.commit import register_import_handlers
+    # claiming, or already-enqueued jobs would fail as unknown types. The same
+    # registration runs in dedicated worker processes (services/runtime/run_role.py).
+    from services.jobs.bootstrap import register_durable_job_handlers
 
-    register_import_handlers()  # import.commit / import.replay
-    register_source_classification_repair_handler()
-    from services.consent.erasure_jobs import register_consent_erasure_handler
-
-    register_consent_erasure_handler()  # consent.erasure (durable DSR erasure)
-    from services.semantic_intelligence.jobs import register_semantic_replay_handler
-
-    register_semantic_replay_handler()  # semantic.replay (durable Bronze backfill)
-
-    # Data Exchange Plane — durable jobs + canonical exporter registration
-    # (flag-gated; registration is idempotent per process and the surfaces only
-    # exist when the matching availability flag is ON).
-    dex = settings.data_exchange
-    if dex.enabled:
-        from services.data_exchange.jobs_migrate import register as register_data_exchange_migrate_handlers
-        from services.data_exchange.exporters import register_data_exchange_exporters
-        from services.data_exchange.jobs_ops import register as register_data_exchange_ops_jobs
-        from services.data_exchange.metrics import register_metrics as register_data_exchange_metrics
-
-        register_data_exchange_migrate_handlers()  # data_exchange.migrate_legacy_artifact
-        register_data_exchange_exporters()  # canonical EXPORTERS += data-exchange envelope exporters
-        register_data_exchange_ops_jobs()  # M7 ops: expire / reconcile / cleanup / finalize-pending-egress
-        register_data_exchange_metrics()  # M7 metric-family no-op seam (collector auto-registers)
-    if dex.reports_enabled:
-        from services.reports.jobs_reports import register_report_jobs
-
-        register_report_jobs()  # report.generate (PDF report artifacts)
+    register_durable_job_handlers(settings)
 
     # Supervised long-running loop workers: event replay, billing overage
     # cron, notification SLA expiry, Dune polling (canonical scheduler only —

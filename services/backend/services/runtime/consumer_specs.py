@@ -38,12 +38,20 @@ class ConsumerSpec:
 
 def _attach_stream_ingestion(registry: Any) -> None:
     from services.ingestion.workers import (
+        analytics_event_recorder,
         sdk_bronze_writer,
         silver_fact_projector,
         silver_normalizer,
     )
 
-    for handler in (sdk_bronze_writer, silver_normalizer, silver_fact_projector):
+    # analytics_event_recorder is the sole writer of the events/sessions
+    # tables the analytics API and Profile 360 timeline read.
+    for handler in (
+        sdk_bronze_writer,
+        silver_normalizer,
+        silver_fact_projector,
+        analytics_event_recorder,
+    ):
         registry.consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, handler)
 
 

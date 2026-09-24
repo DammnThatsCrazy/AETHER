@@ -378,7 +378,10 @@ Privacy erasure already reaches the measurement layer:
 profile's touchpoints and conversions
 (`TouchpointRepository.tombstone_for_profile`,
 `ConversionRepository.tombstone_for_profile`) and triggers
-`JourneyCompiler.rebuild_affected_by_consent_change` for that profile.
+`JourneyCompiler.rebuild_affected_by_consent_change` for that profile. (It now
+also tombstones the profile's canonical activity via
+`ActivityRepository.tombstone_by_profile` before that rebuild; the rebuild only
+excludes tombstoned activity, so without it the erased journey was re-derived.)
 
 What it does **not** do: call into `AttributionRunRepository`
 (`services/backend/services/measurement/repositories/attribution_run_repo.py`), which

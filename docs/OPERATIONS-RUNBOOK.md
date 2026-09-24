@@ -17,7 +17,7 @@ toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
   "services/backend/config/settings.py": "sha256:b93f7e8775022ceb602e28f42df42e5f524a15c5d849e56643dfff21d7b039c5"
-  "services/backend/main.py": "sha256:7f7f8efc68276c89f61cd6c02079f60869959da6b0c5788b46ab8c06aa7eb32d"
+  "services/backend/main.py": "sha256:29c86cf3a10e85148b699b7c4be46143babf61a0c9b6738e5f68c032f6bad736"
   "services/backend/services/provider_runtime/": "sha256:b2a3e39e1032cbb1b93e8e546f6ce97541c978d183f96460afcc08aead164154"
 ---
 # Operations Runbook v0.1.0-alpha.0
@@ -640,7 +640,11 @@ Replay reads Bronze only and republishes to `aether.sdk.events.validated` with
 `source_service="ingestion.replay"`; the `sdk_bronze_writer` consumer **skips**
 those rows (the durable Bronze row already exists), incrementing
 `ingestion_bronze_replay_skip_total`, so a replay re-delivers the downstream
-pipeline without double-persisting.
+pipeline without double-persisting. The `analytics_event_recorder` consumer
+does not skip replays: it inserts the analytics `events` row only if absent
+(tenant-scoped `(tenant_id, event_id)` id), so a replay backfills events the
+analytics API is missing and is a no-op (`analytics_events_duplicate_total`)
+for events already recorded.
 
 ## Ingestion Funnel Observability & SDK Version Tiers (WS-E)
 

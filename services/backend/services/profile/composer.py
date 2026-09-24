@@ -282,9 +282,11 @@ class ProfileComposer:
         )
         return [
             {
-                "event_id": e.get("id", ""),
+                # Projector rows carry the SDK event id and its canonical
+                # occurred_at; raw record_event rows only have id/created_at.
+                "event_id": e.get("event_id") or e.get("id", ""),
                 "event_type": e.get("event_type", ""),
-                "timestamp": e.get("created_at", ""),
+                "timestamp": e.get("occurred_at") or e.get("created_at", ""),
                 "properties": e.get("properties", {}),
                 "source": "analytics",
             }

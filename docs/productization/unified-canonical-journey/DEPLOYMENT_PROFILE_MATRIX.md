@@ -8,11 +8,11 @@ status: stable
 since_version: 0.1.0
 source_files: [services/backend/alembic/versions/20260627_canonical_activity.py, services/backend/alembic/versions/20260725_ai_referral_attribution.py, services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/repositories/activity_repo.py, services/backend/services/measurement/repositories/journey_step_repo.py]
 source_hashes:
-  services/backend/alembic/versions/20260627_canonical_activity.py: sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8
-  services/backend/alembic/versions/20260725_ai_referral_attribution.py: sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189
-  services/backend/services/measurement/engine/journey_compiler.py: sha256:53c760d1ef1a8c9efdd63665039287f033904f4c29e665341ffc6e5efdd40b4e
-  services/backend/services/measurement/repositories/activity_repo.py: sha256:faccc83968a7d96bcb74d60f05cbf3886bcabf22fc69ca9c4f6f4effa30894a9
-  services/backend/services/measurement/repositories/journey_step_repo.py: sha256:2e6af9a132e634bcfee37410c0966acc7d6f190d65b3d0de4c06efcfdee72831
+  "services/backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
+  "services/backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
+  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:53c760d1ef1a8c9efdd63665039287f033904f4c29e665341ffc6e5efdd40b4e"
+  "services/backend/services/measurement/repositories/activity_repo.py": "sha256:8ef772fda45e4364b7529e4c4f12724a88116fdc9f9021727c6e9cd91ae6ab06"
+  "services/backend/services/measurement/repositories/journey_step_repo.py": "sha256:b5ded116782e70397b8e3009c15ec8cd30490ecdf52bd7c580f0a81806804ec6"
 ---
 
 # Deployment Profile Matrix — Unified Canonical Journey

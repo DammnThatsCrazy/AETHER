@@ -223,10 +223,10 @@ See [frontend-integration.md](./frontend-integration.md) for hook and component 
 
 ### Events
 The service publishes best-effort event bus messages on state transitions:
-- `tenant.activation.updated` — activation milestone change
-- `tenant.surface_readiness.updated` — provider sync / surface readiness change
-- `lens.projection.updated` — lens projection change
-- `background_job.updated` — background job status change
+- `aether.tenant.activation.updated` — activation milestone change
+- `aether.tenant.surface_readiness.updated` — provider sync / surface readiness change
+- `aether.lens.projection.updated` — lens projection change
+- `aether.background_job.updated` — background job status change
 
 ---
 

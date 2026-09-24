@@ -17,12 +17,15 @@ import json
 import os
 import re
 from abc import ABC
+from collections import Counter
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Optional, TypeVar
 
 from shared.cache.cache import TTL, CacheClient, CacheKey
 from shared.common.common import NotFoundError, utc_now
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger
+from shared.temporal.instant import coerce_utc_lenient
 
 logger = get_logger("aether.repository")
 
@@ -168,6 +171,66 @@ def _jsonb_text(value: Any) -> str:
     return str(value)
 
 
+# ── Explicit-column (``_jsonb_mode = False``) schema awareness ──────────────
+# Those repositories write straight into migration-owned columns, so the
+# values they bind must match each column's Postgres type: asyncpg rejects an
+# ISO-8601 *string* for a ``timestamptz`` column and a Python list for a
+# ``text[]`` column that is cast to jsonb. The column set/type map is
+# introspected once per table from ``information_schema`` and cached here.
+_EXPLICIT_COLUMN_TYPES: dict[str, dict[str, str]] = {}
+#: Per table, the ``NOT NULL`` columns that carry a server default. A ``None``
+#: for one of these is omitted from the write (the default / current value
+#: applies) instead of binding an explicit NULL that violates the constraint.
+_EXPLICIT_DEFAULTED_NOT_NULL: dict[str, frozenset[str]] = {}
+
+#: Bookkeeping columns ``BaseRepository.insert``/``update`` stamp on every
+#: record. A migration-owned explicit-column table may lack them (e.g.
+#: ``notification_intelligence_events`` has ``detected_at``/``updated_at`` but
+#: no ``created_at``); they are dropped from the write rather than failing it.
+_AUTO_STAMP_COLUMNS = frozenset({"created_at", "updated_at"})
+
+_JSON_DATA_TYPES = frozenset({"json", "jsonb"})
+_TIMESTAMPTZ_DATA_TYPE = "timestamp with time zone"
+
+
+def _explicit_bind(data_type: Optional[str], value: Any) -> tuple[Any, str]:
+    """``(bound value, SQL cast suffix)`` for one explicit-column write.
+
+    ``data_type`` is the column's ``information_schema`` type, or ``None`` when
+    the schema is unknown (introspection unavailable) — then the legacy rule
+    (dict/list → jsonb) applies unchanged.
+    """
+    if data_type is None:
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, default=str), "::jsonb"
+        return value, ""
+    if data_type in _JSON_DATA_TYPES:
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, default=str), f"::{data_type}"
+        # None, or JSON text read back through ``SELECT *`` (asyncpg returns
+        # json/jsonb as ``str`` without a codec) — bind as-is.
+        return value, f"::{data_type}"
+    if data_type == _TIMESTAMPTZ_DATA_TYPE and isinstance(value, str):
+        # ``insert``/``update`` stamp ISO strings and ``_row_to_dict`` renders
+        # read-back datetimes as ISO strings; asyncpg needs a datetime.
+        parsed = coerce_utc_lenient(value)
+        return (parsed if parsed is not None else value), ""
+    # ARRAY columns take the Python list directly; scalars bind as-is.
+    return value, ""
+
+
+def _explicit_filter_param(data_type: Optional[str], value: Any) -> Any:
+    """Bind an equality-filter value against an explicit column's type."""
+    if data_type == "boolean":
+        if isinstance(value, bool):
+            return value
+        return _jsonb_text(value).strip().lower() == "true"
+    if data_type == _TIMESTAMPTZ_DATA_TYPE and isinstance(value, str):
+        parsed = coerce_utc_lenient(value)
+        return parsed if parsed is not None else value
+    return _jsonb_text(value)
+
+
 def _matches_filters(row: dict, filters: dict) -> bool:
     """In-memory equivalent of the SQL find_many predicate.
 
@@ -207,6 +270,13 @@ class BaseRepository(ABC):
 
     _jsonb_mode: bool = True
     _default_sort: str = "created_at"
+    #: Explicit-column mode only: the JSONB column that holds record keys the
+    #: migrated table has no column for (e.g. ``payload``). ``None`` keeps
+    #: unknown keys as columns, so an unexpected key fails loudly.
+    _payload_column: Optional[str] = None
+    #: Explicit-column mode only: record key → migrated column name, for
+    #: records whose historical key differs from the migration's column.
+    _column_renames: dict[str, str] = {}
 
     def __init__(self, table_name: str) -> None:
         self.table_name = table_name
@@ -235,20 +305,160 @@ class BaseRepository(ABC):
         safe_name = self.table_name.replace("-", "_").replace(" ", "_")
         if not _TABLE_NAME_RE.match(safe_name):
             raise ValueError(f"Invalid table name: {safe_name!r} — must be alphanumeric/underscores only")
-        await pool.execute(f"""
-            CREATE TABLE IF NOT EXISTS {safe_name} (
-                id TEXT PRIMARY KEY,
-                data JSONB NOT NULL DEFAULT '{{}}',
-                tenant_id TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        """)
-        await pool.execute(f"""
-            CREATE INDEX IF NOT EXISTS idx_{safe_name}_tenant
-            ON {safe_name} (tenant_id)
-        """)
+        # Postgres ``CREATE TABLE/INDEX IF NOT EXISTS`` is NOT concurrency-safe:
+        # two sessions creating the same relation at once both pass the
+        # existence check and the loser fails on ``pg_class_relname_nsp_index``
+        # (the API and every worker loop start with their own repository
+        # instances, so this raced on every fresh deploy). The bootstrap
+        # therefore runs under a per-table transaction-scoped advisory lock —
+        # the pattern ``_PostgresGraphBackend.ensure_schema`` uses — and is
+        # skipped entirely when the table already exists: a migration-owned
+        # table (e.g. ``reward_delivery_jobs`` from
+        # ``20260828_reward_delivery_tables``) keeps exactly the schema and
+        # indexes Alembic gave it instead of gaining a duplicate runtime index.
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                    f"aether.base_repository.ensure_table:{safe_name}",
+                )
+                exists = await conn.fetchval(
+                    "SELECT to_regclass($1) IS NOT NULL", safe_name
+                )
+                if not exists:
+                    await conn.execute(f"""
+                        CREATE TABLE IF NOT EXISTS {safe_name} (
+                            id TEXT PRIMARY KEY,
+                            data JSONB NOT NULL DEFAULT '{{}}',
+                            tenant_id TEXT,
+                            created_at TIMESTAMPTZ DEFAULT NOW(),
+                            updated_at TIMESTAMPTZ DEFAULT NOW()
+                        )
+                    """)
+                    await conn.execute(f"""
+                        CREATE INDEX IF NOT EXISTS idx_{safe_name}_tenant
+                        ON {safe_name} (tenant_id)
+                    """)
         self._table_ensured = True
+
+    async def _explicit_column_types(self, pool: Any) -> dict[str, str]:
+        """``{column: data_type}`` of an explicit-column table (cached).
+
+        Empty when the table is not visible (callers then fall back to the
+        legacy untyped binding rather than guessing).
+        """
+        cached = _EXPLICIT_COLUMN_TYPES.get(self.table_name)
+        if cached is not None:
+            return cached
+        rows = await pool.fetch(
+            "SELECT column_name, data_type, is_nullable, column_default "
+            "FROM information_schema.columns "
+            "WHERE table_name = $1 AND table_schema = current_schema()",
+            self.table_name,
+        )
+        types = {r["column_name"]: r["data_type"] for r in rows or []}
+        if types:
+            _EXPLICIT_COLUMN_TYPES[self.table_name] = types
+            _EXPLICIT_DEFAULTED_NOT_NULL[self.table_name] = frozenset(
+                r["column_name"] for r in rows
+                if r.get("is_nullable") == "NO" and r.get("column_default") is not None
+            )
+        return types
+
+    def _explicit_column_for(self, key: str) -> str:
+        return self._column_renames.get(key, key)
+
+    def _explicit_record(self, row: Any, column_types: dict[str, str]) -> dict:
+        """Materialise an explicit-column row as the repository's record dict.
+
+        Datetimes render as ISO strings (``_row_to_dict``); json/jsonb columns
+        are decoded (asyncpg returns them as text without a codec); the
+        ``_payload_column`` bag is unpacked underneath the real columns; and
+        each renamed record key (``_column_renames``) is exposed alongside its
+        column so callers keep reading the key they wrote.
+        """
+        record = self._row_to_dict(row)
+        for col, data_type in column_types.items():
+            value = record.get(col)
+            if data_type in _JSON_DATA_TYPES and isinstance(value, str):
+                try:
+                    record[col] = json.loads(value)
+                except ValueError:
+                    pass
+        payload_col = self._payload_column
+        if payload_col and payload_col in record:
+            bag = record.pop(payload_col)
+            if isinstance(bag, dict):
+                for key, value in bag.items():
+                    record.setdefault(key, value)
+        for key, col in self._column_renames.items():
+            if col in record:
+                record[key] = record[col]
+        return record
+
+    def _explicit_write_columns(
+        self, data: dict, column_types: dict[str, str]
+    ) -> list[tuple[str, Any]]:
+        """Map a record dict onto the migrated columns, ``[(column, value)]``.
+
+        * record keys are renamed through ``_column_renames``; when both the
+          record key and its column name are present the column name wins;
+        * ``created_at``/``updated_at`` stamps the table lacks are dropped;
+        * keys with no column go into ``_payload_column`` when the repository
+          declares one (otherwise they are kept, so Postgres rejects the
+          unknown column loudly rather than the data vanishing);
+        * ``None`` for a ``NOT NULL`` column with a server default is omitted.
+        """
+        if not column_types:
+            return [(k, v) for k, v in data.items()]
+        defaulted = _EXPLICIT_DEFAULTED_NOT_NULL.get(self.table_name, frozenset())
+        payload_col = self._payload_column
+        if payload_col not in column_types:
+            payload_col = None
+        columns: dict[str, Any] = {}
+        overflow: dict[str, Any] = {}
+        for key, value in data.items():
+            if payload_col and key == payload_col:
+                if isinstance(value, dict):
+                    overflow = {**value, **overflow}
+                continue
+            col = self._explicit_column_for(key)
+            if col in column_types:
+                if col != key and col in data:
+                    continue
+                if value is None and col in defaulted:
+                    continue
+                columns[col] = value
+            elif key in _AUTO_STAMP_COLUMNS:
+                continue
+            elif payload_col:
+                overflow[key] = value
+            else:
+                columns[key] = value
+        if payload_col:
+            columns[payload_col] = overflow
+        return list(columns.items())
+
+    def _explicit_predicate(
+        self, key: str, idx: int, value: Any, column_types: dict[str, str]
+    ) -> tuple[str, Any]:
+        """``(SQL condition, bound param)`` for an explicit-mode equality filter."""
+        if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
+            raise ValueError(f"Invalid filter key: {key!r}")
+        col = self._explicit_column_for(key)
+        payload_col = self._payload_column
+        if (
+            column_types
+            and col not in column_types
+            and payload_col
+            and payload_col in column_types
+        ):
+            if value is None:
+                return f"{payload_col}->>'{key}' IS NULL", None
+            return f"{payload_col}->>'{key}' = ${idx}", _jsonb_text(value)
+        if value is None:
+            return f"{col} IS NULL", None
+        return f"{col} = ${idx}", _explicit_filter_param(column_types.get(col), value)
 
     @staticmethod
     def _row_to_dict(row: Any) -> dict:
@@ -271,12 +481,13 @@ class BaseRepository(ABC):
             if row is None:
                 return None
             return json.loads(row["data"])
+        column_types = await self._explicit_column_types(pool)
         row = await pool.fetchrow(
             f"SELECT * FROM {self.table_name} WHERE id = $1", record_id
         )
         if row is None:
             return None
-        return self._row_to_dict(row)
+        return self._explicit_record(row, column_types)
 
     async def find_by_id_or_fail(self, record_id: str) -> dict:
         record = await self.find_by_id(record_id)
@@ -289,9 +500,14 @@ class BaseRepository(ABC):
         filters: Optional[dict[str, Any]] = None,
         limit: int = 50,
         offset: int = 0,
-        sort_by: str = "created_at",
+        sort_by: Optional[str] = None,
         sort_order: str = "desc",
     ) -> list[dict]:
+        # ``None`` means "the table's natural order": ``_default_sort``. A
+        # hard-coded ``created_at`` default silently overrode subclasses whose
+        # table has no such column (notification_intelligence_events sorts by
+        # ``detected_at``), so every unsorted query there failed in Postgres.
+        sort_by = sort_by or self._default_sort
         pool = await self._ensure_pool()
         if pool is None:
             # In-memory fallback
@@ -306,6 +522,9 @@ class BaseRepository(ABC):
             return results[offset: offset + limit]
 
         await self._ensure_table()
+        column_types = (
+            {} if self._jsonb_mode else await self._explicit_column_types(pool)
+        )
         # Build filter conditions
         conditions = ["1=1"]
         params: list[Any] = []
@@ -334,18 +553,24 @@ class BaseRepository(ABC):
                         continue
                     conditions.append(f"data->>'{key}' = ${idx}")
                 else:
-                    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
-                        raise ValueError(f"Invalid filter key: {key!r}")
-                    if value is None:
-                        conditions.append(f"{key} IS NULL")
-                        continue
-                    conditions.append(f"{key} = ${idx}")
+                    condition, param = self._explicit_predicate(
+                        key, idx, value, column_types
+                    )
+                    conditions.append(condition)
+                    if value is not None:
+                        params.append(param)
+                        idx += 1
+                    continue
                 params.append(_jsonb_text(value))
                 idx += 1
 
         direction = "DESC" if sort_order == "desc" else "ASC"
         allowed_sorts = {"created_at", "updated_at", "detected_at"}
         safe_sort = sort_by if sort_by in allowed_sorts else self._default_sort
+        if column_types and safe_sort not in column_types:
+            # An explicit caller sort key the migrated table does not have
+            # (e.g. ``created_at`` on notification_intelligence_events).
+            safe_sort = self._default_sort
         select_expr = "data" if self._jsonb_mode else "*"
         query = f"""
             SELECT {select_expr} FROM {self.table_name}
@@ -357,7 +582,7 @@ class BaseRepository(ABC):
         rows = await pool.fetch(query, *params)
         if self._jsonb_mode:
             return [json.loads(row["data"]) for row in rows]
-        return [self._row_to_dict(row) for row in rows]
+        return [self._explicit_record(row, column_types) for row in rows]
 
     async def count(self, filters: Optional[dict[str, Any]] = None) -> int:
         pool = await self._ensure_pool()
@@ -370,6 +595,9 @@ class BaseRepository(ABC):
             ])
 
         await self._ensure_table()
+        column_types = (
+            {} if self._jsonb_mode else await self._explicit_column_types(pool)
+        )
         conditions = ["1=1"]
         params: list[Any] = []
         idx = 1
@@ -387,12 +615,14 @@ class BaseRepository(ABC):
                         continue
                     conditions.append(f"data->>'{key}' = ${idx}")
                 else:
-                    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
-                        raise ValueError(f"Invalid filter key: {key!r}")
-                    if value is None:
-                        conditions.append(f"{key} IS NULL")
-                        continue
-                    conditions.append(f"{key} = ${idx}")
+                    condition, param = self._explicit_predicate(
+                        key, idx, value, column_types
+                    )
+                    conditions.append(condition)
+                    if value is not None:
+                        params.append(param)
+                        idx += 1
+                    continue
                 params.append(_jsonb_text(value))
                 idx += 1
 
@@ -450,19 +680,19 @@ class BaseRepository(ABC):
                 record_id, json.dumps(data, default=str), tenant_id,
             )
         else:
+            column_types = await self._explicit_column_types(pool)
             cols: list[str] = []
             vals: list[Any] = []
             casts: list[str] = []
-            for col, val in data.items():
+            for col, val in self._explicit_write_columns(data, column_types):
                 if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
                     raise ValueError(f"Invalid column name: {col!r}")
+                bound, cast = _explicit_bind(
+                    column_types.get(col) if column_types else None, val
+                )
                 cols.append(col)
-                if isinstance(val, (dict, list)):
-                    vals.append(json.dumps(val, default=str))
-                    casts.append("::jsonb")
-                else:
-                    vals.append(val)
-                    casts.append("")
+                vals.append(bound)
+                casts.append(cast)
             col_list = ", ".join(cols)
             placeholders = ", ".join(
                 f"${i + 1}{casts[i]}" for i in range(len(cols))
@@ -496,17 +726,20 @@ class BaseRepository(ABC):
                 json.dumps(existing, default=str), record_id,
             )
         else:
+            column_types = await self._explicit_column_types(pool)
             set_parts: list[str] = []
             vals: list[Any] = []
             idx = 1
-            for col, val in existing.items():
+            for col, val in self._explicit_write_columns(existing, column_types):
                 if col == "id":
                     continue
                 if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
                     raise ValueError(f"Invalid column name: {col!r}")
-                cast = "::jsonb" if isinstance(val, (dict, list)) else ""
+                bound, cast = _explicit_bind(
+                    column_types.get(col) if column_types else None, val
+                )
                 set_parts.append(f"{col} = ${idx}{cast}")
-                vals.append(json.dumps(val, default=str) if isinstance(val, (dict, list)) else val)
+                vals.append(bound)
                 idx += 1
             vals.append(record_id)
             await pool.execute(
@@ -567,11 +800,15 @@ class BaseRepository(ABC):
             raise ValueError(f"Invalid entity_field: {entity_field!r}")
         if self._jsonb_mode:
             where_clause = f"data->>'{entity_field}' = $1"
+            param: Any = entity_id
         else:
-            where_clause = f"{entity_field} = $1"
+            where_clause, param = self._explicit_predicate(
+                entity_field, 1, entity_id,
+                await self._explicit_column_types(pool),
+            )
         result = await pool.execute(
             f"DELETE FROM {self.table_name} WHERE {where_clause}",
-            entity_id,
+            param,
         )
         # result is like "DELETE 5"
         count = int(result.split()[-1]) if result else 0
@@ -678,6 +915,93 @@ class IdentityRepository:
 # ANALYTICS REPOSITORY (TimescaleDB + Redis caching)
 # ═══════════════════════════════════════════════════════════════════════════
 
+#
+# The ``events`` and ``sessions`` JSONB tables are written by the
+# ``analytics_event_recorder`` projector (services/ingestion/workers.py), which
+# the ``stream-ingestion-projection`` consumer subscribes on
+# SDK_EVENTS_VALIDATED. Each processed SDK event becomes one ``events`` row
+# keyed by ``analytics_event_record_id(tenant_id, event_id)`` and advances one
+# ``sessions`` row keyed by ``analytics_session_record_id(tenant_id,
+# session_id)``. Both ids are tenant-scoped digests, so an at-least-once
+# redelivery lands on the same row and two tenants never share a row.
+
+ANALYTICS_EVENT_RECORD_TYPE = "analytics_event"
+ANALYTICS_SESSION_RECORD_TYPE = "analytics_session"
+# The dashboard summary window; ``period`` in the response names it.
+ANALYTICS_SUMMARY_WINDOW = timedelta(hours=24)
+ANALYTICS_SUMMARY_TOP_EVENT_TYPES = 10
+
+# Query keys that are request plumbing, never row predicates. ``limit`` rides
+# ``EventQuery.model_dump()``; treating it as ``data->>'limit' = '1'`` made
+# every limited query match nothing. ``tenant_id`` is bound from the
+# authenticated request and must not be overridable by query parameters.
+_ANALYTICS_NON_FILTER_KEYS = frozenset({"limit", "offset", "tenant_id"})
+_FILTER_KEY_RE = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*")
+_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_CANONICAL_TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
+
+
+def _tenant_scoped_digest(prefix: str, tenant_id: str, natural_id: str) -> str:
+    digest = hashlib.sha256(f"{tenant_id}\x1f{natural_id}".encode()).hexdigest()
+    return f"{prefix}_{digest[:32]}"
+
+
+def analytics_event_record_id(tenant_id: str, event_id: str) -> str:
+    """Deterministic, tenant-scoped ``events`` row id for an SDK event."""
+    return _tenant_scoped_digest("evt", tenant_id, event_id)
+
+
+def analytics_session_record_id(tenant_id: str, session_id: str) -> str:
+    """Deterministic, tenant-scoped ``sessions`` row id for an SDK session."""
+    return _tenant_scoped_digest("ses", tenant_id, session_id)
+
+
+def analytics_query_cache_pattern(tenant_id: str) -> str:
+    """Cache-key pattern covering every cached ``query_events`` result of one
+    tenant (the trailing ``:`` keeps tenant ``t1`` from matching ``t10``)."""
+    return CacheKey.analytics_query(tenant_id, "*")
+
+
+def canonical_utc_timestamp(value: Any, *, end_of_day: bool = False) -> Optional[str]:
+    """Render ``value`` as fixed-width UTC ISO-8601 (``YYYY-MM-DDTHH:MM:SS.ffffffZ``).
+
+    Stored ``occurred_at`` values and query bounds share this spelling, so a
+    plain text comparison on ``data->>'occurred_at'`` is a chronological
+    comparison. A date-only bound (``YYYY-MM-DD``) covers the whole day:
+    midnight for a start bound, the last microsecond for an end bound. Naive
+    values are taken as UTC. Returns ``None`` for empty input and raises
+    ``ValueError`` for anything unparseable.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value).strip()
+        if _DATE_ONLY_RE.match(text):
+            parsed = datetime.fromisoformat(text)
+            if end_of_day:
+                # The day's last microsecond; ``+ 1 day`` overflows on 9999-12-31.
+                parsed = datetime.combine(parsed.date(), time.max)
+        else:
+            if text.endswith(("Z", "z")):
+                text = text[:-1] + "+00:00"
+            parsed = datetime.fromisoformat(text)
+    parsed = coerce_utc_lenient(parsed)
+    return parsed.astimezone(timezone.utc).strftime(_CANONICAL_TS_FORMAT)
+
+
+def _as_utc_datetime(value: Any) -> Optional[datetime]:
+    """Best-effort parse of a stored timestamp (``None`` when unparseable)."""
+    try:
+        canonical = canonical_utc_timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if canonical is None:
+        return None
+    return coerce_utc_lenient(canonical)
+
+
 class AnalyticsRepository:
     """Query engine for dashboards — uses TimescaleDB with Redis query caching."""
 
@@ -692,40 +1016,303 @@ class AnalyticsRepository:
         query_params: dict,
         limit: int = 100,
     ) -> list[dict]:
+        """Tenant-scoped event query.
+
+        Equality filters (``event_type``, ``user_id``, ``session_id``, ...)
+        match the recorded row fields; ``start_date`` / ``end_date`` bound the
+        event's canonical ``occurred_at`` (inclusive; a date-only bound covers
+        the whole day). Non-empty results are cached for ``TTL.MEDIUM``. An
+        empty result is never cached, so a caller polling for an event that
+        is still in flight sees it on the first read after it lands.
+        """
+        params = dict(query_params or {})
+        occurred_from = canonical_utc_timestamp(params.pop("start_date", None))
+        occurred_to = canonical_utc_timestamp(
+            params.pop("end_date", None), end_of_day=True
+        )
+        for key in _ANALYTICS_NON_FILTER_KEYS:
+            params.pop(key, None)
         # Cache key must include `limit` — without it, a /sessions?limit=1 call
         # would otherwise serve its 1-event result to /platforms, /protocols,
         # /devices, /rewards (all of which call with the same {user_id} filter
         # but larger limits), making the rollups undercount.
         cache_key = CacheKey.analytics_query(
-            tenant_id, CacheKey.hash_query(f"{query_params}|limit={limit}")
+            tenant_id,
+            CacheKey.hash_query(
+                f"{sorted(params.items())}|from={occurred_from}"
+                f"|to={occurred_to}|limit={limit}"
+            ),
         )
         cached = await self.cache.get_json(cache_key)
         if cached:
             return cached
 
-        results = await self._events.find_many(
-            filters={"tenant_id": tenant_id, **query_params},
+        results = await self._events.query(
+            tenant_id,
+            params,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
             limit=limit,
         )
-        await self.cache.set_json(cache_key, results, TTL.MEDIUM)
+        if results:
+            await self.cache.set_json(cache_key, results, TTL.MEDIUM)
         return results
 
     async def record_event(self, event_id: str, data: dict) -> dict:
+        """Raw upsert under a caller-chosen id (fixtures and legacy callers).
+
+        The ingestion projector uses :meth:`record_processed_event`, which is
+        idempotent under redelivery and maintains the session rollup.
+        """
         return await self._events.insert(event_id, data)
 
-    async def get_event(self, event_id: str) -> dict:
+    async def record_processed_event(self, record: dict) -> bool:
+        """Insert a processed SDK event once and advance its session rollup.
+
+        ``record`` must carry ``tenant_id`` and ``event_id``; its row id is
+        :func:`analytics_event_record_id`. Returns ``True`` when the event was
+        newly recorded and ``False`` for a redelivery of an already-recorded
+        event, which changes nothing. On PostgreSQL the event insert and the
+        session increment commit in one transaction, so a session's
+        ``event_count`` counts each event exactly once.
+        """
+        tenant_id = str(record.get("tenant_id") or "")
+        event_id = str(record.get("event_id") or "")
+        if not tenant_id or not event_id:
+            raise ValueError("analytics event record requires tenant_id and event_id")
+        record_id = analytics_event_record_id(tenant_id, event_id)
+        session_id = record.get("session_id")
+        session_record_id = (
+            analytics_session_record_id(tenant_id, str(session_id)) if session_id else None
+        )
+        now = utc_now().isoformat()
+        row = {
+            **record,
+            "record_type": ANALYTICS_EVENT_RECORD_TYPE,
+            "id": record_id,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        pool = await self._events._ensure_pool()
+        if pool is None:
+            if record_id in self._events._store:
+                return False
+            self._events._store[record_id] = row
+            if session_record_id:
+                self._sessions.advance_in_memory(session_record_id, row, now)
+            return True
+
+        await self._events._ensure_table()
+        if session_record_id:
+            await self._sessions._ensure_table()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                inserted = await conn.fetchval(
+                    f"""INSERT INTO {self._events.table_name}
+                        (id, data, tenant_id, created_at, updated_at)
+                        VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                        ON CONFLICT (id) DO NOTHING
+                        RETURNING id""",
+                    record_id, json.dumps(row, default=str), tenant_id,
+                )
+                if inserted is None:
+                    return False
+                if session_record_id:
+                    await self._sessions.advance_sql(conn, session_record_id, row, now)
+        return True
+
+    async def get_event(self, event_id: str, tenant_id: Optional[str] = None) -> dict:
+        """Fetch one event.
+
+        With ``tenant_id`` the lookup first resolves the tenant-scoped record
+        id the projector writes, so another tenant's event is unreachable by
+        construction; a raw id is the fallback for rows written through
+        :meth:`record_event`.
+        """
+        if tenant_id:
+            record = await self._events.find_by_id(
+                analytics_event_record_id(tenant_id, event_id)
+            )
+            if record is not None:
+                return record
         return await self._events.find_by_id_or_fail(event_id)
 
     async def dashboard_summary(self, tenant_id: str | None = None) -> dict:
-        filters = {"tenant_id": tenant_id} if tenant_id else None
-        events = await self._events.count(filters=filters)
-        sessions = await self._sessions.count(filters=filters)
+        """Summary of the last 24h of processed events.
+
+        Computed from the store by aggregate queries bounded by the tenant
+        index and the 24h ``created_at`` window (when the event was processed,
+        which is server-authoritative, unlike the SDK timestamp):
+        ``total_events`` rows, ``total_sessions`` sessions seen in the window,
+        ``unique_users`` distinct ``user_id`` (falling back to
+        ``anonymous_id`` for unidentified visitors) and the ten most frequent
+        ``event_type`` values. ``tenant_id=None`` summarises every tenant (the
+        Kyber cross-tenant scope).
+        """
+        since = utc_now() - ANALYTICS_SUMMARY_WINDOW
+        events = await self._events.summary(
+            tenant_id, since, top_n=ANALYTICS_SUMMARY_TOP_EVENT_TYPES
+        )
+        sessions = await self._sessions.count_active(tenant_id, since)
         return {
             "period": "24h",
-            "total_events": events,
+            "total_events": events["total_events"],
             "total_sessions": sessions,
-            "unique_users": 0,
-            "top_event_types": [],
+            "unique_users": events["unique_users"],
+            "top_event_types": events["top_event_types"],
+        }
+
+    async def erase_subject(
+        self,
+        tenant_id: str,
+        user_id: Optional[str],
+        anonymous_id: Optional[str] = None,
+    ) -> dict[str, int]:
+        """DSR erasure of one data subject from the analytics event store.
+
+        Hard-deletes (the tenant-erasure semantics for these tables) every
+        ``events`` row in ``tenant_id`` whose ``user_id`` equals ``user_id`` or,
+        when the request carries it, whose ``anonymous_id`` equals
+        ``anonymous_id``, and every analytics ``sessions`` rollup attributed to
+        either identity (following the semantic plane's precedent: a row the
+        subject is part of is deleted, not partially kept). A session rollup
+        that is attributed to ANOTHER identity but counted some of the
+        subject's events is recomputed from its remaining events (or deleted
+        when none remain), so no aggregate keeps the erased contribution.
+
+        Tenant-scoped on every statement and idempotent: a re-run erases 0.
+        Returns ``events_deleted``, ``sessions_deleted`` and
+        ``sessions_recomputed``. On PostgreSQL all statements commit in one
+        transaction.
+        """
+        if not tenant_id:
+            raise ValueError("analytics erasure requires tenant_id")
+        user_id = user_id or None
+        anonymous_id = anonymous_id or None
+        if user_id is None and anonymous_id is None:
+            raise ValueError("analytics erasure requires user_id or anonymous_id")
+
+        pool = await self._events._ensure_pool()
+        if pool is None:
+            return self._erase_subject_in_memory(tenant_id, user_id, anonymous_id)
+
+        await self._events._ensure_table()
+        await self._sessions._ensure_table()
+        events_table = self._events.table_name
+        sessions_table = self._sessions.table_name
+        subject_predicate = "(data->>'user_id' = $2 OR data->>'anonymous_id' = $3)"
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                erased = await conn.fetch(
+                    f"""DELETE FROM {events_table}
+                        WHERE tenant_id = $1 AND {subject_predicate}
+                        RETURNING data->>'session_id' AS session_id""",
+                    tenant_id, user_id, anonymous_id,
+                )
+                deleted_sessions = await conn.fetch(
+                    f"""DELETE FROM {sessions_table}
+                        WHERE tenant_id = $1 AND data->>'record_type' = $4
+                          AND {subject_predicate}
+                        RETURNING data->>'session_id' AS session_id""",
+                    tenant_id, user_id, anonymous_id, ANALYTICS_SESSION_RECORD_TYPE,
+                )
+                touched = {r["session_id"] for r in erased if r["session_id"]}
+                touched -= {r["session_id"] for r in deleted_sessions}
+                sessions_deleted = len(deleted_sessions)
+                recomputed = 0
+                now = utc_now().isoformat()
+                for session_id in sorted(touched):
+                    record_id = analytics_session_record_id(tenant_id, session_id)
+                    remaining = await conn.fetchrow(
+                        f"""SELECT COUNT(*) AS n,
+                                   MIN(data->>'occurred_at') AS first_seen_at,
+                                   MAX(data->>'occurred_at') AS last_seen_at
+                            FROM {events_table}
+                            WHERE tenant_id = $1 AND data->>'session_id' = $2""",
+                        tenant_id, session_id,
+                    )
+                    if not remaining or int(remaining["n"]) == 0:
+                        status = await conn.execute(
+                            f"""DELETE FROM {sessions_table}
+                                WHERE id = $1 AND tenant_id = $2
+                                  AND data->>'record_type' = $3""",
+                            record_id, tenant_id, ANALYTICS_SESSION_RECORD_TYPE,
+                        )
+                        sessions_deleted += int(status.split()[-1]) if status else 0
+                        continue
+                    status = await conn.execute(
+                        f"""UPDATE {sessions_table} SET data = data || jsonb_build_object(
+                                'event_count', $3::bigint,
+                                'first_seen_at', $4::text,
+                                'last_seen_at', $5::text,
+                                'updated_at', $6::text)
+                            WHERE id = $1 AND tenant_id = $2
+                              AND data->>'record_type' = $7""",
+                        record_id, tenant_id, int(remaining["n"]),
+                        remaining["first_seen_at"], remaining["last_seen_at"], now,
+                        ANALYTICS_SESSION_RECORD_TYPE,
+                    )
+                    recomputed += int(status.split()[-1]) if status else 0
+        return {
+            "events_deleted": len(erased),
+            "sessions_deleted": sessions_deleted,
+            "sessions_recomputed": recomputed,
+        }
+
+    def _erase_subject_in_memory(
+        self, tenant_id: str, user_id: Optional[str], anonymous_id: Optional[str]
+    ) -> dict[str, int]:
+        def _is_subject(row: dict) -> bool:
+            return bool(
+                (user_id and row.get("user_id") == user_id)
+                or (anonymous_id and row.get("anonymous_id") == anonymous_id)
+            )
+
+        events = self._events._store
+        sessions = self._sessions._store
+        doomed = [
+            key for key, row in events.items()
+            if row.get("tenant_id") == tenant_id and _is_subject(row)
+        ]
+        touched = {events[key].get("session_id") for key in doomed} - {None, ""}
+        for key in doomed:
+            del events[key]
+        doomed_sessions = [
+            key for key, row in sessions.items()
+            if row.get("record_type") == ANALYTICS_SESSION_RECORD_TYPE
+            and row.get("tenant_id") == tenant_id
+            and _is_subject(row)
+        ]
+        for key in doomed_sessions:
+            touched.discard(sessions[key].get("session_id"))
+            del sessions[key]
+        sessions_deleted = len(doomed_sessions)
+        recomputed = 0
+        for session_id in touched:
+            record_id = analytics_session_record_id(tenant_id, session_id)
+            session = sessions.get(record_id)
+            if session is None or session.get("tenant_id") != tenant_id:
+                continue
+            remaining = [
+                row.get("occurred_at") or ""
+                for row in events.values()
+                if row.get("tenant_id") == tenant_id and row.get("session_id") == session_id
+            ]
+            if not remaining:
+                del sessions[record_id]
+                sessions_deleted += 1
+                continue
+            session.update({
+                "event_count": len(remaining),
+                "first_seen_at": min(remaining),
+                "last_seen_at": max(remaining),
+            })
+            recomputed += 1
+        return {
+            "events_deleted": len(doomed),
+            "sessions_deleted": sessions_deleted,
+            "sessions_recomputed": recomputed,
         }
 
 
@@ -889,14 +1476,247 @@ class _ProfileStore(BaseRepository):
         super().__init__("profiles")
 
 
+def _row_created_at(row: dict) -> Optional[datetime]:
+    return _as_utc_datetime(row.get("created_at"))
+
+
 class _EventStore(BaseRepository):
+    """Processed analytics events (JSONB ``events`` table)."""
+
     def __init__(self) -> None:
         super().__init__("events")
 
+    async def query(
+        self,
+        tenant_id: str,
+        equals: dict[str, Any],
+        *,
+        occurred_from: Optional[str] = None,
+        occurred_to: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Tenant-scoped equality + ``occurred_at`` range query, newest first.
+
+        An empty ``tenant_id`` returns nothing: analytics rows are never read
+        outside a tenant scope through this path. ``occurred_from`` /
+        ``occurred_to`` are canonical UTC strings (see
+        :func:`canonical_utc_timestamp`); rows without ``occurred_at`` never
+        satisfy a range bound.
+        """
+        if not tenant_id:
+            return []
+        for key in equals:
+            if not _FILTER_KEY_RE.fullmatch(key):
+                raise ValueError(f"Invalid filter key: {key!r}")
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            filters = {**equals, "tenant_id": tenant_id}
+            rows = [r for r in self._store.values() if _matches_filters(r, filters)]
+            if occurred_from is not None:
+                rows = [r for r in rows if (r.get("occurred_at") or "") >= occurred_from]
+            if occurred_to is not None:
+                rows = [
+                    r for r in rows
+                    if r.get("occurred_at") and r["occurred_at"] <= occurred_to
+                ]
+            rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+            return rows[:limit]
+
+        await self._ensure_table()
+        conditions = ["tenant_id = $1"]
+        params: list[Any] = [tenant_id]
+        for key, value in equals.items():
+            if value is None:
+                conditions.append(f"data->>'{key}' IS NULL")
+                continue
+            params.append(_jsonb_text(value))
+            conditions.append(f"data->>'{key}' = ${len(params)}")
+        if occurred_from is not None:
+            params.append(occurred_from)
+            conditions.append(f"data->>'occurred_at' >= ${len(params)}")
+        if occurred_to is not None:
+            params.append(occurred_to)
+            conditions.append(f"data->>'occurred_at' <= ${len(params)}")
+        params.append(limit)
+        rows = await pool.fetch(
+            f"""SELECT data FROM {self.table_name}
+                WHERE {' AND '.join(conditions)}
+                ORDER BY created_at DESC
+                LIMIT ${len(params)}""",
+            *params,
+        )
+        return [json.loads(row["data"]) for row in rows]
+
+    async def summary(
+        self, tenant_id: Optional[str], since: datetime, *, top_n: int
+    ) -> dict:
+        """Event count, distinct users and top event types since ``since``.
+
+        Two aggregate statements over the tenant's rows inside the window;
+        both are bounded by the ``tenant_id`` index and the ``created_at``
+        window rather than returning rows to the application.
+        """
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = [
+                r for r in self._store.values()
+                if (not tenant_id or r.get("tenant_id") == tenant_id)
+                and (_row_created_at(r) or since) >= since
+            ]
+            users = {
+                r.get("user_id") or r.get("anonymous_id")
+                for r in rows
+                if r.get("user_id") or r.get("anonymous_id")
+            }
+            counts = Counter(r.get("event_type") for r in rows if r.get("event_type"))
+            ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:top_n]
+            return {
+                "total_events": len(rows),
+                "unique_users": len(users),
+                "top_event_types": [
+                    {"event_type": et, "count": n} for et, n in ranked
+                ],
+            }
+
+        await self._ensure_table()
+        where = "created_at >= $1"
+        params: list[Any] = [since]
+        if tenant_id:
+            where += " AND tenant_id = $2"
+            params.append(tenant_id)
+        totals = await pool.fetchrow(
+            f"""SELECT COUNT(*) AS total_events,
+                       COUNT(DISTINCT COALESCE(
+                           NULLIF(data->>'user_id', ''),
+                           NULLIF(data->>'anonymous_id', '')
+                       )) AS unique_users
+                FROM {self.table_name} WHERE {where}""",
+            *params,
+        )
+        top = await pool.fetch(
+            f"""SELECT data->>'event_type' AS event_type, COUNT(*) AS count
+                FROM {self.table_name}
+                WHERE {where} AND COALESCE(data->>'event_type', '') <> ''
+                GROUP BY 1 ORDER BY 2 DESC, 1 ASC
+                LIMIT ${len(params) + 1}""",
+            *params, top_n,
+        )
+        return {
+            "total_events": int(totals["total_events"]) if totals else 0,
+            "unique_users": int(totals["unique_users"]) if totals else 0,
+            "top_event_types": [
+                {"event_type": r["event_type"], "count": int(r["count"])} for r in top
+            ],
+        }
+
 
 class _SessionStore(BaseRepository):
+    """Per-session rollup of processed analytics events.
+
+    The ``sessions`` table is shared with the fraud ``SessionRepository``, so
+    analytics rows carry ``record_type = 'analytics_session'`` and every
+    analytics read filters on it.
+    """
+
     def __init__(self) -> None:
         super().__init__("sessions")
+
+    @staticmethod
+    def _session_fields(event: dict) -> dict:
+        fields = {
+            "tenant_id": event["tenant_id"],
+            "session_id": event["session_id"],
+            "last_event_type": event.get("event_type"),
+        }
+        for key in ("user_id", "anonymous_id"):
+            if event.get(key):
+                fields[key] = event[key]
+        return fields
+
+    def advance_in_memory(self, record_id: str, event: dict, now: str) -> None:
+        seen_at = event.get("occurred_at") or canonical_utc_timestamp(now)
+        existing = self._store.get(record_id)
+        if existing is None:
+            self._store[record_id] = {
+                **self._session_fields(event),
+                "record_type": ANALYTICS_SESSION_RECORD_TYPE,
+                "id": record_id,
+                "first_seen_at": seen_at,
+                "last_seen_at": seen_at,
+                "event_count": 1,
+                "created_at": now,
+                "updated_at": now,
+            }
+            return
+        existing.update(self._session_fields(event))
+        existing["first_seen_at"] = min(existing.get("first_seen_at") or seen_at, seen_at)
+        existing["last_seen_at"] = max(existing.get("last_seen_at") or seen_at, seen_at)
+        existing["event_count"] = int(existing.get("event_count") or 0) + 1
+        existing["updated_at"] = now
+
+    async def advance_sql(self, conn: Any, record_id: str, event: dict, now: str) -> None:
+        """Upsert the session row and count one newly recorded event.
+
+        Runs on the caller's connection inside the event-insert transaction.
+        ``first_seen_at`` / ``last_seen_at`` are canonical UTC strings, so
+        ``LEAST`` / ``GREATEST`` on text are chronological; the tenant guard
+        keeps an (astronomically unlikely) digest collision from crossing
+        tenants.
+        """
+        seen_at = event.get("occurred_at") or canonical_utc_timestamp(now)
+        fields = self._session_fields(event)
+        initial = {
+            **fields,
+            "record_type": ANALYTICS_SESSION_RECORD_TYPE,
+            "id": record_id,
+            "first_seen_at": seen_at,
+            "last_seen_at": seen_at,
+            "event_count": 1,
+            "created_at": now,
+            "updated_at": now,
+        }
+        await conn.execute(
+            f"""INSERT INTO {self.table_name} AS s
+                    (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                    data = s.data || $4::jsonb || jsonb_build_object(
+                        'first_seen_at', LEAST(s.data->>'first_seen_at', $5::text),
+                        'last_seen_at', GREATEST(s.data->>'last_seen_at', $5::text),
+                        'event_count', COALESCE((s.data->>'event_count')::bigint, 0) + 1,
+                        'updated_at', $6::text
+                    ),
+                    updated_at = NOW()
+                WHERE s.tenant_id = EXCLUDED.tenant_id""",
+            record_id,
+            json.dumps(initial, default=str),
+            fields["tenant_id"],
+            json.dumps(fields, default=str),
+            seen_at,
+            now,
+        )
+
+    async def count_active(self, tenant_id: Optional[str], since: datetime) -> int:
+        """Analytics sessions with activity processed since ``since``."""
+        pool = await self._ensure_pool()
+        if pool is None:
+            return sum(
+                1 for r in self._store.values()
+                if r.get("record_type") == ANALYTICS_SESSION_RECORD_TYPE
+                and (not tenant_id or r.get("tenant_id") == tenant_id)
+                and (_as_utc_datetime(r.get("updated_at")) or since) >= since
+            )
+        await self._ensure_table()
+        where = "updated_at >= $1 AND data->>'record_type' = $2"
+        params: list[Any] = [since, ANALYTICS_SESSION_RECORD_TYPE]
+        if tenant_id:
+            where += " AND tenant_id = $3"
+            params.append(tenant_id)
+        row = await pool.fetchrow(
+            f"SELECT COUNT(*) AS cnt FROM {self.table_name} WHERE {where}", *params
+        )
+        return int(row["cnt"]) if row else 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════

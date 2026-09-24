@@ -32,11 +32,13 @@ source .venv/bin/activate
 cd "services/backend"
 python - <<'PY'
 import json
-from shared.events.events import declared_topics
+from shared.events.events import Topic
+topics = [t.value for t in Topic]
 open("../../deploy/kafka/topics.json", "w").write(
-    json.dumps({"schema_version": 1, "source": "shared.events.events::Topic",
-                "generated_from_enum": True, "topic_count": len(declared_topics()),
-                "topics": declared_topics()}, indent=2) + "\n")
+    json.dumps({"schema_version": 1,
+                "source": "services/backend/shared/events/events.py::Topic",
+                "generated_from_enum": True, "topic_count": len(topics),
+                "topics": topics}, indent=2) + "\n")
 PY
 ```
 

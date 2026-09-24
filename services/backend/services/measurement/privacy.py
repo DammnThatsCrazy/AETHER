@@ -6,12 +6,14 @@ from typing import Any
 
 from shared.logger.logger import get_logger
 from services.measurement.reattribution import reattribute_affected
+from services.measurement.repositories.activity_repo import ActivityRepository
 from services.measurement.repositories.touchpoint_repo import TouchpointRepository
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
 
 logger = get_logger("aether.measurement.privacy")
 
+_activity_repo = ActivityRepository()
 _touchpoint_repo = TouchpointRepository()
 _conversion_repo = ConversionRepository()
 _attribution_run_repo = AttributionRunRepository()
@@ -41,7 +43,8 @@ class MeasurementPrivacyHandler:
     'erasure' is submitted. Steps:
       1. Tombstone touchpoints (sets privacy_class='deleted', nulls identity fields)
       2. Mark conversions attribution-ineligible (nulls identity fields)
-      3. Triggers journey rebuild for the profile (which will auto-recompute attribution)
+      3. Tombstones the profile's canonical activities, then triggers the journey
+         rebuild for the profile (which will auto-recompute attribution)
       4. Re-attribution (Program 3 M1 — see
          docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md §3): for every
          conversion whose ACTIVE attribution run was built from touchpoints
@@ -76,9 +79,12 @@ class MeasurementPrivacyHandler:
     see the truncation-detection block below.
     """
 
-    async def handle_erasure(self, tenant_id: str, user_id: str) -> dict[str, Any]:
+    async def handle_erasure(
+        self, tenant_id: str, user_id: str, anonymous_id: str | None = None
+    ) -> dict[str, Any]:
         touchpoint_count = 0
         conversion_count = 0
+        activity_count = 0
         journey_rebuild_triggered = False
         errors: list[str] = []
         reattribution_truncated = False
@@ -183,10 +189,48 @@ class MeasurementPrivacyHandler:
             errors.append(f"conversion_tombstone: {exc}")
             logger.error("DSR erasure conversion tombstone failed: %s", exc, extra={"tenant_id": tenant_id})
 
+        # The journey rebuild below reads canonical_activity and skips only
+        # tombstoned/deleted/consent_restricted rows, so the subject's activities
+        # must be tombstoned first or the "privacy-correct" rebuild re-derives the
+        # erased journey from them.
+        try:
+            activity_count = await _activity_repo.tombstone_by_profile(tenant_id, user_id)
+            logger.info(
+                "DSR erasure: tombstoned %d canonical activities",
+                activity_count,
+                extra={"tenant_id": tenant_id, "user_id": user_id},
+            )
+        except Exception as exc:
+            errors.append(f"activity_tombstone: {exc}")
+            logger.error("DSR erasure activity tombstone failed: %s", exc, extra={"tenant_id": tenant_id})
+
+        # A DSR may also name the subject's pre-identification anonymous id;
+        # activity and touchpoints recorded only under it are erased too.
+        anonymous_id = anonymous_id if anonymous_id and anonymous_id != user_id else None
+        if anonymous_id:
+            try:
+                touchpoint_count += await _touchpoint_repo.tombstone_for_profile(
+                    tenant_id, anonymous_id
+                )
+                activity_count += await _activity_repo.tombstone_by_anonymous(
+                    tenant_id, anonymous_id
+                )
+            except Exception as exc:
+                errors.append(f"anonymous_tombstone: {exc}")
+                logger.error(
+                    "DSR erasure anonymous-id tombstone failed: %s", exc,
+                    extra={"tenant_id": tenant_id},
+                )
+
         try:
             from services.measurement.engine.journey_compiler import JourneyCompiler
             compiler = JourneyCompiler()
             await compiler.rebuild_affected_by_consent_change(tenant_id, user_id)
+            if anonymous_id:
+                await compiler.compile_for_profile(
+                    tenant_id, anonymous_id,
+                    identity_type="anonymous", trigger_reason="consent_change",
+                )
             journey_rebuild_triggered = True
         except Exception as exc:
             errors.append(f"journey_rebuild: {exc}")
@@ -234,6 +278,7 @@ class MeasurementPrivacyHandler:
             "user_id": user_id,
             "touchpoints_tombstoned": touchpoint_count,
             "conversions_tombstoned": conversion_count,
+            "activities_tombstoned": activity_count,
             "journey_rebuild_triggered": journey_rebuild_triggered,
             "conversions_reattributed": conversions_reattributed,
             "reattribution_truncated": reattribution_truncated,
@@ -249,7 +294,9 @@ class MeasurementPrivacyHandler:
 _handler = MeasurementPrivacyHandler()
 
 
-async def handle_erasure_background(tenant_id: str, user_id: str) -> dict[str, Any]:
+async def handle_erasure_background(
+    tenant_id: str, user_id: str, anonymous_id: str | None = None
+) -> dict[str, Any]:
     """Durable-job entry point for measurement erasure.
 
     Returns the per-store evidence dict (tombstone counts, journey-rebuild
@@ -259,6 +306,6 @@ async def handle_erasure_background(tenant_id: str, user_id: str) -> dict[str, A
     instead of silently losing the erasure (the old fire-and-forget path
     swallowed it).
     """
-    result = await _handler.handle_erasure(tenant_id, user_id)
+    result = await _handler.handle_erasure(tenant_id, user_id, anonymous_id)
     logger.info("DSR erasure complete: %s", result, extra={"tenant_id": tenant_id})
     return result

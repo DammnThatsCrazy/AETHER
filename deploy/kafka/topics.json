@@ -2,7 +2,7 @@
   "schema_version": 1,
   "source": "services/backend/shared/events/events.py::Topic",
   "generated_from_enum": true,
-  "topic_count": 240,
+  "topic_count": 257,
   "topics": [
     "aether.sdk.events.raw",
     "aether.sdk.events.validated",
@@ -198,6 +198,14 @@
     "aether.fraud.evaluation.completed",
     "aether.fraud.evaluation.failed",
     "aether.risk.annotation.updated",
+    "aether.risk.signal.created",
+    "aether.risk.signal.superseded",
+    "aether.risk.assessment.created",
+    "aether.risk.assessment.superseded",
+    "aether.fraud.hypothesis.created",
+    "aether.fraud.hypothesis.updated",
+    "aether.fraud.hypothesis.confirmed",
+    "aether.fraud.hypothesis.superseded",
     "aether.canonical.activity.ingested",
     "aether.canonical.activity.risk_updated",
     "aether.stablecoin.depeg.detected",
@@ -243,6 +251,15 @@
     "aether.reconciliation.started",
     "aether.reconciliation.completed",
     "aether.reconciliation.drift_detected",
-    "aether.graph.mutated"
+    "aether.graph.mutated",
+    "aether.data_exchange.artifact.uploaded",
+    "aether.report.requested",
+    "aether.report.available",
+    "aether.report.failed",
+    "aether.report.downloaded",
+    "aether.tenant.activation.updated",
+    "aether.tenant.surface_readiness.updated",
+    "aether.lens.projection.updated",
+    "aether.background_job.updated"
   ]
 }

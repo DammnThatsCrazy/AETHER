@@ -289,6 +289,22 @@ class IdentityHealthResponse(BaseModel):
     tenant_id: Optional[str] = None
 
 
+class IdentityHealthEnvelope(BaseModel):
+    """The standard ``APIResponse`` envelope around :class:`IdentityHealthResponse`.
+
+    ``GET /v1/identity/health`` returns ``APIResponse(...).to_dict()`` like every
+    other identity route (callers read ``data.status``), so its
+    ``response_model`` must describe that envelope. Declaring the bare
+    ``IdentityHealthResponse`` made FastAPI validate the envelope's top-level
+    ``status: "success"`` against the health ``Literal`` and answer 500.
+    """
+
+    data: IdentityHealthResponse
+    status: Literal["success"] = "success"
+    timestamp: str
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 # ── Explainability request/response shapes (PR 8, blueprint §13.2) ──────────
 
 

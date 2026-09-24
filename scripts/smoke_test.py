@@ -48,6 +48,33 @@ class SmokeRunner:
     results: list[CheckResult] = field(default_factory=list)
 
     @staticmethod
+    def _batch_verdict(status: int, body: str, expected: int) -> tuple[bool, str]:
+        """/v1/batch answers 200 with per-event verdicts; every event must be accepted."""
+        try:
+            result = json.loads(body)
+        except (json.JSONDecodeError, TypeError):
+            return False, f"HTTP {status} — batch response was not JSON"
+        accepted = int(result.get("accepted", 0) or 0)
+        if accepted == expected and not int(result.get("rejected", 0) or 0):
+            return True, f"HTTP {status} — {accepted}/{expected} events accepted"
+        reasons = sorted({e.get("reason") for e in result.get("events", []) if isinstance(e, dict) and e.get("reason")})
+        return False, f"HTTP {status} — {accepted}/{expected} events accepted; rejected: {reasons}"
+
+    def _grant_consent(self, purposes: list[str]) -> tuple[str | None, str]:
+        """Record a server consent receipt for a fresh smoke subject.
+
+        Deployed environments enforce authoritative consent: a purposed event
+        without a receipt for its subject is rejected per event under HTTP 200.
+        """
+        subject = f"smoke-subject-{uuid.uuid4().hex}"
+        status, _ = self._post("/v1/consent/records", {
+            "user_id": subject, "purposes": purposes, "granted": True, "source": "smoke_test",
+        })
+        if status in (200, 201):
+            return subject, ""
+        return None, f"HTTP {status} — consent receipt could not be recorded for the smoke subject"
+
+    @staticmethod
     def _canonical_event(event_type: str, properties: dict) -> dict:
         """Build the deployed canonical SDK batch envelope.
 
@@ -212,17 +239,21 @@ class SmokeRunner:
 
     def check_sdk_ingestion(self) -> None:
         def run() -> tuple[bool, str]:
+            subject, failure = self._grant_consent(["analytics"])
+            if subject is None:
+                return False, failure
             event = self._canonical_event(
-                "page_view", {"source": "smoke_test", "path": "/smoke"}
+                "page", {"source": "smoke_test", "path": "/smoke"}
             )
+            event["userId"] = subject
             payload = {
                 "batch": [event],
                 "sentAt": event["timestamp"],
                 "consents": ["analytics"],
             }
-            status, _ = self._post("/v1/batch", payload)
+            status, body = self._post("/v1/batch", payload)
             if status in (200, 201, 202):
-                return True, f"HTTP {status}"
+                return self._batch_verdict(status, body, 1)
             if status in (401, 403):
                 return False, f"HTTP {status} — check API key / auth config"
             return False, f"HTTP {status} — canonical batch ingestion rejected"
@@ -246,9 +277,12 @@ class SmokeRunner:
     def check_web2_ingestion(self) -> None:
         """Verify Web2-only events (no wallet/chain fields) are accepted without error."""
         def run() -> tuple[bool, str]:
+            subject, failure = self._grant_consent(["analytics", "commerce"])
+            if subject is None:
+                return False, failure
             web2_events = [
                 self._canonical_event(
-                    "page_view",
+                    "page",
                     {"path": "/products/widget-pro", "referrer": "/home"},
                 ),
                 self._canonical_event(
@@ -259,6 +293,8 @@ class SmokeRunner:
                     "signup_completed", {"method": "email", "plan": "pro"}
                 ),
             ]
+            for web2_event in web2_events:
+                web2_event["userId"] = subject
             status, body = self._post(
                 "/v1/batch",
                 {
@@ -267,8 +303,8 @@ class SmokeRunner:
                     "consents": ["analytics", "commerce"],
                 },
             )
-            if status in (200, 201, 202, 204):
-                return True, f"HTTP {status} — {len(web2_events)} Web2 events accepted"
+            if status in (200, 201, 202):
+                return self._batch_verdict(status, body, len(web2_events))
             if status in (401, 403):
                 return False, f"HTTP {status} — check API key"
             # 4xx indicates the backend rejected the canonical Web2 envelope.

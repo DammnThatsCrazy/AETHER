@@ -8,9 +8,22 @@ The dispatcher produces rows; this writer stores them:
   ``social_*_observed`` projectors) → their named repositories in
   ``services/silver/repositories/social_facts.py``
 - other silver tables                  → generic idempotent insert
-  (column set introspected once per table and cached; unknown row keys are
-  dropped rather than failing the write; ON CONFLICT DO NOTHING keeps
-  replays safe).
+  (column set AND column types introspected once per table and cached;
+  unknown row keys are dropped rather than failing the write; ON CONFLICT DO
+  NOTHING keeps replays safe).
+
+Type coercion at the generic-insert boundary: projectors build rows from the
+Bronze event dict, so timestamps arrive as ISO-8601 strings, JSON-shaped
+values as Python lists/dicts and money as strings/floats. asyncpg binds
+parameters by the *column* type and rejects those shapes outright ("expected
+a datetime.date or datetime.datetime instance, got 'str'", "expected str, got
+list"). ``_coerce_value`` therefore converts each value to the representation
+its introspected Postgres type requires — aware ``datetime`` for
+``timestamptz``, JSON text for ``json``/``jsonb``, ``Decimal`` for
+``numeric`` (via ``str()``, never binary float), ``int``/``bool`` for
+integer/boolean columns — and raises a ``ValueError`` naming the column for a
+value that cannot be represented, so a bad row fails loudly instead of being
+persisted with a fabricated value.
 
 Local/test (no pool): rows land in per-table in-memory stores with the same
 first-write-wins semantics.
@@ -19,18 +32,30 @@ first-write-wins semantics.
 from __future__ import annotations
 
 import json
+import uuid
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import get_pool
 from services.silver.projectors.base import ProjectionResult
+from shared.temporal.instant import coerce_utc_lenient
 
 logger = get_logger("aether.silver.writer")
 
 _local_tables: dict[str, dict[str, dict[str, Any]]] = {}
-_column_cache: dict[str, tuple[str, ...]] = {}
+# table -> ((column_name, data_type), ...) in ordinal order.
+_column_cache: dict[str, tuple[tuple[str, str], ...]] = {}
 
-_JSON_LIKE_KEYS = {"payload", "provenance", "properties"}
+_JSON_TYPES = frozenset({"json", "jsonb"})
+_TIMESTAMPTZ_TYPES = frozenset({"timestamp with time zone"})
+_INTEGER_TYPES = frozenset({"smallint", "integer", "bigint"})
+_NUMERIC_TYPES = frozenset({"numeric", "decimal"})
+_FLOAT_TYPES = frozenset({"real", "double precision"})
+_TEXT_TYPES = frozenset({"text", "character varying", "character"})
+_TRUE_STRINGS = frozenset({"true", "t", "1", "yes", "y", "on"})
+_FALSE_STRINGS = frozenset({"false", "f", "0", "no", "n", "off"})
 
 # Social Silver (M3) tables routed to named repositories — the six tables the
 # social_*_observed projectors write (see services/silver/repositories/social_facts.py).
@@ -111,14 +136,11 @@ class SilverFactWriter:
         written = 0
         async with pool.acquire() as conn:
             for row in rows:
-                cols = [c for c in columns if c in row]
-                if not cols:
+                typed = [(c, t) for c, t in columns if c in row]
+                if not typed:
                     continue
-                values = [
-                    json.dumps(row[c]) if c in _JSON_LIKE_KEYS and row[c] is not None
-                    else row[c]
-                    for c in cols
-                ]
+                cols = [c for c, _ in typed]
+                values = [_coerce_value(table, c, t, row[c]) for c, t in typed]
                 placeholders = ", ".join(f"${i+1}" for i in range(len(cols)))
                 await conn.execute(
                     f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders}) "
@@ -128,16 +150,108 @@ class SilverFactWriter:
                 written += 1
         return written
 
-    async def _table_columns(self, pool: Any, table: str) -> tuple[str, ...]:
+    async def _table_columns(
+        self, pool: Any, table: str
+    ) -> tuple[tuple[str, str], ...]:
         if table in _column_cache:
             return _column_cache[table]
         async with pool.acquire() as conn:
             records = await conn.fetch(
                 """
-                SELECT column_name FROM information_schema.columns
+                SELECT column_name, data_type FROM information_schema.columns
                 WHERE table_name = $1 AND table_schema = current_schema()
+                ORDER BY ordinal_position
                 """,
                 table,
             )
-        _column_cache[table] = tuple(r["column_name"] for r in records)
+        _column_cache[table] = tuple(
+            (r["column_name"], r["data_type"]) for r in records
+        )
         return _column_cache[table]
+
+
+def _parse_timestamp(value: Any) -> datetime:
+    """ISO-8601 string / ``datetime`` → timezone-aware UTC ``datetime``.
+
+    Delegates to the temporal kernel's lenient event-time rule
+    (:func:`shared.temporal.instant.coerce_utc_lenient`) — the same
+    accept/reject rule ``BaseEvent.validate_timestamp`` applies at ingestion
+    (naive values are assumed UTC) — so Silver accepts exactly what Bronze
+    accepted. Unparseable input raises instead of fabricating ``now()``.
+    """
+    if isinstance(value, bool) or not isinstance(value, (str, datetime)):
+        raise ValueError(f"{type(value).__name__} is not an ISO-8601 timestamp")
+    parsed = coerce_utc_lenient(value)
+    if parsed is None:
+        raise ValueError(f"{value!r} is not an ISO-8601 timestamp")
+    return parsed
+
+
+def _coerce_value(table: str, column: str, data_type: str, value: Any) -> Any:
+    """Convert ``value`` to the Python type asyncpg binds for ``data_type``.
+
+    Raises ``ValueError`` (naming the table/column) when the value cannot be
+    represented in the column type; ``None`` always passes through as NULL.
+    """
+    if value is None:
+        return None
+    try:
+        if data_type in _JSON_TYPES:
+            return json.dumps(value, default=str)
+        if data_type in _TIMESTAMPTZ_TYPES:
+            return _parse_timestamp(value)
+        if data_type == "date":
+            if isinstance(value, date):
+                return value.date() if isinstance(value, datetime) else value
+            return date.fromisoformat(str(value).strip()[:10])
+        if data_type in _NUMERIC_TYPES:
+            if isinstance(value, bool):
+                raise ValueError("boolean is not numeric")
+            if isinstance(value, Decimal):
+                return value
+            # str() — never Decimal(float) — so 0.1 stays 0.1, not a binary
+            # float artefact (docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
+            return Decimal(str(value).strip())
+        if data_type in _FLOAT_TYPES:
+            if isinstance(value, bool):
+                raise ValueError("boolean is not numeric")
+            return float(value)
+        if data_type in _INTEGER_TYPES:
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, int):
+                return value
+            number = Decimal(str(value).strip())
+            if number != number.to_integral_value():
+                raise ValueError(f"{value!r} is not an integer")
+            return int(number)
+        if data_type == "boolean":
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float, Decimal)):
+                return bool(value)
+            lowered = str(value).strip().lower()
+            if lowered in _TRUE_STRINGS:
+                return True
+            if lowered in _FALSE_STRINGS:
+                return False
+            raise ValueError(f"{value!r} is not a boolean")
+        if data_type in _TEXT_TYPES:
+            if isinstance(value, str):
+                return value
+            if isinstance(value, (dict, list, tuple)):
+                return json.dumps(value, default=str)
+            if isinstance(value, (datetime, date)):
+                return value.isoformat()
+            return str(value)
+        if data_type == "uuid":
+            # Validate here so a non-UUID id fails with a coercion error that
+            # names the column, not an opaque driver DataError.
+            return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value).strip())
+    except (ValueError, TypeError, InvalidOperation, OverflowError) as exc:
+        raise ValueError(
+            f"cannot coerce {table}.{column} ({data_type}) from "
+            f"{type(value).__name__} {value!r}: {exc}"
+        ) from exc
+    # ARRAY / other types: asyncpg binds the Python value directly.
+    return value

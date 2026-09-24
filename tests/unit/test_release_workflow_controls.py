@@ -2022,3 +2022,44 @@ def test_delivery_renders_registrable_task_definition_from_deregistered_revision
     container = rendered["containerDefinitions"][0]
     assert container["image"] == "new@sha256:bbb"
     assert container["environment"] == [{"name": "AETHER_ROLE", "value": "api"}]
+
+
+def test_rehearsal_delivery_defers_only_the_fixed_key_smoke_to_the_rehearsal():
+    """Pilot rehearsal delivery runs before any durable key exists in staging.
+
+    The lifecycle must ask delivery to defer its fixed-key golden-path smoke
+    (the rehearsal owns authenticated checks with run-scoped keys); every other
+    delivery path must still run that smoke. A dispatch input is caller-
+    controlled, so the deferral holds only after the named run is verified as a
+    live staging-lifecycle run on the same commit; a failed check fails the job.
+    """
+    deploy = yaml.safe_load((WORKFLOW_DIR / "deploy.yml").read_text(encoding="utf-8"))
+    on = deploy.get("on", deploy.get(True))
+    inputs = on["workflow_dispatch"]["inputs"]
+    assert "rehearsal_smoke" not in inputs
+    owner_input = inputs["rehearsal_run_id"]
+    assert owner_input["type"] == "string" and owner_input["default"] == ""
+    job = deploy["jobs"]["deploy"]
+    assert job["permissions"]["actions"] == "read"
+    steps = {s.get("name"): s for s in job["steps"]}
+    owner = steps["Golden-path smoke deferred to the staging rehearsal"]
+    assert owner["id"] == "smoke_owner"
+    assert owner["if"] == (
+        "github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' "
+        "&& inputs.rehearsal_run_id != ''"
+    )
+    verify = owner["run"]
+    assert "continue-on-error" not in owner
+    assert "test \"$run_path\" = '.github/workflows/staging-lifecycle.yml'" in verify
+    assert "test \"$run_status\" = 'in_progress'" in verify
+    assert 'test "$run_head_sha" = "$GITHUB_SHA"' in verify
+    assert verify.index("deferred=true") > verify.index("run_head_sha\" = \"$GITHUB_SHA")
+    smoke = steps["Golden-path smoke test"]
+    assert smoke["if"] == "steps.smoke_owner.outputs.deferred != 'true'"
+    assert "--api-key" in smoke["run"]
+
+    lifecycle = (WORKFLOW_DIR / "staging-lifecycle.yml").read_text(encoding="utf-8")
+    dispatch = lifecycle[lifecycle.index('gh workflow run deploy.yml'):]
+    dispatch = dispatch[: dispatch.index("2>&1")]
+    assert '-f rehearsal_run_id="$GITHUB_RUN_ID"' in dispatch
+    assert "Capability checks (auth, consent, ingestion" in lifecycle

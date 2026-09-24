@@ -144,7 +144,7 @@ class AttributionRunRepository:
                 _uuid_or_none(config["model_config_id"]), tenant_id,
                 config.get("name"), config.get("model_type"),
                 config.get("model_version", "1.0"),
-                json.dumps(config.get("conversion_types") or ["all"]),
+                json.dumps(config.get("conversion_types") or ["all"], default=str),
                 int(config.get("click_lookback_window", 720)),
                 int(config.get("view_lookback_window", 168)),
                 int(config.get("session_timeout_seconds", 1800)),
@@ -216,9 +216,9 @@ class AttributionRunRepository:
                 _uuid_or_none(run.get("model_config_id")), run.get("model_type", "last_touch"),
                 run.get("model_version", "1.0"), run.get("code_version"),
                 json.dumps(run.get("model_config_snapshot") or {}, default=str),
-                json.dumps(run.get("input_touchpoint_ids", [])),
-                json.dumps(run.get("excluded_touchpoint_ids", [])),
-                json.dumps(run.get("exclusion_reasons", {})),
+                json.dumps(run.get("input_touchpoint_ids", []), default=str),
+                json.dumps(run.get("excluded_touchpoint_ids", []), default=str),
+                json.dumps(run.get("exclusion_reasons", {}), default=str),
                 _to_decimal(run.get("eligible_revenue")),
                 _to_decimal(run.get("credit_total", "1.0")),
                 _to_decimal(run.get("unattributed_credit", "0.0")),
@@ -951,7 +951,7 @@ def _run_update_parts(updates: dict[str, Any]) -> tuple[list[str], list[Any]]:
         elif col in ("credit_total", "unattributed_credit"):
             value = _to_decimal(value)
         elif col in ("input_touchpoint_ids", "excluded_touchpoint_ids", "exclusion_reasons"):
-            value = json.dumps(value or ([] if col != "exclusion_reasons" else {}))
+            value = json.dumps(value or ([] if col != "exclusion_reasons" else {}), default=str)
         params.append(value)
         sets.append(f"{col} = ${len(params)}")
     return sets, params
@@ -999,7 +999,7 @@ def _credit_params(c: dict[str, Any]) -> tuple[Any, ...]:
         _to_decimal(c.get("attributed_net_revenue")),
         _to_decimal(c.get("attributed_contribution_value")),
         c.get("identity_confidence"), c.get("model_confidence"), c.get("explanation"),
-        json.dumps(c.get("evidence_ids", [])),
+        json.dumps(c.get("evidence_ids", []), default=str),
         _parse_ts(c.get("created_at")) or datetime.now(timezone.utc),
     )
 

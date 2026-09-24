@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:a1045e84a50852cb17a91268c092e5a39e5a0fed59eb8bdae50697b52b053683"
+  "services/backend/services/": "sha256:a198e60dd31fe28a9da5f2177504d6aeab2a76e756e18e6f732b0ae14b8ead70"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1499,6 +1499,40 @@ credential slot must be ACTIVE, entitlement must approve).
 | GET | `/v1/intelligence/commerce/lifecycle/{challenge_id}` | Full payment lifecycle trace: requirement → policy → approval → settlement → entitlement (`x402:read`) |
 
 **Permissions:** `read` for intelligence endpoints; `x402:read` for commerce lifecycle trace.
+
+---
+
+### Analytics Service Event Store
+
+Reads the tenant analytics event store that the `stream-worker` role's
+`analytics_event_recorder` projector fills from validated SDK events
+(`POST /v1/batch` → `SDK_EVENTS_VALIDATED`). Every read is scoped to the
+authenticated tenant.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). `limit` 1–200 (default 50). Non-empty results are cached for 5 minutes; an empty result is never cached. |
+| GET | `/v1/analytics/events/{event_id}` | One processed event by its SDK event id |
+| GET | `/v1/analytics/dashboard/summary` | Last 24h, computed from the store: `total_events`, `total_sessions`, `unique_users` (distinct `user_id`, else `anonymous_id`), `top_event_types` (up to 10 `{event_type, count}`) |
+
+Recorded events carry identifiers, event type/family, canonical UTC
+`occurred_at` / `received_at`, schema version and a scalar, PII-filtered
+`properties` subset; SDK `context` is never stored.
+
+A `POST /v1/consent/dsr` erasure (`request_type: "erasure"`, `user_id`, and
+optionally the subject's SDK `anonymous_id`) removes the subject's events and
+analytics session rollups in the requesting tenant through the durable
+`consent.erasure` job. Its `analytics_events` propagation step reports the
+erased row counts; if dropping the query cache fails after the rows are
+deleted, the retry keeps those counts instead of reporting zero. The same job
+tombstones the subject's measurement touchpoints, conversions and canonical
+activity, including anything recorded only under the request's `anonymous_id`
+(`activities_tombstoned` counts toward the measurement receipt), before
+rebuilding their journeys, so the rebuilt journey no longer contains the
+erased activity. The analytics projector skips any queued or redelivered event
+that an erasure submitted at or after its receipt covers, so broker retries
+cannot write erased events back; activity received after the request is
+recorded normally.
 
 ---
 

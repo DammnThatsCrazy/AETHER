@@ -11,7 +11,10 @@ collapsing a missing amount to ``0.0`` / a missing currency to ``'USD'``. OFF
 from __future__ import annotations
 
 from typing import Any
-from shared.backend_interpretation.money import revenue_exact_money
+from shared.backend_interpretation.money import (
+    REVENUE_AMOUNT_KEYS,
+    revenue_exact_money,
+)
 from .base import BaseProjector, ProjectionResult
 
 _REVENUE_TYPES = frozenset({
@@ -54,7 +57,9 @@ class RevenueProjector(BaseProjector):
         evt_type = event["type"]
         # WS-D item 7: exact-money column surface ({} when flag OFF).
         exact = revenue_exact_money(p)
-        amount_raw = _first_present(p, ("amount", "total", "value"))
+        # Same key precedence as the exact-money path, so the legacy ``amount``
+        # and ``amount_exact`` always describe the same source property.
+        amount_raw = _first_present(p, REVENUE_AMOUNT_KEYS)
         if exact:
             # Money-exact path: a missing/unparseable amount is a typed absence
             # (None), never a fabricated 0.0; currency is never defaulted 'USD'.

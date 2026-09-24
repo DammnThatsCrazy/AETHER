@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:06a03d6e6bc9809d7d99fe2646983d67cf9745e75305e0c61c8b1c0cb4577903"
+  ".github/workflows/": "sha256:34c9d2bddf989635938439e855b444676017cfbf8a923b154ea80ea22a0ec807"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -267,7 +267,12 @@ or upload cannot authorize publication.
 The credential contract is action-specific: full rehearsal requires the
 durable admin key; pilot rehearsal obtains it after readiness; standalone smoke
 and live redeploy require `SMOKE_API_KEY`; rehearsal data-plane probes use
-isolated run-scoped tenant keys, not that durable smoke key. The certificate-
+isolated run-scoped tenant keys, not that durable smoke key. The lifecycle
+dispatches canonical delivery with `rehearsal_run_id` set to its own run. Delivery
+verifies through the Actions API that the run is an in-progress
+`staging-lifecycle.yml` run on the same commit and only then defers its
+fixed-key golden-path smoke to the rehearsal; a failed check fails delivery.
+Every other staging, push, and production delivery still runs it. The certificate-
 covered API hostname and raw ALB name are captured from reviewed Terraform
 apply output. External DNS is not Terraform-managed, so promotion publishes
 those values without failing an otherwise completed apply on propagation; the

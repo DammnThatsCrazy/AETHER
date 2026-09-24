@@ -3,8 +3,18 @@
 All queries are tenant-scoped. Sensitive alias values are stored as hashes.
 Merge and split events are append-only. Audit records are append-only.
 
-Uses the same BaseRepository JSONB pattern as the rest of the backend
-(local=in-memory, production=asyncpg/PostgreSQL).
+Backed by ``BaseRepository`` (local=in-memory, production=asyncpg/PostgreSQL).
+The identity tables are migration-owned with NAMED columns
+(``20260612_identity_resolution_tables``, ``20260619_identity_suppression``,
+``20260715_identity_merge_correctness``) — none of the nine resolution tables
+has the ``data`` JSONB bag the default BaseRepository mode reads and writes, so
+every store runs in explicit-column mode (``_jsonb_mode = False``): record keys
+bind to their migrated columns, keys the migration has no column for are kept
+in the table's ``payload`` JSONB (``data`` for ``identity_suppression_rules``),
+and the few historical record keys whose column is spelled differently are
+mapped through ``_column_renames``. Reads return the same flat record shape.
+``source_identities`` / ``identity_claims`` have no migration and stay on the
+JSONB bag.
 """
 
 from __future__ import annotations
@@ -41,51 +51,88 @@ from .models import (
 # ── Concrete table repositories ───────────────────────────────────────────────
 
 class _IdentitySubjectStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+
     def __init__(self) -> None:
         super().__init__("identity_subjects")
 
 
 class _IdentityAliasStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+    _column_renames = {"alias_value_hash": "alias_hash"}
+
     def __init__(self) -> None:
         super().__init__("identity_aliases")
 
 
 class _IdentitySignalObservationStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+    _column_renames = {"signal_value_hash": "signal_hash"}
+
     def __init__(self) -> None:
         super().__init__("identity_signal_observations")
 
 
 class _IdentityClusterStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+    _column_renames = {"status": "cluster_status"}
+
     def __init__(self) -> None:
         super().__init__("identity_clusters_v2")
 
 
 class _IdentityEdgeStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+    _column_renames = {
+        "source_entity_id": "from_entity_id",
+        "target_entity_id": "to_entity_id",
+    }
+
     def __init__(self) -> None:
         super().__init__("identity_edges")
 
 
 class _IdentityMergeEventStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+
     def __init__(self) -> None:
         super().__init__("identity_merge_events")
 
 
 class _IdentitySplitEventStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+
     def __init__(self) -> None:
         super().__init__("identity_split_events")
 
 
 class _IdentityConflictStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+
     def __init__(self) -> None:
         super().__init__("identity_conflicts")
 
 
 class _IdentityAuditStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "payload"
+
     def __init__(self) -> None:
         super().__init__("identity_resolution_audit")
 
 
 class _IdentitySuppressionStore(BaseRepository):
+    _jsonb_mode = False
+    _payload_column = "data"
+
     def __init__(self) -> None:
         super().__init__("identity_suppression_rules")
 

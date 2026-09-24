@@ -1233,6 +1233,27 @@
           "value": "aether.report.downloaded"
         }
       ]
+    },
+    {
+      "name": "\u2500\u2500 Responsiveness spine (services/responsiveness) \u2014 appended block \u2500\u2500\u2500\u2500\u2500\u2500",
+      "topics": [
+        {
+          "member": "TENANT_ACTIVATION_UPDATED",
+          "value": "aether.tenant.activation.updated"
+        },
+        {
+          "member": "TENANT_SURFACE_READINESS_UPDATED",
+          "value": "aether.tenant.surface_readiness.updated"
+        },
+        {
+          "member": "LENS_PROJECTION_UPDATED",
+          "value": "aether.lens.projection.updated"
+        },
+        {
+          "member": "BACKGROUND_JOB_UPDATED",
+          "value": "aether.background_job.updated"
+        }
+      ]
     }
   ],
   "all_topics": [
@@ -2247,6 +2268,22 @@
     {
       "member": "REPORT_DOWNLOADED",
       "value": "aether.report.downloaded"
+    },
+    {
+      "member": "TENANT_ACTIVATION_UPDATED",
+      "value": "aether.tenant.activation.updated"
+    },
+    {
+      "member": "TENANT_SURFACE_READINESS_UPDATED",
+      "value": "aether.tenant.surface_readiness.updated"
+    },
+    {
+      "member": "LENS_PROJECTION_UPDATED",
+      "value": "aether.lens.projection.updated"
+    },
+    {
+      "member": "BACKGROUND_JOB_UPDATED",
+      "value": "aether.background_job.updated"
     }
   ]
 }

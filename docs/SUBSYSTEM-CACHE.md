@@ -11,7 +11,7 @@ canonical_owner: backend@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  services/backend/shared/cache/cache.py: sha256:0f7b739b90343981892113e4103aecac16a76705987c3eff0730e0ce279f3226
+  "services/backend/shared/cache/cache.py": "sha256:753e8d1a02710bedd08d966ccf5b02b4dfa5e36129448024c5db5fdc1eeddadc"
 ---
 
 # Cache / Redis Subsystem
@@ -60,7 +60,7 @@ await cache.delete_pattern("aether:identity:*")
 claimed = await cache.set_nx("aether:idempotency:key", "1", ttl=TTL.DAY)
 ```
 
-`set_nx` is used for idempotency claims on ingestion events — it atomically marks an event as seen without a separate get+set round-trip, eliminating the race condition where two concurrent requests both observe a miss and both proceed.
+`set_nx` is used for idempotency claims on ingestion events — it atomically marks an event as seen without a separate get+set round-trip, eliminating the race condition where two concurrent requests both observe a miss and both proceed. Every backend implements it: Redis uses `SET NX EX`, and the DynamoDB backend (lean staging/production) uses a conditional `PutItem` that succeeds only when the key is absent or its `ttl` has passed, since DynamoDB deletes expired items lazily. Ingestion treats a cache error as a successful claim, so a backend missing `set_nx` silently disables duplicate detection; a unit test pins the DynamoDB backend to the Redis backend's full operation set.
 
 ## Failure Modes
 

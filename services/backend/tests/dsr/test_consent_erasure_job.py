@@ -136,9 +136,10 @@ async def test_worker_executes_erasure_and_marks_step_with_evidence():
     assert step["audit_event_id"] == job_id
     assert step["requires_recompute"] is False
     # The three mobile stores, three kyber device stores, four semantic stores,
-    # three population-plane artifacts and the geographic-plane location_facts
-    # store were all erased end-to-end and marked with their OWN real erased-row
-    # receipts (0 here — nothing was seeded for this subject).
+    # three population-plane artifacts, the geographic-plane location_facts
+    # store and the analytics event store were all erased end-to-end and marked
+    # with their OWN real erased-row receipts (0 here — nothing was seeded for
+    # this subject).
     handler_components = {
         "continuation_records", "mobile_installations", "client_sync_records",
         "kyber_trusted_devices", "kyber_webauthn_credentials", "kyber_device_proof_keys",
@@ -146,6 +147,7 @@ async def test_worker_executes_erasure_and_marks_step_with_evidence():
         "semantic_gold_state", "semantic_review_queue",
         "population_memberships", "population_snapshots", "populations",
         "location_facts",
+        "analytics_events",
     }
     for c in status["components"]:
         if c["component"] in handler_components:
@@ -230,3 +232,17 @@ async def test_non_erasure_dsr_enqueues_nothing():
     assert "erasure_job_id" not in data
     jobs = await get_jobs_service().list_jobs(TENANT, job_type=ERASURE_JOB_TYPE)
     assert jobs == []
+
+
+async def test_measurement_receipt_counts_tombstoned_activity(monkeypatch):
+    """records_impacted is the measurement store's full receipt: touchpoints,
+    conversions and the canonical activity the erasure tombstoned."""
+    monkeypatch.setattr(
+        privacy_mod._activity_repo, "tombstone_by_profile", AsyncMock(return_value=4)
+    )
+    dsr = await _submit_erasure()
+    assert await JobWorker().run_once() is True
+
+    status = await DSRPropagationService().status(dsr["propagation_request_id"], tenant_id=TENANT)
+    step = next(c for c in status["components"] if c["component"] == MEASUREMENT_COMPONENT)
+    assert step["records_impacted"] == 3 + 2 + 4

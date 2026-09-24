@@ -463,6 +463,16 @@ class Topic(str, Enum):
     REPORT_FAILED = "aether.report.failed"
     REPORT_DOWNLOADED = "aether.report.downloaded"
 
+    # ── Responsiveness spine (services/responsiveness) — appended block ──────
+    # Best-effort state-transition notifications the spine publishes so UIs can
+    # refetch instead of polling (docs/responsiveness-spine/README.md#events).
+    # The publisher previously built ``Topic("tenant.activation.updated")`` etc.
+    # from strings no member declared, which raised on every publish.
+    TENANT_ACTIVATION_UPDATED = "aether.tenant.activation.updated"
+    TENANT_SURFACE_READINESS_UPDATED = "aether.tenant.surface_readiness.updated"
+    LENS_PROJECTION_UPDATED = "aether.lens.projection.updated"
+    BACKGROUND_JOB_UPDATED = "aether.background_job.updated"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # EVENT SCHEMA

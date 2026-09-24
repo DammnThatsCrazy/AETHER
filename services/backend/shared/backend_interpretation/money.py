@@ -21,8 +21,18 @@ from typing import Any, Optional
 from shared.backend_interpretation.flags import silver_exact_money_enabled
 from services.value.models import to_decimal_string
 
-# Canonical money column names the Silver projectors emit (additive schema).
-_AMOUNT_EXACT_KEYS = ("amount", "total", "value", "amount_usd", "total_amount")
+# Event-property keys that carry a revenue event's money amount, in precedence
+# order. ``revenue`` is the canonical SDK field for an order
+# (``packages/shared/ecommerce-types.ts`` ``Order.revenue``, emitted by the web
+# SDK's ``order_completed``) and the key ``ConversionProjector`` reads first for
+# ``canonical_conversions.gross_value``; the mobile SDKs emit ``total``; payment,
+# subscription and invoice events carry ``amount`` / ``value``. Without
+# ``revenue`` here an ``order_completed`` with ``revenue: 10`` projected
+# ``silver_revenue_facts.amount = 0``.
+REVENUE_AMOUNT_KEYS = (
+    "revenue", "amount", "total", "value", "amount_usd", "total_amount",
+)
+_AMOUNT_EXACT_KEYS = REVENUE_AMOUNT_KEYS
 _VALUE_EXACT_KEYS = ("value", "amount")
 
 
@@ -87,6 +97,7 @@ def outcome_exact_money(props: dict[str, Any], *, enabled: Optional[bool] = None
 
 
 __all__ = [
+    "REVENUE_AMOUNT_KEYS",
     "exact_money_fields",
     "outcome_exact_money",
     "revenue_exact_money",

@@ -14,7 +14,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
-  "services/backend/services/identity/": "sha256:e624034299d019f7c1097b49a7e13df80b75136f764cc9c4b26f278513ecb8ea"
+  "services/backend/services/identity/": "sha256:b972456bd886e59ce570336754b7df6669eee87bc9ea3a66b9b57e945d8082e9"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
@@ -27,6 +27,27 @@ Aether's Identity Resolution system unifies user profiles across devices, browse
 ## Architecture
 
 The production implementation lives in `services/backend/services/identity/` — `resolver.py` orchestrates a 15-step pipeline via `IdentityResolutionService`, backed by 9 specialized repository classes (`repository.py`), HMAC-SHA256 PII hashing (`hashing.py`), merge/split policy engines (`merge_policy.py`, `split_policy.py`), a conflict manager (`conflicts.py`), an audit writer (`audit.py`), and a graph writer (`graph_writer.py`). Confidence scoring uses a 5-tier model (BLOCKED → NONE → LOW → MEDIUM → HIGH → DETERMINISTIC) in `confidence.py`.
+
+**Persistence.** Alembic migrations create the identity tables with named
+columns, not the generic `data` JSONB column. The migrations are
+`20260612_identity_resolution_tables`, `20260619_identity_suppression` and
+`20260715_identity_merge_correctness`. The stores in `repository.py` therefore
+run `BaseRepository` in explicit-column mode (`_jsonb_mode = False`):
+
+- Record keys bind to their migrated columns.
+- Keys with no column are kept in the table's `payload` JSONB, or in `data` for
+  `identity_suppression_rules`. Examples are `source_platform`, `context`,
+  `cluster_version` and a split's `fragment`.
+- A few historical record keys map to differently named columns: `alias_value_hash` →
+  `alias_hash`, `signal_value_hash` → `signal_hash`, a cluster's `status` →
+  `cluster_status`, and an edge's `source_entity_id`/`target_entity_id` →
+  `from_entity_id`/`to_entity_id`.
+
+Reads return the same flat record shape. Signal observations are written before the event resolves to an entity, so
+`identity_signal_observations.canonical_entity_id` is nullable
+(`20260924_identity_observation_entity_nullable`) until the resolver links it.
+`source_identities` and `identity_claims` have no migration and stay on the
+runtime-created JSONB store.
 
 The graph writer's graph mirror routes through the canonical **Graph Mutation Gateway** (`shared/graph/mutation_gateway.py`): merge edges are expressed as `identity_merged` mutations (other identity edges as `edge_created`, split revokes as `identity_split`), each carrying the decision's reason codes, source-event evidence, and confidence as ledger metadata. At `AETHER_MUTATION_GATEWAY_MODE=off` the gateway delegates straight to the GraphClient (pre-gateway behavior); in `shadow`/`enforce` modes every mirror write is also recorded in the append-only `graph_mutation_ledger`. Repo-backed identity edges remain the source of truth — mirror failures stay non-fatal.
 
@@ -220,7 +241,7 @@ Production routes are served under `/v1/identity/` by `services/backend/services
 | `/v1/identity/reconciliation` | GET | Repository↔graph identity-edge drift for the tenant (`missing_in_graph` / `missing_in_repo`); `?refresh=true` forces a fresh check, else returns the latest persisted run (`read`) |
 | `/v1/admin/kyber/identity/reconciliation` | POST | Kyber-operator trigger to run edge reconciliation for a given `tenant_id` (`require_kyber_operator`) |
 | `/v1/identity/recompute` | POST | Recompute identity from stored signals |
-| `/v1/identity/health` | GET | Resolver health (DB ping, total entities, open conflicts, queue depth) |
+| `/v1/identity/health` | GET | Resolver health in the standard envelope (`IdentityHealthEnvelope`). `data.status` is `healthy` when the repository answers and the tenant counts read back, otherwise `degraded`. The counts are total entities/aliases/clusters, open conflicts and recent merges/splits. |
 | `/v1/identity/suppress` | POST | Suppress an identifier hash — revokes matching aliases + blocks future resolution (`write` permission) |
 | `/v1/identity/suppress/{suppression_id}` | DELETE | Revoke a suppression rule (`write` permission) |
 | `/v1/identity/suppressions` | GET | List active suppression rules for tenant |

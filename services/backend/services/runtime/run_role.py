@@ -477,6 +477,14 @@ async def _run_workers(role: str) -> int:
     registry = get_registry()
     await registry.startup()
 
+    # Durable job handlers are a per-process registry. The API lifespan
+    # registers them for its own process only; a worker process that hosts the
+    # job_worker (the maintenance role, e.g. inside lean-worker) must register
+    # them too, or every claimed job fails as an unknown job_type.
+    from services.jobs.bootstrap import register_durable_job_handlers
+
+    register_durable_job_handlers(settings)
+
     all_specs = build_worker_specs(registry=registry, settings=settings)
     specs = _stamp_owning_roles(specs_for_role(role, all_specs), role)
     consumer_specs = consumer_specs_for_role(role, settings)

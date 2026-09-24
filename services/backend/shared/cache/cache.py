@@ -458,6 +458,34 @@ class _DynamoDBBackend:
             item["ttl"] = expires_at
         await self._run(lambda: self._get_table().put_item(Item=item))
 
+    async def set_nx(self, key: str, value: str, ttl: int = TTL.MEDIUM) -> bool:
+        """Atomically set key only if absent or expired. Returns True if claimed.
+
+        DynamoDB deletes TTL-expired items lazily, so an expired item still
+        present must be claimable, matching the Redis and in-memory backends.
+        """
+        now = int(time.time())
+        item: dict[str, Any] = {"cache_key": key, "val": value}
+        if ttl > 0:
+            item["ttl"] = now + ttl
+
+        def _put() -> bool:
+            try:
+                self._get_table().put_item(
+                    Item=item,
+                    ConditionExpression="attribute_not_exists(cache_key) OR #t < :now",
+                    ExpressionAttributeNames={"#t": "ttl"},
+                    ExpressionAttributeValues={":now": now},
+                )
+            except Exception as exc:
+                code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+                if code == "ConditionalCheckFailedException":
+                    return False
+                raise
+            return True
+
+        return await self._run(_put)
+
     async def delete(self, key: str) -> None:
         await self._run(
             lambda: self._get_table().delete_item(Key={"cache_key": key})
