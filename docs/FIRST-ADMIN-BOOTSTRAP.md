@@ -19,7 +19,7 @@ source_files:
   - scripts/release/check_staging_runtime_iam.py
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
-  ".github/workflows/staging-lifecycle.yml": "sha256:f1ab81db40344d860bd39f8e562edcdb1ae12d0aaa66b19a4cd21adb7e8821d2"
+  ".github/workflows/staging-lifecycle.yml": "sha256:af994b96bd6c7a1997c1e516356be23e1782f7d8dbca01d9fcfd1b984a0575ec"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:ca2a52de871d72661439c932674799164c893d893be54a3fffaf40e377a855a1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
@@ -141,7 +141,9 @@ running task out of band.
 
 The fixed `SMOKE_API_KEY` remains required for the standalone smoke action and
 live redeploy action, but not for the full rehearsal because that path creates
-isolated run-scoped data-plane keys. Never put the raw admin key or AWS
+isolated run-scoped data-plane keys. The canonical delivery the rehearsal
+dispatches therefore runs with `rehearsal_smoke=true`, which defers only its
+fixed-key golden-path smoke to the rehearsal's authenticated capability checks. Never put the raw admin key or AWS
 bootstrap token in source, plans, logs, or artifacts.
 
 If a retry is needed, reuse the same saved key and request from the helper. Do

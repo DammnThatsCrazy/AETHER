@@ -46,10 +46,10 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
-  ".github/workflows/deploy.yml": "sha256:ad0f765a0498405826f8ab9bea254fa49731fb41358be526d1f4df0cfee785c5"
+  ".github/workflows/deploy.yml": "sha256:bf66c442b7239daccaee5e82e25b764835b8d679c2831fc2658f281b45204310"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:f1ab81db40344d860bd39f8e562edcdb1ae12d0aaa66b19a4cd21adb7e8821d2"
+  ".github/workflows/staging-lifecycle.yml": "sha256:af994b96bd6c7a1997c1e516356be23e1782f7d8dbca01d9fcfd1b984a0575ec"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
@@ -564,11 +564,16 @@ Steps, in order, with what each proves:
    `lean-worker` task definitions match the selected lane, including pilot
    Stripe mounts and absence of deferred Kyber mounts; a stale revision fails.
 7. **Tenant isolation.** The run uses the verified durable staging admin
-   key to create two fresh, free, run-scoped tenants and one API key for each.
+   key to create two fresh run-scoped tenants and one API key for each: an
+   `enterprise` primary tenant (graph Connectivity and ML Prediction are
+   gamma-gated) and a `free`, read-only isolation peer.
    The raw keys are masked and held only in the runner environment; they are
-   never committed or uploaded. Their `tenant_id` values must differ. A
-   cross-tenant read of the peer's consent records must return 401/403/404 — a
-   200 is a breach and fails the run. An unauthenticated `/v1/me` must fail
+   never committed or uploaded. Their `tenant_id` values must differ. The
+   primary tenant writes a consent record for a unique subject and reads it
+   back; the peer's read of that subject must be refused or return no record,
+   and any visible record is a breach that fails the run. (The route is keyed
+   by data subject and answers `200 {"consent": null}` for unknown subjects, so
+   a bare 200 is not itself a breach.) An unauthenticated `/v1/me` must fail
    closed.
 8. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
    `scripts/smoke_test.py` (the tenant key covers data-plane checks; the
@@ -576,7 +581,9 @@ Steps, in order, with what each proves:
    characters) is supplied only after the post-wake `/v1/me` admin validation,
    then to the two admin diagnostics probes), then explicit probes for
    auth, consent/privacy
-   (records, retention manifest, DSR), ingestion, **queue-worker drain**
+   (records, retention manifest, DSR), ingestion (a canonical `page` event for
+   a consented subject, which must be reported `accepted`, not merely HTTP
+   200), **queue-worker drain**
    (polls analytics for the ingested event for up to 300 s; failure to drain is
    reported as the `lean-worker` execution group not draining — this is the
    check that proves consolidation actually works), graph, analytics, and
@@ -590,8 +597,9 @@ Steps, in order, with what each proves:
    --api-key "$REHEARSAL_TENANT_API_KEY"`, so the load path exercises the same
    authenticated tenant contract as the capability probes.
 11. **Failure and retry.** A malformed ingest payload must be a 4xx — a 5xx is a
-   server error and a 2xx means it was accepted. A duplicate event must not
-   produce a 5xx.
+   server error and a 2xx means it was accepted. The retry probe records a
+   consent receipt for its subject, its first write must be accepted, and the
+   identical retry must be reported as a duplicate, never a 5xx.
 12. **Rollback rehearsal.** Refuses to run outside the `AETHER-staging` cluster.
    Rolls `AETHER-staging-backend` back to the previous task-definition revision,
    waits for stability, asserts the rollback took effect and `/v1/health` is

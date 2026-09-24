@@ -31,6 +31,11 @@ on:
         description: Approved sha256 checksum of release.json (required with source_run_id)
         type: string
         required: false
+      rehearsal_smoke:
+        description: "Set only by staging-lifecycle full-rehearsal; its authenticated checks use run-scoped keys after first-admin bootstrap"
+        type: boolean
+        default: false
+        required: false
 
 concurrency:
   group: deploy-${{ github.event_name == 'push' && 'staging' || inputs.environment }}
@@ -952,7 +957,14 @@ jobs:
           done
           echo "::error::Readiness check failed after 5 attempts — service is alive but not deployable-ready"
           exit 1
+      - name: Golden-path smoke deferred to the staging rehearsal
+        # The pilot rehearsal bootstraps the durable admin identity only after
+        # this delivery, then runs authenticated capability checks with
+        # run-scoped keys; the fixed SMOKE_API_KEY is not provisioned there.
+        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' && inputs.rehearsal_smoke
+        run: echo '::notice::golden-path smoke is owned by the staging rehearsal that dispatched this delivery'
       - name: Golden-path smoke test
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' && inputs.rehearsal_smoke) }}
         env:
           ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME || secrets.TF_DOMAIN_NAME }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}

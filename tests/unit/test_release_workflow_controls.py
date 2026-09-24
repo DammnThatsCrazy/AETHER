@@ -2022,3 +2022,30 @@ def test_delivery_renders_registrable_task_definition_from_deregistered_revision
     container = rendered["containerDefinitions"][0]
     assert container["image"] == "new@sha256:bbb"
     assert container["environment"] == [{"name": "AETHER_ROLE", "value": "api"}]
+
+
+def test_rehearsal_delivery_defers_only_the_fixed_key_smoke_to_the_rehearsal():
+    """Pilot rehearsal delivery runs before any durable key exists in staging.
+
+    The lifecycle must ask delivery to defer its fixed-key golden-path smoke
+    (the rehearsal owns authenticated checks with run-scoped keys); every other
+    delivery path must still run that smoke.
+    """
+    deploy = yaml.safe_load((WORKFLOW_DIR / "deploy.yml").read_text(encoding="utf-8"))
+    on = deploy.get("on", deploy.get(True))
+    flag = on["workflow_dispatch"]["inputs"]["rehearsal_smoke"]
+    assert flag["type"] == "boolean" and flag["default"] is False
+    steps = {s.get("name"): s for s in deploy["jobs"]["deploy"]["steps"]}
+    deferral = (
+        "github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' "
+        "&& inputs.rehearsal_smoke"
+    )
+    assert steps["Golden-path smoke test"]["if"] == "${{ !(" + deferral + ") }}"
+    assert steps["Golden-path smoke deferred to the staging rehearsal"]["if"] == deferral
+    assert "--api-key" in steps["Golden-path smoke test"]["run"]
+
+    lifecycle = (WORKFLOW_DIR / "staging-lifecycle.yml").read_text(encoding="utf-8")
+    dispatch = lifecycle[lifecycle.index('gh workflow run deploy.yml'):]
+    dispatch = dispatch[: dispatch.index("2>&1")]
+    assert "-f rehearsal_smoke=true" in dispatch
+    assert "Capability checks (auth, consent, ingestion" in lifecycle

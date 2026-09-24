@@ -1710,3 +1710,91 @@ def test_the_recorded_staging_state_is_asserted_in_both_wake_and_sleep():
     # The stronger control it backs up is still the one doing the real work.
     assert "planned ECS desired counts" in _job_script(doc, "wake-validate")
     assert "planned ECS desired counts" in _job_script(doc, "sleep")
+
+
+# ---------------------------------------------------------------------------
+# Rehearsal probes must exercise the deployed ingestion and entitlement
+# contracts, not only HTTP status codes. /v1/batch answers 200 with per-event
+# verdicts, so a non-canonical type or a missing consent receipt used to pass
+# the smoke silently and surface only as a five-minute drain timeout.
+# ---------------------------------------------------------------------------
+
+
+def _canonical_event_types() -> frozenset:
+    import importlib.util
+
+    path = ROOT / "services" / "backend" / "services" / "ingestion" / "generated_registry.py"
+    spec = importlib.util.spec_from_file_location("_generated_event_registry", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.CANONICAL_EVENT_TYPES
+
+
+def _smoke_module():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_smoke_test", ROOT / "scripts" / "smoke_test.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolve their module by name
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_rehearsal_and_smoke_events_use_canonical_event_types():
+    canonical = _canonical_event_types()
+    rehearsal = _job_script(_workflow_yaml(LIFECYCLE), "rehearse")
+    sent = set(re.findall(r'"type":\s*"([a-z_]+)"', rehearsal))
+    smoke = (ROOT / "scripts" / "smoke_test.py").read_text(encoding="utf-8")
+    sent |= set(re.findall(r'_canonical_event\(\s*"([a-z_]+)"', smoke))
+    assert sent, "no ingestion probe event types were found"
+    assert sent <= canonical, f"non-canonical probe event types: {sorted(sent - canonical)}"
+
+
+def test_smoke_batch_checks_require_every_event_to_be_accepted():
+    module = _smoke_module()
+    runner_cls = next(
+        value for value in vars(module).values()
+        if isinstance(value, type) and hasattr(value, "_batch_verdict")
+    )
+    verdict = runner_cls._batch_verdict
+    rejected = json.dumps({"accepted": 0, "rejected": 1, "events": [
+        {"status": "rejected", "reason": "consent_receipt_missing:analytics"}]})
+    ok, detail = verdict(200, rejected, 1)
+    assert ok is False and "consent_receipt_missing:analytics" in detail
+    assert verdict(200, json.dumps({"accepted": 3, "rejected": 0}), 3)[0] is True
+    smoke = (ROOT / "scripts" / "smoke_test.py").read_text(encoding="utf-8")
+    assert smoke.count("self._grant_consent(") == 2, (
+        "smoke ingestion no longer records a consent receipt for its subject"
+    )
+
+
+def test_rehearsal_isolation_proves_the_peer_cannot_read_written_data():
+    run = next(
+        s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")
+        if s.get("name") == "Create the isolated rehearsal tenant and verify tenant isolation"
+    )["run"]
+    write = run.index('call("POST", "/v1/consent/records", key=os.environ["REHEARSAL_TENANT_API_KEY"]')
+    peer_read = run.index('key=os.environ["ISOLATION_PEER_API_KEY"])')
+    assert write < peer_read, "the peer read must target a record the rehearsal tenant wrote"
+    assert "/v1/consent/records/{peer_id}" not in run, (
+        "a subject-keyed read of the peer tenant id is not a tenant-isolation test"
+    )
+
+
+def test_rehearsal_primary_tenant_is_entitled_to_the_capabilities_it_checks():
+    run = next(
+        s for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse")
+        if s.get("name") == "Bootstrap run-scoped rehearsal tenants and API keys"
+    )["run"]
+    assert 'create_tenant("Primary", "enterprise")' in run
+    assert '], "enterprise")' in run
+    assert 'create_tenant("Isolation", "free")' in run
+
+
+def test_rehearsal_ingestion_probes_fail_fast_on_per_event_rejection():
+    steps = {s.get("name"): s["run"] for s in _steps(_workflow_yaml(LIFECYCLE), "rehearse") if s.get("run")}
+    capability = steps["Capability checks (auth, consent, ingestion, queue, graph, analytics, ML)"]
+    assert 'ingested.get("accepted"' in capability
+    retry = steps["Failure and retry checks"]
+    assert retry.index('"/v1/consent/records"') < retry.index('first, _first_body = call("POST", "/v1/batch"')
+    assert '_first_body.get("accepted"' in retry
