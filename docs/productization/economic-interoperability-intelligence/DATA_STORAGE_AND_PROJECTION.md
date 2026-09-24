@@ -32,7 +32,15 @@ constraints that JSONB would forfeit (ADR-005).
 Three projectors (`stablecoin`, `derivatives`, `interop`) subclass
 `BaseProjector` with registry-derived `handles`, registered in the
 dispatcher after `X402FlowProjector` and before `SilverGraphProjector`;
-`SilverFactWriter` provides idempotent writes and drops unknown columns.
+`SilverFactWriter` provides idempotent writes and drops unknown columns. It
+also converts each value to its column's introspected Postgres type:
+
+- ISO-8601 strings become aware UTC datetimes for `timestamptz` columns.
+- Lists and dicts become JSON text for `json`/`jsonb` columns.
+- Values for `numeric` columns become `Decimal(str(v))`.
+
+A value that can't be converted fails the write, and the error names the
+table and column.
 
 The card-linked payment rail slice adds `CardLinkedProjector`
 (`card_linked_flow_facts`), registered after the economic projectors in
