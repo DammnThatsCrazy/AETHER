@@ -73,6 +73,10 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_bronze_replay_skip_total",
     # Consent-on-every-path (WS-B3): feed ingress seam consent/data-policy deny
     "ingestion_feed_consent_blocked_total",
+    # Analytics event store projector (services/ingestion/workers.py)
+    "analytics_events_recorded_total",
+    "analytics_events_duplicate_total",
+    "analytics_events_skipped_total",
     # Payment Rail Observability (services/integrations/providers/payment_rails)
     "payment_rail_event_duplicate_total",
     "payment_rail_event_rejected_total",

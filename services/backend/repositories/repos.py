@@ -986,8 +986,7 @@ def canonical_utc_timestamp(value: Any, *, end_of_day: bool = False) -> Optional
             if text.endswith(("Z", "z")):
                 text = text[:-1] + "+00:00"
             parsed = datetime.fromisoformat(text)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+    parsed = coerce_utc_lenient(parsed)
     return parsed.astimezone(timezone.utc).strftime(_CANONICAL_TS_FORMAT)
 
 
@@ -999,7 +998,7 @@ def _as_utc_datetime(value: Any) -> Optional[datetime]:
         return None
     if canonical is None:
         return None
-    return datetime.strptime(canonical, _CANONICAL_TS_FORMAT).replace(tzinfo=timezone.utc)
+    return coerce_utc_lenient(canonical)
 
 
 class AnalyticsRepository:
