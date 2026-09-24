@@ -640,7 +640,11 @@ Replay reads Bronze only and republishes to `aether.sdk.events.validated` with
 `source_service="ingestion.replay"`; the `sdk_bronze_writer` consumer **skips**
 those rows (the durable Bronze row already exists), incrementing
 `ingestion_bronze_replay_skip_total`, so a replay re-delivers the downstream
-pipeline without double-persisting.
+pipeline without double-persisting. The `analytics_event_recorder` consumer
+does not skip replays: it inserts the analytics `events` row only if absent
+(tenant-scoped `(tenant_id, event_id)` id), so a replay backfills events the
+analytics API is missing and is a no-op (`analytics_events_duplicate_total`)
+for events already recorded.
 
 ## Ingestion Funnel Observability & SDK Version Tiers (WS-E)
 

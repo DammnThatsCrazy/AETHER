@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
   "services/backend/repositories/lake.py": "sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd"
-  "services/backend/repositories/repos.py": "sha256:fbf464a1822f49d054e182223a14d0e6f7e36961dd16de95f41d0cf5eda174e3"
+  "services/backend/repositories/repos.py": "sha256:a025bae110bc577645acded5432ead7bf139cd5d2f252e6ddea6f896095fba5a"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -51,8 +51,8 @@ Tables are created automatically on first access. No migration tool is required 
 | Table | Repository Class | Used By |
 |-------|-----------------|---------|
 | `profiles` | `IdentityRepository` | Identity service |
-| `events` | `AnalyticsRepository` | Analytics service |
-| `sessions` | `AnalyticsRepository` | Analytics service |
+| `events` | `AnalyticsRepository` | Analytics service, Profile 360 timeline — one row per processed SDK event, written by the `analytics_event_recorder` stream projector |
+| `sessions` | `AnalyticsRepository` (rows with `record_type = analytics_session`), `SessionRepository` (fraud) | Analytics session rollup written by `analytics_event_recorder`; fraud detectors read their own rows by `entity_id` |
 | `campaigns` | `CampaignRepository` | Campaign service |
 | `consent_records` | `ConsentRepository` | Consent service |
 | `webhooks` | `WebhookRepository` | Notification service (legacy) |
@@ -86,6 +86,36 @@ Tables are created automatically on first access. No migration tool is required 
 - `SettlementEventRepository.list_for_agent(agent_id, tenant_id)`
 - `SettlementEventRepository.list_for_intent(intent_id, tenant_id)`
 - `DelegationRepository.active_for(grantee_entity_id, tenant_id)`
+
+### Analytics event store
+
+`AnalyticsRepository` reads the `events` and `sessions` tables; the
+`analytics_event_recorder` projector (`services/ingestion/workers.py`, on the
+`stream-ingestion-projection` consumer) is their only production writer.
+
+- **Row identity:** `analytics_event_record_id(tenant_id, event_id)` and
+  `analytics_session_record_id(tenant_id, session_id)` are tenant-scoped
+  SHA-256 digests. `record_processed_event` inserts the event with
+  `ON CONFLICT DO NOTHING` and, in the same transaction and only for a new
+  row, upserts the session rollup (`first_seen_at`, `last_seen_at`,
+  `event_count`), so at-least-once redelivery changes nothing.
+- **Event row:** `tenant_id`, `event_id`, `event_type`, `event_family`,
+  `session_id`, `anonymous_id`, `user_id`, `occurred_at` / `received_at`
+  (fixed-width UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`), `schema_version`, `source`
+  and a scalar, PII-filtered `properties` subset. SDK `context` is never stored.
+- **Queries:** `query_events(tenant_id, params, limit)` always binds the
+  request tenant (a `tenant_id` in `params` is ignored; an empty tenant returns
+  nothing), matches `event_type` / `user_id` / `session_id` / ... by equality,
+  and bounds `occurred_at` with `start_date` / `end_date` (inclusive; a
+  date-only bound covers the whole day). `limit` is never a row predicate.
+  Non-empty results are cached for 5 minutes; empty results are never cached.
+- **Dashboard summary:** `dashboard_summary(tenant_id)` runs two aggregate
+  statements over the tenant's `events` rows processed in the last 24 hours
+  (`created_at` window, bounded by the `tenant_id` index) for `total_events`,
+  `unique_users` (distinct `user_id`, else `anonymous_id`) and the ten most
+  frequent `top_event_types`, plus one count of analytics sessions updated in
+  the window for `total_sessions`. `tenant_id=None` summarises all tenants
+  (Kyber cross-tenant scope).
 
 ## Data Lake Repositories
 

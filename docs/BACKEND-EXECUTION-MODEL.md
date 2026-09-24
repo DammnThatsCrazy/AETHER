@@ -19,7 +19,7 @@ toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:b93f7e8775022ceb602e28f42df42e5f524a15c5d849e56643dfff21d7b039c5"
   "services/backend/main.py": "sha256:7f7f8efc68276c89f61cd6c02079f60869959da6b0c5788b46ab8c06aa7eb32d"
-  "services/backend/services/runtime/consumer_specs.py": "sha256:8bf1562bea9dcd96bd4ebe71790af816339c70ff829266b16a3142ba68bbd8a2"
+  "services/backend/services/runtime/consumer_specs.py": "sha256:122f290376b080e67d990e6f3a8655addb000f72a9980896e49b9e6c43216266"
   "services/backend/services/runtime/roles.py": "sha256:9d1787f19ddc91d640098ff3e992b4cc1cfaf410bcc49c79e41ed3c5810dc48a"
   "services/backend/services/runtime/run_role.py": "sha256:a5b8af9c057dd8c34d97cdeadf5da94d55e4e31bb25827a088ba1ca3b3bacb7c"
   "services/backend/services/runtime/specs.py": "sha256:999c9da733093cce92d1af9192ea112ffdbbb9307c9698b80a18f2c1700f3a06"
@@ -39,7 +39,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `all` | Everything in one process (local/dev default). Rejected in staging/production. |
 | `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
 | `outbox-relay` | Outbox relay workers: the notification outbox, the ingestion `event_outbox` relay (FT-6), and the reward delivery outbox (drains `reward_delivery_jobs` through the rail-sender registry — the at-least-once delivery path for the reward plane). |
-| `stream-worker` | Stream loops plus Bronze/Silver projection and notification consumers. |
+| `stream-worker` | Stream loops plus Bronze/Silver projection, the analytics event-store projection (`analytics_event_recorder` → the `events`/`sessions` tables the analytics API reads), and notification consumers. |
 | `identity-worker` | Identity-signal emission from validated SDK events. |
 | `graph-writer` | Profile/graph projection and delegation mutation consumers. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
@@ -142,6 +142,31 @@ OFF) is on — otherwise refused with 403. Republished events carry
 (`services/backend/services/ingestion/workers.py`) skips them for the same reason it skips
 relay-originated events: the durable Bronze row already exists, so writing
 again would mint a second Bronze row for the same original event.
+
+## Analytics event-store projection
+
+The `stream-ingestion-projection` consumer (role `stream-worker`, hosted by
+the `lean-worker` execution group in the staging profile) also subscribes
+`analytics_event_recorder` (`services/backend/services/ingestion/workers.py`) on
+`SDK_EVENTS_VALIDATED`. It is the only writer of the `events` and `sessions`
+tables that `AnalyticsRepository` serves to `POST /v1/analytics/events/query`,
+`GET /v1/analytics/dashboard/summary` and the Profile 360
+`/v1/profile/{user_id}/events|timeline` reads.
+
+- **Idempotency:** the `events` row id is a tenant-scoped digest of
+  `(tenant_id, event_id)` inserted with `ON CONFLICT DO NOTHING`; the
+  per-session rollup row (`(tenant_id, session_id)` digest, with
+  `first_seen_at`, `last_seen_at`, `event_count`) advances in the same
+  transaction only when the event row is new. SQS redelivery, relay (V2) and
+  ingestion-replay deliveries therefore never duplicate an event or its count;
+  unlike the Bronze writer, the recorder does not skip relay or replay events,
+  so V2 ingestion and replays reach analytics too.
+- **Privacy:** only identifiers, event type/family, canonical UTC timestamps,
+  schema version and a scalar, PII-filtered subset of `properties` are
+  recorded. `context` (IP, user agent, device, fingerprint signals) is never
+  copied. Consent was enforced before the event reached the topic.
+- **Failure:** a store failure raises, so the consumer retries and then
+  dead-letters the message; the insert-if-absent write makes retries safe.
 
 ## Reward & commerce plane workers
 

@@ -797,6 +797,13 @@ means the consolidated worker task is not processing. Check that
 the eight roles' startup lines. This is the consolidation-specific failure mode
 and is exactly what staging exists to find before production does.
 
+The check polls `POST /v1/analytics/events/query` by `session_id`, which reads
+the `events` table the `stream-worker` role's `analytics_event_recorder`
+writes (the `stream-ingestion-projection` consumer on
+`AETHER-staging-events-stream-worker`). If the task is running and processing
+other work, look for `analytics_event_recorder failed` in its log and for
+messages on the stream-worker dead-letter queue.
+
 ### A reviewed plan expired mid-run
 
 Reviewed plans are valid for 24 hours and apply refuses an expired one. If
