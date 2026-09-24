@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -182,7 +183,12 @@ def test_workflows_dispatch_and_record_the_same_lane_without_changing_state_key(
 
     assert "deployment_lane:" in lifecycle
     assert "options: [full, pilot]" in lifecycle
-    assert lifecycle.count('-f deployment_lane="$DEPLOYMENT_LANE"') == 4
+    # Every promote/delivery dispatch carries the lane; no lane binding exists
+    # outside one. (A fixed count broke each time a dispatch was added.)
+    dispatches = re.findall(r'dispatch_output="\$\(gh workflow run .*?2>&1\)"', lifecycle, re.S)
+    assert len(dispatches) >= 4
+    assert all('-f deployment_lane="$DEPLOYMENT_LANE"' in block for block in dispatches)
+    assert lifecycle.count('-f deployment_lane="$DEPLOYMENT_LANE"') == len(dispatches)
     assert "deployment_lane: ${{ steps.route.outputs.deployment_lane }}" in lifecycle
 
     assert "deployment_lane:" in promote
