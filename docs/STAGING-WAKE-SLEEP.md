@@ -49,9 +49,9 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:5a6b29e5ab3236a7e526c1dbef947989d7e549c9be7dca5b093c3e65f8e8015c"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:8e0b9e8d99134b40e399c6e33bc798a92b277f585de4030e68f53eb1b6c902e3"
+  ".github/workflows/staging-lifecycle.yml": "sha256:f1ab81db40344d860bd39f8e562edcdb1ae12d0aaa66b19a4cd21adb7e8821d2"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:12dda5250bd9e6595958a9a4a67d0205e8256f90af723a90d3b3c444f8a52618"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
@@ -441,7 +441,10 @@ When enforcement fires it, in order: refuses to act unless the cluster is
 literally `AETHER-staging`; checks the exact scalable-target set and ownership
 tags; sets every service's `--desired-count 0`; registers every matching
 scalable target at `--min-capacity 0`; deletes the lease; then re-reads the
-cluster to compute residual tasks. Conflicting or missing target tags never
+cluster to compute residual tasks. Task counts come from the projected
+`taskArns[]` list, never the length of the raw `list-tasks` response object,
+which is always 1 and once made every run report a phantom residual task.
+Conflicting or missing target tags never
 produce a false green: the guard still attempts ECS scale-to-zero and task
 stopping, while failed autoscaling-floor enforcement remains visible. Missing
 tags are repaired only by the reviewed Terraform apply path, which verifies
@@ -663,7 +666,18 @@ for task_arn in "${task_arns[@]}"; do
   aws ecs stop-task --cluster AETHER-staging --task "$task_arn" \
     --reason 'staging reviewed sleep apply failed'
 done
+for target in "${targets[@]}"; do   # exact service/AETHER-staging/ targets only
+  aws application-autoscaling register-scalable-target --service-namespace ecs \
+    --scalable-dimension ecs:service:DesiredCount --resource-id "$target" \
+    --min-capacity 0
+done
 ```
+
+Only the floor is lowered. `max_capacity` stays at the reviewed ceiling: the
+pilot wake policy rejects any ceiling change as autoscaling shape drift, so a
+cost stop that clamped it would make the next wake plan unapplyable. An
+unreadable autoscaling namespace fails the step rather than leaving a floor
+that could revive staging.
 
 It reduces only and never provisions. Any force-stop or floor change is called
 out as outside-Terraform state that requires a later reviewed reconciliation;

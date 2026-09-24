@@ -1358,6 +1358,45 @@ def test_ttl_guard_enforcement_only_reduces_and_is_logged():
     assert str(upload["if"]).strip() == "always()"
 
 
+def test_ttl_guard_counts_task_arns_not_response_keys():
+    """`jq length` of the raw list-tasks object is 1 even when nothing runs.
+
+    Every scheduled guard reported a phantom residual task because the raw
+    `{"taskArns": [...]}` response was counted instead of its ARN list.
+    """
+    doc = _workflow_yaml(TTL_GUARD)
+    for step_id, artifact in (("state", "tasks.json"), ("verify", "tasks-after.json")):
+        run = next(s for s in _steps(doc, "guard") if s.get("id") == step_id)["run"]
+        call = re.search(
+            r"aws ecs list-tasks[^\n]*\\\n[^\n]*artifacts/ttl-guard/" + re.escape(artifact), run
+        )
+        assert call, f"{step_id} no longer records running tasks in {artifact}"
+        assert "--query 'taskArns[]'" in call.group(0), (
+            f"{step_id} counts the list-tasks response object instead of its task ARNs"
+        )
+        assert f"jq 'length' artifacts/ttl-guard/{artifact}" in run
+
+    for raw, expected in (('{"taskArns": []}', "0"), ('{"taskArns": ["a", "b"]}', "2")):
+        projected = json.dumps(json.loads(raw)["taskArns"])
+        counted = subprocess.run(
+            ["jq", "length"], input=projected, capture_output=True, text=True, check=True
+        ).stdout.strip()
+        assert counted == expected
+
+
+def test_last_resort_cost_stop_lowers_autoscaling_floors_but_not_ceilings():
+    doc = _workflow_yaml(LIFECYCLE)
+    run = next(s for s in _steps(doc, "sleep") if s.get("id") == "last-resort")["run"]
+    assert "--min-capacity 0" in run, "an autoscaling floor revives staging after the cost stop"
+    assert re.search(r"--min-capacity [1-9]", run) is None
+    assert "--max-capacity" not in run, (
+        "the cost stop changes the reviewed autoscaling ceiling, which the next wake plan rejects"
+    )
+    assert "starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')" in run
+    assert "could not read staging autoscaling targets" in run
+    assert run.index("stop-task") < run.index("register-scalable-target")
+
+
 def test_ttl_guard_raises_a_blocking_alert_rather_than_passing_quietly():
     doc = _workflow_yaml(TTL_GUARD)
     alert = next(
