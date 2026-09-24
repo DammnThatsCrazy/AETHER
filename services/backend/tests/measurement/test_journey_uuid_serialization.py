@@ -63,3 +63,22 @@ def test_create_version_encodes_uuid_identifier_lists():
     encoded = [value for value in insert if isinstance(value, str) and value.startswith("[")]
     assert json.dumps([str(activity_id)]) in encoded
     assert json.dumps([str(session_id)]) in encoded
+
+
+def test_step_params_encode_uuid_evidence():
+    from services.measurement.repositories.journey_step_repo import _step_params
+
+    activity_id = uuid.uuid4()
+    params = _step_params({
+        "tenant_id": "tenant-a",
+        "profile_id": "subject-1",
+        "step_position": 0,
+        "activity_id": activity_id,
+        "transition_evidence": {"previous_activity_id": activity_id},
+        "evidence_conflicts": [activity_id],
+        "evidence_summary": {"activity_id": activity_id},
+    })
+
+    encoded = [value for value in params if isinstance(value, str) and str(activity_id) in value]
+    assert json.dumps({"activity_id": str(activity_id)}) in encoded
+    assert json.dumps([str(activity_id)]) in encoded

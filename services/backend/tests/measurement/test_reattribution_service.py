@@ -486,6 +486,7 @@ async def test_privacy_erasure_dict_shape_unchanged_after_extraction():
         "user_id",
         "touchpoints_tombstoned",
         "conversions_tombstoned",
+        "activities_tombstoned",  # canonical activities tombstoned before the journey rebuild
         "journey_rebuild_triggered",
         "conversions_reattributed",
         "reattribution_truncated",

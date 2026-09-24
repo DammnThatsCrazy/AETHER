@@ -560,7 +560,7 @@ class ActivityRepository:
                 annotation.get("fraud_decision_id"),
                 annotation.get("fraud_network_ids", []),
                 annotation.get("fraud_signal_types", []),
-                _json.dumps(annotation.get("fraud_evidence_refs", [])),
+                _json.dumps(annotation.get("fraud_evidence_refs", []), default=str),
                 annotation.get("risk_evaluated_at"),
                 annotation.get("risk_model_version"),
                 annotation.get("risk_policy_version"),
