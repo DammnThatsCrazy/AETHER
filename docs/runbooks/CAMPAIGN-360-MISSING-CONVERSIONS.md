@@ -11,8 +11,8 @@ estimated_read_minutes: 5
 toc_depth: 2
 source_files: [services/backend/services/campaign/exploration.py, services/backend/services/measurement/repositories/conversion_repo.py]
 source_hashes:
-  services/backend/services/campaign/exploration.py: sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13
-  services/backend/services/measurement/repositories/conversion_repo.py: sha256:70be3473d422ac0fc495b579755289d2c0d2e5ea78224f217b8ec4c2981192f5
+  "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
+  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:bcfca3569ea3cc408f3d4857ca0a3982b29c4f54fa974e886dba578f42c109a7"
 ---
 
 # Runbook — Missing Conversions (Campaign 360)

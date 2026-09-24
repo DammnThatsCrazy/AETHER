@@ -13,7 +13,7 @@ reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; fraud-network behavior and contracts are unaffected."
 source_hashes:
-  "services/backend/repositories/repos.py": "sha256:8a3e6dfa6331ea90c484931ecf23c45458f20a412066ef7a2b2b726370aa07a5"
+  "services/backend/repositories/repos.py": "sha256:901f631c5f45e6afc31deca9ec615582992b02b6e3f02b59c1dece8645115937"
   "services/backend/services/fraud_networks/": "sha256:9c7f503deb4644cf1c70768b9286e147a0ecd22a4d34951b91abfc2036ce06f4"
 ---
 

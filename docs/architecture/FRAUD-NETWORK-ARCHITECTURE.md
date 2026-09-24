@@ -17,7 +17,7 @@ reviewed_source_commits:
     reason: "Reviewed the staging first-admin bootstrap change; fraud-network architecture remains unchanged."
 source_hashes:
   "packages/shared/graph-contract.ts": "sha256:22f04a5932fd36c169c27cab2cf3107df3a8ea6150b02796ce30bc77affd6a94"
-  "services/backend/repositories/repos.py": "sha256:8a3e6dfa6331ea90c484931ecf23c45458f20a412066ef7a2b2b726370aa07a5"
+  "services/backend/repositories/repos.py": "sha256:901f631c5f45e6afc31deca9ec615582992b02b6e3f02b59c1dece8645115937"
   "services/backend/services/flow_trace/": "sha256:ecabf31ddd0dacf96475c891836cc7d7ba3906c17a34f67669393eff874a3348"
   "services/backend/services/fraud_networks/": "sha256:9c7f503deb4644cf1c70768b9286e147a0ecd22a4d34951b91abfc2036ce06f4"
   "services/backend/services/risk_overlay/": "sha256:6d04a12540c642817550c816f91c6dfefeab901764d53d05bd0cd7c43e814bc7"
