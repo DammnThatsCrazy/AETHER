@@ -25,6 +25,7 @@ from shared.cache.cache import TTL, CacheClient, CacheKey
 from shared.common.common import NotFoundError, utc_now
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger
+from shared.temporal.instant import coerce_utc_lenient
 
 logger = get_logger("aether.repository")
 
@@ -170,6 +171,62 @@ def _jsonb_text(value: Any) -> str:
     return str(value)
 
 
+# ── Explicit-column (``_jsonb_mode = False``) schema awareness ──────────────
+# Those repositories write straight into migration-owned columns, so the
+# values they bind must match each column's Postgres type: asyncpg rejects an
+# ISO-8601 *string* for a ``timestamptz`` column and a Python list for a
+# ``text[]`` column that is cast to jsonb. The column set/type map is
+# introspected once per table from ``information_schema`` and cached here.
+_EXPLICIT_COLUMN_TYPES: dict[str, dict[str, str]] = {}
+
+#: Bookkeeping columns ``BaseRepository.insert``/``update`` stamp on every
+#: record. A migration-owned explicit-column table may lack them (e.g.
+#: ``notification_intelligence_events`` has ``detected_at``/``updated_at`` but
+#: no ``created_at``); they are dropped from the write rather than failing it.
+_AUTO_STAMP_COLUMNS = frozenset({"created_at", "updated_at"})
+
+_JSON_DATA_TYPES = frozenset({"json", "jsonb"})
+_TIMESTAMPTZ_DATA_TYPE = "timestamp with time zone"
+
+
+def _explicit_bind(data_type: Optional[str], value: Any) -> tuple[Any, str]:
+    """``(bound value, SQL cast suffix)`` for one explicit-column write.
+
+    ``data_type`` is the column's ``information_schema`` type, or ``None`` when
+    the schema is unknown (introspection unavailable) — then the legacy rule
+    (dict/list → jsonb) applies unchanged.
+    """
+    if data_type is None:
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, default=str), "::jsonb"
+        return value, ""
+    if data_type in _JSON_DATA_TYPES:
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, default=str), f"::{data_type}"
+        # None, or JSON text read back through ``SELECT *`` (asyncpg returns
+        # json/jsonb as ``str`` without a codec) — bind as-is.
+        return value, f"::{data_type}"
+    if data_type == _TIMESTAMPTZ_DATA_TYPE and isinstance(value, str):
+        # ``insert``/``update`` stamp ISO strings and ``_row_to_dict`` renders
+        # read-back datetimes as ISO strings; asyncpg needs a datetime.
+        parsed = coerce_utc_lenient(value)
+        return (parsed if parsed is not None else value), ""
+    # ARRAY columns take the Python list directly; scalars bind as-is.
+    return value, ""
+
+
+def _explicit_filter_param(data_type: Optional[str], value: Any) -> Any:
+    """Bind an equality-filter value against an explicit column's type."""
+    if data_type == "boolean":
+        if isinstance(value, bool):
+            return value
+        return _jsonb_text(value).strip().lower() == "true"
+    if data_type == _TIMESTAMPTZ_DATA_TYPE and isinstance(value, str):
+        parsed = coerce_utc_lenient(value)
+        return parsed if parsed is not None else value
+    return _jsonb_text(value)
+
+
 def _matches_filters(row: dict, filters: dict) -> bool:
     """In-memory equivalent of the SQL find_many predicate.
 
@@ -237,20 +294,60 @@ class BaseRepository(ABC):
         safe_name = self.table_name.replace("-", "_").replace(" ", "_")
         if not _TABLE_NAME_RE.match(safe_name):
             raise ValueError(f"Invalid table name: {safe_name!r} — must be alphanumeric/underscores only")
-        await pool.execute(f"""
-            CREATE TABLE IF NOT EXISTS {safe_name} (
-                id TEXT PRIMARY KEY,
-                data JSONB NOT NULL DEFAULT '{{}}',
-                tenant_id TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        """)
-        await pool.execute(f"""
-            CREATE INDEX IF NOT EXISTS idx_{safe_name}_tenant
-            ON {safe_name} (tenant_id)
-        """)
+        # Postgres ``CREATE TABLE/INDEX IF NOT EXISTS`` is NOT concurrency-safe:
+        # two sessions creating the same relation at once both pass the
+        # existence check and the loser fails on ``pg_class_relname_nsp_index``
+        # (the API and every worker loop start with their own repository
+        # instances, so this raced on every fresh deploy). The bootstrap
+        # therefore runs under a per-table transaction-scoped advisory lock —
+        # the pattern ``_PostgresGraphBackend.ensure_schema`` uses — and is
+        # skipped entirely when the table already exists: a migration-owned
+        # table (e.g. ``reward_delivery_jobs`` from
+        # ``20260828_reward_delivery_tables``) keeps exactly the schema and
+        # indexes Alembic gave it instead of gaining a duplicate runtime index.
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                    f"aether.base_repository.ensure_table:{safe_name}",
+                )
+                exists = await conn.fetchval(
+                    "SELECT to_regclass($1) IS NOT NULL", safe_name
+                )
+                if not exists:
+                    await conn.execute(f"""
+                        CREATE TABLE IF NOT EXISTS {safe_name} (
+                            id TEXT PRIMARY KEY,
+                            data JSONB NOT NULL DEFAULT '{{}}',
+                            tenant_id TEXT,
+                            created_at TIMESTAMPTZ DEFAULT NOW(),
+                            updated_at TIMESTAMPTZ DEFAULT NOW()
+                        )
+                    """)
+                    await conn.execute(f"""
+                        CREATE INDEX IF NOT EXISTS idx_{safe_name}_tenant
+                        ON {safe_name} (tenant_id)
+                    """)
         self._table_ensured = True
+
+    async def _explicit_column_types(self, pool: Any) -> dict[str, str]:
+        """``{column: data_type}`` of an explicit-column table (cached).
+
+        Empty when the table is not visible (callers then fall back to the
+        legacy untyped binding rather than guessing).
+        """
+        cached = _EXPLICIT_COLUMN_TYPES.get(self.table_name)
+        if cached is not None:
+            return cached
+        rows = await pool.fetch(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name = $1 AND table_schema = current_schema()",
+            self.table_name,
+        )
+        types = {r["column_name"]: r["data_type"] for r in rows or []}
+        if types:
+            _EXPLICIT_COLUMN_TYPES[self.table_name] = types
+        return types
 
     @staticmethod
     def _row_to_dict(row: Any) -> dict:
@@ -291,9 +388,14 @@ class BaseRepository(ABC):
         filters: Optional[dict[str, Any]] = None,
         limit: int = 50,
         offset: int = 0,
-        sort_by: str = "created_at",
+        sort_by: Optional[str] = None,
         sort_order: str = "desc",
     ) -> list[dict]:
+        # ``None`` means "the table's natural order": ``_default_sort``. A
+        # hard-coded ``created_at`` default silently overrode subclasses whose
+        # table has no such column (notification_intelligence_events sorts by
+        # ``detected_at``), so every unsorted query there failed in Postgres.
+        sort_by = sort_by or self._default_sort
         pool = await self._ensure_pool()
         if pool is None:
             # In-memory fallback
@@ -308,6 +410,9 @@ class BaseRepository(ABC):
             return results[offset: offset + limit]
 
         await self._ensure_table()
+        column_types = (
+            {} if self._jsonb_mode else await self._explicit_column_types(pool)
+        )
         # Build filter conditions
         conditions = ["1=1"]
         params: list[Any] = []
@@ -342,12 +447,21 @@ class BaseRepository(ABC):
                         conditions.append(f"{key} IS NULL")
                         continue
                     conditions.append(f"{key} = ${idx}")
+                    params.append(
+                        _explicit_filter_param(column_types.get(key), value)
+                    )
+                    idx += 1
+                    continue
                 params.append(_jsonb_text(value))
                 idx += 1
 
         direction = "DESC" if sort_order == "desc" else "ASC"
         allowed_sorts = {"created_at", "updated_at", "detected_at"}
         safe_sort = sort_by if sort_by in allowed_sorts else self._default_sort
+        if column_types and safe_sort not in column_types:
+            # An explicit caller sort key the migrated table does not have
+            # (e.g. ``created_at`` on notification_intelligence_events).
+            safe_sort = self._default_sort
         select_expr = "data" if self._jsonb_mode else "*"
         query = f"""
             SELECT {select_expr} FROM {self.table_name}
@@ -372,6 +486,9 @@ class BaseRepository(ABC):
             ])
 
         await self._ensure_table()
+        column_types = (
+            {} if self._jsonb_mode else await self._explicit_column_types(pool)
+        )
         conditions = ["1=1"]
         params: list[Any] = []
         idx = 1
@@ -395,6 +512,11 @@ class BaseRepository(ABC):
                         conditions.append(f"{key} IS NULL")
                         continue
                     conditions.append(f"{key} = ${idx}")
+                    params.append(
+                        _explicit_filter_param(column_types.get(key), value)
+                    )
+                    idx += 1
+                    continue
                 params.append(_jsonb_text(value))
                 idx += 1
 
@@ -452,19 +574,25 @@ class BaseRepository(ABC):
                 record_id, json.dumps(data, default=str), tenant_id,
             )
         else:
+            column_types = await self._explicit_column_types(pool)
             cols: list[str] = []
             vals: list[Any] = []
             casts: list[str] = []
             for col, val in data.items():
                 if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
                     raise ValueError(f"Invalid column name: {col!r}")
+                if (
+                    column_types
+                    and col in _AUTO_STAMP_COLUMNS
+                    and col not in column_types
+                ):
+                    continue
+                bound, cast = _explicit_bind(
+                    column_types.get(col) if column_types else None, val
+                )
                 cols.append(col)
-                if isinstance(val, (dict, list)):
-                    vals.append(json.dumps(val, default=str))
-                    casts.append("::jsonb")
-                else:
-                    vals.append(val)
-                    casts.append("")
+                vals.append(bound)
+                casts.append(cast)
             col_list = ", ".join(cols)
             placeholders = ", ".join(
                 f"${i + 1}{casts[i]}" for i in range(len(cols))
@@ -498,6 +626,7 @@ class BaseRepository(ABC):
                 json.dumps(existing, default=str), record_id,
             )
         else:
+            column_types = await self._explicit_column_types(pool)
             set_parts: list[str] = []
             vals: list[Any] = []
             idx = 1
@@ -506,9 +635,17 @@ class BaseRepository(ABC):
                     continue
                 if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
                     raise ValueError(f"Invalid column name: {col!r}")
-                cast = "::jsonb" if isinstance(val, (dict, list)) else ""
+                if (
+                    column_types
+                    and col in _AUTO_STAMP_COLUMNS
+                    and col not in column_types
+                ):
+                    continue
+                bound, cast = _explicit_bind(
+                    column_types.get(col) if column_types else None, val
+                )
                 set_parts.append(f"{col} = ${idx}{cast}")
-                vals.append(json.dumps(val, default=str) if isinstance(val, (dict, list)) else val)
+                vals.append(bound)
                 idx += 1
             vals.append(record_id)
             await pool.execute(

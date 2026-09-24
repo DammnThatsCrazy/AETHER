@@ -44,7 +44,42 @@ CREATE INDEX IF NOT EXISTS idx_{table_name}_tenant
 ON {table_name} (tenant_id);
 ```
 
-Tables are created automatically on first access. No migration tool is required for the JSONB model.
+Tables are created automatically on first access when no migration has
+created them. Most tables are now owned by Alembic migrations; runtime
+auto-creation is only a bootstrap fallback for a table that doesn't exist yet:
+
+- `_ensure_table` runs under a per-table transaction-scoped advisory lock
+  (`pg_advisory_xact_lock(hashtextextended('aether.base_repository.ensure_table:<table>', 0))`).
+  Postgres `CREATE TABLE/INDEX IF NOT EXISTS` is not safe under concurrency:
+  the API and each worker loop build their own repository instances, and they
+  used to fail with `duplicate key value violates unique constraint
+  "pg_class_relname_nsp_index"` on a fresh database.
+- If the table already exists (for example `reward_delivery_jobs` from
+  `20260828_reward_delivery_tables`), no DDL is issued. The table keeps the
+  schema and indexes the migration gave it, and doesn't gain a duplicate
+  runtime `idx_<table>_tenant` index.
+
+### Explicit-column repositories
+
+Repositories whose migration creates named columns instead of a `data` JSONB
+column set `_jsonb_mode = False`. This applies to
+`NotificationIntelligenceRepository`, `OperatorActionRepository`,
+`TenantNotificationConfigRepository`, `UserNotificationChannelRepository` and
+`SlackOAuthStateRepository`. For these tables the repository reads the column
+set and each column's `data_type` from `information_schema.columns` once per
+table and caches it. Writes and filters are then bound to the migrated types:
+
+- `find_many()` without `sort_by` orders by the repository's `_default_sort`.
+  `notification_intelligence_events` has `detected_at` and no `created_at`, so
+  it sorts by `detected_at`. If a caller asks for a sort column the table
+  doesn't have, the query falls back to `_default_sort`.
+- `insert()`/`update()` drop the `created_at`/`updated_at` stamps when the table
+  has no such column.
+- ISO-8601 strings for `timestamptz` columns are bound as aware UTC datetimes.
+  This uses the lenient rule in `shared.temporal.instant.coerce_utc_lenient`.
+- Only `json`/`jsonb` columns get a JSON cast. Array columns such as `text[]`
+  receive the Python list.
+- Boolean filters are bound as booleans.
 
 ## Tables
 
