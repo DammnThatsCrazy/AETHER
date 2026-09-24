@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -136,7 +137,12 @@ def test_canonical_staging_authorities_accept_full_and_pilot(name):
 
 def test_main_push_uses_pilot_lane_and_profile_choices_do_not_fork():
     deploy = (WORKFLOWS / "deploy.yml").read_text(encoding="utf-8")
-    assert deploy.count("github.event_name == 'push' && 'pilot'") == 8
+    # Every lane binding must resolve main pushes to pilot the same way; a
+    # fixed count went stale when delivery evidence gained its own binding.
+    canonical = "${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}"
+    lane_bindings = re.findall(r"^\s*[A-Z_]*DEPLOYMENT_LANE: (.+)$", deploy, flags=re.MULTILINE)
+    assert len(lane_bindings) >= 8
+    assert set(lane_bindings) == {canonical}
     assert "github.event_name == 'push' && 'full'" not in deploy
     assert "KYBER_GOOGLE_CLIENT_ID: ${{ (github.event_name != 'push'" in deploy
     assert "KYBER_GOOGLE_CLIENT_SECRET: ${{ (github.event_name != 'push'" in deploy

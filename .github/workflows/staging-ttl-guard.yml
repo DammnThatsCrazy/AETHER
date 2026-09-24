@@ -288,8 +288,10 @@ jobs:
             exit 1
           fi
           service_workload="$(python -c "import json;d=json.load(open('artifacts/ttl-guard/services.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
+          # Project the ARN list: the raw response is an object, and `jq length`
+          # of {"taskArns": [...]} is its key count (always 1), not a task count.
           if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
-              --output json > artifacts/ttl-guard/tasks.json; then
+              --query 'taskArns[]' --output json > artifacts/ttl-guard/tasks.json; then
             echo 'state_known=false' >> "$GITHUB_OUTPUT"
             echo '::error::could not enumerate staging ECS tasks; live staging state is UNKNOWN and will not be reported as asleep'
             exit 1
@@ -612,7 +614,7 @@ jobs:
             fi
           fi
           if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
-              --output json > artifacts/ttl-guard/tasks-after.json; then
+              --query 'taskArns[]' --output json > artifacts/ttl-guard/tasks-after.json; then
             residual=unknown
             echo '::error::could not enumerate staging ECS tasks; residual staging compute is UNKNOWN'
           else

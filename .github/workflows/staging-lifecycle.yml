@@ -2950,6 +2950,24 @@ jobs:
             task_stop_count=$((task_stop_count + 1))
             echo "::warning::stopped residual ${task_arn} outside Terraform; state must be reconciled"
           done
+          # Without this, an autoscaling floor of 1 revives the service within
+          # a cooldown. Lower only the floor: max_capacity is the reviewed
+          # envelope, and changing it is plan drift the next wake rejects.
+          if ! targets_raw="$(aws application-autoscaling describe-scalable-targets \
+            --service-namespace ecs \
+            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].ResourceId" \
+            --output text)"; then
+            echo '::error::could not read staging autoscaling targets; an autoscaling floor may revive staging'
+            exit 1
+          fi
+          mapfile -t targets < <(printf '%s' "$targets_raw" | tr '\t' '\n' | sed '/^$/d')
+          for target in "${targets[@]:-}"; do
+            test -n "$target" || continue
+            aws application-autoscaling register-scalable-target --service-namespace ecs \
+              --scalable-dimension ecs:service:DesiredCount --resource-id "$target" \
+              --min-capacity 0 >/dev/null
+            echo "::warning::lowered autoscaling floor for ${target} to 0 outside Terraform; state must be reconciled"
+          done
           printf 'scaled_to_zero=%s\n' "$stopped" >> "$GITHUB_OUTPUT"
           printf 'tasks_stopped=%s\n' "$task_stop_count" >> "$GITHUB_OUTPUT"
 
