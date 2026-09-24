@@ -8,12 +8,14 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - .github/workflows/staging-lifecycle.yml
+  - .github/workflows/deploy.yml
   - .github/workflows/staging-ttl-guard.yml
   - .github/workflows/terraform-promote.yml
   - .github/workflows/pilot-staging.yml
   - .github/workflows/reconcile-staging-plan-role.yml
   - .github/workflows/staging-smoke.yml
   - .github/workflows/amplify-status-production.yml
+  - services/backend/alembic/versions/20260702_delivery_infrastructure.py
   - config/runtime_deployment.yaml
   - config/deployment_profiles.yaml
   - config/staging_lifecycle_iam_policy.yaml
@@ -23,6 +25,7 @@ source_files:
   - deploy/aws/terraform/modules/ecs/main.tf
   - scripts/release/check_staging_lane_contract.py
   - scripts/release/check_staging_credential_contract.py
+  - scripts/release/check_staging_runtime_iam.py
   - scripts/release/check_staging_lifecycle_policy.py
   - scripts/release/bootstrap_staging_admin_key.py
   - scripts/release/ensure_staging_autoscaling_target_tags.py
@@ -30,6 +33,7 @@ source_files:
   - scripts/release/check_staging_secret_payload_contract.py
   - scripts/release/check_staging_secret_preflight_policy.py
   - scripts/release/check_staging_task_definition_contract.py
+  - scripts/release/check_staging_awake_lease.py
   - scripts/release/reconcile_staging_plan_role.py
   - config/staging_secret_preflight_iam_policy.yaml
   - config/staging_secret_preflight_trust_policy.json
@@ -42,9 +46,10 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
+  ".github/workflows/deploy.yml": "sha256:5a6b29e5ab3236a7e526c1dbef947989d7e549c9be7dca5b093c3e65f8e8015c"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:ec2dacca210770b944489a9fbc6ea9f71ba1812f0a827e992f358d9e8aacad3f"
+  ".github/workflows/staging-lifecycle.yml": "sha256:8e0b9e8d99134b40e399c6e33bc798a92b277f585de4030e68f53eb1b6c902e3"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:12dda5250bd9e6595958a9a4a67d0205e8256f90af723a90d3b3c444f8a52618"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
@@ -63,14 +68,17 @@ source_hashes:
   "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
+  "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
-  "scripts/release/check_staging_lifecycle_policy.py": "sha256:f4efb779523227b55abd06bc217b0a824ae3c82bf632abcb6c18b01014b796c6"
+  "scripts/release/check_staging_lifecycle_policy.py": "sha256:001a5330f78fb4c334c3ddf56448c464355bee4b16c1640a1cbd5041be499fb5"
+  "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:edfa749aba1fc6e49eb1a2c6a58d3ef36b78f2c084cd3644441eac090a740435"
   "scripts/release/ensure_staging_autoscaling_target_tags.py": "sha256:2f0733c66a6df555537336d88edf30dab740b1d8c30bbaf8140bab9463cb6b00"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:0e886d472c9a6e4d317c4b0ae627461a5ce2af8caf548290a37a8f28708a9c5c"
+  "services/backend/alembic/versions/20260702_delivery_infrastructure.py": "sha256:df8a6bf971bd9db9a907414a8b7e8f0695b6a7c01aa55719e40f869509510916"
 ---
 
 # Staging Wake / Sleep
@@ -137,6 +145,29 @@ The pilot state migration moves the Aether resource address and forgets the
 old Kyber duplicate with `destroy = false`; it preserves the existing remote
 Kyber association without running or provisioning Kyber's deferred operator
 workflows.
+
+Before a rehearsal can create a wake plan, it binds the immutable release to
+the exact current `main` SHA and verifies the build run, manifest checksum,
+staging profile/lane, every packaged SPA/migration/configuration digest, and
+the explicit lane identity evidence. It then validates delivery and rehearsal
+credentials, assumes the exact `AetherStagingDeploy` role through the staging
+GitHub environment, checks live ECR image-pull grants, and verifies the current
+ECS task-definition/secret-mount contract. Before wake planning it also verifies
+that both live services select the staging DynamoDB cache table, that the table
+is active, and that every live task role is allowed all required cache
+operations on that table. Pilot also proves that the configured GitHub
+credential can safely write and then remove a disposable repository secret—the
+same persistence path used only if the post-readiness admin bootstrap is needed.
+The preflight's `iam:SimulatePrincipalPolicy` call runs with the deploy-role
+session and is covered by the delivery/apply contract, not the separate
+`AetherStagingLifecycle` policy manifest.
+Any failure blocks wake planning. After Terraform apply, the promotion workflow
+repeats the cache-role check against Terraform outputs. After the reviewed wake,
+the lifecycle dispatches canonical delivery with that same release run and
+checksum; delivery independently verifies the artifact before running its
+single migration task, rolling ECS, or publishing static origins. The delivery
+job revalidates the awake lease immediately before each static-origin write,
+not only before ECS mutations.
 
 ## Commands
 
@@ -449,40 +480,45 @@ no matching job exists.
 
 Steps, in order, with what each proves:
 
-1. **Exact-artifact verification.** `release.json` is validated against its
-   commit SHA and approved checksum; each release artifact is re-hashed and
-   compared to its recorded digest; the manifest's backend digest must equal
-   the digest the applied wake plan pinned; and **every** running ECS service's
-   task-definition image must equal the manifest's `backend_image.uri`.
-   Staging is proven to be running the exact artifact under review, not a
-   rebuild of it.
-2. **Static publication.** After revalidating the awake lease with at least five
-   minutes remaining, the approved `aether_spa` archive is synchronized into
-   the Aether staging S3 origin. The `kyber_spa` archive is additionally
-   published only in the full lane; Kyber remains in the profile family but
-   its workforce identity and static surface are deferred from pilot staging.
-   `index.html` is uploaded with no-cache headers, every object is read back,
-   and the bucket is compared byte-for-byte with the approved artifact. This
-   mutation fails closed if the lease expires or publication differs from the
-   approved digest. The public Amplify apps (Olympus, Aether, docs, app, and
-   status) are a separate delivery surface: their exact-head builds and
-   staging-domain checks belong to the Amplify delivery/smoke workflows, not
-   this private S3 publication step.
-3. **Migrations.** After a second lease check, a one-off Fargate task is launched
-   from the `AETHER-staging-backend` task definition with `RUN_MIGRATIONS=1`.
-   The release entrypoint runs `alembic upgrade head` and receives an explicit
-   `/bin/sh -c 'exit 0'` command override so it exits after migrations instead
-   of starting a second long-running API process. The task must stop with exit
-   code 0, and its task/exit evidence is retained. On a `public_ip` profile the
-   run-task network configuration needs `assignPublicIp=ENABLED` — there is no
-   NAT to egress through. Migration success alone does not prove runtime
-   readiness.
-4. **Backend readiness.** After migrations, `/v1/health` and `/v1/ready` must
-   both return 200. A prior rehearsal completed migrations but `/v1/ready`
+1. **Exact-artifact delivery.** Before any wake plan is dispatched, the
+   lifecycle has verified that the immutable source run is a successful build
+   for the exact current `main` SHA, and that its manifest profile/lane,
+   checksum, packaged artifacts, and lane evidence match the selected run.
+   After the reviewed wake applies and services are ready, it dispatches
+   canonical `deploy.yml` with the same immutable source run ID and approved
+   manifest checksum. Delivery independently repeats the source and artifact
+   verification, acquires the release without rebuilding, and requires its
+   backend digest to equal the digest pinned by the reviewed wake plan.
+2. **Canonical migrations, ECS rollout, and static publication.** `deploy.yml`
+   applies the packaged migration using the exact release image, registers and
+   rolls every lane-selected ECS service, waits for readiness and its golden
+   path check, and publishes the selected SPA archives to their private S3
+   origins. Its deployment evidence is tied to the exact delivery run. Pilot
+   publishes Aether only; full also publishes Kyber. The rehearsal does not
+   repeat these mutations: it verifies the recorded migration/service rollout,
+   checks **every** live ECS service uses the approved image, and compares the
+   S3 origin bytes with the approved archives. The public Amplify apps
+   (Olympus, Aether, docs, app, and status) are a separate delivery surface;
+   their exact-head builds and staging-domain checks belong to the Amplify
+   delivery/smoke workflows, not this private S3-origin verification.
+3. **Migration evidence.** The canonical delivery must record exactly one
+   successful migration task using the approved image. Migration success alone
+   does not prove runtime readiness. A prior task used an older image and
+   failed when `delivery_jobs` already existed; the current migration adopts
+   a pre-existing table only after validating its required columns and creates
+   missing indexes idempotently. Canonical delivery now rolls the exact
+   manifest-bound main image before this migration runs, so the rehearsal
+   cannot migrate with the stale task-definition image that caused that
+   failure.
+4. **Backend readiness.** The rehearsal checks `/v1/ready` to prove the
+   database revision matches the packaged head; `/v1/health` and `/v1/ready`
+   must both return 200. A prior rehearsal completed migrations but `/v1/ready`
    returned 503 because the ECS task role lacked table-scoped
    `dynamodb:DescribeTable` for the configured staging cache. That permission
    is now present in the Terraform task-role policy and has been verified in
-   the live policy; this history is not evidence of a successful rehearsal.
+   the live policy; the all-action, exact-table simulation also runs before
+   wake and after Terraform apply. This history is not evidence of a successful
+   rehearsal.
 5. **First-admin handoff (pilot only).** Only after migration and readiness
    succeed does the lifecycle validate/reuse a working `STAGING_ADMIN_API_KEY`
    or, when absent/stale and the durable database marker is unclaimed, create
@@ -668,7 +704,7 @@ bundle.
 | Artifact | Contents | Retention |
 |---|---|---|
 | `staging-wake-plan-validation-<run_id>` | `artifacts/wake-plan-policy.txt`, `artifacts/wake-plan-cost.txt`, `artifacts/profile-resource-inventory.json` | 14 days |
-| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — `bootstrap-marker.json`, `registration-marker.json`, `static-publication.txt`, `migrations.txt`, `ready.json`, `tenant.json`, `capability-matrix.json`, `capabilities.json`, `smoke.txt`, `data-truth.txt`, `load.json`, `load.txt`, `rollback.txt`, `ecs-services.json`, `log-groups.json`, `metrics.json`, `release.json`, `cost.txt` | 30 days |
+| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — `bootstrap-marker.json`, `registration-marker.json`, `static-origin-verification.txt`, `migrations.txt`, `ready.json`, `tenant.json`, `capability-matrix.json`, `capabilities.json`, `smoke.txt`, `data-truth.txt`, `load.json`, `load.txt`, `rollback.txt`, `ecs-services.json`, `log-groups.json`, `metrics.json`, `release.json`, `cost.txt` | 30 days |
 | `staging-lifecycle-evidence-<run_id>` | `artifacts/sleep-plan-policy.txt`, `artifacts/sleep/desired-counts.json`, `artifacts/sleep/autoscaling.json`, `artifacts/evidence.sha256`, `artifacts/evidence.sha256.sha256` | 30 days |
 | `staging-ttl-guard-<run_id>` | `services.json`, `services-after.json`, `actions.log` | 30 days |
 

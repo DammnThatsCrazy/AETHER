@@ -16,6 +16,7 @@ source_files:
   - .github/workflows/amplify-status-production.yml
   - .github/workflows/staging-state-reconcile.yml
   - .github/workflows/staging-lifecycle.yml
+  - .github/workflows/deploy.yml
   - .github/workflows/reconcile-staging-plan-role.yml
   - .github/workflows/staging-ttl-guard.yml
   - scripts/release/verify_effective_staging_apply_policy.py
@@ -40,6 +41,7 @@ source_files:
   - config/terraform_plan_state_access_policy.yaml
   - config/staging_lifecycle_iam_policy.yaml
   - scripts/release/check_staging_application_delivery_policy.py
+  - scripts/release/check_staging_awake_lease.py
   - scripts/release/check_terraform_state_access_policy.py
   - scripts/release/check_staging_lifecycle_policy.py
   - services/backend/Dockerfile
@@ -48,8 +50,9 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:71773ae36b767f0b914026697240573183d8e5f971280c72cb7e477a84612bd1"
+  ".github/workflows/deploy.yml": "sha256:5a6b29e5ab3236a7e526c1dbef947989d7e549c9be7dca5b093c3e65f8e8015c"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:ec2dacca210770b944489a9fbc6ea9f71ba1812f0a827e992f358d9e8aacad3f"
+  ".github/workflows/staging-lifecycle.yml": "sha256:8e0b9e8d99134b40e399c6e33bc798a92b277f585de4030e68f53eb1b6c902e3"
   ".github/workflows/staging-state-reconcile.yml": "sha256:0f86b1f43ff85a1f9859f82d730428ede391c6a69fb54f9d7fcdf0cf09340a16"
   ".github/workflows/staging-ttl-guard.yml": "sha256:12dda5250bd9e6595958a9a4a67d0205e8256f90af723a90d3b3c444f8a52618"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
@@ -70,11 +73,12 @@ source_hashes:
   "deploy/aws/terraform/": "sha256:8e93086f42139303277ecc112e751e0b881b1c6c210311da0311e7e9f43b1666"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
-  "scripts/release/check_staging_application_delivery_policy.py": "sha256:01bbce3783d9c0a59d480e96fc05e2b98e2d3126660805304d8bfee6337d8bd2"
+  "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
+  "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
-  "scripts/release/check_staging_lifecycle_policy.py": "sha256:f4efb779523227b55abd06bc217b0a824ae3c82bf632abcb6c18b01014b796c6"
-  "scripts/release/check_staging_runtime_iam.py": "sha256:282362ca53e7032591ed17dab3c01b4db6e37fa1a95ea86cbd2fd4f26b064e14"
+  "scripts/release/check_staging_lifecycle_policy.py": "sha256:001a5330f78fb4c334c3ddf56448c464355bee4b16c1640a1cbd5041be499fb5"
+  "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:edfa749aba1fc6e49eb1a2c6a58d3ef36b78f2c084cd3644441eac090a740435"
@@ -157,16 +161,31 @@ directly to `STAGING_ADMIN_API_KEY`. The lifecycle validates it live through
 `/v1/me` before any publication, migration, or rehearsal-tenant mutation;
 planning and provisioning do not require this post-bootstrap runtime key.
 
-The lifecycle and apply contracts are intentionally separate. `AetherStagingPlan`
-owns remote plan and read-only state access and is the dedicated metadata-only
-inspector for the effective IAM contracts and Amplify app state. `AetherStagingDeploy`
-realizes the reviewed staging apply actions plus the explicitly declared
-application-delivery and apply-state-backend supplemental contracts; the
-effective-policy simulator evaluates that complete union before a mutation.
-`AetherStagingLifecycle` owns the
-bounded awake lease, ECS inspection/update, migration-task execution, static
-publication, autoscaling-floor cleanup, and evidence collection; it cannot create IAM roles,
-read application secret values, or mutate non-staging resources. The checked-in
+The lifecycle, infrastructure-apply, and application-delivery contracts are
+intentionally separate. `AetherStagingPlan` owns remote plan and read-only state
+access and is the dedicated metadata-only inspector for the effective IAM
+contracts and Amplify app state. The staging Terraform apply role applies only
+the exact reviewed Terraform plan. `AetherStagingDeploy` owns the canonical immutable
+application delivery: ECR image validation/pull, migration task, ECS rollout,
+readiness and smoke gates, and private static-origin publication. Its effective
+policy is checked against the explicitly declared application-delivery and
+apply-state-backend contracts before mutation. `AetherStagingLifecycle` owns
+the bounded awake lease, lifecycle inspection and cleanup, autoscaling-floor
+handling, and evidence collection; it cannot create IAM roles, read application
+secret values, or mutate non-staging resources. During a rehearsal, the
+pre-wake gate first binds the release to the exact current `main` SHA, verifies
+the successful immutable-build run and manifest checksum, checks that the
+manifest profile/lane match the selected staging lane, and hashes each packaged
+SPA, migration, and runtime-configuration artifact. It validates explicit
+Kyber deferral evidence for pilot before any reviewed wake plan is dispatched.
+The gate then assumes `AetherStagingDeploy` and verifies its identity and live
+ECR pull grants, validates the selected lane's current ECS task/secret contract,
+and checks all runtime delivery credentials. In the pilot lane it also proves
+repository-secret write access with a disposable GitHub secret, then verifies
+that secret was removed. The preflight's `iam:SimulatePrincipalPolicy` call
+runs under `AetherStagingDeploy` and is covered by the application-delivery and
+apply-state-backend contracts; it is intentionally absent from the
+`AetherStagingLifecycle` policy. The checked-in
 IAM manifests are validated against the workflow action inventory so adding a
 new lifecycle AWS call without its least-privilege grant fails CI before a
 rehearsal can start. AWS evaluates several lifecycle namespace/read APIs against
@@ -179,15 +198,23 @@ simulation; the live role must match the rendered statements exactly. State
 reconciliation is always followed by a fresh plan; no plan generated before an
 import or untaint may be reused.
 
-After a staging apply, the promotion workflow derives the exact ECS application
-task role and DynamoDB cache table from Terraform outputs and runs
-`scripts/release/check_staging_runtime_iam.py`. Its IAM simulation covers the
-cache operations used by the backend, including `dynamodb:DescribeTable`, before
-the lifecycle can start the rehearsal. This closes the gap where the table and
-migration task are healthy but the application task cannot complete its cache
-readiness probe. If `/v1/ready` is non-200 after migrations, the lifecycle keeps
-the sanitized readiness response in its rehearsal evidence so the failing
-dependency is identified in the same run.
+The canonical deploy workflow re-reads and validates the bounded staging awake
+lease immediately before each private S3 publication operation (`sync` and
+`index.html` copy). This closes the gap where a lease was valid before ECS
+rollout but expired during readiness or a long-running static upload.
+
+Before any staging wake plan, the lifecycle preflight reads the current ECS
+service task roles and cache configuration, verifies that the exact
+`AETHER-staging-cache` table is active, and runs
+`scripts/release/check_staging_runtime_iam.py` against every distinct live task
+role. Its IAM simulation covers all nine cache operations, including
+`dynamodb:DescribeTable`, on the exact table ARN. After Terraform apply, the
+promotion workflow derives the role and table from Terraform outputs and runs
+the same check again against the newly applied configuration. The two gates
+catch both an existing permission gap before wake and a provisioning drift
+before rehearsal. If `/v1/ready` is non-200 after migrations, the lifecycle
+keeps the sanitized readiness response in its rehearsal evidence so the
+failing dependency is identified in the same run.
 
 The plan role is externally managed rather than Terraform-owned, so changing
 its reviewed manifest is not enough by itself. The confirmation-gated

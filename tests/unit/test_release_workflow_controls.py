@@ -738,6 +738,42 @@ def test_deploy_verifies_source_run_identity_before_trusting_artifacts():
     assert verify < download
 
 
+def test_staging_delivery_can_acquire_only_the_exact_main_release_without_rebuilding():
+    document = _workflow_yaml("deploy.yml")
+    jobs = document["jobs"]
+    acquire = jobs["acquire-release"]
+    build = jobs["build"]
+    identity = next(
+        step for step in acquire["steps"]
+        if step.get("name") == "Verify source run identity before trusting its artifacts"
+    )
+    manifest = next(
+        step for step in acquire["steps"]
+        if step.get("name") == "Verify approved manifest and every artifact"
+    )
+    assert "inputs.source_run_id != ''" in acquire["if"]
+    assert "acquire-release" in build["needs"]
+    assert "needs.acquire-release.result == 'skipped'" in build["if"]
+    assert 'test "$run_head_branch" = main' in identity["run"]
+    assert 'test "$run_head_sha" = "$GITHUB_SHA"' in identity["run"]
+    assert '"Build immutable release once"' in identity["run"]
+    assert '"Deploy exact release"' in identity["run"]
+    staging_evidence_download = next(
+        step
+        for step in acquire["steps"]
+        if step.get("uses") == "actions/download-artifact@v4"
+        and step.get("name") is None
+        and step.get("if") == "inputs.environment == 'production'"
+    )
+    assert staging_evidence_download["with"]["name"] == (
+        "deployment-evidence-${{ inputs.source_run_id }}"
+    )
+    assert "environment=staging" in manifest["run"]
+    assert "deployment_lane=full" in manifest["run"]
+    assert "release_manifest_checksum=${RELEASE_MANIFEST_CHECKSUM}" in manifest["run"]
+    assert 'test "$SHA" = "$SOURCE_RUN_SHA"' in manifest["run"]
+
+
 def test_deploy_polls_the_authority_that_exists_for_each_trigger():
     workflow = _workflow("deploy.yml")
     assert 'if [ "${GITHUB_EVENT_NAME}" = "push" ] || [ "${TARGET_ENV}" = "staging" ]; then' in workflow
@@ -791,10 +827,10 @@ def test_deploy_gates_build_and_deploy_on_delivery_armed_output():
 
     build = doc["jobs"]["build"]
     assert "delivery-armed" in build["needs"]
-    assert build["if"] == (
-        "(github.event_name == 'push' || inputs.environment == 'staging')"
-        " && needs.delivery-armed.outputs.armed == 'true'"
-    )
+    assert "always() && !cancelled()" in build["if"]
+    assert "needs.delivery-armed.outputs.armed == 'true'" in build["if"]
+    assert "needs.require-ci-green.result == 'success'" in build["if"]
+    assert "needs.acquire-release.result == 'skipped'" in build["if"]
 
     not_armed = doc["jobs"]["delivery-not-armed"]
     assert not_armed["needs"] == ["delivery-armed"]

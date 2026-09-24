@@ -154,6 +154,10 @@ CLI_TO_IAM = {
         {"application-autoscaling:ListTagsForResource"},
     ("application-autoscaling", "register-scalable-target"):
         {"application-autoscaling:RegisterScalableTarget"},
+    # This invocation runs only after the workflow has assumed
+    # AetherStagingDeploy. Its iam:SimulatePrincipalPolicy grant is checked by
+    # the application-delivery contract, not added to AetherStagingLifecycle.
+    ("iam", "simulate-principal-policy"): set(),
     ("secretsmanager", "get-secret-value"): {"secretsmanager:GetSecretValue"},
     ("sts", "get-caller-identity"): {"sts:GetCallerIdentity"},
 }

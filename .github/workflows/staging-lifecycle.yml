@@ -538,11 +538,110 @@ jobs:
     environment: staging
     permissions:
       contents: read
+      id-token: write
     env:
       DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install contract validation dependency
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate runtime, delivery policy, and all delivery credentials before wake planning
+        env:
+          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+          AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN: ${{ secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL }}
+          TF_AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          TF_AUTH0_MANAGEMENT_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+          TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
+          TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ env.DEPLOYMENT_LANE == 'pilot' && 'deferred' || secrets.KYBER_GOOGLE_CLIENT_ID }}
+          KYBER_GOOGLE_CLIENT_SECRET: ${{ env.DEPLOYMENT_LANE == 'pilot' && 'deferred' || secrets.KYBER_GOOGLE_CLIENT_SECRET }}
+          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_lane_contract.py \
+            --profile staging --deployment-lane "$DEPLOYMENT_LANE" --check-runtime-wiring
+          python scripts/release/check_staging_application_delivery_policy.py
+          python scripts/release/check_staging_credential_contract.py \
+            --lane "$DEPLOYMENT_LANE" --purpose delivery
+          python scripts/release/check_staging_credential_contract.py \
+            --lane "$DEPLOYMENT_LANE" --purpose rehearsal
+      - name: Verify pilot can safely persist the post-readiness admin key
+        if: needs.select-profile.outputs.deployment_lane == 'pilot'
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/bootstrap_staging_admin_key.py \
+            --repo "$GITHUB_REPOSITORY" --preflight-secret-write
+      - name: Configure the staging delivery role before wake planning
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify the exact staging delivery principal and live ECR pull permissions
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || {
+            echo '::error::staging delivery role account does not match AWS_DEPLOY_ROLE_ARN'; exit 1;
+          }
+          test "$caller_role_path" = "$expected_role_path" \
+            && test "$caller_role_path" = AetherStagingDeploy || {
+            echo '::error::staging preflight did not assume AetherStagingDeploy'; exit 1;
+          }
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          repository_arn="arn:aws:ecr:us-east-1:${account_id}:repository/aether-backend"
+          simulate_allowed() {
+            local resource="$1"; shift
+            local result
+            result="$(aws iam simulate-principal-policy \
+              --policy-source-arn "$EXPECTED_ROLE_ARN" \
+              --action-names "$@" --resource-arns "$resource" --output json)"
+            if ! jq -e 'all(.EvaluationResults[]; .EvalDecision == "allowed")' <<<"$result" >/dev/null; then
+              echo '::error::AetherStagingDeploy cannot pull the approved backend image'
+              jq -r '.EvaluationResults[] | [.EvalActionName, .EvalDecision] | @tsv' <<<"$result"
+              exit 1
+            fi
+          }
+          simulate_allowed '*' ecr:GetAuthorizationToken
+          simulate_allowed "$repository_arn" \
+            ecr:BatchCheckLayerAvailability ecr:BatchGetImage \
+            ecr:DescribeImages ecr:GetDownloadUrlForLayer
+          python scripts/release/check_staging_task_definition_contract.py \
+            --lane "$DEPLOYMENT_LANE"
+          python scripts/release/check_staging_runtime_iam.py \
+            --live-ecs-cluster AETHER-staging \
+            --expected-table-name AETHER-staging-cache \
+            --region us-east-1
+          echo 'Verified live staging deploy-role trust, ECR pulls, ECS lane/secret mounts, and task-role cache permissions before any wake.'
+
       - name: Require a durable admin key for full-lane rehearsal
-        if: inputs.deployment_lane == 'full'
+        if: needs.select-profile.outputs.deployment_lane == 'full'
         env:
           STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
@@ -558,8 +657,13 @@ jobs:
   # ---------------------------------------------------------------------------
   wake-plan:
     name: Credentialed wake plan (reviewed promotion)
-    needs: [select-profile, amplify-preflight]
-    if: needs.select-profile.outputs.plan_wake == 'true' && needs.amplify-preflight.result == 'success'
+    needs: [select-profile, amplify-preflight, preflight-rehearsal-inputs]
+    if: >-
+      always()
+      && needs.select-profile.outputs.plan_wake == 'true'
+      && needs.amplify-preflight.result == 'success'
+      && (needs.select-profile.outputs.rehearse != 'true'
+          || needs.preflight-rehearsal-inputs.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -595,9 +699,27 @@ jobs:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          REHEARSE: ${{ needs.select-profile.outputs.rehearse }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_BRANCH: ${{ github.ref_name }}
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
         run: |
           set -euo pipefail
+          if [ "$REHEARSE" = true ]; then
+            test "$WORKFLOW_BRANCH" = main || {
+              echo '::error::a staging rehearsal must be dispatched from main'; exit 1;
+            }
+            test "$INTENDED_RELEASE_SHA" = "$WORKFLOW_SHA" || {
+              echo '::error::the intended immutable release must match this main workflow SHA before wake planning'; exit 1;
+            }
+            test -n "$RELEASE_RUN_ID" || {
+              echo '::error::release_run_id is required before a staging rehearsal can plan or wake infrastructure'; exit 1;
+            }
+            test -n "$RELEASE_MANIFEST_CHECKSUM" || {
+              echo '::error::release_manifest_checksum is required before a staging rehearsal can plan or wake infrastructure'; exit 1;
+            }
+          fi
           if [ -z "$RELEASE_RUN_ID" ]; then
             test -n "$BACKEND_IMAGE_DIGEST" \
               || { echo '::error::supply release_run_id or backend_image_digest'; exit 1; }
@@ -607,6 +729,7 @@ jobs:
           run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_RUN_ID}")"
           run_path="$(jq -r '.path' <<<"$run_json")"
           run_conclusion="$(jq -r '.conclusion' <<<"$run_json")"
+          run_head_branch="$(jq -r '.head_branch' <<<"$run_json")"
           run_head_sha="$(jq -r '.head_sha' <<<"$run_json")"
           if [ "$run_path" != "$DELIVERY_WORKFLOW_PATH" ]; then
             echo "::error::release run ${RELEASE_RUN_ID} belongs to ${run_path}, not the delivery workflow"
@@ -620,6 +743,11 @@ jobs:
           build_conclusion="$(jq -r '[.jobs[] | select(.name == "Build immutable release once") | .conclusion] | last // "missing"' <<<"$jobs_json")"
           test "$build_conclusion" = success \
             || { echo "::error::release run ${RELEASE_RUN_ID} has no successful immutable build job"; exit 1; }
+          if [ "$REHEARSE" = true ]; then
+            test "$run_head_branch" = main && test "$run_head_sha" = "$WORKFLOW_SHA" || {
+              echo "::error::approved release run ${RELEASE_RUN_ID} is not from this exact main SHA ${WORKFLOW_SHA}"; exit 1;
+            }
+          fi
           test "$run_head_sha" = "$INTENDED_RELEASE_SHA" \
             || { echo "::error::release run ${RELEASE_RUN_ID} head ${run_head_sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           cd "${RUNNER_TEMP}/release"
@@ -645,6 +773,48 @@ jobs:
             --expected-sha "$sha" \
             --lockfile package-lock.json \
             --lockfile pyproject.toml
+          EXPECTED_DEPLOYMENT_LANE="$DEPLOYMENT_LANE" python - <<'PY'
+          import hashlib, json, os, pathlib, sys
+
+          manifest = json.loads(pathlib.Path("release.json").read_text(encoding="utf-8"))
+          expected_lane = os.environ["EXPECTED_DEPLOYMENT_LANE"]
+          if manifest.get("profile") != "staging":
+              sys.exit("::error::approved release manifest is not for the staging profile")
+          actual_lane = manifest.get("deployment_lane", "full")
+          if actual_lane != expected_lane:
+              sys.exit(
+                  f"::error::approved release lane {actual_lane} does not match selected staging lane {expected_lane}"
+              )
+
+          for key in ("aether_spa", "kyber_spa", "migration_package", "configuration"):
+              artifact = manifest.get("artifacts", {}).get(key)
+              if not isinstance(artifact, dict):
+                  sys.exit(f"::error::release manifest is missing required artifact {key}")
+              relative = pathlib.PurePosixPath(str(artifact.get("file", "")))
+              if relative.is_absolute() or ".." in relative.parts:
+                  sys.exit(f"::error::release artifact {key} has an unsafe path")
+              path = pathlib.Path(*relative.parts)
+              if not path.is_file():
+                  sys.exit(f"::error::release artifact {key} is missing from the immutable run")
+              actual = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+              if actual != artifact.get("digest"):
+                  sys.exit(f"::error::release artifact {key} checksum does not match its manifest")
+
+          contract_path = pathlib.Path("kyber-staging-contract.json")
+          if not contract_path.is_file():
+              sys.exit("::error::release is missing explicit Kyber lane/defer evidence")
+          contract = json.loads(contract_path.read_text(encoding="utf-8"))
+          if contract.get("contract") != "kyber-workforce-identity" or contract.get("version") != 1:
+              sys.exit("::error::release Kyber lane/defer evidence has an unsupported contract")
+          if contract.get("profile") != "staging" or contract.get("secret_values_read") is not False:
+              sys.exit("::error::release Kyber evidence does not prove staging scope and secret-value safety")
+          if expected_lane == "pilot":
+              if contract.get("deployment_lane") != "pilot" or contract.get("deferred") is not True:
+                  sys.exit("::error::pilot release does not explicitly defer Kyber workforce identity")
+          elif contract.get("google_client_id_present") is not True:
+              sys.exit("::error::full-lane release lacks Kyber Google client identity evidence")
+          print(f"verified staging release lane, package checksums, and identity evidence: {expected_lane}")
+          PY
           digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
           case "$digest" in
             sha256:*) ;;
@@ -1068,6 +1238,7 @@ jobs:
       apply_run_id: ${{ steps.dispatch.outputs.apply_run_id }}
       api_host: ${{ steps.outputs.outputs.api_host }}
       alb_dns: ${{ steps.outputs.outputs.alb_dns }}
+      delivery_run_id: ${{ steps.delivery.outputs.delivery_run_id }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -1274,6 +1445,78 @@ jobs:
             --description "staging awake window (UTC); enforced by staging-ttl-guard"
           echo "staging awake lease refreshed: since ${lease_since}, expires ${deadline}, extensions ${lease_extensions}"
 
+      - name: Dispatch canonical immutable delivery for the exact release
+        if: needs.select-profile.outputs.rehearse == 'true'
+        id: delivery
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+          INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
+          DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          DELIVERY_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" || {
+            echo '::error::no GitHub token is available to dispatch canonical immutable delivery'; exit 1;
+          }
+          test -n "$RELEASE_RUN_ID" || {
+            echo '::error::release_run_id is required before staging can deploy the approved backend image'; exit 1;
+          }
+          test -n "$RELEASE_MANIFEST_CHECKSUM" || {
+            echo '::error::release_manifest_checksum is required before staging can deploy the approved release'; exit 1;
+          }
+          dispatch_output="$(gh workflow run deploy.yml --ref "$REF_NAME" \
+            -f environment=staging \
+            -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f delivery_mode=deploy \
+            -f source_run_id="$RELEASE_RUN_ID" \
+            -f release_manifest_checksum="$RELEASE_MANIFEST_CHECKSUM" 2>&1)"
+          printf '%s\n' "$dispatch_output"
+          delivery_run_id="$(printf '%s\n' "$dispatch_output" \
+            | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$delivery_run_id" || {
+            echo '::error::canonical delivery dispatch did not return its created run URL; refusing ambiguous correlation'
+            exit 1
+          }
+          echo "canonical immutable delivery run: ${delivery_run_id}"
+          wait_deadline="$(( $(date -u +%s) + DELIVERY_TIMEOUT_MINUTES * 60 ))"
+          while :; do
+            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}" --jq '.status')"
+            if [ "$status" = completed ]; then
+              run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}")"
+              run_path="$(jq -r '.path' <<<"$run_json")"
+              run_branch="$(jq -r '.head_branch' <<<"$run_json")"
+              run_sha="$(jq -r '.head_sha' <<<"$run_json")"
+              conclusion="$(jq -r '.conclusion' <<<"$run_json")"
+              test "$run_path" = '.github/workflows/deploy.yml' || {
+                echo "::error::delivery run ${delivery_run_id} belongs to ${run_path}, not the canonical workflow"; exit 1; }
+              test "$run_branch" = main && test "$run_sha" = "$INTENDED_RELEASE_SHA" || {
+                echo "::error::delivery run ${delivery_run_id} is not for intended main release ${INTENDED_RELEASE_SHA}"; exit 1; }
+              test "$conclusion" = success || {
+                echo "::error::canonical delivery run ${delivery_run_id} concluded ${conclusion}"; exit 1; }
+              jobs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}/jobs?per_page=100")"
+              acquire_ok="$(jq -r '[.jobs[] | select(.name == "Acquire approved staged release" and .conclusion == "success")] | length' <<<"$jobs_json")"
+              build_skipped="$(jq -r '[.jobs[] | select(.name == "Build immutable release once" and .conclusion == "skipped")] | length' <<<"$jobs_json")"
+              deploy_ok="$(jq -r '[.jobs[] | select(.name == "Deploy exact release" and .conclusion == "success")] | length' <<<"$jobs_json")"
+              test "$acquire_ok" -ge 1 || {
+                echo "::error::canonical delivery did not acquire the exact source release artifact"; exit 1; }
+              test "$build_skipped" -ge 1 || {
+                echo "::error::canonical delivery rebuilt instead of using the exact approved artifact"; exit 1; }
+              test "$deploy_ok" -ge 1 || {
+                echo "::error::canonical delivery has no successful exact staging deployment job"; exit 1; }
+              printf 'delivery_run_id=%s\n' "$delivery_run_id" >> "$GITHUB_OUTPUT"
+              echo "canonical delivery run ${delivery_run_id} deployed the exact approved release"
+              break
+            fi
+            if [ "$(date -u +%s)" -ge "$wait_deadline" ]; then
+              echo "::error::canonical delivery run ${delivery_run_id} did not finish within ${DELIVERY_TIMEOUT_MINUTES} minutes"
+              exit 1
+            fi
+            sleep 20
+          done
+
   # ---------------------------------------------------------------------------
   # Phase 5 — the rehearsal itself.
   # ---------------------------------------------------------------------------
@@ -1335,11 +1578,19 @@ jobs:
           name: staging-wake-plan-validation-${{ github.run_id }}
           path: artifacts
 
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.wake-apply.outputs.delivery_run_id }}
+          name: deployment-evidence-${{ needs.wake-apply.outputs.delivery_run_id }}
+          path: artifacts/rehearsal/delivery
+
       - name: Verify the exact immutable application artifact is what staging runs
         env:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
           INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          DELIVERY_EVIDENCE: ${{ github.workspace }}/artifacts/rehearsal/delivery/deployment-evidence.txt
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/release"
@@ -1404,6 +1655,46 @@ jobs:
           digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
           test "$digest" = "$BACKEND_IMAGE_DIGEST" \
             || { echo '::error::the applied wake plan does not pin the approved release digest'; exit 1; }
+          test -s "$DELIVERY_EVIDENCE" || {
+            echo '::error::canonical immutable delivery evidence is missing; staging image adoption is unproven'; exit 1;
+          }
+          for provenance in \
+            'environment=staging' \
+            "deployment_lane=${DEPLOYMENT_LANE}" \
+            "commit_sha=${INTENDED_RELEASE_SHA}" \
+            "release_manifest_checksum=${RELEASE_MANIFEST_CHECKSUM}" \
+            "backend_image_digest=${digest}"; do
+            grep -Fxq "$provenance" "$DELIVERY_EVIDENCE" || {
+              echo "::error::canonical delivery evidence does not prove ${provenance}"; exit 1; }
+          done
+          python - <<'PY'
+          import json, os, pathlib, re, sys, yaml
+          release = pathlib.Path(os.environ["RUNNER_TEMP"]) / "release"
+          manifest = json.loads((release / "release.json").read_text(encoding="utf-8"))
+          image = manifest["artifacts"]["backend_image"]["uri"]
+          digest = manifest["artifacts"]["backend_image"]["digest"]
+          if digest != os.environ["BACKEND_IMAGE_DIGEST"]:
+              sys.exit("::error::delivery evidence image digest differs from the reviewed wake image")
+          topology = yaml.safe_load((release / "runtime_deployment.yaml").read_text(encoding="utf-8"))
+          expected_services = set(topology["profiles"]["staging"]["services"])
+          evidence = pathlib.Path(os.environ["DELIVERY_EVIDENCE"]).read_text(encoding="utf-8").splitlines()
+          migrations = [line.split() for line in evidence if line.split()[:1] == ["migrations"]]
+          if len(migrations) != 1 or len(migrations[0]) != 3 or migrations[0][2] != image:
+              sys.exit("::error::canonical delivery evidence does not prove migrations used the approved image")
+          if not re.fullmatch(r"arn:aws:ecs:[^:]+:[0-9]{12}:task/AETHER-staging/[A-Za-z0-9-]+", migrations[0][1]):
+              sys.exit("::error::canonical delivery migration evidence has no valid staging task ARN")
+          delivered = {}
+          for line in evidence:
+              fields = line.split()
+              if len(fields) == 3 and fields[0] in expected_services and fields[2] == image:
+                  if fields[0] in delivered:
+                      sys.exit(f"::error::canonical delivery recorded duplicate rollout evidence for {fields[0]}")
+                  delivered[fields[0]] = fields[1]
+          missing = sorted(expected_services - delivered.keys())
+          if missing:
+              sys.exit("::error::canonical delivery did not prove the approved image for services: " + ", ".join(missing))
+          print("canonical delivery evidence proves packaged migrations and every staging service used the approved image")
+          PY
           # Every running staging service must carry exactly that image. The
           # enumeration fails closed: an empty service list would otherwise skip
           # the loop below and report the image as verified without checking it.
@@ -1432,24 +1723,10 @@ jobs:
           set -euo pipefail
           python scripts/release/ensure_staging_autoscaling_target_tags.py
 
-      - name: Revalidate awake lease before static publication
-        # Static publication mutates the staging origins. Re-check the lease
-        # immediately before the first S3 write so an expired wake window cannot
-        # overwrite or delete staging content.
-        env:
-          MIN_LEASE_SECONDS: "300"
-        run: |
-          set -euo pipefail
-          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" --query 'Parameter.Value' --output text)"
-          until="$(jq -r '.awake_until // empty' <<<"$lease")"
-          test -n "$until" || { echo '::error::awake lease is missing before static publication'; exit 1; }
-          now="$(date -u +%s)"; deadline="$(date -u -d "$until" +%s)"
-          test "$((deadline - now))" -ge "$MIN_LEASE_SECONDS" \
-            || { echo '::error::awake lease lacks five minutes for static publication'; exit 1; }
-
-      - name: Publish and verify the approved static SPA artifacts
-        # Static publication is part of the exact-release rehearsal, not an
-        # assumption about whatever happens to remain in the buckets.
+      - name: Verify canonical delivery published the approved static SPA artifacts
+        # deploy.yml owns release publication. The rehearsal verifies the exact
+        # approved bytes in the private origins without introducing a second,
+        # independently mutating publication path.
         env:
           RELEASE_MANIFEST_SHA256: ${{ inputs.release_manifest_checksum }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
@@ -1483,110 +1760,31 @@ jobs:
             tar -xzf "$archive" -C "$dist"
             bucket_var="$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')"
             bucket="$(aws ssm get-parameter --name "/aether/${STAGING_ENV}/${bucket_var}" --query 'Parameter.Value' --output text)"
-            aws s3 sync "$dist" "s3://${bucket}" --delete --cache-control 'public,max-age=31536000,immutable' --exclude index.html
-            aws s3 cp "$dist/index.html" "s3://${bucket}/index.html" --cache-control 'no-cache,no-store,must-revalidate'
             verify="${RUNNER_TEMP}/verify-${app}"; rm -rf "$verify"; mkdir -p "$verify"
             aws s3 sync "s3://${bucket}" "$verify" --delete
-            diff -qr "$dist" "$verify" >/dev/null || { echo "::error::published ${app} SPA differs from approved artifact"; exit 1; }
-            printf '%s=%s\n' "$app" "$expected" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-publication.txt"
+            diff -qr "$dist" "$verify" >/dev/null || { echo "::error::${app} static origin differs from approved artifact"; exit 1; }
+            printf '%s=%s\n' "$app" "$expected" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-origin-verification.txt"
           done
-          printf 'manifest_sha256=%s\n' "$RELEASE_MANIFEST_SHA256" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-publication.txt"
+          printf 'manifest_sha256=%s\n' "$RELEASE_MANIFEST_SHA256" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-origin-verification.txt"
 
-      - name: Revalidate awake lease before migration mutation
-        # Revalidate immediately before the first mutating rehearsal action.
-        # The wake lease may have expired while image verification ran.
-        env:
-          MIN_LEASE_SECONDS: "300"
-        run: |
-          set -euo pipefail
-          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" --query 'Parameter.Value' --output text)"
-          until="$(jq -r '.awake_until // empty' <<<"$lease")"
-          test -n "$until" || { echo '::error::awake lease is missing before migration mutation'; exit 1; }
-          now="$(date -u +%s)"; deadline="$(date -u -d "$until" +%s)"
-          test "$((deadline - now))" -ge "$MIN_LEASE_SECONDS" \
-            || { echo '::error::awake lease lacks five minutes for the next staging mutation'; exit 1; }
-
-      - name: Run migrations and verify the resulting revision
+      - name: Verify delivered migration and resulting database revision
         run: |
           set -euo pipefail
           mkdir -p artifacts/rehearsal
-          service="AETHER-${STAGING_ENV}-backend"
-          task_def="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
-            --query 'services[0].taskDefinition' --output text)"
-          test "$task_def" != None || { echo "::error::required service missing: ${service}"; exit 1; }
-          container="$(aws ecs describe-task-definition --task-definition "$task_def" \
-            --query 'taskDefinition.containerDefinitions[0].name' --output text)"
-          netcfg="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "$service" \
-            --query 'services[0].networkConfiguration' --output json)"
-          # RUN_MIGRATIONS=1 makes the release entrypoint run `alembic upgrade head`.
-          task_arn="$(aws ecs run-task --cluster "$STAGING_CLUSTER" --task-definition "$task_def" \
-            --launch-type FARGATE --network-configuration "$netcfg" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"${container}\",\"command\":[\"/bin/sh\",\"-c\",\"exit 0\"],\"environment\":[{\"name\":\"RUN_MIGRATIONS\",\"value\":\"1\"}]}]}" \
-            --query 'tasks[0].taskArn' --output text)"
-          test -n "$task_arn" && test "$task_arn" != None \
-            || { echo '::error::migration task did not return a task ARN'; exit 1; }
-          printf 'migration_task=%s\n' "$task_arn" > artifacts/rehearsal/migrations.txt
-          wait_status=0
-          if aws ecs wait tasks-stopped --cluster "$STAGING_CLUSTER" --tasks "$task_arn"; then
-            :
-          else
-            wait_status=$?
-          fi
-          describe_status=0
-          if aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "$task_arn" \
-            > artifacts/rehearsal/migration-task.json; then
-            :
-          else
-            describe_status=$?
-          fi
-          test "$describe_status" = 0 \
-            || { echo '::error::could not collect migration task evidence'; exit 1; }
-          test "$wait_status" = 0 \
-            || { echo "::error::migration task did not stop successfully (wait status ${wait_status})"; exit 1; }
-          jq -e '.tasks | length == 1 and .[0].lastStatus == "STOPPED"' \
-            artifacts/rehearsal/migration-task.json >/dev/null \
-            || { echo '::error::migration task evidence does not show a stopped task'; exit 1; }
-          exit_code="$(jq -er '.tasks[0].containers[0].exitCode // empty' artifacts/rehearsal/migration-task.json)"
-          stopped_reason="$(jq -r '.tasks[0].stoppedReason // empty' artifacts/rehearsal/migration-task.json)"
-          stop_code="$(jq -r '.tasks[0].stopCode // empty' artifacts/rehearsal/migration-task.json)"
-          container_reason="$(jq -r '.tasks[0].containers[0].reason // empty' artifacts/rehearsal/migration-task.json)"
-          printf 'exit_code=%s\nstop_code=%s\nstopped_reason=%s\ncontainer_reason=%s\n' \
-            "$exit_code" "$stop_code" "$stopped_reason" "$container_reason" \
-            >> artifacts/rehearsal/migrations.txt
-          if [ "$exit_code" != 0 ]; then
-            echo "::error::migration task failed (exit ${exit_code}; stop_code=${stop_code}; stopped_reason=${stopped_reason:-unknown}; container_reason=${container_reason:-unknown})"
-            # Keep failure output useful without uploading raw container logs:
-            # application logs can contain provider-controlled values.  Only
-            # sanitized migration/error lines are retained as evidence.
-            task_id="${task_arn##*/}"
-            log_group="$(aws ecs describe-task-definition --task-definition "$task_def" \
-              --query 'taskDefinition.containerDefinitions[0].logConfiguration.options."awslogs-group"' --output text)"
-            stream_prefix="$(aws ecs describe-task-definition --task-definition "$task_def" \
-              --query 'taskDefinition.containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix"' --output text)"
-            log_stream="${stream_prefix}/${container}/${task_id}"
-            raw_log="${RUNNER_TEMP}/migration-log.raw"
-            sanitized_log="artifacts/rehearsal/migration-log-diagnostic.txt"
-            if aws logs get-log-events --log-group-name "$log_group" --log-stream-name "$log_stream" \
-              --start-from-head --query 'events[].message' --output text > "$raw_log" 2>/dev/null; then
-              sed -E \
-                -e 's#(postgres(ql)?://[^:@[:space:]]+:)[^@[:space:]]+@#\1[REDACTED]@#g' \
-                -e 's#((password|secret|token|api[_-]?key|private[_-]?key)[=:][^[:space:]]+)#\2=[REDACTED]#Ig' \
-                "$raw_log" | rg -i 'alembic|migration|traceback|exception|error|failed|duplicate|permission|denied|timeout|database|postgres' \
-                | tail -80 > "$sanitized_log" || true
-            fi
-            if [ -s "$sanitized_log" ]; then
-              cat "$sanitized_log"
-            else
-              echo '::warning::migration task logs were unavailable or contained no sanitized error lines'
-            fi
-            exit 1
-          fi
+          evidence="artifacts/rehearsal/delivery/deployment-evidence.txt"
+          test -s "$evidence" || { echo '::error::canonical delivery migration evidence is missing'; exit 1; }
+          grep -E '^migrations ' "$evidence" \
+            > artifacts/rehearsal/migrations.txt \
+            || { echo '::error::successful exact-image migration evidence is missing'; exit 1; }
+          test "$(wc -l < artifacts/rehearsal/migrations.txt | tr -d ' ')" = 1 \
+            || { echo '::error::canonical delivery must record exactly one successful migration task'; exit 1; }
           # /v1/ready fails unless the database alembic revision equals the
-          # packaged head, so it is the authoritative revision verification.
+          # packaged head. Canonical delivery has already run the migration;
+          # this read-only probe verifies the resulting database revision.
           status="$(curl -sS -o artifacts/rehearsal/ready.json -w '%{http_code}' \
             "https://${ALB_DNS_NAME}/v1/ready")"
           if [ "$status" != 200 ]; then
-            echo "::error::/v1/ready returned ${status} after migrations"
+            echo "::error::/v1/ready returned ${status} after canonical delivery migrations"
             # The response contains status/detail fields only; retain it as
             # sanitized evidence so the failing dependency is actionable.
             jq . artifacts/rehearsal/ready.json || true
@@ -1609,6 +1807,20 @@ jobs:
             status="$(curl -sS -o /dev/null -w '%{http_code}' "https://${ALB_DNS_NAME}${path}")"
             test "$status" = 200 || { echo "::error::${path} returned ${status}"; exit 1; }
           done
+
+      - name: Revalidate awake lease before rehearsal admin mutation
+        # Canonical delivery already ran the exact-image migration and rollout.
+        # Recheck immediately before the rehearsal's first durable admin write.
+        env:
+          MIN_LEASE_SECONDS: "300"
+        run: |
+          set -euo pipefail
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" --query 'Parameter.Value' --output text)"
+          until="$(jq -r '.awake_until // empty' <<<"$lease")"
+          test -n "$until" || { echo '::error::awake lease is missing before rehearsal admin mutation'; exit 1; }
+          now="$(date -u +%s)"; deadline="$(date -u -d "$until" +%s)"
+          test "$((deadline - now))" -ge "$MIN_LEASE_SECONDS" \
+            || { echo '::error::awake lease lacks five minutes for rehearsal admin mutation'; exit 1; }
 
       - name: Verify or bootstrap the durable admin credential after readiness
         env:
@@ -1663,6 +1875,18 @@ jobs:
             aws s3api head-object --bucket "$bucket" --key index.html >/dev/null \
               || { echo "::error::${app} SPA origin has no index.html"; exit 1; }
           done
+
+      - name: Revalidate awake lease before run-scoped tenant mutations
+        env:
+          MIN_LEASE_SECONDS: "300"
+        run: |
+          set -euo pipefail
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" --query 'Parameter.Value' --output text)"
+          until="$(jq -r '.awake_until // empty' <<<"$lease")"
+          test -n "$until" || { echo '::error::awake lease is missing before tenant creation'; exit 1; }
+          now="$(date -u +%s)"; deadline="$(date -u -d "$until" +%s)"
+          test "$((deadline - now))" -ge "$MIN_LEASE_SECONDS" \
+            || { echo '::error::awake lease lacks five minutes for tenant creation'; exit 1; }
 
       - name: Bootstrap run-scoped rehearsal tenants and API keys
         run: |

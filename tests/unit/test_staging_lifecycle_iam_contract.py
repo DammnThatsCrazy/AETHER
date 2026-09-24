@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.release.check_staging_lifecycle_policy import EXPECTED, main, render_policy_document
+from scripts.release.check_staging_lifecycle_policy import (
+    CLI_TO_IAM,
+    EXPECTED,
+    main,
+    render_policy_document,
+)
 from scripts.release.verify_effective_staging_lifecycle_policy import (
     compare_documents,
     inline_policy_name_errors,
@@ -24,6 +29,17 @@ def test_lifecycle_manifest_covers_every_workflow_action() -> None:
 
 def test_lifecycle_manifest_is_static_checker_clean() -> None:
     assert main(["--manifest", str(MANIFEST)]) == 0
+
+
+def test_deploy_role_policy_simulation_does_not_expand_lifecycle_role() -> None:
+    doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    actions = {action for statement in doc["statements"] for action in statement["actions"]}
+
+    # The lifecycle workflow assumes AetherStagingDeploy for this preflight;
+    # its permission is covered by the delivery/apply contracts, not the
+    # separate AetherStagingLifecycle role.
+    assert CLI_TO_IAM[("iam", "simulate-principal-policy")] == set()
+    assert "iam:SimulatePrincipalPolicy" not in actions
 
 
 def test_lifecycle_workflows_run_contract_check() -> None:
