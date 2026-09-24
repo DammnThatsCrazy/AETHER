@@ -28,6 +28,27 @@ Aether's Identity Resolution system unifies user profiles across devices, browse
 
 The production implementation lives in `services/backend/services/identity/` — `resolver.py` orchestrates a 15-step pipeline via `IdentityResolutionService`, backed by 9 specialized repository classes (`repository.py`), HMAC-SHA256 PII hashing (`hashing.py`), merge/split policy engines (`merge_policy.py`, `split_policy.py`), a conflict manager (`conflicts.py`), an audit writer (`audit.py`), and a graph writer (`graph_writer.py`). Confidence scoring uses a 5-tier model (BLOCKED → NONE → LOW → MEDIUM → HIGH → DETERMINISTIC) in `confidence.py`.
 
+**Persistence.** Alembic migrations create the identity tables with named
+columns, not the generic `data` JSONB column. The migrations are
+`20260612_identity_resolution_tables`, `20260619_identity_suppression` and
+`20260715_identity_merge_correctness`. The stores in `repository.py` therefore
+run `BaseRepository` in explicit-column mode (`_jsonb_mode = False`):
+
+- Record keys bind to their migrated columns.
+- Keys with no column are kept in the table's `payload` JSONB, or in `data` for
+  `identity_suppression_rules`. Examples are `source_platform`, `context`,
+  `cluster_version` and a split's `fragment`.
+- A few historical record keys map to differently named columns: `alias_value_hash` →
+  `alias_hash`, `signal_value_hash` → `signal_hash`, a cluster's `status` →
+  `cluster_status`, and an edge's `source_entity_id`/`target_entity_id` →
+  `from_entity_id`/`to_entity_id`.
+
+Reads return the same flat record shape. Signal observations are written before the event resolves to an entity, so
+`identity_signal_observations.canonical_entity_id` is nullable
+(`20260924_identity_observation_entity_nullable`) until the resolver links it.
+`source_identities` and `identity_claims` have no migration and stay on the
+runtime-created JSONB store.
+
 The graph writer's graph mirror routes through the canonical **Graph Mutation Gateway** (`shared/graph/mutation_gateway.py`): merge edges are expressed as `identity_merged` mutations (other identity edges as `edge_created`, split revokes as `identity_split`), each carrying the decision's reason codes, source-event evidence, and confidence as ledger metadata. At `AETHER_MUTATION_GATEWAY_MODE=off` the gateway delegates straight to the GraphClient (pre-gateway behavior); in `shadow`/`enforce` modes every mirror write is also recorded in the append-only `graph_mutation_ledger`. Repo-backed identity edges remain the source of truth — mirror failures stay non-fatal.
 
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.

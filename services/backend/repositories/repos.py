@@ -178,6 +178,10 @@ def _jsonb_text(value: Any) -> str:
 # ``text[]`` column that is cast to jsonb. The column set/type map is
 # introspected once per table from ``information_schema`` and cached here.
 _EXPLICIT_COLUMN_TYPES: dict[str, dict[str, str]] = {}
+#: Per table, the ``NOT NULL`` columns that carry a server default. A ``None``
+#: for one of these is omitted from the write (the default / current value
+#: applies) instead of binding an explicit NULL that violates the constraint.
+_EXPLICIT_DEFAULTED_NOT_NULL: dict[str, frozenset[str]] = {}
 
 #: Bookkeeping columns ``BaseRepository.insert``/``update`` stamp on every
 #: record. A migration-owned explicit-column table may lack them (e.g.
@@ -266,6 +270,13 @@ class BaseRepository(ABC):
 
     _jsonb_mode: bool = True
     _default_sort: str = "created_at"
+    #: Explicit-column mode only: the JSONB column that holds record keys the
+    #: migrated table has no column for (e.g. ``payload``). ``None`` keeps
+    #: unknown keys as columns, so an unexpected key fails loudly.
+    _payload_column: Optional[str] = None
+    #: Explicit-column mode only: record key → migrated column name, for
+    #: records whose historical key differs from the migration's column.
+    _column_renames: dict[str, str] = {}
 
     def __init__(self, table_name: str) -> None:
         self.table_name = table_name
@@ -340,14 +351,114 @@ class BaseRepository(ABC):
         if cached is not None:
             return cached
         rows = await pool.fetch(
-            "SELECT column_name, data_type FROM information_schema.columns "
+            "SELECT column_name, data_type, is_nullable, column_default "
+            "FROM information_schema.columns "
             "WHERE table_name = $1 AND table_schema = current_schema()",
             self.table_name,
         )
         types = {r["column_name"]: r["data_type"] for r in rows or []}
         if types:
             _EXPLICIT_COLUMN_TYPES[self.table_name] = types
+            _EXPLICIT_DEFAULTED_NOT_NULL[self.table_name] = frozenset(
+                r["column_name"] for r in rows
+                if r.get("is_nullable") == "NO" and r.get("column_default") is not None
+            )
         return types
+
+    def _explicit_column_for(self, key: str) -> str:
+        return self._column_renames.get(key, key)
+
+    def _explicit_record(self, row: Any, column_types: dict[str, str]) -> dict:
+        """Materialise an explicit-column row as the repository's record dict.
+
+        Datetimes render as ISO strings (``_row_to_dict``); json/jsonb columns
+        are decoded (asyncpg returns them as text without a codec); the
+        ``_payload_column`` bag is unpacked underneath the real columns; and
+        each renamed record key (``_column_renames``) is exposed alongside its
+        column so callers keep reading the key they wrote.
+        """
+        record = self._row_to_dict(row)
+        for col, data_type in column_types.items():
+            value = record.get(col)
+            if data_type in _JSON_DATA_TYPES and isinstance(value, str):
+                try:
+                    record[col] = json.loads(value)
+                except ValueError:
+                    pass
+        payload_col = self._payload_column
+        if payload_col and payload_col in record:
+            bag = record.pop(payload_col)
+            if isinstance(bag, dict):
+                for key, value in bag.items():
+                    record.setdefault(key, value)
+        for key, col in self._column_renames.items():
+            if col in record:
+                record[key] = record[col]
+        return record
+
+    def _explicit_write_columns(
+        self, data: dict, column_types: dict[str, str]
+    ) -> list[tuple[str, Any]]:
+        """Map a record dict onto the migrated columns, ``[(column, value)]``.
+
+        * record keys are renamed through ``_column_renames``; when both the
+          record key and its column name are present the column name wins;
+        * ``created_at``/``updated_at`` stamps the table lacks are dropped;
+        * keys with no column go into ``_payload_column`` when the repository
+          declares one (otherwise they are kept, so Postgres rejects the
+          unknown column loudly rather than the data vanishing);
+        * ``None`` for a ``NOT NULL`` column with a server default is omitted.
+        """
+        if not column_types:
+            return [(k, v) for k, v in data.items()]
+        defaulted = _EXPLICIT_DEFAULTED_NOT_NULL.get(self.table_name, frozenset())
+        payload_col = self._payload_column
+        if payload_col not in column_types:
+            payload_col = None
+        columns: dict[str, Any] = {}
+        overflow: dict[str, Any] = {}
+        for key, value in data.items():
+            if payload_col and key == payload_col:
+                if isinstance(value, dict):
+                    overflow = {**value, **overflow}
+                continue
+            col = self._explicit_column_for(key)
+            if col in column_types:
+                if col != key and col in data:
+                    continue
+                if value is None and col in defaulted:
+                    continue
+                columns[col] = value
+            elif key in _AUTO_STAMP_COLUMNS:
+                continue
+            elif payload_col:
+                overflow[key] = value
+            else:
+                columns[key] = value
+        if payload_col:
+            columns[payload_col] = overflow
+        return list(columns.items())
+
+    def _explicit_predicate(
+        self, key: str, idx: int, value: Any, column_types: dict[str, str]
+    ) -> tuple[str, Any]:
+        """``(SQL condition, bound param)`` for an explicit-mode equality filter."""
+        if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
+            raise ValueError(f"Invalid filter key: {key!r}")
+        col = self._explicit_column_for(key)
+        payload_col = self._payload_column
+        if (
+            column_types
+            and col not in column_types
+            and payload_col
+            and payload_col in column_types
+        ):
+            if value is None:
+                return f"{payload_col}->>'{key}' IS NULL", None
+            return f"{payload_col}->>'{key}' = ${idx}", _jsonb_text(value)
+        if value is None:
+            return f"{col} IS NULL", None
+        return f"{col} = ${idx}", _explicit_filter_param(column_types.get(col), value)
 
     @staticmethod
     def _row_to_dict(row: Any) -> dict:
@@ -370,12 +481,13 @@ class BaseRepository(ABC):
             if row is None:
                 return None
             return json.loads(row["data"])
+        column_types = await self._explicit_column_types(pool)
         row = await pool.fetchrow(
             f"SELECT * FROM {self.table_name} WHERE id = $1", record_id
         )
         if row is None:
             return None
-        return self._row_to_dict(row)
+        return self._explicit_record(row, column_types)
 
     async def find_by_id_or_fail(self, record_id: str) -> dict:
         record = await self.find_by_id(record_id)
@@ -441,16 +553,13 @@ class BaseRepository(ABC):
                         continue
                     conditions.append(f"data->>'{key}' = ${idx}")
                 else:
-                    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
-                        raise ValueError(f"Invalid filter key: {key!r}")
-                    if value is None:
-                        conditions.append(f"{key} IS NULL")
-                        continue
-                    conditions.append(f"{key} = ${idx}")
-                    params.append(
-                        _explicit_filter_param(column_types.get(key), value)
+                    condition, param = self._explicit_predicate(
+                        key, idx, value, column_types
                     )
-                    idx += 1
+                    conditions.append(condition)
+                    if value is not None:
+                        params.append(param)
+                        idx += 1
                     continue
                 params.append(_jsonb_text(value))
                 idx += 1
@@ -473,7 +582,7 @@ class BaseRepository(ABC):
         rows = await pool.fetch(query, *params)
         if self._jsonb_mode:
             return [json.loads(row["data"]) for row in rows]
-        return [self._row_to_dict(row) for row in rows]
+        return [self._explicit_record(row, column_types) for row in rows]
 
     async def count(self, filters: Optional[dict[str, Any]] = None) -> int:
         pool = await self._ensure_pool()
@@ -506,16 +615,13 @@ class BaseRepository(ABC):
                         continue
                     conditions.append(f"data->>'{key}' = ${idx}")
                 else:
-                    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
-                        raise ValueError(f"Invalid filter key: {key!r}")
-                    if value is None:
-                        conditions.append(f"{key} IS NULL")
-                        continue
-                    conditions.append(f"{key} = ${idx}")
-                    params.append(
-                        _explicit_filter_param(column_types.get(key), value)
+                    condition, param = self._explicit_predicate(
+                        key, idx, value, column_types
                     )
-                    idx += 1
+                    conditions.append(condition)
+                    if value is not None:
+                        params.append(param)
+                        idx += 1
                     continue
                 params.append(_jsonb_text(value))
                 idx += 1
@@ -578,15 +684,9 @@ class BaseRepository(ABC):
             cols: list[str] = []
             vals: list[Any] = []
             casts: list[str] = []
-            for col, val in data.items():
+            for col, val in self._explicit_write_columns(data, column_types):
                 if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
                     raise ValueError(f"Invalid column name: {col!r}")
-                if (
-                    column_types
-                    and col in _AUTO_STAMP_COLUMNS
-                    and col not in column_types
-                ):
-                    continue
                 bound, cast = _explicit_bind(
                     column_types.get(col) if column_types else None, val
                 )
@@ -630,17 +730,11 @@ class BaseRepository(ABC):
             set_parts: list[str] = []
             vals: list[Any] = []
             idx = 1
-            for col, val in existing.items():
+            for col, val in self._explicit_write_columns(existing, column_types):
                 if col == "id":
                     continue
                 if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
                     raise ValueError(f"Invalid column name: {col!r}")
-                if (
-                    column_types
-                    and col in _AUTO_STAMP_COLUMNS
-                    and col not in column_types
-                ):
-                    continue
                 bound, cast = _explicit_bind(
                     column_types.get(col) if column_types else None, val
                 )
@@ -706,11 +800,15 @@ class BaseRepository(ABC):
             raise ValueError(f"Invalid entity_field: {entity_field!r}")
         if self._jsonb_mode:
             where_clause = f"data->>'{entity_field}' = $1"
+            param: Any = entity_id
         else:
-            where_clause = f"{entity_field} = $1"
+            where_clause, param = self._explicit_predicate(
+                entity_field, 1, entity_id,
+                await self._explicit_column_types(pool),
+            )
         result = await pool.execute(
             f"DELETE FROM {self.table_name} WHERE {where_clause}",
-            entity_id,
+            param,
         )
         # result is like "DELETE 5"
         count = int(result.split()[-1]) if result else 0

@@ -64,8 +64,9 @@ auto-creation is only a bootstrap fallback for a table that doesn't exist yet:
 Repositories whose migration creates named columns instead of a `data` JSONB
 column set `_jsonb_mode = False`. This applies to
 `NotificationIntelligenceRepository`, `OperatorActionRepository`,
-`TenantNotificationConfigRepository`, `UserNotificationChannelRepository` and
-`SlackOAuthStateRepository`. For these tables the repository reads the column
+`TenantNotificationConfigRepository`, `UserNotificationChannelRepository`,
+`SlackOAuthStateRepository`, and the ten identity-resolution stores in
+`services/identity/repository.py`. For these tables the repository reads the column
 set and each column's `data_type` from `information_schema.columns` once per
 table and caches it. Writes and filters are then bound to the migrated types:
 
@@ -80,6 +81,15 @@ table and caches it. Writes and filters are then bound to the migrated types:
 - Only `json`/`jsonb` columns get a JSON cast. Array columns such as `text[]`
   receive the Python list.
 - Boolean filters are bound as booleans.
+- json/jsonb columns are decoded on read.
+- A `None` for a `NOT NULL` column that has a server default is left out of
+  the write, so the default or the existing value applies.
+- `_payload_column` (optional) names a JSONB column that holds record keys the
+  table has no column for. On read it is unpacked back into the flat record,
+  and filters on those keys use `<payload>->>'key'`. Without it, an unknown key
+  still fails loudly in Postgres.
+- `_column_renames` (optional) maps a historical record key to the migrated
+  column name. Reads expose both names.
 
 ## Tables
 
