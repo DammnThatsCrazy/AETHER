@@ -883,11 +883,18 @@ jobs:
             service="AETHER-${TARGET_ENV}-$([ "$role" = api ] && echo backend || echo "$role")"
             current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
             test "$current" != None || { echo "::error::required service missing: $service"; exit 1; }
-            aws ecs describe-task-definition --task-definition "$current" --query taskDefinition > task.json
+            # Clone the family's latest ACTIVE revision, not the service's
+            # pointer: Terraform re-registers the backend family on apply and
+            # deregisters the revision the service still runs (the service
+            # ignores task_definition drift so this workflow owns rollout).
+            family=$(aws ecs describe-task-definition --task-definition "$current" --query taskDefinition.family --output text)
+            aws ecs describe-task-definition --task-definition "$family" --query taskDefinition > task.json
+            # Keep only register-task-definition inputs; read-only describe
+            # fields (deregisteredAt, status, revision, ...) are rejected.
             jq --arg image "$IMAGE" --arg role "$role" '
               .containerDefinitions[0].image=$image |
               .containerDefinitions[0].environment=((.containerDefinitions[0].environment // []) | map(select(.name != "AETHER_ROLE"))) + [{name:"AETHER_ROLE",value:$role}] |
-              del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task.json > rendered.json
+              with_entries(select(.key | IN("family","taskRoleArn","executionRoleArn","networkMode","containerDefinitions","volumes","placementConstraints","requiresCompatibilities","cpu","memory","pidMode","ipcMode","proxyConfiguration","inferenceAccelerators","ephemeralStorage","runtimePlatform","enableFaultInjection")))' task.json > rendered.json
             if [ "$TARGET_ENV" = staging ]; then
               lease_json=$(aws ssm get-parameter --name /aether/staging/lifecycle/awake-until --query 'Parameter.Value' --output text)
               assert_lease "$lease_json"
