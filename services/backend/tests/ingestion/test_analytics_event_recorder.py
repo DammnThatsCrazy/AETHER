@@ -46,6 +46,7 @@ except ImportError:  # pragma: no cover
 
 PG_URL = os.getenv("ANALYTICS_TEST_DATABASE_URL")
 BACKENDS = ["inmem", "pg"]
+_DDL_LOCK_KEY = 0x616E_616C_7974  # "analyt"
 
 
 class _DictCache:
@@ -78,6 +79,15 @@ async def repo(request):
             pytest.skip(f"postgres unavailable: {exc}")
         analytics._events._pool = pool
         analytics._sessions._pool = pool
+        # Parallel xdist workers on a fresh database can race on
+        # ``CREATE TABLE IF NOT EXISTS``; create the tables under a lock.
+        async with pool.acquire() as conn:
+            await conn.execute("SELECT pg_advisory_lock($1)", _DDL_LOCK_KEY)
+            try:
+                await analytics._events._ensure_table()
+                await analytics._sessions._ensure_table()
+            finally:
+                await conn.execute("SELECT pg_advisory_unlock($1)", _DDL_LOCK_KEY)
     else:
         reset_in_memory_stores()
     previous = workers._analytics_repository

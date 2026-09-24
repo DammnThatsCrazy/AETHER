@@ -721,6 +721,12 @@ def analytics_session_record_id(tenant_id: str, session_id: str) -> str:
     return _tenant_scoped_digest("ses", tenant_id, session_id)
 
 
+def analytics_query_cache_pattern(tenant_id: str) -> str:
+    """Cache-key pattern covering every cached ``query_events`` result of one
+    tenant (the trailing ``:`` keeps tenant ``t1`` from matching ``t10``)."""
+    return CacheKey.analytics_query(tenant_id, "*")
+
+
 def canonical_utc_timestamp(value: Any, *, end_of_day: bool = False) -> Optional[str]:
     """Render ``value`` as fixed-width UTC ISO-8601 (``YYYY-MM-DDTHH:MM:SS.ffffffZ``).
 
@@ -920,6 +926,158 @@ class AnalyticsRepository:
             "total_sessions": sessions,
             "unique_users": events["unique_users"],
             "top_event_types": events["top_event_types"],
+        }
+
+    async def erase_subject(
+        self,
+        tenant_id: str,
+        user_id: Optional[str],
+        anonymous_id: Optional[str] = None,
+    ) -> dict[str, int]:
+        """DSR erasure of one data subject from the analytics event store.
+
+        Hard-deletes (the tenant-erasure semantics for these tables) every
+        ``events`` row in ``tenant_id`` whose ``user_id`` equals ``user_id`` or,
+        when the request carries it, whose ``anonymous_id`` equals
+        ``anonymous_id``, and every analytics ``sessions`` rollup attributed to
+        either identity (following the semantic plane's precedent: a row the
+        subject is part of is deleted, not partially kept). A session rollup
+        that is attributed to ANOTHER identity but counted some of the
+        subject's events is recomputed from its remaining events (or deleted
+        when none remain), so no aggregate keeps the erased contribution.
+
+        Tenant-scoped on every statement and idempotent: a re-run erases 0.
+        Returns ``events_deleted``, ``sessions_deleted`` and
+        ``sessions_recomputed``. On PostgreSQL all statements commit in one
+        transaction.
+        """
+        if not tenant_id:
+            raise ValueError("analytics erasure requires tenant_id")
+        user_id = user_id or None
+        anonymous_id = anonymous_id or None
+        if user_id is None and anonymous_id is None:
+            raise ValueError("analytics erasure requires user_id or anonymous_id")
+
+        pool = await self._events._ensure_pool()
+        if pool is None:
+            return self._erase_subject_in_memory(tenant_id, user_id, anonymous_id)
+
+        await self._events._ensure_table()
+        await self._sessions._ensure_table()
+        events_table = self._events.table_name
+        sessions_table = self._sessions.table_name
+        subject_predicate = "(data->>'user_id' = $2 OR data->>'anonymous_id' = $3)"
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                erased = await conn.fetch(
+                    f"""DELETE FROM {events_table}
+                        WHERE tenant_id = $1 AND {subject_predicate}
+                        RETURNING data->>'session_id' AS session_id""",
+                    tenant_id, user_id, anonymous_id,
+                )
+                deleted_sessions = await conn.fetch(
+                    f"""DELETE FROM {sessions_table}
+                        WHERE tenant_id = $1 AND data->>'record_type' = $4
+                          AND {subject_predicate}
+                        RETURNING data->>'session_id' AS session_id""",
+                    tenant_id, user_id, anonymous_id, ANALYTICS_SESSION_RECORD_TYPE,
+                )
+                touched = {r["session_id"] for r in erased if r["session_id"]}
+                touched -= {r["session_id"] for r in deleted_sessions}
+                sessions_deleted = len(deleted_sessions)
+                recomputed = 0
+                now = utc_now().isoformat()
+                for session_id in sorted(touched):
+                    record_id = analytics_session_record_id(tenant_id, session_id)
+                    remaining = await conn.fetchrow(
+                        f"""SELECT COUNT(*) AS n,
+                                   MIN(data->>'occurred_at') AS first_seen_at,
+                                   MAX(data->>'occurred_at') AS last_seen_at
+                            FROM {events_table}
+                            WHERE tenant_id = $1 AND data->>'session_id' = $2""",
+                        tenant_id, session_id,
+                    )
+                    if not remaining or int(remaining["n"]) == 0:
+                        status = await conn.execute(
+                            f"""DELETE FROM {sessions_table}
+                                WHERE id = $1 AND tenant_id = $2
+                                  AND data->>'record_type' = $3""",
+                            record_id, tenant_id, ANALYTICS_SESSION_RECORD_TYPE,
+                        )
+                        sessions_deleted += int(status.split()[-1]) if status else 0
+                        continue
+                    status = await conn.execute(
+                        f"""UPDATE {sessions_table} SET data = data || jsonb_build_object(
+                                'event_count', $3::bigint,
+                                'first_seen_at', $4::text,
+                                'last_seen_at', $5::text,
+                                'updated_at', $6::text)
+                            WHERE id = $1 AND tenant_id = $2
+                              AND data->>'record_type' = $7""",
+                        record_id, tenant_id, int(remaining["n"]),
+                        remaining["first_seen_at"], remaining["last_seen_at"], now,
+                        ANALYTICS_SESSION_RECORD_TYPE,
+                    )
+                    recomputed += int(status.split()[-1]) if status else 0
+        return {
+            "events_deleted": len(erased),
+            "sessions_deleted": sessions_deleted,
+            "sessions_recomputed": recomputed,
+        }
+
+    def _erase_subject_in_memory(
+        self, tenant_id: str, user_id: Optional[str], anonymous_id: Optional[str]
+    ) -> dict[str, int]:
+        def _is_subject(row: dict) -> bool:
+            return bool(
+                (user_id and row.get("user_id") == user_id)
+                or (anonymous_id and row.get("anonymous_id") == anonymous_id)
+            )
+
+        events = self._events._store
+        sessions = self._sessions._store
+        doomed = [
+            key for key, row in events.items()
+            if row.get("tenant_id") == tenant_id and _is_subject(row)
+        ]
+        touched = {events[key].get("session_id") for key in doomed} - {None, ""}
+        for key in doomed:
+            del events[key]
+        doomed_sessions = [
+            key for key, row in sessions.items()
+            if row.get("record_type") == ANALYTICS_SESSION_RECORD_TYPE
+            and row.get("tenant_id") == tenant_id
+            and _is_subject(row)
+        ]
+        for key in doomed_sessions:
+            touched.discard(sessions[key].get("session_id"))
+            del sessions[key]
+        sessions_deleted = len(doomed_sessions)
+        recomputed = 0
+        for session_id in touched:
+            record_id = analytics_session_record_id(tenant_id, session_id)
+            session = sessions.get(record_id)
+            if session is None or session.get("tenant_id") != tenant_id:
+                continue
+            remaining = [
+                row.get("occurred_at") or ""
+                for row in events.values()
+                if row.get("tenant_id") == tenant_id and row.get("session_id") == session_id
+            ]
+            if not remaining:
+                del sessions[record_id]
+                sessions_deleted += 1
+                continue
+            session.update({
+                "event_count": len(remaining),
+                "first_seen_at": min(remaining),
+                "last_seen_at": max(remaining),
+            })
+            recomputed += 1
+        return {
+            "events_deleted": len(doomed),
+            "sessions_deleted": sessions_deleted,
+            "sessions_recomputed": recomputed,
         }
 
 

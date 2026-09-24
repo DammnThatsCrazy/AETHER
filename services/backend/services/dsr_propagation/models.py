@@ -32,7 +32,10 @@ DSR_TYPES: tuple[str, ...] = (
 # ── Components a DSR propagates to (prompt §3.11) ─────────────────────────────
 #
 # Order is stable and load-bearing: open_request() seeds one pending step per
-# component in this exact order so status() output is deterministic.
+# component in this exact order so status() output is deterministic. New
+# components are appended: ``analytics_events`` (the analytics ``events`` rows
+# and ``sessions`` rollups written by the ``analytics_event_recorder`` stream
+# projector) is the newest tail member.
 DSRComponent = Literal[
     "identity_aliases",
     "identity_subjects",
@@ -64,6 +67,7 @@ DSRComponent = Literal[
     "population_snapshots",
     "populations",
     "location_facts",
+    "analytics_events",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -96,6 +100,7 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "population_snapshots",
     "populations",
     "location_facts",
+    "analytics_events",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

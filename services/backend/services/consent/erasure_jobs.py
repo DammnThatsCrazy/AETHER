@@ -52,6 +52,13 @@ audit-visible while the fact becomes invisible to reads) and the
 ``location_facts`` component is marked with the store's own revoke count.
 Appending the component grows ``DSR_COMPONENTS`` to 30, so every erasure
 request seeds a pending step for it from birth.
+
+The analytics event store closes the same defect for the ``events`` rows and
+``sessions`` rollups the ``analytics_event_recorder`` stream projector writes:
+the ``analytics_events`` component (31 total) hard-deletes the subject's rows,
+keyed on ``user_id`` and the request's ``anonymous_id`` when present, recomputes
+other identities' session rollups that counted the subject's events, and drops
+the tenant's cached analytics query results.
 """
 
 from __future__ import annotations
@@ -128,6 +135,21 @@ LOCATION_FACTS_COMPONENT = "location_facts"
 # This actor/reason stamp the revoke envelope (mirrors the population plane).
 LOCATION_FACT_ERASURE_ACTOR = "dsr_erasure_job"
 LOCATION_FACT_ERASURE_REASON = "dsr_erasure"
+
+# The analytics event-store dsr_propagation component. The
+# ``analytics_event_recorder`` stream projector writes one ``events`` row per
+# validated SDK event (carrying ``user_id`` / ``anonymous_id``) plus a
+# per-session ``sessions`` rollup; this component erases both for the subject:
+#   analytics_events → hard-delete (the tenant-erasure semantics for these
+#                      tables) of the subject's ``events`` rows and of the
+#                      analytics session rollups attributed to the subject;
+#                      rollups of OTHER identities that counted the subject's
+#                      events are recomputed (reported as artifacts_impacted)
+# Keyed on the DSR ``user_id`` and, when the request carries it, the
+# ``anonymous_id``. records_impacted = events deleted + sessions deleted. The
+# tenant's cached analytics query results are invalidated so no cached read
+# serves an erased event.
+ANALYTICS_EVENTS_COMPONENT = "analytics_events"
 
 
 def _kyber_device_eraser(repo_cls: type) -> Any:
@@ -275,6 +297,35 @@ async def _erase_location_plane(tenant_id: str, entity_id: str) -> dict[str, int
         reason=LOCATION_FACT_ERASURE_REASON,
     )
     return {LOCATION_FACTS_COMPONENT: revoked}
+
+
+async def _erase_analytics_plane(
+    tenant_id: str, user_id: str, anonymous_id: str | None = None
+) -> dict[str, int]:
+    """Analytics event-store erasure for one data subject.
+
+    Delegates to ``AnalyticsRepository.erase_subject`` (tenant-scoped on every
+    statement, idempotent, one transaction on PostgreSQL), then drops the
+    tenant's cached ``/v1/analytics/events/query`` results. A cache failure
+    raises so the plane is marked ``failed`` and the job retries, rather than
+    completing while a cached read could still serve an erased event.
+
+    Returns the component receipt: ``records_impacted`` (events + session
+    rollups deleted) and ``artifacts_impacted`` (other identities' session
+    rollups recomputed without the subject's events).
+    """
+    from dependencies.providers import get_registry
+    from repositories.repos import AnalyticsRepository, analytics_query_cache_pattern
+
+    cache = get_registry().cache
+    erased = await AnalyticsRepository(cache).erase_subject(
+        tenant_id, user_id, anonymous_id
+    )
+    await cache.delete_pattern(analytics_query_cache_pattern(tenant_id))
+    return {
+        "records_impacted": erased["events_deleted"] + erased["sessions_deleted"],
+        "artifacts_impacted": erased["sessions_recomputed"],
+    }
 
 
 def register_consent_erasure_handler() -> None:
@@ -545,6 +596,46 @@ def register_consent_erasure_handler() -> None:
                     logger.warning(
                         "failed to mark geographic DSR component %s failed",
                         LOCATION_FACTS_COMPONENT,
+                        exc_info=True,
+                    )
+
+            # ── Analytics event store ────────────────────────────────────────
+            # The analytics_event_recorder projector persists the subject's
+            # SDK events (events) and session rollups (sessions). Hard-delete
+            # them, keyed on user_id and — when the DSR carries it — the
+            # anonymous_id, and mark ``analytics_events`` with the store's OWN
+            # counts. One isolated try/except mirrors the geographic plane: a
+            # failure marks the component ``failed`` and keeps the job
+            # retryable (the deletes are idempotent).
+            try:
+                analytics_receipt = await _erase_analytics_plane(
+                    ctx.tenant_id,
+                    user_id,
+                    str(payload.get("anonymous_id") or "") or None,
+                )
+                await dsr_propagation_service.mark_step(
+                    propagation_request_id,
+                    ANALYTICS_EVENTS_COMPONENT,
+                    "completed",
+                    tenant_id=ctx.tenant_id,
+                    records_impacted=analytics_receipt["records_impacted"],
+                    artifacts_impacted=analytics_receipt["artifacts_impacted"],
+                    audit_event_id=ctx.job_id,
+                )
+            except Exception as exc:  # noqa: BLE001 — isolate the analytics plane
+                errors.append(f"analytics: {exc}")
+                try:
+                    await dsr_propagation_service.mark_step(
+                        propagation_request_id,
+                        ANALYTICS_EVENTS_COMPONENT,
+                        "failed",
+                        tenant_id=ctx.tenant_id,
+                        audit_event_id=ctx.job_id,
+                    )
+                except Exception:  # noqa: BLE001 — never let marking abort
+                    logger.warning(
+                        "failed to mark analytics DSR component %s failed",
+                        ANALYTICS_EVENTS_COMPONENT,
                         exc_info=True,
                     )
 

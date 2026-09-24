@@ -224,6 +224,9 @@ class DataSubjectRequest(BaseModel):
     user_id: str
     request_type: str = Field(..., description="access, rectification, erasure, portability, restriction, objection")
     details: str = ""
+    # Optional SDK anonymous id of the same subject. An erasure also removes
+    # analytics events/sessions recorded under it (e.g. pre-identify events).
+    anonymous_id: Optional[str] = None
 
 
 @router.post("/records")
@@ -329,6 +332,7 @@ async def submit_dsr(
         "tenant_id": tenant.tenant_id,
         "dsr_id": dsr_id,
         "user_id": body.user_id,
+        "anonymous_id": body.anonymous_id,
         "request_type": body.request_type,
         "details": body.details,
         "status": "pending",
@@ -357,6 +361,7 @@ async def submit_dsr(
             {
                 "dsr_id": dsr_id,
                 "user_id": body.user_id,
+                "anonymous_id": body.anonymous_id,
                 "propagation_request_id": propagation_request_id,
             },
             idempotency_key=f"consent-erasure:{dsr_id}",
