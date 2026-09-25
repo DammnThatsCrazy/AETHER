@@ -133,6 +133,11 @@ class GraphQLTasks(TaskSet):
             if resp.status_code == 400:
                 resp.success()
 
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
+
 
 # =========================================================================
 # Analytics Export Load Tests
@@ -191,6 +196,11 @@ class ExportTasks(TaskSet):
         ) as resp:
             if resp.status_code == 404:
                 resp.success()
+
+    @task(2)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
@@ -258,6 +268,11 @@ class AgentTaskTasks(TaskSet):
         ) as resp:
             if resp.status_code == 400:
                 resp.success()
+
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
@@ -503,6 +518,11 @@ class Profile360Tasks(TaskSet):
             if resp.status_code in (200, 404):
                 resp.success()
 
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
+
 
 # =========================================================================
 # Kyber Operator Summary Load Tests
@@ -559,6 +579,11 @@ class KyberSummaryTasks(TaskSet):
             name="/v1/diagnostics/report",
         )
 
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
+
 
 # =========================================================================
 # Campaign Touchpoint Load Tests
@@ -614,6 +639,11 @@ class CampaignTasks(TaskSet):
             headers=self.headers,
             name="/v1/campaigns/{id}/attribution [read]",
         )
+
+    @task(2)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
@@ -733,6 +763,11 @@ class FraudEvaluationTasks(TaskSet):
         ) as resp:
             if resp.status_code in (400, 422):
                 resp.success()
+
+    @task(5)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================

@@ -13,7 +13,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 toc_depth: 2
 source_hashes:
-  "tests/load/locustfile.py": "sha256:15b403c58a448acd75f393bbaa9c49110771ab85bcc990673586ee9bf5f4a809"
+  "tests/load/locustfile.py": "sha256:162fd17dba337eae0681b6b7af8c452a7132fe7dda8bb8c228e6f32a72de4b91"
   "tests/load/thresholds.json": "sha256:aee0927999630736a9eb307900b102bf1548600d9814caa262a49591902a4fd0"
 ---
 
@@ -53,11 +53,11 @@ and writes CSV results to `tests/load/results/baseline_*.csv`. Every request
 uses `AETHER_LOAD_API_KEY` through the `X-API-Key` header; the deterministic
 `test-key-*` fallback is for local-only runs and is not staging evidence.
 
-The batch-ingest and identity-resolution task sets that `make load-smoke`
-mixes yield back to their Locust user (`interrupt()`), so each user keeps
-re-drawing between them. Without that, a user stays in the first set it
-draws, and a short gate run can miss whole request types and fail with
-"configured threshold never appeared".
+Every task set yields back to its Locust user (`interrupt()`), so each user
+keeps re-drawing from its weighted task sets. Without that, a user stays in
+the first set it draws: a short `make load-smoke` run can miss whole request
+types and fail with "configured threshold never appeared", and if only some
+sets yielded, mixed users would drain into the rest and skew the baseline mix.
 
 ## Recorded Baselines
 
