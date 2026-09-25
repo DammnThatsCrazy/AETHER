@@ -86,13 +86,18 @@ revoked, expired or already-claimed invitation grants nothing, and every
 sign-in for one Auth0 identity converges on one principal. The membership and
 then the user are written after the claim; if a sign-in fails in between, the
 same identity's next sign-in finishes the provisioning, unless an
-administrator removed that member meanwhile. A human session takes its role,
-permissions and membership status from the user record on every request, so
-changing a member's organization role (`PATCH
+administrator removed that member after the claim. A human session takes its
+role, permissions and membership status from the user record on every
+request, so changing a member's organization role (`PATCH
 /v1/account/organization/members/{member_id}/role`) rewrites that user's grant
 (owner/admin → `admin`, member → `editor`, viewer → `viewer`), and removing a
 member revokes it (no permissions, `membership_status=removed`) before the
-membership row changes. A tenant
+membership row changes. The privilege-raising write always goes last: a
+demotion lowers the grant first, and a promotion raises the membership first,
+then the grant, restoring the membership role if the grant write fails. A
+removed member keeps its Auth0 link but is let back in only by a fresh
+invitation, which its next sign-in accepts under the same principal; without
+one the sign-in is denied and never self-provisions a second user. A tenant
 admin's first organization request (with a user principal; a bare admin API key
 does not qualify) creates the organization profile, owned by that admin, so the
 operator tenant can invite teammates via

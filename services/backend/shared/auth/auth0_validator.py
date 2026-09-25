@@ -35,11 +35,11 @@ async def _fetch_jwks(domain: str) -> list[dict]:
     cached = _JWKS_CACHE.get(domain)
     if cached and time.time() - cached["fetched_at"] < _JWKS_TTL:
         return cached["keys"]
-    import asyncio
-    import requests as _requests
+    import httpx
+
     url = f"https://{domain}/.well-known/jwks.json"
-    loop = asyncio.get_event_loop()
-    resp = await loop.run_in_executor(None, lambda: _requests.get(url, timeout=5))
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(url)
     resp.raise_for_status()
     keys = resp.json().get("keys", [])
     _JWKS_CACHE[domain] = {"keys": keys, "fetched_at": time.time()}
@@ -152,16 +152,13 @@ async def fetch_auth0_userinfo(token: str) -> dict:
     domain = settings.auth0.domain
     if not domain:
         raise ValueError("AUTH0_DOMAIN not configured")
-    import asyncio
-    import requests as _requests
+    # httpx is a declared dependency of the backend extra (requests is not).
+    import httpx
 
     url = f"https://{domain}/userinfo"
-    loop = asyncio.get_event_loop()
     try:
-        resp = await loop.run_in_executor(
-            None,
-            lambda: _requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=5),
-        )
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
         resp.raise_for_status()
         profile = resp.json()
     except Exception as e:  # noqa: BLE001 — surfaced as a sign-in failure

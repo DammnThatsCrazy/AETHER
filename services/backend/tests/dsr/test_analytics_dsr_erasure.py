@@ -521,19 +521,22 @@ async def test_marker_is_written_before_the_erasure_request(job_env, monkeypatch
     assert marker is not None and marker["submitted_at"]
 
 
-async def test_fence_is_key_lookups_only():
-    """The fence runs for every projected event, so it must not scan."""
-    from services.consent.erasure_fence import erasure_fences_event
+async def test_fence_is_one_keyed_query():
+    """The fence runs for every projected event, so it must not scan: one
+    keyed read covers the tenant fence and both subject markers."""
+    from services.consent.erasure_fence import erasure_fences_event, tenant_fence_id
 
     class _Repo:
         def __init__(self) -> None:
-            self.reads = 0
+            self.lookups: list[list[str]] = []
 
         async def find_by_id(self, _id):
-            if _id == "dsrm_backfill_v1":
-                return {"id": _id}  # backfill already recorded
-            self.reads += 1
-            return None
+            assert _id == "dsrm_backfill_v1"
+            return {"id": _id}  # backfill already recorded
+
+        async def lookup(self, ids):
+            self.lookups.append(list(ids))
+            return {}
 
         async def find_many(self, *args, **kwargs):  # pragma: no cover - must not be called
             raise AssertionError("the fence must not scan")
@@ -542,7 +545,30 @@ async def test_fence_is_key_lookups_only():
     assert await erasure_fences_event(
         TENANT, user_id=USER, anonymous_id="anon", received_at="2026-05-01T00:00:00Z", repo=repo,
     ) is False
-    assert repo.reads == 2
+    assert len(repo.lookups) == 1 and len(repo.lookups[0]) == 3
+    assert repo.lookups[0][0] == tenant_fence_id(TENANT)
+
+
+async def test_deleted_tenant_is_fenced_after_its_markers_are_gone(job_env):
+    """Account deletion removes the subject markers; a queued event for the
+    deleted tenant must still not be projected."""
+    from services.consent.erasure_fence import (
+        ErasureMarkerRepository,
+        erasure_fences_event,
+        record_tenant_erasure_fence,
+    )
+
+    tenant = _uid("t")
+    await record_tenant_erasure_fence(tenant)
+    await ErasureMarkerRepository().delete_by_entity("tenant_id", tenant)
+
+    for kwargs in ({"user_id": USER, "anonymous_id": None}, {"user_id": None, "anonymous_id": None}):
+        assert await erasure_fences_event(
+            tenant, received_at="2026-05-01T10:00:00Z", **kwargs,
+        ) is True
+    assert await erasure_fences_event(
+        _uid("t"), user_id=USER, anonymous_id=None, received_at="2026-05-01T10:00:00Z",
+    ) is False
 
 
 async def test_later_erasure_advances_the_marker():

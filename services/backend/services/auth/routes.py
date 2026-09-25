@@ -908,10 +908,15 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
     principal_user_id: Optional[str] = None
     plan_tier_value = plan_tier.value
 
+    removed_user: Optional[dict] = None
     try:
         from repositories.repos import UserRepository
         user = await UserRepository().find_by_auth0_sub(sub)
-        if user:
+        if user and user.get("membership_status") == "removed":
+            # A removed member keeps its Auth0 link; a fresh invitation is the
+            # only way back in, so try that path before the old tenant.
+            removed_user = user
+        elif user:
             tenant_id = user.get("tenant_id")
             principal_user_id = user.get("user_id") or user.get("id")
             if tenant_id:
@@ -936,6 +941,7 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
             email=email,
             email_verified=bool(claims.get("email_verified")),
             name=name,
+            user_id=(removed_user.get("user_id") or removed_user.get("id")) if removed_user else None,
         )
         if membership is not None:
             tenant_id = membership.tenant_id
@@ -944,6 +950,11 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
             if rec.get("status") == "inactive":
                 raise BadRequestError("This account has been deactivated.")
             plan_tier_value = rec.get("plan_tier", plan_tier.value) or plan_tier.value
+        elif removed_user is not None:
+            # Not re-invited: sign in as before (route policy denies a removed
+            # membership); never self-provision a second user for this sub.
+            tenant_id = removed_user.get("tenant_id")
+            principal_user_id = removed_user.get("user_id") or removed_user.get("id")
         elif not settings.trust_plane.sso_self_signup_enabled:
             metrics.increment("sso_signup_refused_total")
             raise ForbiddenError(

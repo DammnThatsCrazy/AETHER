@@ -370,7 +370,13 @@ class AccountLifecycleService:
             self._mark_result(result, StorageResultStatus.COMPLETED.value, "erase", count)
             return
         if name == "dsr_erasure_markers":
-            from services.consent.erasure_fence import ErasureMarkerRepository
+            from services.consent.erasure_fence import (
+                ErasureMarkerRepository,
+                record_tenant_erasure_fence,
+            )
+            # Fence the whole tenant before its subject markers go, so an
+            # event still queued or redelivered cannot write erased data back.
+            await record_tenant_erasure_fence(tenant_id)
             count = await ErasureMarkerRepository().delete_by_entity("tenant_id", tenant_id)
             self._mark_result(result, StorageResultStatus.COMPLETED.value, "erase", count)
             return

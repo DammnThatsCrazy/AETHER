@@ -11,8 +11,12 @@ every stored erasure request has its marker even if the process dies between
 the two writes.
 A marker is keyed by a digest of ``(tenant_id, kind, identifier)`` and stores
 only the latest erasure's ``submitted_at`` — never the identifier itself — so
-the fence costs one primary-key read per identifier on the event, instead of
-scanning consent records for every projected event.
+the fence costs one keyed query per projected event (the event's markers and
+its tenant's fence together), instead of scanning consent records.
+
+Deleting a tenant removes its subject markers but first writes a tenant-level
+fence (``record_tenant_erasure_fence``) that is kept, so an event still queued
+or redelivered for that tenant is never projected afterwards.
 
 An event is fenced when a matching erasure was submitted at or after the event
 was received, i.e. the erasure was meant to cover it. Activity received after
@@ -23,7 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository, canonical_utc_timestamp
@@ -69,6 +73,46 @@ class ErasureMarkerRepository(BaseRepository):
                       < EXCLUDED.data->>'submitted_at'""",
             marker_id, json.dumps(record), tenant_id,
         )
+
+
+    async def lookup(self, marker_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """The stored markers among ``marker_ids``, in one keyed round trip."""
+        pool = await self._ensure_pool()
+        if pool is None:
+            return {i: self._store[i] for i in marker_ids if i in self._store}
+        await self._ensure_table()
+        rows = await pool.fetch(
+            f"SELECT id, data FROM {self.table_name} WHERE id = ANY($1::text[])",
+            list(marker_ids),
+        )
+        found: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            data = row["data"]
+            found[row["id"]] = json.loads(data) if isinstance(data, str) else dict(data)
+        return found
+
+
+def tenant_fence_id(tenant_id: str) -> str:
+    digest = hashlib.sha256(f"tenant|{tenant_id}".encode("utf-8")).hexdigest()
+    return f"dsrm_tenant_{digest[:48]}"
+
+
+async def record_tenant_erasure_fence(tenant_id: str, *, repo: Any = None) -> None:
+    """Fence every later projection for a tenant being deleted.
+
+    Account deletion removes the tenant's subject markers, but events accepted
+    before the deletion can still be queued or redelivered. This durable fence
+    is written first and holds no subject data: a digest of the tenant id and
+    the time. It is stored outside the tenant (``tenant_id=""``), so the
+    tenant's own deletion does not remove it.
+    """
+    if not tenant_id:
+        raise ValueError("a tenant fence needs a tenant")
+    repo = repo or ErasureMarkerRepository()
+    await repo.insert(tenant_fence_id(tenant_id), {
+        "tenant_id": "", "kind": "tenant",
+        "erased_at": canonical_utc_timestamp(coerce_utc_lenient(datetime.now(timezone.utc))),
+    })
 
 
 def erasure_marker_id(tenant_id: str, kind: str, identifier: str) -> str:
@@ -161,15 +205,21 @@ async def erasure_fences_event(
     matching erasure (fail closed). A lookup failure raises, so the caller
     retries rather than writes.
     """
-    if not tenant_id or not (user_id or anonymous_id):
+    if not tenant_id:
         return False
     repo = repo or ErasureMarkerRepository()
     await ensure_markers_backfilled(repo=repo)
+    wanted = {
+        kind: erasure_marker_id(tenant_id, kind, str(identifier))
+        for kind, identifier in zip(_KINDS, (user_id, anonymous_id)) if identifier
+    }
+    # One keyed read covers the tenant fence and every subject marker.
+    found = await repo.lookup([tenant_fence_id(tenant_id), *wanted.values()])
+    if tenant_fence_id(tenant_id) in found:
+        return True  # the tenant was deleted: nothing more is projected for it
     received: Optional[datetime] = coerce_utc_lenient(received_at)
-    for kind, identifier in zip(_KINDS, (user_id, anonymous_id)):
-        if not identifier:
-            continue
-        marker = await repo.find_by_id(erasure_marker_id(tenant_id, kind, str(identifier)))
+    for marker_id in wanted.values():
+        marker = found.get(marker_id)
         if marker is None or marker.get("tenant_id") != tenant_id:
             continue
         if received is None:
@@ -187,5 +237,7 @@ __all__ = [
     "erasure_fences_event",
     "erasure_marker_id",
     "record_erasure_markers",
+    "record_tenant_erasure_fence",
     "reset_backfill_state",
+    "tenant_fence_id",
 ]

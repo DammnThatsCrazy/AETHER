@@ -78,19 +78,26 @@ async def _provision(
             if await organization_repo.get_active_member_by_user(tenant_id, user_id) is None:
                 raise
     role, permissions = grants_for(organization_role)
-    await user_repo.insert(user_id, {
-        "user_id": user_id,
+    grant = {
         "tenant_id": tenant_id,
-        "email": email,
-        "name": name or email,
         "auth0_sub": sub,
         "status": "active",
         "email_verified": True,
-        "auth_method": "sso",
         "role": role,
         "permissions": permissions,
         "membership_status": "active",
-    })
+    }
+    if await user_repo.find_by_id(user_id) is not None:
+        # A re-invited member: keep the rest of its record.
+        await user_repo.update(user_id, grant)
+    else:
+        await user_repo.insert(user_id, {
+            **grant,
+            "user_id": user_id,
+            "email": email,
+            "name": name or email,
+            "auth_method": "sso",
+        })
     invitation_id = invitation.get("invitation_id") or invitation.get("id")
     await organization_repo.update_invitation(
         tenant_id, invitation_id, {"provisioned_at": to_iso_utc(SYSTEM_CLOCK.now())}
@@ -103,6 +110,7 @@ async def resolve_sso_membership(
     email: str,
     email_verified: bool,
     name: str,
+    user_id: Optional[str] = None,
     user_repo: Any = None,
     organization_repo: Any = None,
 ) -> Optional[SSOMembership]:
@@ -129,16 +137,19 @@ async def resolve_sso_membership(
         organization_repo = get_organization_repository()
 
     # One principal per Auth0 identity: concurrent or retried callbacks for the
-    # same sub converge on the same user row instead of duplicating it.
-    user_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"aether:sso-user:{sub}"))
+    # same sub converge on the same user row instead of duplicating it. A
+    # removed member being re-invited keeps its existing principal.
+    user_id = user_id or str(uuid.uuid5(uuid.NAMESPACE_URL, f"aether:sso-user:{sub}"))
 
     # Resume first: an invitation this identity already claimed on an earlier
     # sign-in that failed before its membership or user row was written.
     for invitation in await organization_repo.find_unprovisioned_claims(email, user_id):
         tenant_id = invitation.get("tenant_id")
-        # An administrator who removed the half-provisioned member meant it:
-        # the claim is not resumed into access.
-        if tenant_id and not await organization_repo.membership_removed(tenant_id, user_id):
+        # An administrator who removed the half-provisioned member after this
+        # claim meant it: the claim is not resumed into access.
+        if tenant_id and not await organization_repo.membership_removed(
+            tenant_id, user_id, since=invitation.get("accepted_at"),
+        ):
             await _provision(invitation, tenant_id, user_id, sub, email, name, user_repo, organization_repo)
             metrics.increment("sso_membership_resolved_total", labels={"how": "resumed_invitation"})
             logger.info("SSO sign-in resumed an accepted invitation: tenant=%s", tenant_id)

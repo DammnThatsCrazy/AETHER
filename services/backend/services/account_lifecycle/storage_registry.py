@@ -66,7 +66,9 @@ STORAGE_DOMAIN_REGISTRY: tuple[StorageDomain, ...] = (
         "dsr_erasure_markers",
         "dsr_erasure_markers",
         "erase",
-        "per-identifier erasure fence markers hold a tenant-bound digest of erased identifiers",
+        "per-identifier erasure fence markers hold a tenant-bound digest of erased "
+        "identifiers; a tenant-level fence (tenant digest + time, no subject data) is "
+        "written first and retained so queued events are never projected afterwards",
     ),
     StorageDomain(
         "graph",

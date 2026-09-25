@@ -165,6 +165,9 @@ class _Users:
     def __init__(self, users=None) -> None:
         self.rows = {u["user_id"]: dict(u) for u in (users or [])}
 
+    async def find_by_id(self, user_id):
+        return self.rows.get(user_id)
+
     async def find_by_email(self, email):
         return next((u for u in self.rows.values() if u.get("email") == email), None)
 
@@ -426,3 +429,112 @@ async def test_userinfo_for_another_subject_is_rejected(monkeypatch):
     )
     with pytest.raises(BadRequestError, match="subject mismatch"):
         await auth_routes.sso_callback(auth_routes.SSOCallbackRequest(token="t"))
+
+
+async def test_userinfo_is_fetched_with_the_declared_http_client(monkeypatch):
+    """/userinfo uses httpx (a declared backend dependency), not requests."""
+    import httpx
+
+    from shared.auth import auth0_validator
+
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json={"sub": "google|1", "email": "a@b.test", "email_verified": True})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    )
+    monkeypatch.setattr(settings, "auth0", dataclasses.replace(settings.auth0, domain="tenant.auth0.test"))
+
+    profile = await auth0_validator.fetch_auth0_userinfo("tok")
+
+    assert profile["email"] == "a@b.test"
+    assert seen == {"url": "https://tenant.auth0.test/userinfo", "auth": "Bearer tok"}
+
+
+async def test_a_removed_member_can_be_invited_back_with_the_same_principal():
+    from services.account_organization.grants import sync_user_grants
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users, orgs = _Users(), await _orgs(_invite("advisor@example.test", role="member"))
+    first = await resolve_sso_membership(
+        sub="google|10", email="advisor@example.test", email_verified=True, name="A",
+        user_repo=users, organization_repo=orgs,
+    )
+    [member] = await _members(orgs)
+    await sync_user_grants(OPERATOR, first.user_id, None, user_repo=users)
+    await orgs.remove_member(OPERATOR, member["id"])
+    assert users.rows[first.user_id]["membership_status"] == "removed"
+
+    await orgs.create_invitation(OPERATOR, {**_invite("advisor@example.test", role="viewer"),
+                                            "invitation_id": "invite-again"})
+    again = await resolve_sso_membership(
+        sub="google|10", email="advisor@example.test", email_verified=True, name="A",
+        user_id=first.user_id, user_repo=users, organization_repo=orgs,
+    )
+
+    assert again.user_id == first.user_id and len(users.rows) == 1
+    user = users.rows[first.user_id]
+    assert (user["membership_status"], user["role"]) == ("active", "viewer")
+    assert [m["role"] for m in await _members(orgs)] == ["viewer"]
+
+
+async def test_an_earlier_removal_does_not_block_resuming_a_re_invitation():
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users, orgs = _Users(), await _orgs(_invite("advisor@example.test"))
+    old = await orgs.add_member(OPERATOR, user_id="u-back", role="member")
+    await orgs.remove_member(OPERATOR, old["id"])           # removed before the claim
+
+    real_insert = users.insert
+    users.insert = AsyncMock(side_effect=RuntimeError("database unavailable"))
+    with pytest.raises(RuntimeError):
+        await resolve_sso_membership(
+            sub="google|11", email="advisor@example.test", email_verified=True, name="A",
+            user_id="u-back", user_repo=users, organization_repo=orgs,
+        )
+    users.insert = real_insert
+
+    membership = await resolve_sso_membership(
+        sub="google|11", email="advisor@example.test", email_verified=True, name="A",
+        user_id="u-back", user_repo=users, organization_repo=orgs,
+    )
+    assert membership is not None and membership.user_id == "u-back"
+    assert users.rows["u-back"]["membership_status"] == "active"
+
+
+async def test_sso_callback_routes_a_removed_member_through_invitations(monkeypatch):
+    """A removed member's Auth0 link must not bypass a fresh invitation, and
+    without one must never self-provision a second user for the same sub."""
+    from repositories.repos import UserRepository
+    from services.auth import routes as auth_routes
+
+    await UserRepository().insert("u-removed", {
+        "user_id": "u-removed", "tenant_id": OPERATOR, "email": "gone@example.test",
+        "auth0_sub": "google|12", "status": "active", "membership_status": "removed",
+    })
+    monkeypatch.setattr(
+        settings, "trust_plane",
+        dataclasses.replace(settings.trust_plane, sso_self_signup_enabled=True),
+    )
+    monkeypatch.setattr(
+        "shared.auth.auth0_validator.validate_auth0_token",
+        AsyncMock(return_value={"sub": "google|12", "email": "gone@example.test", "email_verified": True}),
+    )
+    resolved = AsyncMock(return_value=None)
+    monkeypatch.setattr("services.auth.sso_membership.resolve_sso_membership", resolved)
+    provisioned = AsyncMock()
+    monkeypatch.setattr(auth_routes._repo, "insert", provisioned)
+
+    try:
+        await auth_routes.sso_callback(auth_routes.SSOCallbackRequest(token="t"))
+    except Exception:  # noqa: BLE001 — only the routing decision is under test
+        pass
+
+    assert resolved.await_args.kwargs["user_id"] == "u-removed"
+    provisioned.assert_not_called()

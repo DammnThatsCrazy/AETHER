@@ -291,3 +291,31 @@ async def test_ownership_transfer_grants_the_new_owner_admin(organization):
     )
     user = await users.find_by_id("target-a")
     assert user["role"] == "admin" and "admin" in user["permissions"]
+
+
+@pytest.mark.asyncio
+async def test_failed_grant_write_rolls_back_a_promotion(organization, monkeypatch):
+    """A promotion must not leave a raised role behind when the grant write fails."""
+    from repositories.repos import UserRepository
+    from services.account_organization import grants
+
+    repo, _ = organization
+    users = UserRepository()
+    await users.insert("viewer-a", {
+        "user_id": "viewer-a", "tenant_id": "tenant-a", "role": "viewer",
+        "permissions": ["read", "analytics"], "membership_status": "active",
+    })
+    member = await repo.add_member("tenant-a", user_id="viewer-a", role="viewer")
+
+    async def failing_sync(*args, **kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(grants, "sync_user_grants", failing_sync)
+    with pytest.raises(RuntimeError):
+        await change_organization_member_role(
+            request_for("owner-a"), member["id"], MemberRoleUpdate(role=OrganizationRole.ADMIN)
+        )
+
+    assert (await repo.get_member("tenant-a", member["id"]))["role"] == "viewer"
+    user = await users.find_by_id("viewer-a")
+    assert (user["role"], user["permissions"]) == ("viewer", ["read", "analytics"])

@@ -100,11 +100,31 @@ class OrganizationRepository:
         )
         return rows[0] if rows else None
 
-    async def membership_removed(self, tenant_id: str, user_id: str) -> bool:
-        """True when this principal held a membership in the tenant that was removed."""
-        return bool(await self.members.find_many(
-            {"tenant_id": tenant_id, "user_id": user_id, "status": "removed"}, limit=1,
-        ))
+    async def membership_removed(
+        self, tenant_id: str, user_id: str, *, since: Optional[str] = None
+    ) -> bool:
+        """True when this principal's membership in the tenant was removed.
+
+        With ``since`` only a removal at or after that instant counts (an
+        earlier removal of a since re-invited member does not); a removal
+        whose time cannot be read counts, failing closed.
+        """
+        rows = await self.members.find_many(
+            {"tenant_id": tenant_id, "user_id": user_id, "status": "removed"}, limit=50,
+        )
+        if since is None:
+            return bool(rows)
+        try:
+            floor = parse_instant_strict(str(since))
+        except (TypeError, ValueError):
+            return bool(rows)
+        for row in rows:
+            try:
+                if parse_instant_strict(str(row.get("removed_at"))) >= floor:
+                    return True
+            except (TypeError, ValueError):
+                return True
+        return False
 
     async def list_members(self, tenant_id: str, *, limit: int, offset: int) -> list[dict[str, Any]]:
         return await self.members.find_many(

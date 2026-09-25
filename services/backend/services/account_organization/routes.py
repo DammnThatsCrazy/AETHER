@@ -21,7 +21,7 @@ from shared.common.common import (
 )
 from shared.temporal import SYSTEM_CLOCK, parse_instant_strict, to_iso_utc
 
-from .grants import sync_user_grants
+from .grants import change_member_role, sync_user_grants
 from .models import (
     InvitationCreateRequest,
     InvitationCreatedResponse,
@@ -336,13 +336,11 @@ async def change_organization_member_role(
             return APIResponse(data=_member_response(member)).to_dict()
         current_owner_id = profile.get("owner_user_id")
         current_owner = await repo.get_active_member_by_user(tenant.tenant_id, current_owner_id)
-        # Session authority comes from the user record, so the grant is
-        # written with the membership (owner and admin grant the same rights).
-        await sync_user_grants(tenant.tenant_id, member.get("user_id"), OrganizationRole.OWNER)
-        updated_target = await repo.update_member(tenant.tenant_id, member_id, {"role": "owner"})
+        # Session authority comes from the user record, so each role change
+        # writes the grant with the membership (see change_member_role).
+        updated_target = await change_member_role(repo, tenant.tenant_id, member, OrganizationRole.OWNER)
         if current_owner is not None:
-            await sync_user_grants(tenant.tenant_id, current_owner.get("user_id"), OrganizationRole.ADMIN)
-            await repo.update_member(tenant.tenant_id, current_owner["id"], {"role": "admin"})
+            await change_member_role(repo, tenant.tenant_id, current_owner, OrganizationRole.ADMIN)
         await repo.update_profile(tenant.tenant_id, {"owner_user_id": member["user_id"]})
         return APIResponse(data=_member_response(updated_target)).to_dict()
 
@@ -350,11 +348,7 @@ async def change_organization_member_role(
         raise ConflictError("The current owner must transfer ownership before changing this role")
     if body.role not in {OrganizationRole.ADMIN, OrganizationRole.MEMBER, OrganizationRole.VIEWER}:
         raise ForbiddenError("Invalid organization member role")
-    # The user record carries the session's authority: change it first, so a
-    # failure part-way leaves the member's grant matching the requested role
-    # rather than the old one; a retry converges.
-    await sync_user_grants(tenant.tenant_id, member.get("user_id"), target_role)
-    updated = await repo.update_member(tenant.tenant_id, member_id, {"role": target_role.value})
+    updated = await change_member_role(repo, tenant.tenant_id, member, target_role)
     return APIResponse(data=_member_response(updated)).to_dict()
 
 
