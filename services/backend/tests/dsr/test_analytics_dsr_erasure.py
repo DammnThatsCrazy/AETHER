@@ -306,9 +306,14 @@ async def test_dsr_erasure_job_erases_analytics_and_marks_step(job_env):
     # Warm the query cache with the subject's events: without invalidation the
     # same query would keep serving them from cache after the rows are gone.
     assert len(await repo.query_events(TENANT, {"user_id": USER}, limit=10)) == 2
+    generation_key = CacheKey.analytics_query_generation(TENANT)
+    generation = await job_env.get_json(generation_key)
+    assert generation  # recording the events issued a query-cache generation
     cache_key = CacheKey.analytics_query(
         TENANT,
-        CacheKey.hash_query(f"{sorted({'user_id': USER}.items())}|from=None|to=None|limit=10"),
+        CacheKey.hash_query(
+            f"{sorted({'user_id': USER}.items())}|from=None|to=None|limit=10|gen={generation}"
+        ),
     )
     assert await job_env.get_json(cache_key)
 
@@ -331,6 +336,9 @@ async def test_dsr_erasure_job_erases_analytics_and_marks_step(job_env):
     assert await _session(repo, TENANT, s_subject) is None
     assert await _event_ids(repo, TENANT) == {kept}
     assert await job_env.get_json(cache_key) is None  # tenant cache dropped
+    # ...and its generation retired, so a read that raced the erasure and
+    # re-cached under the old generation is never served again.
+    assert await job_env.get_json(generation_key) not in (None, generation)
     # Another tenant's rows for the same user_id are untouched.
     assert await _event_ids(repo, "tenant-other", user_id=USER) == {other_tenant}
     assert len(await repo.query_events("tenant-other", {"user_id": USER}, limit=10)) == 1

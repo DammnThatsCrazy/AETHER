@@ -12,10 +12,12 @@ Backend selection:
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import os
 import re
+import uuid
 from abc import ABC
 from collections import Counter
 from datetime import datetime, time, timedelta, timezone
@@ -930,6 +932,13 @@ ANALYTICS_SESSION_RECORD_TYPE = "analytics_session"
 # The dashboard summary window; ``period`` in the response names it.
 ANALYTICS_SUMMARY_WINDOW = timedelta(hours=24)
 ANALYTICS_SUMMARY_TOP_EVENT_TYPES = 10
+# Lifetime of a tenant's query-cache generation token. Every write to the
+# tenant's event store replaces the token; it only needs to outlive the cached
+# results it versions (``TTL.MEDIUM``). A missing token reads as generation
+# ``"0"``, never as a token a write issued, so an expired/evicted token cannot
+# resurrect results cached before a write.
+ANALYTICS_QUERY_GENERATION_TTL = TTL.DAY
+_ANALYTICS_QUERY_GENERATION_UNSET = "0"
 
 # Query keys that are request plumbing, never row predicates. ``limit`` rides
 # ``EventQuery.model_dump()``; treating it as ``data->>'limit' = '1'`` made
@@ -1002,6 +1011,16 @@ def _as_utc_datetime(value: Any) -> Optional[datetime]:
     return coerce_utc_lenient(canonical)
 
 
+class _QueryFlight:
+    """One in-progress :meth:`AnalyticsRepository.query_events` store read."""
+
+    __slots__ = ("future", "waiters")
+
+    def __init__(self, future: asyncio.Future) -> None:
+        self.future = future
+        self.waiters = 0
+
+
 class AnalyticsRepository:
     """Query engine for dashboards — uses TimescaleDB with Redis query caching."""
 
@@ -1009,6 +1028,45 @@ class AnalyticsRepository:
         self.cache = cache
         self._events = _EventStore()
         self._sessions = _SessionStore()
+        # Single-flight: cache key -> the in-progress store read for it.
+        self._inflight_queries: dict[str, _QueryFlight] = {}
+
+    async def _query_generation(self, tenant_id: str) -> str:
+        token = await self.cache.get_json(CacheKey.analytics_query_generation(tenant_id))
+        return str(token) if token else _ANALYTICS_QUERY_GENERATION_UNSET
+
+    async def invalidate_query_cache(self, tenant_id: str) -> None:
+        """Retire every cached :meth:`query_events` result of ``tenant_id``.
+
+        Replaces the tenant's generation token with a fresh random one; the
+        token is part of every cached result's key, so the next read of any
+        query misses and old entries age out under their own TTL (no key scan
+        on the write path). Call it only AFTER the write it covers is
+        committed: a read that raced the write then either saw the write or
+        cached its result under the retired token, which nothing reads again.
+        Other tenants' caches are untouched. Raises on a cache failure.
+        """
+        await self.cache.set_json(
+            CacheKey.analytics_query_generation(tenant_id),
+            uuid.uuid4().hex,
+            ANALYTICS_QUERY_GENERATION_TTL,
+        )
+
+    async def _invalidate_after_write(self, tenant_id: Any) -> None:
+        """Best-effort :meth:`invalidate_query_cache` after a committed write.
+
+        The row is already durable, so a cache outage must not fail (and
+        retry / dead-letter) the write; staleness is then bounded by the
+        cached results' ``TTL.MEDIUM``.
+        """
+        if not tenant_id:
+            return
+        try:
+            await self.invalidate_query_cache(str(tenant_id))
+        except Exception as exc:
+            logger.warning(
+                "analytics query cache invalidation failed for tenant %s: %s", tenant_id, exc
+            )
 
     async def query_events(
         self,
@@ -1021,9 +1079,14 @@ class AnalyticsRepository:
         Equality filters (``event_type``, ``user_id``, ``session_id``, ...)
         match the recorded row fields; ``start_date`` / ``end_date`` bound the
         event's canonical ``occurred_at`` (inclusive; a date-only bound covers
-        the whole day). Non-empty results are cached for ``TTL.MEDIUM``. An
-        empty result is never cached, so a caller polling for an event that
-        is still in flight sees it on the first read after it lands.
+        the whole day). Non-empty results are cached for ``TTL.MEDIUM`` under
+        the tenant's current query generation, which every newly recorded
+        event replaces (:meth:`invalidate_query_cache`), so a new event is
+        visible on the next read rather than after the TTL. An empty result is
+        never cached, so a caller polling for an event that is still in
+        flight sees it on the first read after it lands. Concurrent identical
+        misses in this process share one store read (single-flight), so an
+        invalidation does not stampede the event store.
         """
         params = dict(query_params or {})
         occurred_from = canonical_utc_timestamp(params.pop("start_date", None))
@@ -1036,35 +1099,65 @@ class AnalyticsRepository:
         # would otherwise serve its 1-event result to /platforms, /protocols,
         # /devices, /rewards (all of which call with the same {user_id} filter
         # but larger limits), making the rollups undercount.
+        generation = await self._query_generation(tenant_id)
         cache_key = CacheKey.analytics_query(
             tenant_id,
             CacheKey.hash_query(
                 f"{sorted(params.items())}|from={occurred_from}"
-                f"|to={occurred_to}|limit={limit}"
+                f"|to={occurred_to}|limit={limit}|gen={generation}"
             ),
         )
         cached = await self.cache.get_json(cache_key)
         if cached:
             return cached
 
-        results = await self._events.query(
-            tenant_id,
-            params,
-            occurred_from=occurred_from,
-            occurred_to=occurred_to,
-            limit=limit,
-        )
-        if results:
-            await self.cache.set_json(cache_key, results, TTL.MEDIUM)
-        return results
+        while (flight := self._inflight_queries.get(cache_key)) is not None:
+            # Another reader is already fetching this exact result: share it.
+            flight.waiters += 1
+            try:
+                shared = await asyncio.shield(flight.future)
+            except asyncio.CancelledError:
+                if not flight.future.cancelled():
+                    raise  # this reader itself was cancelled
+                continue  # the fetching reader was cancelled; take over
+            # Every sharer gets its own copy, so a mutation cannot leak across.
+            return copy.deepcopy(shared)
+
+        flight = _QueryFlight(asyncio.get_running_loop().create_future())
+        self._inflight_queries[cache_key] = flight
+        try:
+            results = await self._events.query(
+                tenant_id,
+                params,
+                occurred_from=occurred_from,
+                occurred_to=occurred_to,
+                limit=limit,
+            )
+            if results:
+                await self.cache.set_json(cache_key, results, TTL.MEDIUM)
+        except asyncio.CancelledError:
+            flight.future.cancel()
+            raise
+        except Exception as exc:
+            flight.future.set_exception(exc)
+            flight.future.exception()  # sharers re-raise it; never "unretrieved"
+            raise
+        else:
+            flight.future.set_result(results)
+        finally:
+            self._inflight_queries.pop(cache_key, None)
+        return copy.deepcopy(results) if flight.waiters else results
 
     async def record_event(self, event_id: str, data: dict) -> dict:
         """Raw upsert under a caller-chosen id (fixtures and legacy callers).
 
         The ingestion projector uses :meth:`record_processed_event`, which is
-        idempotent under redelivery and maintains the session rollup.
+        idempotent under redelivery and maintains the session rollup. Retires
+        the row tenant's cached query results.
         """
-        return await self._events.insert(event_id, data)
+        row = await self._events.insert(event_id, data)
+        await self._invalidate_after_write((data or {}).get("tenant_id"))
+        return row
 
     async def record_processed_event(self, record: dict) -> bool:
         """Insert a processed SDK event once and advance its session rollup.
@@ -1074,7 +1167,9 @@ class AnalyticsRepository:
         newly recorded and ``False`` for a redelivery of an already-recorded
         event, which changes nothing. On PostgreSQL the event insert and the
         session increment commit in one transaction, so a session's
-        ``event_count`` counts each event exactly once.
+        ``event_count`` counts each event exactly once. A newly recorded event
+        then retires the tenant's cached query results (best-effort; see
+        :meth:`_invalidate_after_write`).
         """
         tenant_id = str(record.get("tenant_id") or "")
         event_id = str(record.get("event_id") or "")
@@ -1101,6 +1196,7 @@ class AnalyticsRepository:
             self._events._store[record_id] = row
             if session_record_id:
                 self._sessions.advance_in_memory(session_record_id, row, now)
+            await self._invalidate_after_write(tenant_id)
             return True
 
         await self._events._ensure_table()
@@ -1120,6 +1216,9 @@ class AnalyticsRepository:
                     return False
                 if session_record_id:
                     await self._sessions.advance_sql(conn, session_record_id, row, now)
+        # After COMMIT: a read racing the insert must not re-cache the pre-insert
+        # result under the new generation.
+        await self._invalidate_after_write(tenant_id)
         return True
 
     async def get_event(self, event_id: str, tenant_id: Optional[str] = None) -> dict:

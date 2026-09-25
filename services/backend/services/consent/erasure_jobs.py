@@ -337,7 +337,8 @@ async def _erase_analytics_plane(
 
     Delegates to ``AnalyticsRepository.erase_subject`` (tenant-scoped on every
     statement, idempotent, one transaction on PostgreSQL), then drops the
-    tenant's cached ``/v1/analytics/events/query`` results. A cache failure
+    tenant's cached ``/v1/analytics/events/query`` results and retires its
+    query-cache generation. A cache failure
     raises ``AnalyticsCacheInvalidationError`` (carrying the committed receipt)
     so the plane is marked ``failed`` and the job retries, rather than
     completing while a cached read could still serve an erased event.
@@ -350,15 +351,18 @@ async def _erase_analytics_plane(
     from repositories.repos import AnalyticsRepository, analytics_query_cache_pattern
 
     cache = get_registry().cache
-    erased = await AnalyticsRepository(cache).erase_subject(
-        tenant_id, user_id, anonymous_id
-    )
+    repo = AnalyticsRepository(cache)
+    erased = await repo.erase_subject(tenant_id, user_id, anonymous_id)
     receipt = {
         "records_impacted": erased["events_deleted"] + erased["sessions_deleted"],
         "artifacts_impacted": erased["sessions_recomputed"],
     }
     try:
         await cache.delete_pattern(analytics_query_cache_pattern(tenant_id))
+        # Also retire the generation: a read that raced the deletes and wrote
+        # its pre-erasure result back after the pattern delete is keyed under
+        # the old generation, which no read uses again.
+        await repo.invalidate_query_cache(tenant_id)
     except Exception as exc:
         raise AnalyticsCacheInvalidationError(receipt, exc) from exc
     return receipt

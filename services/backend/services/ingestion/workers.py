@@ -343,12 +343,13 @@ _analytics_repository = None
 def _analytics_repo():
     global _analytics_repository
     if _analytics_repository is None:
+        from dependencies.providers import get_cache
         from repositories.repos import AnalyticsRepository
-        from shared.cache.cache import CacheClient
 
-        # The recorder never touches the query cache; an unconnected client
-        # satisfies the constructor.
-        _analytics_repository = AnalyticsRepository(CacheClient())
+        # Recording an event retires the tenant's cached query results, so the
+        # recorder must write the generation token to the cache the analytics
+        # routes read through (the process registry's), not a private client.
+        _analytics_repository = AnalyticsRepository(get_cache())
     return _analytics_repository
 
 

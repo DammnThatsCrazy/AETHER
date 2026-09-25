@@ -81,6 +81,13 @@ class CacheKey:
         return f"aether:analytics:query:{tenant_id}:{query_hash}"
 
     @staticmethod
+    def analytics_query_generation(tenant_id: str) -> str:
+        """Per-tenant token folded into every ``analytics_query`` hash; writes
+        to the tenant's event store replace it, retiring every cached result.
+        Deliberately outside the ``analytics:query:{tenant_id}:*`` pattern."""
+        return f"aether:analytics:querygen:{tenant_id}"
+
+    @staticmethod
     def rate_limit(api_key: str) -> str:
         return f"aether:ratelimit:{api_key}"
 

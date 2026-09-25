@@ -21,6 +21,7 @@ test uses its own tenant ids, so a shared database needs no truncation.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -32,11 +33,13 @@ import pytest  # noqa: E402
 from repositories.repos import (  # noqa: E402
     AnalyticsRepository,
     analytics_event_record_id,
+    analytics_query_cache_pattern,
     analytics_session_record_id,
     canonical_utc_timestamp,
     reset_in_memory_stores,
 )
 from services.ingestion import workers  # noqa: E402
+from shared.cache.cache import CacheKey  # noqa: E402
 from shared.events.events import Event, Topic  # noqa: E402
 
 try:  # asyncpg ships with the backend runtime; guard so collection never fails.
@@ -417,12 +420,166 @@ async def test_empty_results_are_never_cached(repo):
     query = {"session_id": event.payload["session_id"], "limit": 1}
 
     assert await repo.query_events(tenant, query, limit=1) == []
-    assert repo.cache.sets == []  # the in-flight poll left nothing behind
+    assert _query_cache_sets(repo.cache, tenant) == []  # the in-flight poll left nothing behind
 
     await workers.analytics_event_recorder(event)
     rows = await repo.query_events(tenant, query, limit=1)
     assert [r["event_id"] for r in rows] == [event.payload["event_id"]]
-    assert len(repo.cache.sets) == 1
+    assert len(_query_cache_sets(repo.cache, tenant)) == 1
+
+
+def _query_cache_sets(cache: _DictCache, tenant: str) -> list:
+    """Cached ``query_events`` results written for ``tenant`` (the cache also
+    holds the tenant's query-generation token, which is not a result)."""
+    prefix = analytics_query_cache_pattern(tenant).rstrip("*")
+    return [key for key in cache.sets if key.startswith(prefix)]
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_new_event_is_visible_through_a_warm_query_cache(repo):
+    """A cached non-empty result must not hide an event recorded after it.
+
+    Before the fix the tenant's cached result was served for ``TTL.MEDIUM``
+    (5 minutes) after the projector recorded a newer matching event.
+    """
+    tenant = _tenant()
+    user = f"u-{uuid.uuid4().hex}"
+    first = _bus_event(tenant, user_id=user)
+    await workers.analytics_event_recorder(first)
+    warm = await repo.query_events(tenant, {"user_id": user}, limit=10)
+    assert [r["event_id"] for r in warm] == [first.payload["event_id"]]
+    # Served from cache: a warm hit writes nothing new.
+    sets_before = len(_query_cache_sets(repo.cache, tenant))
+    assert await repo.query_events(tenant, {"user_id": user}, limit=10) == warm
+    assert len(_query_cache_sets(repo.cache, tenant)) == sets_before
+
+    second = _bus_event(tenant, user_id=user)
+    await workers.analytics_event_recorder(second)
+    fresh = await repo.query_events(tenant, {"user_id": user}, limit=10)
+    assert {r["event_id"] for r in fresh} == {
+        first.payload["event_id"],
+        second.payload["event_id"],
+    }
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_redelivery_does_not_invalidate_the_query_cache(repo):
+    tenant = _tenant()
+    event = _bus_event(tenant)
+    await workers.analytics_event_recorder(event)
+    generation = await repo.cache.get_json(CacheKey.analytics_query_generation(tenant))
+    assert generation
+    await workers.analytics_event_recorder(event)  # SQS redelivery: nothing new
+    assert await repo.cache.get_json(CacheKey.analytics_query_generation(tenant)) == generation
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_recording_invalidates_only_the_recording_tenant(repo):
+    tenant_a, tenant_b = _tenant(), _tenant()
+    await workers.analytics_event_recorder(_bus_event(tenant_a))
+    event_b = _bus_event(tenant_b)
+    await workers.analytics_event_recorder(event_b)
+    query = {"session_id": event_b.payload["session_id"]}
+    assert len(await repo.query_events(tenant_b, query, limit=5)) == 1
+    generation_b = await repo.cache.get_json(CacheKey.analytics_query_generation(tenant_b))
+
+    await workers.analytics_event_recorder(_bus_event(tenant_a))
+    assert await repo.cache.get_json(CacheKey.analytics_query_generation(tenant_b)) == generation_b
+    sets_b = len(_query_cache_sets(repo.cache, tenant_b))
+    assert len(await repo.query_events(tenant_b, query, limit=5)) == 1
+    assert len(_query_cache_sets(repo.cache, tenant_b)) == sets_b  # still a cache hit
+
+
+async def test_concurrent_identical_misses_share_one_store_query(monkeypatch):
+    """After an invalidation, concurrent identical reads coalesce into one
+    store query instead of stampeding the event store."""
+    reset_in_memory_stores()
+    analytics = AnalyticsRepository(_DictCache())
+    tenant = _tenant()
+    await analytics.record_event("e1", {"tenant_id": tenant, "user_id": "u", "event_type": "page"})
+
+    calls = 0
+    real_query = analytics._events.query
+    gate = asyncio.Event()
+
+    async def _slow_query(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        await gate.wait()
+        return await real_query(*args, **kwargs)
+
+    monkeypatch.setattr(analytics._events, "query", _slow_query)
+    readers = [
+        asyncio.create_task(analytics.query_events(tenant, {"user_id": "u"}, limit=10))
+        for _ in range(8)
+    ]
+    await asyncio.sleep(0.01)
+    gate.set()
+    results = await asyncio.gather(*readers)
+    assert calls == 1
+    assert all([r["id"] for r in rows] == ["e1"] for rows in results)
+    # Each reader gets its own copy: mutating one result cannot leak into another.
+    results[0][0]["user_id"] = "mutated"
+    assert results[1][0]["user_id"] == "u"
+
+
+async def test_failed_store_query_propagates_to_every_waiter(monkeypatch):
+    reset_in_memory_stores()
+    analytics = AnalyticsRepository(_DictCache())
+    gate = asyncio.Event()
+
+    async def _failing_query(*args, **kwargs):
+        await gate.wait()
+        raise RuntimeError("store down")
+
+    monkeypatch.setattr(analytics._events, "query", _failing_query)
+    readers = [
+        asyncio.create_task(analytics.query_events("t", {"user_id": "u"}, limit=10))
+        for _ in range(3)
+    ]
+    await asyncio.sleep(0.01)
+    gate.set()
+    outcomes = await asyncio.gather(*readers, return_exceptions=True)
+    assert all(isinstance(o, RuntimeError) for o in outcomes)
+    assert analytics._inflight_queries == {}
+
+
+async def test_raw_record_event_invalidates_the_query_cache():
+    reset_in_memory_stores()
+    analytics = AnalyticsRepository(_DictCache())
+    tenant = _tenant()
+    await analytics.record_event("r1", {"tenant_id": tenant, "user_id": "u"})
+    assert len(await analytics.query_events(tenant, {"user_id": "u"}, limit=10)) == 1
+    await analytics.record_event("r2", {"tenant_id": tenant, "user_id": "u"})
+    assert len(await analytics.query_events(tenant, {"user_id": "u"}, limit=10)) == 2
+
+
+async def test_cache_failure_on_invalidation_does_not_fail_the_recording():
+    """The event row is committed before the generation bump; a cache outage
+    must not turn a recorded event into a retried/dead-lettered message."""
+    reset_in_memory_stores()
+
+    class _BrokenCache(_DictCache):
+        async def set_json(self, key, value, ttl=None):
+            raise ConnectionError("cache down")
+
+    analytics = AnalyticsRepository(_BrokenCache())
+    tenant = _tenant()
+    record = workers.build_analytics_event_record(
+        _bus_event(tenant).payload, tenant_id=tenant, event_id="e-cache-down"
+    )
+    assert await analytics.record_processed_event(record) is True
+    assert await analytics.get_event("e-cache-down", tenant_id=tenant)
+
+
+def test_projector_shares_the_process_query_cache(monkeypatch):
+    """The recorder must bump the generation in the cache the analytics routes
+    read through (the registry's), not a private client: with the in-memory
+    backend a private client would never invalidate the routes' cache."""
+    from dependencies.providers import get_registry
+
+    monkeypatch.setattr(workers, "_analytics_repository", None)
+    assert workers._analytics_repo().cache is get_registry().cache
 
 
 def test_invalid_time_bound_is_rejected():

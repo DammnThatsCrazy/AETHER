@@ -1511,7 +1511,7 @@ authenticated tenant.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). `limit` 1–200 (default 50). Non-empty results are cached for 5 minutes; an empty result is never cached. |
+| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). `limit` 1–200 (default 50). Non-empty results are cached for up to 5 minutes, but every newly recorded event in the tenant retires the tenant's cached results, so a new event is visible on the next read; an empty result is never cached. |
 | GET | `/v1/analytics/events/{event_id}` | One processed event by its SDK event id |
 | GET | `/v1/analytics/dashboard/summary` | Last 24h, computed from the store: `total_events`, `total_sessions`, `unique_users` (distinct `user_id`, else `anonymous_id`), `top_event_types` (up to 10 `{event_type, count}`) |
 
