@@ -101,10 +101,18 @@ Each subsystem binds an explicit backend, declared via env and surfaced on
 | `CACHE_BACKEND` | `memory` | Local convenience; `memory` rejected in production. |
 | `EVENT_BACKEND` | `sns_sqs` | e.g. `sns_sqs`, `kafka`. |
 | `GRAPH_BACKEND` | `postgres` | |
-| `ANALYTICS_BACKEND` | `postgres` | |
 | `OBJECT_BACKEND` | `s3` | |
 | `ML_MODE` | `inline` | `inline` or `remote`. |
 | `DEPLOYMENT_PROFILE` | `local` | Drives compose/helm wiring & ops tooling. |
+
+`ANALYTICS_BACKEND` (`postgres` | `clickhouse`) is a deployment-profile
+selector only, not a backend setting: Terraform uses it to gate the ClickHouse
+appliance and the `CLICKHOUSE_HOST` / `CLICKHOUSE_PORT` task environment, and
+the release profile tooling (`scripts/release/profile_doctor.py`,
+`scripts/release/check_profile_config.py`) checks it. The backend process does
+not read it: the analytics event store (`AnalyticsRepository`) is PostgreSQL
+in every profile, and ClickHouse is reached through `CLICKHOUSE_HOST`
+(`services/backend/shared/cis/clickhouse.py`).
 
 ## Ingestion event-outbox relay (FT-6)
 

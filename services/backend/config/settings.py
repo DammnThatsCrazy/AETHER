@@ -776,7 +776,11 @@ class RuntimeConfig:
     cache_backend: str = _env("CACHE_BACKEND", "memory")
     event_backend: str = _env("EVENT_BACKEND", "sns_sqs")
     graph_backend: str = _env("GRAPH_BACKEND", "postgres")
-    analytics_backend: str = _env("ANALYTICS_BACKEND", "postgres")
+    # ANALYTICS_BACKEND is deliberately absent: it is a deployment-profile
+    # selector (Terraform gates the ClickHouse appliance and CLICKHOUSE_HOST on
+    # it; the release profile tooling checks it). The backend never branches on
+    # it — the analytics event store is PostgreSQL in every profile and
+    # ClickHouse is reached through CLICKHOUSE_HOST (shared/cis/clickhouse.py).
     object_backend: str = _env("OBJECT_BACKEND", "s3")
     ml_mode: str = _env("ML_MODE", "inline")
 

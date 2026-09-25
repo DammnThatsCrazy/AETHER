@@ -143,7 +143,8 @@ table and caches it. Writes and filters are then bound to the migrated types:
   SHA-256 digests. `record_processed_event` inserts the event with
   `ON CONFLICT DO NOTHING` and, in the same transaction and only for a new
   row, upserts the session rollup (`first_seen_at`, `last_seen_at`,
-  `event_count`), so at-least-once redelivery changes nothing.
+  `event_count`, `page_views` = `page` / `screen` events), so at-least-once
+  redelivery changes nothing.
 - **Event row:** `tenant_id`, `event_id`, `event_type`, `event_family`,
   `session_id`, `anonymous_id`, `user_id`, `occurred_at` / `received_at`
   (fixed-width UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`), `schema_version`, `source`
@@ -153,7 +154,20 @@ table and caches it. Writes and filters are then bound to the migrated types:
   nothing), matches `event_type` / `user_id` / `session_id` / ... by equality,
   and bounds `occurred_at` with `start_date` / `end_date` (inclusive; a
   date-only bound covers the whole day). `limit` is never a row predicate.
-  Non-empty results are cached for 5 minutes; empty results are never cached.
+  Non-empty results are cached for up to 5 minutes under the tenant's query
+  generation (`CacheKey.analytics_query_generation`), a token folded into every
+  cached key. Each newly recorded event (and `record_event`) replaces the
+  token after its write commits, so the next read of any query misses and sees
+  the event; old entries age out under their TTL. The replacement is
+  best-effort (a cache outage never fails a committed write; staleness is then
+  TTL-bounded), and a missing token reads as `"0"`, never as a token a write
+  issued. Concurrent identical misses in one process share a single store read.
+  Empty results are never cached.
+- **Session rollups:** `query_sessions(tenant_id, params, limit)` reads the
+  tenant's analytics `sessions` rollups (never fraud rows), most recently
+  active first, filtered by `session_id` / `user_id` / `anonymous_id`, and adds
+  the derived `duration` in seconds. It backs the `sessions` root of
+  `POST /v1/analytics/graphql` and is not cached.
 - **Dashboard summary:** `dashboard_summary(tenant_id)` runs two aggregate
   statements over the tenant's `events` rows processed in the last 24 hours
   (`created_at` window, bounded by the `tenant_id` index) for `total_events`,
@@ -169,13 +183,14 @@ table and caches it. Writes and filters are then bound to the migrated types:
   semantics for these tables) every `events` row whose `user_id` or
   `anonymous_id` is the subject's, and every analytics session rollup
   attributed to either identity. A rollup attributed to another identity that
-  counted the subject's events is recomputed from its remaining events, or
-  deleted when none remain. Other users' sessions and other tenants' rows (even
+  counted the subject's events is recomputed (`event_count`, `page_views`,
+  first/last seen) from its remaining events, or deleted when none remain. Other users' sessions and other tenants' rows (even
   with the same `user_id`) are never touched; a re-run erases nothing. The step
   receipt is `records_impacted` = events + session rollups deleted and
   `artifacts_impacted` = rollups recomputed, with the job id as the audit
-  pointer. The tenant's cached query results are then dropped; if that fails,
-  the step is marked `failed` and the job retries.
+  pointer. The tenant's cached query results are then dropped and its query
+  generation replaced; if that fails, the step is marked `failed` and the job
+  retries.
 
 ## Data Lake Repositories
 
