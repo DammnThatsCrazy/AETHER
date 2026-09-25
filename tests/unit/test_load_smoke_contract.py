@@ -78,3 +78,33 @@ def test_every_load_task_set_yields_so_user_mixes_hold() -> None:
         if not any(yields(m) for m in task_set.body if isinstance(m, ast.FunctionDef))
     ]
     assert not missing, f"task sets that never interrupt back to the user: {missing}"
+
+
+def test_task_set_setup_fixtures_survive_yield_re_entry() -> None:
+    """``interrupt()`` discards the TaskSet, so ``on_start`` runs again on each
+    re-entry. A fixture created there (e.g. CampaignTasks' campaign) must be kept
+    on the parent user, or a baseline run creates one per re-entry: 429 campaigns
+    instead of 2 in a 15 s, two-user CampaignTasks run against a stub API."""
+    path = ROOT / "tests" / "load" / "locustfile.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    offenders = []
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for method in node.body:
+            if isinstance(method, ast.FunctionDef) and method.name == "on_start":
+                reads_user = any(
+                    isinstance(n, ast.Attribute)
+                    and isinstance(n.value, ast.Attribute)
+                    and n.value.attr == "user"
+                    for n in ast.walk(method)
+                ) or any(
+                    isinstance(n, ast.Call)
+                    and getattr(n.func, "id", None) == "getattr"
+                    and isinstance(n.args[0], ast.Attribute)
+                    and n.args[0].attr == "user"
+                    for n in ast.walk(method)
+                )
+                if not reads_user:
+                    offenders.append(node.name)
+    assert not offenders, f"on_start fixtures not kept on the user: {offenders}"

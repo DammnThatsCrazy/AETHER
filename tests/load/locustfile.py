@@ -595,8 +595,15 @@ class CampaignTasks(TaskSet):
     headers = _api_headers()
 
     def on_start(self):
-        """Create a test campaign to write touchpoints to."""
-        self.campaign_id = None
+        """Create a test campaign to write touchpoints to, once per user.
+
+        The set yields back to its user, so Locust re-creates it (and re-runs
+        ``on_start``) on every re-entry; the campaign id lives on the user so
+        re-entry reuses it instead of creating another campaign.
+        """
+        self.campaign_id = getattr(self.user, "load_campaign_id", None)
+        if self.campaign_id:
+            return
         resp = self.client.post(
             "/v1/campaigns",
             json={
@@ -610,6 +617,7 @@ class CampaignTasks(TaskSet):
         if resp.status_code == 200:
             data = resp.json().get("data", {})
             self.campaign_id = data.get("id")
+            self.user.load_campaign_id = self.campaign_id
 
     @task(8)
     def write_touchpoint(self):

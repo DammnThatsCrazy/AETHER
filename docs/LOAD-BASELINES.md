@@ -13,7 +13,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 toc_depth: 2
 source_hashes:
-  "tests/load/locustfile.py": "sha256:162fd17dba337eae0681b6b7af8c452a7132fe7dda8bb8c228e6f32a72de4b91"
+  "tests/load/locustfile.py": "sha256:33a63220889f777908b0448dbefd56e9e9902393cd215c69ac79f208551525c2"
   "tests/load/thresholds.json": "sha256:aee0927999630736a9eb307900b102bf1548600d9814caa262a49591902a4fd0"
 ---
 
