@@ -63,6 +63,12 @@ STORAGE_DOMAIN_REGISTRY: tuple[StorageDomain, ...] = (
         "audit evidence is legally retained in detached form",
     ),
     StorageDomain(
+        "dsr_erasure_markers",
+        "dsr_erasure_markers",
+        "erase",
+        "per-identifier erasure fence markers hold a tenant-bound digest of erased identifiers",
+    ),
+    StorageDomain(
         "graph",
         "tenant_graph",
         "unavailable",
@@ -98,6 +104,7 @@ TENANT_SCOPED_REPOSITORY_REGISTRY: dict[str, str] = {
     "delivery_attempts": "webhook_delivery_attempts",
     "tenant_billing_accounts": "billing",
     "security_audit_events": "audit",
+    "dsr_erasure_markers": "dsr_erasure_markers",
     "tenant_graph": "graph",
     "tenant_object_store": "object_store",
     "tenant_search_index": "search_index",

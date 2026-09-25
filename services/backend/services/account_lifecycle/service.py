@@ -369,6 +369,11 @@ class AccountLifecycleService:
             count = await WebhookRepository().delete_by_entity("tenant_id", tenant_id)
             self._mark_result(result, StorageResultStatus.COMPLETED.value, "erase", count)
             return
+        if name == "dsr_erasure_markers":
+            from services.consent.erasure_fence import ErasureMarkerRepository
+            count = await ErasureMarkerRepository().delete_by_entity("tenant_id", tenant_id)
+            self._mark_result(result, StorageResultStatus.COMPLETED.value, "erase", count)
+            return
         if name == "provider_credentials":
             from repositories.repos import ProvidersRepository
             count = await ProvidersRepository().delete_by_entity("tenant_id", tenant_id)

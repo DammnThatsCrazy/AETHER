@@ -8,6 +8,7 @@ and pending-invitation uniqueness in PostgreSQL.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
@@ -164,6 +165,32 @@ class OrganizationRepository:
             sort_by="created_at",
             sort_order="desc",
         )
+
+    async def claim_pending_invitation(
+        self, tenant_id: str, invitation_id: str, changes: dict[str, Any]
+    ) -> bool:
+        """Atomically move a *pending* invitation to ``changes`` (e.g. accepted).
+
+        Returns False when the invitation is missing, belongs to another
+        tenant, or is no longer pending (revoked, expired, or already claimed by
+        a concurrent sign-in), so access is provisioned at most once per
+        invitation and never for a revoked one.
+        """
+        repo = self.invitations
+        pool = await repo._ensure_pool()
+        if pool is None:
+            record = repo._store.get(invitation_id)
+            if not record or record.get("tenant_id") != tenant_id or record.get("status") != "pending":
+                return False
+            record.update(changes)
+            return True
+        await repo._ensure_table()
+        row = await pool.fetchrow(
+            f"UPDATE {repo.table_name} SET data = data || $3::jsonb, updated_at = NOW() "
+            "WHERE id = $1 AND tenant_id = $2 AND data->>'status' = 'pending' RETURNING id",
+            invitation_id, tenant_id, json.dumps(changes, default=str),
+        )
+        return row is not None
 
     async def list_invitations(self, tenant_id: str) -> list[dict[str, Any]]:
         return await self.invitations.find_many(

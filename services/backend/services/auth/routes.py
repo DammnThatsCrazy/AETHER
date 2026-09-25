@@ -877,6 +877,21 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
         raise BadRequestError(f"Invalid SSO token: {e}")
 
     sub: str = claims.get("sub", "")
+    if not claims.get("email") and not claims.get("_local_mode"):
+        # Access tokens for the Aether API audience carry no OIDC profile
+        # claims; the verified email lives behind Auth0 /userinfo.
+        from shared.auth.auth0_validator import fetch_auth0_userinfo
+
+        try:
+            profile = await fetch_auth0_userinfo(body.token)
+        except ValueError as e:
+            raise BadRequestError(f"Invalid SSO token: {e}")
+        if profile.get("sub") and profile.get("sub") != sub:
+            raise BadRequestError("Invalid SSO token: userinfo subject mismatch")
+        claims = {
+            **claims,
+            **{k: profile[k] for k in ("email", "email_verified", "name", "nickname") if k in profile},
+        }
     email: str = claims.get("email", "").lower()
     name: str = claims.get("name", "") or claims.get("nickname", "") or email
 

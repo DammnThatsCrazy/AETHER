@@ -20,19 +20,53 @@ the request is new data and is not fenced.
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime
 from typing import Any, Optional
 
-from repositories.repos import BaseRepository
-from shared.temporal.instant import coerce_utc_lenient, to_iso_utc
+from repositories.repos import BaseRepository, canonical_utc_timestamp
+from shared.temporal.instant import coerce_utc_lenient
 
 ERASURE_MARKERS_TABLE = "dsr_erasure_markers"
 _KINDS = ("user_id", "anonymous_id")
 
 
+# Durable flag: markers for erasures submitted before markers existed have
+# been written (see ensure_markers_backfilled).
+_BACKFILL_FLAG_ID = "dsrm_backfill_v1"
+_BACKFILL_PAGE = 500
+_backfilled = False
+
+
 class ErasureMarkerRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__(ERASURE_MARKERS_TABLE)
+
+    async def advance(self, marker_id: str, tenant_id: str, kind: str, submitted_at: str) -> None:
+        """Create the marker, or move it forward — never back — atomically.
+
+        ``submitted_at`` is the fixed-width canonical UTC form, so the string
+        comparison inside the upsert is a chronological one and two
+        overlapping erasures cannot leave the older time behind.
+        """
+        record = {
+            "id": marker_id, "tenant_id": tenant_id, "kind": kind, "submitted_at": submitted_at,
+        }
+        pool = await self._ensure_pool()
+        if pool is None:
+            current = self._store.get(marker_id)
+            if current is None or str(current.get("submitted_at") or "") < submitted_at:
+                self._store[marker_id] = record
+            return
+        await self._ensure_table()
+        await pool.execute(
+            f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+                WHERE COALESCE({self.table_name}.data->>'submitted_at', '')
+                      < EXCLUDED.data->>'submitted_at'""",
+            marker_id, json.dumps(record), tenant_id,
+        )
 
 
 def erasure_marker_id(tenant_id: str, kind: str, identifier: str) -> str:
@@ -53,24 +87,60 @@ async def record_erasure_markers(
     submitted = coerce_utc_lenient(submitted_at)
     if not tenant_id or submitted is None:
         raise ValueError("an erasure marker needs a tenant and a submission time")
+    canonical = canonical_utc_timestamp(submitted)
     written = 0
     for kind, identifier in zip(_KINDS, (user_id, anonymous_id)):
         if not identifier:
             continue
-        marker_id = erasure_marker_id(tenant_id, kind, str(identifier))
-        existing = await repo.find_by_id(marker_id)
-        if existing is None:
-            await repo.insert(marker_id, {
-                "tenant_id": tenant_id,
-                "kind": kind,
-                "submitted_at": to_iso_utc(submitted),
-            })
-        else:
-            previous = coerce_utc_lenient(existing.get("submitted_at"))
-            if previous is None or submitted > previous:
-                await repo.update(marker_id, {"submitted_at": to_iso_utc(submitted)})
+        await repo.advance(erasure_marker_id(tenant_id, kind, str(identifier)), tenant_id, kind, canonical)
         written += 1
     return written
+
+
+async def ensure_markers_backfilled(*, repo: Any = None, consent_repo: Any = None) -> None:
+    """Write markers for erasure requests submitted before markers existed.
+
+    Runs once per process until the durable flag exists; afterwards it is one
+    cached boolean. Idempotent under concurrency (markers only advance). A
+    failure raises, so the fenced write is retried rather than let through.
+    """
+    global _backfilled
+    if _backfilled:
+        return
+    repo = repo or ErasureMarkerRepository()
+    if await repo.find_by_id(_BACKFILL_FLAG_ID) is not None:
+        _backfilled = True
+        return
+    if consent_repo is None:
+        from repositories.repos import ConsentRepository
+
+        consent_repo = ConsentRepository()
+    offset = 0
+    while True:
+        page = await consent_repo.find_many(
+            filters={"request_type": "erasure"}, limit=_BACKFILL_PAGE, offset=offset,
+            sort_by="created_at", sort_order="asc",
+        )
+        for request in page:
+            if request.get("tenant_id") and request.get("submitted_at"):
+                await record_erasure_markers(
+                    request["tenant_id"],
+                    user_id=request.get("user_id"),
+                    anonymous_id=request.get("anonymous_id"),
+                    submitted_at=request["submitted_at"],
+                    repo=repo,
+                )
+        if len(page) < _BACKFILL_PAGE:
+            break
+        offset += _BACKFILL_PAGE
+    await repo.insert(_BACKFILL_FLAG_ID, {"tenant_id": "", "kind": "backfill_flag"})
+    _backfilled = True
+
+
+def reset_backfill_state() -> None:
+    """Forget the cached backfill flag (tests)."""
+    global _backfilled
+    _backfilled = False
 
 
 async def erasure_fences_event(
@@ -92,6 +162,7 @@ async def erasure_fences_event(
     if not tenant_id or not (user_id or anonymous_id):
         return False
     repo = repo or ErasureMarkerRepository()
+    await ensure_markers_backfilled(repo=repo)
     received: Optional[datetime] = coerce_utc_lenient(received_at)
     for kind, identifier in zip(_KINDS, (user_id, anonymous_id)):
         if not identifier:
@@ -110,7 +181,9 @@ async def erasure_fences_event(
 __all__ = [
     "ERASURE_MARKERS_TABLE",
     "ErasureMarkerRepository",
+    "ensure_markers_backfilled",
     "erasure_fences_event",
     "erasure_marker_id",
     "record_erasure_markers",
+    "reset_backfill_state",
 ]

@@ -498,6 +498,8 @@ async def test_fence_is_key_lookups_only():
             self.reads = 0
 
         async def find_by_id(self, _id):
+            if _id == "dsrm_backfill_v1":
+                return {"id": _id}  # backfill already recorded
             self.reads += 1
             return None
 
@@ -525,3 +527,36 @@ async def test_later_erasure_advances_the_marker():
     assert await erasure_fences_event(
         tenant, user_id=USER, anonymous_id=None, received_at="2026-05-05T00:00:00Z",
     ) is False
+
+
+async def test_overlapping_erasures_never_rewind_the_marker():
+    """Advancing is a max, not read-then-write: an older erasure applied last
+    must not replace a newer submission time."""
+    from services.consent.erasure_fence import ErasureMarkerRepository, erasure_marker_id
+
+    repo = ErasureMarkerRepository()
+    marker = erasure_marker_id("t-race", "user_id", USER)
+    await repo.advance(marker, "t-race", "user_id", "2026-05-04T00:00:00.000000Z")
+    await repo.advance(marker, "t-race", "user_id", "2026-05-02T00:00:00.000000Z")
+
+    assert (await repo.find_by_id(marker))["submitted_at"] == "2026-05-04T00:00:00.000000Z"
+
+
+async def test_erasures_submitted_before_markers_existed_are_backfilled():
+    from services.consent import erasure_fence
+    from services.consent.erasure_fence import erasure_fences_event
+
+    erasure_fence.reset_backfill_state()
+    tenant = _uid("t")
+    dsr_id = str(uuid.uuid4())
+    await ConsentRepository().insert(f"dsr_{dsr_id}", {
+        "tenant_id": tenant, "dsr_id": dsr_id, "user_id": USER, "anonymous_id": "anon-old",
+        "request_type": "erasure", "status": "completed",
+        "submitted_at": "2026-05-02T00:00:00+00:00",
+    })
+
+    for kwargs in ({"user_id": USER, "anonymous_id": None}, {"user_id": None, "anonymous_id": "anon-old"}):
+        assert await erasure_fences_event(
+            tenant, received_at="2026-05-01T10:00:00Z", **kwargs,
+        ) is True
+    erasure_fence.reset_backfill_state()

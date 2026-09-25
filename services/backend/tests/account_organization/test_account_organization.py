@@ -224,3 +224,14 @@ async def test_non_admin_cannot_create_a_missing_profile():
     with pytest.raises(NotFoundError):
         await get_organization_profile(request_for("viewer-c", role="viewer", tenant_id="tenant-c"))
     assert await OrganizationRepository().get_profile("tenant-c") is None
+
+
+@pytest.mark.asyncio
+async def test_principal_less_admin_key_does_not_create_an_ownerless_profile():
+    """A legacy admin API key has no user; an ownerless organization could never
+    be repaired, so creation waits for a principal-backed admin."""
+    from shared.common.common import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        await get_organization_profile(request_for(None, role="admin", tenant_id="tenant-d"))
+    assert await OrganizationRepository().get_profile("tenant-d") is None

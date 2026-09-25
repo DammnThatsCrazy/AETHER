@@ -75,9 +75,12 @@ async def _create_default_profile(tenant: Any, repo: OrganizationRepository) -> 
     Nothing else creates a profile (first-admin bootstrap and SSO provisioning
     make only tenant and user rows), so without this every organization route,
     including invitations, 404s. Only a tenant admin may create it, and becomes
-    its owner; anyone else still gets 404.
+    its owner; anyone else still gets 404. A principal is required: a legacy
+    admin API key carries no user, and an ownerless profile could never be
+    repaired (ownership changes require an OWNER actor).
     """
-    if _state_role(tenant) != OrganizationRole.ADMIN:
+    owner_user_id = getattr(tenant, "user_id", None)
+    if _state_role(tenant) != OrganizationRole.ADMIN or not owner_user_id:
         raise NotFoundError("Organization")
     name = "Organization"
     try:
@@ -88,11 +91,13 @@ async def _create_default_profile(tenant: Any, repo: OrganizationRepository) -> 
     except Exception:  # noqa: BLE001 — the name is cosmetic
         pass
     try:
-        return await repo.create_profile(
-            tenant.tenant_id, owner_user_id=getattr(tenant, "user_id", None), name=name,
-        )
-    except ConflictError:
-        # A concurrent first request created it.
+        return await repo.create_profile(tenant.tenant_id, owner_user_id=owner_user_id, name=name)
+    except Exception as exc:
+        # A concurrent first request created it: the repository's own check
+        # raises ConflictError, PostgreSQL's unique index raises
+        # UniqueViolationError.
+        if not isinstance(exc, ConflictError) and not _unique_violation(exc):
+            raise
         return await _organization_or_404(tenant.tenant_id, repo)
 
 

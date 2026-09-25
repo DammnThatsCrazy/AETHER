@@ -21,6 +21,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from shared.common.common import ConflictError
 from shared.logger.logger import get_logger, metrics
 from shared.temporal import SYSTEM_CLOCK, parse_instant_strict, to_iso_utc
 
@@ -86,7 +87,18 @@ async def resolve_sso_membership(
         if not tenant_id or not invitation_id or _expired(invitation):
             continue
         role, permissions = _ROLE_GRANTS.get(str(invitation.get("role")), _ROLE_GRANTS["viewer"])
-        user_id = str(uuid.uuid4())
+        # One principal per Auth0 identity: concurrent or retried callbacks for
+        # the same sub converge on the same user row instead of duplicating it.
+        user_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"aether:sso-user:{sub}"))
+        # Claim first, atomically: a revoked, expired or already-claimed
+        # invitation provisions nothing.
+        claimed = await organization_repo.claim_pending_invitation(tenant_id, invitation_id, {
+            "status": "accepted",
+            "accepted_at": to_iso_utc(SYSTEM_CLOCK.now()),
+            "accepted_user_id": user_id,
+        })
+        if not claimed:
+            continue
         await user_repo.insert(user_id, {
             "user_id": user_id,
             "tenant_id": tenant_id,
@@ -100,18 +112,16 @@ async def resolve_sso_membership(
             "permissions": permissions,
             "membership_status": "active",
         })
-        await organization_repo.add_member(
-            tenant_id,
-            user_id=user_id,
-            role=str(invitation.get("role") or "viewer"),
-            email=email,
-            display_name=name or email,
-        )
-        await organization_repo.update_invitation(tenant_id, invitation_id, {
-            "status": "accepted",
-            "accepted_at": to_iso_utc(SYSTEM_CLOCK.now()),
-            "accepted_user_id": user_id,
-        })
+        try:
+            await organization_repo.add_member(
+                tenant_id,
+                user_id=user_id,
+                role=str(invitation.get("role") or "viewer"),
+                email=email,
+                display_name=name or email,
+            )
+        except ConflictError:
+            pass  # a retried callback already added this principal
         metrics.increment("sso_membership_resolved_total", labels={"how": "accepted_invitation"})
         logger.info("SSO sign-in accepted invitation: tenant=%s role=%s", tenant_id, role)
         return SSOMembership(tenant_id, user_id, "accepted_invitation")

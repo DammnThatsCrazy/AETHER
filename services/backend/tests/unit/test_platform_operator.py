@@ -185,6 +185,14 @@ class _Orgs:
     async def find_pending_invitations_for_email(self, email):
         return [i for i in self.invitations if i["email"] == email and i["status"] == "pending"]
 
+    async def claim_pending_invitation(self, tenant_id, invitation_id, changes):
+        for invitation in self.invitations:
+            if (invitation["invitation_id"] == invitation_id and invitation["tenant_id"] == tenant_id
+                    and invitation["status"] == "pending"):
+                invitation.update(changes)
+                return True
+        return False
+
     async def add_member(self, tenant_id, **kwargs):
         self.members.append({"tenant_id": tenant_id, **kwargs})
 
@@ -272,3 +280,81 @@ async def test_staging_refuses_self_signup_for_an_uninvited_sign_in(monkeypatch)
     with pytest.raises(ForbiddenError, match="invitation only"):
         await auth_routes.sso_callback(auth_routes.SSOCallbackRequest(token="t"))
     inserted.assert_not_called()
+
+
+async def test_a_revoked_or_already_claimed_invitation_provisions_nothing():
+    """The claim is atomic and comes first: an invitation that stopped being
+    pending between the read and the claim grants no access."""
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users = _Users()
+    orgs = _Orgs([_invite("advisor@example.test")])
+    stale_read = [dict(orgs.invitations[0])]
+    orgs.invitations[0]["status"] = "revoked"
+    orgs.find_pending_invitations_for_email = AsyncMock(return_value=stale_read)
+
+    assert await resolve_sso_membership(
+        sub="google|3", email="advisor@example.test", email_verified=True, name="A",
+        user_repo=users, organization_repo=orgs,
+    ) is None
+    assert users.rows == {} and orgs.members == []
+
+
+async def test_retried_sign_in_converges_on_one_principal():
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users, orgs = _Users(), _Orgs([_invite("advisor@example.test"), _invite("advisor@example.test")])
+    orgs.invitations[1]["invitation_id"] = "invite-second"
+    first = await resolve_sso_membership(
+        sub="google|4", email="advisor@example.test", email_verified=True, name="A",
+        user_repo=users, organization_repo=orgs,
+    )
+    second = await resolve_sso_membership(
+        sub="google|4", email="advisor@example.test", email_verified=True, name="A",
+        user_repo=users, organization_repo=orgs,
+    )
+
+    assert first.user_id == second.user_id
+    assert len(users.rows) == 1
+
+
+async def test_sso_callback_reads_the_verified_email_from_userinfo(monkeypatch):
+    """Access tokens for the API audience carry no email claims; without
+    /userinfo every staging first sign-in would be refused."""
+    from services.auth import routes as auth_routes
+
+    monkeypatch.setattr(
+        settings, "trust_plane",
+        dataclasses.replace(settings.trust_plane, sso_self_signup_enabled=False, human_sessions_enabled=True),
+    )
+    monkeypatch.setattr(
+        "shared.auth.auth0_validator.validate_auth0_token",
+        AsyncMock(return_value={"sub": "google|5"}),
+    )
+    userinfo = AsyncMock(return_value={"sub": "google|5", "email": "team@olympus.test", "email_verified": True})
+    monkeypatch.setattr("shared.auth.auth0_validator.fetch_auth0_userinfo", userinfo)
+    resolved = AsyncMock(return_value=None)
+    monkeypatch.setattr("services.auth.sso_membership.resolve_sso_membership", resolved)
+
+    from shared.common.common import ForbiddenError
+
+    with pytest.raises(ForbiddenError):
+        await auth_routes.sso_callback(auth_routes.SSOCallbackRequest(token="t"))
+    userinfo.assert_awaited_once_with("t")
+    assert resolved.await_args.kwargs["email"] == "team@olympus.test"
+    assert resolved.await_args.kwargs["email_verified"] is True
+
+
+async def test_userinfo_for_another_subject_is_rejected(monkeypatch):
+    from services.auth import routes as auth_routes
+    from shared.common.common import BadRequestError
+
+    monkeypatch.setattr(
+        "shared.auth.auth0_validator.validate_auth0_token", AsyncMock(return_value={"sub": "google|6"}),
+    )
+    monkeypatch.setattr(
+        "shared.auth.auth0_validator.fetch_auth0_userinfo",
+        AsyncMock(return_value={"sub": "google|other", "email": "x@y.test", "email_verified": True}),
+    )
+    with pytest.raises(BadRequestError, match="subject mismatch"):
+        await auth_routes.sso_callback(auth_routes.SSOCallbackRequest(token="t"))

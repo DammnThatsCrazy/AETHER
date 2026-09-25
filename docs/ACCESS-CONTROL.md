@@ -76,9 +76,16 @@ when its identity-provider-verified email:
 2. has an unexpired pending organization invitation, which is accepted: the
    person joins the inviting tenant with the invited role.
 
-Anything else gets `403` ("Sign-in is by invitation only"). A tenant admin's
-first organization request creates the organization profile, owned by that
-admin, so the operator tenant can invite teammates via
+Anything else gets `403` ("Sign-in is by invitation only"). The browser sends an
+access token for the Aether API audience, which carries no email claims, so the
+backend reads the verified email from Auth0 `/userinfo` with that token (and
+rejects a userinfo subject that differs from the token's). Accepting an
+invitation is an atomic pending-to-accepted claim made **before** any access is
+provisioned, so a revoked or already-claimed invitation grants nothing, and
+every sign-in for one Auth0 identity converges on one principal. A tenant
+admin's first organization request (with a user principal; a bare admin API key
+does not qualify) creates the organization profile, owned by that admin, so the
+operator tenant can invite teammates via
 `POST /v1/account/organization/invitations`. Other environments keep self-serve
 Auth0 sign-up.
 
