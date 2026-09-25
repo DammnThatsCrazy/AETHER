@@ -49,7 +49,7 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:8df5f83f20c8ec516fb41d8a4d1b6458a3f3df39ffa2bb5b45130c068b02350e"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:0cca221c0d5746517c1d2581014926eb0f905c739b42d680b3e4cdaac37b2f82"
+  ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
@@ -198,6 +198,8 @@ gh workflow run staging-lifecycle.yml \
   -f backend_image_digest=sha256:<64hex> \
   -f max_awake_hours=4
 
+# plan-wake prints both values in its log and run summary
+# ("Reviewed wake plan": plan_run_id and plan_checksum).
 gh workflow run staging-lifecycle.yml \
   -f action=apply-wake \
   -f plan_run_id=<run id from plan-wake> \

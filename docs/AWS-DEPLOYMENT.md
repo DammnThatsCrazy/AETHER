@@ -52,7 +52,7 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:c135b99b58cf0408675b1afce06c846981e8b092c2289e3655763635a9a7b490"
   ".github/workflows/deploy.yml": "sha256:8df5f83f20c8ec516fb41d8a4d1b6458a3f3df39ffa2bb5b45130c068b02350e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:0cca221c0d5746517c1d2581014926eb0f905c739b42d680b3e4cdaac37b2f82"
+  ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/staging-state-reconcile.yml": "sha256:0f86b1f43ff85a1f9859f82d730428ede391c6a69fb54f9d7fcdf0cf09340a16"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
