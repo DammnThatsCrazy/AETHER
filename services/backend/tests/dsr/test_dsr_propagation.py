@@ -256,25 +256,29 @@ async def test_overall_status_helper_precedence():
 async def test_status_constants_match_spec():
     # Order is pinned by tail membership, not a hard-coded length, so governed
     # components appended by later programs (population360 P3.3 grew this from
-    # 26 to 29, and geographic360 G4.5-C3 appended ``location_facts`` to reach
-    # 30, and the analytics event store appended ``analytics_events`` to reach
-    # 31) extend these slices rather than silently breaking a count. The
-    # analytics event store is the newest tail member; the geographic-plane
-    # store (G4.5-C3), the population-plane artifacts (P3.3), the mobile-plane
-    # + kyber device-plane components sit just before it, in stable order.
-    assert DSR_COMPONENTS[-1:] == ("analytics_events",)
-    assert DSR_COMPONENTS[-2:-1] == ("location_facts",)
-    assert DSR_COMPONENTS[-5:-2] == (
+    # 26 to 29, geographic360 G4.5-C3 appended ``location_facts`` to reach 30,
+    # the analytics event store appended ``analytics_events`` to reach 31, and
+    # DSR completeness appended ``silver_facts`` + ``bronze_events`` to reach
+    # 33) extend these slices rather than silently breaking a count. The Silver
+    # fact tables and the hash-chained Bronze tier are the newest tail members;
+    # the analytics event store, the geographic-plane store (G4.5-C3), the
+    # population-plane artifacts (P3.3), the mobile-plane + kyber device-plane
+    # components sit just before them, in stable order.
+    assert DSR_COMPONENTS[-2:] == ("silver_facts", "bronze_events")
+    tail = DSR_COMPONENTS[:-2]
+    assert tail[-1:] == ("analytics_events",)
+    assert tail[-2:-1] == ("location_facts",)
+    assert tail[-5:-2] == (
         "population_memberships",
         "population_snapshots",
         "populations",
     )
-    assert DSR_COMPONENTS[-8:-5] == (
+    assert tail[-8:-5] == (
         "kyber_trusted_devices",
         "kyber_webauthn_credentials",
         "kyber_device_proof_keys",
     )
-    assert DSR_COMPONENTS[-11:-8] == (
+    assert tail[-11:-8] == (
         "continuation_records",
         "mobile_installations",
         "client_sync_records",

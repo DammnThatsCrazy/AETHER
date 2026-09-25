@@ -768,6 +768,74 @@ class BaseRepository(ABC):
             logger.info(f"DELETE {self.table_name} id={record_id}")
         return deleted
 
+    async def delete_for_tenant_where(
+        self, tenant_id: str, field: str, values: Any,
+    ) -> int:
+        """Hard-delete ``tenant_id``'s rows whose ``field`` equals any of ``values``.
+
+        The DSR-erasure primitive: ONE set-based statement whose predicate
+        ALWAYS includes ``tenant_id = $1`` (an empty tenant raises, never an
+        unscoped delete), so one tenant's erasure can never touch another
+        tenant's rows even when the subject identifier collides. Idempotent: a
+        retry deletes nothing and returns 0. ``field`` is a record key — JSONB
+        tables match ``data->>'field'``; explicit-column tables bind the migrated
+        column (``_column_renames`` applied) or, for a key the migration has no
+        column for, ``<_payload_column>->>'field'``. Values compare as text.
+
+        Returns the number of rows deleted.
+        """
+        if not tenant_id:
+            raise ValueError("delete_for_tenant_where requires a tenant_id")
+        if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", field):
+            raise ValueError(f"Invalid field: {field!r}")
+        wanted = sorted({str(v) for v in (values or ()) if v not in (None, "")})
+        if not wanted:
+            return 0
+        pool = await self._ensure_pool()
+        if pool is None:
+            wanted_set = set(wanted)
+            doomed = [
+                key for key, row in self._store.items()
+                if row.get("tenant_id") == tenant_id
+                and row.get(field) is not None
+                and str(row.get(field)) in wanted_set
+            ]
+            for key in doomed:
+                del self._store[key]
+            if doomed:
+                logger.info(
+                    f"DELETE {self.table_name} tenant={tenant_id} {field} "
+                    f"count={len(doomed)} (in-memory)"
+                )
+            return len(doomed)
+
+        await self._ensure_table()
+        if self._jsonb_mode:
+            target = f"data->>'{field}'"
+        else:
+            column_types = await self._explicit_column_types(pool)
+            col = self._explicit_column_for(field)
+            payload_col = self._payload_column
+            if column_types and col not in column_types and payload_col \
+                    and payload_col in column_types:
+                target = f"{payload_col}->>'{field}'"
+            else:
+                target = f"{col}::text"
+        result = await pool.execute(
+            f"DELETE FROM {self.table_name} "
+            f"WHERE tenant_id = $1 AND {target} = ANY($2::text[])",
+            tenant_id, wanted,
+        )
+        try:
+            count = int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            count = 0
+        if count:
+            logger.info(
+                f"DELETE {self.table_name} tenant={tenant_id} {field} count={count}"
+            )
+        return count
+
     async def delete_by_entity(self, entity_field: str, entity_id: str) -> int:
         """Delete all records where a JSONB field matches the given entity ID.
 

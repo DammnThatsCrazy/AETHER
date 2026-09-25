@@ -160,6 +160,48 @@ class TypedTableRepository:
         status = await pool.execute(query, *params)
         return not status.endswith(" 0")
 
+    async def delete_for_tenant_where(
+        self, tenant_id: str, column: str, values: Any,
+    ) -> int:
+        """Hard-delete ``tenant_id``'s rows whose ``column`` is any of ``values``.
+
+        DSR-erasure primitive for a typed table whose storage policy permits
+        ``hard_delete``: one set-based statement that ALWAYS carries
+        ``tenant_id = $1`` (an empty tenant raises), idempotent on retry.
+        Returns the number of rows deleted.
+        """
+        if not tenant_id:
+            raise ValueError("delete_for_tenant_where requires a tenant_id")
+        self._require_column(column)
+        if "tenant_id" not in self.columns:
+            raise ValueError(f"{self.table_name} has no tenant_id column")
+        wanted = sorted({str(v) for v in (values or ()) if v not in (None, "")})
+        if not wanted:
+            return 0
+        pool = await self._pool()
+        if pool is None:
+            with _STORE_LOCK:
+                keep = [
+                    row for row in self._rows
+                    if not (
+                        row.get("tenant_id") == tenant_id
+                        and row.get(column) is not None
+                        and str(row.get(column)) in set(wanted)
+                    )
+                ]
+                deleted = len(self._rows) - len(keep)
+                self._rows[:] = keep
+            return deleted
+        status = await pool.execute(
+            f"DELETE FROM {self.table_name} "
+            f"WHERE tenant_id = $1 AND {column}::text = ANY($2::text[])",
+            tenant_id, wanted,
+        )
+        try:
+            return int(str(status).split()[-1])
+        except (ValueError, IndexError):
+            return 0
+
     # ── reads ──────────────────────────────────────────────────────────────
 
     def _require_column(self, col: str) -> None:

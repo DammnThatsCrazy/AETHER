@@ -368,6 +368,162 @@ async def _erase_analytics_plane(
     return receipt
 
 
+# Components executed by the completeness planes (services/consent/erasure_planes.py).
+# Listed here as literals so the DSR coverage gate
+# (scripts/release/check_dsr_coverage.py) can prove every DSR_COMPONENTS entry
+# is wired to an executor in this job.
+COMPLETENESS_PLANE_COMPONENTS: tuple[str, ...] = (
+    "identity_aliases",
+    "identity_subjects",
+    "graph_edges",
+    "profile360_snapshots",
+    "feature_rows",
+    "training_datasets",
+    "model_artifacts",
+    "prediction_drift_buffers",
+    "exports",
+    "audit_exports",
+    "cached_tenant_views",
+    "replay_bundles",
+    "reward_decisions",
+    "connector_derived_records",
+    "financial_value_snapshots",
+    "silver_facts",
+    "bronze_events",
+)
+
+# Receipt statuses that are assessments of retained/offline state (a count of
+# what EXISTS), not erasures (a count of what was REMOVED): a retry reports the
+# current assessment instead of adding it to a prior one.
+_ASSESSMENT_STATUSES = frozenset({"skipped_legal_hold", "requires_manual_review"})
+
+
+async def _run_completeness_planes(
+    propagation_request_id: str,
+    ctx: JobContext,
+    user_id: str,
+    anonymous_id: str | None,
+) -> list[str]:
+    """Execute every completeness plane and mark its components.
+
+    Evidence contract (mirrors the planes above): each plane is its own
+    isolated try/except; a failure marks that plane's components ``failed``
+    (the job then fails and the worker retries — every plane is idempotent).
+    A retried erasure plane that already completed in an earlier attempt adds
+    that attempt's committed counts, so rows erased before the retry are never
+    reported as zero. The ML-artifact assessment reads the feature plane's
+    training-eligible count; the identity planes (which destroy the
+    user_id → entity mapping every other plane resolves through) run last and
+    are deferred — marked ``failed`` — whenever another plane failed, so a
+    retry can still resolve the subject.
+    """
+    from services.consent import erasure_planes as planes
+    from services.dsr_propagation.service import dsr_propagation_service
+
+    errors: list[str] = []
+    tenant_id = ctx.tenant_id
+
+    try:
+        status = await dsr_propagation_service.status(
+            propagation_request_id, tenant_id=tenant_id
+        )
+        prior = {c.get("component"): c for c in status["components"]}
+    except Exception:  # noqa: BLE001 — prior receipts are an optimisation
+        logger.warning("could not read prior DSR receipts", exc_info=True)
+        prior = {}
+
+    async def _fail(components: tuple[str, ...]) -> None:
+        for component in components:
+            try:
+                await dsr_propagation_service.mark_step(
+                    propagation_request_id,
+                    component,
+                    "failed",
+                    tenant_id=tenant_id,
+                    audit_event_id=ctx.job_id,
+                )
+            except Exception:  # noqa: BLE001 — never let marking abort
+                logger.warning(
+                    "failed to mark DSR component %s failed", component, exc_info=True
+                )
+
+    async def _mark(component: str, receipt: "planes.Receipt") -> None:
+        evidence = receipt.evidence()
+        previous = prior.get(component) or {}
+        if (
+            receipt.status not in _ASSESSMENT_STATUSES
+            and previous.get("status") == "completed"
+        ):
+            for key in ("records_impacted", "artifacts_impacted"):
+                evidence[key] += int(previous.get(key) or 0)
+            for key in ("requires_retrain", "requires_recompute"):
+                evidence[key] = evidence[key] or bool(previous.get(key))
+        await dsr_propagation_service.mark_step(
+            propagation_request_id,
+            component,
+            receipt.status,
+            tenant_id=tenant_id,
+            audit_event_id=ctx.job_id,
+            **evidence,
+        )
+        if receipt.detail:
+            logger.info(
+                "DSR component %s receipt detail=%s", component, receipt.detail
+            )
+
+    all_components = tuple(
+        c for _, comps, _ in planes.ENTITY_PLANES for c in comps
+    ) + planes.ML_ARTIFACT_COMPONENTS + planes.IDENTITY_COMPONENTS
+    try:
+        subject = await planes.resolve_subject(tenant_id, user_id, anonymous_id)
+    except Exception as exc:  # noqa: BLE001 — nothing can run without the subject
+        await _fail(all_components)
+        return [f"subject_resolution: {exc}"]
+
+    training_eligible: int | None = None
+    for name, components, plane in planes.ENTITY_PLANES:
+        try:
+            receipts = await plane(subject)
+            for component in components:
+                await _mark(component, receipts[component])
+            if name == "feature":
+                training_eligible = int(
+                    receipts[planes.FEATURE_ROWS_COMPONENT].detail.get(
+                        "training_eligible", 0
+                    )
+                )
+        except Exception as exc:  # noqa: BLE001 — isolate each plane
+            errors.append(f"{name}: {exc}")
+            await _fail(components)
+
+    if training_eligible is None:
+        errors.append("ml_artifacts: feature plane did not complete")
+        await _fail(planes.ML_ARTIFACT_COMPONENTS)
+    else:
+        try:
+            receipts = await planes.assess_ml_artifact_plane(subject, training_eligible)
+            for component in planes.ML_ARTIFACT_COMPONENTS:
+                await _mark(component, receipts[component])
+        except Exception as exc:  # noqa: BLE001 — isolate the ML plane
+            errors.append(f"ml_artifacts: {exc}")
+            await _fail(planes.ML_ARTIFACT_COMPONENTS)
+
+    if errors:
+        # Defer the identity erasure: it removes the mapping a retry needs to
+        # re-resolve the subject for the planes that just failed.
+        errors.append("identity: deferred until every other plane completes")
+        await _fail(planes.IDENTITY_COMPONENTS)
+        return errors
+    try:
+        receipts = await planes.erase_identity_plane(subject)
+        for component in planes.IDENTITY_COMPONENTS:
+            await _mark(component, receipts[component])
+    except Exception as exc:  # noqa: BLE001 — isolate the identity plane
+        errors.append(f"identity: {exc}")
+        await _fail(planes.IDENTITY_COMPONENTS)
+    return errors
+
+
 def register_consent_erasure_handler() -> None:
     """Register the internal-only erasure job handler exactly once at startup."""
     if ERASURE_JOB_TYPE in HANDLER_REGISTRY:
@@ -698,6 +854,21 @@ def register_consent_erasure_handler() -> None:
                         ANALYTICS_EVENTS_COMPONENT,
                         exc_info=True,
                     )
+
+            # ── Completeness planes (services/consent/erasure_planes.py) ─────
+            # The fifteen registry components nothing executed before (identity,
+            # graph, Profile 360, features, ML, exports, caches, replay, rewards,
+            # connectors, financial snapshots) plus Silver facts and the
+            # hash-chained Bronze tier. Each plane is isolated; the identity
+            # planes run last and only when every entity-keyed plane succeeded.
+            errors.extend(
+                await _run_completeness_planes(
+                    propagation_request_id,
+                    ctx,
+                    user_id,
+                    str(payload.get("anonymous_id") or "") or None,
+                )
+            )
 
         if dsr_id:
             repo = ConsentRepository()

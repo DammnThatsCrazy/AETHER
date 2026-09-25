@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Validate that every principal-scoped MOBILE table — and the analytics event
-store (``ANALYTICS_DSR_COVERAGE``) — is reachable by a DSR erasure.
+"""Validate that every ``DSR_COMPONENTS`` entry is executed by the erasure job,
+and that every principal-scoped MOBILE table — and the analytics event store
+(``ANALYTICS_DSR_COVERAGE``) — is reachable by a DSR erasure.
 
 Erasability of mobile data is expressed in four otherwise-disconnected places:
 
@@ -154,12 +155,26 @@ def _policy_index(root: Path) -> dict[str, dict]:
 
 def run(root: Path) -> int:
     r = Reporter(
-        "DSR COVERAGE — every principal-scoped mobile table and the analytics "
-        "event store are erasable"
+        "DSR COVERAGE — every DSR component is executed; every principal-scoped "
+        "mobile table and the analytics event store are erasable"
     )
     components = _dsr_components(root)
     handler_literals = _handler_marked_components(root)
     policies = _policy_index(root)
+
+    # Completeness: EVERY registry component must be executed by the erasure
+    # job. A component seeded ``pending`` on every request but referenced by no
+    # executor can never roll up to ``completed`` — and its store's subject data
+    # silently survives (fifteen components sat in exactly that state until the
+    # DSR-completeness program wired them in services/consent/erasure_planes.py).
+    for component in sorted(components):
+        r.require(
+            component in handler_literals,
+            f"{component}: executed by the consent.erasure job",
+            f"{component}: in DSR_COMPONENTS but NOT referenced by "
+            f"services/consent/erasure_jobs.py — every erasure would leave it "
+            f"pending forever",
+        )
 
     for component, spec in {**MOBILE_DSR_COVERAGE, **ANALYTICS_DSR_COVERAGE}.items():
         repo_file = str(spec["repo"])
