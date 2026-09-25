@@ -1026,6 +1026,9 @@ class _QueryFlight:
         self.waiters = 0
 
 
+_SILVER_TABLE_RE = re.compile(r"silver_[a-z0-9_]+")
+
+
 class AnalyticsRepository:
     """Query engine for dashboards — uses TimescaleDB with Redis query caching."""
 
@@ -1260,6 +1263,52 @@ class AnalyticsRepository:
                 max((last - first).total_seconds(), 0.0) if first and last else None
             )
         return rows
+
+    async def query_silver(
+        self, table: str, filters: dict[str, Any], *, limit: int = 50
+    ) -> list[dict]:
+        """Tenant-scoped rows of one Silver fact table, newest ``occurred_at`` first.
+
+        ``filters`` are exact matches on the table's columns and must include
+        ``tenant_id``; an unknown table or column raises ``ValueError`` rather
+        than silently widening the read. Rows are those the Silver writer
+        persisted (``services/silver/writer.py``): the table itself with a
+        database, the writer's per-table store without one.
+        """
+        if not _SILVER_TABLE_RE.fullmatch(table or ""):
+            raise ValueError(f"not a Silver fact table: {table!r}")
+        equals = {key: value for key, value in (filters or {}).items() if value is not None}
+        if not equals.get("tenant_id"):
+            raise ValueError("a Silver query must be scoped to a tenant")
+        limit = max(1, min(int(limit), 1000))
+
+        from services.silver import writer as silver_writer
+
+        pool = await get_pool()
+        if pool is None:
+            store = silver_writer._local_tables.get(table, {})
+            rows = [
+                dict(row) for row in store.values()
+                if all(str(row.get(key)) == str(value) for key, value in equals.items())
+            ]
+            epoch = datetime.min.replace(tzinfo=timezone.utc)
+            rows.sort(key=lambda row: _as_utc_datetime(row.get("occurred_at")) or epoch, reverse=True)
+            return rows[:limit]
+
+        columns = dict(await silver_writer.SilverFactWriter()._table_columns(pool, table))
+        if not columns:
+            raise ValueError(f"unknown Silver table: {table}")
+        unknown = sorted(set(equals) - set(columns))
+        if unknown:
+            raise ValueError(f"unknown {table} columns: {', '.join(unknown)}")
+        keys = sorted(equals)
+        where = " AND ".join(f"{key}::text = ${index + 1}" for index, key in enumerate(keys))
+        order = " ORDER BY occurred_at DESC" if "occurred_at" in columns else ""
+        records = await pool.fetch(
+            f"SELECT * FROM {table} WHERE {where}{order} LIMIT {limit}",
+            *[str(equals[key]) for key in keys],
+        )
+        return [dict(record) for record in records]
 
     async def get_event(self, event_id: str, tenant_id: Optional[str] = None) -> dict:
         """Fetch one event.

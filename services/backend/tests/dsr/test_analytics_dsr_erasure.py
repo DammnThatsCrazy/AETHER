@@ -574,7 +574,10 @@ async def test_erasures_submitted_before_markers_existed_are_backfilled():
     from services.consent import erasure_fence
     from services.consent.erasure_fence import erasure_fences_event
 
+    # Start from "markers never backfilled": forget the cached flag and drop
+    # the durable one an earlier test on this worker may have written.
     erasure_fence.reset_backfill_state()
+    await erasure_fence.ErasureMarkerRepository().delete(erasure_fence._BACKFILL_FLAG_ID)
     tenant = _uid("t")
     dsr_id = str(uuid.uuid4())
     await ConsentRepository().insert(f"dsr_{dsr_id}", {

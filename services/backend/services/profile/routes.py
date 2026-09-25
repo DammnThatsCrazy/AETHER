@@ -2050,7 +2050,7 @@ async def get_entity_exposures(
     tenant.require_permission("read")
     try:
         from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
+        repo = AnalyticsRepository(get_cache())
         filters: dict = {"tenant_id": tenant.tenant_id, "user_id": user_id}
         if content_type:
             filters["content_type"] = content_type
@@ -2077,7 +2077,7 @@ async def get_entity_revenue(
     tenant.require_permission("read")
     try:
         from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
+        repo = AnalyticsRepository(get_cache())
         filters: dict = {"tenant_id": tenant.tenant_id, "user_id": user_id}
         if revenue_type:
             filters["revenue_type"] = revenue_type
@@ -2103,7 +2103,7 @@ async def get_entity_friction(
     tenant.require_permission("read")
     try:
         from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
+        repo = AnalyticsRepository(get_cache())
         fetched = await repo.query_silver(
             "silver_friction_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
@@ -2130,7 +2130,7 @@ async def get_entity_accounts(
     tenant.require_permission("read")
     try:
         from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
+        repo = AnalyticsRepository(get_cache())
         fetched = await repo.query_silver(
             "silver_account_activity_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
@@ -2286,7 +2286,7 @@ async def get_entity_integrations(
     tenant.require_permission("read")
     try:
         from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
+        repo = AnalyticsRepository(get_cache())
         fetched = await repo.query_silver(
             "silver_server_operation_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
@@ -2313,7 +2313,7 @@ async def get_entity_data_quality(
     tenant.require_permission("read")
     try:
         from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
+        repo = AnalyticsRepository(get_cache())
         fetched = await repo.query_silver(
             "silver_data_quality_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
