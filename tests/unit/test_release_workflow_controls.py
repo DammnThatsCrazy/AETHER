@@ -84,8 +84,10 @@ def _every_workflow_file() -> list[Path]:
         and "node_modules" not in path.parts
         # .claude/ is git-ignored local scratch (agent worktrees clone the
         # repo there); nothing under it is tracked, so nothing under it can
-        # ever reach GitHub Actions.
-        and ".claude" not in path.parts
+        # ever reach GitHub Actions. Judged relative to ROOT: when ROOT itself
+        # is such a worktree (…/.claude/worktrees/<name>) its absolute path
+        # contains `.claude`, which excluded every workflow in the repo.
+        and ".claude" not in path.relative_to(ROOT).parts
     )
 
 
