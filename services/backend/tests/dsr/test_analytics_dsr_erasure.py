@@ -166,13 +166,16 @@ async def test_erase_subject_is_tenant_scoped_and_spares_other_users(repo):
     other_1 = await _record(repo, tenant_a, session_id=s_other, user_id=other)
     shared_subj = await _record(repo, tenant_a, session_id=s_shared, user_id=subject,
                                 ts="2026-05-01T09:00:00Z")
+    await _record(repo, tenant_a, session_id=s_shared, user_id=subject,
+                  ts="2026-05-01T09:30:00Z", event_type="track")
     shared_other = await _record(repo, tenant_a, session_id=s_shared, user_id=other,
                                  ts="2026-05-01T11:00:00Z")
+    assert (await _session(repo, tenant_a, s_shared))["page_views"] == 2
     # The SAME user_id in another tenant is a different data subject's scope.
     b_event = await _record(repo, tenant_b, session_id=s_b, user_id=subject)
 
     result = await repo.erase_subject(tenant_a, subject)
-    assert result == {"events_deleted": 3, "sessions_deleted": 1, "sessions_recomputed": 1}
+    assert result == {"events_deleted": 4, "sessions_deleted": 1, "sessions_recomputed": 1}
     assert not {subj_1, subj_2, shared_subj} & await _event_ids(repo, tenant_a)
 
     # Subject's own session rollup is gone.
@@ -186,6 +189,7 @@ async def test_erase_subject_is_tenant_scoped_and_spares_other_users(repo):
     shared = await _session(repo, tenant_a, s_shared)
     assert shared["user_id"] == other
     assert shared["event_count"] == 1
+    assert shared["page_views"] == 1  # only the other user's page view remains
     assert shared["first_seen_at"] == shared["last_seen_at"] == "2026-05-01T11:00:00.000000Z"
     # Tenant B's rows for the same user_id are untouched.
     assert await _event_ids(repo, tenant_b, user_id=subject) == {b_event}

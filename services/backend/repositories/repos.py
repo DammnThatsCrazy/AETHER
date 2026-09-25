@@ -932,6 +932,9 @@ ANALYTICS_SESSION_RECORD_TYPE = "analytics_session"
 # The dashboard summary window; ``period`` in the response names it.
 ANALYTICS_SUMMARY_WINDOW = timedelta(hours=24)
 ANALYTICS_SUMMARY_TOP_EVENT_TYPES = 10
+# Event types a session rollup counts as views (``page_views``): web page
+# views and mobile screen views.
+ANALYTICS_VIEW_EVENT_TYPES = ("page", "screen")
 # Lifetime of a tenant's query-cache generation token. Every write to the
 # tenant's event store replaces the token; it only needs to outlive the cached
 # results it versions (``TTL.MEDIUM``). A missing token reads as generation
@@ -945,6 +948,8 @@ _ANALYTICS_QUERY_GENERATION_UNSET = "0"
 # every limited query match nothing. ``tenant_id`` is bound from the
 # authenticated request and must not be overridable by query parameters.
 _ANALYTICS_NON_FILTER_KEYS = frozenset({"limit", "offset", "tenant_id"})
+# The session-rollup filters ``AnalyticsRepository.query_sessions`` accepts.
+_ANALYTICS_SESSION_FILTER_KEYS = frozenset({"session_id", "user_id", "anonymous_id"})
 _FILTER_KEY_RE = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*")
 _DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CANONICAL_TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
@@ -1221,6 +1226,41 @@ class AnalyticsRepository:
         await self._invalidate_after_write(tenant_id)
         return True
 
+    async def query_sessions(
+        self,
+        tenant_id: str,
+        query_params: Optional[dict] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Tenant-scoped analytics session rollups, most recently active first.
+
+        Reads the ``sessions`` rollups :meth:`record_processed_event` maintains
+        (one row per SDK ``session_id``). Filters are exact matches on
+        ``session_id`` / ``user_id`` / ``anonymous_id``; other keys are
+        ignored and ``tenant_id`` is never overridable. Each row carries
+        ``session_id``, ``user_id`` / ``anonymous_id`` (when known),
+        ``first_seen_at`` / ``last_seen_at`` (canonical UTC event times),
+        ``event_count``, ``page_views`` (``page`` / ``screen`` events; a rollup
+        written before the counter existed counts only views since),
+        ``last_event_type`` and the derived ``duration`` in seconds
+        (``last_seen_at - first_seen_at``). Not cached: a rollup changes on
+        every event of its session.
+        """
+        equals = {
+            key: value
+            for key, value in (query_params or {}).items()
+            if key in _ANALYTICS_SESSION_FILTER_KEYS and value is not None
+        }
+        rows = await self._sessions.list_for_tenant(tenant_id, equals, limit=limit)
+        for row in rows:
+            row.setdefault("page_views", 0)
+            first = _as_utc_datetime(row.get("first_seen_at"))
+            last = _as_utc_datetime(row.get("last_seen_at"))
+            row["duration"] = (
+                max((last - first).total_seconds(), 0.0) if first and last else None
+            )
+        return rows
+
     async def get_event(self, event_id: str, tenant_id: Optional[str] = None) -> dict:
         """Fetch one event.
 
@@ -1325,11 +1365,14 @@ class AnalyticsRepository:
                     record_id = analytics_session_record_id(tenant_id, session_id)
                     remaining = await conn.fetchrow(
                         f"""SELECT COUNT(*) AS n,
+                                   COUNT(*) FILTER (
+                                       WHERE data->>'event_type' = ANY($3::text[])
+                                   ) AS page_views,
                                    MIN(data->>'occurred_at') AS first_seen_at,
                                    MAX(data->>'occurred_at') AS last_seen_at
                             FROM {events_table}
                             WHERE tenant_id = $1 AND data->>'session_id' = $2""",
-                        tenant_id, session_id,
+                        tenant_id, session_id, list(ANALYTICS_VIEW_EVENT_TYPES),
                     )
                     if not remaining or int(remaining["n"]) == 0:
                         status = await conn.execute(
@@ -1345,12 +1388,13 @@ class AnalyticsRepository:
                                 'event_count', $3::bigint,
                                 'first_seen_at', $4::text,
                                 'last_seen_at', $5::text,
-                                'updated_at', $6::text)
+                                'updated_at', $6::text,
+                                'page_views', $8::bigint)
                             WHERE id = $1 AND tenant_id = $2
                               AND data->>'record_type' = $7""",
                         record_id, tenant_id, int(remaining["n"]),
                         remaining["first_seen_at"], remaining["last_seen_at"], now,
-                        ANALYTICS_SESSION_RECORD_TYPE,
+                        ANALYTICS_SESSION_RECORD_TYPE, int(remaining["page_views"]),
                     )
                     recomputed += int(status.split()[-1]) if status else 0
         return {
@@ -1393,17 +1437,21 @@ class AnalyticsRepository:
             session = sessions.get(record_id)
             if session is None or session.get("tenant_id") != tenant_id:
                 continue
-            remaining = [
-                row.get("occurred_at") or ""
-                for row in events.values()
+            remaining_rows = [
+                row for row in events.values()
                 if row.get("tenant_id") == tenant_id and row.get("session_id") == session_id
             ]
-            if not remaining:
+            if not remaining_rows:
                 del sessions[record_id]
                 sessions_deleted += 1
                 continue
+            remaining = [row.get("occurred_at") or "" for row in remaining_rows]
             session.update({
                 "event_count": len(remaining),
+                "page_views": sum(
+                    1 for row in remaining_rows
+                    if row.get("event_type") in ANALYTICS_VIEW_EVENT_TYPES
+                ),
                 "first_seen_at": min(remaining),
                 "last_seen_at": max(remaining),
             })
@@ -1733,8 +1781,13 @@ class _SessionStore(BaseRepository):
                 fields[key] = event[key]
         return fields
 
+    @staticmethod
+    def _view_increment(event: dict) -> int:
+        return 1 if event.get("event_type") in ANALYTICS_VIEW_EVENT_TYPES else 0
+
     def advance_in_memory(self, record_id: str, event: dict, now: str) -> None:
         seen_at = event.get("occurred_at") or canonical_utc_timestamp(now)
+        views = self._view_increment(event)
         existing = self._store.get(record_id)
         if existing is None:
             self._store[record_id] = {
@@ -1744,6 +1797,7 @@ class _SessionStore(BaseRepository):
                 "first_seen_at": seen_at,
                 "last_seen_at": seen_at,
                 "event_count": 1,
+                "page_views": views,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -1752,6 +1806,7 @@ class _SessionStore(BaseRepository):
         existing["first_seen_at"] = min(existing.get("first_seen_at") or seen_at, seen_at)
         existing["last_seen_at"] = max(existing.get("last_seen_at") or seen_at, seen_at)
         existing["event_count"] = int(existing.get("event_count") or 0) + 1
+        existing["page_views"] = int(existing.get("page_views") or 0) + views
         existing["updated_at"] = now
 
     async def advance_sql(self, conn: Any, record_id: str, event: dict, now: str) -> None:
@@ -1764,6 +1819,7 @@ class _SessionStore(BaseRepository):
         tenants.
         """
         seen_at = event.get("occurred_at") or canonical_utc_timestamp(now)
+        views = self._view_increment(event)
         fields = self._session_fields(event)
         initial = {
             **fields,
@@ -1772,6 +1828,7 @@ class _SessionStore(BaseRepository):
             "first_seen_at": seen_at,
             "last_seen_at": seen_at,
             "event_count": 1,
+            "page_views": views,
             "created_at": now,
             "updated_at": now,
         }
@@ -1784,6 +1841,7 @@ class _SessionStore(BaseRepository):
                         'first_seen_at', LEAST(s.data->>'first_seen_at', $5::text),
                         'last_seen_at', GREATEST(s.data->>'last_seen_at', $5::text),
                         'event_count', COALESCE((s.data->>'event_count')::bigint, 0) + 1,
+                        'page_views', COALESCE((s.data->>'page_views')::bigint, 0) + $7::bigint,
                         'updated_at', $6::text
                     ),
                     updated_at = NOW()
@@ -1794,7 +1852,55 @@ class _SessionStore(BaseRepository):
             json.dumps(fields, default=str),
             seen_at,
             now,
+            views,
         )
+
+    async def list_for_tenant(
+        self, tenant_id: str, equals: dict[str, Any], *, limit: int = 50
+    ) -> list[dict]:
+        """Tenant-scoped analytics session rollups, most recently active first.
+
+        Only ``record_type = 'analytics_session'`` rows are read (the table is
+        shared with the fraud ``SessionRepository``). An empty ``tenant_id``
+        returns nothing. ``equals`` holds exact-match filters on row fields.
+        """
+        if not tenant_id:
+            return []
+        for key in equals:
+            if not _FILTER_KEY_RE.fullmatch(key):
+                raise ValueError(f"Invalid filter key: {key!r}")
+        pool = await self._ensure_pool()
+        if pool is None:
+            filters = {
+                **equals,
+                "tenant_id": tenant_id,
+                "record_type": ANALYTICS_SESSION_RECORD_TYPE,
+            }
+            rows = [r for r in self._store.values() if _matches_filters(r, filters)]
+            rows.sort(
+                key=lambda r: (r.get("last_seen_at") or "", r.get("id") or ""),
+                reverse=True,
+            )
+            return [dict(r) for r in rows[:limit]]
+
+        await self._ensure_table()
+        conditions = ["tenant_id = $1", "data->>'record_type' = $2"]
+        params: list[Any] = [tenant_id, ANALYTICS_SESSION_RECORD_TYPE]
+        for key, value in equals.items():
+            if value is None:
+                conditions.append(f"data->>'{key}' IS NULL")
+                continue
+            params.append(_jsonb_text(value))
+            conditions.append(f"data->>'{key}' = ${len(params)}")
+        params.append(limit)
+        rows = await pool.fetch(
+            f"""SELECT data FROM {self.table_name}
+                WHERE {' AND '.join(conditions)}
+                ORDER BY data->>'last_seen_at' DESC NULLS LAST, id DESC
+                LIMIT ${len(params)}""",
+            *params,
+        )
+        return [json.loads(row["data"]) for row in rows]
 
     async def count_active(self, tenant_id: Optional[str], since: datetime) -> int:
         """Analytics sessions with activity processed since ``since``."""

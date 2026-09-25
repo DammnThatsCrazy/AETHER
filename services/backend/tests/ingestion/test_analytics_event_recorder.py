@@ -12,6 +12,8 @@ Profile 360 timeline. Covers:
 * the session rollup (first/last seen, event count);
 * the dashboard summary is computed from the store;
 * empty query results are never cached (a poll cannot stick on an empty read);
+* a newly recorded event retires the tenant's cached query results;
+* the GraphQL ``sessions`` root reads the tenant's session rollups;
 * the stream-ingestion-projection spec subscribes the recorder.
 
 Every behaviour runs against the in-memory backend. The PostgreSQL half runs the
@@ -356,6 +358,7 @@ async def test_session_rollup_tracks_first_last_and_count(repo):
     assert session["anonymous_id"] == anon
     assert session["user_id"] == "u-late"
     assert session["event_count"] == 3
+    assert session["page_views"] == 2  # the two ``page`` events; ``identify`` is not a view
     assert session["first_seen_at"] == "2026-03-01T10:00:00.000000Z"
     assert session["last_seen_at"] == "2026-03-01T10:09:00.000000Z"
 
@@ -618,3 +621,128 @@ def test_end_of_day_bound_on_the_last_representable_date():
     # ``+ 1 day`` overflowed here, so an accepted end_date of 9999-12-31 was a 500.
     assert canonical_utc_timestamp("9999-12-31", end_of_day=True) == "9999-12-31T23:59:59.999999Z"
     assert canonical_utc_timestamp("2026-05-01", end_of_day=True) == "2026-05-01T23:59:59.999999Z"
+
+
+# ── GraphQL ``sessions`` root ────────────────────────────────────────────
+
+
+def _graphql_request(tenant_id: str):
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.state.tenant.tenant_id = tenant_id
+    return req
+
+
+async def _graphql(repo, tenant_id: str, query: str, variables: dict | None = None) -> list:
+    from services.analytics.routes import GraphQLRequest, graphql_endpoint
+
+    body = GraphQLRequest(query=query, variables=variables or {})
+    response = await graphql_endpoint(body, _graphql_request(tenant_id), repo=repo)
+    [root] = response["data"]["data"].values()
+    return root
+
+
+_SESSIONS_QUERY = (
+    "{ sessions { session_id user_id anonymous_id first_seen_at last_seen_at "
+    "duration event_count page_views last_event_type } }"
+)
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_graphql_sessions_reads_the_tenant_session_rollups(repo):
+    """The ``sessions`` root used to return ``[]`` unconditionally."""
+    tenant = _tenant()
+    s1, s2 = f"s-{uuid.uuid4().hex}", f"s-{uuid.uuid4().hex}"
+    for ev in (
+        _bus_event(tenant, session_id=s1, user_id="alice", timestamp="2026-04-01T10:00:00Z"),
+        _bus_event(tenant, session_id=s1, user_id="alice", event_type="track",
+                   timestamp="2026-04-01T10:01:30Z"),
+        _bus_event(tenant, session_id=s1, user_id="alice", event_type="screen",
+                   timestamp="2026-04-01T10:02:00Z"),
+        _bus_event(tenant, session_id=s2, user_id=None, anonymous_id="anon-9",
+                   timestamp="2026-04-02T08:00:00Z"),
+    ):
+        await workers.analytics_event_recorder(ev)
+
+    rows = await _graphql(repo, tenant, _SESSIONS_QUERY)
+    # Most recently active first.
+    assert [r["session_id"] for r in rows] == [s2, s1]
+    by_id = {r["session_id"]: r for r in rows}
+    assert by_id[s1] == {
+        "session_id": s1,
+        "user_id": "alice",
+        "anonymous_id": by_id[s1]["anonymous_id"],
+        "first_seen_at": "2026-04-01T10:00:00.000000Z",
+        "last_seen_at": "2026-04-01T10:02:00.000000Z",
+        "duration": 120.0,
+        "event_count": 3,
+        "page_views": 2,  # the page and the screen view
+        "last_event_type": "screen",
+    }
+    assert by_id[s2]["user_id"] is None
+    assert by_id[s2]["anonymous_id"] == "anon-9"
+    assert by_id[s2]["duration"] == 0.0
+    assert by_id[s2]["event_count"] == 1
+
+    # Field selection projects only what was asked for.
+    assert await _graphql(repo, tenant, "{ sessions { session_id event_count } }",
+                          {"session_id": s1}) == [{"session_id": s1, "event_count": 3}]
+    # Filter variables narrow the rollups.
+    assert [r["session_id"] for r in await _graphql(
+        repo, tenant, _SESSIONS_QUERY, {"user_id": "alice"}
+    )] == [s1]
+    assert [r["session_id"] for r in await _graphql(
+        repo, tenant, _SESSIONS_QUERY, {"anonymous_id": "anon-9"}
+    )] == [s2]
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_graphql_sessions_is_tenant_scoped(repo):
+    tenant_a, tenant_b = _tenant(), _tenant()
+    event = _bus_event(tenant_a)
+    await workers.analytics_event_recorder(event)
+    session_id = event.payload["session_id"]
+
+    assert len(await _graphql(repo, tenant_a, _SESSIONS_QUERY)) == 1
+    assert await _graphql(repo, tenant_b, _SESSIONS_QUERY) == []
+    # A tenant_id variable can never widen the scope.
+    assert await _graphql(
+        repo, tenant_b, _SESSIONS_QUERY, {"tenant_id": tenant_a, "session_id": session_id}
+    ) == []
+    # Same SDK session id under another tenant is a separate rollup.
+    await workers.analytics_event_recorder(_bus_event(tenant_b, session_id=session_id))
+    [a_row] = await _graphql(repo, tenant_a, _SESSIONS_QUERY, {"session_id": session_id})
+    [b_row] = await _graphql(repo, tenant_b, _SESSIONS_QUERY, {"session_id": session_id})
+    assert a_row["event_count"] == b_row["event_count"] == 1
+    assert await repo.query_sessions("", {"session_id": session_id}) == []
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_graphql_sessions_ignores_fraud_session_rows(repo):
+    """The ``sessions`` table is shared with the fraud ``SessionRepository``;
+    only analytics rollups are served."""
+    from repositories.repos import SessionRepository
+
+    tenant = _tenant()
+    fraud = SessionRepository()
+    fraud._pool = repo._sessions._pool
+    await fraud.insert(f"fraud-{uuid.uuid4().hex}", {
+        "tenant_id": tenant, "session_id": "fraud-s", "ip": "198.51.100.1",
+        "last_seen_at": "2099-01-01T00:00:00.000000Z",
+    })
+    event = _bus_event(tenant)
+    await workers.analytics_event_recorder(event)
+    assert [r["session_id"] for r in await _graphql(repo, tenant, _SESSIONS_QUERY)] == [
+        event.payload["session_id"]
+    ]
+
+
+async def test_graphql_sessions_rejects_unrecorded_fields():
+    """Device attributes are never recorded (SDK context is not stored), so the
+    schema does not offer them instead of answering with nulls."""
+    from services.analytics.routes import _parse_and_validate_graphql
+    from shared.common.common import BadRequestError
+
+    with pytest.raises(BadRequestError):
+        _parse_and_validate_graphql("{ sessions { session_id device_type } }")

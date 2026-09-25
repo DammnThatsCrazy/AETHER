@@ -276,9 +276,22 @@ def _sanitize_export_job(job: dict) -> dict:
 # Allowed root fields per permission level
 _GRAPHQL_FIELDS = {
     "events": {"event_id", "event_type", "session_id", "user_id", "timestamp", "properties"},
-    "sessions": {"session_id", "duration", "page_views", "device_type"},
+    # The analytics session rollups the stream projector maintains
+    # (``AnalyticsRepository.query_sessions``). Device attributes are not
+    # offered: SDK ``context`` (user agent, device) is never stored.
+    "sessions": {
+        "session_id", "user_id", "anonymous_id", "first_seen_at", "last_seen_at",
+        "duration", "event_count", "page_views", "last_event_type",
+    },
     "campaigns": {"campaign_id", "name", "channel", "status", "conversions"},
 }
+
+# ``variables`` each root accepts as exact-match filters.
+_GRAPHQL_FILTER_VARIABLES = {
+    "events": ("event_type", "session_id", "user_id"),
+    "sessions": ("session_id", "user_id", "anonymous_id"),
+}
+_GRAPHQL_RESULT_LIMIT = 50
 
 # Max query depth/complexity
 _MAX_QUERY_DEPTH = 5
@@ -406,18 +419,24 @@ async def graphql_endpoint(
     root_type = parsed["root_type"]
     fields = parsed["fields"]
 
+    filters = {
+        key: value
+        for key, value in body.variables.items()
+        if key in _GRAPHQL_FILTER_VARIABLES.get(root_type, ())
+    }
+
     # Execute query
     if root_type == "events":
-        filters = {}
-        for var_key, var_val in body.variables.items():
-            if var_key in ("event_type", "session_id", "user_id"):
-                filters[var_key] = var_val
-        raw = await repo.query_events(tenant.tenant_id, filters, limit=50)
+        raw = await repo.query_events(tenant.tenant_id, filters, limit=_GRAPHQL_RESULT_LIMIT)
         # Project only requested fields
         data = [{f: row.get(f) for f in fields} for row in raw]
 
     elif root_type == "sessions":
-        data = []  # Sessions query — uses session store
+        # The tenant's analytics session rollups, most recently active first.
+        raw = await repo.query_sessions(
+            tenant.tenant_id, filters, limit=_GRAPHQL_RESULT_LIMIT
+        )
+        data = [{f: row.get(f) for f in fields} for row in raw]
 
     elif root_type == "campaigns":
         from repositories.repos import CampaignRepository
