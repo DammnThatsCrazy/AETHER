@@ -146,6 +146,8 @@ async def test_conversion_unknown_currency_not_silently_parity():
     assert fx["quote_currency"] == "ZZZ"
     # The distinguishing marker exists — the row is not silently parity.
     assert "fx_conversion" in row["provenance"]
+    # And the stored rate itself is unknown (NULL), not the old "1.0" default.
+    assert row["exchange_rate"] is None
 
 
 # ── spend_repo ───────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -11,13 +12,24 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = ROOT / "services" / "backend"
 
+
+def _is_installed(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+# Stand-ins only for ABSENT packages: sys.modules is process-global, so
+# stubbing an installed package here (just because nothing had imported it
+# yet) broke every later module that needs the real one in the same run.
 for _mod in (
     "jwt", "cryptography", "cryptography.hazmat",
     "cryptography.hazmat.primitives", "cryptography.hazmat.primitives.asymmetric",
     "cryptography.hazmat.primitives.asymmetric.ec", "cryptography.hazmat.bindings",
     "cryptography.hazmat.bindings._rust", "cryptography.hazmat._oid",
 ):
-    if _mod not in sys.modules:
+    if _mod not in sys.modules and not _is_installed(_mod.split(".")[0]):
         sys.modules[_mod] = MagicMock()
 
 if str(BACKEND_ROOT) not in sys.path:

@@ -12,7 +12,7 @@ toc_depth: 2
 source_files: [services/backend/services/campaign/exploration.py, services/backend/services/measurement/repositories/conversion_repo.py]
 source_hashes:
   "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:bcfca3569ea3cc408f3d4857ca0a3982b29c4f54fa974e886dba578f42c109a7"
+  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:7ce28680d047299ad11e38a2767b2f8dec878afce70203340d6e1286dea1c374"
 ---
 
 # Runbook — Missing Conversions (Campaign 360)
@@ -70,6 +70,8 @@ campaign's active attribution run.
 | Conversions use wrong tenant/campaign ID | Verify the SDK `campaign_id` field in the conversion events |
 | Attribution run completed but `is_active=false` | Re-activate: `PATCH /v1/attribution/runs/{id}` with `{"is_active": true}` |
 | Time window mismatch | Check that conversion `occurred_at` timestamps fall within the campaign's active period |
+| Conversions counted but revenue is 0 / lower than expected | Foreign-currency conversions with no known FX rate are stored **unconverted** (`exchange_rate` NULL, `provenance.fx_conversion.priced = false`, native amount kept) and are excluded from USD revenue; the campaign summary reports them in `unconverted_credit_count` with `data_quality: partial`. Add a rate source for that currency; never backfill `1.0`. |
+| Duplicate / "wrong" value for one order | One canonical row per `(tenant_id, deduplication_key)`; the owner is the record with the greatest `(authority_rank, occurred_at, source_event_id)` (commerce webhook 90 > checkout 80 > …), independent of arrival order. Losing records stay in `evidence_ids`. |
 
 ## Escalation
 

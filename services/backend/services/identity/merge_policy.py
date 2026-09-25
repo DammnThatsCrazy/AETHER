@@ -6,8 +6,14 @@ the policy only makes decisions. The resolver executes them.
 
 Policy rules (in priority order):
 1. Cross-tenant → BLOCKED
+1b. First sighting (no existing entity matched) → CREATE, scored on the event's
+   own observed signals; BLOCKED only when those signals are themselves
+   unusable (no consent for the only signals, fingerprint-only, none)
 2. Consent blocks sensitive link → BLOCKED
 3. Fingerprint-only → BLOCKED
+3b. Authenticated binding (the event carries a user_id together with the
+    anonymous_id / user_id that matched, and no candidate holds a contradictory
+    deterministic id) → DETERMINISTIC MERGE of every candidate
 4. DETERMINISTIC + no conflict → LINK / MERGE
 5. STRONG + no conflict → LINK / MERGE (if policy allows auto-link)
 6. PROBABLE → CANDIDATE
@@ -61,6 +67,13 @@ NON_MERGE_ELIGIBLE_SIGNAL_NAMES: frozenset[str] = frozenset({
 
 REASON_NON_MERGE_ELIGIBLE_SIGNAL = "non_merge_eligible_signal_excluded"
 
+# The event itself binds its anonymous_id to an authenticated user_id (an SDK
+# identify, or any event carrying both after identify). That co-occurrence is
+# deterministic evidence that the anonymous visitor IS the user -- not a
+# probabilistic anonymous-id match -- provided no candidate entity carries a
+# contradictory user_id / external_id / verified wallet (shared device).
+REASON_AUTHENTICATED_BINDING = "authenticated_user_binding"
+
 
 def _filter_merge_eligible(signal_types: list) -> list:
     """Drop signals whose name is on the non-merge-eligible denylist.
@@ -93,6 +106,14 @@ class MergePolicyContext:
     # verified-ownership evidence present in this match?
     verified_present: bool = False
     auto_merge_verified: bool = True
+    # The event's OWN (merge-eligible) signal types. Used to score a first
+    # sighting (no existing entity), where ``matching_signal_types`` is empty
+    # by construction -- the resolver only lists types that matched an alias.
+    observed_signal_types: list[IdentitySignalType] = field(default_factory=list)
+    # Set by the resolver when the event binds its anonymous_id to a user_id
+    # and every candidate was reached through that user_id / anonymous_id with
+    # no contradictory deterministic identifier (see REASON_AUTHENTICATED_BINDING).
+    authenticated_binding: bool = False
 
 
 @dataclass
@@ -130,6 +151,38 @@ def evaluate(ctx: MergePolicyContext) -> MergePolicyResult:
     matching_signal_types = _filter_merge_eligible(ctx.matching_signal_types)
     revoked_signal_types = _filter_merge_eligible(ctx.revoked_signal_types)
     excluded_signals = len(matching_signal_types) != len(ctx.matching_signal_types)
+
+    # ── 1b. First sighting → CREATE ───────────────────────────────────────
+    # Nothing matched and no entity exists yet: this is a new entity, not a
+    # failed match. Scoring the (empty) match set would return BLOCKED /
+    # insufficient_evidence, which skipped alias linking -- so no alias was
+    # ever written, the next event could never match, and profiles never
+    # merged. Score the event's own signals instead; consent and
+    # fingerprint-only rules still apply to them.
+    observed_types = _filter_merge_eligible(ctx.observed_signal_types)
+    if not ctx.existing_entity_ids and not matching_signal_types and observed_types:
+        score, tier, codes = score_signals(
+            matching_signal_types=observed_types,
+            consent_snapshot=ctx.consent_snapshot,
+            source_tenant_id=ctx.source_tenant_id,
+            target_tenant_id=ctx.tenant_id,
+            revoked_types=revoked_signal_types,
+        )
+        # "same_*" codes describe a match; a first sighting has none.
+        codes = [c for c in codes if not c.startswith("same_")]
+        if tier == ConfidenceTier.BLOCKED:
+            return MergePolicyResult(
+                decision=MergeDecision.BLOCKED,
+                confidence=score,
+                confidence_tier=tier,
+                reason_codes=codes,
+            )
+        return MergePolicyResult(
+            decision=MergeDecision.CREATE,
+            confidence=score,
+            confidence_tier=tier,
+            reason_codes=codes + [REASON_NEW_ENTITY],
+        )
 
     # ── 2 & 3. Score signals (handles consent + fingerprint blocking) ─────
     score, tier, reason_codes = score_signals(
@@ -173,6 +226,34 @@ def evaluate(ctx: MergePolicyContext) -> MergePolicyResult:
             confidence_tier=tier,
             reason_codes=conflict_reasons,
             conflict_type="conflicting_strong_alias",
+        )
+
+    # ── 3b. Authenticated binding → deterministic merge ──────────────────
+    # The event itself asserts anonymous_id ↔ user_id. The resolver only sets
+    # the flag when every candidate was reached through that user_id or
+    # anonymous_id and none carries a contradictory deterministic identifier,
+    # so collapsing them cannot fuse two different people. Weak/probabilistic
+    # matches without such a binding fall through to the tiers below and still
+    # need corroboration (CANDIDATE / REJECT).
+    if ctx.authenticated_binding and ctx.existing_entity_ids:
+        target = ctx.existing_entity_ids[0] if len(ctx.existing_entity_ids) == 1 else None
+        binding_codes = list(reason_codes)
+        if REASON_AUTHENTICATED_BINDING not in binding_codes:
+            binding_codes.append(REASON_AUTHENTICATED_BINDING)
+        if not ctx.auto_link_deterministic:
+            return MergePolicyResult(
+                decision=MergeDecision.CANDIDATE,
+                confidence=1.0,
+                confidence_tier=ConfidenceTier.DETERMINISTIC,
+                reason_codes=binding_codes,
+            )
+        return MergePolicyResult(
+            decision=MergeDecision.MERGE,
+            confidence=1.0,
+            confidence_tier=ConfidenceTier.DETERMINISTIC,
+            reason_codes=binding_codes,
+            merge_target_entity_id=target,
+            merge_all_candidates=(len(ctx.existing_entity_ids) > 1),
         )
 
     # ── 4a. Verified ownership authorizes deterministic merge ────────────

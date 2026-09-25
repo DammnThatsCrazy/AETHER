@@ -21,6 +21,7 @@ from shared.common.common import (
 )
 from shared.temporal import SYSTEM_CLOCK, parse_instant_strict, to_iso_utc
 
+from .grants import change_member_role, sync_user_grants
 from .models import (
     InvitationCreateRequest,
     InvitationCreatedResponse,
@@ -69,6 +70,38 @@ def _state_role(tenant: Any) -> OrganizationRole | None:
         return None
 
 
+async def _create_default_profile(tenant: Any, repo: OrganizationRepository) -> dict[str, Any]:
+    """Create a tenant's organization profile on its admin's first use.
+
+    Nothing else creates a profile (first-admin bootstrap and SSO provisioning
+    make only tenant and user rows), so without this every organization route,
+    including invitations, 404s. Only a tenant admin may create it, and becomes
+    its owner; anyone else still gets 404. A principal is required: a legacy
+    admin API key carries no user, and an ownerless profile could never be
+    repaired (ownership changes require an OWNER actor).
+    """
+    owner_user_id = getattr(tenant, "user_id", None)
+    if _state_role(tenant) != OrganizationRole.ADMIN or not owner_user_id:
+        raise NotFoundError("Organization")
+    name = "Organization"
+    try:
+        from repositories.repos import AdminRepository
+
+        record = await AdminRepository().find_by_id(tenant.tenant_id) or {}
+        name = str(record.get("name") or name)
+    except Exception:  # noqa: BLE001 — the name is cosmetic
+        pass
+    try:
+        return await repo.create_profile(tenant.tenant_id, owner_user_id=owner_user_id, name=name)
+    except Exception as exc:
+        # A concurrent first request created it: the repository's own check
+        # raises ConflictError, PostgreSQL's unique index raises
+        # UniqueViolationError.
+        if not isinstance(exc, ConflictError) and not _unique_violation(exc):
+            raise
+        return await _organization_or_404(tenant.tenant_id, repo)
+
+
 async def _organization_or_404(tenant_id: str, repo: OrganizationRepository) -> dict[str, Any]:
     profile = await repo.get_profile(tenant_id)
     if profile is None:
@@ -109,7 +142,9 @@ async def _authorize(
     allowed: frozenset[OrganizationRole],
 ) -> tuple[Any, dict[str, Any], OrganizationRole]:
     tenant = _tenant(request)
-    profile = await _organization_or_404(tenant.tenant_id, repo)
+    profile = await repo.get_profile(tenant.tenant_id)
+    if profile is None:
+        profile = await _create_default_profile(tenant, repo)
     role = await _actor_role(tenant, profile, repo)
     if role not in allowed:
         raise ForbiddenError(f"Organization role '{role.value}' cannot perform this action")
@@ -301,9 +336,11 @@ async def change_organization_member_role(
             return APIResponse(data=_member_response(member)).to_dict()
         current_owner_id = profile.get("owner_user_id")
         current_owner = await repo.get_active_member_by_user(tenant.tenant_id, current_owner_id)
-        updated_target = await repo.update_member(tenant.tenant_id, member_id, {"role": "owner"})
+        # Session authority comes from the user record, so each role change
+        # writes the grant with the membership (see change_member_role).
+        updated_target = await change_member_role(repo, tenant.tenant_id, member, OrganizationRole.OWNER)
         if current_owner is not None:
-            await repo.update_member(tenant.tenant_id, current_owner["id"], {"role": "admin"})
+            await change_member_role(repo, tenant.tenant_id, current_owner, OrganizationRole.ADMIN)
         await repo.update_profile(tenant.tenant_id, {"owner_user_id": member["user_id"]})
         return APIResponse(data=_member_response(updated_target)).to_dict()
 
@@ -311,7 +348,7 @@ async def change_organization_member_role(
         raise ConflictError("The current owner must transfer ownership before changing this role")
     if body.role not in {OrganizationRole.ADMIN, OrganizationRole.MEMBER, OrganizationRole.VIEWER}:
         raise ForbiddenError("Invalid organization member role")
-    updated = await repo.update_member(tenant.tenant_id, member_id, {"role": target_role.value})
+    updated = await change_member_role(repo, tenant.tenant_id, member, target_role)
     return APIResponse(data=_member_response(updated)).to_dict()
 
 
@@ -326,6 +363,9 @@ async def remove_organization_member(request: Request, member_id: str) -> dict:
         raise ConflictError("The organization owner cannot be removed")
     if member.get("user_id") == getattr(tenant, "user_id", None):
         raise ConflictError("An administrator cannot remove their own membership")
+    # Revoke the session grant before the membership row, so a failure
+    # part-way never leaves a removed member with working access.
+    await sync_user_grants(tenant.tenant_id, member.get("user_id"), None)
     removed = await repo.remove_member(tenant.tenant_id, member_id)
     return APIResponse(data={"member_id": removed["member_id"], "removed": True}).to_dict()
 

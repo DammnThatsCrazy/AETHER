@@ -37,7 +37,10 @@ blocked by holds covering A (or unscoped holds), because re-packing removes
 only A's records and preserves every held subject's data.
 
 DSR erasure strategy (simplest correct approach, chosen deliberately):
-subject rows are removed from the row store per ``delete_behavior``, and each
+subject rows are removed from the row store per ``delete_behavior`` — except
+that a hash-chained Bronze row (``integrity_hash`` set, LEDGER M2) is always
+TOMBSTONED (payload + subject identifiers cleared, hashed identity fields and
+chain backlinks kept) so the tenant's truth chain still verifies — and each
 packed object containing the subject is HYDRATED, FILTERED, AND RE-PACKED
 without the subject's records (new descriptor, lineage → old descriptor;
 surviving rows re-pointed). The old object is always deleted. Re-pack runs
@@ -512,6 +515,9 @@ class StorageLifecycle:
             "status": "completed",
             "delete_behavior": policy.delete_behavior,
             "rows_removed": 0,
+            # Subset of rows_removed: hash-chained rows erased by tombstone
+            # (never hard-deleted — see the row-store step below).
+            "rows_tombstoned_chained": 0,
             "packed_records_removed": 0,
             "objects_repacked": 0,
             "objects_deleted": 0,
@@ -530,8 +536,23 @@ class StorageLifecycle:
                 if not subject_rows:
                     break
                 row_ids = [str(r.get("id")) for r in subject_rows]
+                # A hash-chained row (LEDGER M2 ``integrity_hash``) is NEVER
+                # hard-deleted, whatever the policy says: removing it would
+                # break its tenant's truth chain (the verifier would report
+                # the successor as broken and the chain as regressed). The
+                # chain hashes only the event identity + ``payload_hash``
+                # digest, so the chain-preserving erasure is a tombstone —
+                # payload and every subject identifier cleared, the hashed
+                # fields and backlinks kept — and verification still passes.
+                # Pre-cutover (unchained) rows follow the policy verbatim.
+                chained = [
+                    str(r.get("id")) for r in subject_rows if r.get("integrity_hash")
+                ]
+                unchained = [rid for rid in row_ids if rid not in set(chained)]
                 if policy.delete_behavior == "hard_delete":
-                    mutated = await self.rows.delete_rows(row_ids)
+                    tombstoned = await self.rows.tombstone_rows(chained)
+                    mutated = await self.rows.delete_rows(unchained) + tombstoned
+                    report["rows_tombstoned_chained"] += tombstoned
                 else:
                     mutated = await self.rows.tombstone_rows(row_ids)
                 report["rows_removed"] += mutated

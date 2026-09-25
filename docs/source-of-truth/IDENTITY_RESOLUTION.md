@@ -43,7 +43,7 @@ Each resolution cycle produces a `MergeDecision`:
 
 | Decision | Meaning |
 |----------|---------|
-| `create` | No existing entity found; create a new `canonical_entity_id`. |
+| `create` | No existing entity found; create a new `canonical_entity_id`. A first sighting is scored on the event's own signals (not the empty match set) and its aliases are linked so later events can match. |
 | `link` | Confident enough to associate alias with an existing entity without full merge. |
 | `merge` | Strong or deterministic evidence; merge two previously separate entities. |
 | `candidate` | Evidence exists but below merge threshold; enqueued as a conflict for operator review. |
@@ -123,7 +123,8 @@ Every resolution decision is annotated with a reason code for auditability:
 | `consent_blocks_link` | Consent absent or revoked for this link type. |
 | `cross_tenant_blocked` | Attempted cross-tenant resolution; hard block. |
 | `fingerprint_only_blocked` | Only fingerprint signals present; insufficient for link. |
-| `insufficient_evidence` | Combined signal weight below minimum threshold. |
+| `insufficient_evidence` | Combined signal weight of a match against an existing entity is below the minimum threshold (e.g. session-only). Never emitted for a first sighting. |
+| `authenticated_user_binding` | The event carries a `user_id` together with the `anonymous_id` that matched (identify, or any event after it), every candidate was reached through that `user_id`/`anonymous_id`, and no candidate holds a different `user_id` / `external_id` / verified wallet: deterministic merge of all candidates. A contradicted binding resolves to the event's own entity and opens a `conflicting_user_binding` conflict. |
 | `conflicting_alias` | Alias maps to two different entities; enqueued as conflict. |
 | `revoked_alias` | Alias was previously revoked; suppressed. |
 | `manual_operator_merge` | Operator-initiated merge via `/v1/identity/merge`. |
@@ -270,7 +271,12 @@ layer, not just the route layer.
 | Agent delegation link | Analytics consent |
 
 `consent_allows_link` / `consent_blocks_link` reason codes are stamped on
-every decision that involves a consent-gated signal type.
+every decision that involves a consent-gated signal type. Consent is read from
+both snapshot shapes: nested `{"purposes": {...}}` / `{"grants": {...}}` and
+the flat SDK `ConsentState` carried in `context.consent`
+(`{"analytics": true, ...}`); `analytics`, `identity` or `marketing` authorizes
+stitching. Consent-gated identifiers (email/phone hash, installation/browser id,
+fingerprint) are neither scored nor stored as aliases without it.
 
 ---
 

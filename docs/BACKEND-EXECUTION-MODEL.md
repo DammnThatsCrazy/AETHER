@@ -17,7 +17,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:b93f7e8775022ceb602e28f42df42e5f524a15c5d849e56643dfff21d7b039c5"
+  "services/backend/config/settings.py": "sha256:d32a4070ffe8f5e7834f9ec3d9334fc234b6359ee6956de865cbf2e7e0864221"
   "services/backend/main.py": "sha256:29c86cf3a10e85148b699b7c4be46143babf61a0c9b6738e5f68c032f6bad736"
   "services/backend/services/runtime/consumer_specs.py": "sha256:122f290376b080e67d990e6f3a8655addb000f72a9980896e49b9e6c43216266"
   "services/backend/services/runtime/roles.py": "sha256:9d1787f19ddc91d640098ff3e992b4cc1cfaf410bcc49c79e41ed3c5810dc48a"
@@ -101,10 +101,18 @@ Each subsystem binds an explicit backend, declared via env and surfaced on
 | `CACHE_BACKEND` | `memory` | Local convenience; `memory` rejected in production. |
 | `EVENT_BACKEND` | `sns_sqs` | e.g. `sns_sqs`, `kafka`. |
 | `GRAPH_BACKEND` | `postgres` | |
-| `ANALYTICS_BACKEND` | `postgres` | |
 | `OBJECT_BACKEND` | `s3` | |
 | `ML_MODE` | `inline` | `inline` or `remote`. |
 | `DEPLOYMENT_PROFILE` | `local` | Drives compose/helm wiring & ops tooling. |
+
+`ANALYTICS_BACKEND` (`postgres` | `clickhouse`) is a deployment-profile
+selector only, not a backend setting: Terraform uses it to gate the ClickHouse
+appliance and the `CLICKHOUSE_HOST` / `CLICKHOUSE_PORT` task environment, and
+the release profile tooling (`scripts/release/profile_doctor.py`,
+`scripts/release/check_profile_config.py`) checks it. The backend process does
+not read it: the analytics event store (`AnalyticsRepository`) is PostgreSQL
+in every profile, and ClickHouse is reached through `CLICKHOUSE_HOST`
+(`services/backend/shared/cis/clickhouse.py`).
 
 ## Ingestion event-outbox relay (FT-6)
 

@@ -200,3 +200,122 @@ async def test_owner_transfer_and_removal_safeguards(organization):
         await change_organization_member_role(
             request_for("owner-a"), target["id"], MemberRoleUpdate(role=OrganizationRole.VIEWER)
         )
+
+
+@pytest.mark.asyncio
+async def test_tenant_admin_first_use_creates_the_profile_so_invitations_work():
+    """Nothing else creates an organization profile, so without this every
+    organization route (invitations included) 404s for every tenant."""
+    admin = request_for("admin-b", role="admin", tenant_id="tenant-b")
+
+    invitation = await create_organization_invitation(
+        admin, InvitationCreateRequest(email="Advisor@Example.com", role="member")
+    )
+
+    profile = await OrganizationRepository().get_profile("tenant-b")
+    assert profile["owner_user_id"] == "admin-b"
+    assert invitation["data"]["email"] == "advisor@example.com"
+
+
+@pytest.mark.asyncio
+async def test_non_admin_cannot_create_a_missing_profile():
+    from shared.common.common import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        await get_organization_profile(request_for("viewer-c", role="viewer", tenant_id="tenant-c"))
+    assert await OrganizationRepository().get_profile("tenant-c") is None
+
+
+@pytest.mark.asyncio
+async def test_principal_less_admin_key_does_not_create_an_ownerless_profile():
+    """A legacy admin API key has no user; an ownerless organization could never
+    be repaired, so creation waits for a principal-backed admin."""
+    from shared.common.common import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        await get_organization_profile(request_for(None, role="admin", tenant_id="tenant-d"))
+    assert await OrganizationRepository().get_profile("tenant-d") is None
+
+
+@pytest.mark.asyncio
+async def test_role_change_and_removal_update_the_session_grant(organization):
+    """Human sessions take role, permissions and membership status from the
+    user record on every request, so membership changes must reach it."""
+    from repositories.repos import UserRepository
+
+    repo, _ = organization
+    users = UserRepository()
+    await users.insert("member-a", {
+        "user_id": "member-a", "tenant_id": "tenant-a", "role": "admin",
+        "permissions": ["read", "write", "ingest", "analytics", "billing", "admin"],
+        "membership_status": "active",
+    })
+    await users.insert("other-tenant-user", {
+        "user_id": "other-tenant-user", "tenant_id": "tenant-z", "role": "admin",
+        "permissions": ["admin"], "membership_status": "active",
+    })
+    member = await repo.add_member("tenant-a", user_id="member-a", role="admin")
+    foreign = await repo.add_member("tenant-a", user_id="other-tenant-user", role="admin")
+
+    await change_organization_member_role(
+        request_for("owner-a"), member["id"], MemberRoleUpdate(role=OrganizationRole.VIEWER)
+    )
+    user = await users.find_by_id("member-a")
+    assert (user["role"], user["permissions"], user["membership_status"]) == (
+        "viewer", ["read", "analytics"], "active"
+    )
+
+    await remove_organization_member(request_for("owner-a"), member["id"])
+    user = await users.find_by_id("member-a")
+    assert (user["permissions"], user["membership_status"]) == ([], "removed")
+
+    # A user record of another tenant is never rewritten from this one.
+    await remove_organization_member(request_for("owner-a"), foreign["id"])
+    assert (await users.find_by_id("other-tenant-user"))["permissions"] == ["admin"]
+
+
+@pytest.mark.asyncio
+async def test_ownership_transfer_grants_the_new_owner_admin(organization):
+    from repositories.repos import UserRepository
+
+    repo, _ = organization
+    users = UserRepository()
+    await users.insert("target-a", {
+        "user_id": "target-a", "tenant_id": "tenant-a", "role": "viewer",
+        "permissions": ["read", "analytics"], "membership_status": "active",
+    })
+    target = await repo.add_member("tenant-a", user_id="target-a", role="viewer")
+
+    await change_organization_member_role(
+        request_for("owner-a"), target["id"], MemberRoleUpdate(role=OrganizationRole.OWNER)
+    )
+    user = await users.find_by_id("target-a")
+    assert user["role"] == "admin" and "admin" in user["permissions"]
+
+
+@pytest.mark.asyncio
+async def test_failed_grant_write_rolls_back_a_promotion(organization, monkeypatch):
+    """A promotion must not leave a raised role behind when the grant write fails."""
+    from repositories.repos import UserRepository
+    from services.account_organization import grants
+
+    repo, _ = organization
+    users = UserRepository()
+    await users.insert("viewer-a", {
+        "user_id": "viewer-a", "tenant_id": "tenant-a", "role": "viewer",
+        "permissions": ["read", "analytics"], "membership_status": "active",
+    })
+    member = await repo.add_member("tenant-a", user_id="viewer-a", role="viewer")
+
+    async def failing_sync(*args, **kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(grants, "sync_user_grants", failing_sync)
+    with pytest.raises(RuntimeError):
+        await change_organization_member_role(
+            request_for("owner-a"), member["id"], MemberRoleUpdate(role=OrganizationRole.ADMIN)
+        )
+
+    assert (await repo.get_member("tenant-a", member["id"]))["role"] == "viewer"
+    user = await users.find_by_id("viewer-a")
+    assert (user["role"], user["permissions"]) == ("viewer", ["read", "analytics"])

@@ -13,8 +13,8 @@ source_files: [services/backend/services/campaign/exploration.py, services/backe
 source_hashes:
   "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
   "services/backend/services/campaign/routes.py": "sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e"
-  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:9380c757a0c5d3018317f4266dc8edff1df76176f74b1872b2dd2ac8aca4bb7f"
-  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:bcfca3569ea3cc408f3d4857ca0a3982b29c4f54fa974e886dba578f42c109a7"
+  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:b18112dc8b209e1b8630654c7891c0408f4f24bc702980cb03d45b5fc606a800"
+  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:7ce28680d047299ad11e38a2767b2f8dec878afce70203340d6e1286dea1c374"
   "services/backend/services/measurement/repositories/touchpoint_repo.py": "sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8"
   "services/backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
 ---
@@ -114,6 +114,19 @@ mediation type, AI provider/product, actor type, and journey role, and retains
 the classifier version and verification provenance used by the run. A repair
 creates a new classification revision and recomputed attribution run linked to
 the prior run; it does not mutate historical credit evidence in place.
+
+**Money in credit rollups.** `canonical_conversions` keeps the native amount
+and currency; `exchange_rate` is a real recorded rate (with
+`provenance.fx_conversion`), exactly `1.0` for same-currency rows, or **NULL**
+when no rate is known (unconverted). Attribution credits and runs carry revenue
+in the conversion's normalized currency (USD): `native × exchange_rate`, and
+NULL for an unconverted conversion. Campaign revenue totals, the cluster
+rollup, and referral rollups therefore sum a single currency; unconverted
+credits are excluded and counted in `unconverted_credit_count` (the summary's
+`data_quality` becomes `partial`). The canonical row for a dedup key is owned
+by the greatest `(authority_rank, occurred_at, source_event_id)` source record,
+so it does not depend on arrival order (Silver conversions are written through
+`ConversionRepository`, not the generic first-write-wins insert).
 
 ### Ad-platform source connect (WS-2, additive)
 

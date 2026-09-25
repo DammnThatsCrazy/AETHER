@@ -12,6 +12,8 @@ Profile 360 timeline. Covers:
 * the session rollup (first/last seen, event count);
 * the dashboard summary is computed from the store;
 * empty query results are never cached (a poll cannot stick on an empty read);
+* a newly recorded event retires the tenant's cached query results;
+* the GraphQL ``sessions`` root reads the tenant's session rollups;
 * the stream-ingestion-projection spec subscribes the recorder.
 
 Every behaviour runs against the in-memory backend. The PostgreSQL half runs the
@@ -21,6 +23,7 @@ test uses its own tenant ids, so a shared database needs no truncation.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -32,11 +35,13 @@ import pytest  # noqa: E402
 from repositories.repos import (  # noqa: E402
     AnalyticsRepository,
     analytics_event_record_id,
+    analytics_query_cache_pattern,
     analytics_session_record_id,
     canonical_utc_timestamp,
     reset_in_memory_stores,
 )
 from services.ingestion import workers  # noqa: E402
+from shared.cache.cache import CacheKey  # noqa: E402
 from shared.events.events import Event, Topic  # noqa: E402
 
 try:  # asyncpg ships with the backend runtime; guard so collection never fails.
@@ -353,6 +358,7 @@ async def test_session_rollup_tracks_first_last_and_count(repo):
     assert session["anonymous_id"] == anon
     assert session["user_id"] == "u-late"
     assert session["event_count"] == 3
+    assert session["page_views"] == 2  # the two ``page`` events; ``identify`` is not a view
     assert session["first_seen_at"] == "2026-03-01T10:00:00.000000Z"
     assert session["last_seen_at"] == "2026-03-01T10:09:00.000000Z"
 
@@ -417,12 +423,166 @@ async def test_empty_results_are_never_cached(repo):
     query = {"session_id": event.payload["session_id"], "limit": 1}
 
     assert await repo.query_events(tenant, query, limit=1) == []
-    assert repo.cache.sets == []  # the in-flight poll left nothing behind
+    assert _query_cache_sets(repo.cache, tenant) == []  # the in-flight poll left nothing behind
 
     await workers.analytics_event_recorder(event)
     rows = await repo.query_events(tenant, query, limit=1)
     assert [r["event_id"] for r in rows] == [event.payload["event_id"]]
-    assert len(repo.cache.sets) == 1
+    assert len(_query_cache_sets(repo.cache, tenant)) == 1
+
+
+def _query_cache_sets(cache: _DictCache, tenant: str) -> list:
+    """Cached ``query_events`` results written for ``tenant`` (the cache also
+    holds the tenant's query-generation token, which is not a result)."""
+    prefix = analytics_query_cache_pattern(tenant).rstrip("*")
+    return [key for key in cache.sets if key.startswith(prefix)]
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_new_event_is_visible_through_a_warm_query_cache(repo):
+    """A cached non-empty result must not hide an event recorded after it.
+
+    Before the fix the tenant's cached result was served for ``TTL.MEDIUM``
+    (5 minutes) after the projector recorded a newer matching event.
+    """
+    tenant = _tenant()
+    user = f"u-{uuid.uuid4().hex}"
+    first = _bus_event(tenant, user_id=user)
+    await workers.analytics_event_recorder(first)
+    warm = await repo.query_events(tenant, {"user_id": user}, limit=10)
+    assert [r["event_id"] for r in warm] == [first.payload["event_id"]]
+    # Served from cache: a warm hit writes nothing new.
+    sets_before = len(_query_cache_sets(repo.cache, tenant))
+    assert await repo.query_events(tenant, {"user_id": user}, limit=10) == warm
+    assert len(_query_cache_sets(repo.cache, tenant)) == sets_before
+
+    second = _bus_event(tenant, user_id=user)
+    await workers.analytics_event_recorder(second)
+    fresh = await repo.query_events(tenant, {"user_id": user}, limit=10)
+    assert {r["event_id"] for r in fresh} == {
+        first.payload["event_id"],
+        second.payload["event_id"],
+    }
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_redelivery_does_not_invalidate_the_query_cache(repo):
+    tenant = _tenant()
+    event = _bus_event(tenant)
+    await workers.analytics_event_recorder(event)
+    generation = await repo.cache.get_json(CacheKey.analytics_query_generation(tenant))
+    assert generation
+    await workers.analytics_event_recorder(event)  # SQS redelivery: nothing new
+    assert await repo.cache.get_json(CacheKey.analytics_query_generation(tenant)) == generation
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_recording_invalidates_only_the_recording_tenant(repo):
+    tenant_a, tenant_b = _tenant(), _tenant()
+    await workers.analytics_event_recorder(_bus_event(tenant_a))
+    event_b = _bus_event(tenant_b)
+    await workers.analytics_event_recorder(event_b)
+    query = {"session_id": event_b.payload["session_id"]}
+    assert len(await repo.query_events(tenant_b, query, limit=5)) == 1
+    generation_b = await repo.cache.get_json(CacheKey.analytics_query_generation(tenant_b))
+
+    await workers.analytics_event_recorder(_bus_event(tenant_a))
+    assert await repo.cache.get_json(CacheKey.analytics_query_generation(tenant_b)) == generation_b
+    sets_b = len(_query_cache_sets(repo.cache, tenant_b))
+    assert len(await repo.query_events(tenant_b, query, limit=5)) == 1
+    assert len(_query_cache_sets(repo.cache, tenant_b)) == sets_b  # still a cache hit
+
+
+async def test_concurrent_identical_misses_share_one_store_query(monkeypatch):
+    """After an invalidation, concurrent identical reads coalesce into one
+    store query instead of stampeding the event store."""
+    reset_in_memory_stores()
+    analytics = AnalyticsRepository(_DictCache())
+    tenant = _tenant()
+    await analytics.record_event("e1", {"tenant_id": tenant, "user_id": "u", "event_type": "page"})
+
+    calls = 0
+    real_query = analytics._events.query
+    gate = asyncio.Event()
+
+    async def _slow_query(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        await gate.wait()
+        return await real_query(*args, **kwargs)
+
+    monkeypatch.setattr(analytics._events, "query", _slow_query)
+    readers = [
+        asyncio.create_task(analytics.query_events(tenant, {"user_id": "u"}, limit=10))
+        for _ in range(8)
+    ]
+    await asyncio.sleep(0.01)
+    gate.set()
+    results = await asyncio.gather(*readers)
+    assert calls == 1
+    assert all([r["id"] for r in rows] == ["e1"] for rows in results)
+    # Each reader gets its own copy: mutating one result cannot leak into another.
+    results[0][0]["user_id"] = "mutated"
+    assert results[1][0]["user_id"] == "u"
+
+
+async def test_failed_store_query_propagates_to_every_waiter(monkeypatch):
+    reset_in_memory_stores()
+    analytics = AnalyticsRepository(_DictCache())
+    gate = asyncio.Event()
+
+    async def _failing_query(*args, **kwargs):
+        await gate.wait()
+        raise RuntimeError("store down")
+
+    monkeypatch.setattr(analytics._events, "query", _failing_query)
+    readers = [
+        asyncio.create_task(analytics.query_events("t", {"user_id": "u"}, limit=10))
+        for _ in range(3)
+    ]
+    await asyncio.sleep(0.01)
+    gate.set()
+    outcomes = await asyncio.gather(*readers, return_exceptions=True)
+    assert all(isinstance(o, RuntimeError) for o in outcomes)
+    assert analytics._inflight_queries == {}
+
+
+async def test_raw_record_event_invalidates_the_query_cache():
+    reset_in_memory_stores()
+    analytics = AnalyticsRepository(_DictCache())
+    tenant = _tenant()
+    await analytics.record_event("r1", {"tenant_id": tenant, "user_id": "u"})
+    assert len(await analytics.query_events(tenant, {"user_id": "u"}, limit=10)) == 1
+    await analytics.record_event("r2", {"tenant_id": tenant, "user_id": "u"})
+    assert len(await analytics.query_events(tenant, {"user_id": "u"}, limit=10)) == 2
+
+
+async def test_cache_failure_on_invalidation_does_not_fail_the_recording():
+    """The event row is committed before the generation bump; a cache outage
+    must not turn a recorded event into a retried/dead-lettered message."""
+    reset_in_memory_stores()
+
+    class _BrokenCache(_DictCache):
+        async def set_json(self, key, value, ttl=None):
+            raise ConnectionError("cache down")
+
+    analytics = AnalyticsRepository(_BrokenCache())
+    tenant = _tenant()
+    record = workers.build_analytics_event_record(
+        _bus_event(tenant).payload, tenant_id=tenant, event_id="e-cache-down"
+    )
+    assert await analytics.record_processed_event(record) is True
+    assert await analytics.get_event("e-cache-down", tenant_id=tenant)
+
+
+def test_projector_shares_the_process_query_cache(monkeypatch):
+    """The recorder must bump the generation in the cache the analytics routes
+    read through (the registry's), not a private client: with the in-memory
+    backend a private client would never invalidate the routes' cache."""
+    from dependencies.providers import get_registry
+
+    monkeypatch.setattr(workers, "_analytics_repository", None)
+    assert workers._analytics_repo().cache is get_registry().cache
 
 
 def test_invalid_time_bound_is_rejected():
@@ -461,3 +621,128 @@ def test_end_of_day_bound_on_the_last_representable_date():
     # ``+ 1 day`` overflowed here, so an accepted end_date of 9999-12-31 was a 500.
     assert canonical_utc_timestamp("9999-12-31", end_of_day=True) == "9999-12-31T23:59:59.999999Z"
     assert canonical_utc_timestamp("2026-05-01", end_of_day=True) == "2026-05-01T23:59:59.999999Z"
+
+
+# ── GraphQL ``sessions`` root ────────────────────────────────────────────
+
+
+def _graphql_request(tenant_id: str):
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.state.tenant.tenant_id = tenant_id
+    return req
+
+
+async def _graphql(repo, tenant_id: str, query: str, variables: dict | None = None) -> list:
+    from services.analytics.routes import GraphQLRequest, graphql_endpoint
+
+    body = GraphQLRequest(query=query, variables=variables or {})
+    response = await graphql_endpoint(body, _graphql_request(tenant_id), repo=repo)
+    [root] = response["data"]["data"].values()
+    return root
+
+
+_SESSIONS_QUERY = (
+    "{ sessions { session_id user_id anonymous_id first_seen_at last_seen_at "
+    "duration event_count page_views last_event_type } }"
+)
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_graphql_sessions_reads_the_tenant_session_rollups(repo):
+    """The ``sessions`` root used to return ``[]`` unconditionally."""
+    tenant = _tenant()
+    s1, s2 = f"s-{uuid.uuid4().hex}", f"s-{uuid.uuid4().hex}"
+    for ev in (
+        _bus_event(tenant, session_id=s1, user_id="alice", timestamp="2026-04-01T10:00:00Z"),
+        _bus_event(tenant, session_id=s1, user_id="alice", event_type="track",
+                   timestamp="2026-04-01T10:01:30Z"),
+        _bus_event(tenant, session_id=s1, user_id="alice", event_type="screen",
+                   timestamp="2026-04-01T10:02:00Z"),
+        _bus_event(tenant, session_id=s2, user_id=None, anonymous_id="anon-9",
+                   timestamp="2026-04-02T08:00:00Z"),
+    ):
+        await workers.analytics_event_recorder(ev)
+
+    rows = await _graphql(repo, tenant, _SESSIONS_QUERY)
+    # Most recently active first.
+    assert [r["session_id"] for r in rows] == [s2, s1]
+    by_id = {r["session_id"]: r for r in rows}
+    assert by_id[s1] == {
+        "session_id": s1,
+        "user_id": "alice",
+        "anonymous_id": by_id[s1]["anonymous_id"],
+        "first_seen_at": "2026-04-01T10:00:00.000000Z",
+        "last_seen_at": "2026-04-01T10:02:00.000000Z",
+        "duration": 120.0,
+        "event_count": 3,
+        "page_views": 2,  # the page and the screen view
+        "last_event_type": "screen",
+    }
+    assert by_id[s2]["user_id"] is None
+    assert by_id[s2]["anonymous_id"] == "anon-9"
+    assert by_id[s2]["duration"] == 0.0
+    assert by_id[s2]["event_count"] == 1
+
+    # Field selection projects only what was asked for.
+    assert await _graphql(repo, tenant, "{ sessions { session_id event_count } }",
+                          {"session_id": s1}) == [{"session_id": s1, "event_count": 3}]
+    # Filter variables narrow the rollups.
+    assert [r["session_id"] for r in await _graphql(
+        repo, tenant, _SESSIONS_QUERY, {"user_id": "alice"}
+    )] == [s1]
+    assert [r["session_id"] for r in await _graphql(
+        repo, tenant, _SESSIONS_QUERY, {"anonymous_id": "anon-9"}
+    )] == [s2]
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_graphql_sessions_is_tenant_scoped(repo):
+    tenant_a, tenant_b = _tenant(), _tenant()
+    event = _bus_event(tenant_a)
+    await workers.analytics_event_recorder(event)
+    session_id = event.payload["session_id"]
+
+    assert len(await _graphql(repo, tenant_a, _SESSIONS_QUERY)) == 1
+    assert await _graphql(repo, tenant_b, _SESSIONS_QUERY) == []
+    # A tenant_id variable can never widen the scope.
+    assert await _graphql(
+        repo, tenant_b, _SESSIONS_QUERY, {"tenant_id": tenant_a, "session_id": session_id}
+    ) == []
+    # Same SDK session id under another tenant is a separate rollup.
+    await workers.analytics_event_recorder(_bus_event(tenant_b, session_id=session_id))
+    [a_row] = await _graphql(repo, tenant_a, _SESSIONS_QUERY, {"session_id": session_id})
+    [b_row] = await _graphql(repo, tenant_b, _SESSIONS_QUERY, {"session_id": session_id})
+    assert a_row["event_count"] == b_row["event_count"] == 1
+    assert await repo.query_sessions("", {"session_id": session_id}) == []
+
+
+@pytest.mark.parametrize("repo", BACKENDS, indirect=True)
+async def test_graphql_sessions_ignores_fraud_session_rows(repo):
+    """The ``sessions`` table is shared with the fraud ``SessionRepository``;
+    only analytics rollups are served."""
+    from repositories.repos import SessionRepository
+
+    tenant = _tenant()
+    fraud = SessionRepository()
+    fraud._pool = repo._sessions._pool
+    await fraud.insert(f"fraud-{uuid.uuid4().hex}", {
+        "tenant_id": tenant, "session_id": "fraud-s", "ip": "198.51.100.1",
+        "last_seen_at": "2099-01-01T00:00:00.000000Z",
+    })
+    event = _bus_event(tenant)
+    await workers.analytics_event_recorder(event)
+    assert [r["session_id"] for r in await _graphql(repo, tenant, _SESSIONS_QUERY)] == [
+        event.payload["session_id"]
+    ]
+
+
+async def test_graphql_sessions_rejects_unrecorded_fields():
+    """Device attributes are never recorded (SDK context is not stored), so the
+    schema does not offer them instead of answering with nulls."""
+    from services.analytics.routes import _parse_and_validate_graphql
+    from shared.common.common import BadRequestError
+
+    with pytest.raises(BadRequestError):
+        _parse_and_validate_graphql("{ sessions { session_id device_type } }")

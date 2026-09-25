@@ -11,7 +11,6 @@ parallel behavioral suite completes.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -41,16 +40,12 @@ def _run_pytest(*paths: str, serial: bool = False) -> int:
         command.extend(["-n", "0"])
     print("+", " ".join(command), flush=True)
     # The backend test tree is a package so importlib mode can disambiguate
-    # repeated module names.  A few shared test factories are intentionally
-    # imported as top-level packages (for example, ``ai_economics``), so expose
-    # the test root explicitly while retaining the repository's environment.
-    env = os.environ.copy()
-    test_root = str((ROOT / BACKEND_TESTS).resolve())
-    existing_pythonpath = env.get("PYTHONPATH")
-    env["PYTHONPATH"] = os.pathsep.join(
-        path for path in (test_root, existing_pythonpath) if path
-    )
-    return subprocess.run(command, cwd=ROOT, env=env).returncode
+    # repeated module names. Suite helpers are imported relatively (``from
+    # .factories import ...``), so the test root is deliberately NOT put on
+    # PYTHONPATH: that would make the canonical run resolve bare suite imports
+    # (``from ai_economics.factories``) that fail in every direct pytest run
+    # (guarded by ``services/backend/tests/test_suite_import_paths.py``).
+    return subprocess.run(command, cwd=ROOT).returncode
 
 
 def main() -> int:

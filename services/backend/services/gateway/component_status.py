@@ -567,6 +567,9 @@ def _model_registry_signal() -> dict[str, Any]:
     if not models:
         return _signal(STATUS_DOWN, "canonical model registry resolved but declares no models")
 
+    if os.getenv("ML_SERVING_INLINE", "false").lower() == "true":
+        return _inline_serving_signal(models)
+
     serving_url = os.getenv("ML_SERVING_URL", "")
     if not serving_url:
         return _signal(
@@ -578,6 +581,61 @@ def _model_registry_signal() -> dict[str, Any]:
         STATUS_OK,
         f"{len(models)} models resolvable and serving endpoint configured",
         models=len(models),
+    )
+
+
+_INLINE_FRESHNESS_SLA_THRESHOLD = 0.10  # mirrors serving.src.api /ready
+
+
+def _inline_serving_signal(models: list) -> dict[str, Any]:
+    """Inline profiles (staging, demo, production-lean) serve predictions
+    in-process, so there is no ML_SERVING_URL. Report what the inline server's
+    own readiness probe would: required models loaded (staging/production) and
+    the freshness SLA — never merely that the package imports."""
+    try:
+        from serving.src import api as inline
+    except Exception as exc:
+        return _signal(
+            STATUS_DEGRADED,
+            f"{len(models)} models resolvable but inline ML serving is not importable: "
+            f"{type(exc).__name__}",
+            models=len(models),
+        )
+    try:
+        loaded = list(inline.server.loaded_models())
+    except Exception as exc:
+        return _signal(STATUS_UNKNOWN, f"inline model state unreadable: {type(exc).__name__}")
+
+    missing: list[str] = []
+    if os.getenv("AETHER_ENV", "local").lower() in ("staging", "production"):
+        try:
+            from common.model_registry import list_serving_models
+
+            missing = [
+                m.model_id for m in list_serving_models()
+                if m.fail_closed_required and m.artifact_required and m.model_id not in loaded
+            ]
+        except Exception as exc:
+            return _signal(STATUS_UNKNOWN, f"serving model registry unreadable: {type(exc).__name__}")
+    if missing:
+        return _signal(
+            STATUS_DEGRADED,
+            f"inline serving: required models not loaded: {sorted(missing)}",
+            models=len(models), loaded=len(loaded),
+        )
+
+    tracker = getattr(inline, "_freshness_tracker", None)
+    violation_rate = float(tracker.get_violation_rate()) if tracker is not None else 0.0
+    if violation_rate >= _INLINE_FRESHNESS_SLA_THRESHOLD:
+        return _signal(
+            STATUS_DEGRADED,
+            f"inline serving: freshness SLA violation rate {violation_rate:.1%}",
+            models=len(models), loaded=len(loaded),
+        )
+    return _signal(
+        STATUS_OK,
+        f"{len(models)} models resolvable; {len(loaded)} loaded and served inline",
+        models=len(models), loaded=len(loaded),
     )
 
 

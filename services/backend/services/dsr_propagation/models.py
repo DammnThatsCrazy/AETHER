@@ -35,7 +35,13 @@ DSR_TYPES: tuple[str, ...] = (
 # component in this exact order so status() output is deterministic. New
 # components are appended: ``analytics_events`` (the analytics ``events`` rows
 # and ``sessions`` rollups written by the ``analytics_event_recorder`` stream
-# projector) is the newest tail member.
+# projector), then ``silver_facts`` (every Silver fact table, erased through the
+# Silver writer's introspected schemas) and ``bronze_events`` (the hash-chained
+# ``bronze_sdk_events`` tier + ``event_outbox``, erased by chain-preserving
+# tombstone) — the newest tail members. Every component is executed by the
+# ``consent.erasure`` job (services/consent/erasure_jobs.py +
+# erasure_planes.py); scripts/release/check_dsr_coverage.py fails CI when one
+# is not.
 DSRComponent = Literal[
     "identity_aliases",
     "identity_subjects",
@@ -68,6 +74,8 @@ DSRComponent = Literal[
     "populations",
     "location_facts",
     "analytics_events",
+    "silver_facts",
+    "bronze_events",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -101,6 +109,8 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "populations",
     "location_facts",
     "analytics_events",
+    "silver_facts",
+    "bronze_events",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

@@ -24,7 +24,10 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-from services.measurement.repositories.conversion_repo import ConversionRepository
+from services.measurement.repositories.conversion_repo import (
+    ConversionRepository,
+    normalized_money,
+)
 
 logger = logging.getLogger("aether.measurement.subscription_ltv")
 
@@ -191,9 +194,10 @@ class SubscriptionLTVService:
             tenant_id, acquisition_conv["conversion_id"]
         )
 
-        eligible_revenue = _to_decimal(
-            renewal.get("net_value") or renewal.get("gross_value") or "0"
-        ) or Decimal("0")
+        # Normalized-currency revenue (native * recorded exchange_rate); None
+        # when the renewal is unconverted (no known FX rate) -- its credits then
+        # carry no revenue rather than the native amount read as USD.
+        eligible_revenue = _normalized_renewal_revenue(renewal)
 
         run_id = str(uuid4())
         run = await self._run_repo.create_run({
@@ -204,8 +208,8 @@ class SubscriptionLTVService:
             "model_version": "1.0",
             "code_version": "1.0",
             "status": "running",
-            "currency": renewal.get("currency", "USD"),
-            "eligible_revenue": str(eligible_revenue),
+            "currency": str(renewal.get("normalized_currency") or "USD").upper(),
+            "eligible_revenue": _str_or_none(eligible_revenue),
             "trigger_reason": "subscription_renewal",
             "started_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -233,8 +237,8 @@ class SubscriptionLTVService:
                 "source": src_credit.get("source"),
                 "credit_weight": str(weight),
                 "attributed_conversion_count": str(weight),
-                "attributed_gross_revenue": str(weight * eligible_revenue),
-                "attributed_net_revenue": str(weight * eligible_revenue),
+                "attributed_gross_revenue": _scaled(weight, eligible_revenue),
+                "attributed_net_revenue": _scaled(weight, eligible_revenue),
                 "explanation": (
                     f"subscription_renewal: inherited from acquisition run "
                     f"{acquisition_run.get('attribution_run_id')} "
@@ -404,11 +408,8 @@ class SubscriptionLTVService:
             "model_version": "1.0",
             "code_version": "1.0",
             "status": "running",
-            "currency": renewal.get("currency", "USD"),
-            "eligible_revenue": str(
-                _to_decimal(renewal.get("net_value") or renewal.get("gross_value") or "0")
-                or Decimal("0")
-            ),
+            "currency": str(renewal.get("normalized_currency") or "USD").upper(),
+            "eligible_revenue": _str_or_none(_normalized_renewal_revenue(renewal)),
             "trigger_reason": f"subscription_renewal:{reason}",
             "started_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -439,3 +440,23 @@ def _to_decimal(value: Any) -> Optional[Decimal]:
         return Decimal(str(value))
     except Exception:
         return None
+
+
+def _normalized_renewal_revenue(renewal: dict[str, Any]) -> Optional[Decimal]:
+    """Renewal net (else gross) revenue in its normalized currency.
+
+    ``Decimal("0")`` when no amount is recorded (historical behavior); None when
+    the renewal is unconverted (foreign currency with no known FX rate).
+    """
+    field = "net_value" if renewal.get("net_value") else "gross_value"
+    if renewal.get(field) in (None, ""):
+        return Decimal("0")
+    return normalized_money(renewal, field)
+
+
+def _str_or_none(value: Optional[Decimal]) -> Optional[str]:
+    return None if value is None else str(value)
+
+
+def _scaled(weight: Decimal, amount: Optional[Decimal]) -> Optional[str]:
+    return None if amount is None else str(weight * amount)

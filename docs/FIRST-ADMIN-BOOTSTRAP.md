@@ -17,15 +17,18 @@ source_files:
   - .github/workflows/terraform-promote.yml
   - scripts/release/bootstrap_staging_admin_key.py
   - scripts/release/check_staging_runtime_iam.py
+reviewed_source_commits:
+  - commit: "f63d631"
+    reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
-  ".github/workflows/staging-lifecycle.yml": "sha256:0cca221c0d5746517c1d2581014926eb0f905c739b42d680b3e4cdaac37b2f82"
+  ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:ca2a52de871d72661439c932674799164c893d893be54a3fffaf40e377a855a1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "services/backend/repositories/repos.py": "sha256:b7cf53497f7ee6cfd604cd5abbe1e64cce6f13661c1e9db922357f386a455682"
-  "services/backend/services/auth/routes.py": "sha256:716020d7f01cd1309b397cb71acd3667f30b78bd7e2eebf39dd6cd90643425f5"
+  "services/backend/repositories/repos.py": "sha256:2555cbee6fe1d8a93c02e2b8c0b4d5cc8a0e041b248f7aa02f915bb112af4e20"
+  "services/backend/services/auth/routes.py": "sha256:24cf712702e8344f130a9327046025b8fffcb57de4ddbea867b5ad9248db3055"
 ---
 
 # AETHER first-admin bootstrap
@@ -62,6 +65,14 @@ hash. The durable marker binds the tenant and key hash to the request, making
 an identical retry safe after a lost HTTP response while rejecting a different
 key or request. A token-protected status read prevents overwriting an already
 claimed credential.
+
+The bootstrap tenant is the platform's own administrative tenant, so in
+staging it is a **platform operator** (top plan, no burst limit, quota metering
+or extraction budget; see [Access Control](ACCESS-CONTROL.md#platform-operators)).
+Signing in to `app.staging` through Auth0 with the bootstrap email, verified by
+the identity provider, links that Auth0 identity to the admin user and lands in
+this tenant. Teammates and advisors are invited from it with
+`POST /v1/account/organization/invitations`; their first Auth0 sign-in joins it.
 
 ## Automated lifecycle
 

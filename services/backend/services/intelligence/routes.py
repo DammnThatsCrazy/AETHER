@@ -2072,8 +2072,9 @@ async def _query_silver(
     helper.
     """
     try:
+        from dependencies.providers import get_cache
         from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
+        repo = AnalyticsRepository(get_cache())
         filters: dict = {"tenant_id": tenant_id}
         if entity_id:
             filters["user_id"] = entity_id

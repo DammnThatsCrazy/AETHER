@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:a198e60dd31fe28a9da5f2177504d6aeab2a76e756e18e6f732b0ae14b8ead70"
+  "services/backend/services/": "sha256:cf8f0c99bda35a3bd7a7b5cf6aa6a61417acd4def073fa76f02f198d4b751b2f"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -145,7 +145,7 @@ signature-verification failures.
 | `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key |
 | `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost |
 | `/v1/auth/login` | POST | Email + password → API key (creates a new key per login) |
-| `/v1/auth/sso/callback` | POST | Auth0 JWT → API key (SSO finish) |
+| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off). An unlinked sign-in first links a verified email to its existing user or accepts a pending organization invitation; staging never self-provisions a tenant (see [Access Control](ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
 | `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
@@ -826,7 +826,10 @@ Optional `start_at` (inclusive), `end_at` (exclusive), `campaign_id`,
 filters constrain the rollup; `limit` is bounded to 1–1000. The response
 includes the applied filters, grouped rows, and attributed conversion, gross
 revenue, net revenue, and contribution-value totals. It does not recompute or
-mutate attribution history.
+mutate attribution history. Credit revenue is in the conversion's normalized
+currency (USD: native amount × the conversion's recorded `exchange_rate`); a
+conversion whose currency has no known FX rate is attributed with null revenue
+and excluded from the revenue totals rather than counted 1:1.
 
 **Legacy SourceInfo response shape remains compatible:**
 ```json
@@ -1511,9 +1514,10 @@ authenticated tenant.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). `limit` 1–200 (default 50). Non-empty results are cached for 5 minutes; an empty result is never cached. |
+| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). `limit` 1–200 (default 50). Non-empty results are cached for up to 5 minutes, but every newly recorded event in the tenant retires the tenant's cached results, so a new event is visible on the next read; an empty result is never cached. |
 | GET | `/v1/analytics/events/{event_id}` | One processed event by its SDK event id |
 | GET | `/v1/analytics/dashboard/summary` | Last 24h, computed from the store: `total_events`, `total_sessions`, `unique_users` (distinct `user_id`, else `anonymous_id`), `top_event_types` (up to 10 `{event_type, count}`) |
+| POST | `/v1/analytics/graphql` | Field-selected reads (introspection disabled; up to 50 rows). `events` reads the event store (variables `event_type`, `session_id`, `user_id`). `sessions` reads the per-session rollups the projector maintains, most recently active first (variables `session_id`, `user_id`, `anonymous_id`; fields `session_id`, `user_id`, `anonymous_id`, `first_seen_at`, `last_seen_at`, `duration` in seconds, `event_count`, `page_views` (`page` and `screen` events), `last_event_type`). Device attributes are not offered because SDK `context` is never stored. `campaigns` reads the tenant's campaigns. |
 
 Recorded events carry identifiers, event type/family, canonical UTC
 `occurred_at` / `received_at`, schema version and a scalar, PII-filtered
@@ -1532,7 +1536,26 @@ rebuilding their journeys, so the rebuilt journey no longer contains the
 erased activity. The analytics projector skips any queued or redelivered event
 that an erasure submitted at or after its receipt covers, so broker retries
 cannot write erased events back; activity received after the request is
-recorded normally.
+recorded normally. The check reads per-identifier erasure markers that the DSR
+submission records before it stores the request, so every stored erasure
+request has its markers (keyed by a digest of tenant and identifier, holding only the
+latest submission time; advanced atomically, never rewound), so it costs one
+keyed query per event. Erasure requests submitted before markers existed are
+backfilled once per deployment before the first fenced write. Deleting a
+tenant removes its markers but first writes a retained tenant-level fence
+(tenant digest and time only), so an event still queued or redelivered for a
+deleted tenant is never projected.
+
+The same job executes every other DSR propagation component: identity aliases,
+subjects and graph edges; Profile 360 snapshots; Gold feature rows; ML
+training/model assessments; the prediction cache; export and audit-export
+artifacts; tenant view caches; replay envelopes; connector-derived identities;
+derivatives P&L snapshots; Silver facts; and the hash-chained Bronze tier.
+Bronze rows are erased by chain-preserving tombstone. Reward eligibility
+decisions are retained under legal retention (`skipped_legal_hold`). No step
+is left `pending`, so the request's `overall` becomes `completed`, or
+`requires_manual_review` when an indexed offline ML artifact embeds the
+subject. See `docs/privacy/dsr-erasure-coverage.md`.
 
 ---
 
@@ -1552,7 +1575,7 @@ Core identity resolution and entity management endpoints.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence |
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. A first sighting returns `create`; a `user_id` sent with a matching `anonymous_id` merges deterministically (`authenticated_user_binding`) unless a candidate holds a different user_id (conflict) |
 | GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
@@ -3307,9 +3330,11 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
 - Existing audited remediation: `POST /v1/comms/admin/state/rebuild`,
   `/graph/reproject`, `/dsr/erase`. The durable `/dsr/erase` remediation
   propagates across every subject-data plane — measurement/attribution, mobile
-  (continuations, installations, client-sync), and the semantic-intelligence
-  plane (observations, sentiment, Gold aggregate state, review queue) — marking
-  each `dsr_propagation` component with its own erased-row receipt.
+  (continuations, installations, client-sync), the semantic-intelligence
+  plane (observations, sentiment, Gold aggregate state, review queue), and
+  every other `DSR_COMPONENTS` entry (identity, graph, Profile 360, features,
+  exports, caches, replay, connectors, financial snapshots, Silver, Bronze) —
+  marking each `dsr_propagation` component with its own receipt.
 
 Provider readiness is truthful: without a credential a provider reports
 `credential_missing`, is never marked connected, and the certification harness

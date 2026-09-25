@@ -23,7 +23,7 @@ from services.silver.projectors.ai_invocation_projector import (  # noqa: E402
     project_ai_invocation_event,
     write_execution_fact,
 )
-from ai_economics.factories import (  # noqa: E402
+from .factories import (  # noqa: E402
     bronze_event,
     make_observed,
     new_tenant,

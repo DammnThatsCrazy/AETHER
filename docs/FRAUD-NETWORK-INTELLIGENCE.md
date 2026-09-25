@@ -12,8 +12,10 @@ source_files:
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; fraud-network behavior and contracts are unaffected."
+  - commit: "f63d631"
+    reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/backend/repositories/repos.py": "sha256:b7cf53497f7ee6cfd604cd5abbe1e64cce6f13661c1e9db922357f386a455682"
+  "services/backend/repositories/repos.py": "sha256:2555cbee6fe1d8a93c02e2b8c0b4d5cc8a0e041b248f7aa02f915bb112af4e20"
   "services/backend/services/fraud_networks/": "sha256:9c7f503deb4644cf1c70768b9286e147a0ecd22a4d34951b91abfc2036ce06f4"
 ---
 

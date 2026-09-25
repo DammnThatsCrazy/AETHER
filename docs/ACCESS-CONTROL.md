@@ -49,6 +49,61 @@ processing, evidence-pack generation, and break-glass approve/deny/revoke)
 additionally require the `admin` permission, so a read-only `kyber:operator`
 token cannot perform privileged actions.
 
+## Platform operators
+
+Olympus staff and invited advisors run the platform; they are not billed
+customers. A **platform operator** tenant resolves to the top plan (`omega`,
+every service) and bypasses the customer controls in the request middleware:
+the per-plan burst rate limit, the monthly quota and its overage metering, and
+the ML extraction-defense budget. Each such request increments
+`platform_operator_request_total`. External tenants keep every control.
+
+A tenant is an operator only through a signal it cannot grant itself:
+`PLATFORM_OPERATOR_TENANT_IDS`, set per environment, or, in staging, the tenant
+bound by the single-use first-admin bootstrap
+(`shared/auth/platform_operator.py`). This does **not** grant Kyber access, which
+stays behind `KYBER_OPERATOR_TENANT_IDS` and the operator permission above.
+
+## Staging sign-in (internal only)
+
+Staging is for Olympus staff and invited advisors. An Auth0 sign-in there never
+provisions a new tenant (`SSO_SELF_SIGNUP_ENABLED` defaults to `false` when
+`AETHER_ENV=staging`). A sign-in whose `sub` is not yet linked succeeds only
+when its identity-provider-verified email:
+
+1. matches an existing active user with no Auth0 link (for example the staging
+   first-admin user), which is then linked; or
+2. has an unexpired pending organization invitation, which is accepted: the
+   person joins the inviting tenant with the invited role.
+
+Anything else gets `403` ("Sign-in is by invitation only"). The browser sends an
+access token for the Aether API audience, which carries no email claims, so the
+backend reads the verified email from Auth0 `/userinfo` with that token (and
+rejects a userinfo subject that differs from the token's). Accepting an
+invitation is an atomic pending-to-accepted claim of an invitation that is still
+unexpired at that moment, made **before** any access is provisioned, so a
+revoked, expired or already-claimed invitation grants nothing, and every
+sign-in for one Auth0 identity converges on one principal. The membership and
+then the user are written after the claim; if a sign-in fails in between, the
+same identity's next sign-in finishes the provisioning, unless an
+administrator removed that member after the claim. A human session takes its
+role, permissions and membership status from the user record on every
+request, so changing a member's organization role (`PATCH
+/v1/account/organization/members/{member_id}/role`) rewrites that user's grant
+(owner/admin → `admin`, member → `editor`, viewer → `viewer`), and removing a
+member revokes it (no permissions, `membership_status=removed`) before the
+membership row changes. The privilege-raising write always goes last: a
+demotion lowers the grant first, and a promotion raises the membership first,
+then the grant, restoring the membership role if the grant write fails. A
+removed member keeps its Auth0 link but is let back in only by a fresh
+invitation, which its next sign-in accepts under the same principal; without
+one the sign-in is denied and never self-provisions a second user. A tenant
+admin's first organization request (with a user principal; a bare admin API key
+does not qualify) creates the organization profile, owned by that admin, so the
+operator tenant can invite teammates via
+`POST /v1/account/organization/invitations`. Other environments keep self-serve
+Auth0 sign-up.
+
 ## Tenant vs Kyber visibility
 
 Tenants resolve only their own grants via `GET /v1/security/me/permissions`.

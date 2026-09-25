@@ -12,8 +12,8 @@ toc_depth: 2
 source_files: [services/backend/services/campaign/exploration.py, services/backend/services/measurement/repositories/attribution_run_repo.py, services/backend/services/measurement/engine/attribution_engine.py, services/backend/services/traffic/repair.py]
 source_hashes:
   "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/backend/services/measurement/engine/attribution_engine.py": "sha256:7e57d5a7d4c499a7e0e5ee05b4380905c7d31d3040398fe3bb2c9414e2e84b50"
-  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:9380c757a0c5d3018317f4266dc8edff1df76176f74b1872b2dd2ac8aca4bb7f"
+  "services/backend/services/measurement/engine/attribution_engine.py": "sha256:4313b0cf1b53ece978b4fcbb1ec2efa833602e415b3a26e60072021b950051d2"
+  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:b18112dc8b209e1b8630654c7891c0408f4f24bc702980cb03d45b5fc606a800"
   "services/backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
 ---
 
@@ -30,6 +30,13 @@ The Attribution Studio page shows a run in `failed` status for this campaign.
 The last attribution run for this campaign did not complete successfully. Revenue
 and ROAS figures in Campaign 360 will be based on the last successful run
 (possibly days old) or will be zero if no run has ever succeeded.
+
+A run is **not** failed when its `eligible_revenue` is null: run and credit
+revenue are in the conversion's normalized currency (USD, `native ×
+exchange_rate`), and a foreign-currency conversion with no known FX rate is
+attributed with null revenue (credits still carry weights and conversion
+counts). Those credits are excluded from revenue totals and reported as
+`unconverted_credit_count`; fix the missing rate source, not the run.
 
 ## Diagnosis steps
 

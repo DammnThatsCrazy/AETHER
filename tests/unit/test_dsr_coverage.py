@@ -90,3 +90,21 @@ def test_missing_analytics_component_fails(monkeypatch):
         gate, "_dsr_components", lambda root: original(root) - {"analytics_events"}
     )
     assert gate.run(ROOT) != 0
+
+
+def test_every_dsr_component_is_executed_by_the_erasure_job():
+    """No registry component may be seeded pending yet referenced by no
+    executor (the completeness gap the DSR-completeness program closed)."""
+    components = gate._dsr_components(ROOT)
+    assert components <= gate._handler_marked_components(ROOT)
+    assert {"silver_facts", "bronze_events", "identity_aliases", "feature_rows"} <= components
+
+
+def test_unexecuted_component_fails(monkeypatch):
+    # A component present in DSR_COMPONENTS that the handler never references
+    # (e.g. a new store appended without an executor) must fail the gate.
+    original = gate._dsr_components
+    monkeypatch.setattr(
+        gate, "_dsr_components", lambda root: original(root) | {"unwired_store_component"}
+    )
+    assert gate.run(ROOT) != 0

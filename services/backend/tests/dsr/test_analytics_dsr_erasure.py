@@ -166,13 +166,16 @@ async def test_erase_subject_is_tenant_scoped_and_spares_other_users(repo):
     other_1 = await _record(repo, tenant_a, session_id=s_other, user_id=other)
     shared_subj = await _record(repo, tenant_a, session_id=s_shared, user_id=subject,
                                 ts="2026-05-01T09:00:00Z")
+    await _record(repo, tenant_a, session_id=s_shared, user_id=subject,
+                  ts="2026-05-01T09:30:00Z", event_type="track")
     shared_other = await _record(repo, tenant_a, session_id=s_shared, user_id=other,
                                  ts="2026-05-01T11:00:00Z")
+    assert (await _session(repo, tenant_a, s_shared))["page_views"] == 2
     # The SAME user_id in another tenant is a different data subject's scope.
     b_event = await _record(repo, tenant_b, session_id=s_b, user_id=subject)
 
     result = await repo.erase_subject(tenant_a, subject)
-    assert result == {"events_deleted": 3, "sessions_deleted": 1, "sessions_recomputed": 1}
+    assert result == {"events_deleted": 4, "sessions_deleted": 1, "sessions_recomputed": 1}
     assert not {subj_1, subj_2, shared_subj} & await _event_ids(repo, tenant_a)
 
     # Subject's own session rollup is gone.
@@ -186,6 +189,7 @@ async def test_erase_subject_is_tenant_scoped_and_spares_other_users(repo):
     shared = await _session(repo, tenant_a, s_shared)
     assert shared["user_id"] == other
     assert shared["event_count"] == 1
+    assert shared["page_views"] == 1  # only the other user's page view remains
     assert shared["first_seen_at"] == shared["last_seen_at"] == "2026-05-01T11:00:00.000000Z"
     # Tenant B's rows for the same user_id are untouched.
     assert await _event_ids(repo, tenant_b, user_id=subject) == {b_event}
@@ -306,9 +310,14 @@ async def test_dsr_erasure_job_erases_analytics_and_marks_step(job_env):
     # Warm the query cache with the subject's events: without invalidation the
     # same query would keep serving them from cache after the rows are gone.
     assert len(await repo.query_events(TENANT, {"user_id": USER}, limit=10)) == 2
+    generation_key = CacheKey.analytics_query_generation(TENANT)
+    generation = await job_env.get_json(generation_key)
+    assert generation  # recording the events issued a query-cache generation
     cache_key = CacheKey.analytics_query(
         TENANT,
-        CacheKey.hash_query(f"{sorted({'user_id': USER}.items())}|from=None|to=None|limit=10"),
+        CacheKey.hash_query(
+            f"{sorted({'user_id': USER}.items())}|from=None|to=None|limit=10|gen={generation}"
+        ),
     )
     assert await job_env.get_json(cache_key)
 
@@ -331,6 +340,9 @@ async def test_dsr_erasure_job_erases_analytics_and_marks_step(job_env):
     assert await _session(repo, TENANT, s_subject) is None
     assert await _event_ids(repo, TENANT) == {kept}
     assert await job_env.get_json(cache_key) is None  # tenant cache dropped
+    # ...and its generation retired, so a read that raced the erasure and
+    # re-cached under the old generation is never served again.
+    assert await job_env.get_json(generation_key) not in (None, generation)
     # Another tenant's rows for the same user_id are untouched.
     assert await _event_ids(repo, "tenant-other", user_id=USER) == {other_tenant}
     assert len(await repo.query_events("tenant-other", {"user_id": USER}, limit=10)) == 1
@@ -356,10 +368,14 @@ async def test_analytics_plane_failure_marks_component_failed_and_retries(job_en
     assert step["status"] == "failed"
 
 
-def test_registered_component_is_the_tail_member():
+def test_registered_component_precedes_the_completeness_tail():
     from services.dsr_propagation.models import DSR_COMPONENTS
 
-    assert DSR_COMPONENTS[-1] == ANALYTICS_EVENTS_COMPONENT
+    # ``analytics_events`` was the tail member until the DSR-completeness
+    # program appended ``silver_facts`` and ``bronze_events`` after it.
+    assert DSR_COMPONENTS[-3:] == (
+        ANALYTICS_EVENTS_COMPONENT, "silver_facts", "bronze_events",
+    )
 
 
 # ── 4. Retried erasure keeps the committed receipt ─────────────────────────────
@@ -410,12 +426,11 @@ async def test_cache_failure_retry_keeps_the_committed_erasure_receipt(job_env, 
 
 
 async def _dsr_record(tenant_id: str, *, submitted_at: str, user_id=USER, anonymous_id=None):
-    dsr_id = str(uuid.uuid4())
-    await ConsentRepository().insert(f"dsr_{dsr_id}", {
-        "tenant_id": tenant_id, "dsr_id": dsr_id, "user_id": user_id,
-        "anonymous_id": anonymous_id, "request_type": "erasure",
-        "status": "completed", "submitted_at": submitted_at,
-    })
+    from services.consent.erasure_fence import record_erasure_markers
+
+    await record_erasure_markers(
+        tenant_id, user_id=user_id, anonymous_id=anonymous_id, submitted_at=submitted_at,
+    )
 
 
 def _validated(tenant_id: str, *, received_at: str, user_id=None, anonymous_id=None) -> Event:
@@ -476,3 +491,133 @@ async def test_activity_after_the_erasure_and_other_subjects_are_recorded(record
     assert await _event_ids(recorder_repo, tenant) == {
         later.payload["event_id"], other.payload["event_id"]
     }
+
+
+async def test_erasure_submission_records_markers_without_the_identifier(job_env):
+    from services.consent.erasure_fence import ErasureMarkerRepository, erasure_marker_id
+
+    await _submit(TENANT, anonymous_id="anon-subject")
+
+    repo = ErasureMarkerRepository()
+    for kind, identifier in (("user_id", USER), ("anonymous_id", "anon-subject")):
+        marker = await repo.find_by_id(erasure_marker_id(TENANT, kind, identifier))
+        assert marker is not None and marker["tenant_id"] == TENANT
+        assert identifier not in str(marker)
+
+
+async def test_marker_is_written_before_the_erasure_request(job_env, monkeypatch):
+    """The one-time backfill never revisits, so no crash may leave a stored
+    erasure request without its marker: the marker is written first."""
+    from services.consent import routes as consent_routes
+    from services.consent.erasure_fence import ErasureMarkerRepository, erasure_marker_id
+
+    monkeypatch.setattr(
+        consent_routes._repo, "insert", AsyncMock(side_effect=RuntimeError("process died")),
+    )
+    with pytest.raises(RuntimeError):
+        await _submit(TENANT)
+
+    marker = await ErasureMarkerRepository().find_by_id(erasure_marker_id(TENANT, "user_id", USER))
+    assert marker is not None and marker["submitted_at"]
+
+
+async def test_fence_is_one_keyed_query():
+    """The fence runs for every projected event, so it must not scan: one
+    keyed read covers the tenant fence and both subject markers."""
+    from services.consent.erasure_fence import erasure_fences_event, tenant_fence_id
+
+    class _Repo:
+        def __init__(self) -> None:
+            self.lookups: list[list[str]] = []
+
+        async def find_by_id(self, _id):
+            assert _id == "dsrm_backfill_v1"
+            return {"id": _id}  # backfill already recorded
+
+        async def lookup(self, ids):
+            self.lookups.append(list(ids))
+            return {}
+
+        async def find_many(self, *args, **kwargs):  # pragma: no cover - must not be called
+            raise AssertionError("the fence must not scan")
+
+    repo = _Repo()
+    assert await erasure_fences_event(
+        TENANT, user_id=USER, anonymous_id="anon", received_at="2026-05-01T00:00:00Z", repo=repo,
+    ) is False
+    assert len(repo.lookups) == 1 and len(repo.lookups[0]) == 3
+    assert repo.lookups[0][0] == tenant_fence_id(TENANT)
+
+
+async def test_deleted_tenant_is_fenced_after_its_markers_are_gone(job_env):
+    """Account deletion removes the subject markers; a queued event for the
+    deleted tenant must still not be projected."""
+    from services.consent.erasure_fence import (
+        ErasureMarkerRepository,
+        erasure_fences_event,
+        record_tenant_erasure_fence,
+    )
+
+    tenant = _uid("t")
+    await record_tenant_erasure_fence(tenant)
+    await ErasureMarkerRepository().delete_by_entity("tenant_id", tenant)
+
+    for kwargs in ({"user_id": USER, "anonymous_id": None}, {"user_id": None, "anonymous_id": None}):
+        assert await erasure_fences_event(
+            tenant, received_at="2026-05-01T10:00:00Z", **kwargs,
+        ) is True
+    assert await erasure_fences_event(
+        _uid("t"), user_id=USER, anonymous_id=None, received_at="2026-05-01T10:00:00Z",
+    ) is False
+
+
+async def test_later_erasure_advances_the_marker():
+    from services.consent.erasure_fence import erasure_fences_event
+
+    tenant = _uid("t")
+    await _dsr_record(tenant, submitted_at="2026-05-02T00:00:00+00:00")
+    await _dsr_record(tenant, submitted_at="2026-05-04T00:00:00+00:00")
+    await _dsr_record(tenant, submitted_at="2026-05-03T00:00:00+00:00")
+
+    assert await erasure_fences_event(
+        tenant, user_id=USER, anonymous_id=None, received_at="2026-05-03T12:00:00Z",
+    ) is True
+    assert await erasure_fences_event(
+        tenant, user_id=USER, anonymous_id=None, received_at="2026-05-05T00:00:00Z",
+    ) is False
+
+
+async def test_overlapping_erasures_never_rewind_the_marker():
+    """Advancing is a max, not read-then-write: an older erasure applied last
+    must not replace a newer submission time."""
+    from services.consent.erasure_fence import ErasureMarkerRepository, erasure_marker_id
+
+    repo = ErasureMarkerRepository()
+    marker = erasure_marker_id("t-race", "user_id", USER)
+    await repo.advance(marker, "t-race", "user_id", "2026-05-04T00:00:00.000000Z")
+    await repo.advance(marker, "t-race", "user_id", "2026-05-02T00:00:00.000000Z")
+
+    assert (await repo.find_by_id(marker))["submitted_at"] == "2026-05-04T00:00:00.000000Z"
+
+
+async def test_erasures_submitted_before_markers_existed_are_backfilled():
+    from services.consent import erasure_fence
+    from services.consent.erasure_fence import erasure_fences_event
+
+    # Start from "markers never backfilled": forget the cached flag and drop
+    # the durable one an earlier test on this worker may have written.
+    erasure_fence.reset_backfill_state()
+    await erasure_fence.ErasureMarkerRepository().delete(erasure_fence._BACKFILL_FLAG_ID)
+    tenant = _uid("t")
+    dsr_id = str(uuid.uuid4())
+    await ConsentRepository().insert(f"dsr_{dsr_id}", {
+        "tenant_id": tenant, "dsr_id": dsr_id, "user_id": USER, "anonymous_id": "anon-old",
+        "request_type": "erasure", "status": "completed",
+        "submitted_at": "2026-05-02T00:00:00+00:00",
+    })
+
+    for kwargs in ({"user_id": USER, "anonymous_id": None}, {"user_id": None, "anonymous_id": "anon-old"}):
+        assert await erasure_fences_event(
+            tenant, received_at="2026-05-01T10:00:00Z", **kwargs,
+        ) is True
+    erasure_fence.reset_backfill_state()

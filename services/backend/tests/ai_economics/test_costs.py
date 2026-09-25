@@ -18,7 +18,7 @@ from services.economic import ai_aggregation  # noqa: E402
 from services.economic.ai_costs import select_cost  # noqa: E402
 from services.economic.ai_models import AIExecutionFact  # noqa: E402
 from services.economic.ai_pricing import AIPriceCardRegistry  # noqa: E402
-from ai_economics.factories import make_observed  # noqa: E402
+from .factories import make_observed  # noqa: E402
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 

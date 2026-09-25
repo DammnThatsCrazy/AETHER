@@ -35,11 +35,11 @@ async def _fetch_jwks(domain: str) -> list[dict]:
     cached = _JWKS_CACHE.get(domain)
     if cached and time.time() - cached["fetched_at"] < _JWKS_TTL:
         return cached["keys"]
-    import asyncio
-    import requests as _requests
+    import httpx
+
     url = f"https://{domain}/.well-known/jwks.json"
-    loop = asyncio.get_event_loop()
-    resp = await loop.run_in_executor(None, lambda: _requests.get(url, timeout=5))
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(url)
     resp.raise_for_status()
     keys = resp.json().get("keys", [])
     _JWKS_CACHE[domain] = {"keys": keys, "fetched_at": time.time()}
@@ -138,3 +138,31 @@ async def validate_auth0_token(token: str) -> dict:
         raise ValueError(f"Token issuer mismatch: {claims.get('iss')!r}")
     claims["_sig_unverified"] = True
     return claims
+
+
+async def fetch_auth0_userinfo(token: str) -> dict:
+    """Return the verified OIDC profile for an already-validated access token.
+
+    The browser sends an access token for the Aether API audience; with the
+    ``openid profile email`` scope Auth0 also grants it the ``/userinfo``
+    audience, but the token itself carries no ``email``/``email_verified``
+    claims. Call only after :func:`validate_auth0_token` accepted the token.
+    Raises ValueError when Auth0 is not configured or the call fails.
+    """
+    domain = settings.auth0.domain
+    if not domain:
+        raise ValueError("AUTH0_DOMAIN not configured")
+    # httpx is a declared dependency of the backend extra (requests is not).
+    import httpx
+
+    url = f"https://{domain}/userinfo"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        resp.raise_for_status()
+        profile = resp.json()
+    except Exception as e:  # noqa: BLE001 — surfaced as a sign-in failure
+        raise ValueError(f"Failed to fetch Auth0 userinfo: {type(e).__name__}")
+    if not isinstance(profile, dict):
+        raise ValueError("Auth0 userinfo returned an unexpected payload")
+    return profile

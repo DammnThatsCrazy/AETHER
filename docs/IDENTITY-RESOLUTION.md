@@ -14,7 +14,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
-  "services/backend/services/identity/": "sha256:b972456bd886e59ce570336754b7df6669eee87bc9ea3a66b9b57e945d8082e9"
+  "services/backend/services/identity/": "sha256:657064df36794615baf613ca32958f3ef7d57adf1a4dc1b598fb4767cff39b32"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
@@ -148,6 +148,51 @@ These produce `confidence = 1.0` and trigger immediate merging:
 > **Observed vs. verified email.** A merely *observed* `email_hash` (asserted in event traits) is **strong** evidence, not deterministic — it does not prove the subject controls the mailbox, and does not auto-merge in staging/production. Only **verified email ownership** (`email_ownership_verified`, established by the backend verification layer — OTP, scanner-safe magic link, or a server-validated OIDC `email_verified` claim) is deterministic. Verified email still requires identity-linking consent, respects identifier suppression, and opens a conflict rather than merging when candidates carry contradictory deterministic identifiers. A client-supplied `email_verified` flag is never trusted.
 
 **Phone normalization**: E.164 format (+1234567890), strip spaces/dashes/parens.
+
+### Anonymous → known binding (identify)
+
+An event that carries a `userId` **together with** its `anonymousId` (the SDK
+`identify` call, and every event the SDK sends after it) is the SDK asserting
+that this anonymous visitor *is* that user. The resolver treats that
+co-occurrence as **deterministic** evidence (`authenticated_user_binding`
+reason code): the anonymous profile and the user's profile are merged
+immediately — `MERGE` with `DETERMINISTIC` tier, collapsing every compatible
+candidate into the oldest surviving entity. The binding applies only when:
+
+- the event carries exactly one `userId` and its `anonymousId` matched an
+  existing profile;
+- every candidate profile was reached through that `userId` or `anonymousId`
+  (not through a session, email, or device match); and
+- no candidate — including fragments already merged into it — holds a
+  **different** `userId`, `external_id`, or verified wallet.
+
+A contradiction (a shared device whose anonymous id already belongs to another
+user) never merges: the event resolves to its own profile and a
+`conflicting_user_binding` conflict is opened for review. A plain returning
+anonymous visitor (same `anonymousId`, no `userId`) stays `PROBABLE` →
+`CANDIDATE`, and a session-only match stays `WEAK` → `REJECT`
+(`insufficient_evidence`): probabilistic evidence still needs corroboration.
+Matches follow merge tombstones, so an alias left on a merged fragment resolves
+to the surviving profile.
+
+**First sighting.** An event whose identifiers match nothing yet creates a new
+profile (`CREATE`, scored on the event's own signals) and links its aliases, so
+the next event can match. It is `BLOCKED` only when its own signals are
+unusable (fingerprint-only, or only consent-gated signals without consent).
+Previously the empty match set was scored as `insufficient_evidence`, no alias
+was ever written, and no profile could ever merge.
+
+**Consent.** Identity-stitching consent (`analytics`, `identity`, or
+`marketing`) is read from both snapshot shapes: the nested
+`{"purposes": {...}}` form and the flat SDK `ConsentState` every event carries
+in `context.consent` (`{"analytics": true, ...}`). Consent-gated identifiers
+(email/phone hash, installation/browser id, fingerprint) are neither scored nor
+stored as aliases without it.
+
+**Where identifiers are read from.** `userId`, `anonymousId`, `sessionId` from
+the event; email/phone from `properties`, `properties.traits` (the web SDK
+identify), or `context.traits`; installation id from `properties`,
+`context.installationId`, or `context.device.id` / `context.device.installationId`.
 
 ### Probabilistic Signals (Scored)
 

@@ -328,6 +328,23 @@ async def submit_dsr(
         raise BadRequestError(f"Invalid DSR type. Allowed: {DSR_TYPES}")
 
     dsr_id = str(uuid.uuid4())
+    submitted_at = utc_now().isoformat()
+    if body.request_type == "erasure":
+        # Fence asynchronous projections before the request exists: an event
+        # accepted before this request but projected afterwards must not write
+        # the subject back. Marker first, so no crash can leave an erasure
+        # record without its marker (the one-time backfill never revisits);
+        # a marker whose request then fails to persist only withholds data the
+        # subject asked to erase, and markers only ever advance.
+        from services.consent.erasure_fence import record_erasure_markers
+
+        await record_erasure_markers(
+            tenant.tenant_id,
+            user_id=body.user_id,
+            anonymous_id=body.anonymous_id,
+            submitted_at=submitted_at,
+        )
+
     dsr = await _repo.insert(f"dsr_{dsr_id}", {
         "tenant_id": tenant.tenant_id,
         "dsr_id": dsr_id,
@@ -336,7 +353,7 @@ async def submit_dsr(
         "request_type": body.request_type,
         "details": body.details,
         "status": "pending",
-        "submitted_at": utc_now().isoformat(),
+        "submitted_at": submitted_at,
         "deadline": None,
     })
 

@@ -156,9 +156,17 @@ async def test_worker_executes_erasure_and_marks_step_with_evidence():
             assert c["audit_event_id"] == job_id
         elif c["component"] == MEASUREMENT_COMPONENT:
             assert c["status"] == "completed"
+        elif c["component"] == "reward_decisions":
+            # Legal-retention store: lawfully retained, with its policy pointer.
+            assert c["status"] == "skipped_legal_hold"
+            assert c["policy_decision_id"]
         else:
-            # Every other registry component is untouched by this handler.
-            assert c["status"] == "pending"
+            # Every completeness-plane component is executed too — no step is
+            # ever left pending (tests/dsr/test_dsr_erasure_completeness.py
+            # pins the per-store receipts).
+            assert c["status"] == "completed", c
+            assert c["audit_event_id"] == job_id
+    assert status["overall"] == "completed"
 
     # The DSR record reflects real completion state.
     record = await ConsentRepository().find_by_id(f"dsr_{dsr['dsr_id']}")

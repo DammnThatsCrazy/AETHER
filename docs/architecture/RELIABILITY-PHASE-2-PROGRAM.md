@@ -48,9 +48,21 @@ toc_depth: 4
 > - **Program 5 (Multi-currency) M2** — real FX rate + provenance recorded in
 >   `conversion_repo`/`spend_repo` upserts (no more hardcoded `1.0`; unpriced is
 >   flagged, never silent parity).
+> - **Program 5 (Multi-currency) M3, conversions only** — the staging rehearsal
+>   found SDK conversions bypassing M2 (the Silver projector hardcoded `1.0` and
+>   the generic Silver insert was first-write-wins), so a EUR/JPY order counted
+>   as the same USD amount. Silver conversions now go through
+>   `ConversionRepository` (deterministic `(authority_rank, occurred_at,
+>   source_event_id)` ranking); an unknown rate is stored as `NULL`
+>   (`canonical_conversions.exchange_rate` nullable) and marked unconverted;
+>   attribution runs/credits carry normalized (USD) revenue and exclude
+>   unconverted conversions (`unconverted_credit_count`). Shipped globally, not
+>   behind the per-tenant flag proposed below: it applies to new writes and new
+>   attribution runs only and rewrites no history. `spend_repo` still records
+>   `1.0` + `priced: false` for unpriced spend.
 >
 > Remaining milestones below (Ledger M5/M6, Re-attribution M4/M5, Prod-equivalent
-> M3/M5, Multi-currency M3–M5, and Program 2's production-signal-gated backend
+> M3/M5, Multi-currency M3 for spend and M4–M5, and Program 2's production-signal-gated backend
 > rollout M1–M3) are still design-only.
 
 ## Why these five and why they are Phase 2

@@ -28,7 +28,7 @@ from services.agent.worker_routes import (  # noqa: E402
     update_run_status,
 )
 
-from one_person_ops.conftest import FakeRequest, tenant_id  # noqa: E402
+from .conftest import FakeRequest, tenant_id  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 

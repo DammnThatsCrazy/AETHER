@@ -11,7 +11,7 @@ os.environ.setdefault("AETHER_ENV", "local")
 
 from services.economic import ai_efficiency  # noqa: E402
 from services.economic.ai_pricing import AIPriceCardRegistry  # noqa: E402
-from ai_economics.factories import fact_record, new_tenant  # noqa: E402
+from .factories import fact_record, new_tenant  # noqa: E402
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 

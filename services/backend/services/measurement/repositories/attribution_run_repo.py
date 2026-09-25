@@ -914,8 +914,11 @@ class AttributionRunRepository:
             SELECT
                 cc.cluster_id,
                 COUNT(DISTINCT ac.conversion_id) AS conversion_count,
-                COALESCE(SUM(ac.credit_weight * cc.gross_value), 0) AS attributed_gross_revenue,
-                COALESCE(SUM(ac.credit_weight * cc.net_value), 0) AS attributed_net_revenue
+                -- Credit revenue is already weight * normalized (USD) value;
+                -- cc.gross_value is the NATIVE amount and must not be summed
+                -- across currencies. NULL (unconverted) credits are excluded.
+                COALESCE(SUM(ac.attributed_gross_revenue), 0) AS attributed_gross_revenue,
+                COALESCE(SUM(ac.attributed_net_revenue), 0) AS attributed_net_revenue
             FROM attribution_credits ac
             JOIN canonical_conversions cc
               ON cc.tenant_id = ac.tenant_id
@@ -1025,6 +1028,7 @@ def _aggregate_campaign_credits(credits: list[dict[str, Any]], model_type: Optio
             "touchpoint_count": 0,
             "model_type": model_type,
             "data_quality": "not_provisioned",
+            "unconverted_credit_count": 0,
             "dimension_rollups": _dimension_rollups([]),
             "credits": [],
         }
@@ -1040,6 +1044,14 @@ def _aggregate_campaign_credits(credits: list[dict[str, Any]], model_type: Optio
     )
     model_types = {c.get("model_type") for c in credits if c.get("model_type")}
     derived_model = next(iter(model_types)) if len(model_types) == 1 else "mixed"
+    # Credit revenue is in the normalized currency; a credit of an unconverted
+    # conversion (foreign currency, no known FX rate) carries NULL revenue and
+    # is excluded from the revenue totals above. Surface that explicitly so a
+    # partial total is never read as complete.
+    unconverted = sum(
+        1 for c in credits
+        if "attributed_net_revenue" in c and c["attributed_net_revenue"] is None
+    )
 
     return {
         "total_attributed_conversions": total_conversions,
@@ -1051,7 +1063,8 @@ def _aggregate_campaign_credits(credits: list[dict[str, Any]], model_type: Optio
         "credit_count": len(credits),
         "touchpoint_count": len({str(c.get("touchpoint_id")) for c in credits if c.get("touchpoint_id")}),
         "model_type": model_type or derived_model,
-        "data_quality": "complete",
+        "data_quality": "partial" if unconverted else "complete",
+        "unconverted_credit_count": unconverted,
         "dimension_rollups": _dimension_rollups(credits),
         "credits": credits,
     }

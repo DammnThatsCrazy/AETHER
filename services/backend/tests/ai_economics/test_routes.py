@@ -17,8 +17,8 @@ from shared.common.common import BadRequestError, NotFoundError  # noqa: E402
 from services.economic import ai_routes  # noqa: E402
 from services.economic.ai_routes import PriceCardCreate  # noqa: E402
 from services.silver.projectors.ai_invocation_projector import write_execution_fact  # noqa: E402
-from ai_economics.conftest import FakeRequest  # noqa: E402
-from ai_economics.factories import make_observed, new_tenant  # noqa: E402
+from .conftest import FakeRequest  # noqa: E402
+from .factories import make_observed, new_tenant  # noqa: E402
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 

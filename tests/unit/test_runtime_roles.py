@@ -180,6 +180,35 @@ def test_runtime_config_defaults():
         assert len(settings_mod.RUNTIME_ROLES) == 11
 
 
+def test_analytics_backend_is_a_deployment_selector_not_a_backend_setting():
+    """``ANALYTICS_BACKEND`` gates Terraform's ClickHouse wiring and is checked
+    by the release profile tooling, but no backend code branches on it. It
+    must not be declared on ``settings.runtime`` as if it selected the
+    analytics store (which is PostgreSQL in every profile)."""
+    import dataclasses
+
+    with backend_on_path():
+        settings_mod = importlib.import_module("config.settings")
+        declared = {f.name for f in dataclasses.fields(settings_mod.RuntimeConfig)}
+        assert "analytics_backend" not in declared
+
+    readers = [
+        path.relative_to(ROOT).as_posix()
+        for path in BACKEND_ROOT.rglob("*.py")
+        if "tests" not in path.relative_to(BACKEND_ROOT).parts
+        and any(
+            "ANALYTICS_BACKEND" in line or "analytics_backend" in line
+            for line in path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            if not line.lstrip().startswith("#")
+        )
+    ]
+    assert readers == []
+    # The deployment surfaces that DO consume the selector keep it.
+    assert '"analytics": "ANALYTICS_BACKEND"' in (
+        ROOT / "scripts" / "release" / "profile_doctor.py"
+    ).read_text(encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Pure role helpers
 # ---------------------------------------------------------------------------

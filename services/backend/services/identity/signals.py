@@ -176,7 +176,14 @@ def extract_signals(
     # becomes an EMAIL_HASH signal. EMAIL_OWNERSHIP_VERIFIED is emitted solely by
     # the verification pipeline (server-issued evidence), never from event props.
     _ = props.get("email_verified", props.get("emailVerified"))  # discarded on purpose
-    email_raw = props.get("email") or ""
+    # SDK identify events carry the user's traits nested: the web SDK sends
+    # ``properties.traits`` (``hydrateIdentity`` -> ``identify``), Segment-style
+    # senders use ``context.traits``. Reading only top-level ``properties``
+    # meant an identify's email/phone never became a signal.
+    traits = _traits(props, ctx)
+    email_raw = props.get("email") or traits.get("email") or ""
+    if not isinstance(email_raw, str):
+        email_raw = ""
     if email_raw:
         normalized_email = normalize_email(email_raw)
         if normalized_email:
@@ -187,7 +194,9 @@ def extract_signals(
             ))
 
     # Phone (raw — caller must hash)
-    phone_raw = props.get("phone") or ""
+    phone_raw = props.get("phone") or traits.get("phone") or ""
+    if not isinstance(phone_raw, str):
+        phone_raw = ""
     if phone_raw:
         normalized_phone = normalize_phone(phone_raw)
         if normalized_phone:
@@ -238,7 +247,19 @@ def extract_signals(
         ))
 
     # Installation / browser IDs
-    install_id = props.get("installation_id") or props.get("installationId") or ""
+    # Installation / device id: event properties, or the event context (the
+    # mobile SDKs stamp the installation id; ``context.device.id`` is the
+    # Segment-convention device identifier).
+    device_ctx = ctx.get("device") if isinstance(ctx.get("device"), dict) else {}
+    install_id = (
+        props.get("installation_id")
+        or props.get("installationId")
+        or ctx.get("installationId")
+        or ctx.get("installation_id")
+        or device_ctx.get("installationId")
+        or device_ctx.get("id")
+        or ""
+    )
     if install_id:
         signals.append(_sig(
             IdentitySignalType.INSTALLATION_ID,
@@ -318,6 +339,14 @@ def extract_signals(
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
+
+def _traits(props: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    """Identify traits from ``properties.traits`` or ``context.traits``."""
+    for source in (props.get("traits"), ctx.get("traits")):
+        if isinstance(source, dict) and source:
+            return source
+    return {}
+
 
 def _platform(event: dict) -> str:
     ctx = event.get("context") or {}

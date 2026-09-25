@@ -155,6 +155,48 @@ def _seed(b, *, tenant="t1", n=3, user_id=None, anonymous_id="anon-1",
     assert result.accepted_count == n
 
 
+def _live_rows(b) -> list[dict]:
+    """Bronze rows not tombstoned by an erasure."""
+    return [r for r in b.bronze_store.values() if not r.get("tombstoned")]
+
+
+def _assert_subject_tombstoned(b, subject: str, *, expected: int) -> None:
+    """The subject survives nowhere in the row store: its chained rows remain
+    only as tombstones with payload and every subject identifier cleared."""
+    tombstones = [r for r in b.bronze_store.values() if r.get("tombstoned")]
+    assert len(tombstones) == expected
+    for row in tombstones:
+        assert row["payload"] == {}
+        assert not row.get("user_id") and not row.get("anonymous_id")
+        assert not row.get("entity_id") and not row.get("session_id")
+        assert row["integrity_hash"] and row["payload_hash"]
+    assert not any(
+        r.get(f) == subject
+        for r in b.bronze_store.values()
+        for f in b.compaction_mod.SUBJECT_FIELDS
+    )
+
+
+def _assert_chain_intact(b, tenant: str) -> None:
+    """Re-walk the tenant's Bronze hash chain exactly as the M3 verifier does."""
+    from shared.integrity import hash_chain
+
+    rows = [
+        r for r in b.bronze_store.values()
+        if r.get("tenant_id") == tenant and r.get("integrity_hash")
+    ]
+    result = hash_chain.verify_chain(
+        rows,
+        partition_key=b.bulk._chain_partition,
+        sort_key=b.bulk._chain_sort_key,
+        canonical_field_variants=lambda r: [b.bulk._canonical_fields(r)],
+        stored_hash=lambda r: r.get("integrity_hash"),
+        record_id=lambda r: r["id"],
+    )
+    assert result["chain_intact"], result
+    assert result["records_checked"] == len(rows)
+
+
 def _write_policy_fixture(tmp_path: Path, *, retention_class="standard",
                           delete_behavior="hard_delete",
                           legal_hold_supported=True) -> Path:
@@ -456,9 +498,16 @@ def test_dsr_erasure_repacks_objects_without_subject():
         assert report["packed_records_removed"] == 2
         assert report["objects_repacked"] == 1
 
-        # Row store: subject rows gone, survivors intact.
-        assert len(b.bronze_store) == 3
-        assert all(r["anonymous_id"] == "anon-b" for r in b.bronze_store.values())
+        # Row store: the subject's hash-chained rows are TOMBSTONED (never
+        # hard-deleted — that would break the tenant's truth chain): payload
+        # and every subject identifier cleared, chain fields kept. Survivors
+        # intact, and the chain still verifies.
+        assert len(b.bronze_store) == 5
+        live = _live_rows(b)
+        assert len(live) == 3
+        assert all(r["anonymous_id"] == "anon-b" for r in live)
+        _assert_subject_tombstoned(b, "anon-a", expected=2)
+        _assert_chain_intact(b, "t1")
 
         # Descriptor index: old descriptor replaced by the re-packed one.
         assert old_descriptor["descriptor_id"] not in b.descriptor_store
@@ -475,7 +524,7 @@ def test_dsr_erasure_repacks_objects_without_subject():
         assert all(r["anonymous_id"] == "anon-b" for r in records)
 
         # Survivors were re-pointed and still hydrate through routing.
-        survivor = next(iter(b.bronze_store.values()))
+        survivor = live[0]
         assert survivor["payload_descriptor_id"] == new_descriptor["descriptor_id"]
         payload = _run(compactor.read_payload(survivor))
         assert payload["who"] == "anon-b"
@@ -496,7 +545,11 @@ def test_dsr_erasure_deletes_object_when_subject_owned_all_records():
         assert report["status"] == "completed"
         assert report["objects_deleted"] == 1
         assert report["objects_repacked"] == 0
-        assert b.bronze_store == {} and b.descriptor_store == {} and b.store.list() == []
+        assert report["rows_tombstoned_chained"] == 2
+        assert _live_rows(b) == []
+        _assert_subject_tombstoned(b, "user-a", expected=2)
+        assert b.descriptor_store == {} and b.store.list() == []
+        _assert_chain_intact(b, "t1")
 
 
 def test_dsr_erasure_covers_hot_unpacked_rows_too():
@@ -504,7 +557,34 @@ def test_dsr_erasure_covers_hot_unpacked_rows_too():
         _seed(b, n=2, anonymous_id="anon-a", age_hours=1)  # never compacted
         report = _run(b.lifecycle().dsr_erase_subject("t1", "anon-a"))
         assert report["rows_removed"] == 2
-        assert b.bronze_store == {}
+        assert _live_rows(b) == []
+        _assert_subject_tombstoned(b, "anon-a", expected=2)
+        _assert_chain_intact(b, "t1")
+
+
+def test_dsr_tombstones_chained_rows_and_hard_deletes_pre_cutover_rows():
+    """The chain-preserving rule is scoped to hash-chained rows: a pre-cutover
+    row (NULL integrity_hash — not a chain member) still follows the policy's
+    hard_delete, while a chained row is tombstoned so the chain verifies."""
+    with fresh() as b:
+        _seed(b, tenant="t1", n=2, anonymous_id="anon-a", age_hours=1, prefix="c")
+        _seed(b, tenant="t2", n=2, anonymous_id="anon-a", age_hours=1, prefix="u")
+        for row in b.bronze_store.values():  # t2 = a wholly pre-cutover partition
+            if row["tenant_id"] == "t2":
+                row["prev_hash"] = None
+                row["integrity_hash"] = None
+
+        chained = _run(b.lifecycle().dsr_erase_subject("t1", "anon-a"))
+        assert chained["rows_removed"] == 2 and chained["rows_tombstoned_chained"] == 2
+        unchained = _run(b.lifecycle().dsr_erase_subject("t2", "anon-a"))
+        assert unchained["rows_removed"] == 2 and unchained["rows_tombstoned_chained"] == 0
+
+        assert sorted(r["tenant_id"] for r in b.bronze_store.values()) == ["t1", "t1"]
+        _assert_subject_tombstoned(b, "anon-a", expected=2)
+        _assert_chain_intact(b, "t1")
+        # Idempotent: tombstoned rows are no longer the subject's rows.
+        again = _run(b.lifecycle().dsr_erase_subject("t1", "anon-a"))
+        assert again["rows_removed"] == 0
 
 
 def test_dsr_blocked_by_legal_hold_and_release_unblocks():
@@ -563,7 +643,8 @@ def test_deletion_plan_reaches_externalized_objects_via_adapter():
         )
         assert executed["status"] == "executed"
         assert executed["records_affected"] == 4  # 2 rows + 2 packed records
-        assert all(r["anonymous_id"] == "anon-b" for r in b.bronze_store.values())
+        assert all(r["anonymous_id"] == "anon-b" for r in _live_rows(b))
+        _assert_chain_intact(b, "t1")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

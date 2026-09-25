@@ -20,7 +20,10 @@ dependency, never on top of a present one.
 from __future__ import annotations
 
 import importlib
+import os
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -114,3 +117,39 @@ def test_no_stubbed_module_leaked_into_this_session() -> None:
         f"stub modules leaked over installed packages: {leaked}. A conftest "
         "installed a stand-in during collection and never removed it."
     )
+
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize(
+    "stubbing_module",
+    ["tests.profile360.conftest", "tests.e2e.test_path_intelligence_flow"],
+)
+def test_collection_time_stubs_leave_installed_packages_alone(stubbing_module: str) -> None:
+    """Modules that stub jwt/cryptography at import time must do so only when
+    the package is absent. They used to stub whenever nothing had imported the
+    package YET, so in a whole-tree run every later suite that needs the real
+    ``cryptography`` (e.g. ``cryptography.exceptions`` in the DSR erasure
+    jobs) failed. Checked in a fresh interpreter, where nothing has imported
+    either package before the stubbing module runs."""
+    for name in ("jwt", "cryptography"):
+        if not _installed(name):
+            pytest.skip(f"{name} is not installed in this environment")
+    code = (
+        "import importlib, sys\n"
+        f"importlib.import_module({stubbing_module!r})\n"
+        "import cryptography.exceptions, jwt\n"
+        "for name in ('cryptography', 'jwt'):\n"
+        "    assert getattr(sys.modules[name], '__file__', None), name + ' was stubbed'\n"
+    )
+    env = {**os.environ, "AETHER_ENV": "local"}
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=_BACKEND_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr

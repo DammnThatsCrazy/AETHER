@@ -1798,3 +1798,17 @@ def test_rehearsal_ingestion_probes_fail_fast_on_per_event_rejection():
     retry = steps["Failure and retry checks"]
     assert retry.index('"/v1/consent/records"') < retry.index('first, _first_body = call("POST", "/v1/batch"')
     assert '_first_body.get("accepted"' in retry
+
+
+def test_standalone_plan_wake_surfaces_the_apply_wake_inputs():
+    """A standalone plan-wake is followed by a human apply-wake that needs the
+    plan run id and checksum. Job outputs are invisible outside the run, and
+    the promotion only lists the checksum in its UI summary, so the verify step
+    must print both values to the log and the run summary."""
+    job = _workflow_yaml("staging-lifecycle.yml")["jobs"]["wake-plan"]
+    verify = next(s for s in job["steps"] if s.get("id") == "verify")
+    assert verify["env"]["PLAN_RUN_ID"] == "${{ steps.dispatch.outputs.plan_run_id }}"
+    run = verify["run"]
+    assert 'plan_run_id=${PLAN_RUN_ID} plan_checksum=${checksum}' in run
+    assert "GITHUB_STEP_SUMMARY" in run
+    assert run.index("GITHUB_STEP_SUMMARY") > run.index('checksum="$(sha256sum reviewed.tfplan')

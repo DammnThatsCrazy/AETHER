@@ -948,6 +948,7 @@ jobs:
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           EXPECTED_STATE: awake
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
+          PLAN_RUN_ID: ${{ steps.dispatch.outputs.plan_run_id }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/reviewed-plan"
@@ -989,6 +990,18 @@ jobs:
             printf 'plan_checksum=%s\n' "$checksum"
             printf 'reviewed_commit=%s\n' "$reviewed_commit"
           } >> "$GITHUB_OUTPUT"
+          # A standalone plan-wake is followed by a human apply-wake, which needs
+          # both values; job outputs are not visible outside this run.
+          echo "reviewed wake plan: plan_run_id=${PLAN_RUN_ID} plan_checksum=${checksum}"
+          {
+            echo '### Reviewed wake plan'
+            echo ''
+            echo '| input | value |'
+            echo '|---|---|'
+            echo "| \`plan_run_id\` | \`${PLAN_RUN_ID}\` |"
+            echo "| \`plan_checksum\` | \`${checksum}\` |"
+            echo "| reviewed commit | \`${reviewed_commit}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
   # Phase 3 — independently validate the reviewed plan: policy, budget, and the

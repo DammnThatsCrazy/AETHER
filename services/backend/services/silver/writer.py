@@ -4,6 +4,8 @@ The dispatcher produces rows; this writer stores them:
 
 - ``silver_comms_facts``               → CommsFactsRepository
 - ``silver_campaign_touchpoint_facts`` → TouchpointRepository
+- ``canonical_conversions``            → ConversionRepository (FX
+  normalization + deterministic authority ranking; never first-write-wins)
 - the six ``silver_social_*_facts`` tables (M3 Social Silver plane, the
   ``social_*_observed`` projectors) → their named repositories in
   ``services/silver/repositories/social_facts.py``
@@ -106,6 +108,19 @@ class SilverFactWriter:
             repo = TouchpointRepository()
             for row in result.rows:
                 await repo.upsert(row)
+            return len(result.rows)
+
+        if result.table == "canonical_conversions":
+            # Never the generic first-write-wins insert: a conversion needs FX
+            # normalization (a real recorded rate, or explicitly unconverted)
+            # and the repository's deterministic authority ranking, so the
+            # canonical row does not depend on which source record landed first.
+            from services.measurement.repositories.conversion_repo import (
+                ConversionRepository,
+            )
+            repo = ConversionRepository()
+            for row in result.rows:
+                await repo.upsert(dict(row))
             return len(result.rows)
 
         if result.table in _SOCIAL_FACT_TABLES:

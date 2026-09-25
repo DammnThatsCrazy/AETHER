@@ -660,3 +660,64 @@ def test_preflight_sees_degraded_when_a_component_is_down(gateway):
 
     assert body["status"] == "degraded"
     assert component_statuses(body)["consent"] == cs.STATUS_DOWN
+
+
+def _fake_inline(monkeypatch, *, loaded, violation_rate=0.0):
+    import sys
+    import types
+
+    inline = types.ModuleType("serving.src.api")
+    inline.server = types.SimpleNamespace(loaded_models=lambda: list(loaded))
+    inline._freshness_tracker = types.SimpleNamespace(get_violation_rate=lambda: violation_rate)
+    src = types.ModuleType("serving.src")
+    src.api = inline
+    monkeypatch.setitem(sys.modules, "serving", sys.modules.get("serving") or types.ModuleType("serving"))
+    monkeypatch.setitem(sys.modules, "serving.src", src)
+    monkeypatch.setitem(sys.modules, "serving.src.api", inline)
+    monkeypatch.delenv("ML_SERVING_URL", raising=False)
+    monkeypatch.setenv("ML_SERVING_INLINE", "true")
+
+
+def _registry_signal(gateway):
+    body = gateway(
+        dependency_health=dependencies_all("ok"),
+        supervisor=_Supervisor(healthy_roles()),
+    ).get("/v1/health").json()
+    return body["components"]["ml_serving"]["signals"][cs.SIGNAL_MODEL_REGISTRY]
+
+
+def test_inline_serving_is_healthy_without_a_serving_url(gateway, fake_model_registry, monkeypatch):
+    """Staging runs ML inline (ML_SERVING_INLINE=true) and has no ML_SERVING_URL;
+    that is the intended profile shape, not a degraded inference surface."""
+    _fake_inline(monkeypatch, loaded=["churn"])
+    fake_model_registry(["churn"])
+
+    signal = _registry_signal(gateway)
+    assert signal["status"] == cs.STATUS_OK
+    assert "served inline" in signal["detail"]
+
+
+def test_inline_serving_degrades_when_required_models_are_not_loaded(
+    gateway, fake_model_registry, monkeypatch
+):
+    """Importable is not ready: mirror the inline server's own /ready gate."""
+    import types
+
+    _fake_inline(monkeypatch, loaded=[])
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    fake_model_registry(["churn"])
+    required = types.SimpleNamespace(model_id="churn", fail_closed_required=True, artifact_required=True)
+    monkeypatch.setattr("common.model_registry.list_serving_models", lambda: [required], raising=False)
+
+    signal = _registry_signal(gateway)
+    assert signal["status"] == cs.STATUS_DEGRADED
+    assert "required models not loaded" in signal["detail"]
+
+
+def test_inline_serving_degrades_on_freshness_sla_violation(gateway, fake_model_registry, monkeypatch):
+    _fake_inline(monkeypatch, loaded=["churn"], violation_rate=0.5)
+    fake_model_registry(["churn"])
+
+    signal = _registry_signal(gateway)
+    assert signal["status"] == cs.STATUS_DEGRADED
+    assert "freshness" in signal["detail"]

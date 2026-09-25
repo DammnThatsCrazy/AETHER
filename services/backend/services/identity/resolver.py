@@ -71,6 +71,7 @@ from .models import (
 )
 from .repository import IdentityResolutionRepository
 from .signals import extract_signals
+from .confidence import CONSENT_REQUIRED_SIGNALS, has_stitching_consent
 from .split_policy import SplitPolicyContext, evaluate_split
 from .veto_engine import evaluate_vetoes, get_confidence_band
 from .models import ConfidenceBand
@@ -128,6 +129,26 @@ _NON_IDENTITY_SIGNAL_VALUES: frozenset[str] = frozenset(
 def _is_merge_eligible_signal(signal_value: str) -> bool:
     """True if a signal value can carry identity evidence (not campaign-only)."""
     return bool(signal_value) and signal_value not in _NON_IDENTITY_SIGNAL_VALUES
+
+
+# Signals of the event through which an authenticated binding may reach a
+# candidate: the event's own user_id, or the anonymous_id it binds to it.
+_BINDING_SIGNAL_TYPES: frozenset[IdentitySignalType] = frozenset({
+    IdentitySignalType.USER_ID,
+    IdentitySignalType.ANONYMOUS_ID,
+})
+
+# Identifiers that name exactly one real person/account: two different values
+# across the candidates of a binding mean the binding would fuse two people.
+_BINDING_DETERMINISTIC_TYPES: frozenset[IdentitySignalType] = frozenset({
+    IdentitySignalType.USER_ID,
+    IdentitySignalType.EXTERNAL_ID,
+    IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+})
+
+
+def _dedupe_types(items: list[IdentitySignalType]) -> list[IdentitySignalType]:
+    return list(dict.fromkeys(items))
 
 
 def _dedupe_preserve(items: list[str]) -> list[str]:
@@ -350,6 +371,8 @@ class IdentityResolutionService:
         existing_entity_ids: list[str] = []
         matching_types: list[IdentitySignalType] = []
         revoked_types: list[IdentitySignalType] = []
+        # candidate entity id -> the signal types of THIS event that reached it
+        found_via: dict[str, set[IdentitySignalType]] = {}
 
         for (sig_type, sig_hash, _) in hashed_signals:
             if sig_type in _ATTRIBUTION_ONLY:
@@ -357,6 +380,10 @@ class IdentityResolutionService:
             entity_ids = await self._repo.find_subjects_by_alias(
                 tenant_id, sig_type, sig_hash
             )
+            # Aliases stay on a merged fragment (fragment-aware repair needs
+            # them there); follow the merge tombstone so a match lands on the
+            # surviving entity instead of resurrecting a merged one.
+            entity_ids = await self._surviving_entity_ids(tenant_id, entity_ids)
             if sig_type == IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED:
                 # hash_email() yields the SAME hash for the observed EMAIL_HASH
                 # alias and the verified evidence identifier, so verified email
@@ -368,6 +395,7 @@ class IdentityResolutionService:
             if entity_ids:
                 matching_types.append(sig_type)
                 for eid in entity_ids:
+                    found_via.setdefault(eid, set()).add(sig_type)
                     if eid not in existing_entity_ids:
                         existing_entity_ids.append(eid)
 
@@ -388,6 +416,42 @@ class IdentityResolutionService:
                 tenant_id, existing_entity_ids
             )
 
+        # ── 6b. Authenticated binding (anonymous_id -> user_id) ─────────────
+        # An event that carries a user_id together with its anonymous_id (an
+        # SDK identify, or any event after identify) is the SDK asserting that
+        # this anonymous visitor IS that user: deterministic evidence, not a
+        # probabilistic anonymous-id match. It authorizes collapsing the
+        # candidates only when every candidate was reached through this
+        # event's user_id / anonymous_id and no candidate (including anything
+        # already merged into it) holds a DIFFERENT user_id, external_id or
+        # verified wallet -- a shared device must never fuse two people.
+        authenticated_binding = False
+        binding_contradicted = False
+        event_user_hashes = {
+            h for (t, h, _) in hashed_signals if t == IdentitySignalType.USER_ID
+        }
+        event_has_anonymous = any(
+            t == IdentitySignalType.ANONYMOUS_ID for (t, _, _) in hashed_signals
+        )
+        if (
+            existing_entity_ids
+            and len(event_user_hashes) == 1
+            and event_has_anonymous
+            and IdentitySignalType.ANONYMOUS_ID in matching_types
+            and all(
+                found_via.get(eid, set()) & _BINDING_SIGNAL_TYPES
+                for eid in existing_entity_ids
+            )
+        ):
+            binding_contradicted = await self._binding_contradicted(
+                tenant_id, existing_entity_ids, next(iter(event_user_hashes))
+            )
+            if binding_contradicted:
+                has_conflict = True
+            else:
+                authenticated_binding = True
+                has_conflict = False
+
         # ── 7. Apply merge policy ─────────────────────────────────────────
         # Strong (probabilistic) auto-linking is OFF by default in staging/
         # production — those signals go to candidate/conflict review instead of
@@ -405,6 +469,10 @@ class IdentityResolutionService:
             auto_link_strong=_strong_autolink_enabled(),
             verified_present=verified_present,
             auto_merge_verified=_verified_email_merge_enabled(),
+            observed_signal_types=_dedupe_types([
+                t for (t, _, _) in hashed_signals if t not in _ATTRIBUTION_ONLY
+            ]),
+            authenticated_binding=authenticated_binding,
         )
         policy_result = evaluate(policy_ctx)
 
@@ -476,7 +544,15 @@ class IdentityResolutionService:
             if raw_signals
             else [t for (t, _, _) in hashed_signals]
         )
-        if policy_result.decision == MergeDecision.CREATE or not existing_entity_ids:
+        if (
+            policy_result.decision == MergeDecision.CREATE
+            or not existing_entity_ids
+            or (binding_contradicted and policy_result.decision != MergeDecision.BLOCKED)
+        ):
+            # A contradicted binding (this user_id on a device whose anonymous
+            # id already belongs to a DIFFERENT user) resolves to the event's
+            # own entity; the candidates go to a conflict record for review
+            # instead of absorbing another person's aliases.
             canonical_entity_id = str(uuid.uuid4())
             entity_type = _infer_entity_type_from_types(_signal_types_for_type_infer)
             await self._repo.create_subject(
@@ -512,11 +588,18 @@ class IdentityResolutionService:
 
         # ── 9. Link aliases ───────────────────────────────────────────────
         linked_aliases: list[str] = []
+        # A consent-gated identifier (email/phone hash, install/browser id,
+        # fingerprint) is never linked as an alias without identity-stitching
+        # consent: scoring already ignores it, and a stored alias would let a
+        # later event match through it.
+        stitching_consent = has_stitching_consent(consent_snapshot)
         if policy_result.decision not in (MergeDecision.BLOCKED, MergeDecision.REJECT):
             if raw_signals:
                 for sig in raw_signals:
                     h, display = _hash_signal(sig.type, sig.value, tenant_id)
                     if not h or sig.type in _ATTRIBUTION_ONLY:
+                        continue
+                    if sig.type in CONSENT_REQUIRED_SIGNALS and not stitching_consent:
                         continue
                     alias = await self._repo.upsert_alias(
                         tenant_id=tenant_id,
@@ -536,6 +619,8 @@ class IdentityResolutionService:
                 # Pre-hashed path: use hashed_signals directly (observations already persisted)
                 for (sig_type, sig_hash, display) in hashed_signals:
                     if sig_type in _ATTRIBUTION_ONLY:
+                        continue
+                    if sig_type in CONSENT_REQUIRED_SIGNALS and not stitching_consent:
                         continue
                     alias = await self._repo.upsert_alias(
                         tenant_id=tenant_id,
@@ -599,6 +684,8 @@ class IdentityResolutionService:
         # ── 11. Create conflict if ambiguous ──────────────────────────────
         conflict_id: Optional[str] = None
         if policy_result.decision == MergeDecision.CANDIDATE and has_conflict:
+            if binding_contradicted and not policy_result.conflict_type:
+                policy_result.conflict_type = "conflicting_user_binding"
             conflict_id = await self._conflicts.open_conflict(
                 tenant_id=tenant_id,
                 candidate_entity_ids=existing_entity_ids,
@@ -829,6 +916,78 @@ class IdentityResolutionService:
         )
 
     # ── Verified-ownership merge helpers ──────────────────────────────────
+
+    async def _surviving_entity_ids(
+        self, tenant_id: str, entity_ids: list[str]
+    ) -> list[str]:
+        """Map candidate ids through merge tombstones to their survivors (deduped).
+
+        Fail-safe: a lookup failure keeps the original id.
+        """
+        out: list[str] = []
+        for eid in entity_ids:
+            try:
+                survivor = await self._repo.resolve_surviving_canonical_entity_id(
+                    tenant_id, eid
+                )
+            except Exception as exc:  # noqa: BLE001 - keep the original id
+                logger.warning("survivor lookup failed for %s: %s", eid, exc)
+                survivor = eid
+            survivor = survivor or eid
+            if survivor not in out:
+                out.append(survivor)
+        return out
+
+    async def _entity_family(self, tenant_id: str, survivor: str) -> set[str]:
+        """The survivor plus every fragment currently merged into it."""
+        family = {survivor}
+        frontier = [survivor]
+        while frontier and len(family) < 200:
+            node = frontier.pop()
+            for merge in await self._repo.get_merge_history(tenant_id, node):
+                src = merge.get("from_entity_id")
+                if merge.get("into_entity_id") != node or not src or src in family:
+                    continue
+                current = await self._repo.resolve_surviving_canonical_entity_id(
+                    tenant_id, src
+                )
+                if current != survivor:
+                    continue  # split back out since
+                family.add(src)
+                frontier.append(src)
+        return family
+
+    async def _binding_contradicted(
+        self, tenant_id: str, entity_ids: list[str], event_user_hash: str
+    ) -> bool:
+        """True when collapsing ``entity_ids`` under ``event_user_hash`` would
+        fuse different people: some candidate (or a fragment merged into it)
+        holds a different user_id, or the candidates disagree on external_id /
+        verified wallet. Fail-CLOSED: an error reports a contradiction, because
+        this check is what authorizes an automatic merge.
+        """
+        try:
+            by_type: dict[IdentitySignalType, set[str]] = {
+                IdentitySignalType.USER_ID: {event_user_hash},
+            }
+            for survivor in entity_ids:
+                for eid in await self._entity_family(tenant_id, survivor):
+                    for alias in await self._repo.get_aliases_for_entity(tenant_id, eid):
+                        if alias.get("revoked_at"):
+                            continue
+                        try:
+                            at = IdentitySignalType(alias.get("alias_type"))
+                        except (ValueError, TypeError):
+                            continue
+                        if at not in _BINDING_DETERMINISTIC_TYPES:
+                            continue
+                        by_type.setdefault(at, set()).add(
+                            alias.get("alias_value_hash") or ""
+                        )
+            return any(len(hashes) >= 2 for hashes in by_type.values())
+        except Exception as exc:  # noqa: BLE001 - fail closed: no auto-merge
+            logger.warning("identity binding contradiction check failed: %s", exc)
+            return True
 
     async def _has_deterministic_conflict(
         self, tenant_id: str, entity_ids: list[str]
