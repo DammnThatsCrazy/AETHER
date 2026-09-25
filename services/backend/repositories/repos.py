@@ -1359,8 +1359,11 @@ class AnalyticsRepository:
                 dict(row) for row in store.values()
                 if all(str(row.get(key)) == str(value) for key, value in equals.items())
             ]
-            epoch = datetime.min.replace(tzinfo=timezone.utc)
-            rows.sort(key=lambda row: _as_utc_datetime(row.get("occurred_at")) or epoch, reverse=True)
+            # Newest first; rows without a readable time sort last.
+            rows.sort(key=lambda row: (
+                (instant := _as_utc_datetime(row.get("occurred_at"))) is not None,
+                instant.timestamp() if instant else 0.0,
+            ), reverse=True)
             return rows[:limit]
 
         columns = dict(await silver_writer.SilverFactWriter()._table_columns(pool, table))
