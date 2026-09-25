@@ -9,6 +9,7 @@ since_version: 0.1.0
 source_files: [services/backend/services/investigation/routes.py, services/backend/services/governance/routes.py, services/backend/services/events/routes.py, services/backend/services/events/worker.py, services/backend/services/realtime/channel_hub.py, services/backend/repositories/repos.py, services/backend/shared/events/events.py, frontend/kyber/src/features/investigation/use-investigations.ts, frontend/kyber/src/features/governance/use-governance.ts, frontend/kyber/src/features/graph/use-graph-intelligence.ts]
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged.'}
+  - {'commit': 'f63d631', 'reason': 'Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required.'}
 source_hashes:
   "frontend/kyber/src/features/governance/use-governance.ts": "sha256:95866e0a4d641818054dea1a9c955de75e5c21449bba8687f97a7989b7b17474"
   "frontend/kyber/src/features/graph/use-graph-intelligence.ts": "sha256:9e9e9e76a87c02158860fc6ffa12d542be09d888de3dad5b43ce6c5b8232c57b"

@@ -6846,6 +6846,22 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/privacy/dsr-erasure-coverage.md",
+      "title": "DSR Erasure Coverage — Every Component, Every Store",
+      "slug": "privacy/dsr-erasure-coverage",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "security",
+        "compliance",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/privacy/traffic-intelligence-data-retention.md",
       "title": "Traffic Intelligence Data Retention",
       "slug": "privacy/traffic-intelligence-data-retention",

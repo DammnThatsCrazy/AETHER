@@ -53,7 +53,10 @@ kyber device stores — `DSR_COMPONENTS`, the erasure handler, and a
 dsr-coverage-check` (`scripts/release/check_dsr_coverage.py`) now asserts, fail-closed,
 that every principal-scoped mobile table has **all four** links. Removing a mobile
 table from `DSR_COMPONENTS` or unwiring the handler fails CI (proven by
-`tests/unit/test_dsr_coverage.py`).
+`tests/unit/test_dsr_coverage.py`). The same gate also requires that **every**
+`DSR_COMPONENTS` entry, mobile or not, be executed by the `consent.erasure`
+job, so no component can stay `pending` forever. See
+`docs/privacy/dsr-erasure-coverage.md`.
 
 ## Privacy manifests & Play Data Safety (generated, drift-gated)
 

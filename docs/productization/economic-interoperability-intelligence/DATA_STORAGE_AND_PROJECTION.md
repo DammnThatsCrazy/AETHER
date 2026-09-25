@@ -9,11 +9,11 @@ since_version: 0.1.0
 source_files: [services/backend/repositories/typed_repo.py, services/backend/services/silver/dispatcher.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py]
 canonical_owner: platform@aether
 source_hashes:
-  services/backend/repositories/typed_repo.py: sha256:b0e0fe79957acc7a7009ff34da11be9979d4b21039606c9f67f45650db99a9ac
-  services/backend/services/silver/dispatcher.py: sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f
-  docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py: sha256:3f3951246bed211847eabf45fd2dc2e6bac882f9fad2c6375a595c7d2149f0db
-  docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py: sha256:ff433ea1c35069666694aee0f0a2a6cef369cf97b0f77ad5c9eb578f6913caea
-  docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py: sha256:33c4eb1dab69dd4a98201761df37c8de1a6a3006f190937920751135308fc2fa
+  "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py": "sha256:3f3951246bed211847eabf45fd2dc2e6bac882f9fad2c6375a595c7d2149f0db"
+  "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py": "sha256:ff433ea1c35069666694aee0f0a2a6cef369cf97b0f77ad5c9eb578f6913caea"
+  "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py": "sha256:33c4eb1dab69dd4a98201761df37c8de1a6a3006f190937920751135308fc2fa"
+  "services/backend/repositories/typed_repo.py": "sha256:a39b0ac7f0332b0d3c66cb22f13381f509be6f1c3b260e64d30361766fa6fbaa"
+  "services/backend/services/silver/dispatcher.py": "sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f"
 ---
 
 # Data Storage and Projection
@@ -25,7 +25,9 @@ specs, Decimal-preserving round trips, asyncpg with
 `ON CONFLICT (tenant_id, idempotency_key) DO NOTHING` in staging/prod,
 shared in-memory stores locally. Chosen over JSONB `BaseRepository`
 because the PR1 DDL already enforces NUMERIC(38,18) and CHECK
-constraints that JSONB would forfeit (ADR-005).
+constraints that JSONB would forfeit (ADR-005). Data-subject erasure
+uses `delete_for_tenant_where`, a single tenant-scoped delete (see
+`docs/privacy/dsr-erasure-coverage.md`).
 
 ## Silver
 

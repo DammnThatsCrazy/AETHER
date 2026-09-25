@@ -10,7 +10,7 @@ source_files:
   - services/backend/repositories/typed_repo.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/repositories/typed_repo.py": "sha256:b0e0fe79957acc7a7009ff34da11be9979d4b21039606c9f67f45650db99a9ac"
+  "services/backend/repositories/typed_repo.py": "sha256:a39b0ac7f0332b0d3c66cb22f13381f509be6f1c3b260e64d30361766fa6fbaa"
 ---
 
 # ADR-005: Typed Financial Repositories over JSONB
@@ -42,3 +42,9 @@ use it; non-financial platform data stays on `BaseRepository`.
 - Idempotency is structural, so replays and retries are safe by default.
 - The in-memory local mode makes the entire domain testable without
   Postgres (used by the gated suite).
+- Rows are never rewritten in place; the one deletion path is the DSR
+  primitive `delete_for_tenant_where(tenant_id, column, values)`, a single
+  tenant-scoped statement used by the `consent.erasure` job for tables whose
+  storage policy is `hard_delete` (e.g. `derivatives_pnl_snapshots` under
+  `financial_value_snapshots`). It refuses an empty tenant or an unknown
+  column, and a retry deletes nothing.

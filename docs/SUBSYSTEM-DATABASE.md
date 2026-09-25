@@ -191,6 +191,15 @@ table and caches it. Writes and filters are then bound to the migrated types:
   pointer. The tenant's cached query results are then dropped and its query
   generation replaced; if that fails, the step is marked `failed` and the job
   retries.
+- **DSR delete primitive:** `BaseRepository.delete_for_tenant_where(tenant_id,
+  field, values)` hard-deletes the tenant's rows whose `field` equals any of
+  `values` in one statement. `tenant_id = $1` is always part of the
+  predicate, and an empty tenant or an invalid field name raises. JSONB tables
+  match `data->>'field'`; explicit-column tables use the column, including
+  `_column_renames`, or the `_payload_column` key. A retry deletes nothing. The
+  `consent.erasure` completeness planes use it for the identity, Profile 360,
+  Gold feature, connector and replay stores
+  (`docs/privacy/dsr-erasure-coverage.md`).
 
 ## Data Lake Repositories
 

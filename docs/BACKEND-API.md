@@ -1543,6 +1543,17 @@ latest submission time; advanced atomically, never rewound), so it costs one key
 lookup per identifier on the event. Erasure requests submitted before markers
 existed are backfilled once per deployment before the first fenced write.
 
+The same job executes every other DSR propagation component: identity aliases,
+subjects and graph edges; Profile 360 snapshots; Gold feature rows; ML
+training/model assessments; the prediction cache; export and audit-export
+artifacts; tenant view caches; replay envelopes; connector-derived identities;
+derivatives P&L snapshots; Silver facts; and the hash-chained Bronze tier.
+Bronze rows are erased by chain-preserving tombstone. Reward eligibility
+decisions are retained under legal retention (`skipped_legal_hold`). No step
+is left `pending`, so the request's `overall` becomes `completed`, or
+`requires_manual_review` when an indexed offline ML artifact embeds the
+subject. See `docs/privacy/dsr-erasure-coverage.md`.
+
 ---
 
 ### Analytics Service Commerce KPI
@@ -3316,9 +3327,11 @@ Communications operator surface (`/v1/comms/admin/*`, Kyber operator scope):
 - Existing audited remediation: `POST /v1/comms/admin/state/rebuild`,
   `/graph/reproject`, `/dsr/erase`. The durable `/dsr/erase` remediation
   propagates across every subject-data plane — measurement/attribution, mobile
-  (continuations, installations, client-sync), and the semantic-intelligence
-  plane (observations, sentiment, Gold aggregate state, review queue) — marking
-  each `dsr_propagation` component with its own erased-row receipt.
+  (continuations, installations, client-sync), the semantic-intelligence
+  plane (observations, sentiment, Gold aggregate state, review queue), and
+  every other `DSR_COMPONENTS` entry (identity, graph, Profile 360, features,
+  exports, caches, replay, connectors, financial snapshots, Silver, Bronze) —
+  marking each `dsr_propagation` component with its own receipt.
 
 Provider readiness is truthful: without a credential a provider reports
 `credential_missing`, is never marked connected, and the certification harness

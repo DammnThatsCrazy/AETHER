@@ -28,7 +28,7 @@ this mapping (``identity_aliases`` / ``identity_subjects`` / ``graph_edges``)
 run LAST and only when every entity-keyed plane succeeded in the same attempt,
 so a retry can always re-resolve the subject.
 
-Component → store map (see ``docs/source-of-truth/DSR-ERASURE-COVERAGE.md``):
+Component → store map (see ``docs/privacy/dsr-erasure-coverage.md``):
 
   identity_aliases         identity_aliases + identity_signal_observations (hard delete)
   identity_subjects        identity_subjects + identity_clusters_v2 + identity_clusters
