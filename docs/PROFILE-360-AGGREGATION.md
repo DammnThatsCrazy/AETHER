@@ -15,7 +15,7 @@ source_hashes:
   "services/backend/services/profile/aggregator.py": "sha256:cb9e6fad68f0827cd037458b7306d4c13b0b26fbfc7b8708c926d11784503e83"
   "services/backend/services/profile/intelligence.py": "sha256:c11ffbb5a409e612e7aa40958526b9e9f22c41b5ec9d03c9576c4328646b6d14"
   "services/backend/services/profile/read_result.py": "sha256:be38b15f1b60afa0743471e48ac1e9dfddfddd42880b4f78e6e848761b72d056"
-  "services/backend/services/profile/routes.py": "sha256:f51979fa82968ca97bdac3520fd411b20e578c1734547077c594be2c42a6ed4f"
+  "services/backend/services/profile/routes.py": "sha256:4113de6d0b849835183bfad6de4bbaafe18fc9828c412d4767835b7bde01d718"
   "services/backend/services/reconciliation/coverage.py": "sha256:118ba12380fe87fc788ae747f190e0438d3a8be5e7a610021dab50447a67298f"
   "services/backend/services/reconciliation/expectations.py": "sha256:ccc747594faf8575f23c9726c02a3f50a9370715950c4a801926b2eaaa999c00"
 ---
@@ -490,7 +490,10 @@ distinguishes three states honestly: `available` (rows returned), `empty`
 failed — the empty list is *not* a confirmed absence). A store outage
 degrades to an empty list with `source_status: "missing"` rather than
 masquerading as confirmed-empty. All require the `read` permission on the
-active tenant.
+active tenant. Rows come from `AnalyticsRepository.query_silver`: only the
+active tenant's rows for this entity (`user_id`), newest `occurred_at` first,
+from the fact table itself (or the Silver writer's local store without a
+database); an unknown table or column fails the read rather than widening it.
 
 | Method | Path                              | Silver table                    | Returns                                    |
 |--------|-----------------------------------|---------------------------------|--------------------------------------------|

@@ -10,7 +10,7 @@ canonical_owner: platform@aether
 source_files: [services/backend/services/consent/erasure_jobs.py, services/backend/services/consent/erasure_planes.py, services/backend/services/dsr_propagation/models.py, services/backend/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
 source_hashes:
   "scripts/release/check_dsr_coverage.py": "sha256:3e7278d5281df87983b69075aa0f701b476c4ec3ab7dca534e31011577b663a0"
-  "services/backend/services/consent/erasure_jobs.py": "sha256:3565e02f7f71b8bb252b9cb1597af83bae6ff09f0915afd1cbec11da55631859"
+  "services/backend/services/consent/erasure_jobs.py": "sha256:1d98e9e3121ab00f7f62b4ab2a21f5b317a6182d757cc0ba630268a90081cdd0"
   "services/backend/services/consent/erasure_planes.py": "sha256:a46afee097624401d18a94dcd5f211fbb3a681daf34b1431a031f9597f9f4132"
   "services/backend/services/dsr_propagation/models.py": "sha256:a55bd9d415527b8770bc6eb9be2bcc347de3e462036c69bd7d490f5c40737dec"
   "services/backend/shared/storage/lifecycle.py": "sha256:363902505a04df7228b46faad627ebe0cfc42bbbe8940122cf8ac42b6c93ac40"

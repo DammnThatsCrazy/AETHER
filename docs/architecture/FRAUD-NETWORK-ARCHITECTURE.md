@@ -19,7 +19,7 @@ reviewed_source_commits:
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
   "packages/shared/graph-contract.ts": "sha256:22f04a5932fd36c169c27cab2cf3107df3a8ea6150b02796ce30bc77affd6a94"
-  "services/backend/repositories/repos.py": "sha256:544975ca4498ee26c04fa706f565c4b14a495b7de8ab0d2457a39c238728a3c6"
+  "services/backend/repositories/repos.py": "sha256:fa4001b9bad9ad493abce62503686d163770a5b4440e667df626c134273d6ad0"
   "services/backend/services/flow_trace/": "sha256:ecabf31ddd0dacf96475c891836cc7d7ba3906c17a34f67669393eff874a3348"
   "services/backend/services/fraud_networks/": "sha256:9c7f503deb4644cf1c70768b9286e147a0ecd22a4d34951b91abfc2036ce06f4"
   "services/backend/services/risk_overlay/": "sha256:6d04a12540c642817550c816f91c6dfefeab901764d53d05bd0cd7c43e814bc7"
