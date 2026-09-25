@@ -11,7 +11,7 @@ canonical_owner: backend@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/backend/shared/cache/cache.py": "sha256:753e8d1a02710bedd08d966ccf5b02b4dfa5e36129448024c5db5fdc1eeddadc"
+  "services/backend/shared/cache/cache.py": "sha256:956924e1fc708893553d5b086d731c9bb108c94365baca97c63665612420e387"
 ---
 
 # Cache / Redis Subsystem
