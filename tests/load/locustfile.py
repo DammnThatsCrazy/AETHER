@@ -365,6 +365,16 @@ class BatchIngestTasks(TaskSet):
             if resp.status_code in (400, 422):
                 resp.success()
 
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set.
+
+        Locust keeps a user inside a TaskSet until ``interrupt()``; without
+        this, each user stays in the set it drew first and a short run can
+        exercise only one of the user's task sets.
+        """
+        self.interrupt()
+
 
 # =========================================================================
 # Identity Resolution Load Tests
@@ -432,6 +442,11 @@ class IdentityResolveTasks(TaskSet):
             headers=self.headers,
             name="/sdk/identity/resolve [anon-to-known]",
         )
+
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
