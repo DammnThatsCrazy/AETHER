@@ -910,6 +910,33 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
         logger.debug(f"SSO user lookup error: {e}")
 
     if not tenant_id:
+        # An unknown sub may still belong to a known person: link a verified
+        # email to its existing user, or accept a pending invitation. Only
+        # when neither applies is a new tenant provisioned — never in
+        # staging, which is internal-only (SSO_SELF_SIGNUP_ENABLED=false).
+        from services.auth.sso_membership import resolve_sso_membership
+
+        membership = await resolve_sso_membership(
+            sub=sub,
+            email=email,
+            email_verified=bool(claims.get("email_verified")),
+            name=name,
+        )
+        if membership is not None:
+            tenant_id = membership.tenant_id
+            principal_user_id = membership.user_id
+            rec = await _repo.find_by_id(tenant_id) or {}
+            if rec.get("status") == "inactive":
+                raise BadRequestError("This account has been deactivated.")
+            plan_tier_value = rec.get("plan_tier", plan_tier.value) or plan_tier.value
+        elif not settings.trust_plane.sso_self_signup_enabled:
+            metrics.increment("sso_signup_refused_total")
+            raise ForbiddenError(
+                "Sign-in is by invitation only in this environment. "
+                "Ask an Olympus administrator to invite this email address."
+            )
+
+    if not tenant_id:
         # First SSO login — provision a new tenant
         tenant_id = str(uuid.uuid4())
 

@@ -25,7 +25,7 @@ source_hashes:
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/backend/repositories/repos.py": "sha256:b7cf53497f7ee6cfd604cd5abbe1e64cce6f13661c1e9db922357f386a455682"
-  "services/backend/services/auth/routes.py": "sha256:716020d7f01cd1309b397cb71acd3667f30b78bd7e2eebf39dd6cd90643425f5"
+  "services/backend/services/auth/routes.py": "sha256:698a1cf4c52f05c9cc3f6bba18b1da5080a271fcfb5f834a2501fc7a5d80254f"
 ---
 
 # AETHER first-admin bootstrap
@@ -62,6 +62,14 @@ hash. The durable marker binds the tenant and key hash to the request, making
 an identical retry safe after a lost HTTP response while rejecting a different
 key or request. A token-protected status read prevents overwriting an already
 claimed credential.
+
+The bootstrap tenant is the platform's own administrative tenant, so in
+staging it is a **platform operator** (top plan, no burst limit, quota metering
+or extraction budget; see [Access Control](ACCESS-CONTROL.md#platform-operators)).
+Signing in to `app.staging` through Auth0 with the bootstrap email, verified by
+the identity provider, links that Auth0 identity to the admin user and lands in
+this tenant. Teammates and advisors are invited from it with
+`POST /v1/account/organization/invitations`; their first Auth0 sign-in joins it.
 
 ## Automated lifecycle
 

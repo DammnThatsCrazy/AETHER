@@ -69,6 +69,33 @@ def _state_role(tenant: Any) -> OrganizationRole | None:
         return None
 
 
+async def _create_default_profile(tenant: Any, repo: OrganizationRepository) -> dict[str, Any]:
+    """Create a tenant's organization profile on its admin's first use.
+
+    Nothing else creates a profile (first-admin bootstrap and SSO provisioning
+    make only tenant and user rows), so without this every organization route,
+    including invitations, 404s. Only a tenant admin may create it, and becomes
+    its owner; anyone else still gets 404.
+    """
+    if _state_role(tenant) != OrganizationRole.ADMIN:
+        raise NotFoundError("Organization")
+    name = "Organization"
+    try:
+        from repositories.repos import AdminRepository
+
+        record = await AdminRepository().find_by_id(tenant.tenant_id) or {}
+        name = str(record.get("name") or name)
+    except Exception:  # noqa: BLE001 — the name is cosmetic
+        pass
+    try:
+        return await repo.create_profile(
+            tenant.tenant_id, owner_user_id=getattr(tenant, "user_id", None), name=name,
+        )
+    except ConflictError:
+        # A concurrent first request created it.
+        return await _organization_or_404(tenant.tenant_id, repo)
+
+
 async def _organization_or_404(tenant_id: str, repo: OrganizationRepository) -> dict[str, Any]:
     profile = await repo.get_profile(tenant_id)
     if profile is None:
@@ -109,7 +136,9 @@ async def _authorize(
     allowed: frozenset[OrganizationRole],
 ) -> tuple[Any, dict[str, Any], OrganizationRole]:
     tenant = _tenant(request)
-    profile = await _organization_or_404(tenant.tenant_id, repo)
+    profile = await repo.get_profile(tenant.tenant_id)
+    if profile is None:
+        profile = await _create_default_profile(tenant, repo)
     role = await _actor_role(tenant, profile, repo)
     if role not in allowed:
         raise ForbiddenError(f"Organization role '{role.value}' cannot perform this action")

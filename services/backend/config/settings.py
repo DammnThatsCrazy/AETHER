@@ -548,6 +548,15 @@ class SecurityGovernanceConfig:
     kyber_operator_tenant_ids: list[str] = field(default_factory=lambda: _env_list(
         "KYBER_OPERATOR_TENANT_IDS", ""
     ))
+    # Tenants that RUN the platform (Olympus staff and invited advisors) rather
+    # than consume it. They resolve to the top plan and bypass customer burst
+    # limits, monthly quota/overage metering and ML extraction budgets. This is
+    # deliberately separate from Kyber access above. In staging the tenant
+    # bound by the single-use first-admin bootstrap is added automatically
+    # (shared/auth/platform_operator.py).
+    platform_operator_tenant_ids: list[str] = field(default_factory=lambda: _env_list(
+        "PLATFORM_OPERATOR_TENANT_IDS", ""
+    ))
 
 
 # ---------------------------------------------------------------------------
@@ -582,6 +591,12 @@ class TrustPlaneConfig:
     # env var always wins.
     legacy_tenant_registration_enabled: bool = _env_bool(
         "LEGACY_TENANT_REGISTRATION_ENABLED", not _TRUST_DEFAULT_ON
+    )
+    # Staging is internal-only: an Auth0 sign-in there must belong to an
+    # existing user or accept a pending organization invitation; it never
+    # self-provisions a new tenant. Other environments keep self-signup.
+    sso_self_signup_enabled: bool = _env_bool(
+        "SSO_SELF_SIGNUP_ENABLED", _env("AETHER_ENV", "local") != "staging"
     )
 
     # One-time, staging-only first-admin bootstrap.  This is deliberately

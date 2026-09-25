@@ -200,3 +200,27 @@ async def test_owner_transfer_and_removal_safeguards(organization):
         await change_organization_member_role(
             request_for("owner-a"), target["id"], MemberRoleUpdate(role=OrganizationRole.VIEWER)
         )
+
+
+@pytest.mark.asyncio
+async def test_tenant_admin_first_use_creates_the_profile_so_invitations_work():
+    """Nothing else creates an organization profile, so without this every
+    organization route (invitations included) 404s for every tenant."""
+    admin = request_for("admin-b", role="admin", tenant_id="tenant-b")
+
+    invitation = await create_organization_invitation(
+        admin, InvitationCreateRequest(email="Advisor@Example.com", role="member")
+    )
+
+    profile = await OrganizationRepository().get_profile("tenant-b")
+    assert profile["owner_user_id"] == "admin-b"
+    assert invitation["data"]["email"] == "advisor@example.com"
+
+
+@pytest.mark.asyncio
+async def test_non_admin_cannot_create_a_missing_profile():
+    from shared.common.common import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        await get_organization_profile(request_for("viewer-c", role="viewer", tenant_id="tenant-c"))
+    assert await OrganizationRepository().get_profile("tenant-c") is None

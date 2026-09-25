@@ -19,7 +19,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/": "sha256:36ba3883b69547e3da32726f271844c9632d0d197720ebff1933b66d58222e22"
   "services/backend/main.py": "sha256:29c86cf3a10e85148b699b7c4be46143babf61a0c9b6738e5f68c032f6bad736"
-  "services/backend/middleware/middleware.py": "sha256:09a1dee6007cc06adcd8b67d379278b1edf2a4c311e562470ffbab3bb3d84b99"
+  "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
 ---
 # Aether vNext — Architecture Guide
 
@@ -461,7 +461,9 @@ All protections are gated behind `ENABLE_EXTRACTION_DEFENSE` (default off).
 The middleware resolves an explicit defense mode at request time (extraction
 mesh → legacy defense layer → off); with `REQUIRE_EXTRACTION_DEFENSE=true`
 (production profiles) an unavailable defense fails closed with
-`EXTRACTION_DEFENSE_UNAVAILABLE` instead of silently passing traffic. See
+`EXTRACTION_DEFENSE_UNAVAILABLE` instead of silently passing traffic. Platform
+operator tenants (Olympus staff; see [Access Control](ACCESS-CONTROL.md#platform-operators))
+skip it, together with the burst limit and quota metering. See
 [Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
 
 ## Multi-Model Intelligence Harness (0.1.0-alpha.0)

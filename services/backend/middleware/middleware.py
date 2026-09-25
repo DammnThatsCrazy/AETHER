@@ -37,6 +37,7 @@ from shared.auth.auth import (
     legacy_tier_to_plan,
     CREDENTIAL_CLASS_PUBLISHABLE,
 )
+from shared.auth.platform_operator import is_platform_operator
 from shared.logger.logger import get_logger, set_request_context, metrics
 from shared.plans.catalog import PLAN_CATALOG
 from shared.rate_limit.feature_gate import (
@@ -470,6 +471,16 @@ def register_middleware(app: FastAPI) -> None:
                     status_code=_policy_denial.code.value, content=_policy_denial.to_dict()
                 )
             plan_tier = _resolve_plan_tier(context)
+            # Platform operators run Aether; they are not billed customers.
+            # They get every service and skip the customer controls below
+            # (burst limit, monthly quota/overage metering, ML extraction
+            # budget). External tenants are unaffected.
+            platform_operator = await is_platform_operator(context.tenant_id)
+            request.state.platform_operator = platform_operator
+            if platform_operator:
+                plan_tier = PlanTier.OMEGA
+                context.plan_tier = PlanTier.OMEGA
+                metrics.increment("platform_operator_request_total")
             request.state.plan_tier = plan_tier
             request.state.context = req_context.with_tenant(
                 context.tenant_id,
@@ -487,14 +498,16 @@ def register_middleware(app: FastAPI) -> None:
             )
 
             # --- Burst RPM (per-plan, per-tenant) ---
-            try:
-                rl_result = await registry.rate_limiter.check(
-                    context.tenant_id, plan_tier,
-                )
-            except (ConnectionError, TimeoutError) as e:
-                logger.warning(f"Burst limiter Redis unreachable: {e}")
-                metrics.increment("redis_fallback", labels={"layer": "burst"})
-                rl_result = None
+            rl_result = None
+            if not platform_operator:
+                try:
+                    rl_result = await registry.rate_limiter.check(
+                        context.tenant_id, plan_tier,
+                    )
+                except (ConnectionError, TimeoutError) as e:
+                    logger.warning(f"Burst limiter Redis unreachable: {e}")
+                    metrics.increment("redis_fallback", labels={"layer": "burst"})
+                    rl_result = None
 
             if rl_result is not None:
                 rate_headers = {
@@ -578,7 +591,7 @@ def register_middleware(app: FastAPI) -> None:
                 access_tier_header = gate_result.access_tier
 
             # --- Monthly Quota (meters only, never blocks) ---
-            quota_engine = getattr(registry, "quota_engine", None)
+            quota_engine = None if platform_operator else getattr(registry, "quota_engine", None)
             if quota_engine is not None:
                 try:
                     quota_result = await quota_engine.check_and_increment(
@@ -620,7 +633,7 @@ def register_middleware(app: FastAPI) -> None:
             # --- Extraction defense for protected ML prediction routes ---
             # Mesh preferred; legacy fallback when the mesh is unavailable;
             # fail closed (when required) if neither defense is available.
-            if request.url.path.startswith(_PROTECTED_ML_PREFIX):
+            if request.url.path.startswith(_PROTECTED_ML_PREFIX) and not platform_operator:
                 mode = resolve_extraction_defense_mode()
                 request.state.extraction_defense_mode = mode
 
@@ -1355,8 +1368,11 @@ async def _resolve_session_token(token: str) -> Optional[TenantContext]:
     try:
         plan_tier = PlanTier(tenant_record.get("plan_tier") or tenant_record.get("plan"))
     except (TypeError, ValueError):
-        # Unknown/missing plan evidence is not silently promoted or defaulted.
-        return None
+        # Unknown/missing plan evidence is not silently promoted or defaulted,
+        # except for a platform operator tenant, which is never plan-limited.
+        if not await is_platform_operator(rec.get("tenant_id")):
+            return None
+        plan_tier = PlanTier.OMEGA
     try:
         role = Role(user_record.get("role", Role.VIEWER.value))
     except ValueError:

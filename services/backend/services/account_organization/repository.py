@@ -151,6 +151,20 @@ class OrganizationRepository:
         )
         return rows[0] if rows else None
 
+    async def find_pending_invitations_for_email(self, email: str) -> list[dict[str, Any]]:
+        """Pending invitations addressed to ``email`` in any tenant.
+
+        The one cross-tenant lookup here: an invitee has no tenant until the
+        invitation is accepted at sign-in (services/auth/sso_membership.py),
+        which only calls this for an identity-provider-verified email.
+        """
+        return await self.invitations.find_many(
+            {"email": email, "status": "pending"},
+            limit=50,
+            sort_by="created_at",
+            sort_order="desc",
+        )
+
     async def list_invitations(self, tenant_id: str) -> list[dict[str, Any]]:
         return await self.invitations.find_many(
             {"tenant_id": tenant_id}, limit=200, sort_by="created_at", sort_order="desc"

@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:a198e60dd31fe28a9da5f2177504d6aeab2a76e756e18e6f732b0ae14b8ead70"
+  "services/backend/services/": "sha256:f64402e813b3f81257d0e24886bfb5dcde4a2146ba6cd16ee304b9c389e538ac"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -145,7 +145,7 @@ signature-verification failures.
 | `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key |
 | `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost |
 | `/v1/auth/login` | POST | Email + password → API key (creates a new key per login) |
-| `/v1/auth/sso/callback` | POST | Auth0 JWT → API key (SSO finish) |
+| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off). An unlinked sign-in first links a verified email to its existing user or accepts a pending organization invitation; staging never self-provisions a tenant (see [Access Control](ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
 | `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
