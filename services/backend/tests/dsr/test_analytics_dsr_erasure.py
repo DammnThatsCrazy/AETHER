@@ -410,12 +410,11 @@ async def test_cache_failure_retry_keeps_the_committed_erasure_receipt(job_env, 
 
 
 async def _dsr_record(tenant_id: str, *, submitted_at: str, user_id=USER, anonymous_id=None):
-    dsr_id = str(uuid.uuid4())
-    await ConsentRepository().insert(f"dsr_{dsr_id}", {
-        "tenant_id": tenant_id, "dsr_id": dsr_id, "user_id": user_id,
-        "anonymous_id": anonymous_id, "request_type": "erasure",
-        "status": "completed", "submitted_at": submitted_at,
-    })
+    from services.consent.erasure_fence import record_erasure_markers
+
+    await record_erasure_markers(
+        tenant_id, user_id=user_id, anonymous_id=anonymous_id, submitted_at=submitted_at,
+    )
 
 
 def _validated(tenant_id: str, *, received_at: str, user_id=None, anonymous_id=None) -> Event:
@@ -476,3 +475,53 @@ async def test_activity_after_the_erasure_and_other_subjects_are_recorded(record
     assert await _event_ids(recorder_repo, tenant) == {
         later.payload["event_id"], other.payload["event_id"]
     }
+
+
+async def test_erasure_submission_records_markers_without_the_identifier(job_env):
+    from services.consent.erasure_fence import ErasureMarkerRepository, erasure_marker_id
+
+    await _submit(TENANT, anonymous_id="anon-subject")
+
+    repo = ErasureMarkerRepository()
+    for kind, identifier in (("user_id", USER), ("anonymous_id", "anon-subject")):
+        marker = await repo.find_by_id(erasure_marker_id(TENANT, kind, identifier))
+        assert marker is not None and marker["tenant_id"] == TENANT
+        assert identifier not in str(marker)
+
+
+async def test_fence_is_key_lookups_only():
+    """The fence runs for every projected event, so it must not scan."""
+    from services.consent.erasure_fence import erasure_fences_event
+
+    class _Repo:
+        def __init__(self) -> None:
+            self.reads = 0
+
+        async def find_by_id(self, _id):
+            self.reads += 1
+            return None
+
+        async def find_many(self, *args, **kwargs):  # pragma: no cover - must not be called
+            raise AssertionError("the fence must not scan")
+
+    repo = _Repo()
+    assert await erasure_fences_event(
+        TENANT, user_id=USER, anonymous_id="anon", received_at="2026-05-01T00:00:00Z", repo=repo,
+    ) is False
+    assert repo.reads == 2
+
+
+async def test_later_erasure_advances_the_marker():
+    from services.consent.erasure_fence import erasure_fences_event
+
+    tenant = _uid("t")
+    await _dsr_record(tenant, submitted_at="2026-05-02T00:00:00+00:00")
+    await _dsr_record(tenant, submitted_at="2026-05-04T00:00:00+00:00")
+    await _dsr_record(tenant, submitted_at="2026-05-03T00:00:00+00:00")
+
+    assert await erasure_fences_event(
+        tenant, user_id=USER, anonymous_id=None, received_at="2026-05-03T12:00:00Z",
+    ) is True
+    assert await erasure_fences_event(
+        tenant, user_id=USER, anonymous_id=None, received_at="2026-05-05T00:00:00Z",
+    ) is False

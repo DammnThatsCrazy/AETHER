@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:353b1b6abc781c59f40447c2458e8ae1e44fdc6b4afbe2b93ed96c79320db13c"
+  "services/backend/services/": "sha256:63a20d43e69159dbb098722b44fdb61c5297027a9e0c682df54ed28cc5471506"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1532,7 +1532,9 @@ rebuilding their journeys, so the rebuilt journey no longer contains the
 erased activity. The analytics projector skips any queued or redelivered event
 that an erasure submitted at or after its receipt covers, so broker retries
 cannot write erased events back; activity received after the request is
-recorded normally.
+recorded normally. The check reads per-identifier erasure markers that the DSR
+submission records (keyed by a digest of tenant and identifier, holding only the
+latest submission time), so it costs one key lookup per identifier on the event.
 
 ---
 

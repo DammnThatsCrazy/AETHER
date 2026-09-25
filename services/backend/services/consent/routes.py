@@ -348,6 +348,16 @@ async def submit_dsr(
     ))
 
     if body.request_type == "erasure":
+        # Fence asynchronous projections first: an event accepted before this
+        # request but projected afterwards must not write the subject back.
+        from services.consent.erasure_fence import record_erasure_markers
+
+        await record_erasure_markers(
+            tenant.tenant_id,
+            user_id=body.user_id,
+            anonymous_id=body.anonymous_id,
+            submitted_at=dsr["submitted_at"],
+        )
         # Durable erasure: open the per-component propagation record, then
         # durably enqueue the job. A process death after this request can no
         # longer lose the erasure — the jobs worker owns retry/lease recovery,
