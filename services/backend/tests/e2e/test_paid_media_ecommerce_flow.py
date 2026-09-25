@@ -17,7 +17,6 @@ All repositories and engine components use AETHER_ENV=local (in-memory / mock DB
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 from datetime import datetime, timezone
@@ -26,6 +25,8 @@ from uuid import uuid4
 
 import pytest
 
+from ._event_loop import run as run_in_module_loop
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -33,7 +34,9 @@ os.environ.setdefault("AETHER_ENV", "local")
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # The module's own loop (tests/e2e/conftest.py); never the process-global
+    # current loop, which earlier async tests leave unset.
+    return run_in_module_loop(coro)
 
 
 def _now_iso() -> str:

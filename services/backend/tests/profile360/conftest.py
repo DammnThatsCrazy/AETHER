@@ -9,6 +9,7 @@ those environments. Production imports are unaffected.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 import types
@@ -33,29 +34,40 @@ class _CompatEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
 asyncio.set_event_loop_policy(_CompatEventLoopPolicy())
 
 
+def _is_installed(module: str) -> bool:
+    """Whether ``module`` is a real, importable distribution (without importing it)."""
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def _stub_jwt_and_crypto() -> None:
-    """Forcibly install lightweight stubs for jwt + cryptography.
+    """Install lightweight stubs for jwt + cryptography ONLY when absent.
 
-    PyJWT/cryptography unconditionally panic on import in this sandbox
-    (Rust pyo3 binding failure), and that panic is *not* a Python exception
-    we can catch. So we install stubs into sys.modules **before any code
-    paths that might import them** run. Production runs always have the
-    real packages and never reach this code.
+    In sandboxes without the packages (where PyJWT/cryptography cannot be
+    imported) the stubs let collection proceed. When the real packages are
+    installed they must never be shadowed: this conftest runs at collection
+    time and ``sys.modules`` is process-global, so a stub installed merely
+    because nothing had imported ``cryptography`` yet broke every later suite
+    that needs the real package (``cryptography.exceptions``) in a
+    whole-tree run.
     """
-    sys.modules.setdefault(
-        "jwt",
-        types.SimpleNamespace(
-            encode=lambda *a, **kw: "",
-            decode=lambda *a, **kw: {},
-            exceptions=types.SimpleNamespace(
-                PyJWTError=Exception,
-                ExpiredSignatureError=Exception,
-                InvalidTokenError=Exception,
+    if not _is_installed("jwt"):
+        sys.modules.setdefault(
+            "jwt",
+            types.SimpleNamespace(
+                encode=lambda *a, **kw: "",
+                decode=lambda *a, **kw: {},
+                exceptions=types.SimpleNamespace(
+                    PyJWTError=Exception,
+                    ExpiredSignatureError=Exception,
+                    InvalidTokenError=Exception,
+                ),
             ),
-        ),
-    )
+        )
 
-    if "cryptography" not in sys.modules:
+    if "cryptography" not in sys.modules and not _is_installed("cryptography"):
         fake = types.ModuleType("cryptography")
 
         class _Fern:
