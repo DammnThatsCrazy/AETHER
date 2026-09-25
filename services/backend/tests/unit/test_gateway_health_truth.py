@@ -660,3 +660,25 @@ def test_preflight_sees_degraded_when_a_component_is_down(gateway):
 
     assert body["status"] == "degraded"
     assert component_statuses(body)["consent"] == cs.STATUS_DOWN
+
+
+def test_inline_serving_is_healthy_without_a_serving_url(gateway, fake_model_registry, monkeypatch):
+    """Staging runs ML inline (ML_SERVING_INLINE=true) and has no ML_SERVING_URL;
+    that is the intended profile shape, not a degraded inference surface."""
+    import sys
+    import types
+
+    monkeypatch.delenv("ML_SERVING_URL", raising=False)
+    monkeypatch.setenv("ML_SERVING_INLINE", "true")
+    for name in ("serving", "serving.src"):
+        monkeypatch.setitem(sys.modules, name, sys.modules.get(name) or types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "serving.src.api", types.ModuleType("serving.src.api"))
+    fake_model_registry(["churn"])
+    body = gateway(
+        dependency_health=dependencies_all("ok"),
+        supervisor=_Supervisor(healthy_roles()),
+    ).get("/v1/health").json()
+
+    signal = body["components"]["ml_serving"]["signals"][cs.SIGNAL_MODEL_REGISTRY]
+    assert signal["status"] == cs.STATUS_OK
+    assert "served inline" in signal["detail"]

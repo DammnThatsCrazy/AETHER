@@ -567,6 +567,24 @@ def _model_registry_signal() -> dict[str, Any]:
     if not models:
         return _signal(STATUS_DOWN, "canonical model registry resolved but declares no models")
 
+    if os.getenv("ML_SERVING_INLINE", "false").lower() == "true":
+        # Inline profiles (staging, demo, production-lean) serve predictions
+        # in-process from the serving package; there is no ML_SERVING_URL.
+        try:
+            import serving.src.api  # noqa: F401
+        except Exception as exc:
+            return _signal(
+                STATUS_DEGRADED,
+                f"{len(models)} models resolvable but inline ML serving is not importable: "
+                f"{type(exc).__name__}",
+                models=len(models),
+            )
+        return _signal(
+            STATUS_OK,
+            f"{len(models)} models resolvable and served inline",
+            models=len(models),
+        )
+
     serving_url = os.getenv("ML_SERVING_URL", "")
     if not serving_url:
         return _signal(
