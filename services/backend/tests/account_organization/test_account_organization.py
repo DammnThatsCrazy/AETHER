@@ -235,3 +235,59 @@ async def test_principal_less_admin_key_does_not_create_an_ownerless_profile():
     with pytest.raises(NotFoundError):
         await get_organization_profile(request_for(None, role="admin", tenant_id="tenant-d"))
     assert await OrganizationRepository().get_profile("tenant-d") is None
+
+
+@pytest.mark.asyncio
+async def test_role_change_and_removal_update_the_session_grant(organization):
+    """Human sessions take role, permissions and membership status from the
+    user record on every request, so membership changes must reach it."""
+    from repositories.repos import UserRepository
+
+    repo, _ = organization
+    users = UserRepository()
+    await users.insert("member-a", {
+        "user_id": "member-a", "tenant_id": "tenant-a", "role": "admin",
+        "permissions": ["read", "write", "ingest", "analytics", "billing", "admin"],
+        "membership_status": "active",
+    })
+    await users.insert("other-tenant-user", {
+        "user_id": "other-tenant-user", "tenant_id": "tenant-z", "role": "admin",
+        "permissions": ["admin"], "membership_status": "active",
+    })
+    member = await repo.add_member("tenant-a", user_id="member-a", role="admin")
+    foreign = await repo.add_member("tenant-a", user_id="other-tenant-user", role="admin")
+
+    await change_organization_member_role(
+        request_for("owner-a"), member["id"], MemberRoleUpdate(role=OrganizationRole.VIEWER)
+    )
+    user = await users.find_by_id("member-a")
+    assert (user["role"], user["permissions"], user["membership_status"]) == (
+        "viewer", ["read", "analytics"], "active"
+    )
+
+    await remove_organization_member(request_for("owner-a"), member["id"])
+    user = await users.find_by_id("member-a")
+    assert (user["permissions"], user["membership_status"]) == ([], "removed")
+
+    # A user record of another tenant is never rewritten from this one.
+    await remove_organization_member(request_for("owner-a"), foreign["id"])
+    assert (await users.find_by_id("other-tenant-user"))["permissions"] == ["admin"]
+
+
+@pytest.mark.asyncio
+async def test_ownership_transfer_grants_the_new_owner_admin(organization):
+    from repositories.repos import UserRepository
+
+    repo, _ = organization
+    users = UserRepository()
+    await users.insert("target-a", {
+        "user_id": "target-a", "tenant_id": "tenant-a", "role": "viewer",
+        "permissions": ["read", "analytics"], "membership_status": "active",
+    })
+    target = await repo.add_member("tenant-a", user_id="target-a", role="viewer")
+
+    await change_organization_member_role(
+        request_for("owner-a"), target["id"], MemberRoleUpdate(role=OrganizationRole.OWNER)
+    )
+    user = await users.find_by_id("target-a")
+    assert user["role"] == "admin" and "admin" in user["permissions"]

@@ -489,6 +489,22 @@ async def test_erasure_submission_records_markers_without_the_identifier(job_env
         assert identifier not in str(marker)
 
 
+async def test_marker_is_written_before_the_erasure_request(job_env, monkeypatch):
+    """The one-time backfill never revisits, so no crash may leave a stored
+    erasure request without its marker: the marker is written first."""
+    from services.consent import routes as consent_routes
+    from services.consent.erasure_fence import ErasureMarkerRepository, erasure_marker_id
+
+    monkeypatch.setattr(
+        consent_routes._repo, "insert", AsyncMock(side_effect=RuntimeError("process died")),
+    )
+    with pytest.raises(RuntimeError):
+        await _submit(TENANT)
+
+    marker = await ErasureMarkerRepository().find_by_id(erasure_marker_id(TENANT, "user_id", USER))
+    assert marker is not None and marker["submitted_at"]
+
+
 async def test_fence_is_key_lookups_only():
     """The fence runs for every projected event, so it must not scan."""
     from services.consent.erasure_fence import erasure_fences_event

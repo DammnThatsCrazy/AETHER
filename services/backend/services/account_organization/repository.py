@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from repositories.repos import BaseRepository
 from shared.common.common import ConflictError
+from shared.temporal import parse_instant_strict
 
 
 ORGANIZATIONS_TABLE = "account_organizations"
@@ -24,6 +25,13 @@ INVITATIONS_TABLE = "account_organization_invitations"
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _unexpired(invitation: dict[str, Any], now: datetime) -> bool:
+    try:
+        return parse_instant_strict(str(invitation["expires_at"])) > now
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 class OrganizationRepository:
@@ -91,6 +99,12 @@ class OrganizationRepository:
             limit=1,
         )
         return rows[0] if rows else None
+
+    async def membership_removed(self, tenant_id: str, user_id: str) -> bool:
+        """True when this principal held a membership in the tenant that was removed."""
+        return bool(await self.members.find_many(
+            {"tenant_id": tenant_id, "user_id": user_id, "status": "removed"}, limit=1,
+        ))
 
     async def list_members(self, tenant_id: str, *, limit: int, offset: int) -> list[dict[str, Any]]:
         return await self.members.find_many(
@@ -167,14 +181,21 @@ class OrganizationRepository:
         )
 
     async def claim_pending_invitation(
-        self, tenant_id: str, invitation_id: str, changes: dict[str, Any]
+        self,
+        tenant_id: str,
+        invitation_id: str,
+        changes: dict[str, Any],
+        *,
+        now: datetime,
     ) -> bool:
-        """Atomically move a *pending* invitation to ``changes`` (e.g. accepted).
+        """Atomically move a *pending, unexpired* invitation to ``changes``.
 
         Returns False when the invitation is missing, belongs to another
-        tenant, or is no longer pending (revoked, expired, or already claimed by
-        a concurrent sign-in), so access is provisioned at most once per
-        invitation and never for a revoked one.
+        tenant, is no longer pending (revoked, or claimed by a concurrent
+        sign-in), or expires at or before ``now`` — checked in the same
+        conditional write, so an invitation that expires between being listed
+        and being claimed provisions nothing. ``now`` should be the acceptance
+        time written in ``changes``.
         """
         repo = self.invitations
         pool = await repo._ensure_pool()
@@ -182,15 +203,33 @@ class OrganizationRepository:
             record = repo._store.get(invitation_id)
             if not record or record.get("tenant_id") != tenant_id or record.get("status") != "pending":
                 return False
+            if not _unexpired(record, now):
+                return False
             record.update(changes)
             return True
         await repo._ensure_table()
         row = await pool.fetchrow(
             f"UPDATE {repo.table_name} SET data = data || $3::jsonb, updated_at = NOW() "
-            "WHERE id = $1 AND tenant_id = $2 AND data->>'status' = 'pending' RETURNING id",
-            invitation_id, tenant_id, json.dumps(changes, default=str),
+            "WHERE id = $1 AND tenant_id = $2 AND data->>'status' = 'pending' "
+            "AND (data->>'expires_at')::timestamptz > $4 RETURNING id",
+            invitation_id, tenant_id, json.dumps(changes, default=str), now,
         )
         return row is not None
+
+    async def find_unprovisioned_claims(
+        self, email: str, accepted_user_id: str
+    ) -> list[dict[str, Any]]:
+        """Invitations this principal claimed whose provisioning never finished.
+
+        Sign-in claims the invitation before writing the membership and user
+        rows; a failure in between leaves it accepted without access. The next
+        sign-in by the same identity resumes these (services/auth/sso_membership.py).
+        """
+        rows = await self.invitations.find_many(
+            {"email": email, "status": "accepted", "accepted_user_id": accepted_user_id},
+            limit=50,
+        )
+        return [row for row in rows if not row.get("provisioned_at")]
 
     async def list_invitations(self, tenant_id: str) -> list[dict[str, Any]]:
         return await self.invitations.find_many(

@@ -177,29 +177,18 @@ class _Users:
         return self.rows[user_id]
 
 
-class _Orgs:
-    def __init__(self, invitations=None) -> None:
-        self.invitations = list(invitations or [])
-        self.members: list = []
+async def _orgs(*invitations):
+    """The real organization repository (in-memory), seeded with invitations."""
+    from services.account_organization.repository import OrganizationRepository
 
-    async def find_pending_invitations_for_email(self, email):
-        return [i for i in self.invitations if i["email"] == email and i["status"] == "pending"]
+    orgs = OrganizationRepository()
+    for invitation in invitations:
+        await orgs.create_invitation(invitation["tenant_id"], dict(invitation))
+    return orgs
 
-    async def claim_pending_invitation(self, tenant_id, invitation_id, changes):
-        for invitation in self.invitations:
-            if (invitation["invitation_id"] == invitation_id and invitation["tenant_id"] == tenant_id
-                    and invitation["status"] == "pending"):
-                invitation.update(changes)
-                return True
-        return False
 
-    async def add_member(self, tenant_id, **kwargs):
-        self.members.append({"tenant_id": tenant_id, **kwargs})
-
-    async def update_invitation(self, tenant_id, invitation_id, changes):
-        for invitation in self.invitations:
-            if invitation["invitation_id"] == invitation_id:
-                invitation.update(changes)
+async def _members(orgs, tenant_id=OPERATOR):
+    return await orgs.list_members(tenant_id, limit=50, offset=0)
 
 
 def _invite(email: str, *, hours: int = 24, role: str = "admin") -> dict:
@@ -216,7 +205,7 @@ async def test_verified_email_links_the_existing_first_admin_user():
     users = _Users([{"user_id": "u-admin", "tenant_id": OPERATOR, "email": "founder@olympus.test"}])
     membership = await resolve_sso_membership(
         sub="google|1", email="Founder@Olympus.test", email_verified=True, name="F",
-        user_repo=users, organization_repo=_Orgs(),
+        user_repo=users, organization_repo=await _orgs(),
     )
 
     assert (membership.tenant_id, membership.user_id, membership.how) == (
@@ -228,7 +217,7 @@ async def test_verified_email_links_the_existing_first_admin_user():
 async def test_invited_teammate_joins_the_inviting_tenant():
     from services.auth.sso_membership import resolve_sso_membership
 
-    users, orgs = _Users(), _Orgs([_invite("advisor@example.test", role="member")])
+    users, orgs = _Users(), await _orgs(_invite("advisor@example.test", role="member"))
     membership = await resolve_sso_membership(
         sub="google|2", email="advisor@example.test", email_verified=True, name="A",
         user_repo=users, organization_repo=orgs,
@@ -237,15 +226,17 @@ async def test_invited_teammate_joins_the_inviting_tenant():
     assert membership.tenant_id == OPERATOR and membership.how == "accepted_invitation"
     user = users.rows[membership.user_id]
     assert user["auth0_sub"] == "google|2" and user["role"] == "editor"
-    assert orgs.members[0]["tenant_id"] == OPERATOR
-    assert orgs.invitations[0]["status"] == "accepted"
+    [member] = await _members(orgs)
+    assert (member["user_id"], member["role"]) == (membership.user_id, "member")
+    invitation = await orgs.get_invitation(OPERATOR, "invite-advisor@example.test")
+    assert invitation["status"] == "accepted" and invitation["provisioned_at"]
 
 
 async def test_unverified_or_expired_or_uninvited_sign_ins_resolve_nothing():
     from services.auth.sso_membership import resolve_sso_membership
 
     users = _Users([{"user_id": "u-admin", "tenant_id": OPERATOR, "email": "founder@olympus.test"}])
-    orgs = _Orgs([_invite("late@example.test", hours=-1)])
+    orgs = await _orgs(_invite("late@example.test", hours=-1))
 
     for email, verified in (
         ("founder@olympus.test", False),
@@ -288,23 +279,23 @@ async def test_a_revoked_or_already_claimed_invitation_provisions_nothing():
     from services.auth.sso_membership import resolve_sso_membership
 
     users = _Users()
-    orgs = _Orgs([_invite("advisor@example.test")])
-    stale_read = [dict(orgs.invitations[0])]
-    orgs.invitations[0]["status"] = "revoked"
+    orgs = await _orgs(_invite("advisor@example.test"))
+    stale_read = [dict(await orgs.get_invitation(OPERATOR, "invite-advisor@example.test"))]
+    await orgs.update_invitation(OPERATOR, "invite-advisor@example.test", {"status": "revoked"})
     orgs.find_pending_invitations_for_email = AsyncMock(return_value=stale_read)
 
     assert await resolve_sso_membership(
         sub="google|3", email="advisor@example.test", email_verified=True, name="A",
         user_repo=users, organization_repo=orgs,
     ) is None
-    assert users.rows == {} and orgs.members == []
+    assert users.rows == {} and await _members(orgs) == []
 
 
 async def test_retried_sign_in_converges_on_one_principal():
     from services.auth.sso_membership import resolve_sso_membership
 
-    users, orgs = _Users(), _Orgs([_invite("advisor@example.test"), _invite("advisor@example.test")])
-    orgs.invitations[1]["invitation_id"] = "invite-second"
+    second_invite = {**_invite("advisor@example.test"), "invitation_id": "invite-second"}
+    users, orgs = _Users(), await _orgs(_invite("advisor@example.test"), second_invite)
     first = await resolve_sso_membership(
         sub="google|4", email="advisor@example.test", email_verified=True, name="A",
         user_repo=users, organization_repo=orgs,
@@ -316,6 +307,83 @@ async def test_retried_sign_in_converges_on_one_principal():
 
     assert first.user_id == second.user_id
     assert len(users.rows) == 1
+    assert len(await _members(orgs)) == 1
+
+
+async def test_an_invitation_expiring_before_the_claim_provisions_nothing():
+    """Expiry is part of the atomic claim, not only the earlier read."""
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users = _Users()
+    orgs = await _orgs(_invite("advisor@example.test"))
+    stale_read = [dict(await orgs.get_invitation(OPERATOR, "invite-advisor@example.test"))]
+    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    await orgs.update_invitation(OPERATOR, "invite-advisor@example.test", {"expires_at": past})
+    orgs.find_pending_invitations_for_email = AsyncMock(return_value=stale_read)
+
+    assert await resolve_sso_membership(
+        sub="google|7", email="advisor@example.test", email_verified=True, name="A",
+        user_repo=users, organization_repo=orgs,
+    ) is None
+    assert users.rows == {} and await _members(orgs) == []
+    invitation = await orgs.get_invitation(OPERATOR, "invite-advisor@example.test")
+    assert invitation["status"] == "pending"
+
+
+async def test_a_sign_in_that_failed_after_the_claim_is_resumed():
+    """The claim commits first; a failed membership or user write must not
+    strand an accepted invitation without access."""
+    from services.auth.sso_membership import resolve_sso_membership
+
+    for failing in ("add_member", "user_insert"):
+        reset_in_memory_stores()
+        users, orgs = _Users(), await _orgs(_invite("advisor@example.test", role="viewer"))
+        boom = AsyncMock(side_effect=RuntimeError("database unavailable"))
+        target = orgs if failing == "add_member" else users
+        attribute = "add_member" if failing == "add_member" else "insert"
+        real = getattr(target, attribute)
+        setattr(target, attribute, boom)
+        with pytest.raises(RuntimeError):
+            await resolve_sso_membership(
+                sub="google|8", email="advisor@example.test", email_verified=True, name="A",
+                user_repo=users, organization_repo=orgs,
+            )
+        invitation = await orgs.get_invitation(OPERATOR, "invite-advisor@example.test")
+        assert invitation["status"] == "accepted" and not invitation.get("provisioned_at")
+        assert users.rows == {}
+
+        setattr(target, attribute, real)
+        membership = await resolve_sso_membership(
+            sub="google|8", email="advisor@example.test", email_verified=True, name="A",
+            user_repo=users, organization_repo=orgs,
+        )
+        assert membership.tenant_id == OPERATOR, failing
+        assert users.rows[membership.user_id]["role"] == "viewer"
+        assert [m["user_id"] for m in await _members(orgs)] == [membership.user_id]
+        invitation = await orgs.get_invitation(OPERATOR, "invite-advisor@example.test")
+        assert invitation["provisioned_at"]
+
+
+async def test_a_removed_half_provisioned_member_is_not_resumed():
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users, orgs = _Users(), await _orgs(_invite("advisor@example.test"))
+    real_insert = users.insert
+    users.insert = AsyncMock(side_effect=RuntimeError("database unavailable"))
+    with pytest.raises(RuntimeError):
+        await resolve_sso_membership(
+            sub="google|9", email="advisor@example.test", email_verified=True, name="A",
+            user_repo=users, organization_repo=orgs,
+        )
+    [member] = await _members(orgs)
+    await orgs.remove_member(OPERATOR, member["id"])
+    users.insert = real_insert
+
+    assert await resolve_sso_membership(
+        sub="google|9", email="advisor@example.test", email_verified=True, name="A",
+        user_repo=users, organization_repo=orgs,
+    ) is None
+    assert users.rows == {} and await _members(orgs) == []
 
 
 async def test_sso_callback_reads_the_verified_email_from_userinfo(monkeypatch):

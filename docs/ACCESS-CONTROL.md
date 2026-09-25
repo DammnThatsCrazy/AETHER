@@ -80,9 +80,19 @@ Anything else gets `403` ("Sign-in is by invitation only"). The browser sends an
 access token for the Aether API audience, which carries no email claims, so the
 backend reads the verified email from Auth0 `/userinfo` with that token (and
 rejects a userinfo subject that differs from the token's). Accepting an
-invitation is an atomic pending-to-accepted claim made **before** any access is
-provisioned, so a revoked or already-claimed invitation grants nothing, and
-every sign-in for one Auth0 identity converges on one principal. A tenant
+invitation is an atomic pending-to-accepted claim of an invitation that is still
+unexpired at that moment, made **before** any access is provisioned, so a
+revoked, expired or already-claimed invitation grants nothing, and every
+sign-in for one Auth0 identity converges on one principal. The membership and
+then the user are written after the claim; if a sign-in fails in between, the
+same identity's next sign-in finishes the provisioning, unless an
+administrator removed that member meanwhile. A human session takes its role,
+permissions and membership status from the user record on every request, so
+changing a member's organization role (`PATCH
+/v1/account/organization/members/{member_id}/role`) rewrites that user's grant
+(owner/admin → `admin`, member → `editor`, viewer → `viewer`), and removing a
+member revokes it (no permissions, `membership_status=removed`) before the
+membership row changes. A tenant
 admin's first organization request (with a user principal; a bare admin API key
 does not qualify) creates the organization profile, owned by that admin, so the
 operator tenant can invite teammates via

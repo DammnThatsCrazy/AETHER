@@ -6,7 +6,9 @@ DSR erasure can still be queued, or be redelivered, after the erasure job has
 deleted the subject's rows — and writing it then silently undoes the erasure.
 
 ``submit_dsr`` records an **erasure marker** per erased identifier (the DSR's
-``user_id`` and optional ``anonymous_id``) before it enqueues the erasure job.
+``user_id`` and optional ``anonymous_id``) before it persists the request, so
+every stored erasure request has its marker even if the process dies between
+the two writes.
 A marker is keyed by a digest of ``(tenant_id, kind, identifier)`` and stores
 only the latest erasure's ``submitted_at`` — never the identifier itself — so
 the fence costs one primary-key read per identifier on the event, instead of
