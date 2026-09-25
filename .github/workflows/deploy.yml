@@ -126,8 +126,12 @@ jobs:
           deadline=$((SECONDS + 2040))
           while true; do
             all_done=true
-            runs_json=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
             for name in "${required_checks[@]}"; do
+              # Filter by name: staging dispatches on this SHA (lifecycle,
+              # promotion, delivery) keep adding check runs, and an unfiltered
+              # first page stops containing the authority (125 runs on 401fc1b).
+              runs_json=$(gh api -X GET "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" \
+                -f check_name="$name" -F per_page=100)
               status=$(jq -r --arg n "$name" '[.check_runs[] | select(.name == $n)] | sort_by(.started_at) | last | .status // "missing"' <<<"$runs_json")
               conclusion=$(jq -r --arg n "$name" '[.check_runs[] | select(.name == $n)] | sort_by(.started_at) | last | .conclusion // "missing"' <<<"$runs_json")
               if [ "$status" != "completed" ]; then
