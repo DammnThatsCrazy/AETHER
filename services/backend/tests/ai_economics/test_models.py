@@ -14,7 +14,7 @@ from services.economic.ai_models import (  # noqa: E402
     AIPriceCard,
     BANNED_CONTENT_KEYS,
 )
-from ai_economics.factories import observed_payload  # noqa: E402
+from .factories import observed_payload  # noqa: E402
 
 
 class TestInvocationValidation:

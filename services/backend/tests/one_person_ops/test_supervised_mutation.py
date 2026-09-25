@@ -44,7 +44,7 @@ from services.agent.routes import (  # noqa: E402
 )
 from services.agent.worker_routes import RunStatusUpdate, update_run_status
 
-from one_person_ops.conftest import (  # noqa: E402
+from .conftest import (  # noqa: E402
     OPERATOR_PERMISSIONS,
     WORKER_PERMISSIONS,
     FakeRequest,

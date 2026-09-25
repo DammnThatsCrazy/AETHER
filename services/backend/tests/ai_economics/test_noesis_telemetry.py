@@ -11,7 +11,7 @@ os.environ.setdefault("AETHER_ENV", "local")
 
 from services.noesis.ai_telemetry import record_noesis_invocation  # noqa: E402
 from services.economic import ai_aggregation  # noqa: E402
-from ai_economics.factories import new_tenant  # noqa: E402
+from .factories import new_tenant  # noqa: E402
 
 pytestmark = pytest.mark.asyncio(loop_scope="function")
 

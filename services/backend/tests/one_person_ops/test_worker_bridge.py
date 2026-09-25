@@ -30,7 +30,7 @@ from services.agent.worker_bridge import (  # noqa: E402
 
 # The backend tests/ root is intentionally not a package; this suite's package
 # root is one_person_ops (repo-root tests/ owns the "tests" package name).
-from one_person_ops.conftest import FakeRequest, tenant_id  # noqa: E402
+from .conftest import FakeRequest, tenant_id  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 

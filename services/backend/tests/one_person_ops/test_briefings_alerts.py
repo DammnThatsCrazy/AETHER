@@ -38,7 +38,7 @@ from services.agent.routes import (  # noqa: E402
     toggle_kill_switch,
 )
 
-from one_person_ops.conftest import FakeRequest, tenant_id  # noqa: E402
+from .conftest import FakeRequest, tenant_id  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 
