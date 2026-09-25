@@ -51,7 +51,10 @@ jobs:
           }
           deadline=$((SECONDS + 2040))
           while [ "$SECONDS" -lt "$deadline" ]; do
-            runs_json="$(gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_COMMIT_SHA/check-runs?per_page=100")"
+            # Filter by name: an unfiltered first page can omit the authority
+            # once staging dispatches add more than 100 check runs to the SHA.
+            runs_json="$(gh api -X GET "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_COMMIT_SHA/check-runs" \
+              -f check_name="Main integration authority" -F per_page=100)"
             status="$(jq -r '[.check_runs[] | select(.name == "Main integration authority")] | sort_by(.started_at) | last | .status // "missing"' <<<"$runs_json")"
             conclusion="$(jq -r '[.check_runs[] | select(.name == "Main integration authority")] | sort_by(.started_at) | last | .conclusion // "missing"' <<<"$runs_json")"
             if [ "$status" = completed ]; then

@@ -40,3 +40,71 @@ def test_rehearsal_installs_the_load_runner_before_invoking_load_smoke() -> None
 
     assert "pyyaml" in install_block
     assert "locust>=2.31,<3" in install_block
+
+
+def test_every_load_task_set_yields_so_user_mixes_hold() -> None:
+    """Locust keeps a user inside a TaskSet until it calls ``interrupt()``.
+
+    Staging rehearsal run 36058790357 served 2,787 requests with 0 failures and
+    still failed: all 10 users drew BatchIngestTasks first and never left, so
+    every /sdk/identity/resolve threshold "never appeared". Every task set must
+    hand control back: if only some did, mixed users (SteadyStateUser,
+    BurstUser) would drain out of the yielding sets into the non-yielding ones
+    and the advertised traffic mix would decay during a baseline run.
+    """
+    path = ROOT / "tests" / "load" / "locustfile.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    task_sets = [
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef)
+        and any(getattr(base, "id", None) == "TaskSet" for base in node.bases)
+    ]
+    assert len(task_sets) > 1
+
+    def yields(method: ast.FunctionDef) -> bool:
+        is_task = any(
+            isinstance(d, ast.Call) and getattr(d.func, "id", None) == "task"
+            or getattr(d, "id", None) == "task"
+            for d in method.decorator_list
+        )
+        calls_interrupt = any(
+            isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "interrupt"
+            for n in ast.walk(method)
+        )
+        return is_task and calls_interrupt
+
+    missing = [
+        task_set.name for task_set in task_sets
+        if not any(yields(m) for m in task_set.body if isinstance(m, ast.FunctionDef))
+    ]
+    assert not missing, f"task sets that never interrupt back to the user: {missing}"
+
+
+def test_task_set_setup_fixtures_survive_yield_re_entry() -> None:
+    """``interrupt()`` discards the TaskSet, so ``on_start`` runs again on each
+    re-entry. A fixture created there (e.g. CampaignTasks' campaign) must be kept
+    on the parent user, or a baseline run creates one per re-entry: 429 campaigns
+    instead of 2 in a 15 s, two-user CampaignTasks run against a stub API."""
+    path = ROOT / "tests" / "load" / "locustfile.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    offenders = []
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for method in node.body:
+            if isinstance(method, ast.FunctionDef) and method.name == "on_start":
+                reads_user = any(
+                    isinstance(n, ast.Attribute)
+                    and isinstance(n.value, ast.Attribute)
+                    and n.value.attr == "user"
+                    for n in ast.walk(method)
+                ) or any(
+                    isinstance(n, ast.Call)
+                    and getattr(n.func, "id", None) == "getattr"
+                    and isinstance(n.args[0], ast.Attribute)
+                    and n.args[0].attr == "user"
+                    for n in ast.walk(method)
+                )
+                if not reads_user:
+                    offenders.append(node.name)
+    assert not offenders, f"on_start fixtures not kept on the user: {offenders}"

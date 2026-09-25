@@ -2063,3 +2063,16 @@ def test_rehearsal_delivery_defers_only_the_fixed_key_smoke_to_the_rehearsal():
     dispatch = dispatch[: dispatch.index("2>&1")]
     assert '-f rehearsal_run_id="$GITHUB_RUN_ID"' in dispatch
     assert "Capability checks (auth, consent, ingestion" in lifecycle
+
+
+def test_required_check_gates_query_the_authority_by_name():
+    """The check-runs API returns at most 100 runs per page. Every staging
+    dispatch on a SHA (lifecycle, promotion, delivery) adds runs; on 401fc1b
+    there were 125 and the green 'Main integration authority' sat on page 2,
+    so the delivery gate reported it 'missing' for 34 minutes and failed the
+    wake. Gates must ask for the required check by name."""
+    for name in ("deploy.yml", "amplify-status-production.yml"):
+        workflow = _workflow(name)
+        assert "check-runs?per_page=100" not in workflow, name
+        assert "-f check_name=" in workflow, name
+        assert "gh api -X GET" in workflow, name

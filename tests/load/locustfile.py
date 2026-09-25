@@ -133,6 +133,11 @@ class GraphQLTasks(TaskSet):
             if resp.status_code == 400:
                 resp.success()
 
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
+
 
 # =========================================================================
 # Analytics Export Load Tests
@@ -191,6 +196,11 @@ class ExportTasks(TaskSet):
         ) as resp:
             if resp.status_code == 404:
                 resp.success()
+
+    @task(2)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
@@ -258,6 +268,11 @@ class AgentTaskTasks(TaskSet):
         ) as resp:
             if resp.status_code == 400:
                 resp.success()
+
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
@@ -365,6 +380,16 @@ class BatchIngestTasks(TaskSet):
             if resp.status_code in (400, 422):
                 resp.success()
 
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set.
+
+        Locust keeps a user inside a TaskSet until ``interrupt()``; without
+        this, each user stays in the set it drew first and a short run can
+        exercise only one of the user's task sets.
+        """
+        self.interrupt()
+
 
 # =========================================================================
 # Identity Resolution Load Tests
@@ -433,6 +458,11 @@ class IdentityResolveTasks(TaskSet):
             name="/sdk/identity/resolve [anon-to-known]",
         )
 
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
+
 
 # =========================================================================
 # Profile360 Load Tests
@@ -487,6 +517,11 @@ class Profile360Tasks(TaskSet):
             # not a 404, so both 200 and 404 are valid non-error responses.
             if resp.status_code in (200, 404):
                 resp.success()
+
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
@@ -544,6 +579,11 @@ class KyberSummaryTasks(TaskSet):
             name="/v1/diagnostics/report",
         )
 
+    @task(3)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
+
 
 # =========================================================================
 # Campaign Touchpoint Load Tests
@@ -555,8 +595,15 @@ class CampaignTasks(TaskSet):
     headers = _api_headers()
 
     def on_start(self):
-        """Create a test campaign to write touchpoints to."""
-        self.campaign_id = None
+        """Create a test campaign to write touchpoints to, once per user.
+
+        The set yields back to its user, so Locust re-creates it (and re-runs
+        ``on_start``) on every re-entry; the campaign id lives on the user so
+        re-entry reuses it instead of creating another campaign.
+        """
+        self.campaign_id = getattr(self.user, "load_campaign_id", None)
+        if self.campaign_id:
+            return
         resp = self.client.post(
             "/v1/campaigns",
             json={
@@ -570,6 +617,7 @@ class CampaignTasks(TaskSet):
         if resp.status_code == 200:
             data = resp.json().get("data", {})
             self.campaign_id = data.get("id")
+            self.user.load_campaign_id = self.campaign_id
 
     @task(8)
     def write_touchpoint(self):
@@ -599,6 +647,11 @@ class CampaignTasks(TaskSet):
             headers=self.headers,
             name="/v1/campaigns/{id}/attribution [read]",
         )
+
+    @task(2)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
@@ -718,6 +771,11 @@ class FraudEvaluationTasks(TaskSet):
         ) as resp:
             if resp.status_code in (400, 422):
                 resp.success()
+
+    @task(5)
+    def yield_to_user(self):
+        """Return to the user so it re-picks a task set (see BatchIngestTasks)."""
+        self.interrupt()
 
 
 # =========================================================================
