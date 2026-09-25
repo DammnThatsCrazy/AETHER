@@ -38,9 +38,11 @@ _CONVERSION_TYPE_MAP: dict[str, str] = {
 class ConversionProjector(BaseProjector):
     """Projects commerce/conversion events into canonical_conversions.
 
-    Authority ranking ensures the most-authoritative source record wins.
-    A lower-authority event arriving later for the same dedup_key is
-    preserved in evidence_ids but does not overwrite the canonical row.
+    Rows are persisted through ``ConversionRepository.upsert`` (see
+    ``services/silver/writer.py``), whose deterministic ranking
+    ``(authority_rank, occurred_at, source_event_id)`` decides which source
+    record owns the canonical row regardless of arrival order. A losing
+    record is preserved in evidence_ids but does not overwrite the row.
 
     Idempotency: sha256(tenant_id + source_event_id + conversion_type).
     """
@@ -101,9 +103,13 @@ class ConversionProjector(BaseProjector):
             "tax_value": tax_value or "0",
             "shipping_value": shipping_value or "0",
             "refund_value": refund_value or "0",
-            "currency": props.get("currency", "USD"),
+            # Native currency is preserved as reported. No exchange_rate is set
+            # here: ConversionRepository.upsert (the writer's route for this
+            # table) resolves a real, recorded FX rate or marks the row
+            # unconverted. A hardcoded "1.0" here used to store a EUR/JPY order
+            # as the same USD amount.
+            "currency": str(props.get("currency") or "USD").strip().upper(),
             "normalized_currency": "USD",
-            "exchange_rate": "1.0",
             "quantity": int(props.get("quantity", 1)),
             "product_ids": props.get("product_ids") or _extract_product_ids(props),
             "line_items": props.get("products") or props.get("line_items") or [],

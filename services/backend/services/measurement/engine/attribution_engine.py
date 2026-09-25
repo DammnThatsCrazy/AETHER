@@ -13,7 +13,11 @@ from uuid import UUID, uuid4
 from services.attribution.models import Touchpoint
 from services.attribution.resolver import AttributionConfig, AttributionResolver
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-from services.measurement.repositories.conversion_repo import ConversionRepository
+from services.measurement.repositories.conversion_repo import (
+    ConversionRepository,
+    conversion_is_unconverted,
+    normalized_money,
+)
 from services.measurement.repositories.journey_repo import JourneyRepository
 from services.measurement.repositories.touchpoint_repo import TouchpointRepository
 from shared.common.common import parse_event_time
@@ -158,8 +162,15 @@ class AttributionEngine:
             "model_config_id": effective_model_config_id,
             "model_config_snapshot": model_config_snapshot,
             "status": "pending",
-            "currency": conversion.get("currency", "USD"),
-            "eligible_revenue": conversion.get("net_value") or conversion.get("gross_value"),
+            # Run + credit revenue are in the conversion's NORMALIZED currency
+            # (native * recorded exchange_rate), so every credit rollup sums a
+            # single currency. An unconverted conversion (no known FX rate)
+            # carries no normalized revenue (None) -- never its native amount
+            # read as USD. The native amount stays on canonical_conversions.
+            "currency": str(conversion.get("normalized_currency") or "USD").upper(),
+            "eligible_revenue": _decimal_str_or_none(
+                normalized_money(conversion, _revenue_field(conversion))
+            ),
             "trigger_reason": trigger_reason or "manual",
             "source_classifier_version": source_classifier_version,
             "prior_attribution_run_id": (
@@ -286,13 +297,20 @@ class AttributionEngine:
             )
 
             # 7. Build credit rows
-            gross_revenue = _to_decimal(conversion.get("gross_value") or "0") or Decimal("0")
-            net_revenue = _to_decimal(
-                conversion.get("net_value") or conversion.get("gross_value") or "0"
-            ) or Decimal("0")
-            contribution_value = _to_decimal(
-                conversion.get("contribution_value") or "0"
-            ) or Decimal("0")
+            # Normalized-currency revenue (see the run's ``currency`` above).
+            # ``None`` = unconverted: credits then carry NULL revenue, which
+            # every rollup excludes instead of summing a native amount as USD.
+            unconverted = conversion_is_unconverted(conversion)
+            gross_revenue = None if unconverted else (
+                normalized_money(conversion, "gross_value") or Decimal("0")
+            )
+            net_revenue = None if unconverted else (
+                normalized_money(conversion, _revenue_field(conversion))
+                or Decimal("0")
+            )
+            contribution_value = None if unconverted else (
+                normalized_money(conversion, "contribution_value") or Decimal("0")
+            )
 
             credit_rows: list[dict[str, Any]] = []
             total_weight = Decimal("0")
@@ -338,9 +356,9 @@ class AttributionEngine:
                     "verified_referral_link_id": tp_meta.get("verified_referral_link_id") if tp_meta else None,
                     "credit_weight": str(weight),
                     "attributed_conversion_count": str(weight),
-                    "attributed_gross_revenue": str(weight * gross_revenue),
-                    "attributed_net_revenue": str(weight * net_revenue),
-                    "attributed_contribution_value": str(weight * contribution_value),
+                    "attributed_gross_revenue": _scaled(weight, gross_revenue),
+                    "attributed_net_revenue": _scaled(weight, net_revenue),
+                    "attributed_contribution_value": _scaled(weight, contribution_value),
                     "evidence_ids": [
                         str(tp_meta.get("source_classification_id"))
                     ] if tp_meta and tp_meta.get("source_classification_id") else [],
@@ -725,6 +743,20 @@ def _json_dict(value: Any) -> dict[str, Any]:
         except (ValueError, TypeError):
             return {}
     return {}
+
+
+def _revenue_field(conversion: dict[str, Any]) -> str:
+    """Net revenue when recorded, else gross (the engine's historical rule)."""
+    return "net_value" if conversion.get("net_value") else "gross_value"
+
+
+def _decimal_str_or_none(value: Optional[Decimal]) -> Optional[str]:
+    return None if value is None else str(value)
+
+
+def _scaled(weight: Decimal, amount: Optional[Decimal]) -> Optional[str]:
+    """``weight * amount`` as a decimal string; None stays None (unconverted)."""
+    return None if amount is None else str(weight * amount)
 
 
 def _to_decimal(value: Any) -> Optional[Decimal]:

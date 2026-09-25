@@ -244,7 +244,9 @@ class CanonicalConversion(BaseModel):
     net_value: Optional[Decimal] = None
     currency: str = "USD"
     normalized_currency: str = "USD"
-    exchange_rate: Decimal = Decimal("1.0")
+    # None = unconverted: no FX rate is known for ``currency`` (the native
+    # amount is preserved; it is never treated as 1:1 parity).
+    exchange_rate: Optional[Decimal] = Decimal("1.0")
     quantity: int = 1
     product_ids: list[str] = Field(default_factory=list)
     line_items: list[dict[str, Any]] = Field(default_factory=list)

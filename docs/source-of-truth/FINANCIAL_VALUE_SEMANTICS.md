@@ -119,6 +119,44 @@ They now use `safe_rollup`:
   scalar is never produced.
 - Each recent item carries a canonical `value` envelope (native + USD valuation).
 
+## Measurement conversions (canonical_conversions)
+
+Conversions from the SDK (`/v1/batch` → Bronze → Silver `ConversionProjector`),
+webhooks, and the conversions API all persist through
+`services/backend/services/measurement/repositories/conversion_repo.py`
+(`ConversionRepository.upsert`) — the Silver writer routes
+`canonical_conversions` there instead of its generic insert.
+
+- **Native preserved.** `gross_value` / `net_value` / … and `currency` are the
+  native amount and currency as reported (currency upper-cased).
+- **Recorded rate, never parity.** For a foreign-currency row the repository
+  resolves a real rate through `services/backend/services/value/price_sources.py` (the
+  dated snapshot provider in `services/backend/services/value/fx_provider.py` today — an in-process
+  table, no network call on the write path) and records it with
+  `provenance.fx_conversion` (`conversion_source`, `method`, `as_of`,
+  `priced: true`). Same-currency rows are exactly `1.0`. A caller-supplied
+  foreign rate is ignored.
+- **Unknown is unconverted.** When no rate is known, `exchange_rate` is `NULL`
+  (column nullable since migration `20260925_conversion_exchange_rate_nullable`)
+  and `provenance.fx_conversion.priced` is `false`. `normalized_money(row, field)`
+  returns `None` for such a row (`conversion_is_unconverted(row)` is true); rows
+  written earlier with `1.0` + `priced: false` are treated the same.
+- **Normalized downstream.** Attribution runs and credits carry revenue in the
+  conversion's normalized currency (`native × exchange_rate`, Decimal); an
+  unconverted conversion's credits carry `NULL` revenue, are excluded from
+  revenue totals, and are counted in `unconverted_credit_count`
+  (`data_quality: partial`) — never summed as a 1:1 amount.
+- **Deterministic ranking.** One canonical row per
+  `(tenant_id, deduplication_key)`, owned by the source record with the greatest
+  `(authority_rank, occurred_at, source_event_id)`; every monetary, currency,
+  rate and provenance column moves with the winner, the canonical
+  `conversion_id` is stable, and every record's `evidence_ids` are kept. The
+  result is independent of arrival order (no first- or last-write-wins).
+
+`spend_records` (`spend_repo.py`) still stores `1.0` with
+`provenance.fx_conversion.priced = false` for an unpriced foreign spend row;
+bringing it to the same nullable-rate contract is tracked separately.
+
 ## Display contract
 
 The frontend renders values through `frontend/shared` value components

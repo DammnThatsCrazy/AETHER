@@ -20,6 +20,147 @@ _IS_LOCAL = os.getenv("AETHER_ENV", "local").lower() == "local"
 _local_store: dict[str, dict[str, Any]] = {}
 
 
+# -- Deterministic canonical ranking ---------------------------------------
+#
+# The canonical row for a (tenant_id, deduplication_key) is owned by the source
+# record with the greatest ``(authority_rank, occurred_at, source_event_id)``
+# key. Authority decides first (commerce webhook > server > CRM > client > ad
+# platform); between equal-authority records the later business event wins (an
+# order update supersedes the original), and ``source_event_id`` is a final,
+# total tie-break so two records with identical rank and time still converge on
+# the same winner whatever order they are delivered in. ``>=`` keeps an exact
+# replay idempotent (it rewrites identical values).
+_SQL_EXCLUDED_WINS = (
+    "EXCLUDED.authority_rank > canonical_conversions.authority_rank OR ("
+    "EXCLUDED.authority_rank = canonical_conversions.authority_rank AND "
+    "(EXCLUDED.occurred_at, COALESCE(EXCLUDED.source_event_id, '')) >= "
+    "(canonical_conversions.occurred_at, "
+    "COALESCE(canonical_conversions.source_event_id, '')))"
+)
+
+# Columns owned by the winning source record (moved together, so the monetary
+# values never drift apart from their currency/rate/provenance).
+_WINNER_OWNED_COLUMNS = (
+    "gross_value", "discount_value", "tax_value", "shipping_value", "fee_value",
+    "refund_value", "chargeback_value", "contribution_value", "net_value",
+    "currency", "normalized_currency", "exchange_rate", "quantity",
+    "product_ids", "line_items", "occurred_at", "confirmed_at",
+    "conversion_status", "conversion_source", "provenance",
+    "source_connector_id", "source_event_id",
+)
+
+_UPSERT_SQL = (
+    """
+    INSERT INTO canonical_conversions (
+        conversion_id, tenant_id, conversion_type, conversion_name,
+        goal_id, profile_id, cluster_id, account_id,
+        organization_id, wallet_id, agent_id,
+        order_id, payment_id, subscription_id, invoice_id,
+        opportunity_id, transaction_hash, external_conversion_id,
+        gross_value, discount_value, tax_value, shipping_value,
+        fee_value, refund_value, chargeback_value,
+        contribution_value, net_value,
+        currency, normalized_currency, exchange_rate, quantity,
+        product_ids, line_items,
+        occurred_at, observed_at, confirmed_at, adjusted_at, reversed_at,
+        conversion_status, conversion_source, authority_rank,
+        deduplication_key, attribution_eligible,
+        consent_snapshot_id, identity_version,
+        provenance, evidence_ids,
+        source_connector_id, source_event_id, schema_version
+    ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
+        $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
+        $41,$42,$43,$44,$45,$46,$47,$48,$49,$50
+    )
+    ON CONFLICT (tenant_id, deduplication_key)
+    DO UPDATE SET
+"""
+    + "".join(
+        f"        {col} = CASE WHEN {_SQL_EXCLUDED_WINS}\n"
+        f"            THEN EXCLUDED.{col} ELSE canonical_conversions.{col} END,\n"
+        for col in _WINNER_OWNED_COLUMNS
+    )
+    + f"""        adjusted_at = CASE WHEN {_SQL_EXCLUDED_WINS}
+            THEN now() ELSE canonical_conversions.adjusted_at END,
+        -- Evidence from every source record is kept, winner or not.
+        evidence_ids = (
+            SELECT COALESCE(jsonb_agg(e ORDER BY e), '[]'::jsonb)
+            FROM (
+                SELECT DISTINCT e FROM jsonb_array_elements(
+                    canonical_conversions.evidence_ids || EXCLUDED.evidence_ids
+                ) AS e
+            ) AS merged
+        ),
+        authority_rank = GREATEST(EXCLUDED.authority_rank, canonical_conversions.authority_rank),
+        updated_at = now()
+"""
+)
+
+
+def _ranking_key(row: dict[str, Any]) -> tuple[int, datetime, str]:
+    """Python mirror of ``_SQL_EXCLUDED_WINS`` for the local store."""
+    occurred = _parse_ts(row.get("occurred_at")) or datetime.min.replace(tzinfo=timezone.utc)
+    if occurred.tzinfo is None:
+        occurred = occurred.replace(tzinfo=timezone.utc)
+    return (
+        int(row.get("authority_rank") or 0),
+        occurred,
+        str(row.get("source_event_id") or ""),
+    )
+
+
+def _merge_evidence(existing: dict[str, Any], incoming: dict[str, Any]) -> list[str]:
+    merged = {str(e) for e in (existing.get("evidence_ids") or [])}
+    merged.update(str(e) for e in (incoming.get("evidence_ids") or []))
+    return sorted(merged)
+
+
+def conversion_is_unconverted(row: dict[str, Any]) -> bool:
+    """True when a foreign-currency conversion has no known FX rate.
+
+    Such a row keeps its native amount + currency; it has no value in its
+    ``normalized_currency`` and must be excluded from normalized rollups
+    (never counted as 1:1). Same-currency rows are always converted (parity).
+    Rows written before exchange_rate became nullable carry ``1.0`` with
+    ``provenance.fx_conversion.priced = false``; the provenance marker wins.
+    """
+    currency = str(row.get("currency") or "USD").strip().upper()
+    normalized = str(row.get("normalized_currency") or "USD").strip().upper()
+    if currency == normalized:
+        return False
+    provenance = row.get("provenance") or {}
+    if isinstance(provenance, str):
+        try:
+            provenance = json.loads(provenance)
+        except ValueError:
+            provenance = {}
+    fx = provenance.get("fx_conversion") if isinstance(provenance, dict) else None
+    if isinstance(fx, dict) and fx.get("priced") is False:
+        return True
+    return _to_decimal(row.get("exchange_rate")) is None
+
+
+def normalized_money(row: dict[str, Any], field: str) -> Optional[Decimal]:
+    """A conversion money field expressed in the row's ``normalized_currency``.
+
+    ``native * exchange_rate`` for a priced foreign row, the native amount for
+    a same-currency row, and **None** for an unconverted row (unknown rate) or
+    a missing amount -- never a 1:1 guess and never a fabricated 0. Decimal
+    end-to-end (docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
+    """
+    amount = _to_decimal(row.get(field))
+    if amount is None or conversion_is_unconverted(row):
+        return None
+    currency = str(row.get("currency") or "USD").strip().upper()
+    normalized = str(row.get("normalized_currency") or "USD").strip().upper()
+    if currency == normalized:
+        return amount
+    return amount * _to_decimal(row.get("exchange_rate"))
+
+
 class ConversionRepository:
     """Canonical conversion ledger over canonical_conversions.
 
@@ -35,7 +176,16 @@ class ConversionRepository:
         return await get_pool()
 
     async def upsert(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Insert conversion or update if incoming authority_rank is higher."""
+        """Insert a conversion, or merge it into the canonical row for its dedup key.
+
+        Ranking is deterministic and order-independent: the record with the
+        greater ``(authority_rank, occurred_at, source_event_id)`` key owns the
+        canonical values (see :func:`_ranking_key` and ``_SQL_EXCLUDED_WINS``),
+        so the same set of source records converges on the same canonical row
+        whatever order they arrive in -- never first-write-wins, and never
+        last-write-wins between equal-authority sources. A losing record is
+        kept as evidence (its ``evidence_ids`` are merged), never dropped.
+        """
         key = row.get("deduplication_key") or _derive_dedup_key(row)
         row.setdefault("deduplication_key", key)
         row.setdefault("conversion_id", str(uuid4()))
@@ -43,31 +193,34 @@ class ConversionRepository:
         row.setdefault("conversion_status", "confirmed")
         row.setdefault("authority_rank", 50)
         row.setdefault("attribution_eligible", True)
-        row.setdefault("currency", "USD")
-        row.setdefault("normalized_currency", "USD")
-        row.setdefault("exchange_rate", "1.0")
         row.setdefault("quantity", 1)
         row.setdefault("schema_version", 1)
+        row["currency"] = str(row.get("currency") or "USD").strip().upper()
+        row["normalized_currency"] = (
+            str(row.get("normalized_currency") or "USD").strip().upper()
+        )
 
-        # ── M2 (Program 5, multi-currency): real FX conversion ───────────────
+        # -- Multi-currency: real FX conversion, never silent parity ----------
         # When the source currency differs from the normalized target, resolve
-        # a REAL, source-backed rate through services.value.price_sources — the
-        # shared USD price registry the M1 FX snapshot provider registers into —
-        # instead of the hardcoded "1.0" default set above, and record its
-        # provenance. Same-currency rows keep the real 1.0 parity (correct, not
-        # fabricated) and are left untouched. A genuinely unavailable rate is
-        # recorded as unpriced / None-sourced — never a fabricated foreign 1.0
-        # (M1 "unpriced, never silent parity" invariant). Excluding unpriced
-        # rows from rollups is M3, deliberately not done here.
-        src_currency = str(row.get("currency", "USD")).upper()
-        norm_currency = str(row.get("normalized_currency", "USD")).upper()
+        # a REAL, source-backed rate through services.value.price_sources (the
+        # shared USD price registry the dated FX snapshot provider registers
+        # into) and record its provenance. Same-currency rows are real 1.0
+        # parity by definition. A genuinely unavailable rate leaves
+        # ``exchange_rate`` NULL and marks the row unconverted
+        # (``provenance.fx_conversion.priced = False``): the native amount and
+        # currency are preserved, and ``normalized_money`` returns None for the
+        # row, so it can never be counted as a 1:1 amount in a normalized
+        # rollup. A caller-supplied rate is never trusted for a foreign row: a
+        # hardcoded "1.0" is exactly how a EUR/JPY order used to be counted as
+        # the same USD amount.
+        src_currency = row["currency"]
+        norm_currency = row["normalized_currency"]
         if src_currency != norm_currency:
             fx = _resolve_conversion_rate(src_currency, norm_currency)
-            if not fx["unpriced"]:
-                row["exchange_rate"] = fx["exchange_rate"]
+            row["exchange_rate"] = None if fx["unpriced"] else fx["exchange_rate"]
             provenance = dict(row.get("provenance") or {})
             provenance["fx_conversion"] = {
-                "exchange_rate": row.get("exchange_rate"),
+                "exchange_rate": row["exchange_rate"],
                 "conversion_source": fx["conversion_source"],
                 "method": fx["method"],
                 "base_currency": norm_currency,
@@ -78,12 +231,9 @@ class ConversionRepository:
             row["provenance"] = provenance
         else:
             # Same-currency rows are real 1.0 parity by definition. A caller may
-            # supply an explicit exchange_rate, which ``setdefault`` above
-            # preserves and this branch (skipping FX normalization) would
-            # otherwise leave in place — a USD->USD row could then persist a
-            # rate like 2.0 with no fx_conversion provenance, silently distorting
-            # normalized revenue. Force exact 1.0 parity: never a fabricated
-            # same-currency rate.
+            # supply an explicit exchange_rate; a USD->USD row could then persist
+            # a rate like 2.0 with no fx_conversion provenance, silently
+            # distorting normalized revenue. Force exact 1.0 parity.
             row["exchange_rate"] = "1.0"
 
         pool = await self._pool()
@@ -94,62 +244,21 @@ class ConversionRepository:
                  and r.get("deduplication_key") == key),
                 None,
             )
-            if existing is None or row.get("authority_rank", 50) >= existing.get("authority_rank", 50):
+            if existing is None:
                 _local_store[key] = row
+            elif _ranking_key(row) >= _ranking_key(existing):
+                # Mirror the Postgres merge: the canonical conversion_id (PK)
+                # survives and the evidence of both records is kept.
+                row["conversion_id"] = existing.get("conversion_id") or row["conversion_id"]
+                row["evidence_ids"] = _merge_evidence(existing, row)
+                _local_store[key] = row
+            else:
+                existing["evidence_ids"] = _merge_evidence(existing, row)
             return row
 
         async with pool.acquire() as conn:
             await conn.execute(
-                """
-                INSERT INTO canonical_conversions (
-                    conversion_id, tenant_id, conversion_type, conversion_name,
-                    goal_id, profile_id, cluster_id, account_id,
-                    organization_id, wallet_id, agent_id,
-                    order_id, payment_id, subscription_id, invoice_id,
-                    opportunity_id, transaction_hash, external_conversion_id,
-                    gross_value, discount_value, tax_value, shipping_value,
-                    fee_value, refund_value, chargeback_value,
-                    contribution_value, net_value,
-                    currency, normalized_currency, exchange_rate, quantity,
-                    product_ids, line_items,
-                    occurred_at, observed_at, confirmed_at, adjusted_at, reversed_at,
-                    conversion_status, conversion_source, authority_rank,
-                    deduplication_key, attribution_eligible,
-                    consent_snapshot_id, identity_version,
-                    provenance, evidence_ids,
-                    source_connector_id, source_event_id, schema_version
-                ) VALUES (
-                    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                    $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-                    $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
-                    $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-                    $41,$42,$43,$44,$45,$46,$47,$48,$49,$50
-                )
-                ON CONFLICT (tenant_id, deduplication_key)
-                DO UPDATE SET
-                    gross_value = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
-                        THEN EXCLUDED.gross_value ELSE canonical_conversions.gross_value END,
-                    net_value = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
-                        THEN EXCLUDED.net_value ELSE canonical_conversions.net_value END,
-                    -- A higher-authority replay updates the monetary value; its
-                    -- FX fields must move with it, or the row keeps the old
-                    -- currency/rate/source (and returns the new values it never
-                    -- persisted), producing incorrect normalized revenue. Gate
-                    -- them on the same authority condition as the amounts.
-                    currency = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
-                        THEN EXCLUDED.currency ELSE canonical_conversions.currency END,
-                    normalized_currency = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
-                        THEN EXCLUDED.normalized_currency ELSE canonical_conversions.normalized_currency END,
-                    exchange_rate = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
-                        THEN EXCLUDED.exchange_rate ELSE canonical_conversions.exchange_rate END,
-                    provenance = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
-                        THEN EXCLUDED.provenance ELSE canonical_conversions.provenance END,
-                    conversion_status = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
-                        THEN EXCLUDED.conversion_status ELSE canonical_conversions.conversion_status END,
-                    authority_rank = GREATEST(EXCLUDED.authority_rank, canonical_conversions.authority_rank),
-                    adjusted_at = CASE WHEN EXCLUDED.authority_rank >= canonical_conversions.authority_rank
-                        THEN now() ELSE canonical_conversions.adjusted_at END
-                """,
+                _UPSERT_SQL,
                 row.get("conversion_id"), row.get("tenant_id"),
                 row.get("conversion_type"), row.get("conversion_name"),
                 row.get("goal_id"), row.get("profile_id"), row.get("cluster_id"),
@@ -167,9 +276,9 @@ class ConversionRepository:
                 _to_decimal(row.get("chargeback_value", "0")),
                 _to_decimal(row.get("contribution_value")),
                 _to_decimal(row.get("net_value")),
-                row.get("currency", "USD"),
-                row.get("normalized_currency", "USD"),
-                _to_decimal(row.get("exchange_rate", "1.0")),
+                row["currency"],
+                row["normalized_currency"],
+                _to_decimal(row.get("exchange_rate")),
                 row.get("quantity", 1),
                 json.dumps(row.get("product_ids", []), default=str),
                 json.dumps(row.get("line_items", []), default=str),

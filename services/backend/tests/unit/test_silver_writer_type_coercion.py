@@ -108,8 +108,13 @@ _ACCEPTS: dict[str, tuple[type, ...]] = {
 
 
 class _StrictConn:
-    def __init__(self, inserts: list[tuple[str, dict[str, Any]]]) -> None:
+    def __init__(
+        self,
+        inserts: list[tuple[str, dict[str, Any]]],
+        raw_executes: list[tuple[str, tuple]] | None = None,
+    ) -> None:
         self.inserts = inserts
+        self.raw_executes = raw_executes if raw_executes is not None else []
 
     async def fetch(self, query: str, table: str) -> list[dict[str, str]]:
         assert "information_schema.columns" in query
@@ -118,6 +123,10 @@ class _StrictConn:
         ]
 
     async def execute(self, query: str, *values: Any) -> str:
+        if "INSERT INTO canonical_conversions" in query:
+            # Written by ConversionRepository with its own explicit binding.
+            self.raw_executes.append((query, values))
+            return "INSERT 0 1"
         table = query.split("INSERT INTO ", 1)[1].split(" ", 1)[0]
         cols = [c.strip() for c in query.split("(", 1)[1].split(")", 1)[0].split(",")]
         schema = _SCHEMAS[table]
@@ -150,9 +159,10 @@ class _Acquire:
 class _StrictPool:
     def __init__(self) -> None:
         self.inserts: list[tuple[str, dict[str, Any]]] = []
+        self.raw_executes: list[tuple[str, tuple]] = []
 
     def acquire(self) -> _Acquire:
-        return _Acquire(_StrictConn(self.inserts))
+        return _Acquire(_StrictConn(self.inserts, self.raw_executes))
 
 
 @pytest.fixture
@@ -206,21 +216,37 @@ async def test_identity_evidence_occurred_at_is_bound_as_datetime(strict_pool):
 
 
 @pytest.mark.asyncio
-async def test_canonical_conversion_json_lists_are_json_encoded(strict_pool):
+async def test_canonical_conversion_json_lists_are_json_encoded(strict_pool, monkeypatch):
+    """canonical_conversions is written by ConversionRepository, not the generic
+    first-write-wins insert: JSON lists are encoded there, the FX rate is
+    resolved there (the projector no longer hardcodes "1.0"), and the
+    authority ranking is applied there."""
+    import services.measurement.repositories.conversion_repo as conversion_repo_mod
+
+    async def _get_pool():
+        return strict_pool
+
+    monkeypatch.setattr(conversion_repo_mod, "get_pool", _get_pool)
     result = ConversionProjector().project(
         _canonical_event("signup_completed", {"revenue": 42.5})
     )
+    assert "exchange_rate" not in result.rows[0]
 
     written = await SilverFactWriter().persist([result])
 
     assert strict_pool.errors == []
     assert written == 1
-    _, row = strict_pool.inserts[0]
+    (sql, values), = strict_pool.raw_executes
+    assert "ON CONFLICT (tenant_id, deduplication_key)" in sql
+    assert "DO NOTHING" not in sql
+    cols = [c.strip() for c in sql.split("(", 1)[1].split(")", 1)[0].split(",")]
+    row = dict(zip(cols, values))
     assert row["product_ids"] == "[]"
     assert row["line_items"] == "[]"
     assert json.loads(row["evidence_ids"]) == ["3f1e1c1a-6b8e-4c1e-9f3e-2d8a1b7c9e01"]
     assert row["gross_value"] == Decimal("42.5")
-    assert row["exchange_rate"] == Decimal("1.0")
+    assert row["currency"] == "USD"
+    assert row["exchange_rate"] == Decimal("1.0")  # same-currency parity
     assert isinstance(row["occurred_at"], datetime)
     assert isinstance(row["observed_at"], datetime)
 
