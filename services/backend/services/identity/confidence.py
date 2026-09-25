@@ -297,21 +297,37 @@ def _tier_for_score(
     return ConfidenceTier.BLOCKED
 
 
+# Consent purposes that authorize identity stitching.
+_STITCHING_PURPOSES: tuple[str, ...] = ("analytics", "identity", "marketing")
+
+
 def _has_consent(consent_snapshot: dict | None) -> bool:
-    """Return True if the consent snapshot allows identity-stitching."""
-    if consent_snapshot is None:
+    """Return True if the consent snapshot allows identity-stitching.
+
+    Accepts both snapshot shapes the platform produces:
+
+    * nested — ``{"purposes": {"analytics": true}}`` / ``{"grants": {...}}``;
+    * flat — the SDK ``ConsentState`` every web/mobile event carries in
+      ``context.consent`` (``packages/shared/consent.ts``):
+      ``{"analytics": true, "marketing": false, ..., "policyVersion": "1"}``.
+
+    Only the nested shape used to be read, so the real SDK snapshot always
+    evaluated as "no consent" and every consent-gated signal (email/phone hash,
+    install/browser ids) was dropped from matching. A snapshot that carries no
+    recognizable purpose flag still fails closed.
+    """
+    if not isinstance(consent_snapshot, dict) or not consent_snapshot:
         return False
     # If explicit opt-out
     if consent_snapshot.get("denied") is True:
         return False
     # Check for analytics or identity-specific consent
     purposes = consent_snapshot.get("purposes") or consent_snapshot.get("grants") or {}
+    if isinstance(purposes, dict) and purposes:
+        return any(bool(purposes.get(p)) for p in _STITCHING_PURPOSES)
     if isinstance(purposes, dict):
-        return bool(
-            purposes.get("analytics")
-            or purposes.get("identity")
-            or purposes.get("marketing")
-        )
+        # Flat SDK ConsentState: purpose flags at the top level.
+        return any(consent_snapshot.get(p) is True for p in _STITCHING_PURPOSES)
     # Fallback: presence of any non-empty snapshot implies minimal consent
     return bool(consent_snapshot)
 
@@ -325,3 +341,7 @@ def signal_weight(signal_type: IdentitySignalType) -> float:
 # match score). ``score_signals`` is retained as the historical name that
 # existing callers (e.g. merge_policy.evaluate) import.
 identity_match_score = score_signals
+
+# Public name for the consent rule, shared with the resolver's alias linking so
+# scoring and persistence agree on what "identity-stitching consent" means.
+has_stitching_consent = _has_consent

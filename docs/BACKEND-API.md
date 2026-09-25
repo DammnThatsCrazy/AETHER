@@ -826,7 +826,10 @@ Optional `start_at` (inclusive), `end_at` (exclusive), `campaign_id`,
 filters constrain the rollup; `limit` is bounded to 1–1000. The response
 includes the applied filters, grouped rows, and attributed conversion, gross
 revenue, net revenue, and contribution-value totals. It does not recompute or
-mutate attribution history.
+mutate attribution history. Credit revenue is in the conversion's normalized
+currency (USD: native amount × the conversion's recorded `exchange_rate`); a
+conversion whose currency has no known FX rate is attributed with null revenue
+and excluded from the revenue totals rather than counted 1:1.
 
 **Legacy SourceInfo response shape remains compatible:**
 ```json
@@ -1558,7 +1561,7 @@ Core identity resolution and entity management endpoints.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence |
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. A first sighting returns `create`; a `user_id` sent with a matching `anonymous_id` merges deterministically (`authenticated_user_binding`) unless a candidate holds a different user_id (conflict) |
 | GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |

@@ -217,8 +217,11 @@ async def test_evidence_failure_never_breaks_resolution():
     # Inject a failing recorder — resolution must still complete normally and
     # must NOT fall through to the resolver's generic internal-error handler.
     resolver._decision_evidence = _Boom()  # type: ignore[assignment]
+    # A distinct user: both runs are first sightings of an unknown user, so the
+    # control is the same decision path (the stores are shared, and a repeat of
+    # "user_ctrl" would now correctly match the alias the control wrote).
     decision = await resolver.resolve_event(
-        {"event_id": "evt_boom", "user_id": "user_ctrl"}, TENANT,
+        {"event_id": "evt_boom", "user_id": "user_boom"}, TENANT,
     )
     assert decision.canonical_entity_id
     assert "internal_error" not in decision.reason_codes

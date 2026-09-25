@@ -14,7 +14,7 @@ source_hashes:
   "services/backend/services/identity/graph_reconciliation.py": "sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a"
   "services/backend/services/identity/reconciliation_routes.py": "sha256:3ec51df67337edbc420bc50a6d9f8fccbe61b42164ec966ca45ff2c9ceabca76"
   "services/backend/services/identity/redirects.py": "sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0"
-  "services/backend/services/identity/resolver.py": "sha256:670d254629efc25517bf6d63dae8bb308cf3a5df06f5fc48bb9ddf28e92bc7d5"
+  "services/backend/services/identity/resolver.py": "sha256:e56aab87c1ad25008bfbd2b7cbea65d4366d5290c30851873c7e32c327118d0e"
 ---
 
 # Runbook — Identity Repair
@@ -59,6 +59,24 @@ Use the **fragment-aware split**. Always preview first — it is non-mutating:
 campaign-class signals, which the merge policy excludes from identity. This is a
 guard, not a bug — the split is refused because the merge should not have been
 identity-linked on that basis; fix the upstream signal, don't force the split.
+
+### Identified users never merge with their anonymous profile
+Check the resolution audit for the identify event. The expected decision is
+`merge` / `deterministic` with `authenticated_user_binding`. If instead:
+
+- `conflict` of type `conflicting_user_binding` — the anonymous id already
+  belongs to a profile with a **different** `user_id` (shared device, account
+  switch). This is a guard: review the conflict; do not force a merge.
+- `candidate` without the binding code — the event carried no `user_id`, or a
+  candidate was reached only through a session/email/device match; that
+  evidence is probabilistic and needs review by design.
+- `blocked` with `insufficient_evidence` on a first sighting — no longer
+  produced by the resolver (a first sighting is `create`). If seen, the event's
+  own signals were unusable (fingerprint-only, or consent-gated signals only
+  with no stitching consent in `context.consent`).
+
+Resolver matches follow merge tombstones, so an alias left on a merged fragment
+resolves to the survivor rather than reopening the merged entity.
 
 ### A merged entity's profile/reads resolve to the wrong survivor
 Check the redirect chain. `resolve_entity_redirect(repo, tenant_id, entity_id)`
