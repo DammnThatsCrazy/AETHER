@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { manualChunks } from './chunks';
 
 export default defineConfig({
   plugins: [react()],
@@ -52,14 +53,7 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes('node_modules/react-dom')) return 'react-dom';
-          if (id.includes('node_modules/react')) return 'react';
-          if (id.includes('node_modules/react-router')) return 'router';
-          if (id.includes('node_modules/@auth0')) return 'auth0';
-          if (id.includes('node_modules/zod')) return 'zod';
-          if (id.includes('frontend/shared/src')) return 'ui';
-        },
+        manualChunks,
       },
     },
   },
