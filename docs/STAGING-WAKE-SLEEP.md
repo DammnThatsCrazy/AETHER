@@ -77,7 +77,7 @@ source_hashes:
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:6755ca3b1e088bafbe260272f7df26ebf12a0b227a4fcfe902cf728ce54372e6"
   "scripts/release/ensure_staging_autoscaling_target_tags.py": "sha256:2f0733c66a6df555537336d88edf30dab740b1d8c30bbaf8140bab9463cb6b00"
-  "scripts/release/reconcile_staging_plan_role.py": "sha256:0e886d472c9a6e4d317c4b0ae627461a5ce2af8caf548290a37a8f28708a9c5c"
+  "scripts/release/reconcile_staging_plan_role.py": "sha256:d61d44d4e62016b61ccac7af0b57b55d58a9a4a64fdd74d8cc7e702dda753891"
   "services/backend/alembic/versions/20260702_delivery_infrastructure.py": "sha256:df8a6bf971bd9db9a907414a8b7e8f0695b6a7c01aa55719e40f869509510916"
 ---
 
