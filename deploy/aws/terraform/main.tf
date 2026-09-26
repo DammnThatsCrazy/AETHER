@@ -469,7 +469,7 @@ module "ecs" {
   first_admin_bootstrap_email = var.deployment_lane == "pilot" ? var.alert_email : ""
   # Internal staff who join the operator tenant as owner on a verified
   # sign-in. Pilot staging only; no other lane admits anyone by email.
-  platform_operator_emails = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
+  platform_operator_emails    = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
   deployment_lane             = var.deployment_lane
   stripe_billing_enabled      = var.deployment_lane == "pilot"
   stripe_checkout_success_url = "${var.aether_app_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"
@@ -1077,7 +1077,14 @@ resource "aws_route53_zone" "production" {
 }
 
 locals {
-  hosted_zone_id = var.squarespace_hosted_zone_enabled ? aws_route53_zone.production[0].zone_id : ""
+  # Product DNS lives in a Route 53 zone for amplify_domain_name: either the
+  # Squarespace-shaped zone above, or a delegated zone created outside this
+  # root (product_dns_zone_id; see docs/DOMAIN-DNS-READINESS.md). This root only
+  # manages records, never the delegated zone itself.
+  product_dns_enabled = var.squarespace_hosted_zone_enabled || var.product_dns_zone_id != ""
+  hosted_zone_id = (
+    var.squarespace_hosted_zone_enabled ? aws_route53_zone.production[0].zone_id : var.product_dns_zone_id
+  )
 
   # Squarespace requires four A records for apex domain hosting.
   squarespace_ips = [
@@ -1126,7 +1133,7 @@ resource "aws_route53_record" "squarespace_verify" {
 # ---------------------------------------------------------------------------
 
 resource "aws_route53_record" "amplify_subdomain" {
-  for_each = var.squarespace_hosted_zone_enabled ? local.amplify_apps : {}
+  for_each = local.product_dns_enabled ? local.amplify_apps : {}
   zone_id  = local.hosted_zone_id
   name     = "${each.value.subdomain}.${var.amplify_domain_name}"
   type     = "CNAME"
@@ -1136,12 +1143,24 @@ resource "aws_route53_record" "amplify_subdomain" {
 
 # API subdomain → ALB (wired directly — the ALB is in this root module)
 resource "aws_route53_record" "api" {
-  count   = var.squarespace_hosted_zone_enabled ? 1 : 0
+  count   = local.product_dns_enabled ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "api.${var.amplify_domain_name}"
   type    = "CNAME"
   ttl     = 300
   records = [module.alb.alb_dns_name]
+}
+
+# Certificate validation CNAMEs (Amplify-managed and ACM certificates). They
+# are public, static values; keeping them here keeps renewals working once the
+# zone is authoritative. Keys are relative to amplify_domain_name.
+resource "aws_route53_record" "validation_cname" {
+  for_each = local.product_dns_enabled ? var.product_dns_validation_cnames : {}
+  zone_id  = local.hosted_zone_id
+  name     = "${each.key}.${var.amplify_domain_name}"
+  type     = "CNAME"
+  ttl      = 3600
+  records  = [each.value]
 }
 
 # Kyber operator console subdomain

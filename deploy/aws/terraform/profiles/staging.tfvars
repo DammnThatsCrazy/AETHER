@@ -44,6 +44,20 @@ amplify_custom_domain_enabled = true
 amplify_domain_name           = "staging.olympuslabsml.com"
 status_api_url                = "https://api.staging.olympuslabsml.com/health"
 
+# staging.olympuslabsml.com is a Route 53 zone (created outside this root,
+# delegated from Squarespace by NS records). Terraform owns its records: the
+# Amplify subdomains, api, and the certificate validation CNAMEs below, which
+# mirror what Squarespace served before delegation.
+product_dns_zone_id = "Z01866633FQOV3YDH5J11"
+product_dns_validation_cnames = {
+  # Amplify-managed certificate for the staging custom domain.
+  "_0d97b787857def1c3cc9147d86786335" = "_fa41a8638b50a07ba696b82c152f2460.wzccmgtwzk.acm-validations.aws."
+  # ACM certificate on the staging ALB (app, api and kyber names).
+  "_91e89497e944d212307cabe5d75ff5ff.app"   = "_210138834ca1a798d03f86ae35dfd480.jkddzztszm.acm-validations.aws."
+  "_a9bef454d149a285497e23319ef4863b.api"   = "_9ce54274a5435ae118abb366b269a9de.jkddzztszm.acm-validations.aws."
+  "_f65ab0075246880067ce04c5c74ab348.kyber" = "_ea98898bcc26d2f4924259ab2fe79486.jkddzztszm.acm-validations.aws."
+}
+
 # Logs — short retention; INFO/DEBUG ship to S3.
 log_retention_days        = 3
 enable_social_connections = false

@@ -556,6 +556,23 @@ variable "squarespace_hosted_zone_enabled" {
   default     = false
 }
 
+variable "product_dns_zone_id" {
+  type        = string
+  description = "Route 53 hosted zone ID for amplify_domain_name, delegated from the registrar and created outside this root. When set, this root manages the product records (Amplify subdomains, api, certificate validation) in it. Leave empty while the registrar holds the records."
+  default     = ""
+
+  validation {
+    condition     = var.product_dns_zone_id == "" || can(regex("^Z[A-Z0-9]{8,32}$", var.product_dns_zone_id))
+    error_message = "product_dns_zone_id must be empty or a Route 53 hosted zone ID such as Z0123456789ABC."
+  }
+}
+
+variable "product_dns_validation_cnames" {
+  type        = map(string)
+  description = "Certificate validation CNAMEs to keep in the product DNS zone, as {name relative to amplify_domain_name = target}. Public values from Amplify domain associations and ACM."
+  default     = {}
+}
+
 variable "squarespace_verification_code" {
   type        = string
   description = "Squarespace domain verification CNAME record name (e.g. a1b2c3d4e5f6). Leave empty to skip the verification record."
