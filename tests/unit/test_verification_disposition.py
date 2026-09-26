@@ -43,6 +43,13 @@ def test_package_workspace_change_selects_its_build_and_dependencies() -> None:
     ]
 
 
+def test_brand_mark_change_rebuilds_the_unified_site() -> None:
+    result = build_disposition(["packages/brand/src/identity/marks/logo-olympus-arch.svg"])
+
+    assert "site" in result["build_selection"]["applications"]
+    assert "frontend/site" in result["build_selection"]["workspaces"]
+
+
 def test_global_node_dependency_change_selects_every_buildable_workspace() -> None:
     result = build_disposition(["package-lock.json"])
 

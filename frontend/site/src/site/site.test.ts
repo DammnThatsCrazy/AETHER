@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { manualChunks } from '../../chunks';
-import { resolveSite, siteHref, siteOrigins } from './site';
+import { querySelectedSite, resolveSite, siteHref, siteOrigins } from './site';
 
 describe('resolveSite', () => {
   it('serves Olympus on the company hosts', () => {
@@ -75,5 +75,23 @@ describe('manualChunks', () => {
     );
     expect(manualChunks(nm('react-router-dom'))).toBe('router');
     expect(manualChunks(nm('react-is'))).toBeUndefined();
+  });
+});
+
+describe('preview selector', () => {
+  const origins = { olympus: 'https://olympuslabsml.com', aether: 'https://aether.olympuslabsml.com' };
+
+  it('is only reported when ?site= picked the site', () => {
+    expect(querySelectedSite('?site=olympus', undefined)).toBe('olympus');
+    expect(querySelectedSite('?site=olympus', 'aether')).toBeNull();
+    expect(querySelectedSite('', undefined)).toBeNull();
+  });
+
+  it('carries forward on same-site links only', () => {
+    expect(siteHref('olympus', 'olympus', '/company', origins, true)).toBe('/company?site=olympus');
+    expect(siteHref('olympus', 'olympus', '/contact?type=pilot', origins, true)).toBe('/contact?type=pilot&site=olympus');
+    expect(siteHref('olympus', 'olympus', '/#contact', origins, true)).toBe('/?site=olympus#contact');
+    expect(siteHref('olympus', 'aether', '/pricing', origins, true)).toBe('https://aether.olympuslabsml.com/pricing');
+    expect(siteHref('olympus', 'olympus', '/company', origins)).toBe('/company');
   });
 });

@@ -34,6 +34,25 @@ export function resolveSite(
   return OLYMPUS_HOSTS.has(hostname.toLowerCase()) ? 'olympus' : 'aether';
 }
 
+/**
+ * The site named by `?site=` when that parameter is what picked it (no
+ * build-time VITE_SITE). Same-site links carry it forward so a preview host
+ * stays on the chosen site as the visitor navigates.
+ */
+export function querySelectedSite(search: string, buildSite: string | undefined = import.meta.env.VITE_SITE): SiteId | null {
+  if (isSiteId(buildSite)) return null;
+  const requested = new URLSearchParams(search).get('site');
+  return isSiteId(requested) ? requested : null;
+}
+
+function withSiteParam(path: string, site: SiteId): string {
+  const hashAt = path.indexOf('#');
+  const base = hashAt === -1 ? path : path.slice(0, hashAt);
+  const hash = hashAt === -1 ? '' : path.slice(hashAt);
+  if (/[?&]site=/.test(base)) return path;
+  return `${base}${base.includes('?') ? '&' : '?'}site=${site}${hash}`;
+}
+
 export interface SiteOrigins {
   olympus: string;
   aether: string;
@@ -70,8 +89,15 @@ export function siteOrigins(env: Record<string, string | undefined> = import.met
  * A link to `path` on `target`. Same-site links stay relative so they work on
  * every host (production, staging, previews); cross-site links are absolute.
  */
-export function siteHref(current: SiteId, target: SiteId, path: string, origins: SiteOrigins = siteOrigins()): string {
+export function siteHref(
+  current: SiteId,
+  target: SiteId,
+  path: string,
+  origins: SiteOrigins = siteOrigins(),
+  keepSelector = false,
+): string {
   if (/^(https?:|mailto:)/.test(path)) return path;
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  return current === target ? normalized : `${origins[target]}${normalized}`;
+  if (current !== target) return `${origins[target]}${normalized}`;
+  return keepSelector ? withSiteParam(normalized, current) : normalized;
 }

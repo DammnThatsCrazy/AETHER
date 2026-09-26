@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { resolveSite, siteHref, siteOrigins, type SiteId, type SiteOrigins } from './site';
+import { querySelectedSite, resolveSite, siteHref, siteOrigins, type SiteId, type SiteOrigins } from './site';
 
 interface SiteValue {
   site: SiteId;
@@ -18,7 +18,9 @@ export function SiteProvider({ site, children }: { site?: SiteId; children: Reac
         ? 'aether'
         : resolveSite(window.location.hostname, window.location.search));
     const origins = siteOrigins();
-    return { site: resolved, origins, href: (target, path) => siteHref(resolved, target, path, origins) };
+    // Keep `?site=` on same-site links when it chose the site (preview hosts).
+    const keepSelector = !site && typeof window !== 'undefined' && querySelectedSite(window.location.search) === resolved;
+    return { site: resolved, origins, href: (target, path) => siteHref(resolved, target, path, origins, keepSelector) };
   }, [site]);
   return <SiteContext.Provider value={value}>{children}</SiteContext.Provider>;
 }
