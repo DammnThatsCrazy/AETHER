@@ -839,12 +839,17 @@ locals {
   # marketing auth threshold gets only the three explicit hand-off routes.
   # Keeping these rules per-app prevents a blanket rewrite from replacing
   # prerendered marketing shells and their route-specific metadata.
+  #
+  # The index fallback must be "404-200" (serve index.html only when no file
+  # exists at the path). A plain "200" rewrite of "/<*>" also captures
+  # /assets/*.js and *.css, so the browser receives HTML for its bundles and
+  # the application renders blank.
   amplify_custom_rules = {
     "aether-app" = [
-      { source = "/<*>", target = "/index.html", status = "200" },
+      { source = "/<*>", target = "/index.html", status = "404-200" },
     ]
     docs = [
-      { source = "/<*>", target = "/index.html", status = "200" },
+      { source = "/<*>", target = "/index.html", status = "404-200" },
     ]
     "aether-marketing" = [
       { source = "/login", target = "/index.html", status = "200" },
