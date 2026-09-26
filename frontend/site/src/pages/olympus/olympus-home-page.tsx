@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useLocation } from 'react-router-dom';
 import { PageShell } from '@site/components/page-shell';
 import { RelationshipExplorer } from '@site/components/relationship-explorer';
 import { useSite } from '@site/site/site-context';
@@ -33,9 +34,9 @@ const sideBorders = (color: string): CSSProperties => ({
   borderLeftColor: color,
 });
 
-function tabFromHash(): HomeTab | null {
-  if (typeof window === 'undefined') return null;
-  const hash = window.location.hash.replace('#', '');
+function tabFromHash(raw?: string): HomeTab | null {
+  if (raw === undefined && typeof window === 'undefined') return null;
+  const hash = (raw ?? window.location.hash).replace('#', '');
   return isHomeTab(hash) ? hash : null;
 }
 
@@ -51,7 +52,14 @@ export function OlympusHomePage() {
     if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 56, behavior: 'smooth' });
   }, []);
 
-  // Header links such as /#contact select a tab.
+  // Header links such as /#contact select a tab and scroll to it, both on
+  // arrival from another page and on a later in-page hash change. No element
+  // carries the tab's id, so the browser's own fragment scroll cannot do it.
+  const { hash } = useLocation();
+  useEffect(() => {
+    const next = tabFromHash(hash || undefined);
+    if (next) show(next);
+  }, [hash, show]);
   useEffect(() => {
     const onHash = () => {
       const next = tabFromHash();

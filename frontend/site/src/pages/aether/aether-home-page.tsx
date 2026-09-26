@@ -325,9 +325,9 @@ function AboutPanels({ tab }: { tab: AboutTab }) {
         {([
           ['multi-tenant cloud', 'sage'],
           ['enterprise isolated', 'cobalt'],
-          ['sovereign', 'ochre'],
-          ['on-premise', 'ember'],
-          ['air-gapped', 'solar'],
+          ['regulated cloud · planned', 'ochre'],
+          ['on-premise · planned', 'ember'],
+          ['air-gapped · planned', 'solar'],
         ] as Array<[string, Accent]>).map(([label, accent]) => (
           <span key={label} className={`${pill} font-medium`} style={{ background: tint(accent, 0.16), color: ACCENTS[accent].ink }}>
             {label}

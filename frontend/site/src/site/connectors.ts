@@ -13,7 +13,7 @@ export interface Connector {
 }
 
 export const MANAGED_CONNECTORS: Connector[] = [
-  { name: 'HubSpot', category: 'CRM', direction: 'both', carries: 'contacts, companies, deals, lifecycle' },
+  { name: 'HubSpot', category: 'CRM', direction: 'in', carries: 'contacts, companies, deals, lifecycle' },
   { name: 'Salesforce', category: 'CRM', direction: 'in', carries: 'leads, accounts, opportunities' },
   { name: 'Shopify', category: 'Commerce', direction: 'in', carries: 'products, carts, orders, customers' },
   { name: 'Stripe', category: 'Billing', direction: 'in', carries: 'customers, invoices, payments, refunds, disputes' },

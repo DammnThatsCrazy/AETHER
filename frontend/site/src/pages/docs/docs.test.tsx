@@ -115,6 +115,32 @@ describe('docs page', () => {
     expect(screen.getByTestId('where').textContent).toMatch(/^\/docs\//);
   });
 
+  it('keeps Tab inside the search dialog and closes it with Escape from any control', async () => {
+    renderDocs('/docs/overview');
+    await userEvent.keyboard('{Meta>}k{/Meta}');
+    const dialog = screen.getByRole('dialog', { name: 'Search docs' });
+    await userEvent.type(within(dialog).getByRole('combobox'), 'zzzz-no-match');
+    const link = within(dialog).getByRole('link', { name: /Ask an engineer/ });
+    await userEvent.tab();
+    expect(document.activeElement).toBe(link);
+    await userEvent.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.tab({ shift: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    link.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('lands on a heading fragment instead of the top of the page', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderDocs('/docs/overview#what-you-use-it-for');
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.contexts[0]).toBe(document.getElementById('what-you-use-it-for'));
+    expect(window.scrollTo).not.toHaveBeenCalled();
+  });
+
   it('shows the platform version from pyproject.toml', () => {
     renderDocs('/docs/overview');
     const header = screen.getByRole('banner');

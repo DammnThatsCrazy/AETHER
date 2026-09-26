@@ -422,7 +422,7 @@
        "g": "■",
        "c": "ember",
        "title": "No secrets in browsers",
-       "x": "Tenant and app IDs are identifiers. Server keys stay server-side."
+       "x": "Publishable keys (pk_…) are public and bound to a site. Server keys stay server-side."
       },
       {
        "g": "◈",
@@ -1289,13 +1289,13 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import { AetherSDK } from '@aether/web';\n\n// Run after your consent banner records the analytics purpose.\nconst aether = AetherSDK.init({\n  tenantId: 'your-tenant-id',\n  appId: 'your-app-id',\n});\n\naether.track('page_view', { path: window.location.pathname });"
+     "x": "import aether from '@aether/web';\n\n// Run after your consent banner records the analytics purpose.\naether.init({\n  apiKey: 'pk_your_publishable_key',\n  siteId: 'site_your_site_id',\n});\n\naether.track('page_view', { path: window.location.pathname });"
     },
     {
      "t": "callout",
      "tone": "risk",
      "title": "No secrets in browser code",
-     "x": "Tenant and app IDs are identifiers, not credentials."
+     "x": "A publishable key (pk_…) is public by design and bound to your site by siteId. Never put a server key in browser code."
     },
     {
      "t": "h",
@@ -1441,7 +1441,7 @@
     {
      "t": "code",
      "lang": "http",
-     "x": "POST /v1/ingest/feed\nAuthorization: Bearer <server-key>\n\n{ \"source\": \"billing\", \"external_id\": \"inv_2291\", \"event_type\": \"payment_completed\", \"occurred_at\": \"…\", \"properties\": {} }"
+     "x": "POST /v1/ingest/feed\nAuthorization: Bearer <server-key>\n\n{ \"source\": \"billing\", \"entity_type\": \"invoice\", \"external_id\": \"inv_2291\", \"data\": { \"status\": \"paid\", \"amount\": 4200, \"currency\": \"USD\" } }"
     }
    ]
   },
@@ -1623,7 +1623,7 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import { AetherSDK } from '@aether/web';\n\nconst aether = AetherSDK.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\naether.consent.grant(['analytics']);\naether.track('page_view', { path: location.pathname });"
+     "x": "import aether from '@aether/web';\n\naether.init({ apiKey: 'pk_your_publishable_key', siteId: 'site_your_site_id' });\naether.consent.grant(['analytics']);\naether.track('page_view', { path: location.pathname });"
     },
     {
      "t": "h",
@@ -1756,7 +1756,7 @@
     {
      "t": "code",
      "lang": "swift",
-     "x": "import AetherSDK\n\nAether.shared.configure(tenantId: \"your-tenant-id\", appId: \"your-app-id\")\nAether.shared.consent.grant([.analytics])\nAether.shared.screen(\"Home\")"
+     "x": "import AetherSDK\n\nAether.shared.initialize(config: AetherConfig(apiKey: \"your-api-key\"))\nAether.shared.grantConsent(categories: [\"analytics\"])\nAether.shared.screenView(\"Home\")"
     },
     {
      "t": "h",
@@ -1885,7 +1885,7 @@
     {
      "t": "code",
      "lang": "kotlin",
-     "x": "Aether.configure(context, tenantId = \"your-tenant-id\", appId = \"your-app-id\")\nAether.consent.grant(listOf(Purpose.ANALYTICS))\nAether.screen(\"Home\")"
+     "x": "Aether.initialize(this, AetherConfig(apiKey = \"your-api-key\"))\nAether.grantConsent(listOf(\"analytics\"))\nAether.screenView(\"Home\")"
     },
     {
      "t": "h",
@@ -2014,7 +2014,7 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import Aether from '@aether/react-native';\n\nAether.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\nAether.consent.grant(['analytics']);\nAether.screen('Home');"
+     "x": "import Aether from '@aether/react-native';\n\nAether.init({ apiKey: 'your-api-key' });\nAether.consent.grant(['analytics']);\nAether.screenView('Home');"
     },
     {
      "t": "h",
@@ -2118,7 +2118,7 @@
     {
      "t": "code",
      "lang": "json",
-     "x": "{\n  \"batch\": [{\n    \"type\": \"<canonical-event-type>\",\n    \"timestamp\": \"<ISO-8601>\",\n    \"context\": { \"tenantId\": \"…\", \"sessionId\": \"…\", \"anonymousId\": \"…\" },\n    \"properties\": {}\n  }],\n  \"consents\": { \"analytics\": true, \"marketing\": false }\n}"
+     "x": "{\n  \"sentAt\": \"<ISO-8601>\",\n  \"batch\": [{\n    \"id\": \"<client-generated-event-id>\",\n    \"type\": \"<canonical-event-type>\",\n    \"timestamp\": \"<ISO-8601>\",\n    \"sessionId\": \"…\",\n    \"anonymousId\": \"…\",\n    \"properties\": {}\n  }],\n  \"consents\": [\"analytics\"]\n}"
     },
     {
      "t": "h",
@@ -2895,7 +2895,7 @@
       },
       {
        "q": "What deployment options exist?",
-       "a": "Multi-tenant cloud, enterprise isolated, sovereign, on-premise, and air-gapped."
+       "a": "Multi-tenant cloud today, and enterprise isolated tenants for pilots. Regulated cloud, on-premise, and air-gapped deployment are planned and not deployable today."
       }
      ]
     }
@@ -3066,7 +3066,7 @@
      "t": "callout",
      "tone": "risk",
      "title": "Never ship secrets to clients",
-     "x": "Tenant and app IDs are identifiers. Server keys stay on the backend."
+     "x": "Publishable keys (pk_…) are public and bound to a site. Server keys stay on the backend."
     }
    ]
   },
@@ -3245,7 +3245,7 @@
       },
       {
        "q": "Where is Aether hosted?",
-       "a": "Multi-tenant cloud by default. Enterprise isolated, sovereign, on-premise, and air-gapped are supported models."
+       "a": "Multi-tenant cloud by default, with enterprise isolated tenants for pilots. Regulated cloud, on-premise, and air-gapped deployment are planned and not deployable today."
       }
      ]
     }

@@ -28,7 +28,7 @@ const DOCUMENTS: Array<[string, string, string, string]> = [
 
 const FAQ: Array<[string, string, Accent]> = [
   ['Who owns the data?', 'You own raw operational data, event streams, and records. Tenant intelligence never crosses tenants.', 'cobalt'],
-  ['Can we deploy in our own environment?', 'Yes. Enterprise isolated, sovereign, on-premise, and air-gapped models are supported.', 'sage'],
+  ['Can we deploy in our own environment?', 'Enterprise isolated tenants are available for pilots. Regulated cloud, on-premise, and air-gapped deployment are planned and not deployable today.', 'sage'],
   ['What happens at the end of a term?', 'Export through the data exchange API, then request deletion. Deletion removes raw data and stops ingestion.', 'ochre'],
   ['Is Aether generally available?', 'No. Aether is in pre-production private alpha.', 'ember'],
   ['How is support provided?', 'Through contact@olympuslabsml.com and a named contact during pilots.', 'steel'],

@@ -25,6 +25,8 @@ import { BrandMark } from '@site/components/brand-mark';
 
 const DAYS = 90;
 const REFRESH_MS = 60_000;
+/** The optional history feed gets this long before the page stops waiting. */
+const HISTORY_TIMEOUT_MS = 10_000;
 
 const BAR: Record<DayStatus, string> = { operational: '#6b9a7c', degraded: '#c9975a', outage: '#b5564a', no_data: '#d8d6d0' };
 const DAY_LABEL: Record<DayStatus, string> = { operational: 'operational', degraded: 'degraded', outage: 'outage', no_data: 'no data' };
@@ -110,20 +112,40 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
   const [range, setRange] = useState(90);
   const abort = useRef<AbortController | null>(null);
 
+  const loadHistory = useCallback(
+    async (signal: AbortSignal) => {
+      const timeout = new AbortController();
+      const timer = setTimeout(() => timeout.abort(), HISTORY_TIMEOUT_MS);
+      const stop = () => timeout.abort();
+      signal.addEventListener('abort', stop);
+      try {
+        const hist = await fetchHistory(historyUrl, DAYS, fetch, timeout.signal);
+        if (!signal.aborted) setHistory(hist);
+      } catch {
+        // Aborted or timed out: keep what is already shown.
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', stop);
+      }
+    },
+    [historyUrl],
+  );
+
   const refresh = useCallback(async () => {
     abort.current?.abort();
     const controller = new AbortController();
     abort.current = controller;
     setChecking(true);
+    // History is optional: it loads on its own clock with a timeout, so a slow
+    // or hung feed never holds back the live state.
+    void loadHistory(controller.signal);
     try {
-      const [live, hist] = await Promise.all([checkHealth(apiUrl, fetch, controller.signal), fetchHistory(historyUrl, DAYS, fetch, controller.signal)]);
-      setSnapshot(live);
-      setHistory(hist);
+      setSnapshot(await checkHealth(apiUrl, fetch, controller.signal));
     } catch {
       return; // aborted by a newer check
     }
     setChecking(false);
-  }, [apiUrl, historyUrl]);
+  }, [apiUrl, loadHistory]);
 
   useEffect(() => {
     document.title = 'Status — Aether';

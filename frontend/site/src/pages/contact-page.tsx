@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PageShell } from '@site/components/page-shell';
 import { Glyph, accentVars } from '@site/components/ui';
 import { submitLead, type ContactTopic } from '@site/site/api';
+import { CONTRACT_PLANS } from '@site/site/plans';
 import { ACCENTS, tint, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
 
@@ -57,6 +58,8 @@ export function ContactPage() {
     () => topics.find((t) => t.id === params.get('type'))?.id ?? 'pilot',
   );
   const topic = topics.find((t) => t.id === topicId) ?? topics[0]!;
+  // Pricing links carry the contract package the visitor chose.
+  const plan = CONTRACT_PLANS.find((p) => p.id === params.get('plan'));
   const c = ACCENTS[topic.accent];
 
   const [name, setName] = useState('');
@@ -90,7 +93,8 @@ export function ContactPage() {
       email: email.trim(),
       message: msg.trim(),
       company: company.trim(),
-      use_case: extra.trim(),
+      // The lead API has no plan field; use_case carries it (200 characters max).
+      use_case: [plan ? `Plan: ${plan.name}` : '', extra.trim()].filter(Boolean).join(' · ').slice(0, 200),
       source: olympus ? 'olympus-marketing' : 'aether-marketing',
     });
     if (result.status === 'ok') {
@@ -201,6 +205,7 @@ export function ContactPage() {
                 <span className="text-caption" style={{ color: c.ink }}>
                   {topic.desc}
                 </span>
+                {plan && <span className="text-caption text-slate">About the {plan.name} package.</span>}
               </fieldset>
 
               {banner && (

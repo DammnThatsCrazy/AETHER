@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { SkipLink } from '@site/components/page-shell';
 import { Glyph } from '@site/components/ui';
 import { ProviderMark } from '@site/components/provider-mark';
@@ -330,6 +330,7 @@ function SearchDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (id: s
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const results = useMemo(() => searchDocs(query), [query]);
   const active = Math.min(sel, Math.max(0, results.length - 1));
@@ -341,9 +342,31 @@ function SearchDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (id: s
     return () => previous?.focus();
   }, []);
 
+  // Modal: Escape closes from any control, and Tab wraps inside the dialog.
+  const onDialogKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusable = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])') ?? [],
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   const onKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') onClose();
-    else if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSel(Math.min(active + 1, results.length - 1));
     } else if (e.key === 'ArrowUp') {
@@ -355,9 +378,11 @@ function SearchDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (id: s
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-graphite-base/60 px-4 pb-4 pt-[10vh]" onClick={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Search docs"
+        onKeyDown={onDialogKey}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-[620px] overflow-hidden rounded-lg border border-line bg-stone-50 shadow-dialog"
       >
@@ -461,9 +486,17 @@ export function DocsPage() {
     if (pageId && param !== pageId) navigate(docHref(pageId), { replace: true });
   }, [pageId, param, navigate]);
 
+  const { hash } = useLocation();
+  const hashRef = useRef(hash);
+  hashRef.current = hash;
   useEffect(() => {
     document.title = page ? `${page.title} — Aether Docs` : 'Page not public — Aether Docs';
-    window.scrollTo?.(0, 0);
+    // A heading fragment (/docs/page#heading) is a deep link: land on it.
+    // Otherwise a new page starts at the top.
+    const id = hashRef.current ? decodeURIComponent(hashRef.current.slice(1)) : '';
+    const target = id ? document.getElementById(id) : null;
+    if (target) target.scrollIntoView?.();
+    else window.scrollTo?.(0, 0);
   }, [page]);
 
   useEffect(() => {

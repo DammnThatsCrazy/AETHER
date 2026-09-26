@@ -84,4 +84,17 @@ describe('status page', () => {
     const product = screen.getByText('Customer-visible product').closest('details')!;
     expect(within(product).getByText('all 1 operational')).toBeTruthy();
   });
+
+  it('shows live state even when the history feed never answers', async () => {
+    vi.stubEnv('VITE_STATUS_API_URL', 'https://api.test/v1/health');
+    vi.stubEnv('VITE_STATUS_HISTORY_URL', 'https://api.test/v1/status/history');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        url.includes('history') ? new Promise<Response>(() => {}) : json({ status: 'healthy', components: {} }),
+      ),
+    );
+    renderStatus();
+    expect((await screen.findByText('All systems operational')).closest('h1')).toBeTruthy();
+  });
 });

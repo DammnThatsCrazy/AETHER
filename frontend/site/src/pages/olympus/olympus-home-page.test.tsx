@@ -8,9 +8,9 @@ import { RELATIONSHIP_TYPES } from '@site/components/relationship-explorer';
 vi.stubEnv('VITE_SITE_OLYMPUS_URL', 'https://olympuslabsml.com');
 vi.stubEnv('VITE_SITE_AETHER_URL', 'https://aether.olympuslabsml.com');
 
-function renderHome() {
+function renderHome(path = '/') {
   return render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={[path]}>
       <App site="olympus" />
     </MemoryRouter>,
   );
@@ -55,6 +55,12 @@ describe('Olympus Home', () => {
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     });
     expect(screen.getByRole('tabpanel').id).toBe('panel-research');
+    expect(window.scrollTo).toHaveBeenCalled();
+  });
+
+  it('scrolls to the selected tab when arriving from another page with /#contact', () => {
+    renderHome('/#contact');
+    expect(screen.getByRole('tabpanel').id).toBe('panel-contact');
     expect(window.scrollTo).toHaveBeenCalled();
   });
 

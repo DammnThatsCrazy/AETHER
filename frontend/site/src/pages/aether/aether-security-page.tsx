@@ -22,17 +22,19 @@ const KEY_SCOPES: Array<[string, string, string]> = [
 ];
 
 const DATA: Array<[string, Accent, string, string[]]> = [
-  ['Ownership', 'sage', '✓', ['You own raw data, event streams, and records.', 'Tenant intelligence never crosses tenants.', 'No data export happens without explicit approval.']],
+  ['Ownership', 'sage', '✓', ['You own raw data, event streams, and records.', 'Tenant intelligence never crosses tenants.', 'Exports need the export permission; high-risk audit exports also need a recorded approval.']],
   ['Retention and deletion', 'steel', '↺', ['Retention is set per tenant.', 'Deletion removes raw customer data and stops ingestion.', 'Export first if you need a copy.']],
   ['Redaction', 'ember', '■', ['Secrets, keys, tokens, and password-like fields are redacted from exports.', 'SDK redaction rules strip sensitive fields before sending.']],
 ];
 
 const DEPLOYMENTS: Array<[string, string, Accent]> = [
-  ['Multi-tenant cloud', 'default', 'cobalt'],
-  ['Enterprise isolated', 'dedicated resources', 'steel'],
-  ['Sovereign', 'regional control', 'sage'],
-  ['On-premise', 'your infrastructure', 'ochre'],
-  ['Air-gapped', 'no external network', 'ember'],
+  // Mirrors the deployment modes in services/intelligence/solution_packages.py:
+  // only the first two can be deployed today.
+  ['Multi-tenant cloud', 'Available · the default', 'cobalt'],
+  ['Enterprise isolated', 'Available for pilots · isolated tenant', 'steel'],
+  ['Regulated cloud', 'Planned · not deployable today', 'sage'],
+  ['On-premise', 'Planned · not deployable today', 'ochre'],
+  ['Air-gapped', 'Planned · not deployable today', 'ember'],
 ];
 
 const LIMITS = ['Covert monitoring of people', 'Political manipulation', 'Unauthorized enrichment', 'Unlawful targeting', 'Cross-tenant intelligence leakage'];
@@ -123,8 +125,8 @@ export function AetherSecurityPage() {
           accent="steel"
           glyph="◈"
           eyebrow="Deployment"
-          title="Five deployment models"
-          lede="From shared cloud to air-gapped. The data model and controls stay the same."
+          title="Deployment models"
+          lede="Two models run today. Regulated cloud, on-premise and air-gapped are planned, and the data model and controls will stay the same."
         />
         <CardRow>
           {DEPLOYMENTS.map(([title, body, accent]) => (

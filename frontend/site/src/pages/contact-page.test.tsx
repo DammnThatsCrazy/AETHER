@@ -76,6 +76,20 @@ describe('Contact page', () => {
     });
   });
 
+  it('sends the contract package chosen on Pricing', async () => {
+    const fetchMock = vi.fn(() => jsonResponse(200, { data: { received: true, lead_id: '3f2a9c1e-0000-4000-8000-000000000000' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test/');
+    renderContact('aether', '?type=security&plan=omega');
+    expect(screen.getByText('About the Omega package.')).toBeTruthy();
+    await fillValid();
+    await userEvent.click(screen.getByRole('button', { name: /Send/ }));
+
+    await screen.findByRole('status');
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({ lead_type: 'security', use_case: 'Plan: Omega' });
+  });
+
   it('keeps the text and offers a retry when the API fails', async () => {
     vi.stubGlobal('fetch', vi.fn(() => jsonResponse(503, { error: 'unavailable' })));
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test');
