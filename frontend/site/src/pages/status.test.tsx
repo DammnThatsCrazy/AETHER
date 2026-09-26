@@ -61,6 +61,8 @@ describe('status page', () => {
     expect((await screen.findByRole('status')).textContent).toContain('Status not yet verified');
     expect(screen.getByText('No component data')).toBeTruthy();
     expect(screen.queryByText('All systems operational')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Skip to content' }).getAttribute('href')).toBe('#main');
+    expect(screen.getByRole('main').getAttribute('tabindex')).toBe('-1');
   });
 
   it('renders live components with 90 history bars each', async () => {

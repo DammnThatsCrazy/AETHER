@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { SkipLink } from '@site/components/page-shell';
 import { Glyph } from '@site/components/ui';
 import { BRAND_LOGOS } from '@site/site/brand-logos';
 import { ACCENTS, tint, type Accent } from '@site/site/palette';
@@ -486,6 +487,7 @@ export function DocsPage() {
 
   return (
     <div className="min-h-screen bg-stone-50 font-sans text-ink">
+      <SkipLink />
       <header className="sticky top-0 z-30 border-b border-line bg-stone-50">
         <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-5">
           <div className="flex shrink-0 items-center gap-2.5">
@@ -598,7 +600,7 @@ export function DocsPage() {
           })}
         </nav>
 
-        <main id="main" className={`min-w-0 px-[clamp(20px,4vw,48px)] pb-[72px] pt-7 ${navOpen ? 'hidden min-[860px]:block' : ''}`}>
+        <main id="main" tabIndex={-1} className={`min-w-0 px-[clamp(20px,4vw,48px)] focus:outline-none pb-[72px] pt-7 ${navOpen ? 'hidden min-[860px]:block' : ''}`}>
           {!page ? (
             <div className="flex max-w-[720px] flex-col gap-3.5 pt-6">
               <Glyph className="text-[22px] text-ash">○</Glyph>

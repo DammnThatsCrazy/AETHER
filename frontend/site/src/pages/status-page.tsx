@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SkipLink } from '@site/components/page-shell';
 import { Glyph } from '@site/components/ui';
 import { useSite } from '@site/site/site-context';
 import {
@@ -152,6 +153,7 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
 
   return (
     <div className="min-h-screen bg-stone-50 font-sans text-ink">
+      <SkipLink />
       <header className="border-b border-line bg-stone-50">
         <div className="mx-auto flex h-14 max-w-[920px] items-center justify-between gap-4 px-6">
           <a href={href('aether', '/status')} className="flex items-center gap-2 text-ink no-underline">
@@ -176,7 +178,7 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
         </div>
       </header>
 
-      <main id="main" className="mx-auto flex max-w-[920px] flex-col gap-6 px-6 pb-16 pt-[clamp(28px,5vw,48px)]">
+      <main id="main" tabIndex={-1} className="mx-auto flex max-w-[920px] flex-col gap-6 px-6 pb-16 focus:outline-none pt-[clamp(28px,5vw,48px)]">
         <section
           aria-labelledby="overall"
           className="flex flex-col gap-4 rounded-lg border border-t-4 p-[clamp(20px,3vw,28px)]"

@@ -75,6 +75,12 @@ describe('docs page', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(DOCS_PAGES['quickstart-web']!.title);
   });
 
+  it('offers a skip link to a focusable main landmark', () => {
+    renderDocs('/docs/overview');
+    expect(screen.getByRole('link', { name: 'Skip to content' }).getAttribute('href')).toBe('#main');
+    expect(screen.getByRole('main').getAttribute('tabindex')).toBe('-1');
+  });
+
   it('shows the not-public state for unknown pages', () => {
     renderDocs('/docs/internal-runbook');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('This page is not public');
