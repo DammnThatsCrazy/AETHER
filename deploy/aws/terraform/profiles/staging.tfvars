@@ -50,7 +50,4 @@ enable_social_connections = false
 
 # Per-PR previews of the Aether app (frontend-preview.yml): an unconnected
 # Amplify app whose pr-<N> branches call this staging API and Auth0.
-# Off until AWS raises this account's Amplify app limit: CreateApp returns
-# LimitExceededException at 10 apps (the listed quota is 25), which failed the
-# 2026-09-26 staging apply. Enabling it before then fails every staging wake.
-enable_frontend_previews = false
+enable_frontend_previews = true
