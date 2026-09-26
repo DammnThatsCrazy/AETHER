@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <title>Aether</title>
+  <style>
+    html, body { margin: 0; -webkit-font-smoothing: antialiased; background: #f5f4f1; }
+    a { color: #2d5373; }
+    a:hover { color: #3a6896; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 1px solid #2563eb; outline-offset: 2px; }
+    input::placeholder { color: #9c9b95; }
+    @keyframes aeSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; animation: none !important; } }
+  </style>
+</helmet>
+<div data-screen-label="Aether journey" style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);">
+
+  <sc-if value="{{ isAuthPane }}" hint-placeholder-val="{{ true }}">
+    <div data-screen-label="Sign in" style="min-height: 100vh; display: flex; flex-direction: column; background: #111114; color: #e8e6e1; box-sizing: border-box; padding: 24px clamp(20px, 4vw, 56px);">
+      <header style="display: flex; align-items: center; gap: 10px;">
+        <a href="Aether Home.dc.html" style="display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: #e8e6e1;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 26px; height: 26px;"><span style="font-size: 20px; font-weight: 500; letter-spacing: -0.4px;">Aether</span></a>
+        <a href="Aether Pricing.dc.html" style="margin-left: auto; display: inline-flex; align-items: center; min-height: 38px; padding: 0 16px; border-radius: 10px; background: #e8e6e1; color: #111114; font-size: 14px; font-weight: 500; text-decoration: none; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="background: #ffffff; color: #111114;">See plans</a>
+      </header>
+      <div style="flex: 1; display: grid; grid-template-columns: {{ authCols }}; gap: clamp(32px, 5vw, 80px); align-items: center; padding: 40px 0;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center;">
+          <div style="display: flex; flex-direction: column; gap: 14px; align-items: center;">
+            <h1 style="margin: 0; color: #e8e6e1; font-size: clamp(40px, 5.2vw, 68px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; text-wrap: balance;">{{ authTitle }}</h1>
+            <p style="margin: 0; font-size: 18px; line-height: 1.5; color: #c9c7c0; max-width: 460px; text-wrap: balance;">{{ authLead }}</p>
+          </div>
+          <div style="width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; padding: 26px; border-radius: 20px; border: 1px solid #2a2a2f; background: #16171b; box-sizing: border-box;">
+            <sc-for list="{{ providers }}" as="p" hint-placeholder-count="2"><button type="button" onClick="{{ p.go }}" style="font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; border-radius: 12px; border: 1px solid #2a2a2f; background: #1f1f24; color: #e8e6e1; font-size: 15px; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="background: #26262c;"><span style="{{ p.logo }}"></span>{{ p.label }}</button></sc-for>
+            <div style="display: flex; justify-content: center; gap: 14px;"><sc-for list="{{ moreProviders }}" as="p" hint-placeholder-count="2"><button type="button" onClick="{{ p.go }}" aria-label="{{ p.label }}" title="{{ p.label }}" style="font-family: inherit; display: inline-flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 10px; border-radius: 8px; border: 0; background: transparent; color: #9c9b95; font-size: 12px; cursor: pointer;" style-hover="color: #e8e6e1;"><span style="{{ p.logo }}"></span>{{ p.short }}</button></sc-for></div>
+            <span style="font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">or</span>
+            <input type="email" value="{{ email }}" onChange="{{ onEmail }}" placeholder="Enter your work email" aria-label="Work email" style="font-family: inherit; font-size: 15px; padding: 13px 14px; border-radius: 12px; border: 1px solid #2a2a2f; background: #111114; color: #e8e6e1;">
+            <sc-if value="{{ formError }}"><span role="alert" style="font-size: 12px; color: #e0796b; text-align: left;">{{ formError }}</span></sc-if>
+            <button type="button" onClick="{{ submit }}" disabled="{{ busy }}" style="font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; border-radius: 12px; border: 0; background: #e8e6e1; color: #111114; font-size: 15px; font-weight: 500; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="background: #ffffff;">{{ darkSpinner }}{{ submitLabel }}</button>
+            <span style="font-size: 12px; line-height: 1.5; color: #9c9b95;">By continuing you agree to the <a href="Legal.dc.html?doc=terms" style="color: #a9c4dc;">Terms</a> and <a href="Legal.dc.html?doc=privacy" style="color: #a9c4dc;">Privacy Policy</a>.</span>
+          </div>
+          <span style="font-size: 13px; color: #9c9b95;">{{ switchLead }} <button type="button" onClick="{{ switchMode }}" style="font-family: inherit; border: 0; background: transparent; padding: 0; color: #e8e6e1; font-size: 13px; cursor: pointer; text-decoration: underline;">{{ switchLabel }}</button></span>
+        </div>
+        <sc-if value="{{ showVisual }}">
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-width: 0; width: 100%; max-width: 520px; justify-self: center; align-self: center;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #9c9b95;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #7fb08f;"></span>What you’ll see · a live Profile 360</div>
+            <div style="width: 100%; max-height: 68vh; overflow: auto; scrollbar-width: none; border-radius: 22px; border: 1px solid #2a2a2f; background: #f4f3ef; box-sizing: border-box;"><dc-import name="Profile 360" hint-size="100%,560px"></dc-import></div>
+          </div>
+        </sc-if>
+      </div>
+      <footer style="display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: #9c9b95;">
+        <a href="Status.dc.html" style="display: inline-flex; align-items: center; gap: 6px; color: #9c9b95; text-decoration: none;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #7fb08f;"></span>All systems operational</a>
+        <a href="Docs.dc.html" style="color: #9c9b95; text-decoration: none;">Docs</a>
+        <a href="Contact.dc.html" style="color: #9c9b95; text-decoration: none;">Help</a>
+      </footer>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isPlanPane }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Choose plan" style="min-height: 100vh; background: #111114; color: #e8e6e1; box-sizing: border-box; padding: 24px clamp(20px, 4vw, 56px) 64px;">
+      <header style="display: flex; align-items: center; gap: 10px;">
+        <span style="display: inline-flex; align-items: center; gap: 10px;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 26px; height: 26px;"><span style="font-size: 20px; font-weight: 500; letter-spacing: -0.4px;">Aether</span></span>
+        <span style="margin-left: auto; font-size: 13px; color: #9c9b95;">{{ email }}</span>
+        <button type="button" onClick="{{ backToAuth }}" style="font-family: inherit; min-height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid #2a2a2f; background: transparent; color: #e8e6e1; font-size: 13px; cursor: pointer;">Change email</button>
+      </header>
+      <div style="max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 28px; padding-top: clamp(32px, 5vw, 64px);">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;">
+          <h1 style="margin: 0; color: #e8e6e1; font-size: clamp(36px, 4vw, 52px); font-weight: 500; letter-spacing: -0.03em;">Choose your plan</h1>
+          <p style="margin: 0; font-size: 16px; color: #c9c7c0;">Start free, or pay monthly. Change plans anytime in Settings.</p>
+        </div>
+        <div role="tablist" aria-label="Plan type" style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; border: 1px solid #2a2a2f; background: #16171b;"><sc-for list="{{ planTabs }}" as="tb" hint-placeholder-count="2"><button type="button" role="tab" aria-selected="{{ tb.on }}" onClick="{{ tb.go }}" style="{{ tb.style }}">{{ tb.label }}</button></sc-for></div>
+        <div style="width: 100%; display: grid; grid-template-columns: {{ planCols }}; gap: 12px; align-items: stretch;">
+          <sc-for list="{{ planCards }}" as="p" hint-placeholder-count="4">
+            <div style="{{ p.card }}">
+              <div aria-hidden="true" style="display: flex; flex-direction: column; gap: 3px; width: 34px; height: 34px; justify-content: flex-end;"><sc-for list="{{ p.plates }}" as="pl" hint-placeholder-count="0"><span style="{{ pl }}"></span></sc-for></div>
+              <div style="display: flex; flex-direction: column; gap: 4px;"><span style="{{ p.nameStyle }}">{{ p.name }}</span><span style="font-size: 13px; color: #c9c7c0;">{{ p.fit }}</span></div>
+              <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 22px; font-weight: 500; letter-spacing: -0.5px;">{{ p.price }}</span><span style="font-size: 12px; color: #9c9b95;">{{ p.per }}</span></div>
+              <sc-if value="{{ p.paying }}">
+                <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 14px; border: 1px solid #2a2a2f; background: #111114;">
+                  <div style="display: flex; align-items: center; gap: 8px;"><span style="font-size: 13px; font-weight: 500;">Payment</span><span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #9c9b95;">Powered by<span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 14px; height: 14px; border-radius: 3px; background: url('assets/brand/stripe.svg') center / contain no-repeat;"></span><span style="font-size: 13px; font-weight: 600; letter-spacing: -0.2px; color: #e8e6e1;">Stripe</span></span></span></div>
+                  <input value="{{ cardNum }}" onChange="{{ onCard }}" placeholder="Card number" aria-label="Card number" inputmode="numeric" style="font-family: var(--font-mono); font-size: 14px; padding: 11px 12px; border-radius: 10px; border: 1px solid {{ cardBorder }}; background: #1a1a1e; color: #e8e6e1;">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;"><input value="{{ exp }}" onChange="{{ onExp }}" placeholder="MM / YY" aria-label="Expiry" style="font-family: var(--font-mono); font-size: 14px; padding: 11px 12px; border-radius: 10px; border: 1px solid #2a2a2f; background: #1a1a1e; color: #e8e6e1; min-width: 0;"><input value="{{ cvc }}" onChange="{{ onCvc }}" placeholder="CVC" aria-label="CVC" style="font-family: var(--font-mono); font-size: 14px; padding: 11px 12px; border-radius: 10px; border: 1px solid #2a2a2f; background: #1a1a1e; color: #e8e6e1; min-width: 0;"></div>
+                  <sc-if value="{{ payError }}"><div role="alert" style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #f0b3a9;"><span>■ Card declined. Nothing was charged.</span><span style="display: flex; gap: 10px;"><button type="button" onClick="{{ retryPay }}" style="font-family: inherit; border: 0; background: transparent; padding: 0; color: #e8e6e1; font-size: 12px; cursor: pointer; text-decoration: underline;">Try another card</button><button type="button" onClick="{{ startAlpha }}" style="font-family: inherit; border: 0; background: transparent; padding: 0; color: #e8e6e1; font-size: 12px; cursor: pointer; text-decoration: underline;">Start on Alpha instead</button></span></div></sc-if>
+                  <sc-if value="{{ formError }}"><span role="alert" style="font-size: 12px; color: #f0b3a9;">{{ formError }}</span></sc-if>
+                  <span style="font-size: 11px; color: #6b6a65;">Test cards: 4242 4242 4242 4242 · decline 4000 0000 0000 0002</span>
+                </div>
+              </sc-if>
+              <button type="button" onClick="{{ p.go }}" disabled="{{ busy }}" style="{{ p.cta }}" style-hover="{{ p.ctaHover }}">{{ p.spin }}{{ p.ctaLabel }}</button>
+              <span style="font-size: 11px; color: #9c9b95; text-align: center; margin-top: -6px;">{{ p.note }}</span>
+              <span style="height: 1px; background: #2a2a2f;"></span>
+              <span style="font-size: 12px; font-weight: 500;">{{ p.inherit }}</span>
+              <div style="display: flex; flex-direction: column; gap: 8px;"><sc-for list="{{ p.feats }}" as="f" hint-placeholder-count="5"><div style="display: grid; grid-template-columns: 14px minmax(0,1fr); gap: 8px; font-size: 13px; line-height: 1.45; color: #c9c7c0;"><span style="{{ p.tick }}">✓</span><span>{{ f }}</span></div></sc-for></div>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-size: 12px; color: #9c9b95;">{{ planFoot }}</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ false }}">
+    <div style="min-height: 100vh; display: flex; flex-direction: column;">
+      <header style="display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #d8d6d0; background: #fbfaf8;">
+        <img src="assets/logo-aether-layers.svg" alt="Aether" style="width: 22px; height: 22px;">
+                <span style="{{ planPill }}">{{ planName }}</span>
+        <span style="flex: 1;"></span>
+        <button type="button" onClick="{{ signOut }}" style="font-family: inherit; min-height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid #d8d6d0; background: transparent; color: #4a4945; font-size: 12px; cursor: pointer;">Sign out</button>
+      </header>
+      <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+        <div role="progressbar" aria-label="Setup progress" aria-valuenow="{{ doneCount }}" aria-valuemin="0" aria-valuemax="7" style="height: 2px; background: #eceae5;"><div style="height: 2px; width: {{ progressW }}; background: #4f8466; transition: width 320ms cubic-bezier(0.22,1,0.36,1);"></div></div>
+        <main style="min-width: 0; padding: clamp(24px, 4vw, 48px) clamp(16px, 4vw, 48px) 64px;">
+          <div style="max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+              <span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65;">Step {{ stepNum }} of {{ stepTotal }}</span>
+              <h1 style="margin: 0; color: #1a1a1e; font-size: 28px; font-weight: 500; letter-spacing: -0.56px; line-height: 1.2;">{{ stepTitle }}</h1>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #4a4945; text-wrap: pretty;">{{ stepLead }}</p>
+            </div>
+
+            <sc-if value="{{ at.goal }}">
+              <div role="radiogroup" aria-label="Goal" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
+                <sc-for list="{{ goals }}" as="g" hint-placeholder-count="6"><button type="button" role="radio" aria-checked="{{ g.on }}" onClick="{{ g.go }}" style="{{ g.style }}" style-hover="border-color: #6b6a65;"><span style="{{ g.gs }}">{{ g.g }}</span><span style="font-size: 14px; font-weight: 500;">{{ g.label }}</span><span style="font-size: 12px; line-height: 1.45; color: #6b6a65;">{{ g.d }}</span></button></sc-for>
+              </div>
+              <sc-if value="{{ goalOther }}"><input type="text" value="{{ goalText }}" onChange="{{ onGoalText }}" placeholder="e.g. Which referral partners bring repeat buyers" aria-label="Describe your goal" style="font-family: inherit; font-size: 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid #c9975a; background: #ffffff; color: #1a1a1e; box-shadow: 0 0 0 3px #c9975a1f; outline: none;"></sc-if>
+              <sc-if value="{{ goalRec }}"><div style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid #c8d4e2; background: #e6ebf0; font-size: 13px; color: #2d5373;"><span style="font-family: var(--font-mono);">→</span><span>{{ goalRec }}</span></div></sc-if>
+            </sc-if>
+
+            <sc-if value="{{ at.connect }}">
+              <input type="search" value="{{ connQ }}" onChange="{{ onConnQ }}" placeholder="Search {{ connTotal }} connectors" aria-label="Search connectors" style="font-family: inherit; font-size: 14px; padding: 11px 14px; border-radius: 12px; border: 1px solid #d8d6d0; background: #ffffff; color: #1a1a1e; outline: none;" style-focus="border-color: #3a6896; box-shadow: 0 0 0 3px #3a68961f;">
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;">
+                <sc-for list="{{ conns }}" as="c" hint-placeholder-count="0">
+                  <button type="button" onClick="{{ c.go }}" disabled="{{ c.dis }}" style="{{ c.style }}" style-hover="{{ c.hover }}">
+                    <span style="display: flex; align-items: center; justify-content: space-between; width: 100%;"><span style="{{ c.logo }}"></span><span style="{{ c.pill }}">{{ c.action }}</span></span>
+                    <span style="font-size: 13px; font-weight: 500;">{{ c.name }}</span>
+                    <span style="font-size: 11px; line-height: 1.35; color: #6b6a65;">{{ c.sub }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; font-size: 12px; color: #6b6a65;"><sc-if value="{{ connMore }}"><button type="button" onClick="{{ showAllConns }}" style="font-family: inherit; border: 0; background: transparent; padding: 0; color: #3a6896; font-size: 12px; font-weight: 500; cursor: pointer;">Show all {{ connTotal }}</button></sc-if><a href="Docs.dc.html#connectors" style="color: #6b6a65;">Connector catalog ↗</a><span>{{ connCount }}</span></div>
+              <sc-if value="{{ consent }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ consent.cancel }}" style="position: fixed; inset: 0; z-index: 50; background: #1a1a1e59; display: flex; align-items: center; justify-content: center; padding: 16px;">
+                  <div role="dialog" aria-modal="true" aria-label="{{ consent.title }}" onClick="{{ consent.stop }}" style="width: 100%; max-width: 400px; max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; box-sizing: border-box; border-radius: 18px; background: #ffffff; box-shadow: 0 24px 64px #1a1a1e2e; display: flex; flex-direction: column;">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 22px 24px 12px; text-align: center;">
+                      <div style="display: flex; align-items: center; gap: 10px;"><img src="assets/logo-aether-layers.svg" alt="Aether" style="width: 36px; height: 36px;"><span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65; letter-spacing: 2px;">···</span><span style="{{ consent.logo }}"></span></div>
+                      <span style="font-size: 18px; font-weight: 500; letter-spacing: -0.2px;">{{ consent.title }}</span>
+                      <span style="font-size: 13px; line-height: 1.5; color: #4a4945;">Read-only. Aether never writes to {{ consent.name }}. Change this later in Settings.</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; padding: 0 12px;">
+                      <sc-for list="{{ consent.scopes }}" as="sc" hint-placeholder-count="0">
+                        <label style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background 120ms;" style-hover="background: #f5f4f1;"><input type="checkbox" checked="{{ sc.on }}" onChange="{{ sc.toggle }}" style="width: 16px; height: 16px; accent-color: #4f8466; margin: 0;"><span style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 13px; font-weight: 500;">{{ sc.label }}</span><span style="font-size: 12px; color: #6b6a65;">{{ sc.d }}</span></span></label>
+                      </sc-for>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px; padding: 14px 24px 18px;">
+                      <button type="button" onClick="{{ consent.allow }}" disabled="{{ consent.none }}" style="font-family: inherit; min-height: 42px; border-radius: 12px; border: 0; background: #1a1a1e; color: #ffffff; font-size: 14px; font-weight: 500; cursor: pointer;" style-hover="background: #3a3a40;">Allow access</button>
+                      <button type="button" onClick="{{ consent.cancel }}" style="font-family: inherit; min-height: 38px; border-radius: 12px; border: 0; background: transparent; color: #4a4945; font-size: 13px; cursor: pointer;">Cancel</button>
+                      <span style="font-size: 11px; text-align: center; color: #6b6a65;">Webhook added automatically · revoke anytime</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ connNote }}"><p style="margin: 0; text-align: center; font-size: 12px; line-height: 1.5; color: #6b6a65;">{{ connNote }} <button type="button" onClick="{{ openUpgrade }}" style="font-family: inherit; border: 0; background: transparent; padding: 0; color: #8a6433; font-size: 12px; font-weight: 500; cursor: pointer;">See Beta</button></p></sc-if>
+            </sc-if>
+
+            <sc-if value="{{ at.import }}">
+              <button type="button" onClick="{{ doImport }}" style="font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 20px; border-radius: 16px; border: 1.5px dashed #c9975a; background: #f4ece0; color: #1a1a1e; cursor: pointer; transition: border-color 120ms cubic-bezier(0.22,1,0.36,1), background 120ms;" style-hover="border-color: #8a6433; background: #f1e5d3;"><span style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; background: #c9975a; color: #ffffff; font-family: var(--font-mono); font-size: 20px;">⇪</span><span style="font-size: 14px; font-weight: 500;">{{ importTitle }}</span><span style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; font-size: 11px;"><span style="padding: 2px 8px; border-radius: 999px; background: #3a68961a; color: #2d5373; font-weight: 500;">CSV</span><span style="padding: 2px 8px; border-radius: 999px; background: #4f84661f; color: #3f6b50; font-weight: 500;">JSON</span><span style="padding: 2px 8px; border-radius: 999px; background: #5a85a81f; color: #2d5373; font-weight: 500;">JSONL</span><span style="padding: 2px 8px; color: #6b6a65;">up to 32 MB</span></span><span style="font-size: 11px; color: #6b6a65;">PDF, XLSX and more formats coming soon</span></button>
+              <sc-if value="{{ importRows }}"><div style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #d8d6d0; background: #fbfaf8; overflow: hidden;"><sc-for list="{{ importRows }}" as="r" hint-placeholder-count="0"><div style="display: grid; grid-template-columns: 22px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #eceae5; font-size: 13px;"><span style="{{ r.gs }}">{{ r.g }}</span><span>{{ r.t }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">{{ r.n }}</span></div></sc-for></div><button type="button" onClick="{{ openMap }}" style="align-self: center; font-family: inherit; border: 0; background: transparent; padding: 0; color: #3a6896; font-size: 12px; font-weight: 500; cursor: pointer;">Review column mapping</button></sc-if>
+              <sc-if value="{{ mapOpen }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ closeMap }}" style="position: fixed; inset: 0; z-index: 50; background: #1a1a1e59; display: flex; align-items: center; justify-content: center; padding: 16px;">
+                  <div role="dialog" aria-modal="true" aria-label="Column mapping" onClick="{{ stopMap }}" style="width: 100%; max-width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; border-radius: 18px; background: #ffffff; box-shadow: 0 24px 64px #1a1a1e2e; display: flex; flex-direction: column; gap: 14px; padding: 22px;">
+                    <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 17px; font-weight: 500;">Column mapping</span><span style="font-size: 12px; color: #6b6a65;">Matched automatically from legacy_crm_v2. Change any field below.</span></div>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <sc-for list="{{ mapRows }}" as="m" hint-placeholder-count="0">
+                        <div style="display: grid; grid-template-columns: minmax(0,1fr) 16px minmax(0,1fr) 44px; gap: 8px; align-items: center;"><span style="font-family: var(--font-mono); font-size: 12px; padding: 7px 10px; border-radius: 8px; background: #f5f4f1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ m.col }}</span><span style="color: #9c9b95; font-size: 12px;">→</span><select value="{{ m.field }}" onChange="{{ m.set }}" aria-label="{{ m.col }}" style="font-family: inherit; font-size: 12px; padding: 7px 8px; border-radius: 8px; border: 1px solid #d8d6d0; background: #ffffff; color: #1a1a1e; min-width: 0;"><option value="email">email</option><option value="name">name</option><option value="phone">phone</option><option value="order_total">order_total</option><option value="created_at">created_at</option><option value="external_id">external_id</option><option value="skip">skip column</option></select><span style="{{ m.conf }}">{{ m.pct }}</span></div>
+                      </sc-for>
+                    </div>
+                    <span style="font-size: 11px; color: #6b6a65;">Full import tools live in Data once setup is done.</span>
+                    <div style="display: flex; gap: 8px; justify-content: flex-end;"><button type="button" onClick="{{ closeMap }}" style="font-family: inherit; min-height: 38px; padding: 0 14px; border-radius: 10px; border: 0; background: transparent; color: #4a4945; font-size: 13px; cursor: pointer;">Cancel</button><button type="button" onClick="{{ closeMap }}" style="font-family: inherit; min-height: 38px; padding: 0 16px; border-radius: 10px; border: 0; background: #1a1a1e; color: #ffffff; font-size: 13px; font-weight: 500; cursor: pointer;">Save mapping</button></div>
+                  </div>
+                </div>
+              </sc-if>
+            </sc-if>
+
+            <sc-if value="{{ at.sdk }}">
+              <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;">
+                <sc-for list="{{ sdks }}" as="k" hint-placeholder-count="0"><button type="button" aria-pressed="{{ k.on }}" onClick="{{ k.go }}" style="{{ k.style }}"><span style="{{ k.dot }}"></span>{{ k.label }}</button></sc-for>
+              </div>
+              <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #2a2a2f; background: #111114; color: #e8e6e1; overflow: hidden;">
+                <div style="display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid #2a2a2f;">
+                  <sc-for list="{{ sdkTabs }}" as="k" hint-placeholder-count="0"><button type="button" onClick="{{ k.go }}" style="{{ k.style }}">{{ k.label }}</button></sc-for>
+                  <button type="button" onClick="{{ copySdk }}" style="margin-left: auto; font-family: inherit; min-height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid #3a3a40; background: transparent; color: #e8e6e1; font-size: 12px; cursor: pointer;">{{ copyLabel }}</button>
+                </div>
+                <pre style="margin: 0; padding: 14px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; color: #e8e6e1;">{{ sdkCode }}</pre>
+              </div>
+              <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #c8d4e2; background: #e6ebf0; overflow: hidden;">
+                <sc-for list="{{ keys }}" as="k" hint-placeholder-count="0"><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #c8d4e2; font-size: 13px;"><span style="font-family: var(--font-mono); color: #3a6896;">⌘</span><span style="font-weight: 500;">{{ k.label }}</span><span style="{{ k.valStyle }}">{{ k.val }}</span><span style="margin-left: auto; font-size: 11px; color: #2d5373;">{{ k.note }}</span></div></sc-for>
+                <sc-if value="{{ keyHidden }}"><button type="button" onClick="{{ revealKey }}" style="font-family: inherit; min-height: 40px; border: 0; background: transparent; color: #2d5373; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #dbe3ec;">Reveal {{ keyWord }}</button></sc-if>
+              </div>
+              <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #d8d6d0; background: #ffffff; overflow: hidden;">
+                <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #eceae5; font-size: 12px; color: #6b6a65;"><span style="font-weight: 500; color: #1a1a1e;">Test each SDK</span><span>Your first call: aether.track("page_view")</span></div>
+                <sc-for list="{{ tests }}" as="x" hint-placeholder-count="0">
+                  <div style="display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-bottom: 1px solid #eceae5;">
+                    <div style="display: flex; align-items: center; gap: 10px;"><span style="{{ x.dot }}"></span><span style="font-size: 13px; font-weight: 500;">{{ x.label }}</span><span style="font-size: 12px; color: #6b6a65; min-width: 0; flex: 1;">{{ x.line }}</span><button type="button" onClick="{{ x.go }}" disabled="{{ x.busy }}" style="{{ x.btn }}">{{ x.cta }}</button></div>
+                    <sc-if value="{{ x.err }}"><span role="alert" style="font-size: 12px; line-height: 1.5; color: #9c4439; padding-left: 20px;">{{ x.err }} <a href="Docs.dc.html#sdks" style="color: #b5564a; font-weight: 500;">Troubleshoot ↗</a></span></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <a href="Docs.dc.html#sdks" style="align-self: center; font-size: 12px; color: #6b6a65;">Full SDK reference ↗</a>
+            </sc-if>
+
+            <sc-if value="{{ at.invite }}">
+              <div style="display: flex; justify-content: center; gap: 8px;"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #3a68961a; color: #2d5373; font-size: 12px;">◆ Admin · full access</span><span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #4f84661f; color: #3f6b50; font-size: 12px;">● Member · explore</span><span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #c9975a1f; color: #6e4f28; font-size: 12px;">○ Viewer · read</span></div>
+              <div style="display: grid; grid-template-columns: minmax(0,1fr) 120px auto; gap: 8px;">
+                <input type="email" value="{{ invEmail }}" onChange="{{ onInv }}" placeholder="teammate@company.com" aria-label="Teammate email" aria-invalid="{{ invBad }}" style="font-family: inherit; font-size: 14px; padding: 10px 12px; border-radius: 10px; background: #ffffff; color: #1a1a1e; min-width: 0; outline: none; transition: border-color 160ms, box-shadow 160ms; {{ invGlow }}">
+                <select value="{{ invRole }}" onChange="{{ onRole }}" aria-label="Role" style="font-family: inherit; font-size: 13px; padding: 10px; border-radius: 10px; border: 1px solid #d8d6d0; background: #ffffff; color: #1a1a1e;"><option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option></select>
+                <button type="button" onClick="{{ sendInvite }}" style="font-family: inherit; min-height: 42px; padding: 0 16px; border-radius: 10px; border: 1px solid #1a1a1e; background: #1a1a1e; color: #f5f4f1; font-size: 13px; font-weight: 500; cursor: pointer;">Send invite</button>
+              </div>
+              <span style="text-align: center; font-size: 12px; color: #6b6a65;">{{ seatNote }}</span>
+              <sc-for list="{{ invites }}" as="v" hint-placeholder-count="0"><div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; border: 1px solid #c3d6c9; background: #e8eee9; box-shadow: 0 0 0 3px #4f846614; font-size: 13px;"><span style="font-family: var(--font-mono); color: #4f8466;">✉</span>{{ v.e }}<span style="font-size: 12px; color: #4a4945;">{{ v.r }}</span><span style="margin-left: auto; font-size: 11px; font-weight: 500; color: #3f6b50;">✓ invite sent</span></div></sc-for>
+              <sc-if value="{{ inviteError }}"><span role="alert" style="font-size: 12px; color: #9c4439;">{{ inviteError }}</span></sc-if>
+            </sc-if>
+
+            <sc-if value="{{ at.value }}">
+              <div style="display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 16px; border: 1px solid #3a4250; background: #262b33; color: #eef0f2;">
+                <div style="display: flex; align-items: center; gap: 12px;"><span style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; background: #3a6896; color: #ffffff; font-size: 15px; font-weight: 500; box-shadow: 0 0 0 3px #3a689655;">JD</span><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 17px; font-weight: 500;">Jane Doe</span><span style="font-family: var(--font-mono); font-size: 11px; color: #a9b3bf;">usr_4f21a9 · {{ valueSources }}</span></span><span style="{{ valuePill }}">{{ valueState }}</span></div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+                  <sc-for list="{{ valueFacts }}" as="f" hint-placeholder-count="4"><div style="{{ f.style }}"><span style="font-size: 11px; color: #c3cad3;">{{ f.k }}</span><span style="{{ f.vs }}">{{ f.v }}</span></div></sc-for>
+                </div>
+                <sc-if value="{{ valueLimited }}"><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid #b5564a55; background: #b5564a1f; font-size: 12px; color: #f0b3a9;"><span>Alpha shows events for this profile. Identity matching and relationships start on Beta.</span><button type="button" onClick="{{ openUpgrade }}" style="margin-left: auto; font-family: inherit; min-height: 28px; padding: 0 12px; border-radius: 8px; border: 0; background: transparent; color: #f6c7bf; font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: underline; text-underline-offset: 3px;">See Beta</button></div></sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ at.done }}">
+              <div style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #d8d6d0; background: #fbfaf8; overflow: hidden;">
+                <sc-for list="{{ summary }}" as="x" hint-placeholder-count="7"><div style="display: grid; grid-template-columns: 22px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #eceae5; font-size: 13px;"><span style="font-family: var(--font-mono); color: #4f8466;">●</span><span>{{ x.k }}</span><span style="font-size: 12px; color: #6b6a65;">{{ x.v }}</span></div></sc-for>
+              </div>
+            </sc-if>
+
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; padding-top: 4px;">
+              <sc-if value="{{ canBack }}"><button type="button" onClick="{{ back }}" style="font-family: inherit; min-height: 42px; padding: 0 16px; border-radius: 10px; border: 1px solid #d8d6d0; background: #fbfaf8; color: #1a1a1e; font-size: 13px; cursor: pointer;">Back</button></sc-if>
+              <button type="button" onClick="{{ next }}" disabled="{{ nextDis }}" style="{{ nextStyle }}" style-hover="{{ nextHover }}">{{ nextLabel }}<span style="font-family: var(--font-mono);">→</span></button>
+              <sc-if value="{{ canSkip }}"><button type="button" onClick="{{ skip }}" style="font-family: inherit; min-height: 42px; padding: 0 14px; border-radius: 10px; border: 0; background: transparent; color: #4a4945; font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #c9c7c0;" style-hover="color: #1a1a1e;">Skip for now</button></sc-if>
+              <span style="font-size: 12px; color: #6b6a65;">{{ nextHint }}</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isApp }}" hint-placeholder-val="{{ false }}">
+    <div style="min-height: 100vh; display: grid; grid-template-columns: {{ appCols }};">
+      <aside style="position: sticky; top: 0; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; padding: 14px 10px; border-right: 1px solid #e2e0da; background: #fbfaf8;">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px 14px;"><img src="assets/logo-aether-layers.svg" alt="Aether" style="width: 22px; height: 22px;"><span style="font-size: 14px; font-weight: 500;">{{ workspace }}</span></div>
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5"><button type="button" onClick="{{ n.go }}" aria-current="{{ n.cur }}" style="{{ n.style }}" style-hover="background: #eceae5;"><span style="{{ n.gs }}">{{ n.g }}</span>{{ n.label }}</button></sc-for>
+        <div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid #e2e0da; background: #f5f4f1;">
+          <span style="display: flex; align-items: center; gap: 6px; font-size: 12px;"><span style="{{ planPill }}">{{ planName }}</span><span style="color: #6b6a65;">plan</span></span>
+          <span style="display: flex; justify-content: space-between; font-size: 11px; color: #4a4945;"><span>Events</span><span style="font-family: var(--font-mono);">{{ usage }}</span></span>
+          <span style="height: 5px; border-radius: 999px; background: #e2e0da; overflow: hidden;"><span style="display: block; height: 100%; width: 14%; background: #3a6896;"></span></span>
+          <button type="button" onClick="{{ signOut }}" style="font-family: inherit; align-self: flex-start; border: 0; background: transparent; padding: 0; color: #6b6a65; font-size: 11px; cursor: pointer; text-decoration: underline;">Sign out</button>
+        </div>
+      </aside>
+      <main style="min-width: 0; padding: 24px clamp(16px, 3vw, 36px) 64px;">
+
+        <sc-if value="{{ view.home }}">
+          <div style="max-width: 1040px; display: flex; flex-direction: column; gap: 18px;">
+            <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 12px; color: #6b6a65;">{{ greeting }}</span><h1 style="margin: 0; color: #1a1a1e; font-size: 28px; font-weight: 500; letter-spacing: -0.56px;">Home</h1></div>
+            <button type="button" onClick="{{ openJaneExplore }}" style="font-family: inherit; text-align: left; display: grid; grid-template-columns: 48px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 18px; border-radius: 14px; border: 1px solid #2a2a2f; background: #111114; color: #e8e6e1; cursor: pointer; transition: border-color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="border-color: #6b6a65;">
+              <span style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 999px; background: #3a6896; font-size: 15px; font-weight: 500;">JD</span>
+              <span style="display: flex; flex-direction: column; gap: 3px;"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #9c9b95;">Your first profile</span><span style="font-size: 18px; font-weight: 500;">Jane Doe is ready to explore</span><span style="font-size: 13px; color: #c9c7c0;">{{ homeCardSub }}</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 8px; background: #e8e6e1; color: #111114; font-size: 13px; font-weight: 500;">Open in Explore<span style="font-family: var(--font-mono);">→</span></span>
+            </button>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+              <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4"><div style="{{ k.style }}"><span style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;"><span style="{{ k.gs }}">{{ k.g }}</span>{{ k.k }}</span><span style="font-family: var(--font-mono); font-size: 24px; font-weight: 500; letter-spacing: -0.4px;">{{ k.v }}</span><span style="font-size: 12px; color: #6b6a65;">{{ k.n }}</span></div></sc-for>
+            </div>
+            <div style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #d8d6d0; background: #fbfaf8; overflow: hidden;">
+              <div style="padding: 12px 16px; border-bottom: 1px solid #e2e0da; font-size: 13px; font-weight: 500;">Recent signals</div>
+              <sc-for list="{{ signals }}" as="s" hint-placeholder-count="4"><div style="display: grid; grid-template-columns: 26px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 11px 16px; border-bottom: 1px solid #eceae5;"><span style="{{ s.gs }}">{{ s.g }}</span><span style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span style="font-size: 13px;">{{ s.t }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">{{ s.src }}</span></span><span style="font-size: 11px; color: #9c9b95;">{{ s.age }}</span></div></sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ view.explore }}">
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+              <h1 style="margin: 0; color: #1a1a1e; font-size: 24px; font-weight: 500; letter-spacing: -0.4px;">Explore</h1>
+              <div style="position: relative; flex: 1; min-width: 220px; max-width: 420px;">
+                <input type="search" value="{{ q }}" onChange="{{ onQ }}" placeholder="Search a profile" aria-label="Search a profile" style="width: 100%; box-sizing: border-box; font-family: inherit; font-size: 14px; padding: 9px 12px 9px 32px; border-radius: 10px; border: 1px solid #d8d6d0; background: #ffffff; color: #1a1a1e;">
+                <span style="position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 13px; color: #9c9b95;">⌕</span>
+                <sc-if value="{{ results }}"><div style="position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; display: flex; flex-direction: column; padding: 4px; border-radius: 10px; border: 1px solid #d8d6d0; background: #ffffff; box-shadow: 0 10px 28px rgba(17,17,20,0.12);"><sc-for list="{{ results }}" as="r" hint-placeholder-count="0"><button type="button" onClick="{{ r.go }}" style="font-family: inherit; text-align: left; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: #1a1a1e; font-size: 13px; cursor: pointer;" style-hover="background: #eceae5;"><span style="{{ r.gs }}">{{ r.g }}</span>{{ r.name }}<span style="margin-left: auto; font-size: 11px; color: #6b6a65;">{{ r.kind }}</span></button></sc-for></div></sc-if>
+              </div>
+              <div role="tablist" aria-label="View" style="display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: #eceae5;">
+                <sc-for list="{{ views }}" as="v" hint-placeholder-count="2"><button type="button" role="tab" aria-selected="{{ v.on }}" onClick="{{ v.go }}" style="{{ v.style }}">{{ v.label }}</button></sc-for>
+              </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; color: #6b6a65; margin-right: 2px;">Lenses</span>
+              <sc-for list="{{ lenses }}" as="l" hint-placeholder-count="4"><button type="button" onClick="{{ l.go }}" aria-pressed="{{ l.on }}" disabled="{{ l.dis }}" title="{{ l.title }}" style="{{ l.style }}"><span style="{{ l.dot }}"></span>{{ l.label }}</button></sc-for>
+              <sc-if value="{{ timeOn }}"><div role="group" aria-label="Time window" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: #eceae5;"><sc-for list="{{ times }}" as="t" hint-placeholder-count="3"><button type="button" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div></sc-if>
+              <span style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">{{ depthLabel }}</span>
+            </div>
+            <div style="display: grid; grid-template-columns: {{ exploreCols }}; gap: 14px; align-items: start;">
+              <div style="position: relative; border-radius: 14px; border: 1px solid #2a2a2f; background: #111114; overflow: hidden; aspect-ratio: 16 / 10; min-height: 360px;">
+                <sc-if value="{{ graphMode }}">
+                  <svg viewBox="0 0 100 62.5" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%;"><sc-for list="{{ edges }}" as="e" hint-placeholder-count="0"><line x1="{{ e.x1 }}" y1="{{ e.y1 }}" x2="{{ e.x2 }}" y2="{{ e.y2 }}" stroke="{{ e.c }}" stroke-width="{{ e.w }}" stroke-opacity="{{ e.o }}" style="transition: stroke-opacity 320ms cubic-bezier(0.22,1,0.36,1);"></line></sc-for></svg>
+                  <sc-for list="{{ gnodes }}" as="n" hint-placeholder-count="0"><button type="button" onClick="{{ n.go }}" aria-label="{{ n.aria }}" style="{{ n.style }}"><span style="{{ n.dot }}">{{ n.g }}</span><span style="display: flex; flex-direction: column; align-items: flex-start;"><span style="font-size: 12px; font-weight: 500; color: #e8e6e1; white-space: nowrap;">{{ n.name }}</span><span style="font-size: 10px; color: #9c9b95; white-space: nowrap;">{{ n.meta }}</span></span></button></sc-for>
+                  <sc-for list="{{ lockedHops }}" as="h" hint-placeholder-count="0"><div style="{{ h.style }}"><span style="font-family: var(--font-mono);">⌬</span>{{ h.label }}</div></sc-for>
+                </sc-if>
+                <sc-if value="{{ mapMode }}">
+                  <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 24px; color: #e8e6e1; background: radial-gradient(ellipse at 50% 50%, #1a1c22 0%, #111114 70%);">
+                    <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #9c9b95;">Where {{ focusName }}’s connections appear</span>
+                    <sc-for list="{{ places }}" as="p" hint-placeholder-count="4"><div style="display: grid; grid-template-columns: 120px minmax(0,1fr) 84px; gap: 10px; align-items: center; font-size: 13px;"><span>{{ p.city }}</span><span style="height: 6px; border-radius: 999px; background: #1f1f24; overflow: hidden;"><span style="{{ p.bar }}"></span></span><span style="font-family: var(--font-mono); font-size: 11px; color: #9c9b95; text-align: right; white-space: nowrap;">{{ p.n }}</span></div></sc-for>
+                    <a href="Aether Spatial Globe v2.dc.html" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #3a3a40; color: #e8e6e1; font-size: 12px; text-decoration: none;" style-hover="border-color: #9c9b95; color: #e8e6e1;">Open the globe<span style="font-family: var(--font-mono);">→</span></a>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ exploreLock }}"><div style="position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px dashed #c9975a; background: #16171b; font-size: 12px; color: #e8c79a;"><span>{{ exploreLock }}</span><button type="button" onClick="{{ openUpgrade }}" style="margin-left: auto; font-family: inherit; min-height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid #c9975a; background: transparent; color: #e8c79a; font-size: 12px; cursor: pointer;">{{ upgradeTo }}</button></div></sc-if>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 14px; border: 1px solid #d8d6d0; background: #fbfaf8;">
+                <span style="display: flex; align-items: center; gap: 10px;"><span style="{{ selAv }}">{{ selG }}</span><span style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 15px; font-weight: 500;">{{ selName }}</span><span style="font-size: 12px; color: #6b6a65;">{{ selKind }}</span></span></span>
+                <span style="font-size: 13px; line-height: 1.55; color: #4a4945; text-wrap: pretty;">{{ selDesc }}</span>
+                <sc-for list="{{ selFacts }}" as="f" hint-placeholder-count="3"><div style="display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eceae5; font-size: 12px;"><span style="color: #6b6a65;">{{ f.k }}</span><span style="{{ f.vs }}">{{ f.v }}</span></div></sc-for>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">{{ selEvidence }}</span>
+                <sc-if value="{{ canRefocus }}"><button type="button" onClick="{{ refocus }}" style="align-self: flex-start; font-family: inherit; min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #1a1a1e; background: #1a1a1e; color: #f5f4f1; font-size: 12px; font-weight: 500; cursor: pointer;">Center on {{ selName }}</button></sc-if>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ view.profiles }}">
+          <div style="max-width: 1040px; display: flex; flex-direction: column; gap: 14px;">
+            <h1 style="margin: 0; color: #1a1a1e; font-size: 24px; font-weight: 500; letter-spacing: -0.4px;">Profiles <span style="font-family: var(--font-mono); font-size: 14px; color: #6b6a65;">{{ profileCount }}</span></h1>
+            <div style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #d8d6d0; background: #fbfaf8; overflow: hidden;">
+              <sc-for list="{{ profiles }}" as="p" hint-placeholder-count="5"><div style="{{ p.style }}"><span style="{{ p.av }}">{{ p.ini }}</span><span style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span style="font-size: 13px; font-weight: 500;">{{ p.name }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">{{ p.id }}</span></span><span style="font-size: 12px; color: #4a4945;">{{ p.src }}</span><span style="font-family: var(--font-mono); font-size: 12px;">{{ p.value }}</span><button type="button" onClick="{{ p.go }}" disabled="{{ p.dis }}" style="{{ p.btn }}">{{ p.action }}</button></div></sc-for>
+            </div>
+            <sc-if value="{{ profilesLock }}"><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px dashed #c9975a; background: #f4ece0; font-size: 13px; color: #6e4f28;"><span>{{ profilesLock }}</span><button type="button" onClick="{{ openUpgrade }}" style="margin-left: auto; font-family: inherit; min-height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid #8a6433; background: #8a6433; color: #ffffff; font-size: 12px; font-weight: 500; cursor: pointer;">Upgrade to Beta</button></div></sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ view.data }}">
+          <div style="max-width: 1040px; display: flex; flex-direction: column; gap: 14px;">
+            <h1 style="margin: 0; color: #1a1a1e; font-size: 24px; font-weight: 500; letter-spacing: -0.4px;">Data</h1>
+            <div role="tablist" aria-label="Data" style="display: flex; gap: 2px; border-bottom: 1px solid #d8d6d0;"><sc-for list="{{ dataTabs }}" as="t" hint-placeholder-count="3"><button type="button" role="tab" aria-selected="{{ t.on }}" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div>
+            <div style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #d8d6d0; background: #fbfaf8; overflow: hidden;">
+              <sc-for list="{{ dataRows }}" as="r" hint-placeholder-count="4"><div style="display: grid; grid-template-columns: 28px minmax(0,1fr) auto auto; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #eceae5;"><span style="{{ r.logo }}"></span><span style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span style="font-size: 13px; font-weight: 500;">{{ r.name }}</span><span style="font-size: 11px; color: #6b6a65;">{{ r.sub }}</span></span><span style="{{ r.stStyle }}">{{ r.st }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #9c9b95;">{{ r.age }}</span></div></sc-for>
+            </div>
+            <sc-if value="{{ dataImports }}"><a href="Aether Import Mapping.dc.html" style="align-self: flex-start; font-size: 13px;">Start a new import</a></sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ view.settings }}">
+          <div style="max-width: 820px; display: flex; flex-direction: column; gap: 14px;">
+            <h1 style="margin: 0; color: #1a1a1e; font-size: 24px; font-weight: 500; letter-spacing: -0.4px;">Settings</h1>
+            <section style="display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 12px; border: 1px solid #d8d6d0; background: #fbfaf8;">
+              <div style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 14px; font-weight: 500;">Plan</span><span style="{{ planPill }}">{{ planName }}</span><span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65;">{{ planPrice }}</span><button type="button" onClick="{{ openUpgrade }}" style="margin-left: auto; font-family: inherit; min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #1a1a1e; background: #1a1a1e; color: #f5f4f1; font-size: 12px; font-weight: 500; cursor: pointer;">Change plan</button></div>
+              <sc-for list="{{ planLinesNow }}" as="l" hint-placeholder-count="4"><div style="display: grid; grid-template-columns: 16px minmax(0,1fr); gap: 8px; font-size: 13px;"><span style="{{ l.gs }}">{{ l.g }}</span><span><span style="font-weight: 500;">{{ l.k }}</span> <span style="color: #4a4945;">{{ l.v }}</span></span></div></sc-for>
+              <sc-if value="{{ receipt }}"><span style="font-size: 12px; color: #3f6b50;">{{ receipt }}</span></sc-if>
+            </section>
+            <section style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 12px; border: 1px solid #d8d6d0; background: #fbfaf8;">
+              <span style="font-size: 14px; font-weight: 500;">Account</span>
+              <sc-for list="{{ account }}" as="a" hint-placeholder-count="3"><div style="display: flex; justify-content: space-between; gap: 10px; font-size: 13px;"><span style="color: #6b6a65;">{{ a.k }}</span><span>{{ a.v }}</span></div></sc-for>
+            </section>
+            <section style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 12px; border: 1px solid #d8d6d0; background: #fbfaf8;">
+              <span style="font-size: 14px; font-weight: 500;">Data retention</span>
+              <span style="font-size: 13px; color: #4a4945;">Set by type of data, the same on every plan.</span>
+              <sc-for list="{{ retention }}" as="r" hint-placeholder-count="4"><div style="display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eceae5; font-size: 13px;"><span>{{ r.k }}</span><span style="font-family: var(--font-mono); color: #4a4945;">{{ r.v }}</span></div></sc-for>
+            </section>
+          </div>
+        </sc-if>
+      </main>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ upgradeOpen }}" hint-placeholder-val="{{ false }}">
+    <div role="dialog" aria-modal="true" aria-label="Change plan" style="position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; background: rgba(17,17,20,0.6);">
+      <div style="width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: 16px; background: #fbfaf8; box-shadow: 0 24px 60px rgba(0,0,0,0.3); box-sizing: border-box;">
+        <div style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px; font-weight: 500;">Change plan</span><button type="button" onClick="{{ closeUpgrade }}" aria-label="Close" style="margin-left: auto; font-family: inherit; width: 30px; height: 30px; border-radius: 8px; border: 1px solid #d8d6d0; background: transparent; color: #4a4945; cursor: pointer;">×</button></div>
+        <div role="radiogroup" aria-label="Plan" style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #d8d6d0; overflow: hidden; background: #ffffff;">
+          <sc-for list="{{ plans }}" as="p" hint-placeholder-count="4">
+            <div style="{{ p.wrap }}">
+              <button type="button" role="radio" aria-checked="{{ p.on }}" onClick="{{ p.go }}" style="font-family: inherit; width: 100%; text-align: left; display: flex; align-items: center; gap: 10px; padding: 13px 14px; border: 0; background: transparent; color: #1a1a1e; cursor: pointer;"><span style="{{ p.radio }}"></span><span style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 14px; font-weight: 500;">{{ p.name }} <span style="font-size: 11px; font-weight: 400; color: #6b6a65;">{{ p.current }}</span></span><span style="font-size: 12px; color: #6b6a65;">{{ p.fit }}</span></span><span style="margin-left: auto; font-family: var(--font-mono); font-size: 13px;">{{ p.price }}</span></button>
+              <sc-if value="{{ p.open }}"><div style="display: flex; flex-direction: column; gap: 8px; padding: 0 14px 14px 38px;"><sc-for list="{{ p.lines }}" as="l" hint-placeholder-count="0"><div style="display: grid; grid-template-columns: 16px minmax(0,1fr); gap: 8px; font-size: 13px; line-height: 1.45;"><span style="{{ l.gs }}">{{ l.g }}</span><span><span style="font-weight: 500;">{{ l.k }}</span> <span style="color: #4a4945;">{{ l.v }}</span></span></div></sc-for></div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ showCard }}">
+          <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; background: #eceae5;">
+            <div style="display: flex; align-items: center; gap: 8px;"><span style="font-size: 13px; font-weight: 500;">Payment</span><span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #6b6a65;">Powered by<span style="width: 38px; height: 16px; background: url('assets/brand/stripe.svg') center / contain no-repeat;"></span></span></div>
+            <input value="{{ cardNum }}" onChange="{{ onCard }}" placeholder="Card number" aria-label="Card number" style="font-family: var(--font-mono); font-size: 14px; padding: 11px 12px; border-radius: 10px; border: 1px solid #d8d6d0; background: #ffffff; color: #1a1a1e;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;"><input value="{{ exp }}" onChange="{{ onExp }}" placeholder="MM / YY" aria-label="Expiry" style="font-family: var(--font-mono); font-size: 14px; padding: 11px 12px; border-radius: 10px; border: 1px solid #d8d6d0; background: #ffffff; color: #1a1a1e;"><input value="{{ cvc }}" onChange="{{ onCvc }}" placeholder="CVC" aria-label="CVC" style="font-family: var(--font-mono); font-size: 14px; padding: 11px 12px; border-radius: 10px; border: 1px solid #d8d6d0; background: #ffffff; color: #1a1a1e;"></div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #4a4945;">{{ planName }} · monthly</span><span style="font-family: var(--font-mono); font-weight: 500;">{{ dueToday }} today</span></div>
+            <span style="font-size: 11px; color: #6b6a65;">A receipt is emailed to {{ receiptTo }}.</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ payError }}"><div role="alert" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid #e3bdb7; background: #f3e8e6; color: #7e3129; font-size: 13px;"><span>■ Card declined. Nothing was charged.</span><button type="button" onClick="{{ retryPay }}" style="margin-left: auto; font-family: inherit; min-height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid #7e3129; background: transparent; color: #7e3129; font-size: 12px; cursor: pointer;">Try another card</button></div></sc-if>
+        <sc-if value="{{ formError }}"><span role="alert" style="font-size: 12px; color: #9c4439;">{{ formError }}</span></sc-if>
+        <button type="button" onClick="{{ confirmUpgrade }}" disabled="{{ busy }}" style="font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; border-radius: 10px; border: 1px solid #1a1a1e; background: #1a1a1e; color: #f5f4f1; font-size: 14px; font-weight: 500; cursor: pointer;">{{ spinner }}{{ upgradeLabel }}</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const SKEY = 'aether.journey.v3';
+const PLANS = [
+  { id: 'alpha', name: 'Alpha', m: 0, fit: 'For individuals starting out', c: '#6b9a7c', ev: '3M events a month', seats: '2 seats', svc: '11 services', conn: 'Payment rails such as Stripe. Business-system connectors start on Beta.', feat: 'Capture, consent, reporting, a preview of your first profile and its connections' },
+  { id: 'beta', name: 'Beta', m: 299, fit: 'For growing teams', c: '#3a6896', ev: '9M events a month', seats: '3 seats', svc: '22 services', conn: 'Standard connectors: Shopify, HubSpot, Salesforce, Klaviyo, Instagram, and more', feat: 'Everything in Alpha, plus identity matching, Profiles, campaigns, alerts, redaction, and Explore two steps out' },
+  { id: 'gamma', name: 'Gamma', m: 899, fit: 'For scale-ups', c: '#c9975a', ev: '18M events a month', seats: '5 seats', svc: '36 services', conn: 'Expanded connectors', feat: 'Everything in Beta, plus the full graph in Explore, insights, prediction, risk, contribution, and agent activity' },
+  { id: 'delta', name: 'Delta', m: 3449, fit: 'For enterprises', c: '#a88a5a', ev: '27M events a month', seats: '5 seats', svc: '41 services', conn: 'Expanded connectors with your own keys', feat: 'Everything in Gamma, plus settlement, verification, rewards, and cross-domain intelligence' }
+];
+const ENT = [
+  { id: 'epsilon', name: 'Epsilon', c: '#8f86c2', fit: 'Higher volume, more teams', price: 'Custom', per: 'From 54M events a month', type: 'sales', cta: 'Talk through scope', inherit: 'Everything in Delta, plus:', feats: ['54M+ events a month', 'More seats and workspaces', 'Stronger support and response times', 'Volume pricing'] },
+  { id: 'omicron', name: 'Omicron', c: '#5f9aa6', fit: 'Dedicated or governed deployment', price: 'Custom', per: 'Annual contract', type: 'security', cta: 'Request a review', inherit: 'Everything in Epsilon, plus:', feats: ['Dedicated or governed deployment', 'Procurement and security review', 'Assurance documents', 'Named support team'] },
+  { id: 'omega', name: 'Omega', c: '#c07f6f', fit: 'Private or regulated environments', price: 'Custom', per: 'Negotiated', type: 'security', cta: 'Request a review', inherit: 'Everything in Omicron, plus:', feats: ['Private or regulated environments', 'Negotiated isolation', 'Data residency choices', 'Customer-held control'] }
+];
+const STEPS = [['goal', 'Goal', 'What should Aether help you see first?', 'Pick a starting point. Aether suggests a first source, and you can add more goals anytime.'], ['connect', 'Connect', 'Connect your sources', 'Connect one or as many as you use. No per-connector fees. Aether reads only; it never writes back.'], ['import', 'Import', 'Bring in your history', 'Upload past customers or orders. Aether checks every row before adding it.'], ['sdk', 'SDKs', 'Install your SDKs', 'Pick one or more platforms, add the snippet, then send a test event from each.'], ['invite', 'Invite', 'Invite a teammate', 'Invite at least one person who owns a system you use.'], ['value', 'First profile', 'Your first profile', 'This completes on its own once real data forms a profile.'], ['done', 'Done', 'You’re set up', 'Everything Aether needs is in place.']];
+const GOALS = [['campaign', 'Prove campaign impact', '⚑', '#c9975a', 'What each campaign appears to drive', 'instagram'], ['retain', 'Keep best customers', '◈', '#6b9a7c', 'High-value customers going quiet', 'shopify'], ['identity', 'One view per customer', '⬡', '#3a6896', 'Match duplicate records into one profile', 'hubspot'], ['agents', 'See what agents do', '⌬', '#5a85a8', 'Agents acting on someone’s behalf', 'stripe'], ['risk', 'Catch risk early', '▲', '#b5564a', 'Unusual patterns before they cost you', 'stripe'], ['journeys', 'Understand journeys', '↔', '#6b6a65', 'Paths to a second purchase', 'klaviyo'], ['other', 'Something else', '✎', '#8a6433', 'Tell us in your own words', 'stripe']];
+const CONNS = [['stripe', 'Stripe', 'Payments, refunds', 'alpha'], ['shopify', 'Shopify', 'Orders, customers', 'beta'], ['hubspot', 'HubSpot', 'Contacts, lifecycle', 'beta'], ['salesforce', 'Salesforce', 'Accounts, deals', 'beta'], ['klaviyo', 'Klaviyo', 'Email, flows', 'beta'], ['instagram', 'Instagram', 'Ad clicks, campaigns', 'beta'], ['zendesk', 'Zendesk', 'Tickets', 'beta'], ['segment', 'Segment', 'Event streams', 'beta'], ['googleads', 'Google Ads', 'Spend, clicks', 'beta'], ['meta', 'Meta Ads', 'Campaigns, spend', 'beta'], ['x', 'X', 'Posts, engagement', 'beta'], ['googleanalytics', 'Google Analytics', 'Sessions, goals', 'beta'], ['intercom', 'Intercom', 'Conversations', 'beta'], ['posthog', 'PostHog', 'Product events', 'beta'], ['slack', 'Slack', 'Alerts, channels', 'beta'], ['jira', 'Jira', 'Issues', 'beta'], ['linear', 'Linear', 'Issues, cycles', 'beta'], ['phantom', 'Phantom', 'Wallet activity', 'beta']];
+const SCOPES = { stripe: [['Customers', 'Names, emails, IDs'], ['Payments', 'Charges and invoices'], ['Refunds and disputes', 'Status and amounts'], ['Subscriptions', 'Plans and renewals']], shopify: [['Customers', 'Profiles and tags'], ['Orders', 'Line items and totals'], ['Products', 'Catalog titles'], ['Fulfilment', 'Shipping status']], hubspot: [['Contacts', 'Lifecycle stage and owner'], ['Companies', 'Accounts and domains'], ['Deals', 'Pipeline and amounts'], ['Campaigns', 'Email and ad campaigns']], salesforce: [['Contacts and leads', 'Owner and status'], ['Accounts', 'Company records'], ['Opportunities', 'Stage and amount'], ['Campaigns', 'Members and responses']] };
+const scopesFor = id => SCOPES[id] || [['Profiles', 'People and accounts'], ['Activity', 'Events and history'], ['Metadata', 'Names, tags, timestamps']];
+const LT = '\x3c';
+const SDKEY = { web: 'ae_wk_web_7Hq2…p9Xc', ios: 'ae_wk_ios_K3vd…2mRa', android: 'ae_wk_and_Q8ne…7tLb', rn: 'ae_wk_rn_Z5pc…1hWy', server: 'ae_sk_srv_Rt8m…4LwQ' };
+const SDKC = { web: '#3a6896', ios: '#5a85a8', android: '#4f8466', rn: '#c9975a', server: '#8a6433' };
+const scramble = (v, n) => v.split('').map((ch, i) => i < v.length * n / 14 || ch === '_' || ch === '…' ? ch : '#%&@$*+=/<>'[(i * 7 + n * 3) % 11]).join('');
+const SDKS = { web: ['Web', 'index.html', LT + 'script src="https://cdn.aether.dev/v1.js">' + LT + '/script>\n' + LT + 'script>\n  aether.init({ writeKey: "ae_wk_live_7Hq2…p9Xc" });\n  aether.track("page_view");\n' + LT + '/script>'], ios: ['iOS', 'AppDelegate.swift', 'import Aether\n\nAether.configure(writeKey: "ae_wk_live_7Hq2…p9Xc")\nAether.track("app_open")'], android: ['Android', 'App.kt', 'Aether.init(this, writeKey = "ae_wk_live_7Hq2…p9Xc")\nAether.track("app_open")'], rn: ['React Native', 'App.tsx', 'import { Aether } from "@aether/react-native";\n\nAether.init({ writeKey: "ae_wk_live_7Hq2…p9Xc" });\nAether.track("app_open");'], server: ['Server', 'server.ts', 'import { Aether } from "@aether/server";\n\nconst aether = new Aether({ key: process.env.AETHER_KEY });\nawait aether.track({ event: "order_completed", userId: "usr_4f21a9" });'] };
+const K = { human: ['Person', '#6b9a7c', '●'], agent: ['Agent', '#5a85a8', '⌬'], syndicate: ['Syndicate', '#c9975a', '◈'], source: ['Source', '#9c9b95', '◉'] };
+const N = {
+  jane: ['Jane Doe', 'human', 'Customer since 2021 · 23 orders', 'Four sources matched to one profile.', 4820, 18, 212, 'identity · email + device · 0.98', 'San Francisco'],
+  ptolemy: ['Ptolemy', 'agent', 'Support agent', 'Issued a $240 refund for Jane, seen in Stripe.', 240, 12, 41, 'h2a · delegation dlg_22f0', 'San Francisco'],
+  stripe: ['Stripe', 'source', 'Payments', '$4,820 lifetime value across 23 orders.', 4820, 5, 23, 'stripe · charges + refunds', 'San Francisco'],
+  insta: ['Instagram', 'source', 'Spring Drop ads', 'Ad clicks started her last three orders.', 1860, 8, 64, 'instagram · ad.click', 'Los Angeles'],
+  percival: ['Percival', 'human', 'Risk analyst', 'Reviews settlement batches with Jane.', 0, 20, 30, 'h2h · 14 shared reviews', 'New York'],
+  maya: ['Maya Chen', 'human', 'Referred by Jane', 'Joined through Jane’s referral link on X.', 520, 9, 18, 'h2h · referral ref_9a1', 'Oakland'],
+  kyoto: ['Kyoto trip', 'syndicate', '3 members', 'Three members booked the same trip within six minutes.', 3840, 34, 9, 'syndicate syn_kyoto', 'Kyoto'],
+  mordred: ['Mordred', 'agent', 'Settlement agent', 'Message volume with an external agent rose 21×.', 212000, 91, 3910, 'a2a · agentmail thr_40a', 'Dubai'],
+  dxb: ['syn_dxb4', 'syndicate', 'External syndicate', 'An external group Mordred messages often.', 0, 78, 212, 'graph · a2a edge', 'Dubai'],
+  aria: ['Aria Cole', 'human', 'Maya’s partner', 'Shares a shipping address with Maya.', 310, 6, 11, 'identity · address', 'Oakland']
+};
+const E = [['jane', 'ptolemy', 'agent'], ['jane', 'stripe', 'source'], ['jane', 'insta', 'source'], ['jane', 'percival', 'human'], ['jane', 'maya', 'human'], ['jane', 'kyoto', 'syndicate'], ['kyoto', 'mordred', 'agent'], ['maya', 'aria', 'human'], ['mordred', 'dxb', 'agent'], ['ptolemy', 'stripe', 'agent']];
+const tone = (c, bg) => 'display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; background: ' + bg + '; color: ' + c + ';';
+const logo = (k, sz) => 'width: ' + sz + 'px; height: ' + sz + 'px; flex: none; background: url("assets/brand/' + k + '.svg") center / contain no-repeat;';
+const money = v => '$' + (v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v);
+const price = v => '$' + v.toLocaleString('en-US');
+const rank = id => PLANS.findIndex(p => p.id === id);
+const nb = s => (s || '').replace(/\D/g, '');
+const spin = () => React.createElement('span', { style: { width: 14, height: 14, borderRadius: 999, border: '2px solid rgba(245,244,241,0.35)', borderTopColor: '#f5f4f1', animation: 'aeSpin 700ms linear infinite', display: 'inline-block', flex: 'none' } });
+
+class Component extends DCLogic {
+  state = { planTab: 'self', sub: 'auth', paying: null, stage: 'signup', email: '', name: '', pw: '', plan: 'alpha', pick: 'alpha', cardNum: '', exp: '', cvc: '', busy: false, payError: false, formError: '', step: 0, done: {}, goal: null, conns: {}, imported: 0, sdk: 'web', copied: false, invites: [], invEmail: '', invRole: 'member', invErr: '', test: 'idle', view: 'home', focus: 'jane', sel: 'jane', lens: ['activity'], time: 30, mode: 'graph', q: '', upgrade: false, receipt: '', dataTab: 'connectors', w: typeof window !== 'undefined' ? window.innerWidth : 1280 };
+  componentDidMount() {
+    this.onR = () => this.setState({ w: window.innerWidth }); window.addEventListener('resize', this.onR);
+    let saved = null; try { saved = JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch (e) {}
+    const p = new URLSearchParams(location.search); const mode = p.get('mode'); const pre = p.get('plan');
+    const valid = PLANS.some(x => x.id === pre);
+    if (saved && saved.account && mode !== 'signup') { this.account = saved; this.setState({ stage: 'signin', email: saved.email || '' }); }
+    else this.setState({ stage: mode === 'signin' ? 'signin' : 'signup', plan: valid ? pre : 'alpha', pick: valid ? pre : 'alpha' });
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this.onR); [this.t1, this.t2, this.t3, this.t4].concat(this.kts || []).forEach(clearTimeout); }
+  componentDidUpdate() { if (!['signup', 'signin'].includes(this.state.stage)) this.persist(); }
+  persist() { const s = this.state; try { localStorage.setItem(SKEY, JSON.stringify({ account: true, email: s.email, name: s.name, plan: s.plan, stage: s.stage, step: s.step, done: s.done, goal: s.goal, conns: s.conns, imported: s.imported, invites: s.invites, test: s.test, view: s.view, focus: s.focus, sdk: s.sdk, receipt: s.receipt })); } catch (e) {} }
+  pay(then) {
+    const s = this.state, n = nb(s.cardNum);
+    if (n.length < 15 || nb(s.exp).length < 4 || nb(s.cvc).length < 3) return this.setState({ formError: 'Enter the full card number, expiry, and CVC.' });
+    this.setState({ busy: true, payError: false, formError: '' });
+    this.t1 = setTimeout(() => { if (n === '4000000000000002') return this.setState({ busy: false, payError: true }); this.setState({ busy: false, cardNum: '', exp: '', cvc: '' }); then(); }, 1600);
+  }
+  submit() {
+    const s = this.state;
+    if (!/.+@.+\..+/.test(s.email)) return this.setState({ formError: 'Enter a valid work email.' });
+    this.setState({ busy: true, formError: '' });
+    this.t2 = setTimeout(() => {
+      if (s.stage === 'signin') { const a = this.account || {}; const { account, ...rest } = a; return this.setState({ busy: false, ...rest, email: s.email, stage: a.stage === 'app' ? 'app' : 'setup' }); }
+      const nm = s.name || s.email.split('@')[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      this.setState({ busy: false, sub: 'plan', name: nm });
+    }, 600);
+  }
+  tone(c, i, active) {
+    const ink = c === '#3a6896' || c === '#5d6fa8' ? '#ffffff' : '#111114';
+    return { plates: Array.from({ length: i + 1 }, (_, j) => 'display: block; height: 4px; border-radius: 2px; width: ' + (34 - (i - j) * 5) + 'px; background: ' + c + '; opacity: ' + (j === i ? 1 : (0.3 + j * 0.15).toFixed(2)) + ';'),
+      nameStyle: 'font-size: 22px; font-weight: 500; letter-spacing: -0.4px; color: ' + c + ';', tick: 'font-family: var(--font-mono); color: ' + c + ';',
+      cta: 'font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border-radius: 11px; border: 0; background: ' + c + '; color: ' + ink + '; font-size: 14px; font-weight: 500; cursor: pointer; transition: filter 120ms cubic-bezier(0.22,1,0.36,1);', ctaHover: 'filter: brightness(1.12);' };
+  }
+  entCard(p, i) {
+    return { name: p.name, fit: p.fit, price: p.price, per: p.per, paying: false, inherit: p.inherit, feats: p.feats, note: 'Scoped with our team', ctaLabel: p.cta, spin: null,
+      go: () => { location.href = 'Contact.dc.html?brand=aether&type=' + p.type + '&plan=' + p.id; }, ...this.tone(p.c, i + 4, false),
+      card: 'display: flex; flex-direction: column; gap: 16px; padding: 20px; border-radius: 18px; border: 1px solid ' + p.c + '40; background: ' + p.c + '0f;' };
+  }
+  choose(id) {
+    const s = this.state;
+    const go = () => this.setState(x => ({ stage: 'setup', sub: 'auth', plan: id, pick: id, paying: null, step: 0, receipt: id !== 'alpha' ? 'Paid ' + price(PLANS[rank(id)].m) + ' · receipt sent to ' + x.email : '' }));
+    if (id === 'alpha') { this.setState({ busy: true, paying: null }); this.t2 = setTimeout(() => { this.setState({ busy: false }); go(); }, 600); return; }
+    if (s.paying !== id) return this.setState({ paying: id, pick: id, payError: false, formError: '' });
+    this.pay(go);
+  }
+  planLines(p) { return [['Events', p.ev, '◉', '#3a6896'], ['Seats', p.seats, '●', '#6b9a7c'], ['Connectors', p.conn, '↔', '#c9975a'], ['Services', p.svc + ' · ' + p.feat, '⬢', '#5a85a8']].map(([k, v, g, c]) => ({ k, v, g, gs: 'font-family: var(--font-mono); font-size: 12px; color: ' + c + ';' })); }
+  renderVals() {
+    const s0 = this.state, s = s0.step > STEPS.length - 1 ? { ...s0, step: STEPS.length - 1 } : s0, P = PLANS[rank(s.plan)], PK = PLANS[rank(s.pick)], r = rank(s.plan);
+    const isAuth = ['signup', 'signin'].includes(s.stage), isSignup = s.stage === 'signup';
+    const needsCard = (isSignup && s.pick !== 'alpha') || (s.upgrade && rank(s.pick) > r);
+    const spinner = s.busy ? spin() : null;
+    const plans = PLANS.map(p => { const on = s.pick === p.id; return { name: p.name, fit: p.fit, price: p.m ? price(p.m) + '/mo' : 'Free', on: on ? 'true' : 'false', open: on, current: s.upgrade && p.id === s.plan ? '· current' : '', lines: this.planLines(p), go: () => this.setState({ pick: p.id, payError: false, formError: '' }),
+      wrap: 'border-bottom: 1px solid #eceae5; background: ' + (on ? p.c + '10' : 'transparent') + '; transition: background-color 200ms cubic-bezier(0.22,1,0.36,1);',
+      radio: 'width: 16px; height: 16px; flex: none; box-sizing: border-box; border-radius: 999px; border: ' + (on ? '5px solid ' + p.c : '1px solid #9c9b95') + '; transition: border 120ms cubic-bezier(0.22,1,0.36,1);' }; });
+    const planPill = tone(P.c, P.c + '1f');
+    const cur = STEPS[s.step][0];
+    const connected = Object.keys(s.conns).filter(k => s.conns[k] === 'connected');
+    const autoDone = { goal: !!s.goal, connect: connected.length > 0, import: s.imported > 0, sdk: !!s.done.sdk, invite: s.invites.length > 0, test: s.test === 'ok', value: s.test === 'ok' && (connected.length > 0 || s.imported > 0), done: false };
+    const doneCount = STEPS.filter(x => autoDone[x[0]]).length + (s.stage === 'app' || STEPS[s.step][0] === 'done' ? 1 : 0);
+    const firstOpen = STEPS.findIndex(x => !autoDone[x[0]]);
+    const at = Object.fromEntries(STEPS.map(x => [x[0], x[0] === cur]));
+    const stepList = STEPS.map(([k, label], i) => { const d = autoDone[k], c = i === s.step, locked = i > (firstOpen < 0 ? STEPS.length - 1 : firstOpen); return { label, cur: c ? 'step' : 'false', locked, g: d ? '✓' : String(i + 1), state: d ? 'complete' : c ? 'in progress' : locked ? 'locked' : 'to do', go: () => !locked && this.setState({ step: i }),
+      dot: 'display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: none; border-radius: 999px; font-family: var(--font-mono); font-size: 11px; ' + (d ? 'background: #6b9a7c; color: #ffffff;' : c ? 'background: #1a1a1e; color: #f5f4f1;' : 'background: #eceae5; color: #6b6a65;'),
+      style: 'font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 10px; color: #1a1a1e; cursor: ' + (locked ? 'default' : 'pointer') + '; opacity: ' + (locked ? 0.5 : 1) + '; background: ' + (c ? '#eceae5' : 'transparent') + ';' }; });
+    const G = GOALS.find(g => g[0] === s.goal);
+    const recConn = G ? G[5] : null;
+    const rc = recConn ? CONNS.find(c => c[0] === recConn) : null;
+    const q = (s.connQ || '').toLowerCase(); const connList = CONNS.filter(c => !q || (c[1] + ' ' + c[2]).toLowerCase().includes(q)); const connShown = q || s.connAll ? connList : connList.slice(0, 8);
+    const conns = connShown.map(([id, name, sub, min]) => { const lockd = false; const st = s.conns[id]; const on = st === 'connected', ing = st === 'connecting'; return { name, sub: lockd ? sub + ' · from Beta' : on ? 'Connected · reading' : ing ? 'Connecting…' : sub, rec: id === recConn, logo: logo(id, 26), action: on ? '✓ On' : ing ? '…' : lockd ? 'Beta' : 'Connect', dis: lockd || on || ing, go: () => this.setState({ consent: id, scopes: scopesFor(id).map(() => true) }),
+      style: 'font-family: inherit; text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; border-radius: 12px; color: #1a1a1e; transition: border-color 120ms, box-shadow 120ms, transform 120ms; cursor: ' + (lockd || on || ing ? 'default' : 'pointer') + '; border: 1px solid ' + (on ? '#c3d6c9' : '#e2e0da') + '; background: ' + (on ? '#e8eee9' : '#ffffff') + '; opacity: ' + (lockd ? 0.62 : 1) + ';', hover: lockd || on ? '' : 'border-color: #3a6896; box-shadow: 0 6px 18px #1a1a1e12; transform: translateY(-1px);', pill: tone(on ? '#4f8466' : ing ? '#8a6433' : lockd ? '#6b6a65' : '#2d5373', on ? '#4f84661f' : ing ? '#c9975a1f' : lockd ? '#eceae5' : '#3a68961a'),
+      btn: 'font-family: inherit; min-height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: ' + (lockd || on || ing ? 'default' : 'pointer') + '; ' + (on ? 'border: 1px solid #c3d6c9; background: transparent; color: #4f8466;' : lockd ? 'border: 1px solid #d8d6d0; background: transparent; color: #6b6a65;' : 'border: 1px solid #1a1a1e; background: #1a1a1e; color: #f5f4f1;') }; });
+    const sdkActive = cur === 'sdk'; const ie = s.invEmail || '', good = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(ie), bad = ie.length > 4 && ie.includes('@') && !good && /\.[a-z]*$/i.test(ie.split('@')[1] || '') && (ie.split('@')[1] || '').includes('.'); const sel = (s.sdkSel || ['web']).filter(k => SDKS[k]); const view = sel.includes(s.sdk) ? s.sdk : sel[0]; const anyOk = Object.values(s.tests || {}).includes('ok');
+    const nextEnabled = cur === 'done' || (cur === 'sdk' ? anyOk : autoDone[cur]);
+    const nextLabel = cur === 'done' ? 'Go to Home' : 'Continue';
+    const hints = { goal: 'Pick a goal to continue', connect: 'Connect one source to continue', import: 'Upload a file to continue', invite: 'Invite one teammate to continue', test: 'Send a test event to continue', sdk: 'Send one test event to continue', value: 'Waiting for data to form a profile' };
+    const alpha = s.plan === 'alpha', beta = s.plan === 'beta';
+    const maxHop = alpha ? 1 : beta ? 2 : 9;
+    const hop = {}; hop[s.focus] = 0; let frontier = [s.focus];
+    for (let d = 1; d <= 4; d++) { const nx = []; frontier.forEach(f => E.forEach(([a, b]) => { const o = a === f ? b : b === f ? a : null; if (o && hop[o] == null) { hop[o] = d; nx.push(o); } })); frontier = nx; }
+    const shown = Object.keys(hop).filter(k => hop[k] <= maxHop);
+    const hidden = Object.keys(hop).filter(k => hop[k] > maxHop);
+    const ringR = [0, 17, 29, 38, 38];
+    const byHop = {}; shown.forEach(k => { (byHop[hop[k]] = byHop[hop[k]] || []).push(k); });
+    const posOf = {}; Object.entries(byHop).forEach(([d, arr]) => arr.forEach((k, i) => { const a = (i / arr.length) * Math.PI * 2 - Math.PI / 2 + (+d) * 0.55; const R = ringR[Math.min(4, +d)]; posOf[k] = [50 + Math.cos(a) * R * 1.3, 31.25 + Math.sin(a) * R * 0.72]; }));
+    const L = alpha ? [] : s.lens;
+    const mxA = Math.max(...shown.map(k => N[k][6])), mxV = Math.max(1, ...shown.map(k => N[k][4]));
+    const gnodes = shown.map(k => { const n = N[k], T = K[n[1]], p = posOf[k], on = k === s.sel; const size = L.includes('activity') ? 22 + Math.sqrt(n[6] / mxA) * 14 : 26; const risky = L.includes('risk') && n[5] >= 60; const vc = L.includes('value') ? 'rgba(127,176,143,' + (0.2 + 0.8 * n[4] / mxV).toFixed(2) + ')' : T[1] + '2e';
+      return { name: n[0], g: T[2], meta: L.includes('value') ? money(n[4]) : L.includes('risk') ? 'risk ' + n[5] : L.includes('activity') ? n[6] + ' events' : T[0], aria: n[0] + ', ' + T[0], go: () => this.setState({ sel: k }),
+        style: 'position: absolute; left: ' + p[0] + '%; top: ' + (p[1] / 62.5 * 100) + '%; transform: translate(-50%,-50%); display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 5px; border-radius: 999px; font-family: inherit; cursor: pointer; background: ' + (on ? '#1f1f24' : '#16171b') + '; border: 1px solid ' + (risky ? '#e0796b' : on ? T[1] : '#2a2a2f') + '; transition: border-color 200ms cubic-bezier(0.22,1,0.36,1), left 320ms cubic-bezier(0.22,1,0.36,1), top 320ms cubic-bezier(0.22,1,0.36,1);',
+        dot: 'display: inline-flex; align-items: center; justify-content: center; width: ' + size + 'px; height: ' + size + 'px; border-radius: 999px; background: ' + vc + '; color: ' + (L.includes('value') ? '#e8e6e1' : T[1]) + '; font-family: var(--font-mono); font-size: 11px; transition: width 320ms cubic-bezier(0.22,1,0.36,1), height 320ms cubic-bezier(0.22,1,0.36,1), background-color 320ms cubic-bezier(0.22,1,0.36,1);' }; });
+    const edges = E.filter(([a, b]) => posOf[a] && posOf[b]).map(([a, b, k]) => { const A = posOf[a], B = posOf[b], on = a === s.sel || b === s.sel; return { x1: A[0], y1: A[1], x2: B[0], y2: B[1], c: K[k][1], w: on ? 0.45 : 0.25, o: on ? 0.9 : 0.35 }; });
+    const lockedHops = hidden.length ? [{ label: hidden.length + ' more connection' + (hidden.length > 1 ? 's' : '') + ' further out', style: 'position: absolute; right: 12px; top: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px dashed #4a4a52; font-size: 11px; color: #9c9b95;' }] : [];
+    const SN = N[s.sel] || N.jane;
+    const results = s.q.trim() ? Object.entries(N).filter(([k, n]) => n[0].toLowerCase().includes(s.q.trim().toLowerCase())).slice(0, 6).map(([k, n]) => ({ name: n[0], kind: K[n[1]][0], g: K[n[1]][2], gs: 'font-family: var(--font-mono); color: ' + K[n[1]][1] + ';', go: () => { if (alpha && k !== 'jane') return this.setState({ q: '', upgrade: true, pick: 'beta' }); this.setState({ focus: k, sel: k, q: '' }); } })) : null;
+    const lenses = [['activity', 'Activity', '#6a95bd'], ['value', 'Value', '#7fb08f'], ['risk', 'Risk', '#e0796b'], ['time', 'Time', '#c9975a']].map(([k, label, c]) => { const on = s.lens.includes(k) && !alpha, dis = alpha; return { label, on: on ? 'true' : 'false', dis, title: dis ? 'Lenses start on Beta' : label, go: () => this.setState({ lens: s.lens.includes(k) ? s.lens.filter(x => x !== k) : s.lens.concat([k]) }), dot: 'width: 8px; height: 8px; border-radius: 999px; background: ' + (on ? c : '#c9c7c0') + ';', style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12px; cursor: ' + (dis ? 'default' : 'pointer') + '; opacity: ' + (dis ? 0.55 : 1) + '; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1); ' + (on ? 'background: #1a1a1e; border: 1px solid #1a1a1e; color: #f5f4f1;' : 'background: #fbfaf8; border: 1px solid #d8d6d0; color: #1a1a1e;') }; });
+    const seg = on => 'font-family: inherit; min-height: 28px; padding: 0 12px; border-radius: 7px; border: 0; font-size: 12px; cursor: pointer; ' + (on ? 'background: #fbfaf8; color: #1a1a1e; font-weight: 500;' : 'background: transparent; color: #6b6a65;');
+    const placesAgg = {}; shown.forEach(k => { const c = N[k][8]; placesAgg[c] = (placesAgg[c] || 0) + 1; });
+    const pm = Math.max(...Object.values(placesAgg));
+    const navDefs = [['home', 'Home', '◈'], ['explore', 'Explore', '↔'], ['profiles', 'Profiles', '⬡'], ['data', 'Data', '◉'], ['settings', 'Settings', '⚙']];
+    const dataRows = s.dataTab === 'connectors' ? (connected.length ? connected : ['stripe']).map(k => { const c = CONNS.find(x => x[0] === k); return { name: c[1], sub: c[2], logo: logo(k, 24), st: '● healthy', stStyle: tone('#3f6b50', '#e8eee9') + ' font-family: var(--font-mono);', age: 'synced 2m ago' }; })
+      : s.dataTab === 'sdks' ? [{ name: SDKS[s.sdk][0] + ' SDK', sub: 'write key ae_wk_live_7Hq2…', logo: 'width: 24px; height: 24px; border-radius: 6px; background: #1a1a1e;', st: '● receiving', stStyle: tone('#3f6b50', '#e8eee9') + ' font-family: var(--font-mono);', age: 'last event 1m ago' }]
+      : [{ name: 'legacy_customers.csv', sub: (s.imported || 12408).toLocaleString('en-US') + ' rows · added', logo: 'width: 24px; height: 24px; border-radius: 6px; background: #f4ece0;', st: '✓ added', stStyle: tone('#3f6b50', '#e8eee9'), age: 'today' }];
+    const profilesAll = [['jane', 'Jane Doe', 'usr_4f21a9', 'Stripe · Instagram · web', '$4,820'], ['maya', 'Maya Chen', 'usr_a81d3', 'web · referral', '$520'], ['percival', 'Percival Hart', 'usr_91b2c', 'HubSpot', '—'], ['aria', 'Aria Cole', 'usr_c77e0', 'Shopify', '$310'], [null, 'Tom Alvarez', 'usr_0e19f', 'Stripe', '$96']];
+    const ws = (s.name || 'Northwind').split(' ')[0] + '’s workspace';
+    return {
+      isAuth, isSignup, isSetup: s.stage === 'setup', progressW: Math.round(Math.min(1, doneCount / STEPS.length) * 100) + '%',
+      consent: s.consent ? (() => { const id = s.consent, c = CONNS.find(x => x[0] === id), sc = scopesFor(id), sel = s.scopes || [], close = () => this.setState({ consent: null });
+        return { name: c[1], title: 'Allow Aether to access ' + c[1] + ' data', logo: logo(id, 36), none: !sel.some(Boolean), stop: e => e.stopPropagation(), cancel: close,
+          scopes: sc.map(([label, d], i) => ({ label, d, on: !!sel[i], toggle: () => this.setState(x => { const a = [...(x.scopes || [])]; a[i] = !a[i]; return { scopes: a }; }) })),
+          allow: () => { this.setState(x => ({ consent: null, conns: { ...x.conns, [id]: 'connecting' } })); this.t3 = setTimeout(() => this.setState(x => ({ conns: { ...x.conns, [id]: 'connected' } })), 900); } }; })() : null, isApp: s.stage === 'app',
+      isAuthPane: isAuth && (s.stage === 'signin' || s.sub === 'auth'), isPlanPane: s.stage === 'signup' && s.sub === 'plan',
+      authCols: s.w < 980 ? 'minmax(0,1fr)' : 'minmax(0,1.05fr) minmax(0,0.95fr)', showVisual: s.w >= 980,
+      authTitle: isSignup ? 'See every relationship' : 'Welcome back', authLead: isSignup ? 'One governed view of every customer, agent, and outcome.' : 'Sign in and pick up exactly where you left off.',
+      moreProviders: [['microsoft', 'Microsoft'], ['slack', 'Slack']].map(([k, label]) => ({ label: 'Continue with ' + label, short: label, logo: logo(k, 16), go: () => this.setState({ email: s.email || 'jane@northwind.co', formError: '' }) })),
+      darkSpinner: s.busy ? React.createElement('span', { style: { width: 14, height: 14, borderRadius: 999, border: '2px solid rgba(17,17,20,0.25)', borderTopColor: '#111114', animation: 'aeSpin 700ms linear infinite', display: 'inline-block', flex: 'none' } }) : null,
+      backToAuth: () => this.setState({ sub: 'auth', paying: null, payError: false, formError: '' }), startAlpha: () => this.choose('alpha'),
+      planCols: s.w < 620 ? 'minmax(0,1fr)' : s.w < 900 ? 'repeat(2, minmax(0,1fr))' : 'repeat(' + (s.planTab === 'ent' ? 3 : 4) + ', minmax(0,1fr))',
+      planTabs: [['self', 'Self-serve'], ['ent', 'Enterprise']].map(([id, label]) => { const on = s.planTab === id; return { label, on: on ? 'true' : 'false', go: () => this.setState({ planTab: id, paying: null, payError: false }), style: 'font-family: inherit; min-height: 34px; padding: 0 16px; border-radius: 9px; border: 0; font-size: 13px; font-weight: 500; cursor: pointer; background: ' + (on ? '#2a2a30' : 'transparent') + '; color: ' + (on ? '#e8e6e1' : '#9c9b95') + '; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);' }; }),
+      planFoot: s.planTab === 'ent' ? 'Enterprise plans are scoped with our team. No online checkout.' : 'Prices in USD. Taxes calculated at checkout.',
+      planCards: s.planTab === 'ent' ? ENT.map((p, i) => this.entCard(p, i)) : PLANS.map((p, i) => { const paying = s.paying === p.id; const FEATS = { alpha: ['Capture events from web, iOS, Android, and server', 'Consent and redaction rules at the source', 'Stripe and other payment-rail connectors', 'Standard reporting', 'A preview of your first profile and its connections', '3M events a month · 2 seats'], beta: ['Identity matching across every source', 'Profiles for every customer', 'Shopify, HubSpot, Salesforce, Klaviyo, Instagram, and more', 'Campaigns and alerts', 'Explore two steps out, with lenses', '9M events a month · 3 seats'], gamma: ['The whole network in Explore', 'Insights and prediction', 'Risk and fraud signals', 'Campaign contribution', 'Agent activity, seen and recorded', '18M events a month · 5 seats'], delta: ['Settlement and verification', 'Rewards and incentives', 'Cross-domain intelligence', 'Connectors with your own keys', 'Sovereign governance controls', '27M events a month · 5 seats'] };
+        const dim = s.paying && !paying;
+        return { name: p.name, fit: p.fit, price: p.m ? price(p.m) : '$0', per: p.m ? 'Per month' : 'Free for everyone', paying, 
+          inherit: i === 0 ? 'Includes:' : 'Everything in ' + PLANS[i - 1].name + ', plus:', feats: FEATS[p.id], note: p.m ? 'No commitment · Cancel anytime' : 'No card needed',
+          ctaLabel: s.busy && (paying || (p.id === 'alpha' && !s.paying)) ? (p.m ? 'Processing payment…' : 'Creating workspace…') : paying ? 'Pay ' + price(p.m) + ' and continue' : p.m ? 'Choose ' + p.name : 'Start with Alpha',
+          spin: s.busy && (paying || (p.id === 'alpha' && !s.paying)) ? React.createElement('span', { style: { width: 14, height: 14, borderRadius: 999, border: '2px solid rgba(17,17,20,0.25)', borderTopColor: '#111114', animation: 'aeSpin 700ms linear infinite', display: 'inline-block', flex: 'none' } }) : null,
+          go: () => this.choose(p.id),
+          ...this.tone(p.c, i, paying),
+          card: 'display: flex; flex-direction: column; gap: 16px; padding: 20px; border-radius: 18px; border: 1px solid ' + (paying ? p.c : p.c + '40') + '; background: ' + p.c + (paying ? '1f' : '0f') + '; opacity: ' + (dim ? 0.55 : 1) + '; transition: opacity 200ms cubic-bezier(0.22,1,0.36,1), border-color 200ms cubic-bezier(0.22,1,0.36,1);' }; }),
+      heroNodes: [['jane', 50, 46], ['ptolemy', 22, 24], ['stripe', 20, 58], ['insta', 76, 70], ['percival', 80, 32], ['maya', 34, 80], ['kyoto', 60, 16], ['mordred', 82, 8]].map(([k, x, y]) => { const n = N[k], T = K[n[1]]; return { name: n[0], meta: T[0], g: T[2], style: 'position: absolute; left: ' + x + '%; top: ' + y + '%; transform: translate(-50%,-50%); display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 5px; border-radius: 999px; background: #16171b; border: 1px solid ' + (k === 'jane' ? T[1] : '#2a2a2f') + ';', dot: 'display: inline-flex; align-items: center; justify-content: center; width: ' + (k === 'jane' ? 30 : 22) + 'px; height: ' + (k === 'jane' ? 30 : 22) + 'px; border-radius: 999px; background: ' + T[1] + '2e; color: ' + T[1] + '; font-family: var(--font-mono); font-size: 11px;' }; }),
+      heroEdges: (() => { const P0 = { jane: [50, 57.5], ptolemy: [22, 30], stripe: [20, 72.5], insta: [76, 87.5], percival: [80, 40], maya: [34, 100], kyoto: [60, 20], mordred: [82, 10] }; return E.filter(([a, b]) => P0[a] && P0[b]).map(([a, b, k]) => ({ x1: P0[a][0], y1: P0[a][1], x2: P0[b][0], y2: P0[b][1], c: K[k][1] })); })(),
+      providers: [['google', 'Google'], ['apple', 'Apple']].map(([k, label]) => ({ label: 'Continue with ' + label, logo: logo(k, 18) + (k === 'apple' ? ' filter: invert(1);' : ''), go: () => this.setState({ email: s.email || 'jane@northwind.co', name: s.name || 'Jane Doe', formError: '' }) })),
+      email: s.email, onEmail: e => this.setState({ email: e.target.value, formError: '' }), name: s.name, onName: e => this.setState({ name: e.target.value, formError: '' }), pw: s.pw, onPw: e => this.setState({ pw: e.target.value, formError: '' }),
+      plans, showCard: needsCard, cardNum: s.cardNum, onCard: e => this.setState({ cardNum: e.target.value, payError: false, formError: '' }), exp: s.exp, onExp: e => this.setState({ exp: e.target.value }), cvc: s.cvc, onCvc: e => this.setState({ cvc: e.target.value }), cardBorder: s.payError ? '#b5564a' : '#d8d6d0',
+      planName: isAuth || s.upgrade ? PK.name : P.name, dueToday: price(PK.m), receiptTo: s.email || 'your email',
+      payError: s.payError, retryPay: () => this.setState({ payError: false, cardNum: '' }), switchAlpha: () => this.setState({ pick: 'alpha', payError: false }), formError: s.formError,
+      busy: s.busy, busyStr: s.busy ? 'true' : 'false', spinner,
+      submitLabel: s.busy ? (isSignup ? 'Continuing…' : 'Signing in…') : isSignup ? 'Continue with email' : 'Sign in with email',
+      submit: () => this.submit(),
+      switchLead: isSignup ? 'Already have a workspace?' : 'New to Aether?', switchLabel: isSignup ? 'Sign in' : 'Create a workspace', switchMode: () => this.setState({ stage: isSignup ? 'signin' : 'signup', sub: 'auth', formError: '', payError: false }),
+      workspace: ws, planPill, doneCount: String(doneCount),
+      signOut: () => { this.persist(); try { this.account = JSON.parse(localStorage.getItem(SKEY) || '{}'); } catch (e) {} this.setState({ stage: 'signin', sub: 'auth', pw: '', upgrade: false }); },
+      setupCols: s.w < 760 ? 'minmax(0,1fr)' : '240px minmax(0,1fr)', stepList, stepNum: String(s.step + 1), stepTitle: STEPS[s.step][2], stepLead: STEPS[s.step][3], at,
+      goals: GOALS.map(([id, label, g, c, d]) => { const on = s.goal === id; return { label, g, d, on: on ? 'true' : 'false', go: () => this.setState({ goal: id }), gs: 'font-family: var(--font-mono); font-size: 16px; color: ' + c + ';', style: 'font-family: inherit; text-align: left; display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; cursor: pointer; color: #1a1a1e; transition: border-color 120ms cubic-bezier(0.22,1,0.36,1), background-color 120ms cubic-bezier(0.22,1,0.36,1); ' + (on ? 'background: ' + c + '14; border: 1px solid ' + c + ';' : 'background: #fbfaf8; border: 1px solid #d8d6d0;') }; }),
+      goalOther: s.goal === 'other', goalText: s.goalText || '', onGoalText: e => this.setState({ goalText: e.target.value }),
+      goalRec: s.goal === 'other' ? 'Most teams start with Stripe. Aether will tune suggestions to what you describe.' : rc ? 'Start by connecting ' + rc[1] + '. It gives this goal the most to work with.' + (rank(rc[3]) > r ? ' It’s on Beta; on Alpha, start with Stripe.' : '') : '',
+      conns, connNote: '', connQ: s.connQ || '', onConnQ: e => this.setState({ connQ: e.target.value }), connTotal: String(CONNS.length), connMore: !q && !s.connAll && CONNS.length > 8, showAllConns: () => this.setState({ connAll: true }), connCount: connected.length ? connected.length + ' connected' : '',
+      mapOpen: !!s.mapOpen, openMap: () => this.setState({ mapOpen: true }), closeMap: () => this.setState({ mapOpen: false }), stopMap: e => e.stopPropagation(),
+      mapRows: [['Email Address', 'email', 99], ['Full Name', 'name', 97], ['Phone #', 'phone', 92], ['Lifetime value', 'order_total', 81], ['Signup Date', 'created_at', 95], ['CRM ID', 'external_id', 88]].map(([col, f, p], i) => { const field = (s.map || {})[col] || f; return { col, field, pct: p + '%', set: e => this.setState(x => ({ map: { ...(x.map || {}), [col]: e.target.value } })), conf: 'font-family: var(--font-mono); font-size: 11px; text-align: right; color: ' + (p >= 90 ? '#4f8466' : '#8a6433') + ';' }; }),
+      importTitle: s.imported ? 'Upload another file' : 'Upload legacy_customers.csv', doImport: () => this.setState({ imported: 12408 }),
+      importRows: s.imported ? [['⇪', 'Read 10 columns', '12,408 rows', '#8a6433'], ['◐', 'Matched a saved template', 'legacy_crm_v2', '#3a6896'], ['✓', 'Checked every row', '12,357 valid · 51 kept aside', '#4f8466'], ['⬡', alpha ? 'Added as events' : 'Added as profiles', alpha ? 'profiles start on Beta' : '11,960 new · 448 matched', '#4f8466']].map(([g, t, n, c]) => ({ g, t, n, gs: 'font-family: var(--font-mono); color: ' + c + ';' })) : null,
+      sdks: Object.entries(SDKS).map(([k, v]) => { const on = sel.includes(k), c = SDKC[k]; return { label: v[0], on: on ? 'true' : 'false', go: () => this.setState(x => { const cs = x.sdkSel || ['web']; const n = cs.includes(k) ? (cs.length > 1 ? cs.filter(y => y !== k) : cs) : cs.concat([k]); return { sdkSel: n, sdk: n.includes(x.sdk) ? x.sdk : n[0], copied: false }; }), dot: 'width: 8px; height: 8px; border-radius: 999px; background: ' + c + ';', style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 14px; border-radius: 999px; font-size: 13px; cursor: pointer; transition: all 120ms; ' + (on ? 'background: ' + c + '1f; border: 1px solid ' + c + '; color: #1a1a1e; font-weight: 500;' : 'background: #ffffff; border: 1px solid #d8d6d0; color: #4a4945;') }; }),
+      sdkTabs: sel.map(k => ({ label: SDKS[k][1], go: () => this.setState({ sdk: k, copied: false }), style: 'font-family: var(--font-mono); min-height: 26px; padding: 0 10px; border-radius: 6px; border: 0; font-size: 11px; cursor: pointer; ' + (k === view ? 'background: #232328; color: #e8e6e1;' : 'background: transparent; color: #9c9b95;') })),
+      keys: sel.map(k => [SDKS[k][0] + (k === 'server' ? ' secret key' : ' write key'), SDKEY[k], k === 'server' ? 'server only · never ship' : 'send-only · safe in app']).map(([label, val, note]) => ({ label, note, val: s.keyShown ? val : s.keyAnim ? scramble(val, s.keyAnim) : '••••••••••••••••••', valStyle: 'font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: ' + (s.keyShown ? '#1a1a1e' : '#5a85a8') + ';' })),
+      keyHidden: !s.keyShown && !s.keyAnim, keyWord: sel.length > 1 ? sel.length + ' keys' : 'key',
+      revealKey: () => { this.setState({ keyAnim: 1 }); this.kts = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(n => setTimeout(() => this.setState(x => x.keyShown ? null : { keyAnim: n }), n * 45)); this.kts.push(setTimeout(() => this.setState({ keyAnim: 0, keyShown: true }), 700)); },
+      tests: sel.map(k => { const st = (s.tests || {})[k] || 'idle', ok = st === 'ok', w = st === 'wait', er = st === 'err'; return { label: SDKS[k][0], line: ok ? 'received · 180ms · matched to Jane Doe' : w ? 'Listening…' : er ? 'Nothing received yet' : 'Ready', busy: w, cta: ok ? 'Send again' : er ? 'Retry' : w ? '…' : 'Send test',
+        err: er ? 'No event from ' + SDKS[k][0] + ' in 10s. Check the write key and network access.' : '',
+        dot: 'width: 10px; height: 10px; flex: none; border-radius: 999px; background: ' + (ok ? '#4f8466' : w ? '#c9975a' : er ? '#b5564a' : '#c9c7c0') + '; box-shadow: 0 0 0 3px ' + (ok ? '#4f846626' : w ? '#c9975a26' : er ? '#b5564a26' : 'transparent') + ';',
+        btn: 'font-family: inherit; min-height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; ' + (ok ? 'border: 1px solid #c3d6c9; background: transparent; color: #4f8466;' : 'border: 1px solid #1a1a1e; background: #1a1a1e; color: #ffffff;'),
+        go: () => { const failFirst = k === 'android' && !(this.tried || {})[k]; this.tried = { ...(this.tried || {}), [k]: 1 }; this.setState(x => ({ tests: { ...(x.tests || {}), [k]: 'wait' } })); setTimeout(() => this.setState(x => ({ tests: { ...(x.tests || {}), [k]: failFirst ? 'err' : 'ok' }, test: failFirst ? x.test : 'ok' })), 1100); } }; }),
+      _sdkOld: Object.entries(SDKS).map(([k, v]) => ({ label: v[0], on: s.sdk === k ? 'true' : 'false', go: () => this.setState({ sdk: k, copied: false }), style: 'font-family: inherit; min-height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; cursor: pointer; ' + (s.sdk === k ? 'background: #1a1a1e; border: 1px solid #1a1a1e; color: #f5f4f1;' : 'background: #fbfaf8; border: 1px solid #d8d6d0; color: #1a1a1e;') })),
+      sdkFile: SDKS[view][1], sdkCode: SDKS[view][2], copyLabel: s.copied ? 'Copied' : 'Copy', copySdk: () => { try { navigator.clipboard.writeText(SDKS[view][2]); } catch (e) {} this.setState({ copied: true }); },
+      invEmail: s.invEmail, onInv: e => this.setState({ invEmail: e.target.value, invErr: '' }), invRole: s.invRole, onRole: e => this.setState({ invRole: e.target.value }),
+      sendInvite: () => { if (!/.+@.+\..+/.test(s.invEmail)) return this.setState({ invErr: 'Enter a valid email.' }); const seats = parseInt(P.seats, 10); if (s.invites.length + 1 >= seats) return this.setState({ invErr: P.name + ' includes ' + P.seats + '. Upgrade to add more.' }); this.setState({ invites: s.invites.concat([{ e: s.invEmail, r: s.invRole }]), invEmail: '' }); },
+      invites: s.invites, inviteError: s.invErr, invBad: bad ? 'true' : 'false', invGlow: bad || s.invErr ? 'border: 1px solid #b5564a; box-shadow: 0 0 0 3px #b5564a24;' : good ? 'border: 1px solid #4f8466; box-shadow: 0 0 0 3px #4f846624;' : 'border: 1px solid #d8d6d0;', seatNote: P.name + ' includes ' + P.seats + ', including you.',
+      testTitle: s.test === 'ok' ? 'Test event received' : s.test === 'wait' ? 'Waiting for the event…' : 'Ready to send', testLine: s.test === 'ok' ? 'page_view · ' + SDKS[s.sdk][0] + ' SDK · received 180ms after send · matched to Jane Doe' : 'aether.track("page_view") from ' + SDKS[s.sdk][0],
+      testDot: 'width: 10px; height: 10px; border-radius: 999px; background: ' + (s.test === 'ok' ? '#6b9a7c' : s.test === 'wait' ? '#c9975a' : '#c9c7c0') + ';', testBusy: s.test === 'wait', testBtn: s.test === 'ok' ? 'Send another' : s.test === 'wait' ? 'Listening…' : 'Send test event',
+      testSpinner: s.test === 'wait' ? spin() : null,
+      sendTest: () => { this.setState({ test: 'wait' }); this.t4 = setTimeout(() => this.setState({ test: 'ok' }), 1200); },
+      valueSources: alpha ? 'Stripe + ' + SDKS[s.sdk][0] + ' SDK' : (connected.length + 1) + ' sources matched', valueState: autoDone.value ? '● formed' : '◌ waiting', valuePill: tone(autoDone.value ? '#7fb08f' : '#c9975a', 'rgba(255,255,255,0.06)') + ' margin-left: auto;',
+      valueFacts: [['Lifetime value', '$4,820', '#6b9a7c'], ['Orders', '23', '#3a6896'], ['Last seen', '1m ago', '#c9975a'], ['Connections', alpha ? '6 · preview' : '6', '#5a85a8']].map(([k, v, c]) => ({ k, v, vs: 'font-family: var(--font-mono); font-size: 18px; font-weight: 600; color: ' + ({ '#6b9a7c': '#9cc5a9', '#3a6896': '#a9c4dc', '#c9975a': '#e3bd8d', '#5a85a8': '#b8cde0' }[c] || '#eef0f2') + ';', style: 'display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: 12px; background: ' + c + '2e; border: 1px solid ' + c + 'aa;' })), valueLimited: alpha,
+      summary: [['Plan', P.name + (P.m ? ' · ' + price(P.m) + '/mo' : ' · free')], ['Goal', G ? G[1] : '—'], ['Sources', connected.map(k => CONNS.find(c => c[0] === k)[1]).join(', ') || '—'], ['Import', s.imported ? s.imported.toLocaleString('en-US') + ' rows' : '—'], ['SDK', SDKS[s.sdk][0]], ['Team', (s.invites.length + 1) + ' people'], ['First profile', 'Jane Doe']].map(([k, v]) => ({ k, v })),
+      canBack: s.step > 0, back: () => this.setState({ step: s.step - 1 }),
+      nextDis: !nextEnabled, nextHint: nextEnabled ? '' : hints[cur] || '',
+      nextStyle: 'font-family: inherit; display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 500; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1); ' + (nextEnabled ? 'border: 1px solid #1a1a1e; background: #1a1a1e; color: #f5f4f1; cursor: pointer;' : 'border: 1px solid #d8d6d0; background: #eceae5; color: #6b6a65; cursor: default;'), nextHover: nextEnabled ? 'background: #d8d6d0;' : '',
+      nextLabel, next: () => { if (!nextEnabled) return; if (cur === 'sdk') this.setState(x => ({ done: { ...x.done, sdk: true } })); if (cur === 'done') return this.setState({ stage: 'app', view: 'home' }); this.setState({ step: Math.min(STEPS.length - 1, s.step + 1) }); },
+      canSkip: cur === 'import' || cur === 'invite', skip: () => this.setState({ step: s.step + 1 }), stepTotal: String(STEPS.length),
+      appCols: s.w < 760 ? '64px minmax(0,1fr)' : '220px minmax(0,1fr)',
+      nav: navDefs.map(([k, label, g]) => { const on = s.view === k; return { label: s.w < 760 ? '' : label, g, cur: on ? 'page' : 'false', go: () => this.setState({ view: k }), gs: 'font-family: var(--font-mono); font-size: 13px; width: 18px; text-align: center; color: ' + (on ? '#e8e6e1' : '#9c9b95') + ';', style: 'font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border: 0; border-radius: 8px; font-size: 13px; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1); color: #e8e6e1; font-weight: ' + (on ? 500 : 400) + '; background: ' + (on ? '#232328' : 'transparent') + ';' }; }),
+      usage: alpha ? '412K / 3M' : '1.2M / ' + P.ev.split(' ')[0], view: Object.fromEntries(navDefs.map(([k]) => [k, s.view === k])),
+      greeting: 'Good morning, ' + (s.name || 'there').split(' ')[0], openJaneExplore: () => this.setState({ view: 'explore', focus: 'jane', sel: 'jane' }),
+      homeCardSub: alpha ? 'Preview her direct connections. Beta opens two steps out.' : beta ? 'See her connections up to two steps out.' : 'See her whole network.',
+      kpis: [['◉', '#3a6896', 'Events · 30d', alpha ? '412K' : '1.2M', 'from ' + (connected.length + 1) + ' sources'], ['⬡', '#6b9a7c', 'Profiles', alpha ? '1' : '12,408', alpha ? 'preview on Alpha' : '448 matched today'], ['↔', '#c9975a', 'Connections', alpha ? '6' : '38.2K', 'people, agents, syndicates'], ['▲', '#b5564a', 'Risk signals', alpha || beta ? '—' : '4', alpha || beta ? 'starts on Gamma' : '1 high']].map(([g, c, k, v, n]) => ({ g, k, v, n, gs: 'font-family: var(--font-mono); color: ' + c + ';', style: 'display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: 12px; border: 1px solid ' + c + '40; background: ' + c + '0d;' })),
+      signals: [['◉', '#3a6896', 'Rising purchase intent for Jane Doe', 'signal · 3 events · interpreted', '2m'], ['⌬', '#5a85a8', 'Ptolemy issued a $240 refund for Jane', 'stripe · seen', '4m'], ['⬡', '#6b9a7c', alpha ? '12,408 imported rows added as events' : '448 imported records matched to profiles', alpha ? 'import' : 'identity matching', '1h'], ['⚑', '#c9975a', 'Spring Drop drove 212 touchpoints', 'instagram · campaign', '3h']].map(([g, c, t, src, age]) => ({ g, t, src, age, gs: 'display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; font-family: var(--font-mono); font-size: 12px; background: ' + c + '1a; color: ' + c + ';' })),
+      q: s.q, onQ: e => this.setState({ q: e.target.value }), results,
+      views: [['graph', 'Connections'], ['map', 'Map']].map(([k, label]) => ({ label, on: s.mode === k ? 'true' : 'false', go: () => this.setState({ mode: k }), style: seg(s.mode === k) })),
+      lenses, timeOn: s.lens.includes('time') && !alpha, times: [7, 30, 90].map(d => ({ label: d + 'd', go: () => this.setState({ time: d }), style: seg(s.time === d) })),
+      depthLabel: alpha ? 'Alpha · direct connections · read-only' : beta ? 'Beta · up to 2 steps out' : P.name + ' · whole network',
+      exploreCols: s.w < 1000 ? 'minmax(0,1fr)' : 'minmax(0,1fr) 300px', graphMode: s.mode === 'graph', mapMode: s.mode === 'map',
+      gnodes, edges, lockedHops, focusName: N[s.focus][0],
+      places: Object.entries(placesAgg).sort((a, b) => b[1] - a[1]).map(([city, n]) => ({ city, n: n + (n > 1 ? ' profiles' : ' profile'), bar: 'display: block; height: 100%; width: ' + (n / pm * 100) + '%; background: #6a95bd;' })),
+      exploreLock: alpha ? 'Alpha shows Jane’s direct connections only. Beta adds lenses, search, and two steps out.' : beta && hidden.length ? 'Beta shows two steps out. Gamma opens the whole network.' : '',
+      selName: SN[0], selKind: K[SN[1]][0] + ' · ' + SN[2], selDesc: SN[3], selG: K[SN[1]][2], selAv: 'display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 999px; font-family: var(--font-mono); font-size: 14px; background: ' + K[SN[1]][1] + '22; color: ' + K[SN[1]][1] + ';',
+      selFacts: [['Value', money(SN[4]), '#3f6b50'], ['Events', String(SN[6]), '#1a1a1e'], ['Risk', String(SN[5]), SN[5] >= 60 ? '#9c4439' : '#1a1a1e'], ['Steps from ' + N[s.focus][0].split(' ')[0], String(hop[s.sel] ?? '—'), '#1a1a1e']].map(([k, v, c]) => ({ k, v, vs: 'font-family: var(--font-mono); color: ' + c + ';' })), selEvidence: SN[7],
+      canRefocus: !alpha && s.sel !== s.focus && ['human', 'agent'].includes(SN[1]), refocus: () => this.setState({ focus: s.sel }),
+      profileCount: alpha ? '1 of 12,408' : '12,408',
+      profiles: profilesAll.map(([k, name, id, src, value], i) => { const lockd = alpha && i > 0; return { name: lockd ? name.split(' ')[0] + ' ' + name.split(' ')[1][0] + '.' : name, id, src, value: lockd ? '—' : value, ini: name.split(' ').map(w => w[0]).join(''), action: lockd ? 'Beta' : k ? 'Explore' : 'View', dis: lockd || !k, go: () => k && this.setState({ view: 'explore', focus: k, sel: k }),
+        av: 'display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; background: #3a68961f; color: #3a6896; font-size: 12px; font-weight: 500;',
+        btn: 'font-family: inherit; min-height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12px; cursor: ' + (lockd || !k ? 'default' : 'pointer') + '; ' + (lockd || !k ? 'border: 1px solid #e2e0da; background: transparent; color: #9c9b95;' : 'border: 1px solid #d8d6d0; background: #fbfaf8; color: #1a1a1e;'),
+        style: 'display: grid; grid-template-columns: 32px minmax(0,1.4fr) minmax(0,1fr) 70px auto; gap: 12px; align-items: center; padding: 11px 16px; border-bottom: 1px solid #eceae5; opacity: ' + (lockd ? 0.55 : 1) + ';' }; }),
+      profilesLock: alpha ? 'Alpha shows one profile in full. Beta matches every record into profiles.' : '',
+      dataTabs: [['connectors', 'Connectors'], ['sdks', 'SDKs'], ['imports', 'Imports']].map(([k, label]) => ({ label, on: s.dataTab === k ? 'true' : 'false', go: () => this.setState({ dataTab: k }), style: 'font-family: inherit; min-height: 36px; padding: 0 12px; border: 0; border-bottom: 2px solid ' + (s.dataTab === k ? '#1a1a1e' : 'transparent') + '; margin-bottom: -1px; background: transparent; font-size: 13px; cursor: pointer; color: ' + (s.dataTab === k ? '#1a1a1e' : '#6b6a65') + ';' })),
+      dataRows, dataImports: s.dataTab === 'imports',
+      planPrice: P.m ? price(P.m) + '/mo' : 'Free', planLinesNow: this.planLines(P), receipt: s.receipt,
+      account: [['Name', s.name || '—'], ['Email', s.email || '—'], ['Workspace', ws]].map(([k, v]) => ({ k, v })),
+      retention: [['Short-lived data', '30 days'], ['Standard data', '1 year'], ['Extended data', '3 years'], ['Compliance and audit records', '7 years']].map(([k, v]) => ({ k, v })),
+      upgradeOpen: s.upgrade, upgradeTo: r < 1 ? 'Upgrade to Beta' : 'Upgrade to Gamma', openUpgrade: () => this.setState({ upgrade: true, pick: r < 1 ? 'beta' : r === 1 ? 'gamma' : s.plan, payError: false, formError: '' }), closeUpgrade: () => this.setState({ upgrade: false, payError: false, formError: '' }),
+      upgradeLabel: s.busy ? 'Processing payment…' : s.pick === s.plan ? 'Keep ' + P.name : rank(s.pick) > r ? 'Pay ' + price(PK.m) + ' and switch to ' + PK.name : 'Switch to ' + PK.name,
+      confirmUpgrade: () => { if (s.pick === s.plan) return this.setState({ upgrade: false }); const up = rank(s.pick) > r; const fin = () => this.setState(x => ({ plan: x.pick, upgrade: false, receipt: up ? 'Paid ' + price(PLANS[rank(x.pick)].m) + ' · receipt sent to ' + (x.email || 'your email') : 'Switches to ' + PLANS[rank(x.pick)].name + ' at the next billing date' })); if (up) this.pay(fin); else fin(); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+</helmet>
+<header style="position: sticky; top: 0; z-index: 40; background: #f5f4f1; border-bottom: 1px solid #d8d6d0; font-family: var(--font-sans);">
+  <div style="max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 24px;">
+    <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+      <sc-if value="{{ isAether }}" hint-placeholder-val="{{ true }}">
+        <a href="Aether Home.dc.html" aria-label="Aether home" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: #1a1a1e;">
+          <img src="assets/logo-aether-layers.svg" alt="" style="width: 22px; height: 22px; display: block;">
+          <span style="font-size: 17px; font-weight: 500; letter-spacing: -0.4px;">Aether</span>
+        </a>
+        <span style="font-size: 12px; color: #6b6a65;">by <a href="Olympus Home.dc.html" style="color: #6b6a65; text-decoration: underline; text-underline-offset: 2px;">Olympus Labs</a></span>
+      </sc-if>
+      <sc-if value="{{ isOlympus }}" hint-placeholder-val="{{ false }}">
+        <a href="Olympus Home.dc.html" aria-label="Olympus Labs home" style="display: flex; align-items: center; gap: 9px; text-decoration: none; color: #1a1a1e;">
+          <img src="assets/logo-olympus-arch.svg" alt="" style="width: 18px; height: 18px; display: block;">
+          <span style="font-size: 16px; font-weight: 500; letter-spacing: -0.3px;">Olympus Labs</span>
+        </a>
+      </sc-if>
+    </div>
+    <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+      <nav aria-label="Primary" style="display: flex; align-items: center; gap: 2px;">
+        <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+          <a href="{{ item.href }}" style="{{ item.style }}" style-hover="color: #1a1a1e;">{{ item.label }}</a>
+        </sc-for>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <a href="{{ secondary.href }}" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; font-size: 13px; font-weight: 500; color: #1a1a1e; text-decoration: none; padding: 0 14px; min-height: 36px; border: 1px solid #d8d6d0; background: #eceae5; border-radius: 6px; " style-hover="background: #e2e0da; border-color: #c9c7c0;">{{ secondary.label }}</a>
+        <a href="{{ primary.href }}" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; font-size: 13px; font-weight: 500; color: #f5f4f1; text-decoration: none; padding: 0 14px; min-height: 36px; border-radius: 6px; background: #1a1a1e;" style-hover="background: #2d5373;">{{ primary.label }}</a>
+      </div>
+    </sc-if>
+    <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+      <button type="button" onClick="{{ toggle }}" aria-expanded="{{ openStr }}" aria-label="{{ menuLabel }}" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; border-radius: 4px; color: #1a1a1e; cursor: pointer; font-family: var(--font-mono); font-size: 18px;">{{ menuGlyph }}</button>
+    </sc-if>
+  </div>
+  <sc-if value="{{ showMenu }}" hint-placeholder-val="{{ false }}">
+    <nav aria-label="Mobile" style="border-top: 1px solid #d8d6d0; background: #f5f4f1; padding: 8px 24px 20px;">
+      <div style="display: flex; flex-direction: column;">
+        <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+          <a href="{{ item.href }}" style="font-size: 15px; color: #1a1a1e; text-decoration: none; padding: 12px 0; border-bottom: 1px solid #e8e6e1; display: flex; justify-content: space-between;">
+            <span>{{ item.label }}</span><span style="font-family: var(--font-mono); color: #6b6a65;">→</span>
+          </a>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 16px;">
+        <a href="{{ secondary.href }}" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; font-size: 14px; font-weight: 500; color: #1a1a1e; text-decoration: none; padding: 0 18px; min-height: 42px; border: 1px solid #d8d6d0; background: #eceae5; border-radius: 6px; text-align: center;">{{ secondary.label }}</a>
+        <a href="{{ primary.href }}" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; font-size: 14px; font-weight: 500; color: #f5f4f1; text-decoration: none; padding: 0 18px; min-height: 42px; border-radius: 6px; background: #1a1a1e; text-align: center;">{{ primary.label }}</a>
+      </div>
+    </nav>
+  </sc-if>
+</header>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1280, &quot;height&quot;: 120}, &quot;brand&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;aether&quot;, &quot;olympus&quot;], &quot;default&quot;: &quot;aether&quot;, &quot;tsType&quot;: &quot;'aether'|'olympus'&quot;}, &quot;active&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { w: typeof window !== 'undefined' ? window.innerWidth : 1280, open: false };
+  componentDidMount() {
+    this.onR = () => this.setState({ w: window.innerWidth });
+    window.addEventListener('resize', this.onR);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this.onR); }
+  renderVals() {
+    const brand = this.props.brand ?? 'aether';
+    const active = this.props.active ?? '';
+    const isAether = brand !== 'olympus';
+    const base = 'font-size: 13px; font-weight: 500; text-decoration: none; padding: 8px 10px; border-radius: 4px; transition: color 120ms cubic-bezier(0.22,1,0.36,1);';
+    const raw = isAether ? [
+      ['About', 'Aether Home.dc.html#about'],
+      ['How it works', 'Aether How It Works.dc.html'],
+      ['Connections', 'Aether Connections.dc.html'],
+      ['Pricing', 'Aether Pricing.dc.html'],
+      ['Developers', 'Docs.dc.html'],
+      ['Security', 'Aether Security.dc.html'],
+    ] : [
+      ['Company', 'Olympus Company.dc.html'],
+      ['Principles', 'Olympus Principles.dc.html'],
+      ['Research', 'Olympus Research.dc.html'],
+      ['Stories', 'Olympus Stories.dc.html'],
+      ['Aether', 'Aether Home.dc.html'],
+      ['Contact', 'Olympus Home.dc.html#contact'],
+    ];
+    const nav = raw.map(([label, href]) => ({ label, href, style: base + (label === active ? 'color: #1a1a1e;' : 'color: #6b6a65;') }));
+    const wide = this.state.w >= 1000;
+    return {
+      isAether, isOlympus: !isAether, nav, wide, narrow: !wide,
+      showMenu: !wide && this.state.open,
+      openStr: this.state.open ? 'true' : 'false',
+      menuLabel: this.state.open ? 'Close menu' : 'Open menu',
+      menuGlyph: this.state.open ? '✕' : '≡',
+      toggle: () => this.setState(s => ({ open: !s.open })),
+      secondary: isAether ? { label: 'Sign in', href: 'Auth.dc.html?mode=signin' } : { label: 'Contact', href: 'Contact.dc.html?brand=olympus' },
+      primary: isAether ? { label: 'Request a pilot', href: 'Contact.dc.html?brand=aether&type=pilot' } : { label: 'Explore Aether', href: 'Aether Home.dc.html' },
+    };
+  }
+}
+</script>
+</body>
+</html>
