@@ -44,11 +44,25 @@ function trimOrigin(value: string | undefined, fallback: string): string {
   return origin.replace(/\/+$/, '');
 }
 
-/** Absolute origins for cross-site links (production unless configured). */
-export function siteOrigins(env: Record<string, string | undefined> = import.meta.env): SiteOrigins {
+const PRODUCTION: SiteOrigins = { olympus: 'https://olympuslabsml.com', aether: 'https://aether.olympuslabsml.com' };
+const STAGING: SiteOrigins = { olympus: 'https://staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' };
+const STAGING_HOSTS = new Set(['staging.olympuslabsml.com', 'aether.staging.olympuslabsml.com']);
+
+function currentHostname(): string {
+  return typeof window === 'undefined' ? '' : window.location.hostname;
+}
+
+/**
+ * Absolute origins for cross-site links. VITE_SITE_OLYMPUS_URL and
+ * VITE_SITE_AETHER_URL win; otherwise a staging host links to its staging
+ * pair, so testers are never sent to production, and anything else uses the
+ * production origins.
+ */
+export function siteOrigins(env: Record<string, string | undefined> = import.meta.env, hostname: string = currentHostname()): SiteOrigins {
+  const defaults = STAGING_HOSTS.has(hostname.toLowerCase()) ? STAGING : PRODUCTION;
   return {
-    olympus: trimOrigin(env.VITE_SITE_OLYMPUS_URL, 'https://olympuslabsml.com'),
-    aether: trimOrigin(env.VITE_SITE_AETHER_URL, 'https://aether.olympuslabsml.com'),
+    olympus: trimOrigin(env.VITE_SITE_OLYMPUS_URL, defaults.olympus),
+    aether: trimOrigin(env.VITE_SITE_AETHER_URL, defaults.aether),
   };
 }
 

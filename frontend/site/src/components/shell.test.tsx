@@ -81,3 +81,18 @@ describe('not found page', () => {
     expect(hrefOf('Research Open questions', main)).toBe('/research');
   });
 });
+
+describe('favicon', () => {
+  it('uses the mark of the resolved site', () => {
+    const link = document.createElement('link');
+    link.rel = 'icon';
+    link.href = '/favicon-aether.svg';
+    document.head.appendChild(link);
+    const { unmount } = renderAt('olympus', '/missing');
+    expect(link.getAttribute('href')).toBe('/logo-olympus-arch.svg');
+    unmount();
+    renderAt('aether', '/missing');
+    expect(link.getAttribute('href')).toBe('/favicon-aether.svg');
+    link.remove();
+  });
+});

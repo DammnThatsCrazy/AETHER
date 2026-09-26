@@ -53,6 +53,17 @@ describe('siteOrigins', () => {
       siteOrigins({ VITE_SITE_OLYMPUS_URL: 'https://staging.olympuslabsml.com/', VITE_SITE_AETHER_URL: ' https://aether.staging.olympuslabsml.com// ' }),
     ).toEqual({ olympus: 'https://staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' });
   });
+
+  it('keeps staging hosts on their staging pair', () => {
+    const staging = { olympus: 'https://staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' };
+    expect(siteOrigins({}, 'staging.olympuslabsml.com')).toEqual(staging);
+    expect(siteOrigins({}, 'aether.staging.olympuslabsml.com')).toEqual(staging);
+    expect(siteHref('olympus', 'aether', '/pricing', siteOrigins({}, 'staging.olympuslabsml.com'))).toBe(
+      'https://aether.staging.olympuslabsml.com/pricing',
+    );
+    expect(siteOrigins({}, 'aether.olympuslabsml.com').olympus).toBe('https://olympuslabsml.com');
+    expect(siteOrigins({ VITE_SITE_OLYMPUS_URL: 'https://x.test' }, 'staging.olympuslabsml.com').olympus).toBe('https://x.test');
+  });
 });
 
 describe('manualChunks', () => {
