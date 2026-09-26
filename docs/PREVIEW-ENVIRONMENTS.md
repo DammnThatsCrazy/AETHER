@@ -72,11 +72,6 @@ app's public build settings; nothing else.
 
 ### Enabling it
 
-> **Status (2026-09-26): off.** This AWS account refuses a new Amplify app
-> (`CreateApp` returns `LimitExceededException` with 10 apps, although the
-> listed quota is 25). Request an Amplify app-limit increase from AWS Support,
-> then set `enable_frontend_previews = true` in `profiles/staging.tfvars`.
-
 1. Terraform creates the preview app when `enable_frontend_previews = true`
    (set in `profiles/staging.tfvars`) on the next staging apply. Read its id
    and domain from the `frontend_preview_app_id` and
