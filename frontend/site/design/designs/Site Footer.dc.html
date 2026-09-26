@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+</helmet>
+<footer style="background: #eceae5; border-top: 1px solid #d8d6d0; font-family: var(--font-sans);">
+  <div style="max-width: 1200px; margin: 0 auto; padding: 48px 24px 28px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 32px;">
+      <div style="display: flex; flex-direction: column; gap: 14px; min-width: 200px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <span style="display: flex; align-items: center; gap: 7px;"><img src="assets/logo-olympus-arch.svg" alt="" style="width: 15px; height: 15px;"><span style="font-size: 14px; font-weight: 500; color: #1a1a1e;">Olympus Labs</span></span>
+          <span style="width: 1px; height: 14px; background: #d8d6d0;"></span>
+          <span style="display: flex; align-items: center; gap: 6px;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 17px; height: 17px;"><span style="font-size: 14px; font-weight: 500; color: #1a1a1e;">Aether</span></span>
+        </div>
+        <p style="font-size: 13px; line-height: 1.55; color: #6b6a65; max-width: 260px; margin: 0;">Olympus Labs builds governed intelligence infrastructure. Aether is its customer-facing connection and relationship intelligence platform.</p>
+      </div>
+      <sc-for list="{{ cols }}" as="col" hint-placeholder-count="4">
+        <nav aria-label="{{ col.title }}" style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">{{ col.title }}</span>
+          <sc-for list="{{ col.links }}" as="l" hint-placeholder-count="4">
+            <a href="{{ l.href }}" style="font-size: 13px; color: #1a1a1e; text-decoration: none;" style-hover="color: #3a6896;">{{ l.label }}</a>
+          </sc-for>
+        </nav>
+      </sc-for>
+    </div>
+    <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #d8d6d0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 12px; color: #6b6a65;">
+      <span>© 2026 Olympus Labs. All rights reserved.</span>
+      <span style="display: flex; gap: 16px; font-family: var(--font-mono);">
+        <a href="Status.dc.html" style="color: #6b6a65; text-decoration: none;">status.olympuslabsml.com</a>
+        <span style="display: inline-flex; align-items: center; gap: 6px;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 14px; height: 14px;">Aether by<img src="assets/logo-olympus-arch.svg" alt="" style="width: 13px; height: 13px;">Olympus Labs</span>
+      </span>
+    </div>
+  </div>
+</footer>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1280, &quot;height&quot;: 320}}">
+class Component extends DCLogic {
+  renderVals() {
+    const L = (label, href) => ({ label, href });
+    return {
+      cols: [
+        { title: 'Aether', links: [L('Overview', 'Aether Home.dc.html'), L('How it works', 'Aether How It Works.dc.html'), L('Connections', 'Aether Connections.dc.html'), L('Pricing', 'Aether Pricing.dc.html'), L('Request a pilot', 'Contact.dc.html?brand=aether&type=pilot')] },
+        { title: 'Olympus Labs', links: [L('Company', 'Olympus Company.dc.html'), L('Principles', 'Olympus Principles.dc.html'), L('Research', 'Olympus Research.dc.html'), L('Stories and proof', 'Olympus Stories.dc.html'), L('Contact', 'Contact.dc.html?brand=olympus')] },
+        { title: 'Trust', links: [L('Security overview', 'Aether Security.dc.html'), L('Procurement', 'Aether Procurement.dc.html'), L('Request a security review', 'Contact.dc.html?brand=aether&type=security'), L('Privacy and data use', 'Legal.dc.html?doc=privacy'), L('Terms and use', 'Legal.dc.html?doc=terms')] },
+        { title: 'Resources', links: [L('Documentation', 'Docs.dc.html'), L('Status', 'Status.dc.html'), L('Sign in', 'Auth.dc.html?mode=signin'), L('Create an account', 'Auth.dc.html?mode=signup'), L('contact@olympuslabsml.com', 'mailto:contact@olympuslabsml.com')] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
