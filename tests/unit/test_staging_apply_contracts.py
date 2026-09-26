@@ -1473,3 +1473,13 @@ def test_amplify_subdomain_records_use_only_the_cname_target() -> None:
     block = main[start:main.index("\n}\n", start)]
     assert 'regex("[^ ]+$", trimspace(one(aws_amplify_domain_association.frontend[each.key].sub_domain).dns_record))' in block
     assert "for_each = local.product_dns_enabled ? local.amplify_apps : {}" in block
+
+
+def test_dns_zone_modes_are_mutually_exclusive() -> None:
+    """A delegated product_dns_zone_id is never silently ignored in favor of
+    the Squarespace-shaped zone this root would create."""
+    main = (TF / "main.tf").read_text(encoding="utf-8")
+    start = main.index('resource "aws_route53_zone" "production"')
+    block = main[start:main.index("\n}\n", start)]
+    assert 'condition     = var.product_dns_zone_id == ""' in block
+    assert "mutually exclusive" in block

@@ -1069,6 +1069,15 @@ resource "aws_route53_zone" "production" {
   count = var.squarespace_hosted_zone_enabled ? 1 : 0
   name  = var.amplify_domain_name
 
+  lifecycle {
+    # One DNS mode per profile: a delegated zone supplied through
+    # product_dns_zone_id must never be silently ignored in favor of this one.
+    precondition {
+      condition     = var.product_dns_zone_id == ""
+      error_message = "squarespace_hosted_zone_enabled and product_dns_zone_id are mutually exclusive; choose one DNS mode."
+    }
+  }
+
   tags = {
     Name        = "${var.project}-${var.environment}-production-zone"
     Purpose     = "Production DNS for ${var.amplify_domain_name}"
