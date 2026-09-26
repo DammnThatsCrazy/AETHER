@@ -15,6 +15,7 @@ import {
   type HealthState,
   type StatusHistory,
 } from '@site/site/status';
+import { BrandMark } from '@site/components/brand-mark';
 
 /**
  * Status.dc.html at /status. Live state from VITE_STATUS_API_URL, history from
@@ -157,7 +158,7 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
       <header className="border-b border-line bg-stone-50">
         <div className="mx-auto flex h-14 max-w-[920px] items-center justify-between gap-4 px-6">
           <a href={href('aether', '/status')} className="flex items-center gap-2 text-ink no-underline">
-            <img src="/logo-aether-layers.svg" alt="" className="h-5 w-5" />
+            <BrandMark brand="aether" className="h-5 w-5" />
             <span className="text-[15px] font-medium">Aether</span>
             <span className="text-[15px] text-slate">Status</span>
           </a>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { BRAND_BY_SLUG, type BrandSlug } from '@site/site/brand-logos';
+import { ProviderMark } from '@site/components/provider-mark';
+import { BrandMark } from '@site/components/brand-mark';
 
 /**
  * Profile 360.dc.html: an interactive, synthetic profile (Jane Doe) that shows
@@ -11,7 +12,7 @@ type Tab = 'overview' | 'rels' | 'journeys' | 'risk' | 'value';
 type Filter = 'all' | 'humans' | 'agents' | 'syndicates';
 type JourneyId = 'ig' | 'x';
 
-const logo = (slug: BrandSlug) => BRAND_BY_SLUG[slug === 'x' ? 'x-dark' : slug];
+type BrandSlug = 'hubspot' | 'instagram' | 'phantom' | 'shopify' | 'stripe' | 'x';
 
 const TABS: Array<[Tab, string, string, string]> = [
   ['overview', '◈', 'Overview', '#5a85a8'],
@@ -134,7 +135,7 @@ function Mark({ slug, size = 22, round = false }: { slug: BrandSlug; size?: 20 |
       className={`inline-flex shrink-0 items-center justify-center bg-stone-50 ${round ? 'rounded-full' : size === 26 ? 'rounded-lg' : 'rounded-control'}`}
       style={{ width: size, height: size }}
     >
-      <img src={logo(slug)} alt="" style={{ width: inner, height: inner }} />
+      <ProviderMark provider={slug} size={inner} className="text-graphite-body" />
     </span>
   );
 }
@@ -227,7 +228,7 @@ export function Profile360() {
     <div className="flex min-w-0 flex-col font-sans" onKeyDown={onRootKey}>
       <div data-theme="dark" className="flex items-center gap-2.5 rounded-t-lg border border-b-0 border-graphite-hairline bg-ink px-2.5 py-2 text-caption text-bone">
         <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-          <img src="/logo-aether-layers.svg" alt="" className="h-4 w-4" />
+          <BrandMark brand="aether" className="h-4 w-4" />
           <span className="text-mist">360</span>
           <span className="text-slate">/</span>
           <span className="font-medium">Jane Doe</span>
@@ -378,7 +379,7 @@ export function Profile360() {
                   <span className="font-mono text-caption">j••••e@example.com</span>
                   <span className="font-mono text-caption">+1 (415) •••-••42</span>
                   <span className="flex items-center gap-1.5 font-mono text-caption">
-                    <img src={logo('phantom')} alt="" className="h-4 w-4" />
+                    <ProviderMark provider="phantom" size={16} className="rounded-control bg-stone-50 text-graphite-body" />
                     Phantom <span className="text-mist">7xKX…9fQm</span>
                   </span>
                 </div>

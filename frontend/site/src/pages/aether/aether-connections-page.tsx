@@ -1,6 +1,6 @@
 import { PageShell } from '@site/components/page-shell';
 import { ButtonLink, Card, CardRow, ClosingCta, DataTable, PageHero, Section, SectionHead } from '@site/components/ui';
-import { BRAND_LOGOS } from '@site/site/brand-logos';
+import { ProviderMark } from '@site/components/provider-mark';
 import { MANAGED_CONNECTORS, type ConnectorDirection } from '@site/site/connectors';
 import { ACCENTS, soft, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
@@ -144,7 +144,7 @@ export function AetherConnectionsPage() {
               >
                 <span className="flex items-center gap-2.5">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-stone-200 bg-white">
-                    <img src={BRAND_LOGOS[c.name]} alt="" className="h-5 w-5 object-contain" />
+                    <ProviderMark provider={c.name} size={20} className="text-graphite-body" />
                   </span>
                   <span className="flex flex-col gap-px">
                     <span className="text-[15px] font-medium">{c.name}</span>

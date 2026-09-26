@@ -1,6 +1,6 @@
 import { PageShell } from '@site/components/page-shell';
 import { ButtonLink, Card, CardRow, ClosingCta, DataTable, PageHero, Section, SectionHead, StepList } from '@site/components/ui';
-import { BRAND_LOGOS } from '@site/site/brand-logos';
+import { ProviderMark } from '@site/components/provider-mark';
 import { ACCENTS, soft, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
 
@@ -83,7 +83,7 @@ export function AetherProcurementPage() {
           />
           <Card flex="1 1 280px" title="Billing" body="Monthly subscriptions and invoices through Stripe. Enterprise terms by agreement.">
             <span className="inline-flex items-center gap-1.5 text-caption text-graphite-body">
-              <img src={BRAND_LOGOS.Stripe} alt="" className="h-4 w-4" />
+              <ProviderMark provider="stripe" size={16} className="rounded-control border border-stone-200 bg-white" />
               Payments processed by Stripe
             </span>
           </Card>

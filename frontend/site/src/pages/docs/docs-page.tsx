@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SkipLink } from '@site/components/page-shell';
 import { Glyph } from '@site/components/ui';
-import { BRAND_LOGOS } from '@site/site/brand-logos';
+import { ProviderMark } from '@site/components/provider-mark';
 import { ACCENTS, tint, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
 import {
@@ -58,7 +58,7 @@ function Inline({ text, codeClass = 'rounded border border-stone-200 bg-stone-10
   );
 }
 
-/** Table cells mark provider names with their logo. */
+/** Table cells mark provider names with their registry mark. */
 function CellText({ text }: { text: string }) {
   return (
     <>
@@ -73,12 +73,12 @@ function CellText({ text }: { text: string }) {
               .split(LOGO_RE)
               .filter(Boolean)
               .map((part, j) =>
-                BRAND_LOGOS[part] && LOGO_NAMES.includes(part) ? (
+                LOGO_NAMES.includes(part) ? (
                   <span
                     key={`${i}-${j}`}
                     className="my-px mr-0.5 inline-flex items-center gap-[5px] whitespace-nowrap rounded-full border border-stone-200 bg-white py-px pl-[3px] pr-[7px] align-middle"
                   >
-                    <img src={BRAND_LOGOS[part]} alt="" className="h-3.5 w-3.5 object-contain" />
+                    <ProviderMark provider={part} size={14} className="rounded-full bg-stone-100 text-graphite-body" />
                     <span className="font-medium">{part}</span>
                   </span>
                 ) : (

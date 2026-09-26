@@ -3,7 +3,7 @@ import { PageShell } from '@site/components/page-shell';
 import { RelationshipExplorer } from '@site/components/relationship-explorer';
 import { useSite } from '@site/site/site-context';
 import { ACCENTS, tint } from '@site/site/palette';
-import { BRAND_LOGOS } from '@site/site/brand-logos';
+import { ProviderMark } from '@site/components/provider-mark';
 import {
   ACTOR_CHIPS,
   CONTACT_ROUTES,
@@ -15,6 +15,7 @@ import {
   isHomeTab,
   type HomeTab,
 } from './olympus-home-content';
+import { BrandMark } from '@site/components/brand-mark';
 
 const eyebrow = 'text-label uppercase';
 /** Hover to a runtime accent color: set --hover-bg / --hover-border on the element. */
@@ -73,7 +74,7 @@ export function OlympusHomePage() {
           <div className="grid items-end gap-10 [grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr))]">
             <div className="flex flex-col gap-[22px]">
               <span className={`inline-flex items-center gap-2 ${eyebrow} text-slate`}>
-                <img src="/logo-olympus-arch.svg" alt="" className="h-[18px] w-[18px]" />
+                <BrandMark brand="olympus" className="h-[18px] w-[18px]" />
                 Olympus Labs · research and infrastructure
               </span>
               <h1 className="m-0 text-balance text-[clamp(44px,6.4vw,80px)] font-medium leading-[0.98] tracking-[-0.042em]">
@@ -92,7 +93,7 @@ export function OlympusHomePage() {
                   className="inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-control border border-cobalt-ink bg-cobalt-ink px-5 text-[14px] font-medium text-stone-50 no-underline transition-colors duration-120 ease-site hover:bg-[#244563] hover:text-stone-50"
                 >
                   <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-control bg-stone-50">
-                    <img src="/logo-aether-layers.svg" alt="" className="h-4 w-4" />
+                    <BrandMark brand="aether" className="h-4 w-4" />
                   </span>
                   Meet Aether
                   <span aria-hidden="true" className="font-mono">
@@ -226,7 +227,7 @@ export function OlympusHomePage() {
                 className="box-border flex min-h-[240px] flex-[1_1_280px] flex-col gap-3 rounded-card border border-cobalt/35 bg-cobalt/10 p-6 text-ink no-underline transition-colors duration-120 ease-site hover:border-cobalt hover:bg-cobalt/[0.16] hover:text-ink"
               >
                 <span className="flex items-center gap-2.5">
-                  <img src="/logo-aether-layers.svg" alt="" className="h-[30px] w-[30px]" />
+                  <BrandMark brand="aether" className="h-[30px] w-[30px]" />
                   <span className="text-[20px] font-medium">Aether</span>
                   <span className="rounded-full bg-ochre/20 px-2 py-0.5 font-mono text-[11px] text-ochre-ink">private alpha</span>
                 </span>
@@ -528,17 +529,15 @@ export function OlympusHomePage() {
 }
 
 function ConnectorMark({ name }: { name: string }) {
-  const [broken, setBroken] = useState(false);
-  const logo = BRAND_LOGOS[name];
-  const fallback = GENERIC_CONNECTOR_GLYPHS[name] ?? name.slice(0, 2).toUpperCase();
+  const generic = GENERIC_CONNECTOR_GLYPHS[name];
   return (
     <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center self-center rounded-control border border-stone-200 bg-raised text-steel-ink">
-      {logo && !broken ? (
-        <img src={logo} alt="" className="h-4 w-4 object-contain" onError={() => setBroken(true)} />
-      ) : (
+      {generic ? (
         <span aria-hidden="true" className="font-mono text-[10px] font-medium">
-          {fallback}
+          {generic}
         </span>
+      ) : (
+        <ProviderMark provider={name} size={16} />
       )}
     </span>
   );

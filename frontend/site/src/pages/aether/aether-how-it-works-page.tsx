@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { PageShell } from '@site/components/page-shell';
 import { ButtonLink, Card, CardRow, ClosingCta, MarkList, PageHero, Section, SectionHead, StepList } from '@site/components/ui';
-import { BRAND_BY_SLUG, type BrandSlug } from '@site/site/brand-logos';
+import { ProviderMark } from '@site/components/provider-mark';
 import { ACCENTS, soft, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
 
@@ -40,6 +40,7 @@ const LIFECYCLE: Array<[string, Accent]> = [
   ['measured', 'solar'],
 ];
 
+type BrandSlug = 'hubspot' | 'instagram' | 'shopify' | 'stripe';
 type ExampleStep = { title: string; detail: ReactNode; state: string; accent: Accent } & ({ logo: BrandSlug } | { glyph: string });
 
 const EXAMPLE: ExampleStep[] = [
@@ -208,7 +209,7 @@ export function AetherHowItWorksPage() {
             >
               {'logo' in step ? (
                 <span className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-stone-200 bg-white">
-                  <img src={BRAND_BY_SLUG[step.logo]} alt="" className="h-[18px] w-[18px]" />
+                  <ProviderMark provider={step.logo} size={18} className="text-graphite-body" />
                 </span>
               ) : (
                 <span

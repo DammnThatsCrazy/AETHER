@@ -89,6 +89,7 @@ export const providerRegistry = {
   ready: provider('ready', 'Ready', 'payments'),
   bfinance: provider('bfinance', 'BFinance', 'payments'),
   metamask: provider('metamask', 'MetaMask', 'identity', ['metamask_card']),
+  phantom: provider('phantom', 'Phantom', 'identity', ['phantom_wallet']),
   holyheld: provider('holyheld', 'Holyheld', 'payments'),
   bitget_wallet: provider('bitget_wallet', 'Bitget Wallet', 'identity'),
   avici: provider('avici', 'Avici', 'payments'),
@@ -143,6 +144,7 @@ export const providerRegistry = {
   x_ads: provider('x_ads', 'X Ads', 'advertising', ['twitter_ads']),
   x: provider('x', 'X', 'social', ['twitter', 'twitter_x']),
   reddit: provider('reddit', 'Reddit', 'social'),
+  instagram: provider('instagram', 'Instagram', 'social'),
   farcaster_neynar: provider('farcaster_neynar', 'Neynar', 'social', ['farcaster', 'neynar']),
   lens_protocol: provider('lens_protocol', 'Lens Protocol', 'social'),
 

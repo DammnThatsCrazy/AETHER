@@ -2,6 +2,7 @@ import { PageShell } from '@site/components/page-shell';
 import { ButtonLink, Card, CardRow, ClosingCta, PageHero, Section, SectionHead, accentVars } from '@site/components/ui';
 import type { Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
+import { BrandMark } from '@site/components/brand-mark';
 
 /** Olympus Company.dc.html */
 
@@ -50,7 +51,7 @@ export function OlympusCompanyPage() {
           <>
             <ButtonLink
               href={href('aether', '/')}
-              icon={<img src="/logo-aether-layers.svg" alt="" className="h-4 w-4 rounded bg-stone-50 p-0.5" />}
+              icon={<BrandMark brand="aether" className="h-4 w-4 rounded bg-stone-50 p-0.5" />}
               arrow
             >
               Meet Aether

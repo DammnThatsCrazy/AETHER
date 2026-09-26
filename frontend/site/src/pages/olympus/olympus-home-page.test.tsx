@@ -92,13 +92,14 @@ describe('Olympus Home', () => {
     expect(aetherLinks).toContain('https://aether.olympuslabsml.com/docs');
   });
 
-  it('shows the connector catalog with bundled logos', async () => {
+  it('shows the connector catalog with registry marks', async () => {
     renderHome();
     await userEvent.click(screen.getByRole('tab', { name: /Connected systems/ }));
     expect(screen.getByText('13 managed connectors, plus any system you can reach')).toBeTruthy();
     expect(screen.getByText('HubSpot')).toBeTruthy();
-    const imgs = document.querySelectorAll('#panel-company img');
-    expect(imgs.length).toBeGreaterThanOrEqual(13);
+    // Third-party logos wait for legal review; the registry shows initials.
+    expect(document.querySelectorAll('#panel-company [data-provider]').length).toBeGreaterThanOrEqual(13);
+    expect(document.querySelector('#panel-company [data-provider="hubspot"]')?.textContent).toBe('H');
   });
 });
 
