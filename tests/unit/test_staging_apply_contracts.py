@@ -1464,3 +1464,12 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
     assert set(iam_role_mgmt["resource"]) == _staging_lambda_roles
     assert "iam:CreateRole" in iam_role_mgmt["actions"]
     assert "iam:DeleteRole" in iam_role_mgmt["actions"]
+
+
+def test_amplify_subdomain_records_use_only_the_cname_target() -> None:
+    """Amplify reports "<prefix> CNAME <target>"; Route 53 must get the target."""
+    main = (TF / "main.tf").read_text(encoding="utf-8")
+    start = main.index('resource "aws_route53_record" "amplify_subdomain"')
+    block = main[start:main.index("\n}\n", start)]
+    assert 'regex("[^ ]+$", trimspace(one(aws_amplify_domain_association.frontend[each.key].sub_domain).dns_record))' in block
+    assert "for_each = local.product_dns_enabled ? local.amplify_apps : {}" in block

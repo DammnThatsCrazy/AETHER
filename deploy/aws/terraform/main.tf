@@ -1138,7 +1138,12 @@ resource "aws_route53_record" "amplify_subdomain" {
   name     = "${each.value.subdomain}.${var.amplify_domain_name}"
   type     = "CNAME"
   ttl      = 3600
-  records  = [try(one(aws_amplify_domain_association.frontend[each.key].sub_domain).dns_record, aws_amplify_app.frontend[each.key].default_domain)]
+  # Amplify reports dns_record as "<prefix> CNAME <target>"; Route 53 takes
+  # only the target (the last token).
+  records = [try(
+    regex("[^ ]+$", trimspace(one(aws_amplify_domain_association.frontend[each.key].sub_domain).dns_record)),
+    aws_amplify_app.frontend[each.key].default_domain,
+  )]
 }
 
 # API subdomain → ALB (wired directly — the ALB is in this root module)
