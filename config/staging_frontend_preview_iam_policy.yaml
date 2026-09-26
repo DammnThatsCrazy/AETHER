@@ -37,9 +37,11 @@ statements:
       - arn:aws:amplify:us-east-1:${account_id}:apps/${staging_aether_app_id}
     scope: frontend-preview-app-read
   - sid: ListPreviewBranches
+    # Amplify authorizes ListBranches against the app's branches/* ARN, not
+    # the app ARN (an app-ARN grant is denied).
     actions:
       - amplify:ListBranches
-    resource: arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/*
     scope: frontend-preview-app-read
   - sid: ManagePreviewBranches
     actions:

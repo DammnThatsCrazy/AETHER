@@ -86,7 +86,13 @@ def test_every_amplify_call_is_granted_on_the_preview_app_only():
             continue
         for resource in resources:
             assert "*" not in resource.split("apps/")[1].split("/")[0], resource
-            if statement["actions"] not in (["amplify:GetApp"], ["amplify:ListBranches"]):
+            if statement["actions"] == ["amplify:ListBranches"]:
+                # Amplify authorizes ListBranches on apps/<id>/branches/*; an
+                # app-ARN grant is denied at runtime.
+                assert resource == (
+                    "arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/*"
+                ), resource
+            elif statement["actions"] != ["amplify:GetApp"]:
                 assert resource.startswith(
                     "arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*"
                 ), resource
