@@ -70,7 +70,7 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:8e93086f42139303277ecc112e751e0b881b1c6c210311da0311e7e9f43b1666"
+  "deploy/aws/terraform/": "sha256:2e6ed3034a1c6e629ded36563308a4051de1366feff25f802c6e7e8d644159d4"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -615,8 +615,12 @@ Routing is app-specific. Olympus marketing and status serve prerendered files
 without a catch-all rewrite. Aether marketing has only the explicit
 `/login`, `/signup`, and `/forgot-password` fallbacks needed by its public auth
 threshold; the end-user app and docs portal use an index fallback because they
-resolve client routes at runtime. This keeps route-specific marketing metadata
-intact while preserving direct navigation for the two runtime-routed apps.
+resolve client routes at runtime. That fallback is a `404-200` rewrite: it
+serves `index.html` only when no file exists at the path, so built bundles
+under `/assets/` are still served as files (a plain `200` rewrite of `/<*>`
+returns HTML for them and the app renders blank). This keeps route-specific
+marketing metadata intact while preserving direct navigation for the two
+runtime-routed apps.
 
 The Aurora module pins the standard provisioned Aurora PostgreSQL 16.8 engine
 release. The repository previously used 16.4, but that exact standard engine
