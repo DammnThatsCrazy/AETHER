@@ -156,11 +156,20 @@ async def _notify_sales_team(inquiry_id: str, body: EnterpriseContactRequest) ->
 
 # ── Public lead capture ─────────────────────────────────────────────────
 
-_VALID_LEAD_TYPES = {"waitlist", "early-access", "demo-request"}
+# Contact-form topics (frontend/site Contact page) plus the older waitlist,
+# early-access and demo-request forms.
+_CONTACT_TOPICS = {"pilot", "product", "developer", "security", "proof", "research"}
+_VALID_LEAD_TYPES = {"waitlist", "early-access", "demo-request"} | _CONTACT_TOPICS
 
 
 class LeadCaptureRequest(BaseModel):
-    lead_type: str = Field(..., description="waitlist | early-access | demo-request")
+    lead_type: str = Field(
+        ...,
+        description=(
+            "waitlist | early-access | demo-request | pilot | product | developer | "
+            "security | proof | research"
+        ),
+    )
     email: str = Field(..., min_length=3, max_length=320)
     name: str = Field("", max_length=200)
     company: str = Field("", max_length=200)
@@ -229,6 +238,12 @@ _LEAD_TYPE_LABELS = {
     "waitlist": "Waitlist sign-up",
     "early-access": "Early access request",
     "demo-request": "Demo request",
+    "pilot": "Pilot request",
+    "product": "Product question",
+    "developer": "Developer question",
+    "security": "Security review request",
+    "proof": "Proof partner request",
+    "research": "Research inquiry",
 }
 
 

@@ -205,7 +205,7 @@ not exposed by this model.
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
 | `/v1/contact/enterprise` | POST | API key | Submit an enterprise inquiry. Persists the inquiry as the durable record (source of truth), then best-effort emails `ENTERPRISE_INQUIRY_EMAIL`. A persistence failure fails the request (never a fake success); an email-delivery failure is non-fatal and the inquiry is retained with a `status` marker. Inquiry PII (name/email/company/message) is written only to the database, never to application logs. |
-| `/v1/contact/lead` | POST | Public | Accept a public lead-capture submission (waitlist, early-access, demo-request). Persists the lead as a durable row, then best-effort emails `LEAD_NOTIFICATION_EMAIL` (default `team@olympuslabsml.com`). Accepted `lead_type` values: `waitlist`, `early-access`, `demo-request`. Optional fields: `name`, `company`, `role`, `use_case`, `message`, `source`. Rate-limited by IP. |
+| `/v1/contact/lead` | POST | Public | Accept a public lead-capture submission (the unified site's contact form, plus the waitlist, early-access and demo-request forms). Persists the lead as a durable row, then best-effort emails `LEAD_NOTIFICATION_EMAIL` (default `team@olympuslabsml.com`). Accepted `lead_type` values: contact topics `pilot`, `product`, `developer`, `security`, `proof`, `research`, and `waitlist`, `early-access`, `demo-request`. The contact form sends its extra field as `use_case` and its organization as `company`. Optional fields: `name`, `company`, `role`, `use_case`, `message`, `source`. Rate-limited by IP. |
 
 ### Self-service billing (`/v1/billing/*`)
 
