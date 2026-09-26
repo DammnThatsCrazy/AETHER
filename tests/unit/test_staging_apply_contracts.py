@@ -368,7 +368,9 @@ def test_pilot_first_admin_handoff_is_explicit_and_staging_only() -> None:
     # Operator emails ride the same pilot-only overlay and never reach another lane.
     assert '{ name = "PLATFORM_OPERATOR_EMAILS", value = join(",", [for e in var.platform_operator_emails : lower(trimspace(e))]) }' in ecs
     main = (TF / "main.tf").read_text(encoding="utf-8")
-    assert 'platform_operator_emails = var.deployment_lane == "pilot" ? var.platform_operator_emails : []' in main
+    assert re.search(
+        r'platform_operator_emails\s+= var\.deployment_lane == "pilot" \? var\.platform_operator_emails : \[\]', main
+    )
 
 
 def test_backend_task_definition_has_an_explicit_api_runtime_role() -> None:
