@@ -1775,8 +1775,9 @@ export const api = {
         .then(r => r.data as AuthGrantResponse & { tenant_id: string }),
 
     /** Exchange Auth0 JWT for an Aether session (or legacy API key) — SSO callback. */
+    // Body field must match SSOCallbackRequest (services/backend/services/auth/routes.py).
     ssoCallback: (jwt: string) =>
-      restClient.post('/v1/auth/sso/callback', wrap(unknownSchema), { jwt })
+      restClient.post('/v1/auth/sso/callback', wrap(unknownSchema), { token: jwt })
         .then(r => r.data as AuthGrantResponse),
   },
 
