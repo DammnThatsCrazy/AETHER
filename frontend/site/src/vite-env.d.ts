@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_SITE_AETHER_URL?: string;
   /** Public API origin for the contact form. */
   readonly VITE_API_BASE_URL?: string;
+  /** 'true' shows plan prices; otherwise pricing reads "on request". */
+  readonly VITE_PUBLISH_PRICES?: string;
 }
 
 interface ImportMeta {

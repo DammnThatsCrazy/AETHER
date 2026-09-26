@@ -22,6 +22,7 @@ import shopify from '@site/assets/brand/shopify.svg';
 import slack from '@site/assets/brand/slack.svg';
 import stripe from '@site/assets/brand/stripe.svg';
 import x from '@site/assets/brand/x.svg';
+import xDark from '@site/assets/brand/x-dark.svg';
 import zendesk from '@site/assets/brand/zendesk.svg';
 
 export const BRAND_LOGOS: Record<string, string> = {
@@ -48,3 +49,17 @@ export const BRAND_LOGOS: Record<string, string> = {
   X: x,
   Zendesk: zendesk,
 };
+
+/** Provider marks by file slug, for components that key sources by id. */
+export const BRAND_BY_SLUG = {
+  hubspot,
+  instagram,
+  phantom,
+  shopify,
+  stripe,
+  x,
+  /** X mark drawn for dark surfaces. */
+  'x-dark': xDark,
+} as const;
+
+export type BrandSlug = keyof typeof BRAND_BY_SLUG;

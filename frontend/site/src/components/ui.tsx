@@ -31,7 +31,8 @@ export function Glyph({ children, className = '' }: { children: ReactNode; class
 
 /* Buttons ---------------------------------------------------------------- */
 
-type ButtonVariant = 'solid' | 'soft' | 'ghost-dark';
+/** solid/soft take an accent; ink, stone and bone are the neutral Aether buttons. */
+type ButtonVariant = 'solid' | 'soft' | 'ghost-dark' | 'ink' | 'stone' | 'bone';
 
 const BUTTON_BASE =
   'inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-control border px-5 text-[14px] font-medium no-underline ' +
@@ -42,6 +43,9 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
     'text-stone-50 [background:var(--a-ink)] [border-color:var(--a-ink)] hover:text-stone-50 hover:[background:var(--a-base)] hover:[border-color:var(--a-base)]',
   soft: '[background:var(--a-soft)] [border-color:var(--a-line)] [color:var(--a-ink)] hover:[border-color:var(--a-base)] hover:[color:var(--a-ink)]',
   'ghost-dark': 'border-[#3a3a40] bg-transparent text-bone hover:border-slate hover:bg-graphite-hover hover:text-bone',
+  ink: 'border-ink bg-ink text-stone-50 hover:border-[#2e2e34] hover:bg-[#2e2e34] hover:text-stone-50',
+  stone: 'border-line bg-stone-100 text-ink hover:border-line-strong hover:bg-stone-200 hover:text-ink',
+  bone: 'border-bone bg-bone text-ink hover:border-line hover:bg-line hover:text-ink',
 };
 
 export interface ButtonLinkProps {
@@ -71,12 +75,20 @@ export function ButtonLink({ href, children, variant = 'solid', accent = 'cobalt
 
 /* Type ------------------------------------------------------------------- */
 
-/** Small uppercase label; accent ink on light surfaces, accent base on dark. */
-export function Eyebrow({ accent, glyph, dark, children }: { accent: Accent; glyph?: string; dark?: boolean; children: ReactNode }) {
-  const c = ACCENTS[accent];
+/**
+ * Small uppercase label; accent ink on light surfaces, accent base on dark.
+ * Without an accent it is neutral (slate, or mist on dark).
+ */
+export function Eyebrow({ accent, glyph, dark, children }: { accent?: Accent; glyph?: string; dark?: boolean; children: ReactNode }) {
+  const color = accent ? (dark ? ACCENTS[accent].base : ACCENTS[accent].ink) : dark ? '#a09f99' : '#6b6a65';
   return (
-    <span className="text-label uppercase" style={{ color: dark ? c.base : c.ink }}>
-      {glyph && <Glyph>{glyph}</Glyph>} {children}
+    <span className="text-label uppercase" style={{ color }}>
+      {glyph && (
+        <>
+          <Glyph>{glyph}</Glyph>{' '}
+        </>
+      )}
+      {children}
     </span>
   );
 }
@@ -112,8 +124,8 @@ export function Section({ id, tone = 'paper', children }: { id?: string; tone?: 
 }
 
 export interface SectionHeadProps {
-  accent: Accent;
-  glyph: string;
+  accent?: Accent;
+  glyph?: string;
   eyebrow: string;
   title: ReactNode;
   /** Short lede shown beside the heading on wide screens. */
@@ -165,6 +177,8 @@ export interface CardProps {
   href?: string;
   /** Icon tile at the top of the card. */
   glyph?: string;
+  /** Small mono label beside the icon tile. */
+  tag?: string;
   eyebrow?: string;
   title?: ReactNode;
   large?: boolean;
@@ -174,7 +188,7 @@ export interface CardProps {
   children?: ReactNode;
 }
 
-export function Card({ variant = 'plain', accent = 'cobalt', flex = '1 1 200px', href, glyph, eyebrow, title, large, body, cta, children }: CardProps) {
+export function Card({ variant = 'plain', accent = 'cobalt', flex = '1 1 200px', href, glyph, tag, eyebrow, title, large, body, cta, children }: CardProps) {
   const dark = variant === 'dark';
   const style: CSSProperties = { flex, ...accentVars(accent) };
   if (variant === 'rule') style.borderTopColor = ACCENTS[accent].base;
@@ -182,7 +196,18 @@ export function Card({ variant = 'plain', accent = 'cobalt', flex = '1 1 200px',
     <>
       {glyph && (
         <span className="flex items-center justify-between gap-2">
-          <IconTile glyph={glyph} accent={accent} />
+          {dark ? (
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-bone/[0.08] font-mono text-[16px]"
+              style={{ color: ACCENTS[accent].base }}
+            >
+              {glyph}
+            </span>
+          ) : (
+            <IconTile glyph={glyph} accent={accent} />
+          )}
+          {tag && <span className="font-mono text-[11px] text-slate">{tag}</span>}
         </span>
       )}
       {eyebrow && <span className={`text-label uppercase ${dark ? 'text-mist' : 'text-slate'}`}>{eyebrow}</span>}
@@ -229,6 +254,37 @@ export function MarkList({ items, mark, color }: { items: string[]; mark: string
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Bordered data table with label-style headers (readiness, key scopes, documents). */
+export function DataTable({ caption, headers, rows }: { caption?: string; headers: string[]; rows: ReactNode[][] }) {
+  return (
+    <div className="overflow-x-auto rounded-card border border-line bg-stone-50">
+      <table className="w-full border-collapse text-body-sm">
+        {caption && <caption className="sr-only">{caption}</caption>}
+        <thead>
+          <tr className="bg-stone-100">
+            {headers.map((h) => (
+              <th key={h} scope="col" className="px-3.5 py-2.5 text-left text-label uppercase text-slate">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((cells, i) => (
+            <tr key={i} className="border-t border-stone-200">
+              {cells.map((cell, j) => (
+                <td key={j} className={`px-3.5 py-2.5 align-top leading-[1.5] ${j === 0 ? 'font-medium' : ''}`}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

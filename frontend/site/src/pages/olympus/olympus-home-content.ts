@@ -96,7 +96,7 @@ export const UNIFY_GROUPS: UnifyGroup[] = [
     items: [['Behavioral patterns', ''], ['Attribution pathways', ''], ['Relationship clusters', ''], ['Fraud relationships', ''], ['Operational risk', ''], ['Customer journeys', ''], ['High-value users', ''], ['Cross-platform identity', '']],
   },
   {
-    id: 'connectors', glyph: '⚙', label: 'Connected systems', accent: 'steel', title: '14 managed connectors, plus any system you can reach',
+    id: 'connectors', glyph: '⚙', label: 'Connected systems', accent: 'steel', title: '13 managed connectors, plus any system you can reach',
     body: 'Managed connectors pull or receive events from the tools a business already runs and normalize them into the Aether envelope. Anything else connects through a signed webhook, the feed API, or an import.',
     source: 'repo · docs/CONNECTORS.md',
     items: [['HubSpot', 'CRM'], ['Salesforce', 'CRM'], ['Shopify', 'commerce'], ['Stripe', 'billing'], ['Klaviyo', 'marketing'], ['Segment', 'analytics'], ['PostHog', 'analytics'], ['GA4', 'analytics'], ['Zendesk', 'support'], ['Intercom', 'support'], ['Jira', 'project · outbound'], ['Linear', 'project · outbound'], ['Slack', 'messaging · outbound'], ['Signed webhook', 'any system'], ['Feed API', 'any backend'], ['File import', 'CSV · JSON · JSONL']],

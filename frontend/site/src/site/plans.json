@@ -1,0 +1,14 @@
+{
+  "_source": "services/backend/shared/plans/catalog.py (tests/unit/test_site_plans_match_catalog.py keeps this in sync)",
+  "self_serve": [
+    { "id": "alpha", "name": "Alpha", "monthly": 0, "annual": 0, "monthly_quota": 3000000, "member_cap": 2, "burst_rpm": 100, "service_count": 11, "event_overage_per_1k": "0.060" },
+    { "id": "beta", "name": "Beta", "monthly": 299, "annual": 3050, "monthly_quota": 9000000, "member_cap": 3, "burst_rpm": 500, "service_count": 22, "event_overage_per_1k": "0.050" },
+    { "id": "gamma", "name": "Gamma", "monthly": 899, "annual": 9170, "monthly_quota": 18000000, "member_cap": 5, "burst_rpm": 2000, "service_count": 36, "event_overage_per_1k": "0.040" },
+    { "id": "delta", "name": "Delta", "monthly": 3449, "annual": 35180, "monthly_quota": 27000000, "member_cap": 5, "burst_rpm": 5000, "service_count": 41, "event_overage_per_1k": "0.030" }
+  ],
+  "contract": [
+    { "id": "epsilon", "name": "Epsilon", "monthly_quota": 54000000 },
+    { "id": "omicron", "name": "Omicron", "monthly_quota": 0 },
+    { "id": "omega", "name": "Omega", "monthly_quota": 0 }
+  ]
+}

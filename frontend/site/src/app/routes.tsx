@@ -1,5 +1,11 @@
 import { Navigate, type RouteObject } from 'react-router-dom';
 import type { SiteId } from '@site/site/site';
+import { AetherHomePage } from '@site/pages/aether/aether-home-page';
+import { AetherConnectionsPage } from '@site/pages/aether/aether-connections-page';
+import { AetherProcurementPage } from '@site/pages/aether/aether-procurement-page';
+import { AetherSecurityPage } from '@site/pages/aether/aether-security-page';
+import { AetherPricingPage } from '@site/pages/aether/aether-pricing-page';
+import { AetherHowItWorksPage } from '@site/pages/aether/aether-how-it-works-page';
 import { ContactPage } from '@site/pages/contact-page';
 import { LegalPage } from '@site/pages/legal-page';
 import { NotFoundPage } from '@site/pages/not-found-page';
@@ -30,5 +36,14 @@ export const ROUTES: Record<SiteId, RouteObject[]> = {
     ...SHARED,
     { path: '*', element: <NotFoundPage /> },
   ],
-  aether: [...SHARED, { path: '*', element: <NotFoundPage /> }],
+  aether: [
+    { path: '/', element: <AetherHomePage /> },
+    { path: '/how-it-works', element: <AetherHowItWorksPage /> },
+    { path: '/connections', element: <AetherConnectionsPage /> },
+    { path: '/pricing', element: <AetherPricingPage /> },
+    { path: '/security', element: <AetherSecurityPage /> },
+    { path: '/procurement', element: <AetherProcurementPage /> },
+    ...SHARED,
+    { path: '*', element: <NotFoundPage /> },
+  ],
 };

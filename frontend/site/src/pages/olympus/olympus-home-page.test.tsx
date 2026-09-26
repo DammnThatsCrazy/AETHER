@@ -95,7 +95,7 @@ describe('Olympus Home', () => {
   it('shows the connector catalog with bundled logos', async () => {
     renderHome();
     await userEvent.click(screen.getByRole('tab', { name: /Connected systems/ }));
-    expect(screen.getByText('14 managed connectors, plus any system you can reach')).toBeTruthy();
+    expect(screen.getByText('13 managed connectors, plus any system you can reach')).toBeTruthy();
     expect(screen.getByText('HubSpot')).toBeTruthy();
     const imgs = document.querySelectorAll('#panel-company img');
     expect(imgs.length).toBeGreaterThanOrEqual(13);
