@@ -62,10 +62,10 @@ source_hashes:
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
-  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:ca2a52de871d72661439c932674799164c893d893be54a3fffaf40e377a855a1"
+  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:878ac0f67502ff5f78682ba9e87ac0290e8b403e55bbd6b8827311bdc25d3f66"
   "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:f08b229d63e97a9f7e37e07a6517c766a3de42d92578d19c7c713d9f111f346c"
-  "deploy/aws/terraform/variables.tf": "sha256:6153654e6668f4673cd15ceb44ea3caf14ba44ca274750d4ad7c7361127c361a"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:c3759e7f469b72ea1a6b2c043bf8a7066421d1836ba9f231a4cd1b0abe3cf974"
+  "deploy/aws/terraform/variables.tf": "sha256:df754a51a31a2bd0a3044e7ebfcd8bc0d825f8b98d2bae1d96ac6c8961a8c6fc"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
@@ -545,7 +545,10 @@ Steps, in order, with what each proves:
    contain `index.html`. The five public Amplify apps have their own
    delivery/smoke gate; this lifecycle step does not claim to publish or verify
    those Amplify domains. Staging does not attach the production custom domain
-   or a production status API URL.
+   or a production status API URL. The staging apply also keeps the per-PR
+   preview app and the API's preview CORS suffix
+   ([Preview Environments](PREVIEW-ENVIRONMENTS.md)); previews call the staging
+   API, so they work only while staging is awake.
 
    Before apply, promotion separately verifies that every ECS-mounted
    application secret has an `AWSCURRENT` version and, when canonical Aurora

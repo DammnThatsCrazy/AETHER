@@ -2401,6 +2401,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/PREVIEW-ENVIRONMENTS.md",
+      "title": "Preview Environments",
+      "slug": "operations/preview-environments",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/PRICING-ARCHITECTURE.md",
       "title": "Pricing Architecture",
       "slug": "enterprise/pricing-architecture",
