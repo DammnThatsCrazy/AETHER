@@ -71,7 +71,9 @@ staging it is a **platform operator** (top plan, no burst limit, quota metering
 or extraction budget; see [Access Control](ACCESS-CONTROL.md#platform-operators)).
 Signing in to `app.staging` through Auth0 with the bootstrap email, verified by
 the identity provider, links that Auth0 identity to the admin user and lands in
-this tenant. Teammates and advisors are invited from it with
+this tenant. Use **Continue with Olympus sign-in** on the login page (Auth0
+Universal Login; sign up or reset the password there). Do not use **Create
+one** (`/signup`): it registers a new customer tenant on a plan instead. Teammates and advisors are invited from it with
 `POST /v1/account/organization/invitations`; their first Auth0 sign-in joins it.
 
 ## Automated lifecycle

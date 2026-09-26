@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 import { Button, SocialProviderIcon } from "@aether/ui";
 import { AetherLogo } from "@aether-app/components/aether-logo";
 import type { SocialProvider } from "@aether/ui";
@@ -31,6 +32,15 @@ export function LoginPage() {
   const [ssoLoading, setSsoLoading] = useState<SsoState>("idle");
 
   const redirectTo = resolvePostAuthRedirect(searchParams.get("redirect"));
+
+  // Auth0 Universal Login is the sign-in for accounts that do not use a
+  // password registered here: the staging operator (first-admin bootstrap
+  // email) and invited teammates. /callback exchanges the Auth0 token for a
+  // session through /v1/auth/sso/callback, which links a verified email to its
+  // existing user or pending invitation. Only offered when the build carries
+  // Auth0 settings (AetherAuth0Provider mounts Auth0Provider only then).
+  const auth0 = useAuth0();
+  const auth0Configured = Boolean(env.VITE_AUTH0_DOMAIN && env.VITE_AUTH0_CLIENT_ID);
 
   // Marketing→signup continuity: when the visitor reached /login carrying a
   // genuine post-auth redirect (RequireAuth round-trip of a connect deep link),
@@ -173,6 +183,23 @@ export function LoginPage() {
           </div>
 
           <div className="space-y-2">
+            {auth0Configured && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                disabled={ssoLoading === "loading"}
+                onClick={() => {
+                  setSsoLoading("loading");
+                  void auth0.loginWithRedirect().catch(() => {
+                    setSsoLoading("idle");
+                    setError("Could not reach the sign-in service. Try again.");
+                  });
+                }}
+              >
+                {ssoLoading === "loading" ? "[···]" : "Continue with Olympus sign-in"}
+              </Button>
+            )}
             {SSO_PROVIDERS.map(({ provider, label }) => (
               <Button
                 key={provider}
