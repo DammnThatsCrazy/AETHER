@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:5b4214f9f0ac4c8cfec7d04041bc1172c822d1cfb5632232196658a45636a85f"
+  "frontend/aether/src/": "sha256:13da30a7b9ccf056bfbc7fff07ab98994cd9d4305644afac39954728957a7d05"
   "frontend/kyber/src/": "sha256:d745484d6bb47de269337f554f9d67e30abfbf1c521bec42dadd0b55a6cc5b8d"
   "frontend/shared/src/": "sha256:abef2b4bb7b38a0124fbf2180dd1de701e533d1bbd57866d57b1848815332a2c"
 ---
@@ -69,7 +69,12 @@ There are two separate frontend applications. **Do not mix them up.**
   sent as `Authorization: Bearer`; see `features/auth/grant.ts` and
   `sessionLogin` in `features/auth/auth-context.tsx`) and fall back to the
   legacy `api_key` response shape only when the backend trust-plane flag is
-  off; signup skips the API-key reveal step when a session is issued. The
+  off; signup skips the API-key reveal step when a session is issued. When the
+  build carries Auth0 settings, login offers **Continue with Olympus sign-in**
+  (Auth0 Universal Login); `/callback` exchanges the Auth0 token through
+  `/v1/auth/sso/callback`, which links a verified email to its existing user or
+  pending invitation. This is how the staging operator and invited teammates
+  sign in; `/signup` always registers a new tenant on a plan. The
   Aether public marketing threshold (`frontend/aether-marketing`) hands users
   into these pages with optional prefill query params — login accepts `?email`,
   signup accepts `?name` and `?email` — read once via a `useState` initializer
