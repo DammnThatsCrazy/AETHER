@@ -1,4 +1,5 @@
-"""Cross-origin allowance for per-PR frontend previews.
+"""Cross-origin allowances: the request headers browsers may send, and per-PR
+frontend preview origins.
 
 A preview of the Aether app for pull request N is served at
 ``https://pr-N.<suffix>`` (an Amplify branch of the preview app). The API
@@ -12,6 +13,20 @@ from __future__ import annotations
 
 import re
 from typing import Optional
+
+# Request headers the first-party browser apps send on every API call
+# (frontend/aether and frontend/kyber REST clients). A header missing here
+# fails the CORS preflight with 400 "Disallowed CORS headers", which the
+# browser reports as "Failed to fetch" for every request, sign-in included.
+CORS_ALLOW_HEADERS: tuple[str, ...] = (
+    "Authorization",
+    "Content-Type",
+    "X-API-Key",
+    "X-Request-ID",
+    "X-Correlation-ID",
+    "X-Aether-Environment",
+    "X-Kyber-Environment",
+)
 
 # One DNS label at a time: letters, digits and inner hyphens; at least two
 # labels (e.g. "d1abc.amplifyapp.com").
