@@ -274,7 +274,9 @@ verifies through the Actions API that the run is an in-progress
 fixed-key golden-path smoke to the rehearsal; a failed check fails delivery.
 Every other staging, push, and production delivery still runs it. The certificate-
 covered API hostname and raw ALB name are captured from reviewed Terraform
-apply output. External DNS is not Terraform-managed, so promotion publishes
+apply output. Terraform writes the staging `api` record once the delegated
+staging zone is in use (see [Domain & DNS Readiness](DOMAIN-DNS-READINESS.md)),
+but resolvers may still hold the old answer, so promotion publishes
 those values without failing an otherwise completed apply on propagation; the
 lifecycle checks hostname-to-ALB resolution before runtime readiness and
 rehearsal. Run-scoped tenant and isolation keys are generated after the admin

@@ -608,8 +608,9 @@ waits for any unrelated active branch job to clear, and only then starts a
 new release when needed. This prevents Amplify's one-job-per-branch race
 without weakening exact-commit provenance.
 The dedicated empty `AETHER-staging-amplify-domain-role` remains constrained
-to Amplify-only trust for the staging infrastructure contract, has no
-permissions or Route 53 access, and Squarespace remains authoritative.
+to Amplify-only trust for the staging infrastructure contract, and has no
+permissions or Route 53 access. Staging DNS is a delegated Route 53 zone whose
+records Terraform manages; see [Route 53 and Squarespace DNS](#route-53-and-squarespace-dns).
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the
 generated staging Amplify app and branch ARN families, and scopes custom-domain
@@ -637,7 +638,21 @@ parameter group remains `aurora-postgresql16`.
 
 ### Route 53 and Squarespace DNS
 
-Squarespace remains the authoritative DNS provider for the first release. After
+**Staging.** `staging.olympuslabsml.com` is a Route 53 zone delegated from
+Squarespace (four `staging` NS records). The zone is created outside this root;
+the resource contract keeps hosted zones out of it. `product_dns_zone_id` in
+`profiles/staging.tfvars` hands the zone to Terraform, which manages its records:
+
+- each Amplify subdomain, pointing at its custom-domain association target;
+- `api`, pointing at the ALB;
+- the Amplify and ACM certificate validation CNAMEs (`product_dns_validation_cnames`).
+
+The apply role (`AetherStagingDeploy`) may change records in that one zone only.
+The plan role may only read it. See [Domain & DNS Readiness](DOMAIN-DNS-READINESS.md)
+for the delegation steps.
+
+**Production.** Squarespace remains the authoritative DNS provider for
+`olympuslabsml.com` (it also carries the Google Workspace mail records). After
 the Amplify custom-domain association is created, add the exported
 `amplify_custom_domain_dns_records` CNAME targets in Squarespace for `www`,
 `aether`, `docs`, `app`, and `status`; keep the apex redirect in Squarespace.
