@@ -18,8 +18,8 @@ export function SiteHeader({ active = '' }: { active?: string }) {
   const location = useLocation();
   const to = (l: SiteLink) => href(l.site, l.path);
 
-  // Close the mobile menu whenever the route changes.
-  useEffect(() => setOpen(false), [location.pathname]);
+  // Close the mobile menu whenever the route or fragment changes.
+  useEffect(() => setOpen(false), [location.pathname, location.hash]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-stone-50 font-sans">
@@ -83,7 +83,16 @@ export function SiteHeader({ active = '' }: { active?: string }) {
       </div>
 
       {open && (
-        <nav id="site-mobile-nav" aria-label="Mobile" className="border-t border-line bg-stone-50 px-6 pb-5 pt-2 min-[1000px]:hidden">
+        <nav
+          id="site-mobile-nav"
+          aria-label="Mobile"
+          // Links are plain anchors; a same-page fragment link never changes the
+          // route, so close on any link choice.
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('a')) setOpen(false);
+          }}
+          className="border-t border-line bg-stone-50 px-6 pb-5 pt-2 min-[1000px]:hidden"
+        >
           <div className="flex flex-col">
             {nav.items.map((item) => (
               <a

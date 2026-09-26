@@ -50,6 +50,27 @@ describe('site header', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }));
     expect(screen.queryByRole('navigation', { name: 'Mobile' })).toBeNull();
   });
+
+  it('closes the mobile menu when a same-page fragment link is chosen', async () => {
+    renderAt('aether', '/');
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const mobile = screen.getByRole('navigation', { name: 'Mobile' });
+    const about = within(mobile).getByRole('link', { name: /About/ });
+    expect(about.getAttribute('href')).toBe('/#about');
+    await userEvent.click(about);
+    expect(screen.queryByRole('navigation', { name: 'Mobile' })).toBeNull();
+  });
+});
+
+describe('page shell', () => {
+  it('offers a skip link to a focusable main landmark', () => {
+    renderAt('olympus', '/missing');
+    const skip = screen.getByRole('link', { name: 'Skip to content' });
+    expect(skip.getAttribute('href')).toBe('#main');
+    const main = screen.getByRole('main');
+    expect(main.id).toBe('main');
+    expect(main.getAttribute('tabindex')).toBe('-1');
+  });
 });
 
 describe('site footer', () => {

@@ -17,8 +17,14 @@ export function PageShell({ title, active, children }: PageShellProps) {
 
   return (
     <div className="flex min-h-screen flex-col bg-stone-50 font-sans text-ink">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-50 focus:rounded-control focus:bg-ink focus:px-3.5 focus:py-2 focus:text-body-sm focus:font-medium focus:text-stone-50"
+      >
+        Skip to content
+      </a>
       <SiteHeader active={active} />
-      <main id="main" className="flex-1">
+      <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
         {children}
       </main>
       <SiteFooter />
