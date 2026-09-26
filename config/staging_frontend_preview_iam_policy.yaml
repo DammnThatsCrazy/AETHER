@@ -1,0 +1,57 @@
+# Least-privilege role for per-PR frontend previews
+# (.github/workflows/frontend-preview.yml). The role can only manage pr-*
+# branches of the staging preview Amplify app, plus read the staging Aether
+# app's public VITE_* build settings. It cannot touch the staging or
+# production apps, the backend, data, or Terraform state.
+#
+# Placeholders: ${account_id}; ${frontend_preview_app_id} is the Terraform
+# output frontend_preview_app_id; ${staging_aether_app_id} is the id of
+# AETHER-staging-aether-app. The workflow finds both apps by name (ListApps
+# cannot be resource-scoped); the role ARN is the repository variable
+# FRONTEND_PREVIEW_ROLE_ARN.
+version: 1
+profile: staging
+role: AetherStagingFrontendPreview
+region: us-east-1
+trust:
+  # GitHub OIDC for this repository only: its pull_request (ready_for_review)
+  # runs, and runs of the workflow on main (dispatch refresh, merge and
+  # scheduled cleanup). Pull requests from forks receive no OIDC token, and
+  # every deploy path also requires the head repository to be this one.
+  provider: token.actions.githubusercontent.com
+  audience: sts.amazonaws.com
+  subjects:
+    - repo:DammnThatsCrazy/AETHER:pull_request
+    - repo:DammnThatsCrazy/AETHER:ref:refs/heads/main
+statements:
+  - sid: DiscoverPreviewAndStagingApps
+    actions:
+      - amplify:ListApps
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadPreviewAndStagingAppSettings
+    actions:
+      - amplify:GetApp
+    resource:
+      - arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}
+      - arn:aws:amplify:us-east-1:${account_id}:apps/${staging_aether_app_id}
+    scope: frontend-preview-app-read
+  - sid: ListPreviewBranches
+    actions:
+      - amplify:ListBranches
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}
+    scope: frontend-preview-app-read
+  - sid: ManagePreviewBranches
+    actions:
+      - amplify:CreateBranch
+      - amplify:GetBranch
+      - amplify:DeleteBranch
+      - amplify:CreateDeployment
+      - amplify:StartDeployment
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*
+    scope: frontend-preview-branches
+  - sid: ReadPreviewDeploymentJobs
+    actions:
+      - amplify:GetJob
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*/jobs/*
+    scope: frontend-preview-jobs

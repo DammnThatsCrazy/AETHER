@@ -1,0 +1,283 @@
+name: Frontend preview
+
+# Per-PR previews of the Aether app, deployed to branch pr-<N> of the staging
+# preview Amplify app (https://pr-<N>.<preview domain>). Previews call the
+# staging API and sign in through staging Auth0; they hold no data of their
+# own, so staging must be awake for a preview to do more than render.
+#
+# Cadence (config/verification_policy.yaml): pull requests trigger hosted work
+# only when marked ready for review, so a preview is created then. A team
+# member refreshes one after later pushes by dispatching this workflow with the
+# pull request number. Cleanup does not depend on a close event: every push to
+# main (each merge) and an hourly sweep delete the previews of pull requests
+# that are closed or merged.
+#
+# Security (the repository is public):
+# - Fork pull requests are never deployed. A ready_for_review event from a
+#   fork gets no OIDC token, and every deploy path requires the pull request's
+#   head repository to be this one. Dispatch requires write access.
+# - The OIDC role (vars.FRONTEND_PREVIEW_ROLE_ARN) is scoped by
+#   config/staging_frontend_preview_iam_policy.yaml to the preview app's pr-*
+#   branches, plus a read of the staging app's public VITE_* build settings.
+# - Until vars.FRONTEND_PREVIEW_ROLE_ARN is set, every job skips and says so.
+#   The preview and staging app ids are found by their Terraform names
+#   (FRONTEND_PREVIEW_APP_ID / STAGING_AETHER_APP_ID override them if set).
+
+on:
+  pull_request:
+    types: [ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to (re)deploy as a preview
+        type: string
+        required: true
+  push:
+    branches: [main]
+  schedule:
+    # Hourly sweep for pull requests closed without a merge.
+    - cron: "41 * * * *"
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    name: Deploy preview
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: frontend-preview-${{ github.event.pull_request.number || inputs.pr_number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Resolve the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          ROLE_ARN: ${{ vars.FRONTEND_PREVIEW_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$PR_NUMBER" | grep -Eq '^[0-9]{1,7}$' || {
+            echo "::error::pr_number must be a pull request number"; exit 1;
+          }
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          head_repo="$(jq -r '.head.repo.full_name' <<<"$pr")"
+          state="$(jq -r '.state' <<<"$pr")"
+          if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::pull request #$PR_NUMBER comes from $head_repo; only same-repository pull requests get previews"
+            exit 1
+          fi
+          test "$state" = open || { echo "::error::pull request #$PR_NUMBER is $state"; exit 1; }
+          {
+            echo "number=$PR_NUMBER"
+            echo "branch=pr-$PR_NUMBER"
+            echo "sha=$(jq -r '.head.sha' <<<"$pr")"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$ROLE_ARN" ]; then
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Frontend previews are not configured (FRONTEND_PREVIEW_ROLE_ARN); nothing was deployed."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.pr.outputs.armed == 'true'
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: steps.pr.outputs.armed == 'true'
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Configure AWS credentials
+        if: steps.pr.outputs.armed == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.FRONTEND_PREVIEW_ROLE_ARN }}
+          role-session-name: frontend-preview-${{ steps.pr.outputs.number }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve the preview and staging Amplify apps
+        if: steps.pr.outputs.armed == 'true'
+        env:
+          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
+          STAGING_APP_ID: ${{ vars.STAGING_AETHER_APP_ID }}
+        run: |
+          set -euo pipefail
+          # Terraform names them; explicit repository variables win if set.
+          apps="$(aws amplify list-apps --max-items 100 --output json)"
+          preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
+          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app") | .appId' <<<"$apps")}"
+          test -n "$preview" || { echo "::error::no AETHER-staging-aether-app-preview Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
+          {
+            echo "PREVIEW_APP_ID=$preview"
+            if [ -n "$staging" ]; then echo "STAGING_APP_ID=$staging"; fi
+          } >> "$GITHUB_ENV"
+
+      - name: Resolve the preview URL and the staging build settings
+        if: steps.pr.outputs.armed == 'true'
+        id: config
+        env:
+          PREVIEW_BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          set -euo pipefail
+          test -n "${STAGING_APP_ID:-}" || { echo "::error::no AETHER-staging-aether-app Amplify app to read build settings from"; exit 1; }
+          domain="$(aws amplify get-app --app-id "$PREVIEW_APP_ID" --query 'app.defaultDomain' --output text)"
+          url="https://${PREVIEW_BRANCH}.${domain}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          # The staging app's VITE_* values are public build settings (API
+          # origin, Auth0 domain/client/audience). Only the redirect and
+          # logout URIs change: they must point at this preview.
+          aws amplify get-app --app-id "$STAGING_APP_ID" --query 'app.environmentVariables' --output json \
+            | jq -r 'to_entries[] | select(.key | test("^VITE_[A-Z0-9_]+$")) | "\(.key)=\(.value)"' \
+            | grep -v -E '^VITE_AUTH0_(REDIRECT|LOGOUT)_URI=' >> "$GITHUB_ENV"
+          {
+            echo "VITE_AUTH0_REDIRECT_URI=${url}/callback"
+            echo "VITE_AUTH0_LOGOUT_URI=${url}"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the Aether app
+        if: steps.pr.outputs.armed == 'true'
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build --workspace=frontend/aether
+          test -f frontend/aether/dist/index.html
+
+      - name: Deploy to the preview branch
+        if: steps.pr.outputs.armed == 'true'
+        env:
+          PREVIEW_BRANCH: ${{ steps.pr.outputs.branch }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          aws amplify get-branch --app-id "$PREVIEW_APP_ID" --branch-name "$PREVIEW_BRANCH" >/dev/null 2>&1 \
+            || aws amplify create-branch --app-id "$PREVIEW_APP_ID" --branch-name "$PREVIEW_BRANCH" \
+                 --stage DEVELOPMENT --description "Preview of PR #${PR_NUMBER}" >/dev/null
+          (cd frontend/aether/dist && zip -qr "$RUNNER_TEMP/preview.zip" .)
+          deployment="$(aws amplify create-deployment --app-id "$PREVIEW_APP_ID" --branch-name "$PREVIEW_BRANCH" --output json)"
+          job_id="$(jq -r '.jobId' <<<"$deployment")"
+          curl -sSf -X PUT -H 'Content-Type: application/zip' \
+            --upload-file "$RUNNER_TEMP/preview.zip" "$(jq -r '.zipUploadUrl' <<<"$deployment")"
+          aws amplify start-deployment --app-id "$PREVIEW_APP_ID" --branch-name "$PREVIEW_BRANCH" --job-id "$job_id" >/dev/null
+          for _ in $(seq 1 60); do
+            status="$(aws amplify get-job --app-id "$PREVIEW_APP_ID" --branch-name "$PREVIEW_BRANCH" \
+              --job-id "$job_id" --query 'job.summary.status' --output text)"
+            case "$status" in
+              SUCCEED) echo "Preview deployed (job $job_id)."; exit 0 ;;
+              FAILED|CANCELLED) echo "::error::preview deployment $job_id ended $status"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::preview deployment $job_id did not finish within 10 minutes"
+          exit 1
+
+      - name: Link the preview on the pull request
+        if: steps.pr.outputs.armed == 'true'
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.config.outputs.url }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
+        with:
+          script: |
+            const marker = '<!-- frontend-preview -->';
+            const body = [
+              marker,
+              `**Aether app preview:** ${process.env.PREVIEW_URL}`,
+              '',
+              `Built from ${process.env.PR_SHA.slice(0, 7)}. It uses the staging API and staging sign-in, so staging must be awake. ` +
+              'To refresh it after new pushes, run the "Frontend preview" workflow with this pull request number. ' +
+              'It is removed after this pull request closes or merges.',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  cleanup:
+    name: Remove previews of closed pull requests
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: frontend-preview-cleanup
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: read
+    steps:
+      - name: Check that previews are configured
+        id: armed
+        env:
+          ROLE_ARN: ${{ vars.FRONTEND_PREVIEW_ROLE_ARN }}
+        run: |
+          if [ -n "$ROLE_ARN" ]; then
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Frontend previews are not configured; nothing to remove."
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.armed.outputs.armed == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.FRONTEND_PREVIEW_ROLE_ARN }}
+          role-session-name: frontend-preview-cleanup
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve the preview and staging Amplify apps
+        if: steps.armed.outputs.armed == 'true'
+        env:
+          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
+          STAGING_APP_ID: ${{ vars.STAGING_AETHER_APP_ID }}
+        run: |
+          set -euo pipefail
+          # Terraform names them; explicit repository variables win if set.
+          apps="$(aws amplify list-apps --max-items 100 --output json)"
+          preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
+          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app") | .appId' <<<"$apps")}"
+          test -n "$preview" || { echo "::error::no AETHER-staging-aether-app-preview Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
+          {
+            echo "PREVIEW_APP_ID=$preview"
+          } >> "$GITHUB_ENV"
+
+      - name: Delete previews whose pull request is closed or merged
+        if: steps.armed.outputs.armed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branches="$(aws amplify list-branches --app-id "$PREVIEW_APP_ID" --max-items 1000 \
+            --query 'branches[].branchName' --output text | tr '\t' '\n')"
+          removed=0
+          for branch in $branches; do
+            number="${branch#pr-}"
+            printf '%s' "$number" | grep -Eq '^[0-9]{1,7}$' || continue
+            state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq '.state')"
+            if [ "$state" = closed ]; then
+              aws amplify delete-branch --app-id "$PREVIEW_APP_ID" --branch-name "$branch" >/dev/null
+              echo "Removed $branch (pull request #$number is closed)."
+              removed=$((removed + 1))
+            fi
+          done
+          echo "Removed $removed preview(s)."

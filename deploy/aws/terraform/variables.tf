@@ -482,6 +482,12 @@ variable "api_cors_origins" {
   default     = []
 }
 
+variable "enable_frontend_previews" {
+  type        = bool
+  description = "Host per-PR previews of the Aether app (branch pr-<N> of an unconnected Amplify app, deployed and torn down by .github/workflows/frontend-preview.yml). Staging only: previews call the staging API, which allows exactly https://pr-<N>.<preview domain> via CORS_PREVIEW_ORIGIN_SUFFIX."
+  default     = false
+}
+
 variable "enable_social_connections" {
   type        = bool
   description = "Enable optional social identity-provider connections. Keep false until provider credentials and Auth0 management scopes are approved."

@@ -156,6 +156,10 @@ class APIConfig:
     cors_origins: list[str] = field(default_factory=lambda: _env_list(
         "CORS_ORIGINS", "http://localhost:3000,https://app.aether.io"
     ))
+    # Host suffix of per-PR frontend previews (e.g. "d123.amplifyapp.com").
+    # When set, origins exactly "https://pr-<number>.<suffix>" are also
+    # allowed; see shared/security/cors.py. Never honored in production.
+    cors_preview_origin_suffix: str = _env("CORS_PREVIEW_ORIGIN_SUFFIX", "")
     deprecation_window_months: int = 12
     max_request_body_bytes: int = _env_int("MAX_REQUEST_BODY_MB", 10) * 1024 * 1024
 

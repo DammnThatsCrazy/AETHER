@@ -36,6 +36,9 @@ Amplify/Terraform variables.
 - Set `CORS_ORIGINS` (backend) to the exact Aether, status, and approved
   operator origins. Terraform derives the canonical production list and accepts
   an explicit staging override.
+- Staging alone may also set `CORS_PREVIEW_ORIGIN_SUFFIX` (the preview Amplify
+  app's default domain), which allows exactly `https://pr-<N>.<suffix>` for
+  per-PR previews. The backend refuses to start with it in production.
 - Set the status app's `VITE_STATUS_API_URL` only after the API certificate,
   DNS, and CORS path have been verified. An empty value must remain visibly
   unverified, not green.

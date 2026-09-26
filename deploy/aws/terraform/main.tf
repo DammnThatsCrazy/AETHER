@@ -501,6 +501,9 @@ module "ecs" {
   # must be present in the same canonical CORS list as the tenant application.
   # Operators can override the derived list for a non-canonical staging host.
   api_cors_origins = join(",", local.api_cors_origins)
+  # Per-PR frontend previews: the backend allows exactly
+  # https://pr-<N>.<this suffix> (services/backend/shared/security/cors.py).
+  cors_preview_origin_suffix = join("", local.frontend_preview_domains)
 
   # Resource gating, so IAM policies and alarms only cover what exists.
   enable_elasticache  = local.enable_elasticache
@@ -685,9 +688,11 @@ module "auth0" {
   environment  = var.environment
   api_audience = var.auth0_api_audience
 
-  aether_callback_urls = ["${var.aether_app_url}/callback"]
-  aether_logout_urls   = [var.aether_app_url]
-  aether_web_origins   = [var.aether_app_url]
+  # Per-PR previews (pr-<N>.<preview app domain>) sign in against the same
+  # staging Auth0 application; Auth0 accepts a leading subdomain wildcard.
+  aether_callback_urls = concat(["${var.aether_app_url}/callback"], [for d in local.frontend_preview_domains : "https://*.${d}/callback"])
+  aether_logout_urls   = concat([var.aether_app_url], [for d in local.frontend_preview_domains : "https://*.${d}"])
+  aether_web_origins   = concat([var.aether_app_url], [for d in local.frontend_preview_domains : "https://*.${d}"])
 
   kyber_callback_urls = ["${var.kyber_app_url}/callback"]
   kyber_logout_urls   = [var.kyber_app_url]
@@ -856,6 +861,39 @@ locals {
       { source = "/signup", target = "/index.html", status = "200" },
       { source = "/forgot-password", target = "/index.html", status = "200" },
     ]
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Per-PR frontend previews (staging only)
+# ---------------------------------------------------------------------------
+# One Amplify app with no repository connection: frontend-preview.yml builds
+# the Aether app for a same-repository pull request and deploys it to branch
+# pr-<N> (https://pr-<N>.<default_domain>), and deletes that branch when the
+# pull request closes or merges. Previews call the staging API and staging
+# Auth0; they hold no data of their own.
+locals {
+  enable_frontend_previews = var.enable_frontend_previews && local.enable_static_frontends && var.environment == "staging"
+  frontend_preview_domains = [for app in aws_amplify_app.frontend_preview : app.default_domain]
+}
+
+resource "aws_amplify_app" "frontend_preview" {
+  count = local.enable_frontend_previews ? 1 : 0
+
+  name        = "${var.project}-${var.environment}-aether-app-preview"
+  description = "Per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
+  platform    = "WEB"
+
+  custom_rule {
+    source = "/<*>"
+    target = "/index.html"
+    status = "404-200"
+  }
+
+  tags = {
+    Name        = "${var.project}-${var.environment}-aether-app-preview"
+    Purpose     = "Per-PR frontend previews"
+    Environment = var.environment
   }
 }
 

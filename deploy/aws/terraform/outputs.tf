@@ -202,6 +202,16 @@ output "amplify_default_domains" {
   value       = { for k, v in aws_amplify_app.frontend : k => v.default_domain }
 }
 
+output "frontend_preview_app_id" {
+  description = "Amplify app hosting per-PR previews of the Aether app (empty when previews are disabled)."
+  value       = join("", aws_amplify_app.frontend_preview[*].id)
+}
+
+output "frontend_preview_default_domain" {
+  description = "Default domain of the preview app; PR N is served at https://pr-N.<this domain>."
+  value       = join("", aws_amplify_app.frontend_preview[*].default_domain)
+}
+
 output "amplify_custom_domain_dns_records" {
   description = "DNS targets returned by Amplify custom-domain associations; add these CNAMEs at the authoritative DNS provider"
   value = var.amplify_custom_domain_enabled ? {

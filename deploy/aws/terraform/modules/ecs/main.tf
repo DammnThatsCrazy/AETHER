@@ -537,6 +537,7 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "DATABASE_PORT", value = tostring(var.database_port) },
           { name = "DATABASE_NAME", value = var.database_name },
           { name = "CORS_ORIGINS", value = var.api_cors_origins },
+          { name = "CORS_PREVIEW_ORIGIN_SUFFIX", value = var.cors_preview_origin_suffix },
           { name = "PORT", value = "8000" },
           # The container image defaults AETHER_ROLE to `all` for local
           # development. The Terraform-managed public API task must override

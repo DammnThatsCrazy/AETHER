@@ -47,3 +47,7 @@ status_api_url                = "https://api.staging.olympuslabsml.com/health"
 # Logs — short retention; INFO/DEBUG ship to S3.
 log_retention_days        = 3
 enable_social_connections = false
+
+# Per-PR previews of the Aether app (frontend-preview.yml): an unconnected
+# Amplify app whose pr-<N> branches call this staging API and Auth0.
+enable_frontend_previews = true

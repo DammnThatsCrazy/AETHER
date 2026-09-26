@@ -557,6 +557,12 @@ variable "api_cors_origins" {
   default     = ""
 }
 
+variable "cors_preview_origin_suffix" {
+  type        = string
+  description = "Host suffix of per-PR frontend previews (the preview Amplify app's default domain), injected as CORS_PREVIEW_ORIGIN_SUFFIX. Empty disables preview origins."
+  default     = ""
+}
+
 variable "credential_kms_key_id" {
   type        = string
   description = "KMS CMK key id for provider-credential envelope encryption (modules/kms_credentials). Injected as CREDENTIAL_KMS_KEY_ID so the AwsKmsEnvelopeCredentialCipher resolves its key. Empty string when the profile provisions no such key (there is no such cloud profile today)."
