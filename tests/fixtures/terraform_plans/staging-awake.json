@@ -133,6 +133,186 @@
           "values": {
             "name": "aether-staging-credential-kms"
           }
+        },
+        {
+          "address": "aws_route53_record.api[0]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "api",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": 0,
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "api.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 300,
+            "records": [
+              "aether-staging-alb-12554292.us-east-1.elb.amazonaws.com"
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.amplify_subdomain[\"olympus-marketing\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "amplify_subdomain",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "olympus-marketing",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "www.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "d1jhuc6vzs0ypj.cloudfront.net"
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.amplify_subdomain[\"aether-marketing\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "amplify_subdomain",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "aether-marketing",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "aether.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "d2gtus3swzdvnn.cloudfront.net"
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.amplify_subdomain[\"docs\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "amplify_subdomain",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "docs",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "docs.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "d13cf8nqxf3501.cloudfront.net"
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.amplify_subdomain[\"aether-app\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "amplify_subdomain",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "aether-app",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "app.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "d1s0g9gx8r6reg.cloudfront.net"
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.amplify_subdomain[\"status\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "amplify_subdomain",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "status",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "status.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "d35we41rmr3xy7.cloudfront.net"
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.validation_cname[\"_0d97b787857def1c3cc9147d86786335\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "validation_cname",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "_0d97b787857def1c3cc9147d86786335",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "_0d97b787857def1c3cc9147d86786335.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "_fa41a8638b50a07ba696b82c152f2460.wzccmgtwzk.acm-validations.aws."
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.validation_cname[\"_91e89497e944d212307cabe5d75ff5ff.app\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "validation_cname",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "_91e89497e944d212307cabe5d75ff5ff.app",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "_91e89497e944d212307cabe5d75ff5ff.app.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "_210138834ca1a798d03f86ae35dfd480.jkddzztszm.acm-validations.aws."
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.validation_cname[\"_a9bef454d149a285497e23319ef4863b.api\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "validation_cname",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "_a9bef454d149a285497e23319ef4863b.api",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "_a9bef454d149a285497e23319ef4863b.api.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "_9ce54274a5435ae118abb366b269a9de.jkddzztszm.acm-validations.aws."
+            ]
+          }
+        },
+        {
+          "address": "aws_route53_record.validation_cname[\"_f65ab0075246880067ce04c5c74ab348.kyber\"]",
+          "mode": "managed",
+          "type": "aws_route53_record",
+          "name": "validation_cname",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "index": "_f65ab0075246880067ce04c5c74ab348.kyber",
+          "schema_version": 2,
+          "values": {
+            "zone_id": "Z01866633FQOV3YDH5J11",
+            "name": "_f65ab0075246880067ce04c5c74ab348.kyber.staging.olympuslabsml.com",
+            "type": "CNAME",
+            "ttl": 3600,
+            "records": [
+              "_ea98898bcc26d2f4924259ab2fe79486.jkddzztszm.acm-validations.aws."
+            ]
+          }
         }
       ],
       "child_modules": [
@@ -2933,6 +3113,296 @@
         "after_sensitive": {}
       },
       "module_address": "module.aurora[0]"
+    },
+    {
+      "address": "aws_route53_record.api[0]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": 0,
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "api.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 300,
+          "records": [
+            "aether-staging-alb-12554292.us-east-1.elb.amazonaws.com"
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.amplify_subdomain[\"olympus-marketing\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "amplify_subdomain",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "olympus-marketing",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "www.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "d1jhuc6vzs0ypj.cloudfront.net"
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.amplify_subdomain[\"aether-marketing\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "amplify_subdomain",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "aether-marketing",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "aether.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "d2gtus3swzdvnn.cloudfront.net"
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.amplify_subdomain[\"docs\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "amplify_subdomain",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "docs",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "docs.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "d13cf8nqxf3501.cloudfront.net"
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.amplify_subdomain[\"aether-app\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "amplify_subdomain",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "aether-app",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "app.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "d1s0g9gx8r6reg.cloudfront.net"
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.amplify_subdomain[\"status\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "amplify_subdomain",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "status",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "status.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "d35we41rmr3xy7.cloudfront.net"
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.validation_cname[\"_0d97b787857def1c3cc9147d86786335\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "validation_cname",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "_0d97b787857def1c3cc9147d86786335",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "_0d97b787857def1c3cc9147d86786335.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "_fa41a8638b50a07ba696b82c152f2460.wzccmgtwzk.acm-validations.aws."
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.validation_cname[\"_91e89497e944d212307cabe5d75ff5ff.app\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "validation_cname",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "_91e89497e944d212307cabe5d75ff5ff.app",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "_91e89497e944d212307cabe5d75ff5ff.app.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "_210138834ca1a798d03f86ae35dfd480.jkddzztszm.acm-validations.aws."
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.validation_cname[\"_a9bef454d149a285497e23319ef4863b.api\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "validation_cname",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "_a9bef454d149a285497e23319ef4863b.api",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "_a9bef454d149a285497e23319ef4863b.api.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "_9ce54274a5435ae118abb366b269a9de.jkddzztszm.acm-validations.aws."
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "aws_route53_record.validation_cname[\"_f65ab0075246880067ce04c5c74ab348.kyber\"]",
+      "mode": "managed",
+      "type": "aws_route53_record",
+      "name": "validation_cname",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "index": "_f65ab0075246880067ce04c5c74ab348.kyber",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "zone_id": "Z01866633FQOV3YDH5J11",
+          "name": "_f65ab0075246880067ce04c5c74ab348.kyber.staging.olympuslabsml.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "records": [
+            "_ea98898bcc26d2f4924259ab2fe79486.jkddzztszm.acm-validations.aws."
+          ]
+        },
+        "after_unknown": {
+          "fqdn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
     }
   ]
 }

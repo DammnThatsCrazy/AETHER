@@ -121,6 +121,21 @@ def test_staging_asleep_plan_passes(tmp_path):
     assert all(r["values"]["desired_count"] == 0 for r in services)
 
 
+def test_staging_plans_carry_delegated_zone_records_and_no_zone(tmp_path):
+    """Staging DNS is a delegated zone owned outside this root: the plan writes
+    its records (Amplify subdomains, api, certificate validation) and never a
+    hosted zone, awake or asleep."""
+    for fixture in ("staging-awake.json", "staging-asleep.json"):
+        code, result, inventory = run("staging", fixture, tmp_path / fixture)
+        assert code == 0, f"{fixture} rejected: {failed_checks(result)}"
+        records = [r for r in inventory["resources"] if r["type"] == "aws_route53_record"]
+        names = {r["values"]["name"] for r in records}
+        assert {f"{h}.staging.olympuslabsml.com" for h in ("api", "www", "aether", "docs", "app", "status")} <= names
+        assert {r["values"]["zone_id"] for r in records} == {"Z01866633FQOV3YDH5J11"}
+        assert all(" " not in target for r in records for target in r["values"]["records"])
+        assert not [r for r in inventory["resources"] if r["type"] == "aws_route53_zone"]
+
+
 def test_staging_plan_proves_legacy_aurora_auto_pause_scope(tmp_path):
     code, result, _ = run("staging", "staging-awake.json", tmp_path)
     assert code == 0, f"staging plan rejected: {failed_checks(result)}"

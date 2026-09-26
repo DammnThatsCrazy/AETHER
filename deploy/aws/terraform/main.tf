@@ -1172,7 +1172,7 @@ resource "aws_route53_record" "validation_cname" {
 resource "aws_route53_record" "kyber" {
   # Kyber is a workforce-only surface. No public DNS record is created unless
   # the operator explicitly enables an internal routing target.
-  count   = var.squarespace_hosted_zone_enabled && var.kyber_internal_dns_enabled && var.kyber_cname_target != "" ? 1 : 0
+  count   = local.product_dns_enabled && var.kyber_internal_dns_enabled && var.kyber_cname_target != "" ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "kyber.${var.amplify_domain_name}"
   type    = "CNAME"
@@ -1182,7 +1182,7 @@ resource "aws_route53_record" "kyber" {
 
 # Status page subdomain
 resource "aws_route53_record" "status" {
-  count   = var.squarespace_hosted_zone_enabled && !contains(keys(local.amplify_apps), "status") && var.status_cname_target != "" ? 1 : 0
+  count   = local.product_dns_enabled && !contains(keys(local.amplify_apps), "status") && var.status_cname_target != "" ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "status.${var.amplify_domain_name}"
   type    = "CNAME"

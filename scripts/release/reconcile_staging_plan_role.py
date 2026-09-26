@@ -29,6 +29,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / "config/staging_plan_iam_policy.yaml"
 DEFAULT_SUPPLEMENTAL_MANIFEST = ROOT / "config/terraform_plan_state_access_policy.yaml"
 VERIFY_SCRIPT = ROOT / "scripts/release/verify_effective_staging_apply_policy.py"
+STAGING_TFVARS = ROOT / "deploy/aws/terraform/profiles/staging.tfvars"
+HOSTED_ZONE_PREFIX = "arn:aws:route53:::hostedzone/"
 EXPECTED_ROLE = "AetherStagingPlan"
 EXPECTED_POLICY_NAME = "AetherStagingPlanContract"
 CONFIRMATION = "RECONCILE-STAGING-PLAN-IAM"
@@ -134,6 +136,12 @@ def _render_condition(statement: dict[str, Any], *, account_id: str) -> dict[str
     return rendered
 
 
+def staging_product_dns_zone(tfvars: Path = STAGING_TFVARS) -> str | None:
+    """The delegated staging DNS zone ARN from the staging profile, if any."""
+    match = re.search(r'^product_dns_zone_id\s*=\s*"(Z[A-Z0-9]+)"', tfvars.read_text(encoding="utf-8"), re.M)
+    return f"{HOSTED_ZONE_PREFIX}{match.group(1)}" if match else None
+
+
 def render_policy_document(manifest: dict[str, Any], *, account_id: str) -> dict[str, Any]:
     """Render the reviewed YAML contract as an account-bound IAM document."""
     if not ACCOUNT_PATTERN.fullmatch(account_id):
@@ -186,6 +194,21 @@ def render_policy_document(manifest: dict[str, Any], *, account_id: str) -> dict
         if condition:
             item["Condition"] = condition
         rendered.append(item)
+
+    # The plan role reads exactly the zone Terraform manages: a hosted-zone
+    # grant must name the profile's product_dns_zone_id (a replaced zone would
+    # otherwise leave the role reading the old one and fail every plan
+    # refresh). tests/unit/test_staging_plan_role_reconcile.py pins that the
+    # reviewed manifest grants it.
+    expected_zone = staging_product_dns_zone()
+    zone_grants = {
+        resource
+        for item in rendered
+        for resource in item["Resource"]
+        if resource.startswith(HOSTED_ZONE_PREFIX)
+    }
+    if zone_grants - ({expected_zone} if expected_zone else set()):
+        fail("staging plan IAM hosted-zone grants must match product_dns_zone_id in staging.tfvars")
 
     return {"Version": "2012-10-17", "Statement": rendered}
 

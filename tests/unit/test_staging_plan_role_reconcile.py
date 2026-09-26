@@ -205,3 +205,20 @@ def test_authority_registry_owns_the_reconciliation_workflow() -> None:
     infrastructure = next(item for item in registry["authorities"] if item["id"] == "infrastructure")
     assert ".github/workflows/reconcile-staging-plan-role.yml" in infrastructure["workflows"]
     assert "scripts/release/reconcile_staging_plan_role.py" in infrastructure["required_commands"]
+
+
+def test_plan_role_zone_grant_follows_the_staging_profile(monkeypatch) -> None:
+    """The plan role reads exactly the zone Terraform manages: a stale or
+    missing hosted-zone grant fails before anything is written."""
+    module = _module()
+    manifest = yaml.safe_load(
+        (ROOT / "config/staging_plan_iam_policy.yaml").read_text(encoding="utf-8")
+    )
+    rendered = module.render_policy_document(manifest, account_id="544471417928")
+    zone = module.staging_product_dns_zone()
+    assert zone and any(zone in statement["Resource"] for statement in rendered["Statement"])
+
+    monkeypatch.setattr(module, "staging_product_dns_zone", lambda: "arn:aws:route53:::hostedzone/ZREPLACED123")
+    with pytest.raises(SystemExit):
+        module.render_policy_document(manifest, account_id="544471417928")
+
