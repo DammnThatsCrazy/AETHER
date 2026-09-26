@@ -133,6 +133,7 @@ domains:
       frontend/olympus-marketing/**: [frontend-olympus-marketing]
       frontend/marketing/**: [frontend-aether-marketing, frontend-olympus-marketing]
       frontend/status/**: [frontend-status]
+      frontend/site/**: [frontend-site]
     minimum_lane: pr
   sdk:
     owner: sdk

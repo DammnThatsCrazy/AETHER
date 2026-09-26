@@ -115,6 +115,7 @@ def _selected_workspaces(
             "demo": "frontend/demo",
             "olympus-marketing": "frontend/olympus-marketing",
             "aether-marketing": "frontend/aether-marketing",
+            "site": "frontend/site",
         }
         selected.update(
             path
@@ -168,6 +169,7 @@ def select_builds(
         ("frontend/kyber", "kyber"),
         ("frontend/aether-marketing", "aether-marketing"),
         ("frontend/olympus-marketing", "olympus-marketing"),
+        ("frontend/site", "site"),
         ("frontend/docs", "docs"),
         ("frontend/demo", "demo"),
     ):
