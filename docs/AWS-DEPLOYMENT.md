@@ -70,7 +70,7 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:439c53e48452fb744949f52de83fa8b96a10dd26d9fd6247b828660fe55a6437"
+  "deploy/aws/terraform/": "sha256:d2585c7d9062be776a196643166bca617988ddb005d500919fcf383b52140de6"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -562,8 +562,9 @@ targets the main branch. Custom domain associations map each app to its
 canonical subdomain under `var.amplify_domain_name`. SSM parameters export
 Amplify app IDs and default domains for downstream consumption.
 
-Staging also gets a sixth, repository-unconnected app for per-PR previews of
-the Aether app (`enable_frontend_previews` in `profiles/staging.tfvars`).
+Staging can also get a sixth, repository-unconnected app for per-PR previews
+of the Aether app (`enable_frontend_previews` in `profiles/staging.tfvars`,
+currently off pending an Amplify app-limit increase).
 `frontend-preview.yml` deploys its `pr-<N>` branches and deletes them when the
 pull request closes. The same apply adds the preview domain's wildcard
 callback, logout and origin URLs to the staging Aether Auth0 application and
