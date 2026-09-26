@@ -648,7 +648,9 @@ the resource contract keeps hosted zones out of it. `product_dns_zone_id` in
 - the Amplify and ACM certificate validation CNAMEs (`product_dns_validation_cnames`).
 
 The apply role (`AetherStagingDeploy`) may change records in that one zone only.
-The plan role may only read it. See [Domain & DNS Readiness](DOMAIN-DNS-READINESS.md)
+The plan role may only read it. Both contract checkers
+(`check_staging_apply_policy.py`, `reconcile_staging_plan_role.py`) reject any
+hosted-zone grant other than `product_dns_zone_id` from `staging.tfvars`. See [Domain & DNS Readiness](DOMAIN-DNS-READINESS.md)
 for the delegation steps.
 
 **Production.** Squarespace remains the authoritative DNS provider for
