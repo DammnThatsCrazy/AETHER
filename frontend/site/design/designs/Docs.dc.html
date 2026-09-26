@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <script src="docs-content.js"></script>
+  <title>Aether docs</title>
+  <style>
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+    a { color: #3a6896; }
+    a:hover { color: #2d5373; }
+    @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; } }
+  </style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);" data-screen-label="Docs">
+  <header style="position: sticky; top: 0; z-index: 30; background: #f5f4f1; border-bottom: 1px solid #d8d6d0;">
+    <div style="padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1440px; margin: 0 auto;">
+      <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+        <a href="Docs.dc.html" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: #1a1a1e;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 20px; height: 20px;"><span style="font-size: 15px; font-weight: 500;">Aether</span><span style="font-size: 15px; color: #6b6a65;">Docs</span></a>
+        <span style="font-family: var(--font-mono); font-size: 11px; padding: 2px 7px; border-radius: 999px; background: rgba(201,151,90,0.16); border: 1px solid rgba(201,151,90,0.4); color: #8a6433;">0.1.0-alpha.0</span>
+      </div>
+      <button type="button" onClick="{{ openSearch }}" aria-label="Search docs" style="{{ searchBtnStyle }}" style-hover="background: #e2e0da; border-color: #c9c7c0;">
+        <span style="display: flex; align-items: center; gap: 8px;"><span style="font-family: var(--font-mono); color: #3a6896;">⌕</span><sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}"><span>Search {{ pageCount }} pages</span></sc-if></span>
+        <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}"><kbd style="font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border: 1px solid #d8d6d0; border-radius: 3px; color: #6b6a65; background: #f5f4f1;">⌘K</kbd></sc-if>
+      </button>
+      <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+        <nav aria-label="Site" style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+          <a href="Aether Home.dc.html" style="color: #6b6a65; text-decoration: none; padding: 8px;" style-hover="color: #1a1a1e;">Aether</a>
+          <a href="Status.dc.html" style="color: #6b6a65; text-decoration: none; padding: 8px; display: inline-flex; gap: 6px; align-items: center;" style-hover="color: #1a1a1e;"><span style="font-family: var(--font-mono); color: #6b9a7c;">●</span>Status</a>
+          <a href="Auth.dc.html?mode=signin" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; min-height: 36px; padding: 0 14px; box-sizing: border-box; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; background: #1a1a1e; color: #f5f4f1; border: 1px solid #1a1a1e;" style-hover="background: #2e2e34; border-color: #2e2e34; color: #f5f4f1;">Open the app<span style="font-family: var(--font-mono); color: #c9975a;">→</span></a>
+        </nav>
+      </sc-if>
+    </div>
+    <div role="tablist" aria-label="Documentation sections" style="max-width: 1440px; margin: 0 auto; padding: 0 12px; display: flex; gap: 2px; overflow-x: auto; border-top: 1px solid #e2e0da;">
+      <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+        <button type="button" role="tab" aria-selected="{{ t.sel }}" onClick="{{ t.go }}" style="{{ t.style }}" style-hover="color: #1a1a1e; background: #eceae5;"><span style="{{ t.glyphStyle }}">{{ t.glyph }}</span>{{ t.label }}<span style="font-family: var(--font-mono); font-size: 11px; color: #9c9b95;">{{ t.count }}</span></button>
+      </sc-for>
+    </div>
+    <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+      <button type="button" onClick="{{ toggleNav }}" aria-expanded="{{ navOpenStr }}" style="font-family: inherit; width: 100%; display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 0 20px; border: 0; border-top: 1px solid #d8d6d0; background: #eceae5; font-size: 13px; color: #1a1a1e; cursor: pointer;"><span style="display: flex; gap: 8px;"><span style="font-family: var(--font-mono);">≡</span><span style="color: #6b6a65;">{{ section.label }} /</span><span style="font-weight: 500;">{{ page.title }}</span></span><span style="font-family: var(--font-mono);">{{ navGlyph }}</span></button>
+    </sc-if>
+  </header>
+
+  <sc-if value="{{ stateBar }}" hint-placeholder-val="{{ false }}">
+    <div style="background: #1a1a1e; color: #e8e6e1; font-size: 12px;">
+      <div style="max-width: 1440px; margin: 0 auto; padding: 8px 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99; margin-right: 6px;">Design state</span>
+        <sc-for list="{{ stateChips }}" as="c" hint-placeholder-count="5"><button type="button" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</button></sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="{{ gridStyle }}">
+    <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
+      <nav aria-label="Documentation" style="{{ sidebarStyle }}">
+        <sc-for list="{{ nav }}" as="sec" hint-placeholder-count="6">
+          <div style="display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px;">
+            <button type="button" onClick="{{ sec.go }}" style="font-family: inherit; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65; padding: 0 10px 6px; background: transparent; border: 0; cursor: pointer; text-align: left;"><span style="{{ sec.glyphStyle }}">{{ sec.glyph }}</span>{{ sec.label }}</button>
+            <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="4">
+              <a href="{{ it.href }}" onClick="{{ it.go }}" aria-current="{{ it.current }}" style="{{ it.style }}" style-hover="background: #eceae5; color: #1a1a1e;">{{ it.label }}</a>
+            </sc-for>
+          </div>
+        </sc-for>
+      </nav>
+    </sc-if>
+
+    <main style="min-width: 0; padding: 28px clamp(20px, 4vw, 48px) 72px;">
+      <sc-if value="{{ isPrivate }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width: 720px; display: flex; flex-direction: column; gap: 14px; padding-top: 24px;">
+          <span style="font-family: var(--font-mono); font-size: 22px; color: #9c9b95;">○</span>
+          <h1 style="font-size: 28px; font-weight: 500; letter-spacing: -0.5px; margin: 0; color: #1a1a1e;">This page is not public</h1>
+          <p style="font-size: 15px; line-height: 1.6; color: #6b6a65; margin: 0;">It may be customer-only or internal. Public docs never include those pages in navigation, search, or the sitemap.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;"><button type="button" onClick="{{ goHome }}" style="font-family: inherit; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 42px; padding: 0 18px; border-radius: 6px; font-size: 14px; font-weight: 500; background: #1a1a1e; color: #f5f4f1; border: 1px solid #1a1a1e; cursor: pointer;">Go to the overview<span style="font-family: var(--font-mono); color: #c9975a;">→</span></button></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPage }}" hint-placeholder-val="{{ true }}">
+        <article style="max-width: 860px; display: flex; flex-direction: column; gap: 16px;">
+          <nav aria-label="Breadcrumb" style="font-size: 12px; color: #6b6a65; display: flex; gap: 6px; align-items: center;"><span style="{{ crumbGlyphStyle }}">{{ section.glyph }}</span><span>{{ section.label }}</span><span>/</span><span style="color: #1a1a1e;">{{ page.title }}</span><span style="margin-left: auto; font-family: var(--font-mono);">{{ position }}</span></nav>
+          <div style="{{ heroStyle }}">
+            <h1 style="font-size: clamp(28px, 4vw, 38px); font-weight: 500; letter-spacing: -0.8px; line-height: 1.1; margin: 0; color: #1a1a1e;">{{ page.title }}</h1>
+            <p style="font-size: 16px; line-height: 1.6; color: #4a4945; margin: 0; max-width: 700px;">{{ page.lead }}</p>
+          </div>
+
+          <sc-for list="{{ blocks }}" as="b" hint-placeholder-count="6">
+            <sc-if value="{{ b.isH }}"><h2 id="{{ b.id }}" style="{{ b.hStyle }}"><span style="{{ b.hDot }}"></span>{{ b.x }}</h2></sc-if>
+            <sc-if value="{{ b.isP }}"><p style="font-size: 14px; line-height: 1.75; margin: 0; max-width: 720px; color: #1a1a1e;"><sc-for list="{{ b.segs }}" as="s"><sc-if value="{{ s.code }}"><code style="font-size: 12px; padding: 1px 5px; border-radius: 4px; background: #eceae5; border: 1px solid #e2e0da;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></p></sc-if>
+            <sc-if value="{{ b.isList }}"><ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; max-width: 720px;"><sc-for list="{{ b.items }}" as="li"><li style="display: flex; gap: 10px; font-size: 14px; line-height: 1.6;"><span style="{{ b.bullet }}">●</span><span><sc-for list="{{ li }}" as="s"><sc-if value="{{ s.code }}"><code style="font-size: 12px; padding: 1px 5px; border-radius: 4px; background: #eceae5;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></span></li></sc-for></ul></sc-if>
+            <sc-if value="{{ b.isCode }}">
+              <div style="border: 1px solid #2a2a2f; border-radius: 8px; background: #111114; overflow: hidden; max-width: 760px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 6px 14px; border-bottom: 1px solid #2a2a2f;"><span style="{{ b.langStyle }}">● {{ b.lang }}</span><button type="button" onClick="{{ b.copy }}" style="font-family: var(--font-mono); font-size: 11px; color: #e8e6e1; background: transparent; border: 1px solid #2a2a2f; border-radius: 6px; min-height: 26px; padding: 0 9px; cursor: pointer;" style-hover="background: #1f1f24;">{{ b.copyLabel }}</button></div>
+                <pre style="margin: 0; padding: 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #e8e6e1;">{{ b.x }}</pre>
+              </div>
+            </sc-if>
+            <sc-if value="{{ b.isTable }}">
+              <div style="border: 1px solid #d8d6d0; border-radius: 8px; overflow-x: auto; max-width: 860px;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                  <thead><tr style="{{ b.headStyle }}"><sc-for list="{{ b.head }}" as="h"><th style="text-align: left; padding: 9px 12px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;">{{ h }}</th></sc-for></tr></thead>
+                  <tbody><sc-for list="{{ b.rows }}" as="r"><tr style="border-top: 1px solid #e2e0da;"><sc-for list="{{ r }}" as="cell"><td style="padding: 9px 12px; vertical-align: top; line-height: 1.5;"><sc-for list="{{ cell }}" as="s"><sc-if value="{{ s.hasLogo }}"><span style="display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px 1px 3px; margin: 1px 2px 1px 0; border-radius: 999px; background: #ffffff; border: 1px solid #e2e0da; white-space: nowrap; vertical-align: middle;"><img src="{{ s.logo }}" alt="" style="width: 14px; height: 14px; object-fit: contain;"><span style="font-weight: 500;">{{ s.t }}</span></span></sc-if><sc-if value="{{ s.code }}"><code style="font-size: 12px; padding: 1px 5px; border-radius: 4px; background: #eceae5; white-space: nowrap;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></td></sc-for></tr></sc-for></tbody>
+                </table>
+              </div>
+            </sc-if>
+            <sc-if value="{{ b.isCallout }}"><div role="note" style="{{ b.calloutStyle }}"><span style="{{ b.calloutGlyphStyle }}">{{ b.glyph }}</span><span style="display: flex; flex-direction: column; gap: 3px;"><span style="font-weight: 500; font-size: 13px;">{{ b.title }}</span><span style="font-size: 13px; line-height: 1.55; color: #3a3935;"><sc-for list="{{ b.segs }}" as="s"><sc-if value="{{ s.code }}"><code style="font-size: 12px;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></span></span></div></sc-if>
+            <sc-if value="{{ b.isCards }}">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; max-width: 860px;">
+                <sc-for list="{{ b.cards }}" as="c">
+                  <button type="button" onClick="{{ c.go }}" style="{{ c.style }}" style-hover="background: #e2e0da; border-color: #c9c7c0;">
+                    <span style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span style="{{ c.chip }}">{{ c.g }}</span><sc-if value="{{ c.linked }}"><span style="{{ c.arrowStyle }}">→</span></sc-if></span>
+                    <span style="font-size: 15px; font-weight: 500; color: #1a1a1e; margin-top: auto;">{{ c.title }}</span>
+                    <span style="font-size: 13px; line-height: 1.5; color: #6b6a65;"><sc-for list="{{ c.segs }}" as="s"><sc-if value="{{ s.code }}"><code style="font-size: 12px;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ b.isSteps }}">
+              <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid #d8d6d0; border-radius: 8px; overflow: hidden; max-width: 760px;">
+                <sc-for list="{{ b.steps }}" as="st"><li style="display: grid; grid-template-columns: 36px minmax(0,1fr); gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e0da; align-items: start;"><span style="{{ st.numStyle }}">{{ st.n }}</span><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 14px; font-weight: 500;">{{ st.title }}</span><span style="font-size: 13px; line-height: 1.55; color: #6b6a65;"><sc-for list="{{ st.segs }}" as="s"><sc-if value="{{ s.code }}"><code style="font-size: 12px;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></span></span></li></sc-for>
+              </ol>
+            </sc-if>
+            <sc-if value="{{ b.isFlow }}">
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; max-width: 860px; padding: 14px; border: 1px solid #2a2a2f; border-radius: 8px; background: #1a1a1e;">
+                <sc-for list="{{ b.flow }}" as="f"><div style="display: flex; align-items: center; gap: 6px;"><div style="{{ f.style }}"><span style="font-family: var(--font-mono); font-size: 12px; color: #e8e6e1;">{{ f.label }}</span><span style="font-size: 11px; color: #a09f99;"><sc-for list="{{ f.segs }}" as="s"><sc-if value="{{ s.code }}"><code style="font-size: 11px; color: #e8e6e1;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></span></div><sc-if value="{{ f.arrow }}"><span style="font-family: var(--font-mono); color: #6b6a65;">→</span></sc-if></div></sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ b.isKv }}">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; max-width: 860px;">
+                <sc-for list="{{ b.kv }}" as="k"><div style="{{ k.style }}"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;"><sc-for list="{{ k.ks }}" as="s">{{ s.t }}</sc-for></span><span style="font-size: 14px; font-weight: 500;"><sc-for list="{{ k.vs }}" as="s"><sc-if value="{{ s.code }}"><code style="font-size: 13px;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></span></div></sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ b.isDetails }}">
+              <div style="display: flex; flex-direction: column; gap: 6px; max-width: 760px;">
+                <sc-for list="{{ b.details }}" as="d"><details style="{{ d.style }}"><summary style="cursor: pointer; font-size: 14px; font-weight: 500; padding: 12px 14px; display: flex; gap: 10px; align-items: center;"><span style="{{ d.gStyle }}">+</span>{{ d.q }}</summary><div style="padding: 0 14px 14px 36px; font-size: 13px; line-height: 1.6; color: #3a3935;"><sc-for list="{{ d.segs }}" as="s"><sc-if value="{{ s.code }}"><code style="font-size: 12px;">{{ s.t }}</code></sc-if><sc-if value="{{ s.plain }}">{{ s.t }}</sc-if></sc-for></div></details></sc-for>
+              </div>
+            </sc-if>
+          </sc-for>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 28px; max-width: 760px;">
+            <button type="button" onClick="{{ prev.go }}" disabled="{{ prev.none }}" style="{{ prev.style }}" style-hover="background: #eceae5; border-color: #c9c7c0;"><span style="font-size: 12px; color: #6b6a65;">← Previous</span><span style="font-size: 14px; font-weight: 500; color: #1a1a1e;">{{ prev.label }}</span></button>
+            <button type="button" onClick="{{ next.go }}" disabled="{{ next.none }}" style="{{ next.style }}" style-hover="background: #eceae5; border-color: #c9c7c0;"><span style="font-size: 12px; color: #6b6a65;">Next →</span><span style="font-size: 14px; font-weight: 500; color: #1a1a1e;">{{ next.label }}</span></button>
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: #9c9b95;">tip · press [ and ] to move between pages</span>
+        </article>
+      </sc-if>
+    </main>
+
+    <sc-if value="{{ showOutline }}" hint-placeholder-val="{{ true }}">
+      <aside aria-label="On this page" style="position: sticky; top: 100px; align-self: start; padding: 28px 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65; margin-bottom: 4px;">On this page</span>
+        <sc-for list="{{ outline }}" as="o" hint-placeholder-count="4"><a href="{{ o.href }}" style="{{ o.style }}" style-hover="color: #1a1a1e;">{{ o.label }}</a></sc-for>
+        <div style="{{ relatedStyle }}"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">In {{ section.label }}</span><span style="font-size: 12px; color: #6b6a65;">{{ sectionCount }} pages</span></div>
+      </aside>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{ searchOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeSearch }}" style="position: fixed; inset: 0; z-index: 50; background: rgba(17,17,20,0.6); display: flex; justify-content: center; align-items: flex-start; padding: 10vh 16px 16px;">
+      <div role="dialog" aria-modal="true" aria-label="Search docs" onClick="{{ stop }}" style="width: 100%; max-width: 620px; background: #f5f4f1; border: 1px solid #d8d6d0; border-radius: 8px; box-shadow: 0 8px 16px rgba(26,26,30,0.06), 0 24px 64px rgba(26,26,30,0.12); overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid #d8d6d0;">
+          <span style="font-family: var(--font-mono); color: #3a6896;">⌕</span>
+          <input ref="{{ searchRef }}" value="{{ query }}" onChange="{{ onQuery }}" onKeyDown="{{ onKey }}" aria-label="Search" placeholder="Search signals, connectors, journeys…" style="flex: 1; font-family: inherit; font-size: 15px; height: 48px; border: 0; background: transparent; color: #1a1a1e; outline: none;">
+          <kbd style="font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border: 1px solid #d8d6d0; border-radius: 3px; color: #6b6a65;">esc</kbd>
+        </div>
+        <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
+          <ul role="listbox" style="list-style: none; margin: 0; padding: 6px; max-height: 380px; overflow-y: auto;">
+            <sc-for list="{{ results }}" as="r" hint-placeholder-count="5">
+              <li role="option" aria-selected="{{ r.sel }}" onClick="{{ r.go }}" onMouseEnter="{{ r.hover }}" style="{{ r.style }}">
+                <span style="display: flex; justify-content: space-between; gap: 8px;"><span style="font-size: 14px; font-weight: 500; display: flex; gap: 8px;"><span style="{{ r.glyphStyle }}">{{ r.glyph }}</span>{{ r.title }}</span><span style="font-size: 12px; color: #6b6a65;">{{ r.section }}</span></span>
+                <span style="font-size: 12px; line-height: 1.5; color: #6b6a65; padding-left: 22px;">{{ r.snippet }}</span>
+              </li>
+            </sc-for>
+          </ul>
+        </sc-if>
+        <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 24px 18px; display: flex; flex-direction: column; gap: 8px;">
+            <span style="font-size: 14px; font-weight: 500;">No public pages match “{{ query }}”</span>
+            <span style="font-size: 13px; line-height: 1.55; color: #6b6a65;">Try “consent”, “journey”, “Stripe”, or an event like <code style="font-size: 12px;">order_completed</code>.</span>
+            <a href="Contact.dc.html?brand=aether&amp;type=developer" style="display: inline-flex; gap: 6px; font-size: 13px; font-weight: 500; color: #4f7a5e; text-decoration: none;">Ask an engineer<span style="font-family: var(--font-mono);">→</span></a>
+          </div>
+        </sc-if>
+        <div style="display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid #d8d6d0; background: #eceae5; font-family: var(--font-mono); font-size: 11px; color: #6b6a65;"><span>↑ ↓ move</span><span>↵ open</span><span>esc close</span></div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showStateBar&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    let q = {};
+    try { q = Object.fromEntries(new URLSearchParams(window.location.search)); } catch (e) {}
+    const st = q.state || 'page';
+    const alias = { quickstart: 'quickstart-web', how: 'how-it-works', concepts: 'signals' };
+    this.state = { w: typeof window !== 'undefined' ? window.innerWidth : 1280, st, page: alias[q.page] || q.page || 'overview', navOpen: st === 'mobile-nav', query: st === 'no-results' ? 'kafka' : st === 'search' ? 'journey' : '', sel: 0, copied: -1, ready: !!window.AETHER_DOCS };
+    this.searchRef = React.createRef();
+  }
+  componentDidMount() {
+    this.onR = () => this.setState({ w: window.innerWidth });
+    this.onK = e => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.open(); return; }
+      const tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === ']') this.step(1); if (e.key === '[') this.step(-1);
+    };
+    window.addEventListener('resize', this.onR); window.addEventListener('keydown', this.onK);
+    if (!this.state.ready) this.poll = setInterval(() => { if (window.AETHER_DOCS) { clearInterval(this.poll); this.setState({ ready: true }); } }, 60);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this.onR); window.removeEventListener('keydown', this.onK); clearInterval(this.poll); }
+  order() { const D = window.AETHER_DOCS; return D ? D.sections.flatMap(s => s.pages) : []; }
+  step(d) { const o = this.order(); const i = o.indexOf(this.state.page); const n = o[i + d]; if (n) this.goto(n); }
+  open() { this.setState({ st: 'search', sel: 0 }, () => setTimeout(() => this.searchRef.current && this.searchRef.current.focus(), 0)); }
+  goto(page) { this.setState({ page, st: 'page', navOpen: false }); try { window.scrollTo(0, 0); } catch (e) {} }
+  renderVals() {
+    const s = this.state;
+    const D = window.AETHER_DOCS || { sections: [{ id: 'about', label: 'About Aether', glyph: '◈', color: 'cobalt', pages: ['overview'] }], pages: { overview: { title: 'Overview', lead: 'Loading…', blocks: [] } } };
+    const A = { cobalt: ['#3a6896', 'rgba(58,104,150,0.12)', '#2d5373'], sage: ['#6b9a7c', 'rgba(107,154,124,0.16)', '#4f7a5e'], ochre: ['#c9975a', 'rgba(201,151,90,0.18)', '#8a6433'], ember: ['#b5564a', 'rgba(181,86,74,0.12)', '#a3473c'], solar: ['#a88a5a', 'rgba(168,138,90,0.18)', '#7d6538'], steel: ['#5a85a8', 'rgba(90,133,168,0.14)', '#3f6a8c'], ash: ['#9c9b95', 'rgba(156,155,149,0.18)', '#6b6a65'] };
+    const cycle = ['cobalt', 'sage', 'ochre', 'solar', 'steel', 'ember'];
+    const segs = str => String(str || '').split(/(`[^`]+`)/g).filter(Boolean).map(t => t.startsWith('`') ? { t: t.slice(1, -1), code: true, plain: false } : { t, code: false, plain: true });
+    const LOGOS = { HubSpot: 'hubspot', Salesforce: 'salesforce', Shopify: 'shopify', Stripe: 'stripe', Klaviyo: 'klaviyo', Segment: 'segment', PostHog: 'posthog', GA4: 'googleanalytics', 'Google Analytics': 'googleanalytics', Zendesk: 'zendesk', Intercom: 'intercom', Jira: 'jira', Linear: 'linear', Slack: 'slack' };
+    const logoRe = new RegExp('(' + Object.keys(LOGOS).sort((a, b) => b.length - a.length).join('|') + ')', 'g');
+    const logoSegs = str => segs(str).flatMap(sg => sg.code ? [sg] : sg.t.split(logoRe).filter(Boolean).map(t => LOGOS[t] ? { t, hasLogo: true, logo: 'assets/brand/' + LOGOS[t] + '.svg', code: false, plain: false } : { t, hasLogo: false, code: false, plain: true }));
+    const wide = s.w >= 860, xwide = s.w >= 1180;
+    const order = D.sections.flatMap(x => x.pages);
+    const pageId = D.pages[s.page] ? s.page : 'overview';
+    const page = D.pages[pageId];
+    const section = D.sections.find(x => x.pages.includes(pageId)) || D.sections[0];
+    const acc = A[section.color];
+    const idx = order.indexOf(pageId);
+    const tabs = D.sections.map(x => { const on = x.id === section.id; const c = A[x.color]; return { label: x.label, glyph: x.glyph, count: x.pages.length, sel: on ? 'true' : 'false', go: () => this.goto(x.pages[0]),
+      glyphStyle: 'font-family: var(--font-mono); color: ' + c[0] + ';',
+      style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 13px; font-weight: 500; padding: 10px 12px; border: 0; background: transparent; cursor: pointer; border-bottom: 2px solid ' + (on ? c[0] : 'transparent') + '; color: ' + (on ? '#1a1a1e' : '#6b6a65') + '; transition: color 120ms, background-color 120ms;' }; });
+    const nav = D.sections.map(x => { const c = A[x.color]; return { label: x.label, glyph: x.glyph, go: () => this.goto(x.pages[0]), glyphStyle: 'font-family: var(--font-mono); font-size: 12px; color: ' + c[0] + ';',
+      items: x.pages.map(pid => ({ label: (D.pages[pid] || {}).title || pid, href: '#' + pid, current: pid === pageId ? 'page' : 'false', go: e => { e.preventDefault(); this.goto(pid); },
+        style: 'font-size: 13px; text-decoration: none; padding: 6px 10px; border-radius: 6px; transition: background-color 120ms; ' + (pid === pageId ? 'background: ' + c[1] + '; color: #1a1a1e; font-weight: 500; box-shadow: inset 2px 0 0 ' + c[0] + ';' : 'color: #6b6a65;') })) }; });
+    let hi = 0, ci = 0;
+    const blocks = (page.blocks || []).map((b, bi) => {
+      const o = { isH: b.t === 'h', isP: b.t === 'p', isList: b.t === 'list', isCode: b.t === 'code', isTable: b.t === 'table', isCallout: b.t === 'callout', isCards: b.t === 'cards', isSteps: b.t === 'steps', isFlow: b.t === 'flow', isKv: b.t === 'kv', isDetails: b.t === 'details' };
+      if (o.isDetails) o.details = b.items.map((d, i) => { const a = A[cycle[i % cycle.length]]; return { q: d.q, segs: segs(d.a), gStyle: 'font-family: var(--font-mono); width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; background: ' + a[1] + '; color: ' + a[2] + ';', style: 'border-radius: 10px; background: #eceae5; border: 1px solid #d8d6d0; border-left: 3px solid ' + a[0] + ';' }; });
+      if (o.isH) { const c = A[cycle[hi++ % cycle.length]]; Object.assign(o, { x: b.x, id: 'h-' + bi, hStyle: 'font-size: 21px; font-weight: 500; letter-spacing: -0.33px; margin: 18px 0 0; color: #1a1a1e; display: flex; align-items: center; gap: 10px; scroll-margin-top: 110px;', hDot: 'width: 8px; height: 8px; border-radius: 2px; background: ' + c[0] + '; flex-shrink: 0;' }); }
+      if (o.isP) o.segs = segs(b.x);
+      if (o.isList) Object.assign(o, { items: b.items.map(segs), bullet: 'font-family: var(--font-mono); font-size: 8px; color: ' + acc[0] + '; padding-top: 6px;' });
+      if (o.isCode) { const k = bi; Object.assign(o, { x: b.x, lang: b.lang, langStyle: 'font-family: var(--font-mono); font-size: 11px; color: ' + (A[cycle[ci++ % cycle.length]][0]) + ';', copyLabel: s.copied === k ? '✓ copied' : 'copy', copy: () => { try { navigator.clipboard.writeText(b.x); } catch (e) {} this.setState({ copied: k }); setTimeout(() => this.setState({ copied: -1 }), 1400); } }); }
+      if (o.isTable) Object.assign(o, { head: b.head, rows: b.rows.map(r => r.map(logoSegs)), headStyle: 'background: ' + acc[1] + '; color: ' + acc[2] + ';' });
+      if (o.isCallout) { const tone = { info: A.cobalt, warn: A.ochre, ok: A.sage, risk: A.ember }[b.tone] || A.cobalt; const g = { info: '◈', warn: '▲', ok: '✓', risk: '■' }[b.tone] || '◈';
+        Object.assign(o, { title: b.title, glyph: g, segs: segs(b.x), calloutStyle: 'display: flex; gap: 12px; padding: 12px 14px; border-radius: 8px; max-width: 760px; background: ' + tone[1] + '; border: 1px solid ' + tone[0] + '55; color: ' + tone[2] + ';', calloutGlyphStyle: 'font-family: var(--font-mono); color: ' + tone[0] + '; padding-top: 1px;' }); }
+      if (o.isCards) o.cards = b.items.map((c, i) => { const a = A[c.c] || A.cobalt; const big = b.items.length % 2 === 1 && i === 0; return { g: c.g, title: c.title, segs: segs(c.x), linked: !!c.link, go: () => c.link && this.goto(c.link),
+        chip: 'min-width: 32px; height: 32px; padding: 0 6px; box-sizing: border-box; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: ' + (c.g.length > 1 ? 11 : 16) + 'px; font-weight: 500; color: ' + a[2] + '; background: ' + a[1] + ';',
+        arrowStyle: 'font-family: var(--font-mono); color: ' + a[0] + ';',
+        style: 'font-family: inherit; text-align: left; flex: 1 1 ' + (big ? 360 : 220) + 'px; min-height: 138px; box-sizing: border-box; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; background: #eceae5; border: 1px solid #d8d6d0; border-top: 3px solid ' + a[0] + '; cursor: ' + (c.link ? 'pointer' : 'default') + '; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1);' }; });
+      if (o.isSteps) o.steps = b.items.map((x, i) => { const a = A[cycle[i % cycle.length]]; return { n: String(i + 1).padStart(2, '0'), title: x.title, segs: segs(x.x), numStyle: 'font-family: var(--font-mono); font-size: 12px; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: ' + a[1] + '; color: ' + a[2] + ';' }; });
+      if (o.isFlow) o.flow = b.items.map(([label, sub], i) => { const a = A[cycle[i % cycle.length]]; return { label, segs: segs(sub), arrow: i < b.items.length - 1, style: 'display: flex; flex-direction: column; gap: 3px; padding: 8px 11px; border-radius: 6px; background: #111114; border: 1px solid #2a2a2f; border-top: 2px solid ' + a[0] + ';' }; });
+      if (o.isKv) o.kv = b.items.map(([k, v], i) => { const a = A[cycle[i % cycle.length]]; return { ks: segs(k), vs: segs(v), style: 'flex: 1 1 180px; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 8px; background: ' + a[1] + '; border: 1px solid ' + a[0] + '40;' }; });
+      return o;
+    });
+    const outline = (page.blocks || []).map((b, bi) => b.t === 'h' ? { href: '#h-' + bi, label: b.x } : null).filter(Boolean).map((o, i) => ({ ...o, style: 'text-decoration: none; padding: 3px 0 3px 10px; border-left: 2px solid ' + (i === 0 ? acc[0] + '; color: #1a1a1e;' : '#e2e0da; color: #6b6a65;') }));
+    const IDX = order.map(pid => { const pg = D.pages[pid]; const sec = D.sections.find(x => x.pages.includes(pid)); const text = (pg.blocks || []).map(b => [b.x, b.title, (b.items || []).map(it => typeof it === 'string' ? it : Array.isArray(it) ? it.join(' ') : [it.title, it.x].join(' ')).join(' '), (b.rows || []).map(r => r.join(' ')).join(' '), (b.items || []).map(it => it && it.q ? it.q + ' ' + it.a : '').join(' ')].join(' ')).join(' ');
+      return { pid, title: pg.title, section: sec.label, glyph: sec.glyph, c: A[sec.color][0], text: (pg.title + ' ' + pg.lead + ' ' + text).replace(/`/g, ''), lead: pg.lead }; });
+    const ql = s.query.trim().toLowerCase();
+    const res = (ql ? IDX.filter(r => r.text.toLowerCase().includes(ql)) : IDX.slice(0, 6)).slice(0, 8).map(r => { if (!ql) return { ...r, snippet: r.lead }; const i = r.text.toLowerCase().indexOf(ql); return { ...r, snippet: (i > 40 ? '…' : '') + r.text.slice(Math.max(0, i - 40), i + 90) + '…' }; });
+    const sel = Math.min(s.sel, Math.max(0, res.length - 1));
+    const searchOpen = s.st === 'search' || s.st === 'no-results';
+    const nb = (k, dir) => { const pid = order[idx + dir]; const base = 'font-family: inherit; border: 1px solid #d8d6d0; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 4px; background: transparent; cursor: pointer; text-align: ' + (dir > 0 ? 'right; align-items: flex-end;' : 'left; align-items: flex-start;') + ' transition: background-color 120ms;';
+      return pid ? { label: D.pages[pid].title, none: false, go: () => this.goto(pid), style: base } : { label: '—', none: true, go: () => {}, style: base + ' opacity: 0.5; cursor: default;' }; };
+    const chips = [['page', 'Page'], ['search', 'Search'], ['no-results', 'No results'], ['mobile-nav', 'Mobile nav'], ['private', 'Not public']];
+    return {
+      stateBar: (this.props.showStateBar ?? true) && !/[?&]bar=0/.test(window.location.search),
+      stateChips: chips.map(([k, label]) => ({ label, go: () => k === 'search' ? (this.setState({ query: 'journey' }), this.open()) : this.setState({ st: k, navOpen: k === 'mobile-nav', query: k === 'no-results' ? 'kafka' : s.query }), style: 'font-family: inherit; font-size: 12px; padding: 4px 9px; border-radius: 4px; cursor: pointer; border: 1px solid ' + (k === s.st ? '#e8e6e1; background: #e8e6e1; color: #1a1a1e;' : '#2a2a2f; background: transparent; color: #e8e6e1;') })),
+      wide, narrow: !wide, pageCount: order.length,
+      toggleNav: () => this.setState({ navOpen: !s.navOpen }), navOpenStr: s.navOpen ? 'true' : 'false', navGlyph: s.navOpen ? '✕' : '⌄',
+      searchBtnStyle: 'font-family: inherit; flex: ' + (wide ? '0 1 360px' : '0 0 auto') + '; display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 36px; padding: 0 10px; border: 1px solid #d8d6d0; border-radius: 6px; background: #eceae5; color: #6b6a65; font-size: 13px; cursor: pointer; min-width: 44px; transition: background-color 120ms;',
+      tabs, nav, section, page, blocks, outline, sectionCount: section.pages.length,
+      position: String(idx + 1).padStart(2, '0') + ' / ' + order.length,
+      crumbGlyphStyle: 'font-family: var(--font-mono); color: ' + acc[0] + ';',
+      heroStyle: 'display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; border-radius: 8px; background: ' + acc[1] + '; border: 1px solid ' + acc[0] + '40; border-left: 3px solid ' + acc[0] + ';',
+      relatedStyle: 'margin-top: 18px; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; background: ' + acc[1] + ';',
+      openSearch: () => this.open(), closeSearch: () => this.setState({ st: 'page' }), stop: e => e.stopPropagation(), goHome: () => this.goto('overview'),
+      searchRef: this.searchRef, query: s.query,
+      onQuery: e => this.setState({ query: e.target.value, sel: 0 }),
+      onKey: e => {
+        if (e.key === 'Escape') this.setState({ st: 'page' });
+        else if (e.key === 'ArrowDown') { e.preventDefault(); this.setState({ sel: Math.min(sel + 1, res.length - 1) }); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); this.setState({ sel: Math.max(sel - 1, 0) }); }
+        else if (e.key === 'Enter' && res[sel]) this.goto(res[sel].pid);
+      },
+      searchOpen, hasResults: res.length > 0, noResults: res.length === 0,
+      results: res.map((r, i) => ({ ...r, sel: i === sel ? 'true' : 'false', go: () => this.goto(r.pid), hover: () => this.setState({ sel: i }), glyphStyle: 'font-family: var(--font-mono); color: ' + r.c + '; width: 14px;',
+        style: 'padding: 10px 12px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; ' + (i === sel ? 'background: #eceae5; box-shadow: inset 2px 0 0 ' + r.c + ';' : '') })),
+      showSidebar: wide || s.navOpen, showOutline: xwide && s.st !== 'private',
+      gridStyle: 'max-width: 1440px; margin: 0 auto; display: grid; grid-template-columns: ' + (xwide ? '250px minmax(0,1fr) 220px' : wide ? '250px minmax(0,1fr)' : 'minmax(0,1fr)') + ';',
+      sidebarStyle: wide ? 'position: sticky; top: 100px; align-self: start; height: calc(100vh - 100px); overflow-y: auto; padding: 20px 12px; border-right: 1px solid #d8d6d0; box-sizing: border-box;' : 'padding: 16px 12px 4px; border-bottom: 1px solid #d8d6d0; background: #f5f4f1;',
+      isPage: s.st !== 'private' && !(!wide && s.navOpen), isPrivate: s.st === 'private',
+      prev: nb('prev', -1), next: nb('next', 1),
+    };
+  }
+}
+</script>
+</body>
+</html>

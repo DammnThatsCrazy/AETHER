@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <title>Legal — Olympus Labs</title>
+  <style>
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+    a { color: #3a6896; }
+    a:hover { color: #2d5373; }
+    @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; } }
+  </style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);" data-screen-label="Legal">
+  <dc-import name="Site Header" brand="olympus" active="" hint-size="100%,56px"></dc-import>
+  <main style="max-width: 1200px; margin: 0 auto; padding: clamp(32px, 6vw, 64px) 24px 72px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 32px; align-items: start;">
+    <aside style="display: flex; flex-direction: column; gap: 14px; position: sticky; top: 72px; max-width: 280px;">
+      <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">Legal</span>
+      <div role="tablist" aria-label="Legal documents" style="display: flex; flex-direction: column; gap: 6px;">
+        <sc-for list="{{ docs }}" as="d" hint-placeholder-count="2"><button type="button" role="tab" aria-selected="{{ d.sel }}" onClick="{{ d.go }}" style="{{ d.style }}" style-hover="{{ d.hover }}"><span style="{{ d.gStyle }}">{{ d.g }}</span>{{ d.label }}</button></sc-for>
+      </div>
+      <nav aria-label="On this page" style="display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid #d8d6d0;">
+        <sc-for list="{{ outline }}" as="o" hint-placeholder-count="6"><a href="{{ o.href }}" style="font-size: 13px; color: #6b6a65; text-decoration: none; padding: 4px 0;" style-hover="color: #1a1a1e;">{{ o.label }}</a></sc-for>
+      </nav>
+    </aside>
+    <article style="grid-column: span 3; min-width: 0; max-width: 760px; display: flex; flex-direction: column; gap: 20px;">
+      <sc-if value="{{ flags }}" hint-placeholder-val="{{ true }}">
+        <div role="note" style="display: flex; gap: 10px; align-items: baseline; padding: 12px 16px; border: 1px dashed #c9975a; border-radius: 10px; font-size: 13px; line-height: 1.55; background: rgba(201,151,90,0.08);"><span style="font-family: var(--font-mono); color: #8a6433;">▲</span><span><span style="font-weight: 500;">Draft for counsel.</span> This page is a structure with plain-language summaries. It is not in force and is not legal advice. Counsel must supply the final text before launch.</span></div>
+      </sc-if>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="display: inline-flex; align-items: center; gap: 10px;"><span style="{{ headChip }}">{{ doc.g }}</span><span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65;">last updated · {{ doc.updated }}</span></span>
+        <h1 style="font-size: clamp(32px, 4.4vw, 44px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.08; margin: 0;">{{ doc.title }}</h1>
+        <p style="font-size: 16px; line-height: 1.6; color: #4a4945; margin: 0;">{{ doc.lead }}</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+        <sc-for list="{{ doc.summary }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"><span style="{{ s.gStyle }}">{{ s.g }}</span><span style="font-size: 13px; line-height: 1.5;">{{ s.x }}</span></div></sc-for>
+      </div>
+      <sc-for list="{{ doc.sections }}" as="sec" hint-placeholder-count="6">
+        <section id="{{ sec.id }}" style="display: flex; flex-direction: column; gap: 8px; padding-top: 18px; border-top: 1px solid #e2e0da;">
+          <h2 style="font-size: 20px; font-weight: 500; letter-spacing: -0.3px; margin: 0; display: flex; gap: 10px; align-items: baseline;"><span style="{{ sec.nStyle }}">{{ sec.n }}</span>{{ sec.title }}</h2>
+          <p style="font-size: 14px; line-height: 1.7; margin: 0; color: #3a3935;">{{ sec.x }}</p>
+        </section>
+      </sc-for>
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px; border-radius: 12px; background: #eceae5; border: 1px solid #d8d6d0;">
+        <span style="font-size: 14px;">Questions about this document?</span>
+        <a href="mailto:contact@olympuslabsml.com" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; background: #2d5373; color: #f5f4f1;" style-hover="background: #3a6896; color: #f5f4f1;"><span style="font-family: var(--font-mono);">✉</span>contact@olympuslabsml.com</a>
+      </div>
+    </article>
+  </main>
+  <dc-import name="Site Footer" hint-size="100%,300px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showReviewFlags&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    let d = 'privacy';
+    try { d = new URLSearchParams(window.location.search).get('doc') || (window.location.hash.includes('terms') ? 'terms' : 'privacy'); } catch (e) {}
+    this.state = { doc: d === 'terms' ? 'terms' : 'privacy' };
+  }
+  renderVals() {
+    const C = { cobalt: ['#3a6896', '#2d5373', 'rgba(58,104,150,0.12)'], sage: ['#6b9a7c', '#4f7a5e', 'rgba(107,154,124,0.15)'], ochre: ['#c9975a', '#8a6433', 'rgba(201,151,90,0.16)'], ember: ['#b5564a', '#a3473c', 'rgba(181,86,74,0.12)'], steel: ['#5a85a8', '#3f6a8c', 'rgba(90,133,168,0.14)'], solar: ['#a88a5a', '#7d6538', 'rgba(168,138,90,0.16)'] };
+    const D = {
+      privacy: { g: '✓', c: C.sage, title: 'Privacy and data use', label: 'Privacy and data use', updated: 'draft', lead: 'How Olympus Labs handles personal information on its public sites, and how Aether processes customer data on a customer’s behalf.',
+        summary: [['✓', C.sage, 'Customers own their data. Aether processes it on their behalf.'], ['⬡', C.cobalt, 'Tenant data never crosses tenants.'], ['■', C.ember, 'No selling of personal information.']],
+        sections: [['scope', 'Scope', 'This notice covers the Olympus Labs and Aether public websites, documentation, status page, and contact forms. Processing inside a customer’s Aether tenant is governed by that customer’s agreement.'], ['collect', 'What is collected', 'Information you submit through contact and sign-up forms, and limited site analytics after consent. Aether SDKs deployed by customers collect only what the customer configures and the purposes a person grants.'], ['use', 'How it is used', 'To answer inquiries, provide the service, secure it, and improve it. Contact details are used only to reply unless you opt in to more.'], ['roles', 'Controller and processor', 'For public-site data, Olympus Labs is the controller. For data inside a tenant, the customer is the controller and Olympus Labs acts as processor.'], ['share', 'Sharing and sub-processors', 'Shared only with service providers needed to run the service, such as payment processing through Stripe. A sub-processor list is available on request.'], ['retention', 'Retention and deletion', 'Kept only as long as needed. Deleting operational data removes raw customer data and stops ingestion.'], ['rights', 'Your rights', 'Depending on where you live, you may request access, correction, deletion, or a copy of your information.'], ['contact', 'Contact', 'Send privacy requests to contact@olympuslabsml.com.']] },
+      terms: { g: '◈', c: C.cobalt, title: 'Terms and use', label: 'Terms and use', updated: 'draft', lead: 'The terms that govern use of the Olympus Labs and Aether websites and, where no separate agreement exists, the Aether service.',
+        summary: [['◈', C.cobalt, 'A signed customer agreement takes precedence over these terms.'], ['▲', C.ochre, 'Aether is pre-production private alpha.'], ['■', C.ember, 'Prohibited uses include covert monitoring and unlawful targeting.']],
+        sections: [['acceptance', 'Acceptance', 'Using the sites or service means accepting these terms. A signed agreement with Olympus Labs replaces them where the two conflict.'], ['service', 'The service', 'Aether is offered in pre-production private alpha. Features may change, and availability is not guaranteed.'], ['accounts', 'Accounts and keys', 'You are responsible for your account, the keys you create, and what is sent with them. Keep server keys out of client code.'], ['acceptable', 'Acceptable use', 'Do not use the service for covert monitoring of people, political manipulation, unauthorized enrichment, unlawful targeting, or to access another tenant’s data.'], ['data', 'Your data', 'You own the data you send. You grant Olympus Labs the rights needed to process it to provide the service.'], ['billing', 'Billing', 'Paid plans are billed through Stripe according to the plan selected at checkout.'], ['liability', 'Warranties and liability', 'To be supplied by counsel.'], ['changes', 'Changes', 'Material changes will be announced before they take effect.']] },
+    };
+    const cur = D[this.state.doc];
+    return {
+      flags: this.props.showReviewFlags ?? false,
+      docs: Object.entries(D).map(([k, d]) => { const on = k === this.state.doc; return { label: d.label, g: d.g, sel: on ? 'true' : 'false', go: () => this.setState({ doc: k }),
+        gStyle: 'font-family: var(--font-mono); color: ' + (on ? '#f5f4f1' : d.c[1]) + ';',
+        style: 'font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 14px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 120ms; ' + (on ? 'background: ' + d.c[1] + '; color: #f5f4f1; border: 1px solid ' + d.c[1] + ';' : 'background: #eceae5; color: #1a1a1e; border: 1px solid #d8d6d0;'),
+        hover: on ? 'background: ' + d.c[1] + ';' : 'background: ' + d.c[2] + ';' }; }),
+      outline: cur.sections.map(([id, t]) => ({ href: '#' + id, label: t })),
+      headChip: 'width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 16px; background: ' + cur.c[2] + '; color: ' + cur.c[1] + ';',
+      doc: { g: cur.g, title: cur.title, lead: cur.lead, updated: cur.updated,
+        summary: cur.summary.map(([g, c, x]) => ({ g, x, gStyle: 'font-family: var(--font-mono); color: ' + c[1] + ';', style: 'flex: 1 1 200px; display: flex; gap: 10px; align-items: baseline; padding: 14px; border-radius: 12px; background: ' + c[2] + '; border: 1px solid ' + c[0] + '55;' })),
+        sections: cur.sections.map(([id, title, x], i) => ({ id, title, x, n: String(i + 1).padStart(2, '0'), nStyle: 'font-family: var(--font-mono); font-size: 12px; color: ' + cur.c[1] + ';' })) },
+    };
+  }
+}
+</script>
+</body>
+</html>

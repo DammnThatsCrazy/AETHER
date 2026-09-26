@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+</helmet>
+<div style="display: flex; flex-direction: column; gap: 12px; font-family: var(--font-sans); color: #1a1a1e;">
+  <div role="tablist" aria-label="Relationship types" style="display: flex; flex-wrap: wrap; gap: 12px;">
+    <sc-for list="{{ types }}" as="t" hint-placeholder-count="4">
+      <button type="button" role="tab" aria-selected="{{ t.sel }}" onClick="{{ t.pick }}" style="{{ t.style }}" style-hover="{{ t.hover }}">
+        <span style="{{ t.codeStyle }}">{{ t.code }}</span>
+        <span style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px;"><span style="font-size: 14px; font-weight: 500;">{{ t.name }}</span><span style="{{ t.subStyle }}">{{ t.short }}</span></span>
+      </button>
+    </sc-for>
+  </div>
+  <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+    <div data-theme="dark" style="flex: 1 1 380px; min-width: 0; background: #1a1a1e; border: 1px solid #2a2a2f; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 18px; color: #e8e6e1;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">Synthetic example</span><span style="{{ codePill }}">{{ cur.code }}</span></div>
+      <div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(90px, 1.2fr) minmax(0,1fr); align-items: center; gap: 8px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;"><span style="{{ fromNode }}">{{ cur.from.g }}</span><span style="font-size: 14px; font-weight: 500; color: #e8e6e1;">{{ cur.from.label }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #a09f99;">{{ cur.from.sub }}</span></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span style="{{ verbStyle }}">{{ cur.verb }}</span><span style="{{ lineStyle }}"></span><span style="font-family: var(--font-mono); font-size: 11px; color: #a09f99;">strength {{ cur.strength }}</span></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;"><span style="{{ toNode }}">{{ cur.to.g }}</span><span style="font-size: 14px; font-weight: 500; color: #e8e6e1;">{{ cur.to.label }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #a09f99;">{{ cur.to.sub }}</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid #2a2a2f;">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">Evidence on the edge</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;"><sc-for list="{{ cur.evidence }}" as="e" hint-placeholder-count="3"><span style="{{ evStyle }}">{{ e }}</span></sc-for></div>
+      </div>
+    </div>
+    <div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 8px;">
+      <div style="background: #eceae5; border: 1px solid #d8d6d0; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">What it means</span><span style="font-size: 15px; line-height: 1.55;">{{ cur.means }}</span></div>
+      <div style="background: #f5f4f1; border: 1px solid #d8d6d0; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">In the example</span><span style="font-size: 14px; line-height: 1.6; color: #3a3935;">{{ cur.example }}</span></div>
+      <div style="{{ valueBox }}"><span style="{{ valueLabel }}">→ What comes from it</span><span style="font-size: 15px; line-height: 1.55; font-weight: 500; color: #1a1a1e;">{{ cur.value }}</span></div>
+    </div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">Aether layers this relationship uses</span>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+      <sc-for list="{{ layers }}" as="l" hint-placeholder-count="5">
+        <div style="{{ l.style }}"><span style="{{ l.glyphStyle }}">{{ l.g }}</span><span style="font-size: 13px; font-weight: 500;">{{ l.name }}</span><span style="font-size: 12px; line-height: 1.45; color: #6b6a65;">{{ l.role }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1100, &quot;height&quot;: 620}}">
+class Component extends DCLogic {
+  state = { t: 'h2a' };
+  renderVals() {
+    const C = { sage: ['#6b9a7c', '#4f7a5e', 'rgba(107,154,124,0.16)'], cobalt: ['#3a6896', '#2d5373', 'rgba(58,104,150,0.14)'], ochre: ['#c9975a', '#8a6433', 'rgba(201,151,90,0.18)'], ember: ['#b5564a', '#a3473c', 'rgba(181,86,74,0.14)'] };
+    const H = (label, sub) => ({ g: '●', label, sub, agent: false }), A = (label, sub) => ({ g: '⬡', label, sub, agent: true });
+    const T = [
+      { id: 'h2h', code: 'H → H', name: 'Human to human', short: 'collaboration', c: C.sage, from: H('Jane Doe', 'account owner'), to: H('Percival', 'risk analyst'), verb: 'co-approves with', strength: '0.74',
+        means: 'People collaborating, communicating, and sharing decisions across teams and organizations.', example: 'Jane and Percival co-approve settlement batches above $10k — 14 shared approvals in 90 days, across Slack and the CRM.', value: 'Shows who actually decides, and who each decision depends on.',
+        evidence: ['approval_recorded ×14', 'slack · shared thread', 'crm · same account'], layers: ['events', 'entities', 'graph', 'governance'] },
+      { id: 'h2a', code: 'H → A', name: 'Human to agent', short: 'delegation', c: C.cobalt, from: H('Jane Doe', 'usr_4f21a9'), to: A('Ptolemy', 'agt_2f18e'), verb: 'delegates to', strength: '0.90',
+        means: 'A person hands a task to an agent while keeping the authority behind it.', example: 'Jane delegated application scoring to Ptolemy. It takes 42 actions a day, and each one traces back to her grant and scope.', value: 'Every agent action stays tied to the human authority that allowed it.',
+        evidence: ['delegation_granted', 'agent_tool_called ×42/day', 'scope: scoring.read'], layers: ['events', 'entities', 'graph', 'intelligence', 'governance'] },
+      { id: 'a2a', code: 'A → A', name: 'Agent to agent', short: 'orchestration', c: C.ochre, from: A('Mordred', 'agt_88ce1'), to: A('Settlement agent', 'external'), verb: 'messages', strength: '0.68',
+        means: 'Agents orchestrating, depending on, and handing work to other agents.', example: 'Mordred began an unusual message pattern with an external settlement agent that belongs to a flagged cluster. Inferred at 0.88 confidence.', value: 'Surfaces machine-to-machine patterns no person would see in a single log.',
+        evidence: ['agent_message ×212', 'new counterparty', 'inferred · conf 0.88'], layers: ['events', 'graph', 'intelligence'] },
+      { id: 'a2h', code: 'A → H', name: 'Agent to human', short: 'escalation', c: C.ember, from: A('Mordred', 'agt_88ce1'), to: H('Percival', 'risk analyst'), verb: 'escalates to', strength: '0.81',
+        means: 'Agents notifying, recommending, or escalating to people for a decision.', example: 'Mordred escalated the pattern to Percival with its evidence attached. The settlement batch is on hold until he decides.', value: 'Consequential actions wait for a person, so the loop stays accountable.',
+        evidence: ['escalation_created', '▲ review required', 'outcome: pending'], layers: ['events', 'intelligence', 'governance'] },
+    ];
+    const L = [['events', '◉', 'Events', 'Ingestion and the operational timeline.'], ['entities', '⬡', 'Entities', 'Humans, organizations, agents, devices.'], ['graph', '↔', 'Graph', 'Resolution and relationship edges.'], ['intelligence', '◈', 'Intelligence', 'Patterns, attribution, and risk.'], ['governance', '✓', 'Governance', 'Consent, policy, approval, audit.']];
+    const cur = T.find(t => t.id === this.state.t) || T[1];
+    const node = (n) => 'width: 60px; height: 60px; border-radius: ' + (n.agent ? '14px' : '999px') + '; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 22px; color: #1a1a1e; background: ' + cur.c[0] + '; box-shadow: 0 0 0 5px ' + cur.c[2] + ';';
+    return {
+      types: T.map(t => { const on = t.id === cur.id; return { code: t.code, name: t.name, short: t.short, sel: on ? 'true' : 'false', pick: () => this.setState({ t: t.id }),
+        codeStyle: 'font-family: var(--font-mono); font-size: 13px; font-weight: 500; padding: 6px 9px; border-radius: 8px; white-space: nowrap; background: ' + (on ? '#f5f4f1' : t.c[2]) + '; color: ' + t.c[1] + ';',
+        subStyle: 'font-family: var(--font-mono); font-size: 11px; color: ' + (on ? 'rgba(245,244,241,0.85)' : '#6b6a65') + ';',
+        style: 'font-family: inherit; flex: 1 1 200px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; cursor: pointer; text-align: left; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms; ' + (on ? 'background: ' + t.c[1] + '; border: 1px solid ' + t.c[1] + '; color: #f5f4f1;' : 'background: #eceae5; border: 1px solid #d8d6d0; color: #1a1a1e;'),
+        hover: on ? 'background: ' + t.c[1] + ';' : 'background: ' + t.c[2] + '; border-color: ' + t.c[0] + ';' }; }),
+      cur, fromNode: node(cur.from), toNode: node(cur.to),
+      codePill: 'font-family: var(--font-mono); font-size: 12px; padding: 3px 9px; border-radius: 999px; color: #1a1a1e; background: ' + cur.c[0] + ';',
+      verbStyle: 'font-size: 12px; font-weight: 500; color: ' + cur.c[0] + '; text-align: center;',
+      lineStyle: 'height: 2px; width: 100%; border-radius: 2px; background: linear-gradient(90deg, ' + cur.c[0] + ' 0 88%, transparent 88%); position: relative;',
+      evStyle: 'font-family: var(--font-mono); font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1px solid #2a2a2f; background: #111114; color: #e8e6e1;',
+      valueBox: 'flex: 1; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 6px; background: ' + cur.c[2] + '; border: 1px solid ' + cur.c[0] + '66;',
+      valueLabel: 'font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: ' + cur.c[1] + ';',
+      layers: L.map(([id, g, name, role]) => { const on = cur.layers.includes(id); return { g, name, role,
+        glyphStyle: 'font-family: var(--font-mono); font-size: 16px; color: ' + (on ? cur.c[1] : '#9c9b95') + ';',
+        style: 'flex: 1 1 160px; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; transition: background-color 200ms, border-color 200ms, opacity 200ms; ' + (on ? 'background: ' + cur.c[2] + '; border: 1px solid ' + cur.c[0] + '; opacity: 1;' : 'background: #f5f4f1; border: 1px dashed #d8d6d0; opacity: 0.6;') }; }),
+    };
+  }
+}
+</script>
+</body>
+</html>

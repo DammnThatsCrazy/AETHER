@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <title>Aether service status</title>
+  <style>
+    summary::-webkit-details-marker { display: none; }
+    details[open] > summary span:first-child > span:first-child { transform: rotate(0deg); }
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+    a { color: #3a6896; }
+    a:hover { color: #2d5373; }
+  </style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);" data-screen-label="Status">
+  <header style="border-bottom: 1px solid #d8d6d0; background: #f5f4f1;">
+    <div style="max-width: 920px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+      <a href="Status.dc.html" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: #1a1a1e;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 20px; height: 20px;"><span style="font-size: 15px; font-weight: 500;">Aether</span><span style="font-size: 15px; color: #6b6a65;">Status</span></a>
+      <nav aria-label="Status resources" style="display: flex; gap: 4px; font-size: 13px; align-items: center;">
+        <a href="Docs.dc.html" style="color: #6b6a65; text-decoration: none; padding: 8px;" style-hover="color: #1a1a1e;">Docs</a>
+        <a href="Aether Home.dc.html" style="color: #6b6a65; text-decoration: none; padding: 8px;" style-hover="color: #1a1a1e;">Aether</a>
+        <a href="Contact.dc.html?brand=aether&amp;type=developer" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 36px; padding: 0 14px; box-sizing: border-box; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; background: #1a1a1e; color: #f5f4f1; border: 1px solid #1a1a1e;" style-hover="background: #2e2e34; color: #f5f4f1;">Contact support<span style="font-family: var(--font-mono); color: #c9975a;">→</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <sc-if value="{{ stateBar }}" hint-placeholder-val="{{ false }}">
+    <div style="background: #1a1a1e; color: #e8e6e1; font-size: 12px;">
+      <div style="max-width: 920px; margin: 0 auto; padding: 8px 24px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99; margin-right: 6px;">Design state</span>
+        <sc-for list="{{ stateChips }}" as="c" hint-placeholder-count="8"><button type="button" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</button></sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <main style="max-width: 920px; margin: 0 auto; padding: clamp(28px, 5vw, 48px) 24px 64px; display: flex; flex-direction: column; gap: 24px;">
+    <section aria-labelledby="overall" style="{{ heroStyle }}">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">System status</span>
+          <h1 id="overall" role="status" style="font-size: clamp(22px, 3vw, 30px); font-weight: 500; letter-spacing: -0.5px; margin: 0; display: flex; align-items: center; gap: 12px; color: #1a1a1e;"><span style="{{ overallGlyphStyle }}">{{ overallGlyph }}</span>{{ overallLabel }}</h1>
+          <p style="font-size: 14px; line-height: 1.6; color: #4a4945; margin: 0; max-width: 580px;">{{ overallDetail }}</p>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+          <span style="{{ pillStyle }}"><span style="font-family: var(--font-mono);">{{ overallGlyph }}</span>{{ pillLabel }}</span>
+          <button type="button" onClick="{{ refresh }}" style="font-family: inherit; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; min-height: 34px; padding: 0 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #1a1a1e; background: #f5f4f1; border: 1px solid #d8d6d0; cursor: pointer;" style-hover="background: #e2e0da; border-color: #c9c7c0;"><span style="font-family: var(--font-mono);">↻</span>Check again</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid rgba(26,26,30,0.08);">
+        <span style="{{ checkedStyle }}">{{ checkedText }}</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #4a4945;">
+          <span style="display: inline-flex; gap: 6px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #6b9a7c;"></span>Operational</span>
+          <span style="display: inline-flex; gap: 6px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #c9975a;"></span>Degraded</span>
+          <span style="display: inline-flex; gap: 6px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #b5564a;"></span>Outage</span>
+          <span style="display: inline-flex; gap: 6px; align-items: center;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #d8d6d0;"></span>No data</span>
+        </div>
+      </div>
+    </section>
+
+    <sc-if value="{{ hasIncident }}" hint-placeholder-val="{{ false }}">
+      <section aria-labelledby="inc" style="border: 1px solid rgba(181,86,74,0.4); border-radius: 8px; overflow: hidden; background: rgba(181,86,74,0.06);">
+        <div style="padding: 14px 18px; border-bottom: 1px solid rgba(181,86,74,0.25); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px;">
+          <h2 id="inc" style="font-size: 16px; font-weight: 500; margin: 0; display: flex; gap: 8px; align-items: center; color: #1a1a1e;"><span style="font-family: var(--font-mono); color: #b5564a;">■</span>Delayed ingestion for batch imports</h2>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: #a3473c;">affects: ingestion · started 14:05 UTC</span>
+        </div>
+        <ol style="list-style: none; margin: 0; padding: 4px 18px 8px;">
+          <li style="padding: 12px 0; border-bottom: 1px solid rgba(181,86,74,0.18); display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 12px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 13px; font-weight: 500; color: #8a6433;">Identified</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">14:22 UTC</span></span><span style="font-size: 13px; line-height: 1.55;">A queue consumer is falling behind after a deploy. Rolling back. Events are accepted and nothing is lost.</span></li>
+          <li style="padding: 12px 0; display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 12px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 13px; font-weight: 500; color: #a3473c;">Investigating</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">14:05 UTC</span></span><span style="font-size: 13px; line-height: 1.55;">Batch imports are taking longer than normal to appear in perspectives.</span></li>
+        </ol>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ hasMaint }}" hint-placeholder-val="{{ false }}">
+      <section aria-label="Scheduled maintenance" style="border: 1px solid rgba(90,133,168,0.4); border-radius: 8px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; background: rgba(90,133,168,0.08);">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #3f6a8c;">◈ Scheduled maintenance</span>
+        <span style="font-size: 15px; font-weight: 500;">Graph projection storage upgrade</span>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: #3f6a8c;">Sep 28, 2026 · 02:00–03:00 UTC · Identity and graph</span>
+        <span style="font-size: 13px; line-height: 1.55; color: #4a4945;">Perspectives may show data up to 15 minutes old during the window. Ingestion continues and catches up afterward.</span>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ flags }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border: 1px dashed #c9975a; border-radius: 6px; font-size: 12px; background: rgba(201,151,90,0.08);"><span style="font-family: var(--font-mono); color: #8a6433;">▲</span><span><span style="font-weight: 500;">Sample history.</span> Current state comes from <code style="font-size: 12px;">GET /v1/health</code>. The 90-day bars need a history feed that doesn't exist yet (e.g. <code style="font-size: 12px;">VITE_STATUS_HISTORY_URL</code>). Until it's connected, bars render as "No data".</span></div>
+    </sc-if>
+
+    <sc-if value="{{ noComponents }}" hint-placeholder-val="{{ false }}">
+      <div style="border: 1px dashed #c9c7c0; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; background: #eceae5;">
+        <span style="font-size: 14px; font-weight: 500;">{{ emptyTitle }}</span>
+        <span style="font-size: 13px; line-height: 1.55; color: #6b6a65; max-width: 560px;">{{ emptyBody }}</span>
+      </div>
+    </sc-if>
+
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+      <details open style="border: 1px solid #d8d6d0; border-radius: 12px; overflow: hidden; background: #f5f4f1;">
+        <summary style="list-style: none; cursor: pointer; padding: 12px 18px; background: #eceae5; border-bottom: 1px solid #d8d6d0; display: flex; justify-content: space-between; gap: 8px; align-items: center;" style-hover="background: #e2e0da;"><span style="display: flex; gap: 10px; align-items: center; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4a4945;"><span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65; width: 12px;">⌄</span><span style="{{ g.glyphStyle }}">{{ g.glyph }}</span>{{ g.name }}</span><span style="{{ g.summaryStyle }}">{{ g.summary }}</span></summary>
+        <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="3">
+          <div style="padding: 14px 18px; border-bottom: 1px solid #e2e0da; display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <span style="display: flex; align-items: baseline; gap: 10px; min-width: 0;"><span style="font-size: 14px; font-weight: 500;">{{ c.label }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #9c9b95;">{{ c.key }}</span></span>
+              <span style="display: flex; align-items: center; gap: 10px;"><span style="{{ c.pctStyle }}">{{ c.pct }}</span><span style="{{ c.badgeStyle }}"><span style="font-family: var(--font-mono);">{{ c.glyph }}</span>{{ c.stateLabel }}</span></span>
+            </div>
+            <div role="img" aria-label="{{ c.aria }}" style="display: flex; gap: 2px; height: 30px; align-items: stretch;">
+              <sc-for list="{{ c.bars }}" as="b"><span onMouseEnter="{{ b.hover }}" style="{{ b.style }}"></span></sc-for>
+            </div>
+            <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: #9c9b95; font-family: var(--font-mono);"><span>90 days ago</span><span style="{{ c.tipStyle }}">{{ c.tip }}</span><span>today</span></div>
+          </div>
+        </sc-for>
+      </details>
+    </sc-for>
+
+    <section aria-labelledby="hist" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;">
+        <h2 id="hist" style="font-size: 18px; font-weight: 500; margin: 0; color: #1a1a1e;">Past incidents</h2>
+        <div role="tablist" aria-label="Range" style="display: inline-flex; border: 1px solid #d8d6d0; border-radius: 6px; padding: 2px; background: #eceae5;">
+          <sc-for list="{{ ranges }}" as="r" hint-placeholder-count="3"><button type="button" role="tab" aria-selected="{{ r.sel }}" onClick="{{ r.pick }}" style="{{ r.style }}">{{ r.label }}</button></sc-for>
+        </div>
+      </div>
+      <sc-if value="{{ hasHistory }}" hint-placeholder-val="{{ false }}">
+        <div style="border: 1px solid #d8d6d0; border-radius: 8px; overflow: hidden;">
+          <details style="border-bottom: 1px solid #e2e0da; border-left: 3px solid #c9975a;"><summary style="list-style: none; cursor: pointer; padding: 14px 18px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;" style-hover="background: #eceae5;"><span style="display: flex; gap: 10px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65;">›</span><span style="font-size: 14px; font-weight: 500;">Delayed ingestion for batch imports</span></span><span style="font-family: var(--font-mono); font-size: 12px; color: #4f7a5e;">● resolved · Sep 12</span></summary><div style="padding: 0 18px 14px 40px; display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">Sep 12 · 14:05–14:48 UTC · ingestion</span><span style="font-size: 13px; color: #4a4945;">Imports queued for up to 40 minutes. No data was lost.</span></div></details>
+          <details style="border-left: 3px solid #b5564a;"><summary style="list-style: none; cursor: pointer; padding: 14px 18px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;" style-hover="background: #eceae5;"><span style="display: flex; gap: 10px; align-items: baseline;"><span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65;">›</span><span style="font-size: 14px; font-weight: 500;">Providers &amp; connectors sync failures</span></span><span style="font-family: var(--font-mono); font-size: 12px; color: #4f7a5e;">● resolved · Aug 30</span></summary><div style="padding: 0 18px 14px 40px; display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">Aug 30 · 09:10–10:02 UTC · provider_credentials</span><span style="font-size: 13px; color: #4a4945;">Connector syncs failed after a credential rotation. Retries caught up.</span></div></details>
+        </div>
+      </sc-if>
+      <sc-if value="{{ noHistory }}" hint-placeholder-val="{{ true }}">
+        <div style="border: 1px dashed #c9c7c0; border-radius: 8px; padding: 20px; font-size: 13px; line-height: 1.55; color: #6b6a65;">{{ historyEmpty }}</div>
+      </sc-if>
+      <div style="border: 1px solid #d8d6d0; border-radius: 8px; padding: 16px 18px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; background: rgba(107,154,124,0.08);">
+        <span style="display: flex; flex-direction: column; gap: 3px;"><span style="font-size: 14px; font-weight: 500;"><span style="font-family: var(--font-mono); color: #4f7a5e;">✉</span> Follow updates</span><span style="font-size: 13px; color: #6b6a65;">Subscriptions aren't set up yet. For deployment-specific questions, contact support.</span></span>
+        <a href="Contact.dc.html?brand=aether&amp;type=developer" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 36px; padding: 0 14px; box-sizing: border-box; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; background: #4f7a5e; color: #f5f4f1; border: 1px solid #4f7a5e;" style-hover="background: #41664e; color: #f5f4f1;">Contact support</a>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showReviewFlags&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;showStateBar&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    let q = {};
+    try { q = Object.fromEntries(new URLSearchParams(window.location.search)); } catch (e) {}
+    this.state = { st: q.state || 'operational', range: '90d', hover: null };
+  }
+  renderVals() {
+    const st = this.state.st;
+    const C = [
+      ['api', 'Aether API', 'product'], ['admin', 'Tenant administration', 'product'], ['analytics', 'Analytics & perspective', 'product'], ['identity', 'Identity & graph', 'product'],
+      ['ingestion', 'Ingestion & processing', 'conn'], ['provider_credentials', 'Providers & connectors', 'conn'], ['notification', 'Delivery & workflow', 'conn'],
+      ['consent', 'Consent & tenant governance', 'sup'], ['ml_serving', 'Model serving', 'sup'], ['agent', 'Agent intelligence', 'sup'], ['campaign', 'Campaign intelligence', 'sup'], ['commerce', 'Commerce', 'sup'], ['rewards', 'Rewards', 'sup'],
+    ];
+    const col = { up: '#6b9a7c', deg: '#c9975a', down: '#b5564a', none: '#d8d6d0' };
+    const tone = { operational: ['●', 'Operational', '#4f7a5e', 'rgba(107,154,124,0.14)'], degraded: ['▲', 'Degraded', '#8a6433', 'rgba(201,151,90,0.16)'], outage: ['■', 'Outage', '#a3473c', 'rgba(181,86,74,0.12)'], unknown: ['○', 'Not verified', '#6b6a65', 'rgba(156,155,149,0.16)'] };
+    const hasHist = !['unknown', 'loading'].includes(st);
+    const current = key => {
+      if (st === 'degraded') return key === 'ingestion' ? 'degraded' : 'operational';
+      if (st === 'incident') return key === 'ingestion' ? 'outage' : 'operational';
+      if (st === 'stale' || st === 'outage') return 'unknown';
+      return 'operational';
+    };
+    const rand = seed => { let x = seed; return () => { x = (x * 9301 + 49297) % 233280; return x / 233280; }; };
+    const today = new Date(2026, 8, 24);
+    const fmt = i => { const d = new Date(today); d.setDate(d.getDate() - (89 - i)); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
+    const showComps = ['operational', 'degraded', 'incident', 'stale', 'maintenance', 'outage'].includes(st);
+    const hv = this.state.hover;
+    const groups = showComps ? [['product', 'Customer-visible product', '◈', '#3a6896'], ['conn', 'APIs and connections', '↔', '#8a6433'], ['sup', 'Supporting systems', '⚙', '#7d6538']].map(([id, name, glyph, gc]) => {
+      const items = C.filter(c => c[2] === id).map(([key, label], ci) => {
+        const r = rand(key.length * 131 + ci * 17 + 7);
+        const days = Array.from({ length: 90 }, (_, i) => { if (!hasHist) return 'none'; const v = r(); if (i < 6 && key.length % 3 === 0) return 'none'; return v > 0.985 ? 'down' : v > 0.95 ? 'deg' : 'up'; });
+        if (key === 'ingestion') { days[78] = 'deg'; if (st === 'degraded') days[89] = 'deg'; if (st === 'incident') days[89] = 'down'; }
+        if (key === 'provider_credentials') days[65] = 'down';
+        if (st === 'stale' || st === 'outage') days[89] = 'none';
+        const counted = days.filter(d => d !== 'none');
+        const score = counted.length ? counted.reduce((a, d) => a + (d === 'up' ? 1 : d === 'deg' ? 0.995 : 0.97), 0) / counted.length : 0;
+        const cs = current(key); const t = tone[cs];
+        const isHov = hv && hv.key === key;
+        const stName = { up: 'operational', deg: 'degraded', down: 'outage', none: 'no data' };
+        return { key: 'component:' + key, label, glyph: t[0], stateLabel: t[1],
+          pct: counted.length ? (score * 100).toFixed(2) + '%' : '—',
+          pctStyle: 'font-family: var(--font-mono); font-size: 12px; color: ' + (score > 0.999 ? '#4f7a5e' : score > 0.997 ? '#8a6433' : '#a3473c') + ';',
+          badgeStyle: 'display: inline-flex; gap: 6px; align-items: center; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px; white-space: nowrap; color: ' + t[2] + '; background: ' + t[3] + '; border: 1px solid ' + t[2] + '33;',
+          aria: label + ': 90-day history, ' + (counted.length ? (score * 100).toFixed(2) + '% uptime' : 'no data'),
+          bars: days.map((d, i) => ({ hover: () => this.setState({ hover: { key, i, d } }), style: 'flex: 1 1 0; min-width: 2px; border-radius: 2px; cursor: default; background: ' + col[d] + '; opacity: ' + (isHov && hv.i !== i ? '0.55' : '1') + '; transition: opacity 120ms;' })),
+          tip: isHov ? fmt(hv.i) + ' · ' + stName[hv.d] : (counted.length ? (score * 100).toFixed(2) + '% uptime' : 'no history yet'),
+          tipStyle: 'color: ' + (isHov ? (hv.d === 'up' ? '#4f7a5e' : hv.d === 'deg' ? '#8a6433' : hv.d === 'down' ? '#a3473c' : '#6b6a65') : '#9c9b95') + ';',
+        };
+      });
+      const bad = items.filter(i => i.stateLabel !== 'Operational').length;
+      return { name, items, glyph, glyphStyle: 'font-family: var(--font-mono); color: ' + gc + ';', summary: bad ? bad + ' of ' + items.length + ' affected' : 'all ' + items.length + ' operational',
+        summaryStyle: 'font-family: var(--font-mono); font-size: 11px; color: ' + (bad ? '#8a6433' : '#4f7a5e') + ';' };
+    }) : [];
+    const O = {
+      loading: ['○', 'Checking the monitored service', 'Contacting the status endpoint. No state is assumed before the check returns.', '#9c9b95', 'Checking'],
+      operational: ['●', 'All systems operational', 'The monitored API and its reported component surfaces are operational.', '#6b9a7c', 'Operational'],
+      degraded: ['▲', 'Degraded performance', 'The API is reachable, but one or more reported components are degraded.', '#c9975a', 'Degraded'],
+      incident: ['■', 'Investigating delayed ingestion', 'Events are accepted, but processing is delayed. Updates are posted below.', '#b5564a', 'Incident'],
+      maintenance: ['●', 'Operational · maintenance scheduled', 'All monitored components are operational. A maintenance window is planned.', '#5a85a8', 'Maintenance planned'],
+      outage: ['■', 'Status endpoint unreachable', 'The health endpoint could not be reached. This may be an outage or a network problem between this page and the API.', '#b5564a', 'Unreachable'],
+      unknown: ['○', 'Status not yet verified', 'The live monitoring source has not been connected to this status surface.', '#9c9b95', 'Not configured'],
+      stale: ['○', 'Status may be out of date', 'The last successful check was 47 minutes ago. Treat current states as unverified.', '#c9975a', 'Stale'],
+    }[st];
+    const chips = [['loading', 'Checking'], ['operational', 'Operational'], ['degraded', 'Degraded'], ['incident', 'Active incident'], ['maintenance', 'Maintenance'], ['outage', 'Unreachable'], ['stale', 'Stale'], ['unknown', 'Not configured']];
+    const ranges = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days']];
+    return {
+      flags: this.props.showReviewFlags ?? false,
+      stateBar: (this.props.showStateBar ?? true) && !/[?&]bar=0/.test(window.location.search),
+      stateChips: chips.map(([k, label]) => ({ label, go: () => this.setState({ st: k }), style: 'font-family: inherit; font-size: 12px; padding: 4px 9px; border-radius: 4px; cursor: pointer; border: 1px solid ' + (k === st ? '#e8e6e1; background: #e8e6e1; color: #1a1a1e;' : '#2a2a2f; background: transparent; color: #e8e6e1;') })),
+      heroStyle: 'border-radius: 8px; padding: clamp(20px, 3vw, 28px); display: flex; flex-direction: column; gap: 16px; border: 1px solid ' + O[3] + '66; border-top: 4px solid ' + O[3] + '; background: ' + O[3] + '14;',
+      overallGlyph: O[0], overallGlyphStyle: 'font-family: var(--font-mono); font-size: 22px; color: ' + O[3] + ';',
+      overallLabel: O[1], overallDetail: O[2], pillLabel: O[4],
+      pillStyle: 'display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 999px; color: #f5f4f1; background: ' + O[3] + ';',
+      checkedText: st === 'loading' ? 'Checking…' : st === 'unknown' ? 'No check has run · monitor not configured' : st === 'stale' ? 'Last updated Sep 24, 2026, 13:43 UTC · 47 min ago' : 'Last updated Sep 24, 2026, 14:30 UTC · just now',
+      checkedStyle: 'font-family: var(--font-mono); font-size: 12px; color: ' + (st === 'stale' ? '#8a6433' : '#6b6a65') + ';',
+      refresh: () => { const prev = st === 'loading' ? 'operational' : st; this.setState({ st: 'loading' }); setTimeout(() => this.setState({ st: prev }), 900); },
+      hasIncident: st === 'incident', hasMaint: st === 'maintenance',
+      groups, noComponents: !showComps,
+      emptyTitle: st === 'unknown' ? 'No component data' : 'Waiting for the check',
+      emptyBody: st === 'unknown' ? 'VITE_STATUS_API_URL is not set for this build, so no component can be verified. Nothing is shown as operational by default.' : 'Components appear once the endpoint responds.',
+      ranges: ranges.map(([k, label]) => ({ label, sel: k === this.state.range ? 'true' : 'false', pick: () => this.setState({ range: k }), style: 'font-family: inherit; font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 4px; border: 0; cursor: pointer; ' + (k === this.state.range ? 'background: #f5f4f1; color: #1a1a1e; box-shadow: 0 0 0 1px #d8d6d0;' : 'background: transparent; color: #6b6a65;') })),
+      hasHistory: hasHist && st !== 'outage', noHistory: !(hasHist && st !== 'outage'),
+      historyEmpty: 'Incident history appears here once an incident feed is connected.',
+    };
+  }
+}
+</script>
+</body>
+</html>

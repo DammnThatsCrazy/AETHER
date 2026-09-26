@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <title>Page not found</title>
+  <style>
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+    a { color: #3a6896; }
+    a:hover { color: #2d5373; }
+  </style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans); display: flex; flex-direction: column;" data-screen-label="404">
+  <dc-import name="Site Header" brand="{{ brand }}" active="" hint-size="100%,56px"></dc-import>
+  <main style="flex: 1; max-width: 1200px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: clamp(48px, 9vw, 120px) 24px; display: flex; flex-direction: column; gap: 28px;">
+    <div style="display: flex; flex-direction: column; gap: 16px; max-width: 640px;">
+      <span style="display: inline-flex; align-items: center; gap: 10px;"><span style="font-family: var(--font-mono); font-size: 13px; padding: 4px 10px; border-radius: 999px; background: rgba(181,86,74,0.12); color: #a3473c;">■ 404</span><code style="font-size: 12px; color: #6b6a65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px;">{{ path }}</code></span>
+      <h1 style="font-size: clamp(36px, 5.6vw, 60px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.04; margin: 0;">This page does not exist</h1>
+      <p style="font-size: 16px; line-height: 1.6; color: #4a4945; margin: 0;">The link may be old, or the page may have moved. Nothing was lost — pick up from one of these.</p>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+      <sc-for list="{{ links }}" as="l" hint-placeholder-count="4">
+        <a href="{{ l.href }}" style="{{ l.style }}" style-hover="{{ l.hover }}"><span style="{{ l.chip }}">{{ l.g }}</span><span style="font-size: 16px; font-weight: 500; margin-top: auto;">{{ l.title }}</span><span style="font-size: 13px; color: #4a4945;">{{ l.body }}</span></a>
+      </sc-for>
+    </div>
+  </main>
+  <dc-import name="Site Footer" hint-size="100%,300px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    let q = {};
+    try { q = Object.fromEntries(new URLSearchParams(window.location.search)); } catch (e) {}
+    const brand = q.brand === 'olympus' ? 'olympus' : 'aether';
+    const C = [['#3a6896', '#2d5373', 'rgba(58,104,150,0.12)'], ['#6b9a7c', '#4f7a5e', 'rgba(107,154,124,0.15)'], ['#c9975a', '#8a6433', 'rgba(201,151,90,0.16)'], ['#5a85a8', '#3f6a8c', 'rgba(90,133,168,0.14)']];
+    const L = brand === 'olympus'
+      ? [['◈', 'Olympus Labs home', 'The company and its principles', 'Olympus Home.dc.html'], ['⬡', 'Aether', 'The flagship product', 'Aether Home.dc.html'], ['⚗', 'Research', 'Open questions', 'Olympus Research.dc.html'], ['✉', 'Contact', 'Reach the team', 'Contact.dc.html?brand=olympus']]
+      : [['⬡', 'Aether home', 'What Aether is and does', 'Aether Home.dc.html'], ['⌘', 'Documentation', 'Quickstarts, SDKs, connectors', 'Docs.dc.html'], ['◉', 'Status', 'Service health', 'Status.dc.html'], ['✉', 'Contact', 'Reach an engineer', 'Contact.dc.html?brand=aether&type=developer']];
+    return {
+      brand, path: q.path || '/this-page',
+      links: L.map(([g, title, body, href], i) => ({ g, title, body, href,
+        chip: 'width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 16px; background: ' + C[i][2] + '; color: ' + C[i][1] + ';',
+        style: 'flex: 1 1 220px; min-height: 150px; box-sizing: border-box; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: #1a1a1e; background: #f5f4f1; border: 1px solid #d8d6d0; border-top: 3px solid ' + C[i][0] + '; transition: background-color 120ms, border-color 120ms;',
+        hover: 'background: ' + C[i][2] + '; border-color: ' + C[i][0] + '; color: #1a1a1e;' })),
+    };
+  }
+}
+</script>
+</body>
+</html>

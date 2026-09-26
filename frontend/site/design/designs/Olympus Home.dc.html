@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <title>Olympus Labs — Governed intelligence infrastructure</title>
+  <style>
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+    a { color: #3a6896; }
+    a:hover { color: #2d5373; }
+    @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; } }
+  </style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);" data-screen-label="Olympus home">
+  <dc-import name="Site Header" brand="olympus" active="" hint-size="100%,56px"></dc-import>
+  <main>
+    <section style="border-bottom: 1px solid #d8d6d0;">
+      <div style="max-width: 1200px; margin: 0 auto; padding: clamp(56px, 9vw, 128px) 24px clamp(48px, 7vw, 88px); display: flex; flex-direction: column; gap: 32px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 40px; align-items: end;">
+          <div style="display: flex; flex-direction: column; gap: 22px;">
+            <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;"><img src="assets/logo-olympus-arch.svg" alt="" style="width: 18px; height: 18px;">Olympus Labs · research and infrastructure</span>
+            <h1 style="font-size: clamp(44px, 6.4vw, 80px); font-weight: 500; line-height: 0.98; letter-spacing: -0.042em; margin: 0; text-wrap: balance;">Intelligence infrastructure for human and agentic economies.</h1>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 22px; padding-bottom: 6px;">
+            <p style="font-size: 17px; line-height: 1.6; color: #4a4945; margin: 0; max-width: 520px; text-wrap: pretty;">Olympus Labs builds governed intelligence systems that unify people, organizations, autonomous agents, and economic activity — so relationships can be understood, explained, and acted on by the people accountable for them.</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <a href="Aether Home.dc.html" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 20px; box-sizing: border-box; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #2d5373; color: #f5f4f1; border: 1px solid #2d5373; transition: background-color 120ms;" style-hover="background: #244563; color: #f5f4f1;"><span style="width: 22px; height: 22px; border-radius: 6px; background: #f5f4f1; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 16px; height: 16px;"></span>Meet Aether<span style="font-family: var(--font-mono);">→</span></a>
+              <button type="button" onClick="{{ goPrinciples }}" style="font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 20px; border-radius: 6px; font-size: 14px; font-weight: 500; background: rgba(107,154,124,0.16); color: #4f7a5e; border: 1px solid rgba(107,154,124,0.45); cursor: pointer; transition: background-color 120ms;" style-hover="background: rgba(107,154,124,0.26);"><span style="font-family: var(--font-mono);">✓</span>Our principles</button>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <div style="flex: 1 1 200px; border-radius: 8px; padding: 18px 20px; background: rgba(58,104,150,0.1); border: 1px solid rgba(58,104,150,0.3); display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 13px; color: #2d5373;">● humans</span><span style="font-size: 12px; color: #4a4945;">people and the teams they form</span></div>
+          <div style="flex: 1 1 200px; border-radius: 8px; padding: 18px 20px; background: rgba(201,151,90,0.14); border: 1px solid rgba(201,151,90,0.4); display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 13px; color: #8a6433;">⬡ autonomous agents</span><span style="font-size: 12px; color: #4a4945;">software acting on someone’s behalf</span></div>
+          <div style="flex: 1 1 200px; border-radius: 8px; padding: 18px 20px; background: rgba(107,154,124,0.14); border: 1px solid rgba(107,154,124,0.4); display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 13px; color: #4f7a5e;">◈ organizations</span><span style="font-size: 12px; color: #4a4945;">companies, partners, syndicates</span></div>
+          <div style="flex: 1 1 200px; border-radius: 8px; padding: 18px 20px; background: rgba(168,138,90,0.16); border: 1px solid rgba(168,138,90,0.4); display: flex; flex-direction: column; gap: 4px;"><span style="font-family: var(--font-mono); font-size: 13px; color: #7d6538;">↑ economic activity</span><span style="font-size: 12px; color: #4a4945;">value, payments, and settlement</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-theme="dark" style="background: #1a1a1e; color: #e8e6e1;">
+      <div style="max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 40px;">
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #c9975a;">◈ The thesis</span>
+          <h2 style="font-size: clamp(28px, 3.6vw, 44px); font-weight: 500; letter-spacing: -0.025em; line-height: 1.08; margin: 0; color: #e8e6e1; text-wrap: balance;">The future economy will not run only through people.</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 14px; font-size: 16px; line-height: 1.65;">
+          <p style="margin: 0; color: #a09f99;">It will run through people, autonomous agents, machine systems, and AI-native organizations working together. Today their data, identities, and attribution are fragmented across systems.</p>
+          <p style="margin: 0; color: #a09f99;">As those interactions multiply, fragmented awareness becomes expensive: lost visibility, lost leverage, lost adaptability.</p>
+          <p style="margin: 0; color: #e8e6e1;">The organizations that succeed will understand and coordinate those relationships in real time. Olympus Labs builds the infrastructure for that.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="build" style="border-bottom: 1px solid #d8d6d0;">
+      <div style="max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: flex; flex-direction: column; gap: 24px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: end;">
+          <div style="display: flex; flex-direction: column; gap: 12px;"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #3a6896;">What we build</span><h2 style="font-size: clamp(28px, 3.6vw, 44px); font-weight: 500; letter-spacing: -0.028em; line-height: 1.06; margin: 0;">Relationships are the unit of intelligence</h2></div>
+          <p style="font-size: 15px; line-height: 1.6; color: #6b6a65; margin: 0;">Every relationship between a person and an agent, or an agent and another agent, is evidence. Choose one to see what it means and what comes from understanding it.</p>
+        </div>
+        <dc-import name="Relationship Explorer" hint-size="100%,600px"></dc-import>
+      </div>
+    </section>
+
+    <section id="tabs" style="border-bottom: 1px solid #d8d6d0; background: #eceae5;">
+      <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6vw, 72px) 24px clamp(48px, 7vw, 88px); display: flex; flex-direction: column; gap: 24px;">
+        <div role="tablist" aria-label="Olympus Labs" style="display: flex; gap: 6px; flex-wrap: wrap; padding: 4px; border-radius: 14px; background: #f5f4f1; border: 1px solid #d8d6d0; align-self: flex-start; max-width: 100%;">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><button type="button" role="tab" id="{{ t.anchor }}" aria-selected="{{ t.sel }}" onClick="{{ t.go }}" style="{{ t.style }}" style-hover="{{ t.hover }}"><span style="{{ t.gStyle }}">{{ t.g }}</span>{{ t.label }}</button></sc-for>
+        </div>
+
+        <sc-if value="{{ tCompany }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <div style="flex: 2 1 460px; min-height: 240px; box-sizing: border-box; border-radius: 12px; padding: 24px; background: #1a1a1e; color: #e8e6e1; display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">The company</span>
+              <span style="font-size: 24px; font-weight: 500; letter-spacing: -0.4px; line-height: 1.3; color: #e8e6e1;">A research and infrastructure company building governed intelligence systems for the next generation of operational, economic, and autonomous infrastructure.</span>
+              <span style="font-size: 13px; color: #a09f99; margin-top: auto;">Goal: enduring infrastructure for human and agentic coordination.</span>
+            </div>
+            <a href="Aether Home.dc.html" style="flex: 1 1 280px; min-height: 240px; box-sizing: border-box; border-radius: 12px; padding: 24px; background: rgba(58,104,150,0.1); border: 1px solid rgba(58,104,150,0.35); display: flex; flex-direction: column; gap: 12px; text-decoration: none; color: #1a1a1e; transition: background-color 120ms, border-color 120ms;" style-hover="background: rgba(58,104,150,0.16); border-color: #3a6896; color: #1a1a1e;">
+              <span style="display: flex; align-items: center; gap: 10px;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 30px; height: 30px;"><span style="font-size: 20px; font-weight: 500;">Aether</span><span style="font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(201,151,90,0.2); color: #8a6433;">private alpha</span></span>
+              <span style="font-size: 15px; line-height: 1.5;">The flagship product: intelligence graph infrastructure that maps people, agents, organizations, and value flows.</span>
+              <span style="font-size: 14px; font-weight: 500; color: #2d5373; margin-top: auto;">Explore Aether →</span>
+            </a>
+            <div style="flex: 1 1 100%; box-sizing: border-box; border-radius: 8px; padding: 24px; background: #f5f4f1; border: 1px solid #d8d6d0; display: flex; flex-direction: column; gap: 14px;">
+              <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px;"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4f7a5e;">What we unify</span><span style="font-size: 12px; color: #6b6a65;">{{ unifyTotal }} connections across {{ unifyCount }} groups · pick one</span></div>
+              <div role="tablist" aria-label="What we unify" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <sc-for list="{{ unifyTabs }}" as="u" hint-placeholder-count="7"><button type="button" role="tab" aria-selected="{{ u.sel }}" onClick="{{ u.go }}" style="{{ u.style }}" style-hover="{{ u.hover }}"><span style="font-family: var(--font-mono);">{{ u.g }}</span>{{ u.label }}<span style="{{ u.nStyle }}">{{ u.n }}</span></button></sc-for>
+              </div>
+              <div style="{{ unifyPanel }}">
+                <div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 16px; font-weight: 500;">{{ unify.title }}</span><span style="font-size: 13px; line-height: 1.55; color: #4a4945; max-width: 760px;">{{ unify.body }}</span></div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;"><sc-for list="{{ unify.items }}" as="x"><span style="{{ x.style }}"><sc-if value="{{ x.hasLogo }}"><span style="{{ x.logoBox }}"><sc-if value="{{ x.showImg }}"><img src="{{ x.logo }}" alt="" onError="{{ x.onErr }}" style="width: 16px; height: 16px; object-fit: contain;"></sc-if><sc-if value="{{ x.showInit }}"><span style="font-family: var(--font-mono); font-size: 10px; font-weight: 500;">{{ x.init }}</span></sc-if></span></sc-if><span style="font-weight: 500; color: #1a1a1e;">{{ x.k }}</span><sc-if value="{{ x.hasV }}"><span style="color: #6b6a65;">{{ x.v }}</span></sc-if></span></sc-for></div>
+                <sc-if value="{{ unify.isConn }}"><div style="display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; border-top: 1px dashed #c9c7c0;"><a href="Docs.dc.html?page=connector-catalog" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 34px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 500; text-decoration: none; background: #3f6a8c; color: #f5f4f1;" style-hover="background: #345a78; color: #f5f4f1;"><span style="font-family: var(--font-mono);">+</span>Connect any system with a signed webhook or the feed API</a><a href="Contact.dc.html?brand=olympus&amp;type=developer" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 34px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 500; text-decoration: none; background: #f5f4f1; color: #3f6a8c; border: 1px solid rgba(90,133,168,0.5);" style-hover="background: rgba(90,133,168,0.14); color: #3f6a8c;"><span style="font-family: var(--font-mono);">✉</span>Request a connector</a></div></sc-if>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">source · {{ unify.src }}</span>
+              </div>
+            </div>
+            <div style="flex: 1 1 300px; box-sizing: border-box; border-radius: 8px; padding: 24px; background: rgba(201,151,90,0.1); border: 1px solid rgba(201,151,90,0.4); display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #8a6433;">Why ecommerce first</span>
+              <span style="font-size: 14px; line-height: 1.55;">High-volume signals, attribution complexity, fraud exposure, and fragmented identity — with outcomes that are fast to measure.</span>
+            </div>
+            <div style="flex: 1 1 300px; box-sizing: border-box; border-radius: 8px; padding: 24px; background: #f5f4f1; border: 1px solid #d8d6d0; display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #3f6a8c;">How we work</span>
+              <span style="font-size: 14px; line-height: 1.55;">Rigor, truth-seeking, stewardship, and intellectual honesty. Quiet excellence over performance.</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tPrinciples }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <sc-for list="{{ principles }}" as="p" hint-placeholder-count="5">
+              <div style="{{ p.style }}"><span style="{{ p.numStyle }}">{{ p.n }}</span><span style="font-size: 17px; font-weight: 500; line-height: 1.35; margin-top: auto;">{{ p.x }}</span></div>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <div style="flex: 1 1 320px; box-sizing: border-box; border-radius: 8px; padding: 24px; background: #f5f4f1; border: 1px solid #d8d6d0; display: flex; flex-direction: column; gap: 10px;">
+              <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #2d5373;">Human in the loop</span>
+              <span style="font-size: 14px; line-height: 1.6;">Critical actions above set thresholds need a person’s authorization. Aether recommends, identifies, and explains. It does not execute irreversible, high-impact actions on its own.</span>
+            </div>
+            <div style="flex: 1 1 320px; box-sizing: border-box; border-radius: 8px; padding: 24px; background: rgba(181,86,74,0.08); border: 1px solid rgba(181,86,74,0.35); display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a3473c;">■ We do not build for</span>
+              <span style="font-size: 14px; line-height: 1.6;">Covert monitoring of people, political manipulation, unauthorized enrichment, unlawful targeting, or leaking intelligence between tenants. Olympus Labs is politically neutral.</span>
+            </div>
+            <div style="flex: 1 1 320px; box-sizing: border-box; border-radius: 8px; padding: 24px; background: rgba(107,154,124,0.1); border: 1px solid rgba(107,154,124,0.4); display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4f7a5e;">✓ Data doctrine</span>
+              <span style="font-size: 14px; line-height: 1.6;">Customers own their raw data. Tenant intelligence stays inside the tenant. Deletion removes raw data and stops ingestion.</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tResearch }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 10px; align-items: baseline; padding: 12px 16px; border-radius: 12px; background: #f5f4f1; border: 1px dashed #c9c7c0; font-size: 13px; color: #4a4945;"><span style="font-family: var(--font-mono); color: #9c9b95;">○</span>Research is a direction, not a production claim. It becomes a capability only with an owner, a contract, tests, and deployment evidence.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <sc-for list="{{ research }}" as="r" hint-placeholder-count="6">
+              <button type="button" onClick="{{ r.go }}" style="{{ r.style }}" style-hover="{{ r.hover }}">
+                <span style="display: flex; justify-content: space-between; width: 100%; align-items: center;"><span style="{{ r.chip }}">{{ r.g }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">{{ r.toggle }}</span></span>
+                <span style="font-size: 16px; font-weight: 500; margin-top: auto;">{{ r.title }}</span>
+                <span style="font-size: 13px; line-height: 1.5; color: #6b6a65;">{{ r.body }}</span>
+                <sc-if value="{{ r.open }}"><span style="{{ r.qStyle }}">{{ r.q }}</span></sc-if>
+              </button>
+            </sc-for>
+          </div>
+          <a href="Contact.dc.html?brand=olympus&amp;type=research" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 42px; padding: 0 18px; box-sizing: border-box; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #3f6a8c; color: #f5f4f1; border: 1px solid #3f6a8c; align-self: flex-start;" style-hover="background: #345a78; color: #f5f4f1;"><span style="font-family: var(--font-mono);">⚗</span>Discuss a research path</a>
+        </sc-if>
+
+        <sc-if value="{{ tContact }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <sc-for list="{{ routes }}" as="r" hint-placeholder-count="5">
+              <a href="{{ r.href }}" style="{{ r.style }}" style-hover="{{ r.hover }}"><span style="{{ r.chip }}">{{ r.g }}</span><span style="font-size: 16px; font-weight: 500; margin-top: auto;">{{ r.title }}</span><span style="font-size: 13px; line-height: 1.5; color: #4a4945;">{{ r.body }}</span><span style="{{ r.cta }}">{{ r.label }} →</span></a>
+            </sc-for>
+            <div style="flex: 1 1 100%; box-sizing: border-box; border-radius: 12px; padding: 16px 20px; background: #1a1a1e; color: #e8e6e1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+              <span style="font-size: 14px;">Prefer email? <span style="color: #a09f99;">Anything you send is used only to reply.</span></span>
+              <a href="mailto:contact@olympuslabsml.com" style="font-family: var(--font-mono); font-size: 13px; color: #9cc4a9; text-decoration: none;">contact@olympuslabsml.com</a>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </section>
+
+    <section>
+      <div style="max-width: 1200px; margin: 0 auto; padding: clamp(72px, 10vw, 128px) 24px; display: flex; flex-direction: column; gap: 20px;">
+        <h2 style="font-size: clamp(30px, 4.4vw, 52px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.04; margin: 0; max-width: 780px; text-wrap: balance;">Start with the question, not the package.</h2>
+        <p style="font-size: 15px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 560px;">Tell us the relationship you need to understand, the systems that hold the evidence, and the outcome that would matter.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <a href="Contact.dc.html?brand=olympus&amp;type=pilot" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 20px; box-sizing: border-box; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #4f7a5e; color: #f5f4f1; border: 1px solid #4f7a5e;" style-hover="background: #41664e; color: #f5f4f1;">Start a conversation<span style="font-family: var(--font-mono);">→</span></a>
+          <a href="Docs.dc.html" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 20px; box-sizing: border-box; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: rgba(201,151,90,0.16); color: #8a6433; border: 1px solid rgba(201,151,90,0.45);" style-hover="background: rgba(201,151,90,0.26); color: #8a6433;"><span style="font-family: var(--font-mono);">⌘</span>Read the docs</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <dc-import name="Site Footer" hint-size="100%,300px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    const h = (typeof window !== 'undefined' && window.location.hash || '').replace('#', '');
+    this.state = { tab: ['company', 'principles', 'research', 'contact'].includes(h) ? h : 'company', open: null };
+  }
+  componentDidMount() {
+    this.onHash = () => { const h = window.location.hash.replace('#', ''); if (['company', 'principles', 'research', 'contact'].includes(h)) this.show(h); };
+    window.addEventListener('hashchange', this.onHash);
+  }
+  componentWillUnmount() { window.removeEventListener('hashchange', this.onHash); }
+  show(k) { this.setState({ tab: k }); try { const el = document.getElementById('tabs'); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 56, behavior: 'smooth' }); } catch (e) {} }
+  renderVals() {
+    const s = this.state;
+    const C = { cobalt: ['#3a6896', '#2d5373', 'rgba(58,104,150,0.12)'], sage: ['#6b9a7c', '#4f7a5e', 'rgba(107,154,124,0.16)'], ochre: ['#c9975a', '#8a6433', 'rgba(201,151,90,0.18)'], ember: ['#b5564a', '#a3473c', 'rgba(181,86,74,0.12)'], solar: ['#a88a5a', '#7d6538', 'rgba(168,138,90,0.18)'], steel: ['#5a85a8', '#3f6a8c', 'rgba(90,133,168,0.14)'] };
+    const T = [['company', '◈', 'Company', C.cobalt], ['principles', '✓', 'Principles', C.sage], ['research', '⚗', 'Research', C.steel], ['contact', '✉', 'Contact', C.ochre]];
+    const P = [['I', 'Operational intelligence should augment human decision-making, not replace it.', C.cobalt], ['II', 'Governed intelligence systems must remain explainable, auditable, and accountable.', C.sage], ['III', 'Human agency remains sovereign over autonomous operational systems.', C.ochre], ['IV', 'Intelligence infrastructure must operate within lawful, governed, and consent-aware boundaries.', C.steel], ['V', 'Operational trust is foundational infrastructure.', C.solar]];
+    const R = [
+      ['identity', '⬡', 'Identity continuity', 'Tenant-scoped relationships across systems, without treating one source as universal truth.', 'When does evidence justify joining two records — and how do you undo it?', C.cobalt],
+      ['temporal', '◉', 'Temporal journeys', 'Transitions and sequences over time, not isolated events.', 'How do journeys pause, resume, and continue across devices and agents?', C.sage],
+      ['attribution', '→', 'Evidence-backed attribution', 'Touchpoints to value, with assumptions and uncertainty visible.', 'How much credit does an agent deserve for an outcome a person approved?', C.solar],
+      ['agents', '↔', 'Human and agent coordination', 'Observable handoffs between people and agents, with authority preserved.', 'How is delegated authority represented, scoped, and revoked?', C.ochre],
+      ['economic', '↑', 'Economic perspective', 'Value flows reasoned about without stripping their native meaning.', 'How do payments, settlement, and ledger effects join the relationship graph?', C.steel],
+      ['assurance', '✓', 'High-assurance deployment', 'Sovereign, on-premise, and air-gapped deployments where confidence must be earned.', 'What evidence proves a boundary held?', C.ember],
+    ];
+    const RT = [['pilot', '→', 'Start a pilot', 'Bring one relationship question and the systems that hold the evidence.', 'Request a pilot', C.sage], ['security', '✓', 'Security review', 'Architecture, tenant scope, consent, retention, and deployment options.', 'Request a review', C.ember], ['research', '⚗', 'Research', 'Collaborate on identity, attribution, or agent coordination.', 'Discuss research', C.steel], ['proof', '◉', 'Proof partner', 'Document a governed loop with your own data and baseline.', 'Become a partner', C.solar], ['product', '◈', 'Product questions', 'What Aether does today and what is on the way.', 'Ask a question', C.cobalt]];
+    const box = (c, flex, extra) => 'font-family: inherit; text-align: left; flex: ' + flex + '; min-height: 170px; box-sizing: border-box; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-decoration: none; color: #1a1a1e; transition: background-color 120ms, border-color 120ms; ' + (extra || '');
+    const U = [
+      ['entities', '⬡', 'Entities', C.cobalt, 'Every operationally relevant actor', 'An entity is any actor that matters in a system. Each one resolves into a profile with its own timeline, graph, and intelligence.', 'positioning doc · Aether Entities', [['Humans', 'people and users'], ['Organizations', 'companies, accounts, households'], ['AI agents', 'systems that plan and act'], ['Systems', 'services and applications'], ['Devices', 'browsers, phones, hardware'], ['Economic identities', 'wallets, payment accounts'], ['Autonomous processes', 'scheduled and self-running jobs'], ['Campaigns', 'marketing entities with touchpoints']]],
+      ['relationships', '↔', 'Relationships', C.sage, 'How entities relate', 'The four relationship kinds between people and agents, plus the structures they form over time.', 'positioning doc · Aether Graph', [['Human → human', 'collaboration, approvals'], ['Human → agent', 'delegation, review'], ['Agent → agent', 'orchestration, handoff'], ['Agent → human', 'escalation, decisions'], ['Syndicates', 'clusters of humans and agents'], ['Shared devices and wallets', 'identity edges'], ['Referral chains', 'who brought whom'], ['Co-purchasers', 'commerce edges']]],
+      ['activity', '◉', 'Activity and events', C.ochre, 'What happened, and when', 'About 400 canonical event types across two dozen families, all on one contract so every source speaks the same language.', 'repo · EVENT_REGISTRY', [['Interaction', 'page, track, conversion'], ['Identity', 'identify, resolve'], ['Consent', 'grants and revocations'], ['Commerce', 'product, cart, checkout, order'], ['Payments', 'payment, refund, settlement'], ['Journeys', 'start, checkpoint, complete, abandon'], ['Agents', 'task, tool call, outcome'], ['Communications', 'messages and deliveries'], ['Web3', 'wallet, transaction']]],
+      ['intelligence', '◈', 'Intelligence', C.solar, 'What the graph lets you understand', 'The operational intelligence Aether derives from evidence — each result with its confidence and source.', 'positioning doc · Aether Intelligence', [['Behavioral patterns', ''], ['Attribution pathways', ''], ['Relationship clusters', ''], ['Fraud relationships', ''], ['Operational risk', ''], ['Customer journeys', ''], ['High-value users', ''], ['Cross-platform identity', '']]],
+      ['connectors', '⚙', 'Connected systems', C.steel, '14 managed connectors, plus any system you can reach', 'Managed connectors pull or receive events from the tools a business already runs and normalize them into the Aether envelope. Anything else connects through a signed webhook, the feed API, or an import.', 'repo · docs/CONNECTORS.md', [['HubSpot', 'CRM'], ['Salesforce', 'CRM'], ['Shopify', 'commerce'], ['Stripe', 'billing'], ['Klaviyo', 'marketing'], ['Segment', 'analytics'], ['PostHog', 'analytics'], ['GA4', 'analytics'], ['Zendesk', 'support'], ['Intercom', 'support'], ['Jira', 'project · outbound'], ['Linear', 'project · outbound'], ['Slack', 'messaging · outbound'], ['Signed webhook', 'any system'], ['Feed API', 'any backend'], ['File import', 'CSV · JSON · JSONL']]],
+      ['paths', '→', 'Ways in and out', C.ember, 'Many ways in, one governed way out', 'Every path lands in the same Bronze record with source, consent, and tenant attached. Exports are tenant-forced and redacted.', 'repo · DATA-INGESTION-PATHS · data-exchange', [['Web SDK', '@aether/web'], ['iOS SDK', 'AetherSDK'], ['Android SDK', 'sdk-android'], ['React Native SDK', '@aether/react-native'], ['Server events', '/v1/ingest/feed'], ['Connector sync', 'pull'], ['Webhooks', 'push · HMAC'], ['Imports', 'CSV, JSON, JSONL'], ['Exports', '/v1/data-exchange'], ['Audit exports', '/v1/audit']]],
+      ['governance', '✓', 'Governance', C.sage, 'What keeps it accountable', 'Consent, policy, explainability, and human authority apply to every connection above.', 'positioning doc · Aether Governance', [['Consent systems', 'purpose per event'], ['Policy enforcement', ''], ['Explainability', ''], ['Auditability', ''], ['Access controls', 'write, read, admin keys'], ['Tenant isolation', ''], ['Human approval', 'above set thresholds'], ['Deletion', 'raw data removed on request']]],
+    ];
+    const LOGO = {"HubSpot":"https://cdn.simpleicons.org/hubspot","Salesforce":"assets/brand/salesforce.svg","Shopify":"https://cdn.simpleicons.org/shopify","Stripe":"assets/brand/stripe.svg","Klaviyo":"assets/brand/klaviyo.svg","Segment":"assets/brand/segment.svg","PostHog":"https://cdn.simpleicons.org/posthog","GA4":"https://cdn.simpleicons.org/googleanalytics","Zendesk":"https://cdn.simpleicons.org/zendesk","Intercom":"https://cdn.simpleicons.org/intercom","Jira":"https://cdn.simpleicons.org/jira","Linear":"https://cdn.simpleicons.org/linear","Slack":"assets/brand/slack.svg"};
+    const uk = s.unify || 'entities';
+    const cu = U.find(u => u[0] === uk) || U[0];
+    const uc = cu[3];
+    return {
+      unifyCount: U.length, unifyTotal: U.reduce((a, u) => a + u[7].length, 0),
+      unifyTabs: U.map(([k, g, label, c, , , , items]) => { const on = k === uk; return { g, label, n: items.length, sel: on ? 'true' : 'false', go: () => this.setState({ unify: k }),
+        nStyle: 'font-family: var(--font-mono); font-size: 11px; padding: 1px 6px; border-radius: 999px; background: ' + (on ? 'rgba(245,244,241,0.25)' : c[2]) + ';',
+        style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color 120ms, border-color 120ms; ' + (on ? 'background: ' + c[1] + '; color: #f5f4f1; border: 1px solid ' + c[1] + ';' : 'background: #eceae5; color: ' + c[1] + '; border: 1px solid #d8d6d0;'),
+        hover: on ? 'background: ' + c[1] + ';' : 'background: ' + c[2] + '; border-color: ' + c[0] + ';' }; }),
+      unify: { title: cu[4], body: cu[5], src: cu[6], isConn: cu[0] === 'connectors', items: cu[7].map(([k, v]) => ({ k, v, hasV: !!v, hasLogo: cu[0] === 'connectors', logo: LOGO[k] || '', showImg: !!LOGO[k] && !(s.bad || {})[k], showInit: !LOGO[k] || !!(s.bad || {})[k], init: k === 'Signed webhook' ? '↯' : k === 'Feed API' ? '≡' : k === 'File import' ? '⇪' : k.slice(0, 2).toUpperCase(), onErr: () => this.setState(st => ({ bad: { ...(st.bad || {}), [k]: true } })), logoBox: 'width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; align-self: center; flex-shrink: 0; background: #ffffff; border: 1px solid #e2e0da; color: #3f6a8c;', style: 'display: inline-flex; gap: 7px; align-items: baseline; font-size: 12px; padding: ' + (cu[0] === 'connectors' ? '5px 12px 5px 5px' : '6px 11px') + '; border-radius: 999px; background: #f5f4f1; border: 1px solid ' + uc[0] + '55;' })) },
+      unifyPanel: 'border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: ' + uc[2] + '; border: 1px solid ' + uc[0] + '55; border-left: 3px solid ' + uc[0] + ';',
+      goPrinciples: () => this.show('principles'),
+      tabs: T.map(([k, g, label, c]) => ({ label, g, anchor: 'tab-' + k, sel: s.tab === k ? 'true' : 'false', go: () => this.setState({ tab: k }),
+        gStyle: 'font-family: var(--font-mono); color: ' + (s.tab === k ? '#f5f4f1' : c[0]) + ';',
+        style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; border: 0; transition: background-color 120ms; ' + (s.tab === k ? 'background: ' + c[1] + '; color: #f5f4f1;' : 'background: transparent; color: #1a1a1e;'),
+        hover: s.tab === k ? 'background: ' + c[1] + ';' : 'background: ' + c[2] + ';' })),
+      tCompany: s.tab === 'company', tPrinciples: s.tab === 'principles', tResearch: s.tab === 'research', tContact: s.tab === 'contact',
+      principles: P.map(([n, x, c], i) => ({ n: 'Principle ' + n, x, numStyle: 'font-family: var(--font-mono); font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 999px; align-self: flex-start; background: ' + c[0] + '; color: #f5f4f1;',
+        style: 'flex: 1 1 ' + (i < 2 ? 420 : 280) + 'px; min-height: 160px; box-sizing: border-box; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 12px; background: ' + c[2] + '; border: 1px solid ' + c[0] + '66;' })),
+      research: R.map(([k, g, title, body, q, c]) => { const open = s.open === k; return { g, title, body, q, open, toggle: open ? '− open question' : '+ open question', go: () => this.setState({ open: open ? null : k }),
+        chip: 'width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 16px; background: ' + c[2] + '; color: ' + c[1] + ';',
+        qStyle: 'font-size: 13px; line-height: 1.5; padding: 10px 12px; border-radius: 8px; background: ' + c[2] + '; color: ' + c[1] + '; width: 100%; box-sizing: border-box;',
+        style: box(c, '1 1 300px', 'cursor: pointer; background: #f5f4f1; border: 1px solid ' + (open ? c[0] : '#d8d6d0') + '; border-top: 3px solid ' + c[0] + ';'), hover: 'background: ' + c[2] + ';' }; }),
+      routes: RT.map(([k, g, title, body, label, c], i) => ({ g, title, body, label, href: 'Contact.dc.html?brand=olympus&type=' + k,
+        chip: 'width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 16px; background: ' + c[0] + '; color: #f5f4f1;',
+        cta: 'font-size: 13px; font-weight: 500; color: ' + c[1] + ';',
+        style: box(c, i === 0 ? '2 1 380px' : '1 1 240px', 'background: ' + c[2] + '; border: 1px solid ' + c[0] + '55;'), hover: 'border-color: ' + c[0] + '; background: ' + c[2] + ';' })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+[
+  { "source": "https://docs.olympuslabsml.com/<*>", "target": "https://aether.olympuslabsml.com/docs/<*>", "status": "301" },
+  { "source": "https://status.olympuslabsml.com/<*>", "target": "https://aether.olympuslabsml.com/status", "status": "301" },
+  { "source": "https://app.olympuslabsml.com/<*>", "target": "https://aether.olympuslabsml.com/app/<*>", "status": "301" },
+  { "source": "https://www.olympuslabsml.com/<*>", "target": "https://olympuslabsml.com/<*>", "status": "301" },
+  { "source": "/signin", "target": "/app/signin", "status": "301" },
+  { "source": "/signup", "target": "/app/signup", "status": "301" },
+  { "source": "/app/<*>", "target": "/app/index.html", "status": "200" },
+  { "source": "/<*>", "target": "/404.html", "status": "404-200" }
+]

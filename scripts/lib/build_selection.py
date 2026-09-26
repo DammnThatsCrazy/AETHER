@@ -115,6 +115,7 @@ def _selected_workspaces(
             "demo": "frontend/demo",
             "olympus-marketing": "frontend/olympus-marketing",
             "aether-marketing": "frontend/aether-marketing",
+            "site": "frontend/site",
         }
         selected.update(
             path
@@ -168,6 +169,7 @@ def select_builds(
         ("frontend/kyber", "kyber"),
         ("frontend/aether-marketing", "aether-marketing"),
         ("frontend/olympus-marketing", "olympus-marketing"),
+        ("frontend/site", "site"),
         ("frontend/docs", "docs"),
         ("frontend/demo", "demo"),
     ):
@@ -187,6 +189,10 @@ def select_builds(
             packages.add(package)
     if _under(changed, "frontend/aether") or _under(changed, "frontend/kyber"):
         packages.add("shared")
+    # frontend/site serves packages/brand's marks as its Vite publicDir, a
+    # filesystem dependency that no workspace manifest declares.
+    if _under(changed, "packages/brand"):
+        applications.add("site")
     if _under(changed, "packages/web") or _under(changed, "packages/react-native"):
         sdk["js"] = True
     sdk["ios"] = _under(changed, "packages/ios")

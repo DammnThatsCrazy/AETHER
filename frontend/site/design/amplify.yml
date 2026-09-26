@@ -1,0 +1,48 @@
+version: 1
+# Single Amplify app for frontend/site.
+# Serves aether.olympuslabsml.com (product surfaces + /app) and olympuslabsml.com (company)
+# from one build. Attach BOTH custom domains to this Amplify app, branch: main.
+applications:
+  - appRoot: frontend/site
+    frontend:
+      buildPath: /
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+            - npm run build --workspace=packages/shared
+            - npm run build --workspace=packages/web
+        build:
+          commands:
+            # vite build + prerender of marketing and docs routes (see README → Prerendering)
+            - npm run build --workspace=frontend/site
+      artifacts:
+        baseDirectory: frontend/site/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+      customHeaders:
+        - pattern: '**/*'
+          headers:
+            - key: 'Strict-Transport-Security'
+              value: 'max-age=63072000; includeSubDomains; preload'
+            - key: 'X-Content-Type-Options'
+              value: 'nosniff'
+            - key: 'X-Frame-Options'
+              value: 'DENY'
+            - key: 'Referrer-Policy'
+              value: 'strict-origin-when-cross-origin'
+            - key: 'Permissions-Policy'
+              value: 'camera=(), microphone=(), geolocation=()'
+            - key: 'Content-Security-Policy'
+              value: "default-src 'self'; script-src 'self' https://js.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com; connect-src 'self' https://api.stripe.com https://*.amazoncognito.com https://cognito-idp.*.amazonaws.com ${VITE_STATUS_API_URL_ORIGIN} ${VITE_API_ORIGIN}; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self'; base-uri 'self'; form-action 'self' https://*.amazoncognito.com; frame-ancestors 'none'"
+        - pattern: '/assets/**'
+          headers:
+            - key: 'Cache-Control'
+              value: 'public, max-age=31536000, immutable'
+        - pattern: '/app/**'
+          headers:
+            - key: 'Cache-Control'
+              value: 'no-store'

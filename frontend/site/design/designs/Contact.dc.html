@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <title>Contact</title>
+  <style>
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+    a { color: #3a6896; }
+    a:hover { color: #2d5373; }
+  </style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);" data-screen-label="Contact">
+  <dc-import name="Site Header" brand="{{ brand }}" active="Contact" hint-size="100%,56px"></dc-import>
+
+  <sc-if value="{{ stateBar }}" hint-placeholder-val="{{ false }}">
+    <div style="background: #1a1a1e; color: #e8e6e1; font-size: 12px;">
+      <div style="max-width: 1200px; margin: 0 auto; padding: 8px 24px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99; margin-right: 6px;">Design state</span>
+        <sc-for list="{{ stateChips }}" as="c" hint-placeholder-count="6"><button type="button" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</button></sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <main style="padding: clamp(32px, 6vw, 72px) 20px clamp(56px, 8vw, 96px);">
+    <div style="max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="{{ eyebrowStyle }}"><span style="font-family: var(--font-mono);">✉</span>{{ eyebrow }}</span>
+        <h1 style="font-size: clamp(30px, 4.4vw, 44px); font-weight: 500; line-height: 1.06; letter-spacing: -0.03em; margin: 0; color: #1a1a1e; text-wrap: balance;">{{ title }}</h1>
+        <p style="font-size: 15px; line-height: 1.6; color: #6b6a65; margin: 0;">Pick a topic, add a sentence or two, and it reaches the right person. No package or connector name needed.</p>
+      </div>
+
+      <sc-if value="{{ isSuccess }}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="border-radius: 8px; padding: 28px; display: flex; flex-direction: column; gap: 14px; background: rgba(107,154,124,0.12); border: 1px solid rgba(107,154,124,0.45); border-top: 4px solid #6b9a7c;">
+          <span style="font-family: var(--font-mono); font-size: 24px; color: #4f7a5e;">✓</span>
+          <h2 style="font-size: 22px; font-weight: 500; letter-spacing: -0.4px; margin: 0; color: #1a1a1e;">Request received</h2>
+          <p style="font-size: 14px; line-height: 1.6; color: #3a3935; margin: 0;">Your <span style="font-weight: 500;">{{ typeLabel }}</span> request is recorded. Replies go to <span style="font-family: var(--font-mono);">{{ email }}</span>. {{ next }}</p>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: #4f7a5e;">lead:req_8k2x · routed to {{ routeTo }}</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="Docs.dc.html" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #1a1a1e; color: #f5f4f1; border: 1px solid #1a1a1e;" style-hover="background: #2e2e34; color: #f5f4f1;">Read the docs<span style="font-family: var(--font-mono); color: #c9975a;">→</span></a>
+            <button type="button" onClick="{{ reset }}" style="font-family: inherit; white-space: nowrap; min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500; color: #1a1a1e; background: #f5f4f1; border: 1px solid #d8d6d0; cursor: pointer;" style-hover="background: #e2e0da; border-color: #c9c7c0;">Send another</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isForm }}" hint-placeholder-val="{{ true }}">
+        <form noValidate onSubmit="{{ submit }}" style="display: flex; flex-direction: column; gap: 18px; padding: clamp(20px, 3vw, 28px); border-radius: 8px; background: #eceae5; border: 1px solid #d8d6d0;">
+          <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px;">
+            <legend style="font-size: 13px; font-weight: 500; padding: 0; margin-bottom: 8px;">What is this about?</legend>
+            <div role="radiogroup" style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <sc-for list="{{ types }}" as="t" hint-placeholder-count="5">
+                <button type="button" role="radio" aria-checked="{{ t.checked }}" onClick="{{ t.pick }}" style="{{ t.style }}" style-hover="{{ t.hover }}"><span style="{{ t.glyphStyle }}">{{ t.glyph }}</span>{{ t.label }}</button>
+              </sc-for>
+            </div>
+            <span style="{{ hintStyle }}">{{ desc }}</span>
+          </fieldset>
+
+          <sc-if value="{{ bannerShow }}" hint-placeholder-val="{{ false }}">
+            <div role="alert" style="{{ bannerStyle }}"><span style="font-family: var(--font-mono);">{{ bannerGlyph }}</span><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 500; color: #1a1a1e;">{{ bannerTitle }}</span><span style="color: #4a4945;">{{ bannerBody }}</span></span></div>
+          </sc-if>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px;">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label for="c-name" style="font-size: 13px; font-weight: 500;">Name</label>
+              <input id="c-name" autocomplete="name" value="{{ name }}" onChange="{{ onName }}" aria-invalid="{{ nameInvalid }}" style="{{ nameStyle }}">
+              <sc-if value="{{ nameErr }}"><span style="font-size: 12px; color: #a3473c;">Enter your name.</span></sc-if>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label for="c-email" style="font-size: 13px; font-weight: 500;">Work email</label>
+              <input id="c-email" type="email" autocomplete="email" value="{{ email }}" onChange="{{ onEmail }}" aria-invalid="{{ emailInvalid }}" style="{{ emailStyle }}">
+              <sc-if value="{{ emailErr }}"><span style="font-size: 12px; color: #a3473c;">Enter a full work email.</span></sc-if>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label for="c-msg" style="font-size: 13px; font-weight: 500;">{{ msgLabel }}</label>
+            <textarea id="c-msg" rows="4" value="{{ msg }}" onChange="{{ onMsg }}" aria-invalid="{{ msgInvalid }}" placeholder="{{ msgPlaceholder }}" style="{{ msgStyle }}"></textarea>
+            <sc-if value="{{ msgErr }}"><span style="font-size: 12px; color: #a3473c;">Add a sentence or two.</span></sc-if>
+          </div>
+          <details style="font-size: 13px;">
+            <summary style="cursor: pointer; color: #4a4945; font-weight: 500;">Add organization and details <span style="color: #9c9b95; font-weight: 400;">· optional</span></summary>
+            <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 12px;">
+              <input aria-label="Organization" autocomplete="organization" placeholder="Organization" style="{{ baseInput }}">
+              <input aria-label="{{ extraLabel }}" placeholder="{{ extraLabel }}" style="{{ baseInput }}">
+            </div>
+          </details>
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+            <span style="font-size: 12px; color: #6b6a65;">Or email <a href="mailto:contact@olympuslabsml.com" style="font-family: var(--font-mono); color: #4f7a5e; text-decoration: none;">contact@olympuslabsml.com</a></span>
+            <button type="submit" disabled="{{ pending }}" aria-busy="{{ pendingStr }}" style="{{ submitStyle }}" style-hover="background: #41664e; border-color: #41664e;">{{ submitLabel }}<span style="font-family: var(--font-mono);">→</span></button>
+          </div>
+          <p style="font-size: 12px; line-height: 1.55; color: #6b6a65; margin: 0; padding-top: 12px; border-top: 1px solid #d8d6d0;">Used only to reply and route this request. No marketing list, no phone number. <a href="#legal-privacy">Privacy and data use</a>.</p>
+        </form>
+      </sc-if>
+
+      <sc-if value="{{ flags }}" hint-placeholder-val="{{ true }}">
+        <div style="border: 1px dashed #c9975a; border-radius: 6px; padding: 10px 14px; font-size: 12px; line-height: 1.6; display: flex; gap: 10px; background: rgba(201,151,90,0.08);"><span style="font-family: var(--font-mono); color: #8a6433;">▲</span><span>Sends to <code style="font-size: 12px;">POST /v1/contact/lead</code> with <code style="font-size: 12px;">lead_type</code> and <code style="font-size: 12px;">source</code> = {{ source }}. Success shows only after a 2xx response.</span></div>
+      </sc-if>
+    </div>
+  </main>
+  <dc-import name="Site Footer" hint-size="100%,300px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;brand&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;aether&quot;, &quot;olympus&quot;], &quot;default&quot;: &quot;aether&quot;, &quot;tsType&quot;: &quot;'aether'|'olympus'&quot;}, &quot;showReviewFlags&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;showStateBar&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    let q = {};
+    try { q = Object.fromEntries(new URLSearchParams(window.location.search)); } catch (e) {}
+    this.state = { brand: q.brand || this.props.brand || 'aether', type: q.type || 'pilot', st: 'idle', name: '', email: '', msg: '' };
+    this.go(q.state || 'idle', true);
+  }
+  go(st, init) {
+    const filled = st !== 'idle' && st !== 'validation';
+    const next = { st, name: filled ? 'Jordan Lee' : '', email: filled ? 'jordan@northwind.example' : (st === 'validation' ? 'jordan@' : ''), msg: filled ? 'One view of how trial users become paid accounts across web, CRM, and billing.' : '' };
+    if (init) Object.assign(this.state, next); else this.setState(next);
+  }
+  componentWillUnmount() { clearTimeout(this.t); }
+  renderVals() {
+    const s = this.state;
+    const olympus = s.brand === 'olympus';
+    const T = [
+      { id: 'pilot', label: 'Pilot', g: '→', c: ['#4f7a5e', 'rgba(107,154,124,0.16)'], desc: 'Connect a bounded set of sources around one question.', next: 'A product lead replies with a proposed scope.', route: 'product', msg: 'What relationship question are you trying to answer?', ph: 'e.g. Which accounts are expanding, and what shows it?', extra: 'Where does the evidence live? (CRM, payments, app…)' },
+      { id: 'product', label: 'Product', g: '◈', c: ['#2d5373', 'rgba(58,104,150,0.12)'], desc: 'Questions about what Aether does today.', next: 'A product lead replies.', route: 'product', msg: 'What would you like to know?', ph: 'A sentence or two is enough.', extra: 'Anything else we should know' },
+      { id: 'developer', label: 'Developer', g: '⌘', c: ['#8a6433', 'rgba(201,151,90,0.18)'], desc: 'SDKs, connectors, webhooks, imports, and APIs.', next: 'An engineer replies, usually with a docs link.', route: 'engineering', msg: 'What are you trying to connect?', ph: 'e.g. Send checkout events from a React Native app', extra: 'Runtime or language' },
+      { id: 'security', label: 'Security', g: '✓', c: ['#a3473c', 'rgba(181,86,74,0.12)'], desc: 'Architecture, tenant scope, consent, DPA, retention.', next: 'The security owner replies. Missing documents are stated plainly.', route: 'security', msg: 'What does your review need to cover?', ph: 'e.g. Vendor questionnaire due in three weeks', extra: 'Timeline' },
+      { id: 'proof', label: 'Proof partner', g: '◉', c: ['#7d6538', 'rgba(168,138,90,0.18)'], desc: 'Document a governed loop with your own data.', next: 'We agree question, baseline, and method first.', route: 'product · proof', msg: 'What outcome would you want to document?', ph: 'The question and the baseline you would measure against.', extra: 'Baseline or current metric' },
+    ];
+    if (olympus) T.push({ id: 'research', label: 'Research', g: '⚗', c: ['#3f6a8c', 'rgba(90,133,168,0.14)'], desc: 'Research directions in governed intelligence.', next: 'A research lead replies if it matches current work.', route: 'research', msg: 'What would you like to discuss?', ph: 'Topic, and any paper or dataset involved.', extra: 'Link to paper or dataset' });
+    const cur = T.find(t => t.id === s.type) || T[0];
+    const errs = s.st === 'validation';
+    const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.email);
+    const ib = 'font-family: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; border-radius: 6px; background: #f5f4f1; color: #1a1a1e; width: 100%; box-sizing: border-box; border: 1px solid ';
+    const pending = s.st === 'pending';
+    const b = { error: ['■', 'That did not go through', 'Nothing was lost. Try again, or email contact@olympuslabsml.com.', '#a3473c', 'rgba(181,86,74,0.1)'], unconfigured: ['○', 'The form is not connected here', 'Email contact@olympuslabsml.com instead. Your text is still in the form.', '#6b6a65', 'rgba(156,155,149,0.16)'], validation: ['▲', 'A few fields need attention', 'Name, work email, and a short message are required.', '#8a6433', 'rgba(201,151,90,0.14)'] }[s.st];
+    const chipNames = [['idle', 'Empty'], ['validation', 'Validation'], ['pending', 'Pending'], ['success', 'Confirmed'], ['error', 'Error · retry'], ['unconfigured', 'Not configured']];
+    return {
+      brand: s.brand, flags: this.props.showReviewFlags ?? false,
+      stateBar: (this.props.showStateBar ?? true) && !/[?&]bar=0/.test(window.location.search),
+      source: olympus ? 'olympus-marketing' : 'aether-marketing',
+      stateChips: chipNames.map(([k, label]) => ({ label, go: () => this.go(k), style: 'font-family: inherit; font-size: 12px; padding: 4px 9px; border-radius: 4px; cursor: pointer; border: 1px solid ' + (k === s.st ? '#e8e6e1; background: #e8e6e1; color: #1a1a1e;' : '#2a2a2f; background: transparent; color: #e8e6e1;') })),
+      eyebrow: olympus ? 'Contact Olympus Labs' : 'Contact Aether',
+      eyebrowStyle: 'display: inline-flex; gap: 8px; align-items: center; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: ' + cur.c[0] + ';',
+      title: olympus ? 'Tell us what you are trying to understand' : 'Tell us what you need to make visible',
+      types: T.map(t => { const on = t.id === cur.id; return { label: t.label, glyph: t.g, checked: on ? 'true' : 'false', pick: () => this.setState({ type: t.id }),
+        glyphStyle: 'font-family: var(--font-mono); color: ' + (on ? '#f5f4f1' : t.c[0]) + ';',
+        style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; min-height: 36px; padding: 0 13px; border-radius: 999px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color 120ms, border-color 120ms; ' + (on ? 'background: ' + t.c[0] + '; color: #f5f4f1; border: 1px solid ' + t.c[0] + ';' : 'background: #f5f4f1; color: #1a1a1e; border: 1px solid #d8d6d0;'),
+        hover: on ? 'background: ' + t.c[0] + ';' : 'background: ' + t.c[1] + '; border-color: ' + t.c[0] + '66;' }; }),
+      desc: cur.desc, hintStyle: 'font-size: 12px; color: ' + cur.c[0] + ';',
+      typeLabel: cur.label.toLowerCase(), next: cur.next, routeTo: cur.route,
+      isSuccess: s.st === 'success', isForm: s.st !== 'success',
+      bannerShow: !!b, bannerGlyph: b ? b[0] : '', bannerTitle: b ? b[1] : '', bannerBody: b ? b[2] : '',
+      bannerStyle: 'display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 6px; font-size: 13px; line-height: 1.5; color: ' + (b ? b[3] : '#1a1a1e') + '; background: ' + (b ? b[4] : '#eceae5') + '; border: 1px solid ' + (b ? b[3] : '#d8d6d0') + '44;',
+      name: s.name, email: s.email, msg: s.msg,
+      onName: e => this.setState({ name: e.target.value }), onEmail: e => this.setState({ email: e.target.value }), onMsg: e => this.setState({ msg: e.target.value }),
+      nameErr: errs && !s.name, emailErr: errs && !emailOk, msgErr: errs && !s.msg,
+      nameInvalid: errs && !s.name ? 'true' : 'false', emailInvalid: errs && !emailOk ? 'true' : 'false', msgInvalid: errs && !s.msg ? 'true' : 'false',
+      baseInput: ib + '#d8d6d0;',
+      nameStyle: ib + (errs && !s.name ? '#b5564a;' : '#d8d6d0;'),
+      emailStyle: ib + (errs && !emailOk ? '#b5564a;' : '#d8d6d0;'),
+      msgStyle: 'font-family: inherit; font-size: 14px; line-height: 1.5; padding: 10px 12px; border-radius: 6px; background: #f5f4f1; color: #1a1a1e; resize: vertical; width: 100%; box-sizing: border-box; border: 1px solid ' + (errs && !s.msg ? '#b5564a;' : '#d8d6d0;'),
+      msgLabel: cur.msg, msgPlaceholder: cur.ph, extraLabel: cur.extra,
+      pending, pendingStr: pending ? 'true' : 'false',
+      submitLabel: pending ? 'Sending…' : s.st === 'error' ? 'Try again' : 'Send',
+      submitStyle: 'font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 22px; border-radius: 6px; border: 1px solid #4f7a5e; color: #f5f4f1; background: #4f7a5e; font-size: 14px; font-weight: 500; cursor: ' + (pending ? 'wait' : 'pointer') + '; opacity: ' + (pending ? '0.6' : '1') + '; transition: background-color 120ms;',
+      submit: e => { e.preventDefault(); if (!s.name || !emailOk || !s.msg) { this.setState({ st: 'validation' }); return; } this.setState({ st: 'pending' }); clearTimeout(this.t); this.t = setTimeout(() => this.setState({ st: 'success' }), 1400); },
+      reset: () => this.go('idle'),
+    };
+  }
+}
+</script>
+</body>
+</html>
