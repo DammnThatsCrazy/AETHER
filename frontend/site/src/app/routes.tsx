@@ -7,6 +7,8 @@ import { AetherSecurityPage } from '@site/pages/aether/aether-security-page';
 import { AetherPricingPage } from '@site/pages/aether/aether-pricing-page';
 import { AetherHowItWorksPage } from '@site/pages/aether/aether-how-it-works-page';
 import { ContactPage } from '@site/pages/contact-page';
+import { DocsPage } from '@site/pages/docs/docs-page';
+import { StatusPage } from '@site/pages/status-page';
 import { LegalPage } from '@site/pages/legal-page';
 import { NotFoundPage } from '@site/pages/not-found-page';
 import { OlympusCompanyPage } from '@site/pages/olympus/olympus-company-page';
@@ -43,6 +45,9 @@ export const ROUTES: Record<SiteId, RouteObject[]> = {
     { path: '/pricing', element: <AetherPricingPage /> },
     { path: '/security', element: <AetherSecurityPage /> },
     { path: '/procurement', element: <AetherProcurementPage /> },
+    { path: '/docs', element: <DocsPage /> },
+    { path: '/docs/:page', element: <DocsPage /> },
+    { path: '/status', element: <StatusPage /> },
     ...SHARED,
     { path: '*', element: <NotFoundPage /> },
   ],
