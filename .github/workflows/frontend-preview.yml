@@ -153,6 +153,12 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          # The app imports the @aether/shared and @aether/web workspaces
+          # through their built dist/ entries, which npm ci does not produce.
+          # Build them first, as the release build does (deploy.yml).
+          npm run build --workspace @aether/shared
+          npm run build --workspace @aether/web
+          test -f packages/web/dist/aether.esm.js
           npm run build --workspace=frontend/aether
           test -f frontend/aether/dist/index.html
 
