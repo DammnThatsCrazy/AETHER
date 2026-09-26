@@ -6,8 +6,8 @@
 #
 # Placeholders: ${account_id}; ${frontend_preview_app_id} is the Terraform
 # output frontend_preview_app_id; ${staging_aether_app_id} is the id of
-# AETHER-staging-aether-app. The same two ids are the repository variables
-# FRONTEND_PREVIEW_APP_ID and STAGING_AETHER_APP_ID, and the role ARN is
+# AETHER-staging-aether-app. The workflow finds both apps by name (ListApps
+# cannot be resource-scoped); the role ARN is the repository variable
 # FRONTEND_PREVIEW_ROLE_ARN.
 version: 1
 profile: staging
@@ -24,6 +24,11 @@ trust:
     - repo:DammnThatsCrazy/AETHER:pull_request
     - repo:DammnThatsCrazy/AETHER:ref:refs/heads/main
 statements:
+  - sid: DiscoverPreviewAndStagingApps
+    actions:
+      - amplify:ListApps
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: ReadPreviewAndStagingAppSettings
     actions:
       - amplify:GetApp

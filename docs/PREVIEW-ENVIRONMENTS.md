@@ -79,10 +79,12 @@ app's public build settings; nothing else.
    API's `CORS_PREVIEW_ORIGIN_SUFFIX` and the Auth0 preview URLs.
 2. Create the IAM role from the manifest, substituting the account id and both
    app ids.
-3. Set repository variables `FRONTEND_PREVIEW_ROLE_ARN`,
-   `FRONTEND_PREVIEW_APP_ID` and `STAGING_AETHER_APP_ID`.
+3. Set the repository variable `FRONTEND_PREVIEW_ROLE_ARN` to the role's ARN.
+   The workflow finds both Amplify apps by their Terraform names
+   (`FRONTEND_PREVIEW_APP_ID` and `STAGING_AETHER_APP_ID` override that when
+   set).
 
-Until step 3 is done the workflow skips with a notice and deploys nothing.
+Until step 3 is done, the workflow skips with a notice and deploys nothing.
 
 ## Databases
 

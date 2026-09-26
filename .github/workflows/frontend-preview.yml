@@ -19,8 +19,9 @@ name: Frontend preview
 # - The OIDC role (vars.FRONTEND_PREVIEW_ROLE_ARN) is scoped by
 #   config/staging_frontend_preview_iam_policy.yaml to the preview app's pr-*
 #   branches, plus a read of the staging app's public VITE_* build settings.
-# - Until the role and app variables are configured, every job skips and says
-#   so.
+# - Until vars.FRONTEND_PREVIEW_ROLE_ARN is set, every job skips and says so.
+#   The preview and staging app ids are found by their Terraform names
+#   (FRONTEND_PREVIEW_APP_ID / STAGING_AETHER_APP_ID override them if set).
 
 on:
   pull_request:
@@ -63,8 +64,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           ROLE_ARN: ${{ vars.FRONTEND_PREVIEW_ROLE_ARN }}
-          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
-          STAGING_APP_ID: ${{ vars.STAGING_AETHER_APP_ID }}
         run: |
           set -euo pipefail
           printf '%s' "$PR_NUMBER" | grep -Eq '^[0-9]{1,7}$' || {
@@ -83,11 +82,11 @@ jobs:
             echo "branch=pr-$PR_NUMBER"
             echo "sha=$(jq -r '.head.sha' <<<"$pr")"
           } >> "$GITHUB_OUTPUT"
-          if [ -n "$ROLE_ARN" ] && [ -n "$PREVIEW_APP_ID" ] && [ -n "$STAGING_APP_ID" ]; then
+          if [ -n "$ROLE_ARN" ]; then
             echo "armed=true" >> "$GITHUB_OUTPUT"
           else
             echo "armed=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Frontend previews are not configured (FRONTEND_PREVIEW_ROLE_ARN, FRONTEND_PREVIEW_APP_ID, STAGING_AETHER_APP_ID); nothing was deployed."
+            echo "::notice::Frontend previews are not configured (FRONTEND_PREVIEW_ROLE_ARN); nothing was deployed."
           fi
 
       - uses: actions/checkout@v4
@@ -110,15 +109,31 @@ jobs:
           role-session-name: frontend-preview-${{ steps.pr.outputs.number }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Resolve the preview and staging Amplify apps
+        if: steps.pr.outputs.armed == 'true'
+        env:
+          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
+          STAGING_APP_ID: ${{ vars.STAGING_AETHER_APP_ID }}
+        run: |
+          set -euo pipefail
+          # Terraform names them; explicit repository variables win if set.
+          apps="$(aws amplify list-apps --max-items 100 --output json)"
+          preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
+          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app") | .appId' <<<"$apps")}"
+          test -n "$preview" || { echo "::error::no AETHER-staging-aether-app-preview Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
+          {
+            echo "PREVIEW_APP_ID=$preview"
+            if [ -n "$staging" ]; then echo "STAGING_APP_ID=$staging"; fi
+          } >> "$GITHUB_ENV"
+
       - name: Resolve the preview URL and the staging build settings
         if: steps.pr.outputs.armed == 'true'
         id: config
         env:
-          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
-          STAGING_APP_ID: ${{ vars.STAGING_AETHER_APP_ID }}
           PREVIEW_BRANCH: ${{ steps.pr.outputs.branch }}
         run: |
           set -euo pipefail
+          test -n "${STAGING_APP_ID:-}" || { echo "::error::no AETHER-staging-aether-app Amplify app to read build settings from"; exit 1; }
           domain="$(aws amplify get-app --app-id "$PREVIEW_APP_ID" --query 'app.defaultDomain' --output text)"
           url="https://${PREVIEW_BRANCH}.${domain}"
           echo "url=$url" >> "$GITHUB_OUTPUT"
@@ -144,7 +159,6 @@ jobs:
       - name: Deploy to the preview branch
         if: steps.pr.outputs.armed == 'true'
         env:
-          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
           PREVIEW_BRANCH: ${{ steps.pr.outputs.branch }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
@@ -215,9 +229,8 @@ jobs:
         id: armed
         env:
           ROLE_ARN: ${{ vars.FRONTEND_PREVIEW_ROLE_ARN }}
-          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
         run: |
-          if [ -n "$ROLE_ARN" ] && [ -n "$PREVIEW_APP_ID" ]; then
+          if [ -n "$ROLE_ARN" ]; then
             echo "armed=true" >> "$GITHUB_OUTPUT"
           else
             echo "armed=false" >> "$GITHUB_OUTPUT"
@@ -232,11 +245,26 @@ jobs:
           role-session-name: frontend-preview-cleanup
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Resolve the preview and staging Amplify apps
+        if: steps.armed.outputs.armed == 'true'
+        env:
+          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
+          STAGING_APP_ID: ${{ vars.STAGING_AETHER_APP_ID }}
+        run: |
+          set -euo pipefail
+          # Terraform names them; explicit repository variables win if set.
+          apps="$(aws amplify list-apps --max-items 100 --output json)"
+          preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
+          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app") | .appId' <<<"$apps")}"
+          test -n "$preview" || { echo "::error::no AETHER-staging-aether-app-preview Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
+          {
+            echo "PREVIEW_APP_ID=$preview"
+          } >> "$GITHUB_ENV"
+
       - name: Delete previews whose pull request is closed or merged
         if: steps.armed.outputs.armed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PREVIEW_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
         run: |
           set -euo pipefail
           branches="$(aws amplify list-branches --app-id "$PREVIEW_APP_ID" --max-items 1000 \

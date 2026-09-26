@@ -81,6 +81,9 @@ def test_every_amplify_call_is_granted_on_the_preview_app_only():
     for statement in statements:
         resources = statement["resource"]
         resources = resources if isinstance(resources, list) else [resources]
+        if statement["actions"] == ["amplify:ListApps"]:
+            assert resources == ["*"] and statement["scope"] == "global-read-required-by-api"
+            continue
         for resource in resources:
             assert "*" not in resource.split("apps/")[1].split("/")[0], resource
             if statement["actions"] not in (["amplify:GetApp"], ["amplify:ListBranches"]):
