@@ -365,6 +365,10 @@ def test_pilot_first_admin_handoff_is_explicit_and_staging_only() -> None:
     assert "Pilot ECS tasks require a non-empty approved first-admin bootstrap email." in ecs
     assert 'variable "first_admin_bootstrap_email"' in variables
     assert ecs.count("local.first_admin_bootstrap_runtime_environment") == 2
+    # Operator emails ride the same pilot-only overlay and never reach another lane.
+    assert '{ name = "PLATFORM_OPERATOR_EMAILS", value = join(",", [for e in var.platform_operator_emails : lower(trimspace(e))]) }' in ecs
+    main = (TF / "main.tf").read_text(encoding="utf-8")
+    assert 'platform_operator_emails = var.deployment_lane == "pilot" ? var.platform_operator_emails : []' in main
 
 
 def test_backend_task_definition_has_an_explicit_api_runtime_role() -> None:

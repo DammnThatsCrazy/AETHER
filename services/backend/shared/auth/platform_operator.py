@@ -13,6 +13,10 @@ A tenant is an operator only through a signal a tenant cannot grant itself:
 * in staging, the tenant bound by the single-use first-admin bootstrap record,
   which is by construction the platform's own administrative tenant.
 
+People reach that tenant through ``PLATFORM_OPERATOR_EMAILS``: a verified
+sign-in from a listed email with no user or invitation yet joins it as owner
+(``services/auth/sso_membership.py``).
+
 Kyber access is a separate, narrower boundary (``is_kyber_operator``) and is
 not widened by this module.
 """
@@ -67,6 +71,25 @@ async def is_platform_operator(tenant_id: Optional[str]) -> bool:
     return tenant_id == await _staging_bootstrap_tenant_id()
 
 
+async def platform_operator_tenant_id() -> Optional[str]:
+    """The tenant platform operators join: the first configured operator
+    tenant, else the staging first-admin bootstrap tenant. None when neither
+    exists."""
+    configured = settings.security_governance.platform_operator_tenant_ids
+    if configured:
+        return configured[0]
+    return await _staging_bootstrap_tenant_id()
+
+
+def is_platform_operator_email(email: Optional[str]) -> bool:
+    """True when ``email`` is on the deployment's PLATFORM_OPERATOR_EMAILS list.
+
+    Callers must only rely on this for an identity-provider-verified email.
+    """
+    normalized = (email or "").strip().casefold()
+    return bool(normalized) and normalized in settings.security_governance.platform_operator_emails
+
+
 def reset_platform_operator_cache() -> None:
     """Forget the cached bootstrap tenant (tests)."""
     global _bootstrap_tenant_id, _bootstrap_resolved
@@ -74,4 +97,9 @@ def reset_platform_operator_cache() -> None:
     _bootstrap_resolved = False
 
 
-__all__ = ["is_platform_operator", "reset_platform_operator_cache"]
+__all__ = [
+    "is_platform_operator",
+    "is_platform_operator_email",
+    "platform_operator_tenant_id",
+    "reset_platform_operator_cache",
+]

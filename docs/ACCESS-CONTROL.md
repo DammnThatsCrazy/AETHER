@@ -73,10 +73,19 @@ when its identity-provider-verified email:
 
 1. matches an existing active user with no Auth0 link (for example the staging
    first-admin user), which is then linked; or
-2. has an unexpired pending organization invitation, which is accepted: the
+2. is on `PLATFORM_OPERATOR_EMAILS` (founders and internal staff), which joins
+   the platform operator tenant as `owner` (the full `admin` grant). Terraform
+   sets the list (`platform_operator_emails`) on the pilot staging lane only,
+   and the task-definition contract rejects it on any other lane. Keeping it
+   in reviewed configuration preserves that access across a database reset.
+   A member an administrator removed from the operator tenant is not re-added;
+   or
+3. has an unexpired pending organization invitation, which is accepted: the
    person joins the inviting tenant with the invited role.
 
-Anything else gets `403` ("Sign-in is by invitation only"). The browser sends an
+Anything else gets `403` ("Sign-in is by invitation only"). A rejected Auth0
+token or `/userinfo` call returns `400` and logs the reason (never the token)
+with `sso_token_rejected_total`. The browser sends an
 access token for the Aether API audience, which carries no email claims, so the
 backend reads the verified email from Auth0 `/userinfo` with that token (and
 rejects a userinfo subject that differs from the token's). Accepting an

@@ -874,6 +874,9 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
     try:
         claims = await validate_auth0_token(body.token)
     except ValueError as e:
+        # The reason names a mismatched claim or a failed fetch, never the token.
+        logger.warning(f"SSO token rejected: {e}")
+        metrics.increment("sso_token_rejected_total", labels={"stage": "validate"})
         raise BadRequestError(f"Invalid SSO token: {e}")
 
     sub: str = claims.get("sub", "")
@@ -885,6 +888,8 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
         try:
             profile = await fetch_auth0_userinfo(body.token)
         except ValueError as e:
+            logger.warning(f"SSO userinfo rejected: {e}")
+            metrics.increment("sso_token_rejected_total", labels={"stage": "userinfo"})
             raise BadRequestError(f"Invalid SSO token: {e}")
         if profile.get("sub") and profile.get("sub") != sub:
             raise BadRequestError("Invalid SSO token: userinfo subject mismatch")

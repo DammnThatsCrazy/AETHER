@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSite } from '@site/site/site-context';
 import { HEADER_NAV, type SiteLink } from '@site/site/navigation';
+import { BrandMark } from '@site/components/brand-mark';
 
 const secondaryButton =
   'inline-flex items-center justify-center whitespace-nowrap rounded-control border border-line bg-stone-100 font-medium text-ink ' +
@@ -28,7 +29,7 @@ export function SiteHeader({ active = '' }: { active?: string }) {
           {site === 'aether' ? (
             <>
               <a href={href('aether', '/')} aria-label="Aether home" className="flex items-center gap-2 text-ink no-underline">
-                <img src="/logo-aether-layers.svg" alt="" className="block h-[22px] w-[22px]" />
+                <BrandMark brand="aether" className="block h-[22px] w-[22px]" />
                 <span className="text-[17px] font-medium tracking-[-0.4px]">Aether</span>
               </a>
               <span className="text-caption text-slate">
@@ -40,7 +41,7 @@ export function SiteHeader({ active = '' }: { active?: string }) {
             </>
           ) : (
             <a href={href('olympus', '/')} aria-label="Olympus Labs home" className="flex items-center gap-[9px] text-ink no-underline">
-              <img src="/logo-olympus-arch.svg" alt="" className="block h-[18px] w-[18px]" />
+              <BrandMark brand="olympus" className="block h-[18px] w-[18px]" />
               <span className="text-[16px] font-medium tracking-[-0.3px]">Olympus Labs</span>
             </a>
           )}

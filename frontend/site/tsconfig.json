@@ -19,6 +19,6 @@
       "@site/*": ["src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "chunks.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "chunks.ts", "platform-version.ts"],
   "exclude": ["node_modules", "dist"]
 }

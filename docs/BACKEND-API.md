@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:cf8f0c99bda35a3bd7a7b5cf6aa6a61417acd4def073fa76f02f198d4b751b2f"
+  "services/backend/services/": "sha256:ade858963817918cdb8c0b7ec4fbb9d52d4a8c6b1cf0254dc903c1269e291de7"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -145,7 +145,7 @@ signature-verification failures.
 | `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key |
 | `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost |
 | `/v1/auth/login` | POST | Email + password → API key (creates a new key per login) |
-| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off). An unlinked sign-in first links a verified email to its existing user or accepts a pending organization invitation; staging never self-provisions a tenant (see [Access Control](ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
+| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off). An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; staging never self-provisions a tenant. A rejected token returns 400 and logs the reason (see [Access Control](ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
 | `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
@@ -205,7 +205,7 @@ not exposed by this model.
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
 | `/v1/contact/enterprise` | POST | API key | Submit an enterprise inquiry. Persists the inquiry as the durable record (source of truth), then best-effort emails `ENTERPRISE_INQUIRY_EMAIL`. A persistence failure fails the request (never a fake success); an email-delivery failure is non-fatal and the inquiry is retained with a `status` marker. Inquiry PII (name/email/company/message) is written only to the database, never to application logs. |
-| `/v1/contact/lead` | POST | Public | Accept a public lead-capture submission (waitlist, early-access, demo-request). Persists the lead as a durable row, then best-effort emails `LEAD_NOTIFICATION_EMAIL` (default `team@olympuslabsml.com`). Accepted `lead_type` values: `waitlist`, `early-access`, `demo-request`. Optional fields: `name`, `company`, `role`, `use_case`, `message`, `source`. Rate-limited by IP. |
+| `/v1/contact/lead` | POST | Public | Accept a public lead-capture submission (the unified site's contact form, plus the waitlist, early-access and demo-request forms). Persists the lead as a durable row, then best-effort emails `LEAD_NOTIFICATION_EMAIL` (default `team@olympuslabsml.com`). Accepted `lead_type` values: contact topics `pilot`, `product`, `developer`, `security`, `proof`, `research`, and `waitlist`, `early-access`, `demo-request`. The contact form sends its extra field as `use_case` and its organization as `company`. Optional fields: `name`, `company`, `role`, `use_case`, `message`, `source`. Rate-limited by IP. |
 
 ### Self-service billing (`/v1/billing/*`)
 

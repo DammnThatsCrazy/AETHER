@@ -371,6 +371,7 @@ locals {
   first_admin_bootstrap_runtime_environment = local.pilot_lane ? [
     { name = "FIRST_ADMIN_BOOTSTRAP_ENABLED", value = "true" },
     { name = "FIRST_ADMIN_BOOTSTRAP_EMAIL", value = trimspace(var.first_admin_bootstrap_email) },
+    { name = "PLATFORM_OPERATOR_EMAILS", value = join(",", [for e in var.platform_operator_emails : lower(trimspace(e))]) },
     ] : [
     { name = "FIRST_ADMIN_BOOTSTRAP_ENABLED", value = "false" },
   ]

@@ -3,12 +3,10 @@ import { useRoutes } from 'react-router-dom';
 import { SiteProvider, useSite } from '@site/site/site-context';
 import type { SiteId } from '@site/site/site';
 import { ROUTES } from './routes';
+import { BRAND_FAVICONS } from '@site/components/brand-mark';
 
 /** Tab icon per site; index.html ships the Aether one. */
-export const FAVICONS: Record<SiteId, string> = {
-  olympus: '/logo-olympus-arch.svg',
-  aether: '/favicon-aether.svg',
-};
+export const FAVICONS: Record<SiteId, string> = BRAND_FAVICONS;
 
 function SiteRoutes() {
   const { site } = useSite();

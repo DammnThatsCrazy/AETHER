@@ -36,11 +36,15 @@ export default {
           hairline: '#2a2a2f',
         },
         bone: '#e8e6e1', // text on dark
+        mist: '#a09f99', // muted text on dark
+        mint: '#9cc4a9', // links on dark
         cobalt: { DEFAULT: '#3a6896', ink: '#2d5373' },
         steel: { DEFAULT: '#5a85a8', ink: '#3f6a8c' },
         ochre: { DEFAULT: '#c9975a', ink: '#8a6433' },
         sage: { DEFAULT: '#6b9a7c', ink: '#4f8466' },
         ember: { DEFAULT: '#b5564a', ink: '#9c4439' },
+        // Not in the token table; the designs use it for economic/value accents.
+        solar: { DEFAULT: '#a88a5a', ink: '#7d6538' },
       },
       fontFamily: {
         sans: ['Geist', 'system-ui', '-apple-system', 'sans-serif'],

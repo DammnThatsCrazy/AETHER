@@ -467,6 +467,9 @@ module "ecs" {
   # approved operator address reuses the required alert recipient; no secret
   # value enters Terraform state or the task definition.
   first_admin_bootstrap_email = var.deployment_lane == "pilot" ? var.alert_email : ""
+  # Internal staff who join the operator tenant as owner on a verified
+  # sign-in. Pilot staging only; no other lane admits anyone by email.
+  platform_operator_emails = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
   deployment_lane             = var.deployment_lane
   stripe_billing_enabled      = var.deployment_lane == "pilot"
   stripe_checkout_success_url = "${var.aether_app_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"

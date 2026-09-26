@@ -24,11 +24,11 @@ source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
-  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:878ac0f67502ff5f78682ba9e87ac0290e8b403e55bbd6b8827311bdc25d3f66"
+  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:2752b8bd08fee324f5abd3f0bca0c57b62b906dc309192b7247ac2aae7a450f0"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/backend/repositories/repos.py": "sha256:2555cbee6fe1d8a93c02e2b8c0b4d5cc8a0e041b248f7aa02f915bb112af4e20"
-  "services/backend/services/auth/routes.py": "sha256:24cf712702e8344f130a9327046025b8fffcb57de4ddbea867b5ad9248db3055"
+  "services/backend/services/auth/routes.py": "sha256:93e65e73ba6cbcebd86dd1eea2873d108eca36427b24aa2d256170c359de7bed"
 ---
 
 # AETHER first-admin bootstrap
@@ -75,6 +75,11 @@ this tenant. Use **Continue with Olympus sign-in** on the login page (Auth0
 Universal Login; sign up or reset the password there). Do not use **Create
 one** (`/signup`): it registers a new customer tenant on a plan instead. Teammates and advisors are invited from it with
 `POST /v1/account/organization/invitations`; their first Auth0 sign-in joins it.
+Founders and internal staff need no invitation: their addresses are listed in
+Terraform `platform_operator_emails` (`PLATFORM_OPERATOR_EMAILS`, pilot lane
+only), and their first verified Auth0 sign-in (for example **Continue with
+Google** with a Workspace account) joins this tenant as `owner`. The list lives
+in reviewed configuration, so that access returns after a database reset.
 
 ## Automated lifecycle
 

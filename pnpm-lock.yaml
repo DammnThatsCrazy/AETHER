@@ -727,6 +727,9 @@ importers:
 
   frontend/site:
     dependencies:
+      '@olympus/brand':
+        specifier: '*'
+        version: link:../../packages/brand
       react:
         specifier: ^19.0.0
         version: 19.3.0

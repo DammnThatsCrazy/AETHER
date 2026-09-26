@@ -1,5 +1,6 @@
 import { useSite } from '@site/site/site-context';
 import { FOOTER_COLUMNS } from '@site/site/navigation';
+import { BrandMark } from '@site/components/brand-mark';
 
 export function SiteFooter() {
   const { href } = useSite();
@@ -10,12 +11,12 @@ export function SiteFooter() {
           <div className="flex min-w-[200px] flex-col gap-3.5">
             <div className="flex items-center gap-3.5">
               <span className="flex items-center gap-[7px]">
-                <img src="/logo-olympus-arch.svg" alt="" className="h-[15px] w-[15px]" />
+                <BrandMark brand="olympus" className="h-[15px] w-[15px]" />
                 <span className="text-[14px] font-medium text-ink">Olympus Labs</span>
               </span>
               <span aria-hidden="true" className="h-3.5 w-px bg-line" />
               <span className="flex items-center gap-1.5">
-                <img src="/logo-aether-layers.svg" alt="" className="h-[17px] w-[17px]" />
+                <BrandMark brand="aether" className="h-[17px] w-[17px]" />
                 <span className="text-[14px] font-medium text-ink">Aether</span>
               </span>
             </div>
@@ -46,9 +47,9 @@ export function SiteFooter() {
               status.olympuslabsml.com
             </a>
             <span className="inline-flex items-center gap-1.5">
-              <img src="/logo-aether-layers.svg" alt="" className="h-3.5 w-3.5" />
+              <BrandMark brand="aether" className="h-3.5 w-3.5" />
               Aether by
-              <img src="/logo-olympus-arch.svg" alt="" className="h-[13px] w-[13px]" />
+              <BrandMark brand="olympus" className="h-[13px] w-[13px]" />
               Olympus Labs
             </span>
           </span>

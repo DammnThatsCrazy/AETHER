@@ -294,6 +294,10 @@ def contract_errors(
             for name in ("STRIPE_CHECKOUT_SUCCESS_URL", "STRIPE_CHECKOUT_CANCEL_URL", "STRIPE_PORTAL_RETURN_URL"):
                 if not environment.get(name, "").startswith("https://app.staging.olympuslabsml.com/"):
                     errors.append(f"{service}: {name} is not a staging HTTPS billing URL")
+        elif environment.get("PLATFORM_OPERATOR_EMAILS", "").strip():
+            # Email-based operator admission is a pilot-staging convenience;
+            # no other lane may admit anyone to the operator tenant by email.
+            errors.append(f"{service}: PLATFORM_OPERATOR_EMAILS is set outside the pilot lane")
 
         missing = sorted(expected_secret_names - secrets.keys())
         if missing:
