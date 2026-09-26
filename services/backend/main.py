@@ -780,7 +780,7 @@ def create_app() -> FastAPI:
     )
 
     # ── CORS ──────────────────────────────────────────────────────
-    from shared.security.cors import preview_origin_regex
+    from shared.security.cors import CORS_ALLOW_HEADERS, preview_origin_regex
 
     app.add_middleware(
         CORSMiddleware,
@@ -791,7 +791,7 @@ def create_app() -> FastAPI:
         ),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID", "X-Correlation-ID", "X-Kyber-Environment"],
+        allow_headers=list(CORS_ALLOW_HEADERS),
         expose_headers=[
             "X-Request-ID",
             "X-Response-Time",

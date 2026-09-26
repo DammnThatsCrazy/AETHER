@@ -38,7 +38,7 @@ source_hashes:
   "services/backend/alembic/versions/20260906_rcp_simulation.py": "sha256:9365aeced6274ca792563a9d8931a54e387e4cced758bfeec7114adc6e932838"
   "services/backend/alembic/versions/20260906_rcp_source_authority.py": "sha256:b3506114be9179b6592dbc08dfc616de066aea4856d274db16f46cf0f8c17422"
   "services/backend/config/settings.py": "sha256:e2bc318f6816270ac5b40eace9a43cef128db9d34ba206f7173134b76e57f6f5"
-  "services/backend/main.py": "sha256:c2c3adfdb33347d0ccb316e1812eca9a3b558531a811efbade5aff9d68735463"
+  "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
   "services/backend/services/kyber/access/": "sha256:518b962e1ac1c2d7a4edd9bcfc7882007ab2caf058dd85120946401cf9fbe841"
   "services/backend/services/managed_integrations/": "sha256:2cd3baa469ef31e1e5e3c607d58578facf059d7089c49c4d027d92c1c05fcd24"
   "services/backend/services/sdk_distribution/control_plane.py": "sha256:593c4d57a8d4370951b86034077150fec0018783c15ed3ac8afa3a3a28f008c1"
