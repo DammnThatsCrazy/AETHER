@@ -538,3 +538,136 @@ async def test_sso_callback_routes_a_removed_member_through_invitations(monkeypa
 
     assert resolved.await_args.kwargs["user_id"] == "u-removed"
     provisioned.assert_not_called()
+
+
+# ── platform operator emails ─────────────────────────────────────────────────
+
+
+@pytest.fixture
+def _operator_emails(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "security_governance",
+        dataclasses.replace(
+            settings.security_governance,
+            platform_operator_tenant_ids=[OPERATOR],
+            platform_operator_emails=["founder@olympus.test"],
+        ),
+    )
+
+
+async def test_listed_operator_email_joins_the_operator_tenant_as_owner(_operator_emails):
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users, orgs = _Users(), await _orgs()
+    membership = await resolve_sso_membership(
+        sub="google|20", email="Founder@Olympus.test", email_verified=True, name="F",
+        user_repo=users, organization_repo=orgs,
+    )
+
+    assert (membership.tenant_id, membership.how) == (OPERATOR, "platform_operator")
+    user = users.rows[membership.user_id]
+    assert user["auth0_sub"] == "google|20" and user["role"] == "admin"
+    assert set(user["permissions"]) == {"read", "write", "ingest", "analytics", "billing", "admin"}
+    [member] = await _members(orgs)
+    assert (member["user_id"], member["role"]) == (membership.user_id, "owner")
+
+    again = await resolve_sso_membership(
+        sub="google|20", email="founder@olympus.test", email_verified=True, name="F",
+        user_repo=users, organization_repo=orgs,
+    )
+    assert again.user_id == membership.user_id and len(await _members(orgs)) == 1
+
+
+async def test_operator_email_needs_verification_and_the_list(_operator_emails):
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users, orgs = _Users(), await _orgs()
+    for email, verified in (("founder@olympus.test", False), ("someone@olympus.test", True)):
+        assert await resolve_sso_membership(
+            sub="google|21", email=email, email_verified=verified, name="",
+            user_repo=users, organization_repo=orgs,
+        ) is None
+    assert users.rows == {} and await _members(orgs) == []
+
+
+async def test_operator_email_without_an_operator_tenant_joins_nothing(monkeypatch):
+    from services.auth.sso_membership import resolve_sso_membership
+
+    monkeypatch.setattr(
+        settings,
+        "security_governance",
+        dataclasses.replace(
+            settings.security_governance,
+            platform_operator_tenant_ids=[],
+            platform_operator_emails=["founder@olympus.test"],
+        ),
+    )
+    users, orgs = _Users(), await _orgs()
+    assert await resolve_sso_membership(
+        sub="google|22", email="founder@olympus.test", email_verified=True, name="",
+        user_repo=users, organization_repo=orgs,
+    ) is None
+    assert users.rows == {}
+
+
+async def test_operator_email_joins_the_staging_bootstrap_tenant(monkeypatch):
+    from repositories.repos import FirstAdminBootstrapRepository
+    from services.auth.sso_membership import resolve_sso_membership
+
+    monkeypatch.setattr(settings, "env", Environment.STAGING)
+    monkeypatch.setattr(
+        settings,
+        "security_governance",
+        dataclasses.replace(
+            settings.security_governance,
+            platform_operator_tenant_ids=[],
+            platform_operator_emails=["founder@olympus.test"],
+        ),
+    )
+    await FirstAdminBootstrapRepository().insert("staging", {"tenant_id": "tenant-bootstrap"})
+
+    membership = await resolve_sso_membership(
+        sub="google|23", email="founder@olympus.test", email_verified=True, name="",
+        user_repo=_Users(), organization_repo=await _orgs(),
+    )
+    assert membership.tenant_id == "tenant-bootstrap"
+
+
+async def test_removed_operator_is_not_re_added(_operator_emails):
+    from services.auth.sso_membership import resolve_sso_membership
+
+    users, orgs = _Users(), await _orgs()
+    first = await resolve_sso_membership(
+        sub="google|24", email="founder@olympus.test", email_verified=True, name="",
+        user_repo=users, organization_repo=orgs,
+    )
+    [member] = await _members(orgs)
+    await orgs.remove_member(OPERATOR, member.get("member_id") or member["id"])
+
+    assert await resolve_sso_membership(
+        sub="google|24", email="founder@olympus.test", email_verified=True, name="",
+        user_id=first.user_id, user_repo=users, organization_repo=orgs,
+    ) is None
+
+
+async def test_staging_admits_a_listed_operator_despite_invitation_only(monkeypatch, _operator_emails):
+    from services.auth import routes as auth_routes
+
+    monkeypatch.setattr(
+        "shared.auth.auth0_validator.validate_auth0_token",
+        AsyncMock(return_value={"sub": "google|25", "email": "founder@olympus.test", "email_verified": True}),
+    )
+    issued = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr(auth_routes, "_issue_human_session", issued)
+    monkeypatch.setattr(
+        settings, "trust_plane",
+        dataclasses.replace(settings.trust_plane, sso_self_signup_enabled=False, human_sessions_enabled=True),
+    )
+    provisioned = AsyncMock()
+    monkeypatch.setattr(auth_routes._repo, "insert", provisioned)
+
+    await auth_routes.sso_callback(auth_routes.SSOCallbackRequest(token="t"))
+
+    provisioned.assert_not_called()
+    assert issued.await_args.args[1] == OPERATOR

@@ -10,7 +10,12 @@ fallback, a sign-in with an identity-provider-verified email:
 2. accepts the newest unexpired pending organization invitation addressed to
    that email, joining the inviting tenant with the invited role. A sign-in
    that claimed an invitation but failed before its access was written is
-   resumed by the same identity's next sign-in.
+   resumed by the same identity's next sign-in; or
+3. for an email on PLATFORM_OPERATOR_EMAILS (founders and internal staff),
+   joins the platform operator tenant as owner. Operators are never billed or
+   rate limited (shared/auth/platform_operator.py), and listing them in the
+   deployment configuration keeps their access across a database reset. A
+   member an administrator removed from that tenant is not re-added.
 
 An unverified email never links or joins anything. Returns ``None`` when
 neither applies; the caller then self-provisions or, where self-signup is
@@ -24,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from services.account_organization.grants import grants_for
+from shared.auth.platform_operator import is_platform_operator_email, platform_operator_tenant_id
 from shared.logger.logger import get_logger, metrics
 from shared.temporal import SYSTEM_CLOCK, parse_instant_strict, to_iso_utc
 
@@ -34,7 +40,7 @@ logger = get_logger("aether.auth.sso_membership")
 class SSOMembership:
     tenant_id: str
     user_id: str
-    how: str  # "linked_existing_user" | "accepted_invitation"
+    how: str  # "linked_existing_user" | "accepted_invitation" | "platform_operator"
 
 
 def _expired(invitation: dict[str, Any]) -> bool:
@@ -44,24 +50,22 @@ def _expired(invitation: dict[str, Any]) -> bool:
         return True
 
 
-async def _provision(
-    invitation: dict[str, Any],
+async def _write_membership(
     tenant_id: str,
     user_id: str,
     sub: str,
     email: str,
     name: str,
+    organization_role: str,
     user_repo: Any,
     organization_repo: Any,
 ) -> None:
-    """Write the membership, then the user, for a claimed invitation.
+    """Write the membership, then the user, for a person joining a tenant.
 
     Every step is idempotent, and the order makes a failure part-way
     recoverable: until the user row (the one carrying ``auth0_sub``) exists,
-    the identity is still unknown, so its next sign-in comes back here through
-    ``find_unprovisioned_claims`` and finishes the job.
+    the identity is still unknown, so its next sign-in comes back here.
     """
-    organization_role = str(invitation.get("role") or "viewer")
     if await organization_repo.get_active_member_by_user(tenant_id, user_id) is None:
         try:
             await organization_repo.add_member(
@@ -98,10 +102,62 @@ async def _provision(
             "name": name or email,
             "auth_method": "sso",
         })
+
+
+async def _provision(
+    invitation: dict[str, Any],
+    tenant_id: str,
+    user_id: str,
+    sub: str,
+    email: str,
+    name: str,
+    user_repo: Any,
+    organization_repo: Any,
+) -> None:
+    """Write the access a claimed invitation grants, then mark it provisioned.
+
+    Until the marker is written, ``find_unprovisioned_claims`` hands the claim
+    back to this identity's next sign-in, which finishes the job.
+    """
+    organization_role = str(invitation.get("role") or "viewer")
+    await _write_membership(
+        tenant_id, user_id, sub, email, name, organization_role, user_repo, organization_repo
+    )
     invitation_id = invitation.get("invitation_id") or invitation.get("id")
     await organization_repo.update_invitation(
         tenant_id, invitation_id, {"provisioned_at": to_iso_utc(SYSTEM_CLOCK.now())}
     )
+
+
+async def _join_platform_operator_tenant(
+    sub: str,
+    email: str,
+    name: str,
+    user_id: str,
+    user_repo: Any,
+    organization_repo: Any,
+) -> Optional[SSOMembership]:
+    """Owner access to the platform operator tenant for a listed email."""
+    if not is_platform_operator_email(email):
+        return None
+    tenant_id = await platform_operator_tenant_id()
+    if not tenant_id:
+        metrics.increment("sso_operator_join_refused_total", labels={"reason": "no_operator_tenant"})
+        logger.error(
+            "Platform operator email signed in, but no operator tenant exists "
+            "(set PLATFORM_OPERATOR_TENANT_IDS or complete the staging first-admin bootstrap)"
+        )
+        return None
+    if await organization_repo.get_active_member_by_user(tenant_id, user_id) is None and (
+        await organization_repo.membership_removed(tenant_id, user_id)
+    ):
+        metrics.increment("sso_operator_join_refused_total", labels={"reason": "removed"})
+        logger.warning("Platform operator email was removed from the operator tenant; not re-adding")
+        return None
+    await _write_membership(tenant_id, user_id, sub, email, name, "owner", user_repo, organization_repo)
+    metrics.increment("sso_membership_resolved_total", labels={"how": "platform_operator"})
+    logger.info("SSO sign-in joined the platform operator tenant: tenant=%s", tenant_id)
+    return SSOMembership(tenant_id, user_id, "platform_operator")
 
 
 async def resolve_sso_membership(
@@ -154,6 +210,12 @@ async def resolve_sso_membership(
             metrics.increment("sso_membership_resolved_total", labels={"how": "resumed_invitation"})
             logger.info("SSO sign-in resumed an accepted invitation: tenant=%s", tenant_id)
             return SSOMembership(tenant_id, user_id, "accepted_invitation")
+
+    operator = await _join_platform_operator_tenant(
+        sub, email, name, user_id, user_repo, organization_repo
+    )
+    if operator is not None:
+        return operator
 
     for invitation in await organization_repo.find_pending_invitations_for_email(email):
         tenant_id = invitation.get("tenant_id")

@@ -242,6 +242,12 @@ variable "first_admin_bootstrap_email" {
   default     = ""
 }
 
+variable "platform_operator_emails" {
+  type        = list(string)
+  description = "Emails that join the platform operator tenant as owner on a verified sign-in. Empty outside the pilot lane."
+  default     = []
+}
+
 variable "deployment_lane" {
   type        = string
   description = "Deployment overlay selected by the reviewed staging plan."

@@ -561,6 +561,13 @@ class SecurityGovernanceConfig:
     platform_operator_tenant_ids: list[str] = field(default_factory=lambda: _env_list(
         "PLATFORM_OPERATOR_TENANT_IDS", ""
     ))
+    # Verified sign-in emails that join the platform operator tenant as owner
+    # when they have no user or invitation yet (services/auth/sso_membership.py).
+    # Staging lists the founders and internal team so their access survives a
+    # database reset; unset elsewhere.
+    platform_operator_emails: list[str] = field(default_factory=lambda: [
+        email.casefold() for email in _env_list("PLATFORM_OPERATOR_EMAILS", "")
+    ])
 
 
 # ---------------------------------------------------------------------------

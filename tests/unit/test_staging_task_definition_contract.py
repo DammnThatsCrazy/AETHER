@@ -52,6 +52,7 @@ def _client(*, pilot: bool = True):
                 environment.update(
                     {
                         "FIRST_ADMIN_BOOTSTRAP_EMAIL": "ops@olympuslabsml.com",
+                        "PLATFORM_OPERATOR_EMAILS": "founder@olympuslabsml.com",
                         "STRIPE_CHECKOUT_SUCCESS_URL": "https://app.staging.olympuslabsml.com/billing/success",
                         "STRIPE_CHECKOUT_CANCEL_URL": "https://app.staging.olympuslabsml.com/billing/cancel",
                         "STRIPE_PORTAL_RETURN_URL": "https://app.staging.olympuslabsml.com/billing",
@@ -94,6 +95,22 @@ def test_pilot_requires_the_first_admin_bootstrap_email():
 
     errors = checker.contract_errors(lane="pilot", client=missing_email)
     assert any("first-admin bootstrap email is missing" in error for error in errors)
+
+
+def test_full_lane_rejects_email_based_operator_admission():
+    original = _client(pilot=False)
+
+    def with_operator_emails(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            container = payload["taskDefinition"]["containerDefinitions"][0]
+            container["environment"].append(
+                {"name": "PLATFORM_OPERATOR_EMAILS", "value": "founder@olympuslabsml.com"}
+            )
+        return payload
+
+    errors = checker.contract_errors(lane="full", client=with_operator_emails)
+    assert any("PLATFORM_OPERATOR_EMAILS is set outside the pilot lane" in error for error in errors)
 
 
 def test_pilot_rejects_old_full_lane_mounts():

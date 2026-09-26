@@ -75,6 +75,11 @@ this tenant. Use **Continue with Olympus sign-in** on the login page (Auth0
 Universal Login; sign up or reset the password there). Do not use **Create
 one** (`/signup`): it registers a new customer tenant on a plan instead. Teammates and advisors are invited from it with
 `POST /v1/account/organization/invitations`; their first Auth0 sign-in joins it.
+Founders and internal staff need no invitation: their addresses are listed in
+Terraform `platform_operator_emails` (`PLATFORM_OPERATOR_EMAILS`, pilot lane
+only), and their first verified Auth0 sign-in (for example **Continue with
+Google** with a Workspace account) joins this tenant as `owner`. The list lives
+in reviewed configuration, so that access returns after a database reset.
 
 ## Automated lifecycle
 

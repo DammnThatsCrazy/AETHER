@@ -465,6 +465,17 @@ variable "kyber_app_url" {
   description = "Public URL of the Kyber operator console (e.g. https://kyber.olympuslabsml.com)"
 }
 
+variable "platform_operator_emails" {
+  type        = list(string)
+  description = "Founders and internal staff who join the platform operator tenant as owner on a verified sign-in (pilot staging only). Reviewed here so their access survives a database reset."
+  default     = ["osaze@olympuslabsml.com", "team@olympuslabsml.com"]
+
+  validation {
+    condition     = alltrue([for e in var.platform_operator_emails : can(regex("^[^@\\s,]+@[a-z0-9.-]+\\.[a-z]{2,}$", lower(trimspace(e))))])
+    error_message = "platform_operator_emails must be plain email addresses (no commas or spaces)."
+  }
+}
+
 variable "kyber_google_hosted_domain" {
   type        = string
   description = "Google Workspace domain accepted by the Kyber workforce OIDC flow"
