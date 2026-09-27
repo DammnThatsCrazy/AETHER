@@ -461,11 +461,12 @@ any migration, ECS rollout, or static-origin write; rehearsal consumes that
 delivery run's evidence instead of mutating those surfaces a second time.
 
 The public web layer follows the infrastructure topology but has its own
-Amplify build path. `olympus-marketing`, `aether-marketing`, `docs`,
-`aether-app`, and `status` are connected to the checked-in monorepo build
-configuration; on staging the site app (`aether-marketing`) holds the `aether`,
-`www`, `docs` and `status` hosts and `aether-app` holds `app`, and production
-adds the reviewed `*.olympuslabsml.com` associations, one per app.
+Amplify build path, connected to the checked-in monorepo build
+configuration. Staging has two apps: the site app (`aether-marketing`, building
+`frontend/site`) holds the `aether`, `www`, `docs` and `status` hosts and
+`aether-app` holds `app`. Production has five (`olympus-marketing`,
+`aether-marketing`, `docs`, `aether-app`, and `status`), each with its reviewed
+`*.olympuslabsml.com` association.
 The protected tenant and Kyber artifacts remain part of the immutable release.
 The canonical `deploy.yml` workflow publishes lane-selected SPA artifacts to
 their private S3 origins; the staging rehearsal verifies those origins against

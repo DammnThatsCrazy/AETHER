@@ -46,6 +46,9 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
    - **Beta** ($299/mo) → recurring subscription Price
    - **Gamma** ($899/mo) → recurring subscription Price
    - **Delta** ($3,449/mo) → recurring subscription Price
+   - Optional yearly Prices (15% off monthly), on the same products:
+     **Beta** $3,050/yr, **Gamma** $9,170/yr, **Delta** $35,180/yr. Stripe
+     amounts are in cents (`305000`, `917000`, `3518000`).
 
    Contract tiers (Epsilon, Omicron, Omega) are provisioned through the
    admin operator path and do not require self-serve Stripe Prices. Their
@@ -67,7 +70,18 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
    STRIPE_PRICE_EPSILON=price_xxx_epsilon
    STRIPE_PRICE_OMICRON=price_xxx_omicron
    STRIPE_PRICE_OMEGA=price_xxx_omega
+   # Optional yearly prices; a tier without one bills monthly only.
+   STRIPE_PRICE_BETA_ANNUAL=price_xxx_beta_year
+   STRIPE_PRICE_GAMMA_ANNUAL=price_xxx_gamma_year
+   STRIPE_PRICE_DELTA_ANNUAL=price_xxx_delta_year
    ```
+
+   Each environment uses its own Stripe account: staging uses the test-mode
+   **Olympus Labs sandbox** (`acct_1TOploG4IgWgDCUX`, `sk_test_` keys) and is
+   never wired to live mode; production uses the live **Olympus Labs** account
+   (`acct_1TOpldQIy0mqIx3U`, `sk_live_` keys). Both carry the same product IDs.
+   `scripts/validate_stripe.py` checks every configured Price ID's product,
+   amount (cents), interval and mode against the key in use.
 
 3. **(Optional) Overage Price** — only if you want to charge Aether overage
    usage through Stripe invoices:
@@ -114,6 +128,7 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for webhook signature verification. |
 | `STRIPE_PRICE_ALPHA..DELTA` | Recurring subscription Price IDs for self-serve plans. |
 | `STRIPE_PRICE_EPSILON/OMICRON/OMEGA` | Optional contract-tier Price IDs for operator-managed flows. |
+| `STRIPE_PRICE_BETA_ANNUAL/GAMMA_ANNUAL/DELTA_ANNUAL` | Optional yearly Price IDs. Checkout with `billing_interval=annual` needs the tier's yearly price. |
 | `STRIPE_OVERAGE_PRICE_ID` | OPTIONAL Price ID for overage line items. |
 | `STRIPE_CHECKOUT_SUCCESS_URL` | Redirect URL after successful Checkout. |
 | `STRIPE_CHECKOUT_CANCEL_URL` | Redirect URL on cancelled Checkout. |
@@ -135,9 +150,9 @@ go through normal Aether auth, rate-limit, and quota middleware.
 
 | Method | Route | Notes |
 | --- | --- | --- |
-| `GET` | `/v1/billing/capability` | Secret-free provider readiness: `not_configured`, `degraded`, or `available`. |
+| `GET` | `/v1/billing/capability` | Secret-free provider readiness: `not_configured`, `degraded`, or `available`, with the `missing` settings when degraded and `annual_plans` (tiers with a yearly price). |
 | `GET` | `/v1/billing/plans` | Customer-safe plan catalog; Stripe Price IDs are never exposed. |
-| `POST` | `/v1/billing/checkout` | Tenant-scoped Checkout. Body: `{ "plan_tier": "beta" }`; only self-serve tiers (alpha–delta) accepted. |
+| `POST` | `/v1/billing/checkout` | Tenant-scoped Checkout. Body: `{ "plan_tier": "beta", "billing_interval": "annual" }`; only self-serve tiers (alpha–delta) accepted; `billing_interval` defaults to `monthly`, and `annual` returns 400 when the tier has no yearly price. |
 | `POST` | `/v1/billing/portal` | Tenant-scoped portal creation for an existing billing customer. |
 | `GET` | `/v1/billing/invoices` | Locally persisted invoices normalized to provider-independent customer fields. |
 | `POST` | `/v1/admin/tenants/{tenant_id}/billing/checkout-session` | Creates a subscription Checkout Session. Body: `{ "plan_tier": "gamma", "contact_email": "..." }`. Local plan_tier is **not** changed here. |
