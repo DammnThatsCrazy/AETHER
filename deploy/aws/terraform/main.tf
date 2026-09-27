@@ -816,10 +816,13 @@ locals {
       description = "Olympus Labs corporate marketing site"
       subdomain   = "www"
     }
+    # The unified Olympus + Aether site (frontend/site). It keeps this app's
+    # key and name while it is the only host consolidated so far; the other
+    # marketing, docs and status hosts move onto it next.
     aether-marketing = {
       name        = "${var.project}-${var.environment}-aether-marketing"
-      app_root    = "frontend/aether-marketing"
-      description = "Aether product marketing site"
+      app_root    = "frontend/site"
+      description = "Unified Olympus Labs and Aether site"
       subdomain   = "aether"
     }
     docs = {
@@ -859,10 +862,17 @@ locals {
     docs = [
       { source = "/<*>", target = "/index.html", status = "404-200" },
     ]
+    # The site's sign-in and sign-up paths lead to the product app until it is
+    # served under /app from this app; the legacy marketing auth paths follow.
+    # Everything else is client-routed with a 404-200 index fallback.
     "aether-marketing" = [
-      { source = "/login", target = "/index.html", status = "200" },
-      { source = "/signup", target = "/index.html", status = "200" },
-      { source = "/forgot-password", target = "/index.html", status = "200" },
+      { source = "/app/signin", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/app/signup", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/app/<*>", target = "${var.aether_app_url}/<*>", status = "302" },
+      { source = "/login", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/signup", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/forgot-password", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/<*>", target = "/index.html", status = "404-200" },
     ]
   }
 }
@@ -950,6 +960,15 @@ resource "aws_amplify_app" "frontend" {
       VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
     } : {},
+    each.key == "aether-marketing" ? {
+      # Public build settings for the unified site. Prices are published on
+      # staging and production alike (owner decision).
+      VITE_API_BASE_URL     = "https://${var.domain_name}"
+      VITE_STATUS_API_URL   = var.status_api_url
+      VITE_PUBLISH_PRICES   = "true"
+      VITE_SITE_AETHER_URL  = "https://aether.${var.amplify_domain_name}"
+      VITE_SITE_OLYMPUS_URL = "https://www.${var.amplify_domain_name}"
+    } : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL              = var.status_api_url
       VITE_STATUS_DOCS_URL             = "https://docs.${var.amplify_domain_name}"
@@ -997,6 +1016,15 @@ resource "aws_amplify_branch" "main" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
+    } : {},
+    each.key == "aether-marketing" ? {
+      # Public build settings for the unified site. Prices are published on
+      # staging and production alike (owner decision).
+      VITE_API_BASE_URL     = "https://${var.domain_name}"
+      VITE_STATUS_API_URL   = var.status_api_url
+      VITE_PUBLISH_PRICES   = "true"
+      VITE_SITE_AETHER_URL  = "https://aether.${var.amplify_domain_name}"
+      VITE_SITE_OLYMPUS_URL = "https://www.${var.amplify_domain_name}"
     } : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL = var.status_api_url

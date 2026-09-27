@@ -621,14 +621,16 @@ Amplify serves the public web surfaces; S3 stores the protected tenant and Kyber
 release archives.
 
 Routing is app-specific. Olympus marketing and status serve prerendered files
-without a catch-all rewrite. Aether marketing has only the explicit
-`/login`, `/signup`, and `/forgot-password` fallbacks needed by its public auth
-threshold; the end-user app and docs portal use an index fallback because they
-resolve client routes at runtime. That fallback is a `404-200` rewrite: it
+without a catch-all rewrite. The `aether-marketing` app now builds the unified
+site (`frontend/site`) for the `aether` host. It redirects `/app/signin`,
+`/app/signup`, `/app/*` and the legacy `/login`, `/signup` and
+`/forgot-password` paths to the product app's sign-in (`aether_app_url`), and
+uses an index fallback for everything else. The end-user app and docs portal
+also use an index fallback, because they resolve client routes at runtime. That fallback is a `404-200` rewrite: it
 serves `index.html` only when no file exists at the path, so built bundles
 under `/assets/` are still served as files (a plain `200` rewrite of `/<*>`
 returns HTML for them and the app renders blank). This keeps route-specific
-marketing metadata intact while preserving direct navigation for the two
+marketing metadata intact while preserving direct navigation for the
 runtime-routed apps.
 
 The Aurora module pins the standard provisioned Aurora PostgreSQL 16.8 engine
