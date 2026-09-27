@@ -32,10 +32,10 @@ def _client(
     domain_branch: str = "main",
     domain_verified: bool = True,
     domain_dns_record: str | None = None,
-    site_hosts: tuple[str, ...] = (),
+    site_hosts: tuple[str, ...] = ("www", "docs", "status"),
 ):
-    """``site_hosts`` moves those hosts onto the site app; their old apps then
-    hold no association."""
+    """``site_hosts`` are served by the site app; their retired apps hold no
+    association. Pass ``()`` for the pre-consolidation layout."""
     apps = []
     for name, app_id in APP_IDS.items():
         apps.append(
@@ -118,7 +118,7 @@ def test_staging_contract_waits_for_an_active_reviewed_commit_job():
 
     def client(args: list[str]) -> dict[str, Any]:
         payload = base_client(args)
-        if args[:2] == ["amplify", "list-jobs"] and args[args.index("--app-id") + 1] == "d-olympus":
+        if args[:2] == ["amplify", "list-jobs"] and args[args.index("--app-id") + 1] == "d-aether-marketing":
             payload["jobSummaries"][0]["status"] = next(statuses)
         return payload
 
@@ -227,7 +227,7 @@ def test_staging_rejects_a_host_that_no_app_serves():
     ]
 
 
-def test_staging_runtime_contract_requires_api_and_custom_status_origins():
+def test_staging_runtime_contract_requires_api_and_auth_origins():
     client = _client()
     errors = checker.contract_errors(
         mode="staging",
@@ -235,9 +235,25 @@ def test_staging_runtime_contract_requires_api_and_custom_status_origins():
         check_runtime_environment=True,
         client=client,
     )
-    assert any("VITE_STATUS_API_URL" in error for error in errors)
-    assert any("VITE_STATUS_DOCS_URL" in error for error in errors)
-    assert any("VITE_STATUS_AETHER_MARKETING_URL" in error for error in errors)
+    assert any("aether-app" in error and "VITE_API_BASE_URL" in error for error in errors)
+    assert any("aether-app" in error and "VITE_AUTH0_REDIRECT_URI" in error for error in errors)
+    assert any("aether-marketing" in error and "VITE_STATUS_API_URL" in error for error in errors)
+
+
+def test_staging_checks_only_the_site_and_product_apps():
+    assert checker.STAGING_APPS == ("AETHER-staging-aether-marketing", "AETHER-staging-aether-app")
+    assert set(checker.STAGING_RUNTIME_ENVIRONMENT) == set(checker.STAGING_APPS)
+    assert {owner for owners in checker.STAGING_HOSTS.values() for owner in owners} == set(checker.STAGING_APPS)
+
+
+def test_staging_rejects_the_pre_consolidation_layout():
+    """Once the old apps are deleted, a host still mapped only to its old app
+    is a failure, not a pass."""
+    errors = checker.contract_errors(mode="staging", expected_commit=COMMIT, client=_client(site_hosts=()))
+    assert sorted(errors) == sorted(
+        f"Amplify app AETHER-staging-aether-marketing staging domain lacks an AVAILABLE {host} subdomain with a live DNS target"
+        for host in ("www", "docs", "status")
+    )
 
 
 def test_staging_runtime_contract_requires_the_unified_site_settings():

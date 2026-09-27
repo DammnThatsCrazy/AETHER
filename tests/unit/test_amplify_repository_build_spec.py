@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _terraform_app_roots() -> set[str]:
     main = (ROOT / "deploy/aws/terraform/main.tf").read_text(encoding="utf-8")
-    start = main.index("amplify_apps = local.enable_static_frontends ? {")
+    start = main.index("amplify_app_catalog = local.enable_static_frontends ? {")
     block = main[start:main.index("\n  } : {}", start)]
     roots = set()
     for line in re.findall(r"^\s*app_root\s*=\s*(.+)$", block, re.MULTILINE):

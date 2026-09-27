@@ -91,10 +91,9 @@ and publishes that workspace's `dist/` directory. The managed apps are:
 Staging sets `amplify_custom_domain_enabled = true` for
 `staging.olympuslabsml.com` and records each app's default domain plus the
 reviewed association outputs in SSM. On staging the site app answers for
-`aether`, `www`, `docs` and `status` (the last two redirect to `/docs` and
-`/status` on the Aether host), the product app for `app`, and the old
-`olympus-marketing`, `docs` and `status` apps hold no domain until they are
-removed. The state-reconciliation workflow imports the site and product
+`aether`, `www`, `docs` and `status` (the site sends the last two to `/docs`
+and `/status` on the Aether host), the product app for `app`, and the old
+`olympus-marketing`, `docs` and `status` staging apps are deleted. The state-reconciliation workflow imports the site and product
 associations before planning, so Terraform cannot create a second owner or
 detach the live targets. `production-lean` enables the reviewed
 custom-domain associations under `olympuslabsml.com` and exports their DNS
@@ -119,8 +118,8 @@ The prerendered marketing bundles retain the following delivery guarantees:
   `/app/signup` and the legacy `/login`, `/signup`, and `/forgot-password`
   paths redirect (302) to the product app's sign-in (`aether_app_url`); `/app`
   redirects to the product app's root and any other `/app/*` path to the same
-  path on the product app; every
-  remaining path falls back to the site's `/index.html`, whose router
+  path on the product app; every other page route is rewritten to the site's
+  `/index.html` with a `200` (paths without a static-asset extension), whose router
   redirects the previous marketing app's URLs to their new pages. Other
   environments keep the prerendered `aether-marketing` build and its targeted
   `/login`, `/signup`, and `/forgot-password` fallbacks until the site

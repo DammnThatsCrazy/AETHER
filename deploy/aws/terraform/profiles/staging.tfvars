@@ -44,6 +44,15 @@ amplify_custom_domain_enabled = true
 amplify_domain_name           = "staging.olympuslabsml.com"
 status_api_url                = "https://api.staging.olympuslabsml.com/health"
 
+# Lead notifications (contact and pilot requests) and account mail go through
+# SES from the verified olympuslabsml.com identity to team@olympuslabsml.com.
+email_enabled = true
+
+# Anyone can create an account on staging through Auth0 sign-up (Google or
+# email) to exercise the full journey: sign-up, tenant, plan, Stripe test-mode
+# checkout, product.
+self_signup_enabled = true
+
 # staging.olympuslabsml.com is a Route 53 zone (created outside this root,
 # delegated from Squarespace by NS records). Terraform owns its records: the
 # Amplify subdomains, api, and the certificate validation CNAMEs below, which

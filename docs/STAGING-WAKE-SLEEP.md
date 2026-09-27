@@ -62,12 +62,12 @@ source_hashes:
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
-  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:2752b8bd08fee324f5abd3f0bca0c57b62b906dc309192b7247ac2aae7a450f0"
+  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:a11e8c76b0e44f976ea373e3c483e3398b8f69846ea6eeedcb6e9e57a6df2295"
   "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:65090a6bedea3bba7947535726b193486ccea315613c0915ba7e701397d15608"
-  "deploy/aws/terraform/variables.tf": "sha256:f62ff6504ed532ff09f5ac3f3a9bfd1e7f9f209df9263e6f7ee8b32e2b7fa413"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:db7c10e85f2053f977d69778e290eacb2af233a4af83bd40cb8e2eff25a12797"
+  "deploy/aws/terraform/variables.tf": "sha256:e38768a8c7093a55a7d9dfc8c3aafd217a81292142e2c6cb4cfcd4ea6dd8f0fd"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:c53accd2aca901dba3ab63e757d413e1659be3a415ce3d0ac90eeeb7be739d3a"
+  "scripts/release/check_amplify_app_contract.py": "sha256:3de18a5a775e1b426726039459742338449bfabb6403c66dcceeac3577f05018"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
@@ -282,7 +282,7 @@ the migration uses metadata-only Secrets Manager calls and does not read the
 secret value.
 
 The staging Amplify preflight is also race-safe for a merged `main` push. The
-five customer-facing apps can auto-start their reviewed-commit builds before
+site and product apps can auto-start their reviewed-commit builds before
 the pilot wrapper reaches its provenance gate, so the gate waits for an active
 job only when its commit is exactly the reviewed SHA. It polls for up to 15
 minutes, then requires a terminal `SUCCEED` status and the exact commit; an
@@ -542,7 +542,7 @@ Steps, in order, with what each proves:
    identity contract and live identity probe, including the API callback
    `https://<api-domain>/v1/kyber/auth/callback`; the Kyber SPA origin remains
    the separate WebAuthn origin. Each selected lane's S3 static origin must
-   contain `index.html`. The five public Amplify apps have their own
+   contain `index.html`. The public Amplify apps have their own
    delivery/smoke gate; this lifecycle step does not claim to publish or verify
    those Amplify domains. Staging does not attach the production custom domain
    or a production status API URL. When `enable_frontend_previews` is on, the

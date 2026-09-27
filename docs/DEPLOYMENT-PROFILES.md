@@ -14,14 +14,14 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:ff7a558cf03301c9559bc5ee8ed429bfe505846b0e11b0b2d98ede2c79e0d92f"
+  "deploy/aws/terraform/main.tf": "sha256:970479d63bb3e8a20c7c85f4117fe810e7af53902812223a9cc499eb766da06b"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:fcc3e84f90f6fb49d57f6e81bb31b5d5bb0c0febe1195c61512d45b40f23cb1c"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:ddc4bacad8ec5aa6047433d330c95afbcda39924c71f3d2c3a2f810ee6437eda"
   "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
-  "deploy/aws/terraform/variables.tf": "sha256:f62ff6504ed532ff09f5ac3f3a9bfd1e7f9f209df9263e6f7ee8b32e2b7fa413"
+  "deploy/aws/terraform/variables.tf": "sha256:e38768a8c7093a55a7d9dfc8c3aafd217a81292142e2c6cb4cfcd4ea6dd8f0fd"
   "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
   "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
@@ -269,8 +269,8 @@ the verified `www`, `aether`, `docs`, `app`, and `status` subdomains under
 `staging.olympuslabsml.com`; production-lean associates the same surface under
 `olympuslabsml.com`. On staging, the Aether marketing app builds the unified
 Olympus + Aether site (`frontend/site`) and serves the `aether`, `www`, `docs`
-and `status` hosts, so the old Olympus, docs and status apps hold no domain
-until they are removed; production keeps one app per host and the prerendered
+and `status` hosts, and the old Olympus, docs and status staging apps are
+deleted; production keeps one app per host and the prerendered
 Aether marketing build for now. Kyber is not one of those public apps and
 has no public DNS route. The protected tenant and Kyber release archives remain
 private S3 artifacts for the staging rehearsal and internal operator path.

@@ -71,9 +71,9 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:ce5eb5ed0de358b85709e6862584baedbd9f1bf77d54e59e9be0147a65ce6aff"
+  "deploy/aws/terraform/": "sha256:ed2c4f44e2ad59afecf5ba507d0b21f45b4d23bcf08d5ec7d5ffc81b5857cc0e"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:c53accd2aca901dba3ab63e757d413e1659be3a415ce3d0ac90eeeb7be739d3a"
+  "scripts/release/check_amplify_app_contract.py": "sha256:3de18a5a775e1b426726039459742338449bfabb6403c66dcceeac3577f05018"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -567,13 +567,22 @@ Amplify app IDs and default domains for downstream consumption.
 On staging, the site app (`aether-marketing`, building `frontend/site`) serves
 `aether`, `www`, `docs` and `status` from one association
 (`aws_amplify_domain_association.site`); the product app keeps `app`. `www`
-shows the Olympus pages, and the `docs` and `status` hosts redirect (301) to
-`aether.*/docs` and `aether.*/status`. The old `olympus-marketing`, `docs` and
-`status` apps hold no domain and are removed after a reviewed hold. Amplify maps
+shows the Olympus pages, and the site itself sends the `docs` and `status`
+hosts to `aether.*/docs/<path>` and `aether.*/status` (Amplify does not apply
+host-based rewrite rules that carry a path). The old `olympus-marketing`,
+`docs` and `status` staging apps are deleted: staging's public web runs on the
+site app and the product app. Amplify maps
 a host to one app, so the site association depends on the others: when a host
 moves, Terraform removes the old app's association before the site claims it.
 Route 53 records are keyed by host. Production keeps one app per host until its
 own cutover.
+
+Transactional email goes through Amazon SES from the verified
+`olympuslabsml.com` domain identity (`email_enabled`, on in the staging
+profile). The tasks send from `noreply@olympuslabsml.com`, contact and pilot
+requests notify `lead_notification_email` (`team@olympuslabsml.com`), and the
+task role may send only from that identity. While the SES account is in the
+sandbox, only verified recipient addresses receive mail.
 
 Staging also gets a repository-unconnected app for per-PR previews of the
 Aether app (`enable_frontend_previews` in `profiles/staging.tfvars`).
@@ -644,8 +653,11 @@ unified site (`frontend/site`) for the `aether` host. It redirects
 `/app/signin`, `/app/signup` and the legacy `/login`, `/signup` and
 `/forgot-password` paths to the product app's sign-in (`aether_app_url`),
 sends `/app` to the product app's root and any other `/app/*` path to the same
-path on the product app, and uses an
-index fallback for everything else; the site's router redirects the previous
+path on the product app, and rewrites every other page route to
+`/index.html` with a `200` (AWS's single-page-app pattern: paths without a
+file extension, or whose extension is not a static asset), so routes are not
+404s and bundles, images and fonts are still served as files; the site's
+router redirects the previous
 marketing app's URLs to their new pages. Other environments keep the
 prerendered `frontend/aether-marketing` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders

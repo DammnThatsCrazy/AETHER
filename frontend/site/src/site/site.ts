@@ -103,3 +103,24 @@ export function siteHref(
   if (current !== target) return `${origins[target]}${normalized}`;
   return keepSelector ? withSiteParam(normalized, current) : normalized;
 }
+
+/**
+ * The docs and status sites used to have their own hosts (docs.* and
+ * status.*). Those hosts now point at this build, which sends visitors to the
+ * same content on the Aether site: docs.<domain>/<path> → <aether>/docs/<path>
+ * and status.<domain>/* → <aether>/status. Returns null for every other host.
+ */
+export function retiredHostRedirect(
+  hostname: string,
+  pathname: string,
+  search = '',
+  origins: SiteOrigins = siteOrigins(),
+): string | null {
+  const label = hostname.toLowerCase().split('.')[0];
+  if (label === 'docs') {
+    const rest = pathname.replace(/^\/+|\/+$/g, '');
+    return `${origins.aether}/docs${rest ? `/${rest}` : ''}${search}`;
+  }
+  if (label === 'status') return `${origins.aether}/status`;
+  return null;
+}

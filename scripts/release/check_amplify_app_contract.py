@@ -35,10 +35,7 @@ DEFAULT_JOB_TIMEOUT_SECONDS = 900.0
 DEFAULT_JOB_POLL_SECONDS = 15.0
 
 STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
-    "AETHER-staging-olympus-marketing": {
-        "AETHER_ENV": "staging",
-    },
-    # The unified site (frontend/site) on the staging Aether host.
+    # The unified site (frontend/site): aether, www, docs and status hosts.
     "AETHER-staging-aether-marketing": {
         "AETHER_ENV": "staging",
         "VITE_API_BASE_URL": "https://api.staging.olympuslabsml.com",
@@ -47,9 +44,6 @@ STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
         "VITE_SITE_AETHER_URL": "https://aether.staging.olympuslabsml.com",
         "VITE_SITE_OLYMPUS_URL": "https://www.staging.olympuslabsml.com",
     },
-    "AETHER-staging-docs": {
-        "AETHER_ENV": "staging",
-    },
     "AETHER-staging-aether-app": {
         "AETHER_ENV": "staging",
         "VITE_AETHER_ENV": "staging",
@@ -57,12 +51,6 @@ STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
         "VITE_AETHER_ENDPOINT": "https://api.staging.olympuslabsml.com",
         "VITE_AUTH0_REDIRECT_URI": "https://app.staging.olympuslabsml.com/callback",
         "VITE_AUTH0_LOGOUT_URI": "https://app.staging.olympuslabsml.com/login",
-    },
-    "AETHER-staging-status": {
-        "AETHER_ENV": "staging",
-        "VITE_STATUS_API_URL": "https://api.staging.olympuslabsml.com/health",
-        "VITE_STATUS_DOCS_URL": "https://docs.staging.olympuslabsml.com",
-        "VITE_STATUS_AETHER_MARKETING_URL": "https://aether.staging.olympuslabsml.com",
     },
 }
 STAGING_REQUIRED_RUNTIME_KEYS: dict[str, tuple[str, ...]] = {
@@ -74,22 +62,18 @@ STAGING_REQUIRED_RUNTIME_KEYS: dict[str, tuple[str, ...]] = {
 }
 
 STAGING_APPS: tuple[str, ...] = (
-    "AETHER-staging-olympus-marketing",
     "AETHER-staging-aether-marketing",
-    "AETHER-staging-docs",
     "AETHER-staging-aether-app",
-    "AETHER-staging-status",
 )
-# Each staging host and the apps allowed to serve it, the reviewed owner
-# first. The unified site app (aether-marketing) takes over www, docs and
-# status from their old apps; until that apply lands (and while the old apps
-# are held before removal) the old owner still passes.
+# Each staging host and the app that serves it. The unified site app
+# (aether-marketing) serves aether, www, docs and status; the product app
+# serves app. The retired Olympus, docs and status apps are deleted.
 STAGING_HOSTS: dict[str, tuple[str, ...]] = {
     "aether": ("AETHER-staging-aether-marketing",),
     "app": ("AETHER-staging-aether-app",),
-    "www": ("AETHER-staging-aether-marketing", "AETHER-staging-olympus-marketing"),
-    "docs": ("AETHER-staging-aether-marketing", "AETHER-staging-docs"),
-    "status": ("AETHER-staging-aether-marketing", "AETHER-staging-status"),
+    "www": ("AETHER-staging-aether-marketing",),
+    "docs": ("AETHER-staging-aether-marketing",),
+    "status": ("AETHER-staging-aether-marketing",),
 }
 STATUS_APP = "aether-status"
 PRODUCTION_STATUS_ENVIRONMENT = {
