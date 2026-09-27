@@ -76,7 +76,8 @@ There are two separate frontend applications. **Do not mix them up.**
   pending invitation, or provisions a new tenant when self sign-up is on. With
   Auth0 configured, `/signup` opens Auth0's hosted sign-up
   (`screen_hint=signup`); the pricing page's `?plan=alpha|beta|gamma|delta`
-  (or a validated `?redirect`, else `/onboarding`) is kept in session storage
+  (or a validated `?redirect`, else the marketing provider hand-off's
+  `/settings/integrations?…`, else `/onboarding`) is kept in session storage
   across the round trip (`rememberPostAuthDestination` /
   `readPostAuthDestination`, validated and expiring after 30 minutes), and
   `/callback` lands on it. `/billing?plan=<id>` starts that plan's Stripe
