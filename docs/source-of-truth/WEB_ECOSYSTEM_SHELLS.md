@@ -87,9 +87,13 @@ authoritative DNS.
   `olympus-marketing`, `docs`, `status` and `aether-app` staging apps are
   deleted, and the post-apply staging Amplify check rejects them if they
   reappear.
-- **Production keeps five applications**, one per host: `olympus-marketing`,
-  `aether-marketing` (the prerendered build), `docs`, `aether-app`, and
-  `status`, until production moves to the unified site.
+- **Production runs one Amplify application**, `AETHER-production-web` (the
+  former `aether-status` app, repurposed). It builds the same unified site with
+  the product under `/app` and serves `www`, `aether`, `docs`, `status` and
+  `app` under `olympuslabsml.com`; `amplify-status-production.yml` binds and
+  deploys it on every `main` push. The four former per-host production apps
+  are deleted. It is not yet Terraform-managed, and the product's sign-in
+  needs the production backend, which does not exist yet.
 
 Kyber remains outside this public set and has no public DNS record by default.
 

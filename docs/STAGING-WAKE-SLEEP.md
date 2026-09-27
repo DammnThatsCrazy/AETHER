@@ -45,7 +45,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:c135b99b58cf0408675b1afce06c846981e8b092c2289e3655763635a9a7b490"
+  ".github/workflows/amplify-status-production.yml": "sha256:f2b555580ea9d40562cae1288180b8980f6c7b238892894c1bc9816e07448a09"
   ".github/workflows/deploy.yml": "sha256:8df5f83f20c8ec516fb41d8a4d1b6458a3f3df39ffa2bb5b45130c068b02350e"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
@@ -67,7 +67,7 @@ source_hashes:
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:db7c10e85f2053f977d69778e290eacb2af233a4af83bd40cb8e2eff25a12797"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:c7915cea9bff84db19c1cac00af09b414b7234c25624935a7304e488e42cde95"
+  "scripts/release/check_amplify_app_contract.py": "sha256:645ad3320ea6ba0335b59fbae64d9e6a9f465c6d0f5be5d10d10446af45e61e9"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:5d5711a9409d7cd9659b30cebd9f961f6e5db55e36297cd4c783f541c152e032"
@@ -465,8 +465,9 @@ you, now reconcile" or "I could not clean up, intervene manually".
 only job in the workflow behind a GitHub environment (`staging`); the apply
 approvals live in `terraform-promote.yml`.
 
-The public production status app is established separately from the staging
-runtime wake. On a merged `main` push, `amplify-status-production.yml` waits
+The production web app (`AETHER-production-web`, the former public status app,
+which now serves every production host) is established separately from the
+staging runtime wake. On a merged `main` push, `amplify-status-production.yml` waits
 for the exact main integration authority and performs a read-only state
 assessment. A clean, unbound legacy app (no manual branches and no live
 domain mappings) is bound to the repository and its production `main` branch
