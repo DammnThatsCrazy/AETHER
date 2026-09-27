@@ -17,6 +17,7 @@ estimated_read_minutes: 3
 | Endpoint | Audience | Purpose |
 | --- | --- | --- |
 | `GET /v1/health` | infra/load balancer | Deep liveness/readiness probe (status, timestamp, dependency/service summary). Public (bypasses auth). |
+| `GET /v1/status/history` | public status page | Per-component daily uptime for up to 90 days, rolled up from `/v1/health` samples. Public, read-only, aggregate only; days without samples are omitted. See [Backend API](BACKEND-API.md#public-status-history). |
 | `GET /v1/metrics` | internal | Prometheus metrics scrape. |
 | `GET /v1/status` | tenant-safe | Single-tenant system status (no infra internals, no other tenants). |
 | `GET /v1/admin/kyber/reliability/*` | operator | Service/pipeline/queue health, SLOs (operator-gated). |

@@ -25,6 +25,10 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/ready",
     "/v1/ready",
     "/v1/metrics",
+    # Public status page history feed: read-only, aggregate per-component
+    # daily uptime (no tenant data). The handler applies its own per-IP limit
+    # and a short response cache (services/gateway/status_history.py).
+    "/v1/status/history",
     "/docs",
     "/openapi.json",
     "/redoc",

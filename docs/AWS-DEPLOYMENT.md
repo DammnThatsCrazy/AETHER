@@ -71,9 +71,9 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:d8b5c21cd5ebe5f52eb3e84a1be455bf6ff58c91032737a0a0841fed62595009"
+  "deploy/aws/terraform/": "sha256:217f49ab0f2e0962c937bc9426baa0bd65f2d37e29dc77990dd1c4c9b3e0a1b7"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:0913fdc119d6f9eea5f328b137c632357d4f5728973d4ed02cbe83091cba276e"
+  "scripts/release/check_amplify_app_contract.py": "sha256:36628a1e727bfbd77da202ed071642585950a5838f152e9af132bda46223353c"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -665,7 +665,7 @@ path on the product app, and rewrites every other page route to
 file extension, or whose extension is not a static asset), so routes are not
 404s and bundles, images and fonts are still served as files; the site's
 router redirects the previous
-marketing app's URLs to their new pages. Other environments keep the
+marketing app's URLs to their new pages. Its status page reads the backend's 90-day per-component uptime feed (`VITE_STATUS_HISTORY_URL`, `GET /v1/status/history`). Other environments keep the
 prerendered `frontend/aether-marketing` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders
 its own route metadata. The end-user app and docs portal

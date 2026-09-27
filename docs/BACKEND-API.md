@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:0881861bc402a066c7427c4ee52fe81d4b06b257746532b6361a4685bb656c23"
+  "services/backend/services/": "sha256:d72649962c0bf6c89d0d86eaf6fdec3c0e0b7d7f3d6455b0b655b050da26c018"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -38,6 +38,69 @@ All endpoints require an API key passed as:
 
 Public paths (`/`, `/health`, `/v1/health`, `/v1/metrics`, `/docs`,
 `/openapi.json`, `/redoc`) bypass authentication and rate limiting.
+`/v1/status/history` is public too; it bypasses API-key auth and the plan
+limits but applies its own per-client-IP limit (see below).
+
+## Public Status History
+
+`GET /v1/status/history?days=90` — unauthenticated, read-only feed behind the
+public status page's 90-day uptime bars (`VITE_STATUS_HISTORY_URL` in
+`frontend/site`; parsed by `frontend/site/src/site/status.ts`). Implemented in
+`services/backend/services/gateway/routes.py` and
+`services/backend/services/gateway/status_history.py`.
+
+| Query | Default | Rule |
+|---|---|---|
+| `days` | `90` | Integer 1–90; anything else returns `422`. The window is the `days` UTC dates ending today. |
+
+```json
+{
+  "generated_at": "2026-09-27T12:00:00+00:00",
+  "window_days": 90,
+  "start_date": "2026-06-30",
+  "end_date": "2026-09-27",
+  "components": [
+    {
+      "name": "api",
+      "days": [
+        { "date": "2026-09-25", "status": "outage", "uptime_pct": 99.65 },
+        { "date": "2026-09-27", "status": "operational", "uptime_pct": 100.0 }
+      ]
+    },
+    { "name": "ingestion", "days": [] }
+  ],
+  "incidents": []
+}
+```
+
+- **Components**: `api` (the `/v1/health` top-level status) plus every
+  component `/v1/health` reports (`services/gateway/component_status.py`),
+  always listed in that order, each with only the days that have data.
+- **Samples**: each API process folds its own `/v1/health` verdict into the
+  `status_component_daily` table (one row per UTC day and component holding
+  `ok` / `degraded` / `down` / `unknown` sample counts) at most once every
+  `STATUS_HISTORY_SAMPLE_INTERVAL_SECONDS` (default 300). The write runs as a
+  background task after the liveness response and cannot fail it. The
+  `STATUS_HISTORY_RECORDING_ENABLED=false` setting stops recording.
+- **Scoring**: `unknown` samples are unobserved and excluded.
+  `uptime_pct = (ok + degraded) / (ok + degraded + down)`, rounded *down* to two
+  decimals, so a day with any `down` sample never shows 100%. `status` is the
+  worst observed sample (`outage` > `degraded` > `operational`).
+- **Missing days are omitted**, never reported as 0% or 100%; the page renders
+  them as "no data". A period when no API process is serving records no
+  samples, so it counts neither for nor against a day's uptime. The feed
+  reports what the platform observed about itself. It is not an external
+  probe.
+- **Public data only**: date, status and uptime per component. No tenant data,
+  hostnames, dependency names, error text or sample counts. `incidents` is
+  always `[]`, because this feed does not publish incidents.
+- **Caching and limits**: `Cache-Control: public, max-age=300,
+  stale-while-revalidate=600`, a 60-second in-process response cache, and 60
+  requests per minute per client IP (the right-most `X-Forwarded-For` hop,
+  which the load balancer appends) before `429` with `Retry-After`. CORS uses
+  the same `CORS_ORIGINS` allowlist as every other endpoint.
+- **Errors**: when the rollups cannot be read the route returns a generic
+  `503` problem body with `Cache-Control: no-store`.
 
 ## Plans, Rate Limits & Quotas
 
