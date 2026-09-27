@@ -83,6 +83,14 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
    `scripts/validate_stripe.py` checks every configured Price ID's product,
    amount (cents), interval and mode against the key in use.
 
+   On AWS, each Price ID is its own Secrets Manager secret
+   (`aether/stripe-price-<tier>`, and `aether/stripe-price-<tier>-annual` for
+   yearly), holding the bare `price_...` string. Tasks mount the yearly ones
+   only when the Terraform profile sets `stripe_annual_prices_enabled = true`.
+   Staging turns it on with the sandbox yearly prices; production does not set
+   it yet. See [AWS Deployment](AWS-DEPLOYMENT.md#post-deploy-steps) for the
+   bootstrap and state-reconciliation order.
+
 3. **(Optional) Overage Price** — only if you want to charge Aether overage
    usage through Stripe invoices:
    ```env

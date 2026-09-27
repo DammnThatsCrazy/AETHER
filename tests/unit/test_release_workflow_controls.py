@@ -564,6 +564,9 @@ def test_staging_reconciliation_discovers_all_managed_price_resources():
         "stripe-price-epsilon",
         "stripe-price-omicron",
         "stripe-price-omega",
+        "stripe-price-beta-annual",
+        "stripe-price-gamma-annual",
+        "stripe-price-delta-annual",
     ):
         assert name in text
     assert "Discover pre-existing Stripe price secrets for state reconciliation" in text

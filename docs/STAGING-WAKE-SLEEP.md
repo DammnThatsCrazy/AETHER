@@ -52,7 +52,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
-  ".github/workflows/terraform-promote.yml": "sha256:94e0e1c155df32a790090337a6a8282b4723943fec7d40325afbc5d26e5c25f0"
+  ".github/workflows/terraform-promote.yml": "sha256:6212c4d61af48158fe4c6c2b0d219e2614e4c786a48f5f41ae5e0fb126c026ad"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -64,13 +64,13 @@ source_hashes:
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
   "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:db7c10e85f2053f977d69778e290eacb2af233a4af83bd40cb8e2eff25a12797"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:9b551210945268adfeb3672655eb28ff564bb07a5732f9bd64205a7f8cacd320"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:645ad3320ea6ba0335b59fbae64d9e6a9f465c6d0f5be5d10d10446af45e61e9"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
-  "scripts/release/check_staging_lane_contract.py": "sha256:5d5711a9409d7cd9659b30cebd9f961f6e5db55e36297cd4c783f541c152e032"
+  "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:001a5330f78fb4c334c3ddf56448c464355bee4b16c1640a1cbd5041be499fb5"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
@@ -271,6 +271,11 @@ Pilot admission is fail-closed. The repository contract validator checks the
 bootstrap/ECS Stripe wiring before planning, and the promotion preflight also
 requires populated current versions for the four self-service Stripe price
 secrets (`aether/stripe-price-alpha`, `-beta`, `-gamma`, and `-delta`).
+The staging profile sets `stripe_annual_prices_enabled = true`, so pilot tasks
+also mount the yearly `aether/stripe-price-{beta,gamma,delta}-annual` secrets;
+the same preflights then require those three to hold a current version, and
+the pilot plan requires them at their canonical Terraform addresses (bootstrap
+them, then run `staging-state-reconcile`, which discovers and imports them).
 Epsilon, Omicron, and Omega remain contract-tier operator mappings and are not
 part of the self-service pilot critical path. The secure bootstrap rejects
 malformed or placeholder values before writing them; the workflow preflight
@@ -558,7 +563,9 @@ Steps, in order, with what each proves:
    creates encrypted secret stubs but never invents values. The metadata check
    does not print secret material. Pilot requires the core application secrets,
    first-admin bootstrap token, and four real recurring Stripe test-price
-   secrets; Kyber Google credentials are deferred. Full requires the base
+   secrets, plus the three yearly price secrets while the staging profile
+   enables `stripe_annual_prices_enabled`; Kyber Google credentials are
+   deferred. Full requires the base
    application secrets and Kyber pair, not the pilot-only Stripe price
    secrets. Value-safe checks validate `sk_test_`, `whsec_`, and `price_`
    formats, verify the Stripe test catalog, and use the dedicated

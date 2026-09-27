@@ -518,6 +518,17 @@ jobs:
               stripe-price-gamma
               stripe-price-delta
             )
+            # Yearly prices are mounted only when the staging profile sets
+            # stripe_annual_prices_enabled = true. They then need the same
+            # canonical owner, or the plan would create an empty stub that the
+            # tasks mount (check_staging_lane_contract.py parses the same flag).
+            if grep -Eq '^[[:space:]]*stripe_annual_prices_enabled[[:space:]]*=[[:space:]]*true([[:space:]]|#|$)' profiles/staging.tfvars; then
+              required_pilot_secret_names+=(
+                stripe-price-beta-annual
+                stripe-price-gamma-annual
+                stripe-price-delta-annual
+              )
+            fi
             for name in "${required_pilot_secret_names[@]}"; do
               address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]"
               grep -Fxq "$address" "$state_list_file" || {
@@ -544,12 +555,7 @@ jobs:
           if [ "$PROFILE" = staging ] && [ "$DEPLOYMENT_LANE" = full ]; then
             required_staging_secret_names+=(kyber-google-client-id kyber-google-client-secret)
           elif [ "$PROFILE" = staging ] && [ "$DEPLOYMENT_LANE" = pilot ]; then
-            required_staging_secret_names+=(
-              stripe-price-alpha
-              stripe-price-beta
-              stripe-price-gamma
-              stripe-price-delta
-            )
+            required_staging_secret_names+=("${required_pilot_secret_names[@]}")
           fi
           if [ "$PROFILE" = staging ]; then
             legacy_aurora_address='module.aurora[0].aws_rds_cluster.legacy_staging[0]'

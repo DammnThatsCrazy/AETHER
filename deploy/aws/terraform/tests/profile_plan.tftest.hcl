@@ -178,14 +178,27 @@ run "staging_profile_plan" {
   command = plan
 
   variables {
-    deployment_profile  = "staging"
-    environment         = "staging"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    aurora_express_mode = true
-    skip_aurora         = true
-    log_retention_days  = 3
+    deployment_profile           = "staging"
+    environment                  = "staging"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = true
+    log_retention_days           = 3
+    stripe_annual_prices_enabled = true
+  }
+
+  # Full staging does not run Stripe billing, so the yearly flag the staging
+  # profile sets mounts nothing there: only the pilot lane mounts price IDs.
+  assert {
+    condition = alltrue([
+      !contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_BETA"),
+      !contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_BETA_ANNUAL"),
+      !contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_GAMMA_ANNUAL"),
+      !contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_DELTA_ANNUAL"),
+    ])
+    error_message = "Full staging mounts Stripe Price ID secrets although Stripe billing is a pilot-lane capability."
   }
 
   # The egress posture profiles.tf must derive for a cost-capped profile that
@@ -428,15 +441,16 @@ run "staging_pilot_profile_plan" {
   command = plan
 
   variables {
-    deployment_profile  = "staging"
-    deployment_lane     = "pilot"
-    environment         = "staging"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    aurora_express_mode = true
-    skip_aurora         = true
-    log_retention_days  = 3
+    deployment_profile           = "staging"
+    deployment_lane              = "pilot"
+    environment                  = "staging"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = true
+    log_retention_days           = 3
+    stripe_annual_prices_enabled = true
   }
 
   # Pilot is an additive staging overlay: it retains the same lean topology,
@@ -469,6 +483,17 @@ run "staging_pilot_profile_plan" {
     error_message = "The pilot backend task secret mounts do not match the reviewed Aether-only Stripe runtime contract."
   }
 
+  # The staging profile turns yearly prices on: pilot tasks mount the three
+  # yearly Price ID secrets next to the monthly ones.
+  assert {
+    condition = alltrue([
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_BETA_ANNUAL"),
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_GAMMA_ANNUAL"),
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_DELTA_ANNUAL"),
+    ])
+    error_message = "Pilot tasks with stripe_annual_prices_enabled do not mount the yearly Stripe Price ID secrets."
+  }
+
   assert {
     condition = alltrue([
       length(module.msk) == 0,
@@ -497,6 +522,19 @@ run "staging_pilot_asleep_profile_plan" {
     aurora_express_mode = true
     skip_aurora         = true
     log_retention_days  = 3
+    # Monthly-only billing: with the flag off no yearly secret is mounted, so
+    # an unpopulated yearly stub never blocks a task.
+    stripe_annual_prices_enabled = false
+  }
+
+  assert {
+    condition = alltrue([
+      contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_BETA"),
+      !contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_BETA_ANNUAL"),
+      !contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_GAMMA_ANNUAL"),
+      !contains(module.ecs.backend_secret_environment_names, "STRIPE_PRICE_DELTA_ANNUAL"),
+    ])
+    error_message = "Pilot tasks mount a yearly Stripe Price ID secret while stripe_annual_prices_enabled is off."
   }
 
   assert {

@@ -53,6 +53,13 @@ email_enabled = true
 # checkout, product.
 self_signup_enabled = true
 
+# Yearly billing for Beta, Gamma and Delta. Pilot tasks mount
+# aether/stripe-price-{beta,gamma,delta}-annual, which hold the Stripe sandbox
+# (acct_1TOploG4IgWgDCUX, test mode) yearly Price IDs. Those secrets must be
+# populated through the secure bootstrap and imported by staging-state-reconcile
+# before the pilot plan; the plan and apply preflights fail closed otherwise.
+stripe_annual_prices_enabled = true
+
 # staging.olympuslabsml.com is a Route 53 zone (created outside this root,
 # delegated from Squarespace by NS records). Terraform owns its records: the
 # Amplify subdomains, api, and the certificate validation CNAMEs below, which

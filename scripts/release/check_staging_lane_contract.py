@@ -9,8 +9,10 @@ customer-facing lean staging contract.
 The pilot contract is deliberately fail-closed. It checks the repository
 registry and ECS wiring without printing secret values, and an optional
 read-only AWS preflight checks that all four self-service Stripe test price-ID
-secrets have an ``AWSCURRENT`` version. Contract-tier identifiers remain
-optional operator mappings. Secret values are never read by this checker;
+secrets have an ``AWSCURRENT`` version, plus the three yearly price-ID secrets
+when ``profiles/staging.tfvars`` sets ``stripe_annual_prices_enabled = true``
+(pilot tasks then mount them). Contract-tier identifiers remain optional
+operator mappings. Secret values are never read by this checker;
 secure bootstrap is responsible for validating identifiers before writing them
 to Secrets Manager.
 
@@ -44,6 +46,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "config" / "deployment_profiles.yaml"
 BOOTSTRAP_PATH = ROOT / "scripts" / "bootstrap_aws_secrets.py"
 ECS_PATH = ROOT / "deploy" / "aws" / "terraform" / "modules" / "ecs" / "main.tf"
+STAGING_TFVARS_PATH = ROOT / "deploy" / "aws" / "terraform" / "profiles" / "staging.tfvars"
 
 ALLOWED_LANES = frozenset({"full", "pilot"})
 PUBLIC_SURFACES = frozenset({
@@ -108,6 +111,18 @@ REQUIRED_POPULATED_PRICE_SECRETS = (
     "stripe-price-gamma",
     "stripe-price-delta",
 )
+# Yearly prices are mounted into pilot tasks only when the staging profile sets
+# stripe_annual_prices_enabled = true; they then must hold a current version
+# like the monthly prices, or ECS cannot start the task.
+ANNUAL_PRICE_SECRETS = (
+    "stripe-price-beta-annual",
+    "stripe-price-gamma-annual",
+    "stripe-price-delta-annual",
+)
+_ANNUAL_FLAG_RE = re.compile(
+    r"^[ \t]*stripe_annual_prices_enabled[ \t]*=[ \t]*(true|false)[ \t]*(?:#.*)?$",
+    re.MULTILINE,
+)
 REQUIRED_STAGING_BASE_SECRETS = (
     "jwt-secret",
     "byok-encryption-key",
@@ -142,6 +157,24 @@ def load_config(path: Path = CONFIG_PATH) -> Mapping[str, Any]:
 
 def _contains_all(values: Any, required: set[str]) -> bool:
     return isinstance(values, list) and required <= set(values)
+
+
+def staging_annual_prices_enabled(tfvars_text: str | None = None) -> bool:
+    """Return the staging profile's stripe_annual_prices_enabled value.
+
+    The root variable defaults to false, so an absent assignment is off. More
+    than one assignment is ambiguous and is rejected rather than guessed.
+    """
+    text = tfvars_text if tfvars_text is not None else STAGING_TFVARS_PATH.read_text(encoding="utf-8")
+    values = _ANNUAL_FLAG_RE.findall(text)
+    if len(values) > 1:
+        raise ValueError("profiles/staging.tfvars assigns stripe_annual_prices_enabled more than once")
+    return bool(values) and values[0] == "true"
+
+
+def required_populated_price_secrets(*, annual_prices_enabled: bool) -> tuple[str, ...]:
+    """Price-ID secrets that pilot tasks mount and that must hold a value."""
+    return REQUIRED_POPULATED_PRICE_SECRETS + (ANNUAL_PRICE_SECRETS if annual_prices_enabled else ())
 
 
 def contract_errors(
@@ -236,6 +269,7 @@ def runtime_wiring_errors(
     *,
     bootstrap_text: str,
     ecs_text: str,
+    annual_prices_enabled: bool = False,
 ) -> list[str]:
     """Find missing static Stripe registry/runtime wiring for the pilot lane."""
     errors: list[str] = []
@@ -261,7 +295,8 @@ def runtime_wiring_errors(
         if env_name not in ecs_text:
             errors.append(f"ECS runtime wiring missing {env_name}")
 
-    for secret_name in REQUIRED_SECRET_MOUNTS:
+    mounts = REQUIRED_SECRET_MOUNTS + (ANNUAL_PRICE_SECRETS if annual_prices_enabled else ())
+    for secret_name in mounts:
         lookup = re.compile(
             rf"lookup\(\s*var\.secret_arns\s*,\s*[\"']{re.escape(secret_name)}[\"']"
         )
@@ -290,10 +325,14 @@ def _aws_json(
     return _mapping(value), None
 
 
-def aws_price_secret_errors(*, runner: Runner = subprocess.run) -> list[str]:
+def aws_price_secret_errors(
+    *,
+    annual_prices_enabled: bool = False,
+    runner: Runner = subprocess.run,
+) -> list[str]:
     """Check required price secret metadata without reading secret values."""
     errors: list[str] = []
-    for secret_name in REQUIRED_POPULATED_PRICE_SECRETS:
+    for secret_name in required_populated_price_secrets(annual_prices_enabled=annual_prices_enabled):
         metadata, error = _aws_json(
             [
                 "secretsmanager",
@@ -324,11 +363,12 @@ def aws_price_secret_errors(*, runner: Runner = subprocess.run) -> list[str]:
 def aws_staging_secret_errors(
     *,
     deployment_lane: str,
+    annual_prices_enabled: bool = False,
     runner: Runner = subprocess.run,
 ) -> list[str]:
     """Check all ECS-mounted staging secret metadata without reading values."""
     if deployment_lane == "pilot":
-        required = REQUIRED_PILOT_STAGING_SECRETS
+        required = REQUIRED_PILOT_STAGING_SECRETS + (ANNUAL_PRICE_SECRETS if annual_prices_enabled else ())
     elif deployment_lane == "full":
         required = REQUIRED_FULL_STAGING_SECRETS
     else:
@@ -369,6 +409,7 @@ def validate(
     data: Mapping[str, Any] | None = None,
     bootstrap_text: str | None = None,
     ecs_text: str | None = None,
+    tfvars_text: str | None = None,
     runner: Runner = subprocess.run,
 ) -> list[str]:
     data = data if data is not None else load_config()
@@ -377,12 +418,23 @@ def validate(
     if check_runtime_wiring and profile == "staging" and deployment_lane == "pilot":
         bootstrap = bootstrap_text if bootstrap_text is not None else BOOTSTRAP_PATH.read_text(encoding="utf-8")
         ecs = ecs_text if ecs_text is not None else ECS_PATH.read_text(encoding="utf-8")
-        errors.extend(runtime_wiring_errors(bootstrap_text=bootstrap, ecs_text=ecs))
+        errors.extend(
+            runtime_wiring_errors(
+                bootstrap_text=bootstrap,
+                ecs_text=ecs,
+                annual_prices_enabled=staging_annual_prices_enabled(tfvars_text),
+            )
+        )
     if require_aws_price_secrets:
         if deployment_lane != "pilot" or profile != "staging":
             errors.append("AWS Stripe price preflight is valid only for deployment_profile=staging and deployment_lane=pilot")
         else:
-            errors.extend(aws_price_secret_errors(runner=runner))
+            errors.extend(
+                aws_price_secret_errors(
+                    annual_prices_enabled=staging_annual_prices_enabled(tfvars_text),
+                    runner=runner,
+                )
+            )
     if require_aws_staging_secrets:
         if profile != "staging":
             errors.append("AWS staging secret preflight is valid only for deployment_profile=staging")
@@ -390,6 +442,7 @@ def validate(
             errors.extend(
                 aws_staging_secret_errors(
                     deployment_lane=deployment_lane,
+                    annual_prices_enabled=staging_annual_prices_enabled(tfvars_text),
                     runner=runner,
                 )
             )
@@ -413,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
             require_aws_price_secrets=args.require_aws_price_secrets,
             require_aws_staging_secrets=args.require_aws_staging_secrets,
         )
-    except (FileNotFoundError, OSError, yaml.YAMLError) as exc:
+    except (FileNotFoundError, OSError, ValueError, yaml.YAMLError) as exc:
         print(f"::error::staging deployment lane contract could not load its inputs: {exc}", file=sys.stderr)
         return 1
 
