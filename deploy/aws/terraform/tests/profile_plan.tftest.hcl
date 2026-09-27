@@ -248,22 +248,27 @@ run "staging_profile_plan" {
     error_message = "The staging plan provisions a cost-capped data store it must not."
   }
 
-  # Public marketing shells are prerendered. Only the runtime-routed app and
-  # docs receive catch-all fallbacks; Aether marketing receives the three
-  # explicit auth-threshold rules and Olympus/status receive none.
+  # Olympus and status shells are prerendered and receive no rules. The
+  # runtime-routed app and docs receive catch-all fallbacks. The Aether host
+  # serves the unified site: /app/* and the legacy auth paths redirect to the
+  # product app, and every other path falls back to the site's client router.
   assert {
     condition = alltrue([
       length(local.amplify_custom_rules["aether-app"]) == 1,
       local.amplify_custom_rules["aether-app"][0].source == "/<*>",
       length(local.amplify_custom_rules.docs) == 1,
-      length(local.amplify_custom_rules["aether-marketing"]) == 3,
-      local.amplify_custom_rules["aether-marketing"][0].source == "/login",
-      local.amplify_custom_rules["aether-marketing"][1].source == "/signup",
-      local.amplify_custom_rules["aether-marketing"][2].source == "/forgot-password",
+      [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == [
+        "/app/signin", "/app/signup", "/app/<*>", "/login", "/signup", "/forgot-password", "/<*>",
+      ],
+      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 6) :
+        rule.status == "302" && startswith(rule.target, var.aether_app_url)
+      ]),
+      local.amplify_custom_rules["aether-marketing"][6].target == "/index.html",
+      local.amplify_custom_rules["aether-marketing"][6].status == "404-200",
       length(lookup(local.amplify_custom_rules, "olympus-marketing", [])) == 0,
       length(lookup(local.amplify_custom_rules, "status", [])) == 0,
     ])
-    error_message = "Amplify custom rules would rewrite a prerendered marketing or status surface, or omit the required client/auth fallback."
+    error_message = "Amplify custom rules would rewrite a prerendered Olympus or status surface, or drift from the unified-site redirects and fallback."
   }
 
   # The status shell must stay inside the same staging environment. These

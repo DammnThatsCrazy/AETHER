@@ -110,10 +110,14 @@ The prerendered marketing bundles retain the following delivery guarantees:
   prerendered site.
 - **Only the required client fallbacks are rewired.** Terraform gives
   `frontend/aether` and `frontend/docs` their SPA fallback because those apps
-  resolve route content at runtime. The Aether marketing app receives targeted
-  `/login`, `/signup`, and `/forgot-password` fallbacks for its auth threshold.
-  Olympus marketing and status receive no catch-all rewrite, so their
-  prerendered route heads and fail-closed status root remain intact.
+  resolve route content at runtime. The Aether host now serves the unified
+  site (`frontend/site`), a client-routed app. `/app/signin`, `/app/signup`
+  and the legacy `/login`, `/signup`, and `/forgot-password` paths redirect
+  (302) to the product app's sign-in (`aether_app_url`); any other `/app/*`
+  path redirects to the same path on the product app; every remaining path
+  falls back to the site's `/index.html`. Olympus marketing and status receive no catch-all
+  rewrite, so their prerendered route heads and fail-closed status root remain
+  intact.
 - **Security headers** on every response: `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
 - **Immutable caching** for `/assets/(.*)`: Vite content-hashes those filenames,
