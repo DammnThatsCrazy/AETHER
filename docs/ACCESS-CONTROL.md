@@ -74,7 +74,9 @@ opens Auth0's hosted sign-up (Google, or email and password); the site's
 chosen plan survives the Auth0 round trip, and `/callback` lands the new
 account on `/billing?plan=<id>`, which starts that plan's Stripe checkout once
 (Alpha is free and needs none). Terraform always sets
-`SSO_SELF_SIGNUP_ENABLED` explicitly; without it the backend defaults to
+`SSO_SELF_SIGNUP_ENABLED` explicitly: `self_signup_enabled` when a profile
+sets it, otherwise the backend's own default (on everywhere except staging, so
+production keeps self-serve sign-up). Without it the backend defaults to
 `false` when `AETHER_ENV=staging`, and a sign-in whose `sub` is not yet linked
 then succeeds only when its identity-provider-verified email:
 

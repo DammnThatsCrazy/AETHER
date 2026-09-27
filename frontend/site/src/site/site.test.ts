@@ -101,26 +101,32 @@ describe('retiredHostRedirect', () => {
   const staging = { olympus: 'https://www.staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' };
 
   it('sends docs hosts to the same page under /docs on the Aether site', () => {
-    expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/', '', staging)).toBe(
+    expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/', '', '', staging)).toBe(
       'https://aether.staging.olympuslabsml.com/docs',
     );
-    expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/quickstart/', '?x=1', staging)).toBe(
+    expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/quickstart/', '?x=1', '', staging)).toBe(
       'https://aether.staging.olympuslabsml.com/docs/quickstart?x=1',
     );
-    expect(retiredHostRedirect('DOCS.olympuslabsml.com', '/sdk-web', '', staging)).toBe(
+    expect(retiredHostRedirect('DOCS.olympuslabsml.com', '/sdk-web', '', '', staging)).toBe(
       'https://aether.staging.olympuslabsml.com/docs/sdk-web',
     );
   });
 
+  it('keeps the heading anchor of a docs deep link', () => {
+    expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/quickstart', '?x=1', '#installation', staging)).toBe(
+      'https://aether.staging.olympuslabsml.com/docs/quickstart?x=1#installation',
+    );
+  });
+
   it('sends status hosts to the status page', () => {
-    expect(retiredHostRedirect('status.staging.olympuslabsml.com', '/anything', '', staging)).toBe(
+    expect(retiredHostRedirect('status.staging.olympuslabsml.com', '/anything', '', '', staging)).toBe(
       'https://aether.staging.olympuslabsml.com/status',
     );
   });
 
   it('leaves the site, product and preview hosts alone', () => {
     for (const host of ['aether.staging.olympuslabsml.com', 'www.staging.olympuslabsml.com', 'olympuslabsml.com', 'pr-7.d39k0b8z1d75nj.amplifyapp.com', 'localhost']) {
-      expect(retiredHostRedirect(host, '/docs', '', staging)).toBeNull();
+      expect(retiredHostRedirect(host, '/docs', '', '', staging)).toBeNull();
     }
   });
 });

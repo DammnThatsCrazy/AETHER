@@ -581,7 +581,9 @@ Transactional email goes through Amazon SES from the verified
 `olympuslabsml.com` domain identity (`email_enabled`, on in the staging
 profile). The tasks send from `noreply@olympuslabsml.com`, contact and pilot
 requests notify `lead_notification_email` (`team@olympuslabsml.com`), and the
-task role may send only from that identity. While the SES account is in the
+task role may only call `ses:SendEmail` on that identity, in the deployment
+region (the tasks get `EMAIL_AWS_REGION`). The staging release manifest
+resolves `EMAIL_ENABLED` on. While the SES account is in the
 sandbox, only verified recipient addresses receive mail.
 
 Staging also gets a repository-unconnected app for per-PR previews of the

@@ -916,6 +916,14 @@ run "production_lean_profile_plan" {
     skip_aurora         = false
   }
 
+  # Production keeps self-serve sign-up unless a profile turns it off: the
+  # tasks always carry SSO_SELF_SIGNUP_ENABLED, so the default must match the
+  # backend's non-staging default.
+  assert {
+    condition     = local.self_signup_enabled
+    error_message = "production-lean would stop new Auth0 users from provisioning a tenant (SSO_SELF_SIGNUP_ENABLED=false)."
+  }
+
   assert {
     condition = alltrue([
       local.network_egress_mode == "public_ip",

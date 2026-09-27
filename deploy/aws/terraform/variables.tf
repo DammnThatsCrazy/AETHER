@@ -628,6 +628,7 @@ variable "lead_notification_email" {
 
 variable "self_signup_enabled" {
   type        = bool
-  description = "Let a verified Auth0 sign-in from an unknown email create its own tenant (SSO_SELF_SIGNUP_ENABLED). The backend defaults to off on staging, which then admits only existing and invited users."
-  default     = false
+  description = "Let a verified Auth0 sign-in from an unknown email create its own tenant (SSO_SELF_SIGNUP_ENABLED). Null keeps the backend's default: off on staging (only existing and invited users), on elsewhere."
+  default     = null
+  nullable    = true
 }

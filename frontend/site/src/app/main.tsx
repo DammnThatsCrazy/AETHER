@@ -5,7 +5,8 @@ import { App } from './app';
 import { retiredHostRedirect } from '@site/site/site';
 import '@site/styles/index.css';
 
-const retired = retiredHostRedirect(window.location.hostname, window.location.pathname, window.location.search);
+const { hostname, pathname, search, hash } = window.location;
+const retired = retiredHostRedirect(hostname, pathname, search, hash);
 if (retired) {
   window.location.replace(retired);
 } else {

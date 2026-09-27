@@ -472,7 +472,7 @@ module "ecs" {
   platform_operator_emails    = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
   deployment_lane             = var.deployment_lane
   email_enabled               = var.email_enabled
-  self_signup_enabled         = var.self_signup_enabled
+  self_signup_enabled         = local.self_signup_enabled
   email_sender_domain         = var.email_sender_domain
   lead_notification_email     = var.lead_notification_email
   stripe_billing_enabled      = var.deployment_lane == "pilot"
@@ -817,6 +817,9 @@ locals {
   # environments keep the prerendered aether-marketing build until the site
   # prerenders its own per-route metadata, sitemap and robots file.
   aether_host_serves_site = var.environment == "staging"
+  # Unset keeps the backend's own default (invitation-only on staging, self
+  # sign-up elsewhere), written explicitly into the task definitions.
+  self_signup_enabled = var.self_signup_enabled != null ? var.self_signup_enabled : var.environment != "staging"
 
   # Hosts the site app answers for. On staging it also takes over www (the
   # Olympus pages), docs and status, and the old apps that served them are

@@ -298,7 +298,7 @@ locals {
     {
       Sid      = "SendTransactionalEmail"
       Effect   = "Allow"
-      Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+      Action   = ["ses:SendEmail"]
       Resource = "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/${var.email_sender_domain}"
     },
   ] : []
@@ -387,6 +387,7 @@ locals {
   email_runtime_environment = var.email_enabled ? [
     { name = "EMAIL_ENABLED", value = "true" },
     { name = "EMAIL_PROVIDER", value = "ses" },
+    { name = "EMAIL_AWS_REGION", value = data.aws_region.current.name },
     { name = "EMAIL_FROM_ADDRESS", value = "noreply@${var.email_sender_domain}" },
     { name = "EMAIL_FROM_NAME", value = "Olympus Labs" },
     { name = "LEAD_NOTIFICATION_EMAIL", value = var.lead_notification_email },
