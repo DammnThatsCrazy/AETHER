@@ -21,6 +21,10 @@ from typing import Any, NoReturn
 
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
 
+# The staging product is served by the one web app under /app (#721); Stripe
+# checkout and portal returns land there.
+STAGING_PRODUCT_BASE_URL = "https://aether.staging.olympuslabsml.com/app/"
+
 SECRET_ENV_TO_CANONICAL_NAME = {
     "JWT_SECRET": "jwt-secret",
     "BYOK_ENCRYPTION_KEY": "byok-encryption-key",
@@ -295,7 +299,7 @@ def contract_errors(
             if not environment.get("FIRST_ADMIN_BOOTSTRAP_EMAIL", "").strip():
                 errors.append(f"{service}: pilot first-admin bootstrap email is missing")
             for name in ("STRIPE_CHECKOUT_SUCCESS_URL", "STRIPE_CHECKOUT_CANCEL_URL", "STRIPE_PORTAL_RETURN_URL"):
-                if not environment.get(name, "").startswith("https://app.staging.olympuslabsml.com/"):
+                if not environment.get(name, "").startswith(STAGING_PRODUCT_BASE_URL):
                     errors.append(f"{service}: {name} is not a staging HTTPS billing URL")
         elif environment.get("PLATFORM_OPERATOR_EMAILS", "").strip():
             # Email-based operator admission is a pilot-staging convenience;

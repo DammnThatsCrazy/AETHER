@@ -53,9 +53,9 @@ def _client(*, pilot: bool = True):
                     {
                         "FIRST_ADMIN_BOOTSTRAP_EMAIL": "ops@olympuslabsml.com",
                         "PLATFORM_OPERATOR_EMAILS": "founder@olympuslabsml.com",
-                        "STRIPE_CHECKOUT_SUCCESS_URL": "https://app.staging.olympuslabsml.com/billing/success",
-                        "STRIPE_CHECKOUT_CANCEL_URL": "https://app.staging.olympuslabsml.com/billing/cancel",
-                        "STRIPE_PORTAL_RETURN_URL": "https://app.staging.olympuslabsml.com/billing",
+                        "STRIPE_CHECKOUT_SUCCESS_URL": "https://aether.staging.olympuslabsml.com/app/billing/success",
+                        "STRIPE_CHECKOUT_CANCEL_URL": "https://aether.staging.olympuslabsml.com/app/billing/cancel",
+                        "STRIPE_PORTAL_RETURN_URL": "https://aether.staging.olympuslabsml.com/app/billing",
                     }
                 )
             else:
@@ -95,6 +95,25 @@ def test_pilot_requires_the_first_admin_bootstrap_email():
 
     errors = checker.contract_errors(lane="pilot", client=missing_email)
     assert any("first-admin bootstrap email is missing" in error for error in errors)
+
+
+def test_pilot_billing_returns_must_land_on_the_product_under_app():
+    # The staging product moved to aether.<domain>/app (#721); a task that
+    # still returns Stripe customers to the retired app host is rejected.
+    original = _client()
+
+    def old_host(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            container = payload["taskDefinition"]["containerDefinitions"][0]
+            for item in container["environment"]:
+                if item["name"] == "STRIPE_PORTAL_RETURN_URL":
+                    item["value"] = "https://app.staging.olympuslabsml.com/billing"
+        return payload
+
+    errors = checker.contract_errors(lane="pilot", client=old_host)
+    assert any("STRIPE_PORTAL_RETURN_URL is not a staging HTTPS billing URL" in e for e in errors)
+    assert checker.STAGING_PRODUCT_BASE_URL == "https://aether.staging.olympuslabsml.com/app/"
 
 
 def test_full_lane_rejects_email_based_operator_admission():
