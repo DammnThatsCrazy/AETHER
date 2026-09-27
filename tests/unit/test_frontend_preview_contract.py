@@ -120,3 +120,16 @@ def test_previews_are_staging_only_in_terraform():
     # Staging declares the toggle explicitly (currently off pending the
     # account's Amplify app limit; see profiles/staging.tfvars).
     assert re.search(r"^enable_frontend_previews\s*=\s*(true|false)$", STAGING_TFVARS.read_text(), re.M)
+
+
+def test_preview_reads_the_web_app_then_the_product_app_it_replaces():
+    # Staging's one web app carries the product's build settings; until its
+    # first rollout the product app it replaces still does, so previews keep
+    # working on both sides of that rollout.
+    text = WORKFLOW.read_text(encoding="utf-8")
+    lookup = (
+        '[.apps[] | select(.name == "AETHER-staging-web")]'
+        ' + [.apps[] | select(.name == "AETHER-staging-aether-app")]'
+        " | .[0].appId // empty"
+    )
+    assert text.count(lookup) == 2
