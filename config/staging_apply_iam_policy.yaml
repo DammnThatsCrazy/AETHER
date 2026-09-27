@@ -739,6 +739,15 @@ statements:
       - route53:GetChange
     resource: arn:aws:route53:::change/*
     scope: global-read-required-by-api
+  # Amplify's UpdateDomainAssociation lists hosted zones with the caller's
+  # credentials (a forward-access session) to find the zone for the custom
+  # domain; without this the call is denied. ListHostedZones cannot be scoped
+  # to one zone and returns names only, so it grants no record access.
+  - sid: ListHostedZonesForAmplifyDomains
+    actions:
+      - route53:ListHostedZones
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: TagStagingAmplifyResources
     actions:
       - amplify:TagResource

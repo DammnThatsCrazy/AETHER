@@ -174,6 +174,28 @@ def test_staging_apply_role_can_audit_its_effective_policy_without_mutation() ->
     ]
 
 
+def test_staging_apply_role_can_list_zones_for_amplify_domains() -> None:
+    # Amplify's UpdateDomainAssociation calls route53:ListHostedZones with the
+    # caller's credentials; without it the domain update is denied. It is the
+    # only Route 53 grant outside the delegated staging zone, and it is list-only.
+    statements = yaml.safe_load(POLICY.read_text())["statements"]
+    route53 = [
+        statement
+        for statement in statements
+        if any(action.startswith("route53:") for action in statement["actions"])
+    ]
+    listing = [s for s in route53 if "route53:ListHostedZones" in s["actions"]]
+    assert len(listing) == 1
+    assert listing[0]["actions"] == ["route53:ListHostedZones"]
+    assert listing[0]["resource"] == "*"
+    for statement in route53:
+        if statement is listing[0]:
+            continue
+        assert statement["resource"] != "*"
+        assert "route53:CreateHostedZone" not in statement["actions"]
+        assert "route53:DeleteHostedZone" not in statement["actions"]
+
+
 def test_staging_plan_trust_is_limited_to_reviewed_github_subjects() -> None:
     trust = json.loads(
         (ROOT / "config/staging_plan_trust_policy.json").read_text(encoding="utf-8")

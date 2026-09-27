@@ -99,8 +99,9 @@ def test_amplify_branches_receive_only_their_declared_variables() -> None:
 
 def test_unified_site_branch_receives_only_public_site_settings() -> None:
     """The unified site (served by the aether-marketing app on staging) gets
-    its public build settings, with prices published, and nothing from the
-    product app."""
+    its public build settings, with prices published, plus the product's
+    public settings: the same build publishes the product under /app, so its
+    Auth0 redirect and logout URIs sit under /app."""
     expression, _, _, _ = _branch_environment_variable_maps()
     site = re.search(
         r'^    each\.key == "aether-marketing" && local\.aether_host_serves_site \? \{\n(?P<body>.*?)^    \} : \{\},$',
@@ -112,9 +113,19 @@ def test_unified_site_branch_receives_only_public_site_settings() -> None:
     assert _keys(body) == {
         "VITE_API_BASE_URL",
         "VITE_STATUS_API_URL",
+        "VITE_STATUS_HISTORY_URL",
         "VITE_PUBLISH_PRICES",
         "VITE_SITE_AETHER_URL",
         "VITE_SITE_OLYMPUS_URL",
+        "VITE_AETHER_ENV",
+        "VITE_AETHER_ENDPOINT",
+        "VITE_AUTH0_DOMAIN",
+        "VITE_AUTH0_CLIENT_ID",
+        "VITE_AUTH0_AUDIENCE",
+        "VITE_AUTH0_REDIRECT_URI",
+        "VITE_AUTH0_LOGOUT_URI",
     }
+    assert _value(body, "VITE_AUTH0_REDIRECT_URI") == '"${local.aether_app_base_url}/callback"'
+    assert _value(body, "VITE_AUTH0_LOGOUT_URI") == '"${local.aether_app_base_url}/login"'
     assert _value(body, "VITE_PUBLISH_PRICES") == '"true"'
     assert _value(body, "VITE_API_BASE_URL") == '"https://${var.domain_name}"'

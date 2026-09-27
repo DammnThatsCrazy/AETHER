@@ -5,6 +5,9 @@ import { manualChunks } from './chunks';
 
 export default defineConfig({
   plugins: [react()],
+  // Served at the domain root by default; the unified staging app builds the
+  // product under /app (VITE_BASE_PATH=/app/) next to the site.
+  base: process.env.VITE_BASE_PATH || '/',
   // Canonical Olympus/Aether identity geometry is package-owned so every
   // product build serves the exact same reviewed SVG assets.
   publicDir: path.resolve(__dirname, '../../packages/brand/src/identity/marks'),

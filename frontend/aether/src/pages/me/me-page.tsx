@@ -1,3 +1,4 @@
+import { appHref } from '@aether-app/lib/app-path';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -69,7 +70,7 @@ function DeleteAccountModal({ open, onClose, available }: DeleteModalProps) {
           <span className="text-warning">
             Your data is retained for 30 days for compliance, then permanently purged.{' '}
             <button
-              onClick={() => window.open('/legal/data-retention', '_blank', 'noopener')}
+              onClick={() => window.open(appHref('/legal/data-retention'), '_blank', 'noopener')}
               className="text-accent underline"
             >
               View policy
@@ -425,7 +426,7 @@ export function MePage() {
               for compliance purposes, then permanently purged from all systems.
             </p>
             <button
-              onClick={() => window.open('/legal/data-retention', '_blank', 'noopener')}
+              onClick={() => window.open(appHref('/legal/data-retention'), '_blank', 'noopener')}
               className="text-accent underline"
             >
               View data retention policy →

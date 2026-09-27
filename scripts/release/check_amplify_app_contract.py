@@ -35,8 +35,9 @@ DEFAULT_JOB_TIMEOUT_SECONDS = 900.0
 DEFAULT_JOB_POLL_SECONDS = 15.0
 
 STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
-    # The unified site (frontend/site): aether, www, docs and status hosts.
-    "AETHER-staging-aether-marketing": {
+    # The one staging app: the unified site (frontend/site) for the aether,
+    # www, docs, status and app hosts, and the product built under /app.
+    "AETHER-staging-web": {
         "AETHER_ENV": "staging",
         "VITE_API_BASE_URL": "https://api.staging.olympuslabsml.com",
         "VITE_STATUS_API_URL": "https://api.staging.olympuslabsml.com/health",
@@ -44,28 +45,27 @@ STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
         "VITE_PUBLISH_PRICES": "true",
         "VITE_SITE_AETHER_URL": "https://aether.staging.olympuslabsml.com",
         "VITE_SITE_OLYMPUS_URL": "https://www.staging.olympuslabsml.com",
-    },
-    "AETHER-staging-aether-app": {
-        "AETHER_ENV": "staging",
         "VITE_AETHER_ENV": "staging",
-        "VITE_API_BASE_URL": "https://api.staging.olympuslabsml.com",
         "VITE_AETHER_ENDPOINT": "https://api.staging.olympuslabsml.com",
-        "VITE_AUTH0_REDIRECT_URI": "https://app.staging.olympuslabsml.com/callback",
-        "VITE_AUTH0_LOGOUT_URI": "https://app.staging.olympuslabsml.com/login",
+        "VITE_AUTH0_REDIRECT_URI": "https://aether.staging.olympuslabsml.com/app/callback",
+        "VITE_AUTH0_LOGOUT_URI": "https://aether.staging.olympuslabsml.com/app/login",
     },
 }
 STAGING_REQUIRED_RUNTIME_KEYS: dict[str, tuple[str, ...]] = {
-    "AETHER-staging-aether-app": (
+    "AETHER-staging-web": (
         "VITE_AUTH0_DOMAIN",
         "VITE_AUTH0_CLIENT_ID",
         "VITE_AUTH0_AUDIENCE",
     ),
 }
 
-STAGING_APPS: tuple[str, ...] = (
-    "AETHER-staging-aether-marketing",
-    "AETHER-staging-aether-app",
-)
+STAGING_APPS: tuple[str, ...] = ("AETHER-staging-web",)
+# The one staging app's name before the consolidation apply renamed it. Only
+# the pre-apply preflight (mode staging) accepts it, since it gates the apply
+# that renames the app and moves the app host onto it.
+STAGING_APP_PREVIOUS_NAMES: dict[str, str] = {
+    "AETHER-staging-web": "AETHER-staging-aether-marketing",
+}
 # Staging apps replaced by the unified site. The post-apply staging-runtime
 # check (terraform-promote) fails while any of these still exists (left behind
 # or recreated out of band). The pre-apply staging preflight allows them: the
@@ -74,16 +74,18 @@ RETIRED_STAGING_APPS: tuple[str, ...] = (
     "AETHER-staging-olympus-marketing",
     "AETHER-staging-docs",
     "AETHER-staging-status",
+    "AETHER-staging-aether-app",
+    "AETHER-staging-aether-marketing",
 )
-# Each staging host and the app that serves it. The unified site app
-# (aether-marketing) serves aether, www, docs and status; the product app
-# serves app. The retired Olympus, docs and status apps are deleted.
+# Each staging host and the apps allowed to serve it: the one app first; the
+# pre-consolidation owner is accepted only by the pre-apply preflight.
+_SITE_OWNERS = ("AETHER-staging-web", "AETHER-staging-aether-marketing")
 STAGING_HOSTS: dict[str, tuple[str, ...]] = {
-    "aether": ("AETHER-staging-aether-marketing",),
-    "app": ("AETHER-staging-aether-app",),
-    "www": ("AETHER-staging-aether-marketing",),
-    "docs": ("AETHER-staging-aether-marketing",),
-    "status": ("AETHER-staging-aether-marketing",),
+    "aether": _SITE_OWNERS,
+    "app": (*_SITE_OWNERS, "AETHER-staging-aether-app"),
+    "www": _SITE_OWNERS,
+    "docs": _SITE_OWNERS,
+    "status": _SITE_OWNERS,
 }
 STATUS_APP = "aether-status"
 PRODUCTION_STATUS_ENVIRONMENT = {
@@ -448,7 +450,10 @@ def contract_errors(
         for name in RETIRED_STAGING_APPS if runtime_only else ():
             if name in apps:
                 errors.append(f"{name}: retired staging Amplify app still exists; the unified site serves its hosts")
-        for name in STAGING_APPS:
+        for reviewed_name in STAGING_APPS:
+            name = reviewed_name
+            if name not in apps and not runtime_only:
+                name = STAGING_APP_PREVIOUS_NAMES.get(reviewed_name, reviewed_name)
             errors.extend(
                 _check_app(
                     name=name,
@@ -457,12 +462,12 @@ def contract_errors(
                     expected_commit=expected_commit,
                     subdomain_prefix=None,
                     expected_branch_environment=(
-                        STAGING_RUNTIME_ENVIRONMENT[name]
+                        STAGING_RUNTIME_ENVIRONMENT[reviewed_name]
                         if check_runtime_environment
                         else None
                     ),
                     required_branch_environment_keys=(
-                        STAGING_REQUIRED_RUNTIME_KEYS.get(name, ())
+                        STAGING_REQUIRED_RUNTIME_KEYS.get(reviewed_name, ())
                         if check_runtime_environment
                         else ()
                     ),

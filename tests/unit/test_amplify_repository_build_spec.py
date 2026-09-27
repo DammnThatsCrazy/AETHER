@@ -43,3 +43,15 @@ def test_each_build_spec_builds_and_publishes_its_own_workspace() -> None:
         frontend = app["frontend"]
         assert f"npm run build --workspace={root}" in frontend["phases"]["build"]["commands"], root
         assert frontend["artifacts"]["baseDirectory"] == f"{root}/dist", root
+
+
+def test_site_build_publishes_the_product_under_app() -> None:
+    """One app per environment: the site's build also builds the product with
+    base /app/ and copies it into the site's output at dist/app."""
+    commands = _repository_spec()["frontend/site"]["frontend"]["phases"]["build"]["commands"]
+    product = "VITE_BASE_PATH=/app/ npm run build --workspace=frontend/aether"
+    assert product in commands
+    assert commands.index("npm run build --workspace=frontend/site") < commands.index(product)
+    assert "cp -R frontend/aether/dist/. frontend/site/dist/app/" in commands
+    pre = _repository_spec()["frontend/site"]["frontend"]["phases"]["preBuild"]["commands"]
+    assert "npm run build --workspace=packages/web" in pre

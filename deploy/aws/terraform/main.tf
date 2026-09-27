@@ -461,7 +461,7 @@ module "ecs" {
   deployment_profile         = var.deployment_profile
   auth0_domain               = var.auth0_domain
   auth0_api_audience         = var.auth0_api_audience
-  aether_app_url             = var.aether_app_url
+  aether_app_url             = local.aether_app_base_url
   # The pilot lane is staging-only and keeps the one-time first-admin route
   # armed behind its Secrets Manager token and durable single-use marker. The
   # approved operator address reuses the required alert recipient; no secret
@@ -477,9 +477,9 @@ module "ecs" {
   lead_notification_email      = var.lead_notification_email
   stripe_billing_enabled       = var.deployment_lane == "pilot"
   stripe_annual_prices_enabled = var.stripe_annual_prices_enabled
-  stripe_checkout_success_url  = "${var.aether_app_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"
-  stripe_checkout_cancel_url   = "${var.aether_app_url}/billing/cancel"
-  stripe_portal_return_url     = "${var.aether_app_url}/billing"
+  stripe_checkout_success_url  = "${local.aether_app_base_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"
+  stripe_checkout_cancel_url   = "${local.aether_app_base_url}/billing/cancel"
+  stripe_portal_return_url     = "${local.aether_app_base_url}/billing"
 
   # E3: Aurora Serverless v2 replaces RDS as the active database.
   # entrypoint.sh reads this ARN via DATABASE_URL_SECRET and builds DATABASE_URL.
@@ -698,9 +698,12 @@ module "auth0" {
 
   # Per-PR previews (pr-<N>.<preview app domain>) sign in against the same
   # staging Auth0 application; Auth0 accepts a leading subdomain wildcard.
-  aether_callback_urls = concat(["${var.aether_app_url}/callback"], [for d in local.frontend_preview_domains : "https://*.${d}/callback"])
-  aether_logout_urls   = concat([var.aether_app_url], [for d in local.frontend_preview_domains : "https://*.${d}"])
-  aether_web_origins   = concat([var.aether_app_url], [for d in local.frontend_preview_domains : "https://*.${d}"])
+  # The product's own URL (aether.<domain>/app on staging) plus
+  # var.aether_app_url, which on staging is the app host that now redirects
+  # to it (kept while sessions and bookmarks move over).
+  aether_callback_urls = concat(distinct(["${local.aether_app_base_url}/callback", "${var.aether_app_url}/callback"]), [for d in local.frontend_preview_domains : "https://*.${d}/callback"])
+  aether_logout_urls   = concat(distinct(["${local.aether_app_base_url}/login", local.aether_app_base_url, var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
+  aether_web_origins   = concat(distinct([local.aether_app_origin, var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
 
   kyber_callback_urls = ["${var.kyber_app_url}/callback"]
   kyber_logout_urls   = [var.kyber_app_url]
@@ -826,8 +829,20 @@ locals {
   # Olympus pages), docs and status, and the old apps that served them are
   # retired (removed from amplify_apps, so Terraform deletes them). Elsewhere
   # the site serves only the aether host and every app keeps its own host.
-  site_host_prefixes   = local.aether_host_serves_site ? ["aether", "www", "docs", "status"] : ["aether"]
-  site_host_owner_apps = local.aether_host_serves_site ? ["olympus-marketing", "docs", "status"] : []
+  site_host_prefixes   = local.aether_host_serves_site ? ["aether", "www", "docs", "status", "app"] : ["aether"]
+  site_host_owner_apps = local.aether_host_serves_site ? ["olympus-marketing", "docs", "status", "aether-app"] : []
+
+  # One app per environment: on staging the site app also serves the product
+  # under /app (built by the frontend/site entry in amplify.yml), so the
+  # product's public URL is aether.<domain>/app and the app host redirects
+  # there. Elsewhere the product keeps its own app and var.aether_app_url.
+  product_under_site = local.aether_host_serves_site && var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
+  aether_app_base_url = (
+    local.product_under_site ? "https://aether.${var.amplify_domain_name}/app" : var.aether_app_url
+  )
+  aether_app_origin = (
+    local.product_under_site ? "https://aether.${var.amplify_domain_name}" : var.aether_app_url
+  )
 
   amplify_apps = {
     for key, app in local.amplify_app_catalog : key => app
@@ -844,7 +859,7 @@ locals {
     # On staging, the unified Olympus + Aether site (frontend/site), which
     # keeps this app's key and name.
     aether-marketing = {
-      name        = "${var.project}-${var.environment}-aether-marketing"
+      name        = local.aether_host_serves_site ? "${var.project}-${var.environment}-web" : "${var.project}-${var.environment}-aether-marketing"
       app_root    = local.aether_host_serves_site ? "frontend/site" : "frontend/aether-marketing"
       description = local.aether_host_serves_site ? "Unified Olympus Labs and Aether site" : "Aether product marketing site"
       subdomain   = "aether"
@@ -882,6 +897,9 @@ locals {
   # AWS's documented single-page-app rewrite source: paths without a file
   # extension, or whose extension is not a static asset.
   spa_route_pattern = "</^[^.]+$|\\.(?!(css|gif|ico|jpg|jpeg|js|png|txt|svg|woff|woff2|ttf|map|json|webp|xml|webmanifest)$)([^.]+$)/>"
+  # The product's page routes under /app (no file extension); its bundles and
+  # assets under /app/ are served as files.
+  app_route_pattern = "</^\\/app\\/[^.]*$/>"
 
   amplify_custom_rules = {
     "aether-app" = [
@@ -890,10 +908,10 @@ locals {
     docs = [
       { source = "/<*>", target = "/index.html", status = "404-200" },
     ]
-    # Unified site: its sign-in and sign-up paths lead to the product app's
-    # /login and /signup (Auth0 sign-up, keeping the pricing page's ?plan=)
-    # until it is served under /app from this app, and the legacy marketing
-    # auth paths follow. The docs and status hosts are sent to /docs and /status by the
+    # Unified site: it also serves the product (Auth0 sign-in and sign-up,
+    # keeping the pricing page's ?plan=) under /app from this app: /app/* page routes are rewritten to the
+    # product's index.html (its bundles under /app/assets stay files), and the
+    # legacy marketing auth paths go to the product's /login and /signup. The docs and status hosts are sent to /docs and /status by the
     # site itself (Amplify does not apply host-based rules with paths).
     # Every other page route is rewritten to index.html with a 200: the regex
     # matches paths with no file extension, or an extension that is not a
@@ -901,13 +919,12 @@ locals {
     # routes are neither 404s nor redirected to a trailing slash.
     # The prerendered aether-marketing build keeps its auth-threshold rewrites.
     "aether-marketing" = local.aether_host_serves_site ? [
-      { source = "/app/signin", target = "${var.aether_app_url}/login", status = "302" },
-      { source = "/app/signup", target = "${var.aether_app_url}/signup", status = "302" },
-      { source = "/app", target = "${var.aether_app_url}/", status = "302" },
-      { source = "/app/<*>", target = "${var.aether_app_url}/<*>", status = "302" },
-      { source = "/login", target = "${var.aether_app_url}/login", status = "302" },
-      { source = "/signup", target = "${var.aether_app_url}/signup", status = "302" },
-      { source = "/forgot-password", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/app/signin", target = "/app/login", status = "302" },
+      { source = "/app", target = "/app/", status = "302" },
+      { source = local.app_route_pattern, target = "/app/index.html", status = "200" },
+      { source = "/login", target = "/app/login", status = "302" },
+      { source = "/signup", target = "/app/signup", status = "302" },
+      { source = "/forgot-password", target = "/app/login", status = "302" },
       { source = local.spa_route_pattern, target = "/index.html", status = "200" },
       ] : [
       { source = "/login", target = "/index.html", status = "200" },
@@ -1010,6 +1027,14 @@ resource "aws_amplify_app" "frontend" {
       VITE_PUBLISH_PRICES     = "true"
       VITE_SITE_AETHER_URL    = "https://aether.${var.amplify_domain_name}"
       VITE_SITE_OLYMPUS_URL   = "https://www.${var.amplify_domain_name}"
+      # The product, built under /app by the same app (amplify.yml).
+      VITE_AETHER_ENV         = var.environment
+      VITE_AETHER_ENDPOINT    = "https://${var.domain_name}"
+      VITE_AUTH0_DOMAIN       = var.auth0_domain
+      VITE_AUTH0_CLIENT_ID    = module.auth0.aether_client_id
+      VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
+      VITE_AUTH0_REDIRECT_URI = "${local.aether_app_base_url}/callback"
+      VITE_AUTH0_LOGOUT_URI   = "${local.aether_app_base_url}/login"
     } : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL              = var.status_api_url
@@ -1068,6 +1093,14 @@ resource "aws_amplify_branch" "main" {
       VITE_PUBLISH_PRICES     = "true"
       VITE_SITE_AETHER_URL    = "https://aether.${var.amplify_domain_name}"
       VITE_SITE_OLYMPUS_URL   = "https://www.${var.amplify_domain_name}"
+      # The product, built under /app by the same app (amplify.yml).
+      VITE_AETHER_ENV         = var.environment
+      VITE_AETHER_ENDPOINT    = "https://${var.domain_name}"
+      VITE_AUTH0_DOMAIN       = var.auth0_domain
+      VITE_AUTH0_CLIENT_ID    = module.auth0.aether_client_id
+      VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
+      VITE_AUTH0_REDIRECT_URI = "${local.aether_app_base_url}/callback"
+      VITE_AUTH0_LOGOUT_URI   = "${local.aether_app_base_url}/login"
     } : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL = var.status_api_url

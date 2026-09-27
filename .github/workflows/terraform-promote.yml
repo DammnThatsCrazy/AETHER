@@ -563,12 +563,11 @@ jobs:
               echo '::error::staging legacy Aurora state address does not identify the preserved aether-staging cluster'
               exit 1
             }
-            # The product app keeps its own association. The site app's is
-            # site[0], or frontend["aether-marketing"] until the moved block
-            # lands; the www, docs and status hosts move onto it, so their old
-            # apps' associations are no longer required.
+            # One app per environment: the site app's association (site[0], or
+            # frontend["aether-marketing"] until the moved block lands) carries
+            # every staging host, app included, so the old per-surface apps'
+            # associations are no longer required.
             for address in \
-              'aws_amplify_domain_association.frontend["aether-app"]' \
               'aws_amplify_domain_association.site[0]|aws_amplify_domain_association.frontend["aether-marketing"]'; do
               found=false
               IFS='|' read -r -a candidates <<<"$address"

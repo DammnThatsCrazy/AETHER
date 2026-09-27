@@ -119,7 +119,7 @@ jobs:
           # Terraform names them; explicit repository variables win if set.
           apps="$(aws amplify list-apps --max-items 100 --output json)"
           preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
-          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app") | .appId' <<<"$apps")}"
+          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-web") | .appId' <<<"$apps")}"
           test -n "$preview" || { echo "::error::no AETHER-staging-aether-app-preview Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
           {
             echo "PREVIEW_APP_ID=$preview"
@@ -133,7 +133,7 @@ jobs:
           PREVIEW_BRANCH: ${{ steps.pr.outputs.branch }}
         run: |
           set -euo pipefail
-          test -n "${STAGING_APP_ID:-}" || { echo "::error::no AETHER-staging-aether-app Amplify app to read build settings from"; exit 1; }
+          test -n "${STAGING_APP_ID:-}" || { echo "::error::no AETHER-staging-web Amplify app to read build settings from"; exit 1; }
           domain="$(aws amplify get-app --app-id "$PREVIEW_APP_ID" --query 'app.defaultDomain' --output text)"
           url="https://${PREVIEW_BRANCH}.${domain}"
           echo "url=$url" >> "$GITHUB_OUTPUT"
@@ -261,7 +261,7 @@ jobs:
           # Terraform names them; explicit repository variables win if set.
           apps="$(aws amplify list-apps --max-items 100 --output json)"
           preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
-          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app") | .appId' <<<"$apps")}"
+          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-web") | .appId' <<<"$apps")}"
           test -n "$preview" || { echo "::error::no AETHER-staging-aether-app-preview Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
           {
             echo "PREVIEW_APP_ID=$preview"

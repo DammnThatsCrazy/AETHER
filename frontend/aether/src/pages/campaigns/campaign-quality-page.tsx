@@ -1,3 +1,4 @@
+import { appHref } from '@aether-app/lib/app-path';
 import {
   Card, CardContent, CardHeader,
   EmptyState, ErrorState, LoadingState,
@@ -149,7 +150,7 @@ export function CampaignQualityPage() {
             )}
             {openReviews !== undefined && openReviews > 50 && (
               <li>
-                {openReviews} open mapping reviews. <a href="/campaign-intelligence/mapping-review" className="text-accent hover:underline">Review queue →</a>
+                {openReviews} open mapping reviews. <a href={appHref("/campaign-intelligence/mapping-review")} className="text-accent hover:underline">Review queue →</a>
               </li>
             )}
           </ul>

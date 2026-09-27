@@ -26,13 +26,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:e62dfa2c87eb1dce8d7dcb439df3b5a9f8235d34d6d964ed33539091cfc75f55"
+  ".github/workflows/": "sha256:167d66db5562a447290b47837112d9295566fd5561c4e34035841f563328dc54"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
   "cicd/aether-cicd/stages/": "sha256:f26f7a608ed0d1cf1aff849650848b64958eba563c69ccb7f7d120726c767619"
   "config/delivery_workflow_authority.yaml": "sha256:7a23c16f192c2fcd9d742f25a447ac7a1d85659bdc51a303a1c61765a64332d6"
-  "config/staging_apply_iam_policy.yaml": "sha256:aae9a18a11444499b2602d85749261112b03a356080a77cdd485420499822ac9"
+  "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:fcc3e84f90f6fb49d57f6e81bb31b5d5bb0c0febe1195c61512d45b40f23cb1c"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -462,9 +462,9 @@ delivery run's evidence instead of mutating those surfaces a second time.
 
 The public web layer follows the infrastructure topology but has its own
 Amplify build path, connected to the checked-in monorepo build
-configuration. Staging has two apps: the site app (`aether-marketing`, building
-`frontend/site`) holds the `aether`, `www`, `docs` and `status` hosts and
-`aether-app` holds `app`. Production has five (`olympus-marketing`,
+configuration. Staging has one app, `AETHER-staging-web` (key `aether-marketing`, building
+`frontend/site` with the product under `/app`), which holds the `aether`,
+`www`, `docs`, `status` and `app` hosts. Production has five (`olympus-marketing`,
 `aether-marketing`, `docs`, `aether-app`, and `status`), each with its reviewed
 `*.olympuslabsml.com` association.
 The protected tenant and Kyber artifacts remain part of the immutable release.

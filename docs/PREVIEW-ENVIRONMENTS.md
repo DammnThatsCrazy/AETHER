@@ -39,8 +39,9 @@ cadence (`config/verification_policy.yaml`): pull requests trigger hosted work
 only when marked ready for review.
 
 1. When a same-repository pull request is marked ready for review, the
-   workflow builds the Aether app with the staging app's public `VITE_*`
-   settings. It points the Auth0 redirect and logout URIs at the preview.
+   workflow builds the Aether app with the staging web app's
+   (`AETHER-staging-web`) public `VITE_*` settings, at the root of the
+   preview host rather than under `/app`. It points the Auth0 redirect and logout URIs at the preview.
 2. It deploys the build to branch `pr-<N>` of the staging preview Amplify app
    (`AETHER-staging-aether-app-preview`, not connected to the repository) and
    comments `https://pr-<N>.<preview domain>` on the pull request.

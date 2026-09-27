@@ -1,3 +1,4 @@
+import { appHref } from '@aether-app/lib/app-path';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, Tabs, TabsContent, TabsList, TabsTrigger, formatCount, formatDate, formatDateTime, formatDecimal, useTimeContext, type TimeContext } from '@aether/ui';
@@ -525,7 +526,7 @@ function CommsRecipientsSection({ campaignId }: { campaignId: string }) {
                   {
                     key: 'profile', header: 'Profile360',
                     render: r => r.entity_id
-                      ? <a className="text-xs text-accent hover:underline" href={`/users/${String(r.entity_id)}`}>Open</a>
+                      ? <a className="text-xs text-accent hover:underline" href={appHref(`/users/${String(r.entity_id)}`)}>Open</a>
                       : <span className="text-text-muted text-xs">unresolved</span>,
                   },
                 ]}

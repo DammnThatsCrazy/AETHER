@@ -659,10 +659,13 @@ jobs:
           state_list_file="$(mktemp)"
           trap 'rm -f "$state_list_file"' EXIT
           terraform state list >"$state_list_file"
-          # The reviewed main-branch hosts of each app's association.
+          # The reviewed main-branch hosts a repair may add to each app's
+          # association. Repair keeps every existing host and only adds
+          # missing ones. app is not listed: while the retired product app
+          # still holds it, Amplify would refuse it here, and Terraform's
+          # apply moves it after deleting that app's association.
           declare -A reviewed_prefixes=(
             [aether-marketing]="aether www docs status"
-            [aether-app]="app"
           )
           wait_for_reviewed_mapping() {
             local app_id="$1"
@@ -688,12 +691,11 @@ jobs:
             done
             echo "::error::staging Amplify domain association for ${prefix} did not become AVAILABLE with a verified main mapping within 900 seconds"; return 1
           }
-          # The site app (aether-marketing) owns aether plus www, docs and
-          # status; the product app owns app. The retired www, docs and status
-          # apps hold no association.
+          # One app per environment: the site app (aether-marketing) owns
+          # every staging host (aether, www, docs, status and app). The retired
+          # per-surface apps hold no association.
           declare -A app_subdomains=(
             [aether-marketing]=aether
-            [aether-app]=app
           )
           for app_key in "${!app_subdomains[@]}"; do
             app_address="module.frontends.aws_amplify_app.frontend[\"${app_key}\"]"
@@ -1237,7 +1239,6 @@ jobs:
           if [ -n "$STAGING_AMPLIFY_DOMAIN_NAME" ]; then
             declare -A app_subdomains=(
               [aether-marketing]=aether
-              [aether-app]=app
             )
             for app_key in "${!app_subdomains[@]}"; do
               app_address="module.frontends.aws_amplify_app.frontend[\"${app_key}\"]"
@@ -1419,7 +1420,6 @@ jobs:
             done
           fi
           if [ -n "${STAGING_AMPLIFY_DOMAIN_NAME:-}" ]; then
-            grep -Fx 'aws_amplify_domain_association.frontend["aether-app"]' "$state_list_file"
             grep -Fx -e 'aws_amplify_domain_association.site[0]' \
               -e 'aws_amplify_domain_association.frontend["aether-marketing"]' "$state_list_file"
           fi

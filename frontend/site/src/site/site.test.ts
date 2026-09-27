@@ -131,6 +131,15 @@ describe('retiredHostRedirect', () => {
     expect(go('/doc/%E0%A4%A')).toBe('https://aether.staging.olympuslabsml.com/docs');
   });
 
+  it('sends the app host to the product under /app, keeping the path', () => {
+    expect(retiredHostRedirect('app.staging.olympuslabsml.com', '/', '', '', staging)).toBe(
+      'https://aether.staging.olympuslabsml.com/app/',
+    );
+    expect(retiredHostRedirect('app.staging.olympuslabsml.com', '/billing', '?plan=beta', '#x', staging)).toBe(
+      'https://aether.staging.olympuslabsml.com/app/billing?plan=beta#x',
+    );
+  });
+
   it('sends status hosts to the status page', () => {
     expect(retiredHostRedirect('status.staging.olympuslabsml.com', '/anything', '', '', staging)).toBe(
       'https://aether.staging.olympuslabsml.com/status',

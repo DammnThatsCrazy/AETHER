@@ -10,6 +10,7 @@
  * In all other environments, this wraps the app in Auth0Provider from
  * @auth0/auth0-react and enforces that required vars are present.
  */
+import { appHref } from '@aether-app/lib/app-path';
 import type { ReactNode } from 'react';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { env, isProduction } from '@aether-app/lib/env';
@@ -40,7 +41,7 @@ export function AetherAuth0Provider({ children }: AetherAuth0ProviderProps) {
 
   const redirectUri =
     env.VITE_AUTH0_REDIRECT_URI ??
-    `${window.location.origin}/callback`;
+    `${window.location.origin}${appHref('/callback')}`;
 
   return (
     <Auth0Provider

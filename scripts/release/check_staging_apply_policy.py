@@ -104,6 +104,8 @@ REQUIRED_ACTIONS = {
     "route53:ChangeResourceRecordSets",
     "route53:ListTagsForResource",
     "route53:GetChange",
+    # Amplify UpdateDomainAssociation lists zones with the caller's credentials
+    "route53:ListHostedZones",
     # KMS
     "kms:CreateKey",
     "kms:TagResource",
@@ -523,6 +525,8 @@ ALLOWED_GLOBAL_ACTIONS = {
     "kms:ListAliases",
     # Free Tier
     "freetier:GetAccountPlanState",
+    # Route 53 zone discovery (Amplify custom domains); names only
+    "route53:ListHostedZones",
     # Amplify CreateApp has no resource-level ARN; the app and branch
     # operations below remain resource-scoped.
     "amplify:CreateApp",
@@ -815,6 +819,9 @@ def main() -> int:
     ):
         expected_resources[_dns] = _dns_zone
     expected_resources["route53:GetChange"] = _ROUTE53_CHANGES
+    # Amplify's UpdateDomainAssociation calls ListHostedZones through a
+    # forward-access session; the API cannot be scoped to a zone.
+    expected_resources["route53:ListHostedZones"] = "*"
 
     # KMS
     expected_resources["kms:CreateKey"] = "*"

@@ -248,33 +248,36 @@ run "staging_profile_plan" {
     error_message = "The staging plan provisions a cost-capped data store it must not."
   }
 
-  # The site app serves aether, www, docs and status; the product app keeps
-  # app. The old www, docs and status apps hold no domain association.
+  # One app per environment: the site app serves every staging host, with the
+  # product under /app; the old per-surface apps hold no domain association.
   assert {
     condition = alltrue([
-      local.site_host_prefixes == tolist(["aether", "www", "docs", "status"]),
+      local.site_host_prefixes == tolist(["aether", "www", "docs", "status", "app"]),
       local.amplify_host_apps == {
         aether = "aether-marketing"
         www    = "aether-marketing"
         docs   = "aether-marketing"
         status = "aether-marketing"
-        app    = "aether-app"
+        app    = "aether-marketing"
       },
     ])
-    error_message = "Staging hosts are not all served by the site app (with app on the product app)."
+    error_message = "Staging hosts are not all served by the one site app."
   }
 
-  # The retired Olympus, docs and status apps are deleted; staging's public
-  # web runs on the site app and the product app.
+  # The retired Olympus, docs, status and product apps are deleted; staging's
+  # public web is one Amplify app, named for what it is.
   assert {
-    condition     = sort(keys(local.amplify_apps)) == tolist(["aether-app", "aether-marketing"])
-    error_message = "Staging still defines a retired Amplify app (Olympus, docs or status)."
+    condition = alltrue([
+      sort(keys(local.amplify_apps)) == tolist(["aether-marketing"]),
+      local.amplify_apps["aether-marketing"].name == "${var.project}-staging-web",
+    ])
+    error_message = "Staging defines more than the one web app, or it is not named <project>-staging-web."
   }
 
-  # Olympus and status shells are prerendered and receive no rules. The
-  # runtime-routed app and docs receive catch-all fallbacks. The Aether host
-  # serves the unified site: /app/* and the legacy auth paths redirect to the
-  # product app, and every other path falls back to the site's client router.
+  # The product is served under /app by the same app: /app page routes are
+  # rewritten to its index.html, /app/signin and the legacy auth paths redirect
+  # into it, and every other path falls back to the site's client router.
+  # Olympus and status shells are prerendered and receive no rules.
   assert {
     condition = alltrue([
       length(local.amplify_custom_rules["aether-app"]) == 1,
@@ -283,21 +286,37 @@ run "staging_profile_plan" {
       local.aether_host_serves_site,
       local.amplify_apps["aether-marketing"].app_root == "frontend/site",
       [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == [
-        "/app/signin", "/app/signup", "/app", "/app/<*>", "/login", "/signup", "/forgot-password", local.spa_route_pattern,
+        "/app/signin", "/app", local.app_route_pattern, "/login", "/signup", "/forgot-password", local.spa_route_pattern,
       ],
-      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 7) :
-        rule.status == "302" && startswith(rule.target, var.aether_app_url)
-      ]),
-      local.amplify_custom_rules["aether-marketing"][1].target == "${var.aether_app_url}/signup",
-      local.amplify_custom_rules["aether-marketing"][5].target == "${var.aether_app_url}/signup",
-      local.amplify_custom_rules["aether-marketing"][7].target == "/index.html",
-      local.amplify_custom_rules["aether-marketing"][7].status == "200",
+      [for rule in local.amplify_custom_rules["aether-marketing"] : rule.target] == [
+        "/app/login", "/app/", "/app/index.html", "/app/login", "/app/signup", "/app/login", "/index.html",
+      ],
+      [for rule in local.amplify_custom_rules["aether-marketing"] : rule.status] == [
+        "302", "302", "200", "302", "302", "302", "200",
+      ],
+      local.app_route_pattern == "</^\\/app\\/[^.]*$/>",
       startswith(local.spa_route_pattern, "</^[^.]+$|"),
       strcontains(local.spa_route_pattern, "css|gif|ico|jpg|jpeg|js|png"),
       length(lookup(local.amplify_custom_rules, "olympus-marketing", [])) == 0,
       length(lookup(local.amplify_custom_rules, "status", [])) == 0,
     ])
-    error_message = "Amplify custom rules would rewrite a prerendered Olympus or status surface, or drift from the unified-site redirects and fallback."
+    error_message = "Amplify custom rules would rewrite a prerendered Olympus or status surface, or drift from the one-app product routes, redirects and fallback."
+  }
+
+  # The product's public URL is aether.<domain>/app: its Auth0 callback and
+  # logout, Stripe return URLs and the API's APP_URL follow it, and the one
+  # app's branch carries the product's build settings.
+  assert {
+    condition = alltrue([
+      local.product_under_site == (var.amplify_custom_domain_enabled && var.amplify_domain_name != ""),
+      !local.product_under_site || local.aether_app_base_url == "https://aether.${var.amplify_domain_name}/app",
+      !local.product_under_site || local.aether_app_origin == "https://aether.${var.amplify_domain_name}",
+      aws_amplify_branch.main["aether-marketing"].environment_variables.VITE_AUTH0_REDIRECT_URI == "${local.aether_app_base_url}/callback",
+      aws_amplify_branch.main["aether-marketing"].environment_variables.VITE_AUTH0_LOGOUT_URI == "${local.aether_app_base_url}/login",
+      aws_amplify_branch.main["aether-marketing"].environment_variables.VITE_AETHER_ENDPOINT == "https://${var.domain_name}",
+      aws_amplify_app.frontend["aether-marketing"].environment_variables.VITE_AUTH0_REDIRECT_URI == "${local.aether_app_base_url}/callback",
+    ])
+    error_message = "The product's URL, Auth0 redirects or build settings do not follow aether.<domain>/app on staging."
   }
 
   # The status page lives on the site now. Its branch must read the staging
