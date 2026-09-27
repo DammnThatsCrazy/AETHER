@@ -572,8 +572,9 @@ hosts to the matching `aether.*/docs` page (the retired portal's
 `/doc/<slug>` pages map to site page ids, and pages with no public equivalent
 open the docs home) and to `aether.*/status` (Amplify does not apply
 host-based rewrite rules that carry a path). The old `olympus-marketing`,
-`docs` and `status` staging apps are deleted: staging's public web runs on the
-site app and the product app. Amplify maps
+`docs` and `status` staging apps are deleted (the staging Amplify contract
+fails if one still exists): staging's public web runs on the site app and the
+product app. Amplify maps
 a host to one app, so the site association depends on the others: when a host
 moves, Terraform removes the old app's association before the site claims it.
 Route 53 records are keyed by host. Production keeps one app per host until its
