@@ -225,7 +225,8 @@ are returned in customer or operator responses.
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
 | `/v1/billing/plans` | GET | Public | Plan catalog for self-service signup and upgrades |
-| `/v1/billing/checkout` | POST | API key | Create a Stripe Checkout session, or a local mocked URL in local mock mode |
+| `/v1/billing/checkout` | POST | API key | Create a Stripe Checkout session for `{plan_tier: alpha\|beta\|gamma\|delta, billing_interval?: monthly\|annual}` (default monthly; annual needs the tier's yearly price, otherwise 400), or a local mocked URL in local mock mode |
+| `/v1/billing/capability` | GET | API key | Secret-free provider readiness: `status`, `enabled`, `missing` settings when degraded, and `annual_plans` (tiers with a yearly price) |
 | `/v1/billing/portal` | POST | API key | Create a Stripe Billing Portal session, or a local mocked URL in local mock mode |
 | `/v1/billing/invoices` | GET | API key | List invoices for the caller's tenant |
 | `/v1/billing/invoices/{invoice_id}` | GET | API key | Get one invoice's full payload for the caller's tenant |
