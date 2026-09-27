@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { SELF_SERVE_PLAN_IDS, parseSelfServePlan } from '@aether-app/features/auth/post-auth-redirect';
 import {
   Badge,
   Button,
@@ -35,7 +36,9 @@ import {
 import { env } from '@aether-app/lib/env';
 import type { CustomerBillingPlan } from '@aether-app/lib/api/endpoints';
 
-const PLAN_ORDER = ['P1', 'P2', 'P3', 'P4'];
+// Self-serve plans in price order (shared/plans/catalog.py). The contract
+// tiers (epsilon, omicron, omega) have no checkout; the Enterprise card covers them.
+const PLAN_ORDER: readonly string[] = SELF_SERVE_PLAN_IDS;
 
 function PlanCard({
   plan,
@@ -51,7 +54,7 @@ function PlanCard({
   disabled: boolean;
 }) {
   const timeCtx = useTimeContext();
-  const isHighTier = ['P3', 'P4'].includes(plan.plan_id);
+  const isHighTier = ['gamma', 'delta'].includes(plan.plan_id);
   return (
     <Card className={isCurrent ? 'border-accent/50 bg-accent/5' : ''}>
       <CardHeader>
@@ -303,6 +306,20 @@ export function BillingPage() {
 
   const currentPlanId = profile?.plan.plan_id ?? '';
 
+  // Arriving from the pricing page (through sign-up) with ?plan=… starts that
+  // plan's checkout once, when billing is available and it is not already the
+  // current plan. Alpha is free and needs no checkout.
+  const [searchParams] = useSearchParams();
+  const requestedPlan = parseSelfServePlan(searchParams.get('plan'));
+  const checkoutStarted = useRef(false);
+  useEffect(() => {
+    if (checkoutStarted.current || !requestedPlan || requestedPlan === 'alpha') return;
+    if (!profile || !billingAvailable || currentPlanId === requestedPlan) return;
+    checkoutStarted.current = true;
+    void handleUpgrade(requestedPlan);
+    // handleUpgrade is recreated each render; the ref makes this run once.
+  }, [requestedPlan, profile, billingAvailable, currentPlanId]);
+
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
@@ -330,7 +347,8 @@ export function BillingPage() {
 
       {!plansLoading && plans && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...plans]
+          {plans
+            .filter(plan => !plan.contact_sales && PLAN_ORDER.includes(plan.plan_id))
             .sort((a, b) => PLAN_ORDER.indexOf(a.plan_id) - PLAN_ORDER.indexOf(b.plan_id))
             .map(plan => (
               <PlanCard

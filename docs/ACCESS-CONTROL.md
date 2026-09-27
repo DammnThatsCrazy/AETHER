@@ -68,7 +68,12 @@ stays behind `KYBER_OPERATOR_TENANT_IDS` and the operator permission above.
 
 The staging profile sets `self_signup_enabled = true`, so staging exercises the
 public journey: an Auth0 sign-in from an email the platform has never seen
-provisions its own tenant, as production does. Terraform always sets
+provisions its own tenant, as production does. The product app's `/signup`
+opens Auth0's hosted sign-up (Google, or email and password); the site's
+"Create an account" and pricing buttons send `/app/signup?plan=<id>` there, the
+chosen plan survives the Auth0 round trip, and `/callback` lands the new
+account on `/billing?plan=<id>`, which starts that plan's Stripe checkout once
+(Alpha is free and needs none). Terraform always sets
 `SSO_SELF_SIGNUP_ENABLED` explicitly; without it the backend defaults to
 `false` when `AETHER_ENV=staging`, and a sign-in whose `sub` is not yet linked
 then succeeds only when its identity-provider-verified email:

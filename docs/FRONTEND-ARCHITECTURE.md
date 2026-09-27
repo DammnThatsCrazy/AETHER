@@ -73,8 +73,17 @@ There are two separate frontend applications. **Do not mix them up.**
   build carries Auth0 settings, login offers **Continue with Olympus sign-in**
   (Auth0 Universal Login); `/callback` exchanges the Auth0 token through
   `/v1/auth/sso/callback`, which links a verified email to its existing user or
-  pending invitation. This is how the staging operator and invited teammates
-  sign in; `/signup` always registers a new tenant on a plan. The
+  pending invitation, or provisions a new tenant when self sign-up is on. With
+  Auth0 configured, `/signup` opens Auth0's hosted sign-up
+  (`screen_hint=signup`); the pricing page's `?plan=alpha|beta|gamma|delta`
+  (or a validated `?redirect`, else `/onboarding`) is kept in session storage
+  across the round trip (`rememberPostAuthDestination` /
+  `readPostAuthDestination`, validated and expiring after 30 minutes), and
+  `/callback` lands on it. `/billing?plan=<id>` starts that plan's Stripe
+  checkout once when billing is available and it is not the current plan;
+  the billing page lists only the self-serve plans (contract tiers go through
+  Contact sales). Without Auth0 settings, `/signup` is the email form, which
+  registers a new tenant on a plan. The
   Aether public marketing threshold (`frontend/aether-marketing`) hands users
   into these pages with optional prefill query params — login accepts `?email`,
   signup accepts `?name` and `?email` — read once via a `useState` initializer

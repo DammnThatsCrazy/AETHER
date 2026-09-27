@@ -288,6 +288,8 @@ run "staging_profile_plan" {
       alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 7) :
         rule.status == "302" && startswith(rule.target, var.aether_app_url)
       ]),
+      local.amplify_custom_rules["aether-marketing"][1].target == "${var.aether_app_url}/signup",
+      local.amplify_custom_rules["aether-marketing"][5].target == "${var.aether_app_url}/signup",
       local.amplify_custom_rules["aether-marketing"][7].target == "/index.html",
       local.amplify_custom_rules["aether-marketing"][7].status == "200",
       startswith(local.spa_route_pattern, "</^[^.]+$|"),

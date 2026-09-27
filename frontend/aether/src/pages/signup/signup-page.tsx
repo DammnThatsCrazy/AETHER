@@ -13,7 +13,13 @@ import {
 } from "@aether/ui";
 import type { SocialProvider } from "@aether/ui";
 import { useAuth, resolveAuthGrant } from "@aether-app/features/auth";
-import { resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
+import { useAuth0 } from "@auth0/auth0-react";
+import {
+  parseSelfServePlan,
+  rememberPostAuthDestination,
+  resolvePostAuthRedirect,
+} from "@aether-app/features/auth/post-auth-redirect";
+import { env } from "@aether-app/lib/env";
 import {
   buildSettingsRedirectFromHandoff,
   parseSettingsHandoff,
@@ -63,7 +69,63 @@ const PLAN_OPTIONS = [
   { value: "delta", label: "Delta — $1,999/mo" },
 ];
 
+/**
+ * Account creation goes through Auth0 (Google or email and password on the
+ * hosted page) whenever Auth0 is configured. The chosen plan from the pricing
+ * page (?plan=alpha|beta|gamma|delta) is kept across the round trip, so a new
+ * account lands on billing with that plan's checkout; with no plan it lands
+ * on the post-signup destination this page already computes. The email form
+ * remains for environments without Auth0 (local development).
+ */
 export function SignupPage() {
+  const auth0Configured = Boolean(env.VITE_AUTH0_DOMAIN && env.VITE_AUTH0_CLIENT_ID);
+  return auth0Configured ? <Auth0SignupRedirect /> : <EmailSignupPage />;
+}
+
+function Auth0SignupRedirect() {
+  const auth0 = useAuth0();
+  const [searchParams] = useSearchParams();
+  const [failed, setFailed] = useState(false);
+  const plan = parseSelfServePlan(searchParams.get("plan"));
+  const redirectParam = searchParams.get("redirect");
+  const destination = plan
+    ? `/billing?plan=${plan}`
+    : redirectParam !== null
+      ? resolvePostAuthRedirect(redirectParam)
+      : "/onboarding";
+
+  const start = () => {
+    setFailed(false);
+    rememberPostAuthDestination(destination);
+    void auth0
+      .loginWithRedirect({ authorizationParams: { screen_hint: "signup" } })
+      .catch(() => setFailed(true));
+  };
+
+  useEffect(() => {
+    start();
+    // Redirect once on arrival; the button retries.
+  }, []);
+
+  return (
+    <div className="flex h-screen items-center justify-center bg-surface-base px-4">
+      <div className="max-w-sm w-full text-center space-y-4">
+        <AetherLogo size={32} className="justify-center" />
+        <p className="text-text-secondary text-sm">
+          {failed ? "Could not reach the sign-up service." : "Opening account creation…"}
+        </p>
+        <Button variant="primary" size="sm" className="w-full" onClick={start}>
+          Create your account
+        </Button>
+        <a href="/login" className="block text-xs text-text-muted">
+          Already have an account? Sign in
+        </a>
+      </div>
+    </div>
+  );
+}
+
+export function EmailSignupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { apiKeyLogin, sessionLogin } = useAuth();

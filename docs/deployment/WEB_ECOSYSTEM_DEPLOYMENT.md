@@ -114,9 +114,10 @@ The prerendered marketing bundles retain the following delivery guarantees:
 - **Only the required client fallbacks are rewired.** Terraform gives
   `frontend/aether` and `frontend/docs` their SPA fallback because those apps
   resolve route content at runtime. On staging, the Aether host serves the
-  unified site (`frontend/site`), a client-routed app. `/app/signin`,
-  `/app/signup` and the legacy `/login`, `/signup`, and `/forgot-password`
-  paths redirect (302) to the product app's sign-in (`aether_app_url`); `/app`
+  unified site (`frontend/site`), a client-routed app. `/app/signin` and the
+  legacy `/login` and `/forgot-password` paths redirect (302) to the product
+  app's sign-in (`aether_app_url`), and `/app/signup` and the legacy `/signup`
+  to its Auth0 sign-up with the chosen `?plan=`; `/app`
   redirects to the product app's root and any other `/app/*` path to the same
   path on the product app; every other page route is rewritten to the site's
   `/index.html` with a `200` (paths without a static-asset extension), whose router

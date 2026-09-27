@@ -650,9 +650,10 @@ release archives.
 Routing is app-specific. Olympus marketing and status serve prerendered files
 without a catch-all rewrite. On staging, the `aether-marketing` app builds the
 unified site (`frontend/site`) for the `aether` host. It redirects
-`/app/signin`, `/app/signup` and the legacy `/login`, `/signup` and
-`/forgot-password` paths to the product app's sign-in (`aether_app_url`),
-sends `/app` to the product app's root and any other `/app/*` path to the same
+`/app/signin` and the legacy `/login` and `/forgot-password` paths to the
+product app's sign-in (`aether_app_url`), `/app/signup` and the legacy
+`/signup` to the product app's sign-up (Auth0 sign-up, keeping the pricing
+page's `?plan=` so a new account lands on that plan's checkout), sends `/app` to the product app's root and any other `/app/*` path to the same
 path on the product app, and rewrites every other page route to
 `/index.html` with a `200` (AWS's single-page-app pattern: paths without a
 file extension, or whose extension is not a static asset), so routes are not

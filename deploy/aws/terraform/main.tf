@@ -886,9 +886,10 @@ locals {
     docs = [
       { source = "/<*>", target = "/index.html", status = "404-200" },
     ]
-    # Unified site: its sign-in and sign-up paths lead to the product app until
-    # it is served under /app from this app, and the legacy marketing auth paths
-    # follow. The docs and status hosts are sent to /docs and /status by the
+    # Unified site: its sign-in and sign-up paths lead to the product app's
+    # /login and /signup (Auth0 sign-up, keeping the pricing page's ?plan=)
+    # until it is served under /app from this app, and the legacy marketing
+    # auth paths follow. The docs and status hosts are sent to /docs and /status by the
     # site itself (Amplify does not apply host-based rules with paths).
     # Every other page route is rewritten to index.html with a 200: the regex
     # matches paths with no file extension, or an extension that is not a
@@ -897,11 +898,11 @@ locals {
     # The prerendered aether-marketing build keeps its auth-threshold rewrites.
     "aether-marketing" = local.aether_host_serves_site ? [
       { source = "/app/signin", target = "${var.aether_app_url}/login", status = "302" },
-      { source = "/app/signup", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/app/signup", target = "${var.aether_app_url}/signup", status = "302" },
       { source = "/app", target = "${var.aether_app_url}/", status = "302" },
       { source = "/app/<*>", target = "${var.aether_app_url}/<*>", status = "302" },
       { source = "/login", target = "${var.aether_app_url}/login", status = "302" },
-      { source = "/signup", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/signup", target = "${var.aether_app_url}/signup", status = "302" },
       { source = "/forgot-password", target = "${var.aether_app_url}/login", status = "302" },
       { source = local.spa_route_pattern, target = "/index.html", status = "200" },
       ] : [
