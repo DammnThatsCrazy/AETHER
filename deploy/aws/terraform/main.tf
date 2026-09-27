@@ -814,6 +814,12 @@ locals {
   # prerenders its own per-route metadata, sitemap and robots file.
   aether_host_serves_site = var.environment == "staging"
 
+  # Hosts the site app answers for. On staging it also takes over www (the
+  # Olympus pages), docs and status, whose old apps then hold no domain and are
+  # removed after a reviewed hold. Elsewhere it serves only the aether host.
+  site_host_prefixes   = local.aether_host_serves_site ? ["aether", "www", "docs", "status"] : ["aether"]
+  site_host_owner_apps = local.aether_host_serves_site ? ["olympus-marketing", "docs", "status"] : []
+
   amplify_apps = local.enable_static_frontends ? {
     olympus-marketing = {
       name        = "${var.project}-${var.environment}-olympus-marketing"
@@ -871,7 +877,12 @@ locals {
     # it is served under /app from this app, and the legacy marketing auth paths
     # follow. Everything else is client-routed with a 404-200 index fallback.
     # The prerendered aether-marketing build keeps its auth-threshold rewrites.
+    #
+    # On staging the docs and status hosts now land on the site's /docs and
+    # /status pages; www serves the Olympus pages from the same build.
     "aether-marketing" = local.aether_host_serves_site ? [
+      { source = "https://docs.${var.amplify_domain_name}/<*>", target = "https://aether.${var.amplify_domain_name}/docs/<*>", status = "301" },
+      { source = "https://status.${var.amplify_domain_name}/<*>", target = "https://aether.${var.amplify_domain_name}/status", status = "301" },
       { source = "/app/signin", target = "${var.aether_app_url}/login", status = "302" },
       { source = "/app/signup", target = "${var.aether_app_url}/login", status = "302" },
       { source = "/app", target = "${var.aether_app_url}/", status = "302" },
@@ -1059,9 +1070,12 @@ resource "aws_amplify_branch" "main" {
 }
 
 resource "aws_amplify_domain_association" "frontend" {
+  # The site app has its own association (below); apps whose host moved to it
+  # hold none.
   for_each = {
     for k, v in local.amplify_apps : k => v
     if var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
+    && k != "aether-marketing" && !contains(local.site_host_owner_apps, k)
   }
 
   app_id      = aws_amplify_app.frontend[each.key].id
@@ -1071,6 +1085,40 @@ resource "aws_amplify_domain_association" "frontend" {
     branch_name = aws_amplify_branch.main[each.key].branch_name
     prefix      = each.value.subdomain
   }
+}
+
+# The site app's association, with every host it serves. It depends on the
+# other associations so that, when a host moves to the site, Terraform removes
+# the old app's association before this one claims the host (Amplify maps each
+# host to one app).
+resource "aws_amplify_domain_association" "site" {
+  count = (
+    contains(keys(local.amplify_apps), "aether-marketing")
+    && var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
+  ) ? 1 : 0
+
+  app_id      = aws_amplify_app.frontend["aether-marketing"].id
+  domain_name = var.amplify_domain_name
+
+  dynamic "sub_domain" {
+    for_each = toset(local.site_host_prefixes)
+    content {
+      branch_name = aws_amplify_branch.main["aether-marketing"].branch_name
+      prefix      = sub_domain.value
+    }
+  }
+
+  # A newly added host verifies only after its Route 53 record (which reads
+  # this association) points at the site, so do not block the apply on it.
+  # The lifecycle preflight checks every host's mapping before the next wake.
+  wait_for_verification = false
+
+  depends_on = [aws_amplify_domain_association.frontend]
+}
+
+moved {
+  from = aws_amplify_domain_association.frontend["aether-marketing"]
+  to   = aws_amplify_domain_association.site[0]
 }
 
 resource "aws_ssm_parameter" "amplify_app_id" {
@@ -1180,18 +1228,47 @@ resource "aws_route53_record" "squarespace_verify" {
 # domain is only a fallback for the transitional non-associated shape.
 # ---------------------------------------------------------------------------
 
+locals {
+  # Host prefix -> the Amplify app that serves it.
+  amplify_host_apps = merge(
+    { for k, v in local.amplify_apps : v.subdomain => k if !contains(local.site_host_owner_apps, k) },
+    contains(keys(local.amplify_apps), "aether-marketing") ? { for p in local.site_host_prefixes : p => "aether-marketing" } : {},
+  )
+  # Host prefix -> the dns_record its association reports.
+  amplify_host_dns_records = merge(
+    { for k, a in aws_amplify_domain_association.frontend : one(a.sub_domain).prefix => one(a.sub_domain).dns_record },
+    { for sub in flatten(aws_amplify_domain_association.site[*].sub_domain) : sub.prefix => sub.dns_record },
+  )
+}
+
 resource "aws_route53_record" "amplify_subdomain" {
-  for_each = local.product_dns_enabled ? local.amplify_apps : {}
+  for_each = local.product_dns_enabled ? local.amplify_host_apps : {}
   zone_id  = local.hosted_zone_id
-  name     = "${each.value.subdomain}.${var.amplify_domain_name}"
+  name     = "${each.key}.${var.amplify_domain_name}"
   type     = "CNAME"
   ttl      = 3600
-  # Amplify reports dns_record as "<prefix> CNAME <target>"; Route 53 takes
-  # only the target (the last token).
+  # Amplify reports each host's dns_record as "<prefix> CNAME <target>";
+  # Route 53 takes only the target (the last token).
   records = [try(
-    regex("[^ ]+$", trimspace(one(aws_amplify_domain_association.frontend[each.key].sub_domain).dns_record)),
-    aws_amplify_app.frontend[each.key].default_domain,
+    regex("[^ ]+$", trimspace(local.amplify_host_dns_records[each.key])),
+    aws_amplify_app.frontend[each.value].default_domain,
   )]
+}
+
+# Records were keyed by app before hosts could share one.
+moved {
+  from = aws_route53_record.amplify_subdomain["olympus-marketing"]
+  to   = aws_route53_record.amplify_subdomain["www"]
+}
+
+moved {
+  from = aws_route53_record.amplify_subdomain["aether-marketing"]
+  to   = aws_route53_record.amplify_subdomain["aether"]
+}
+
+moved {
+  from = aws_route53_record.amplify_subdomain["aether-app"]
+  to   = aws_route53_record.amplify_subdomain["app"]
 }
 
 # API subdomain → ALB (wired directly — the ALB is in this root module)

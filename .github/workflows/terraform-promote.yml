@@ -563,10 +563,20 @@ jobs:
               echo '::error::staging legacy Aurora state address does not identify the preserved aether-staging cluster'
               exit 1
             }
-            for app_key in olympus-marketing aether-marketing docs aether-app status; do
-              address="aws_amplify_domain_association.frontend[\"${app_key}\"]"
-              grep -Fxq "$address" "$state_list_file" || {
-                echo "::error::staging plan requires ${address} in staging Terraform state; verify the existing Squarespace-backed association, run staging-state-reconcile with staging.olympuslabsml.com, then create a fresh plan"
+            # The product app keeps its own association. The site app's is
+            # site[0], or frontend["aether-marketing"] until the moved block
+            # lands; the www, docs and status hosts move onto it, so their old
+            # apps' associations are no longer required.
+            for address in \
+              'aws_amplify_domain_association.frontend["aether-app"]' \
+              'aws_amplify_domain_association.site[0]|aws_amplify_domain_association.frontend["aether-marketing"]'; do
+              found=false
+              IFS='|' read -r -a candidates <<<"$address"
+              for candidate in "${candidates[@]}"; do
+                if grep -Fxq "$candidate" "$state_list_file"; then found=true; fi
+              done
+              "$found" || {
+                echo "::error::staging plan requires ${candidates[0]} in staging Terraform state; verify the existing association, run staging-state-reconcile with staging.olympuslabsml.com, then create a fresh plan"
                 exit 1
               }
             done

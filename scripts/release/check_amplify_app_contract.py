@@ -73,12 +73,23 @@ STAGING_REQUIRED_RUNTIME_KEYS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-STAGING_APPS: dict[str, str] = {
-    "AETHER-staging-olympus-marketing": "www",
-    "AETHER-staging-aether-marketing": "aether",
-    "AETHER-staging-docs": "docs",
-    "AETHER-staging-aether-app": "app",
-    "AETHER-staging-status": "status",
+STAGING_APPS: tuple[str, ...] = (
+    "AETHER-staging-olympus-marketing",
+    "AETHER-staging-aether-marketing",
+    "AETHER-staging-docs",
+    "AETHER-staging-aether-app",
+    "AETHER-staging-status",
+)
+# Each staging host and the apps allowed to serve it, the reviewed owner
+# first. The unified site app (aether-marketing) takes over www, docs and
+# status from their old apps; until that apply lands (and while the old apps
+# are held before removal) the old owner still passes.
+STAGING_HOSTS: dict[str, tuple[str, ...]] = {
+    "aether": ("AETHER-staging-aether-marketing",),
+    "app": ("AETHER-staging-aether-app",),
+    "www": ("AETHER-staging-aether-marketing", "AETHER-staging-olympus-marketing"),
+    "docs": ("AETHER-staging-aether-marketing", "AETHER-staging-docs"),
+    "status": ("AETHER-staging-aether-marketing", "AETHER-staging-status"),
 }
 STATUS_APP = "aether-status"
 PRODUCTION_STATUS_ENVIRONMENT = {
@@ -321,8 +332,32 @@ def _check_app(
                 errors.append(f"Amplify app {name} latest main job is not for the reviewed commit")
 
     if check_domain and subdomain_prefix is not None:
-        requested_domain = domain_name or STAGING_DOMAIN
-        domain_label = "staging" if requested_domain == STAGING_DOMAIN else "production"
+        errors.extend(
+            _domain_errors(
+                name=name,
+                app_id=app_id,
+                subdomain_prefix=subdomain_prefix,
+                domain_name=domain_name,
+                dns_resolver=dns_resolver,
+                client=client,
+            )
+        )
+    return errors
+
+
+def _domain_errors(
+    *,
+    name: str,
+    app_id: str,
+    subdomain_prefix: str,
+    domain_name: str | None,
+    dns_resolver: DnsResolver,
+    client: AwsCall,
+) -> list[str]:
+    errors: list[str] = []
+    requested_domain = domain_name or STAGING_DOMAIN
+    domain_label = "staging" if requested_domain == STAGING_DOMAIN else "production"
+    try:
         association_payload = client(
             [
                 "amplify",
@@ -333,37 +368,67 @@ def _check_app(
                 requested_domain,
             ]
         )
-        association = _mapping(association_payload.get("domainAssociation"))
-        if association.get("domainStatus") != "AVAILABLE":
-            errors.append(
-                f"Amplify app {name} {domain_label} domain association is not AVAILABLE"
-            )
-        subdomains = association.get("subDomains")
-        matching = [
-            _mapping(item)
-            for item in subdomains
-            if isinstance(item, Mapping)
-            and _mapping(item.get("subDomainSetting")).get("prefix") == subdomain_prefix
-            and _mapping(item.get("subDomainSetting")).get("branchName") == "main"
-        ] if isinstance(subdomains, list) else []
-        live_dns = False
-        if matching and matching[0].get("verified") is not True:
-            dns_record = matching[0].get("dnsRecord")
-            expected_target = (
-                str(dns_record).rsplit(" ", 1)[-1].rstrip(".").lower()
-                if isinstance(dns_record, str) and dns_record.strip()
-                else ""
-            )
-            live_dns = bool(
-                expected_target
-                and dns_resolver(f"{subdomain_prefix}.{requested_domain}") == expected_target
-            )
-        if not matching or (matching[0].get("verified") is not True and not live_dns):
-            errors.append(
-                f"Amplify app {name} {domain_label} domain lacks an AVAILABLE {subdomain_prefix} subdomain with a live DNS target"
-            )
+    except RuntimeError:
+        return [f"Amplify app {name} has no {domain_label} domain association"]
+    association = _mapping(association_payload.get("domainAssociation"))
+    if association.get("domainStatus") != "AVAILABLE":
+        errors.append(
+            f"Amplify app {name} {domain_label} domain association is not AVAILABLE"
+        )
+    subdomains = association.get("subDomains")
+    matching = [
+        _mapping(item)
+        for item in subdomains
+        if isinstance(item, Mapping)
+        and _mapping(item.get("subDomainSetting")).get("prefix") == subdomain_prefix
+        and _mapping(item.get("subDomainSetting")).get("branchName") == "main"
+    ] if isinstance(subdomains, list) else []
+    live_dns = False
+    if matching and matching[0].get("verified") is not True:
+        dns_record = matching[0].get("dnsRecord")
+        expected_target = (
+            str(dns_record).rsplit(" ", 1)[-1].rstrip(".").lower()
+            if isinstance(dns_record, str) and dns_record.strip()
+            else ""
+        )
+        live_dns = bool(
+            expected_target
+            and dns_resolver(f"{subdomain_prefix}.{requested_domain}") == expected_target
+        )
+    if not matching or (matching[0].get("verified") is not True and not live_dns):
+        errors.append(
+            f"Amplify app {name} {domain_label} domain lacks an AVAILABLE {subdomain_prefix} subdomain with a live DNS target"
+        )
     return errors
 
+
+
+def _staging_host_errors(
+    prefix: str,
+    owners: tuple[str, ...],
+    apps: Mapping[str, Mapping[str, Any]],
+    dns_resolver: DnsResolver,
+    client: AwsCall,
+) -> list[str]:
+    """A host passes when any allowed owner serves it; else report the reviewed owner's errors."""
+    first_errors: list[str] | None = None
+    for owner in owners:
+        app_id = _mapping(apps.get(owner)).get("appId")
+        if not isinstance(app_id, str) or not app_id:
+            continue
+        owner_errors = _domain_errors(
+            name=owner,
+            app_id=app_id,
+            subdomain_prefix=prefix,
+            domain_name=None,
+            dns_resolver=dns_resolver,
+            client=client,
+        )
+        if not owner_errors:
+            return []
+        if first_errors is None:
+            first_errors = owner_errors
+    return first_errors or [f"no Amplify app serves the staging {prefix} host"]
 
 def contract_errors(
     *,
@@ -386,14 +451,14 @@ def contract_errors(
     errors.extend(app_errors)
     if mode in ("staging", "staging-runtime"):
         runtime_only = mode == "staging-runtime"
-        for name, prefix in STAGING_APPS.items():
+        for name in STAGING_APPS:
             errors.extend(
                 _check_app(
                     name=name,
                     app=apps.get(name),
                     branch_stage="DEVELOPMENT",
                     expected_commit=expected_commit,
-                    subdomain_prefix=prefix,
+                    subdomain_prefix=None,
                     expected_branch_environment=(
                         STAGING_RUNTIME_ENVIRONMENT[name]
                         if check_runtime_environment
@@ -410,11 +475,14 @@ def contract_errors(
                     job_poll_seconds=job_poll_seconds,
                     sleeper=sleeper,
                     clock=clock,
-                    check_domain=not runtime_only,
+                    check_domain=False,
                     client=client,
                     dns_resolver=dns_resolver,
                 )
             )
+        if not runtime_only:
+            for prefix, owners in STAGING_HOSTS.items():
+                errors.extend(_staging_host_errors(prefix, owners, apps, dns_resolver, client))
     elif mode == "production-status":
         errors.extend(
             _check_app(

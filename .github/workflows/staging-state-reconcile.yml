@@ -658,13 +658,11 @@ jobs:
           state_list_file="$(mktemp)"
           trap 'rm -f "$state_list_file"' EXIT
           terraform state list >"$state_list_file"
-          reviewed_settings='[
-            {"prefix":"www","branchName":"main"},
-            {"prefix":"aether","branchName":"main"},
-            {"prefix":"docs","branchName":"main"},
-            {"prefix":"app","branchName":"main"},
-            {"prefix":"status","branchName":"main"}
-          ]'
+          # The reviewed main-branch hosts of each app's association.
+          declare -A reviewed_prefixes=(
+            [aether-marketing]="aether www docs status"
+            [aether-app]="app"
+          )
           wait_for_reviewed_mapping() {
             local app_id="$1"
             local prefix="$2"
@@ -689,12 +687,12 @@ jobs:
             done
             echo "::error::staging Amplify domain association for ${prefix} did not become AVAILABLE with a verified main mapping within 900 seconds"; return 1
           }
+          # The site app (aether-marketing) owns aether plus www, docs and
+          # status; the product app owns app. The retired www, docs and status
+          # apps hold no association.
           declare -A app_subdomains=(
-            [olympus-marketing]=www
             [aether-marketing]=aether
-            [docs]=docs
             [aether-app]=app
-            [status]=status
           )
           for app_key in "${!app_subdomains[@]}"; do
             app_address="module.frontends.aws_amplify_app.frontend[\"${app_key}\"]"
@@ -729,6 +727,8 @@ jobs:
                 rm -f "$association_file"
                 echo "::error::staging Amplify domain association for ${app_key} lacks the reviewed ${prefix} main subdomain; rerun the reviewed reconciliation with REPAIR-STAGING-AMPLIFY"; exit 1;
               fi
+              reviewed_settings="$(jq -nc --arg prefixes "${reviewed_prefixes[$app_key]}" \
+                '$prefixes | split(" ") | map({prefix: ., branchName: "main"})')"
               settings="$(jq -c --argjson desired "$reviewed_settings" '
                 [(.domainAssociation.subDomains // [])[]?.subDomainSetting, $desired[]]
                 | map(select(type == "object" and .prefix != null and .branchName != null))
@@ -750,9 +750,9 @@ jobs:
             fi
           done
           if [ "$repair_requested" = true ]; then
-            echo 'Verified all five staging Amplify associations and reviewed main subdomains; only missing mappings were repaired and Squarespace DNS was not changed.'
+            echo 'Verified the site and product Amplify associations and reviewed main subdomains; only missing mappings were repaired and no DNS was changed.'
           else
-            echo 'Verified all five existing staging Amplify domain associations and their reviewed main subdomains; no DNS or domain values were changed.'
+            echo 'Verified the existing site and product Amplify domain associations and their reviewed main subdomains; no DNS or domain values were changed.'
           fi
 
       - name: Verify imported repositories use the state-managed ECR key
@@ -1235,11 +1235,8 @@ jobs:
           fi
           if [ -n "$STAGING_AMPLIFY_DOMAIN_NAME" ]; then
             declare -A app_subdomains=(
-              [olympus-marketing]=www
               [aether-marketing]=aether
-              [docs]=docs
               [aether-app]=app
-              [status]=status
             )
             for app_key in "${!app_subdomains[@]}"; do
               app_address="module.frontends.aws_amplify_app.frontend[\"${app_key}\"]"
@@ -1253,6 +1250,15 @@ jobs:
                 | sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\{0,1\}\([^"[:space:]]*\)"\{0,1\}/\1/p' \
                 | head -n 1)"
               address="aws_amplify_domain_association.frontend[\"${app_key}\"]"
+              if [ "$app_key" = aether-marketing ]; then
+                # The site app's association lives at site[0]; a state that
+                # still holds the pre-move address is left for the moved block.
+                if grep -Fxq "$address" "$state_list_file"; then
+                  echo "Site Amplify domain association is still at ${address}; the moved block relocates it on the next apply."
+                  continue
+                fi
+                address='aws_amplify_domain_association.site[0]'
+              fi
               if grep -Fxq "$address" "$state_list_file"; then
                 state_domain="$(terraform state show -no-color "$address" \
                   | sed -n 's/^[[:space:]]*domain_name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' \
@@ -1412,9 +1418,9 @@ jobs:
             done
           fi
           if [ -n "${STAGING_AMPLIFY_DOMAIN_NAME:-}" ]; then
-            for app_key in olympus-marketing aether-marketing docs aether-app status; do
-              grep -Fx "aws_amplify_domain_association.frontend[\"${app_key}\"]" "$state_list_file"
-            done
+            grep -Fx 'aws_amplify_domain_association.frontend["aether-app"]' "$state_list_file"
+            grep -Fx -e 'aws_amplify_domain_association.site[0]' \
+              -e 'aws_amplify_domain_association.frontend["aether-marketing"]' "$state_list_file"
           fi
           if [ -n "${LEGACY_AURORA_IDENTIFIER:-}" ]; then
             legacy_address='module.aurora[0].aws_rds_cluster.legacy_staging[0]'

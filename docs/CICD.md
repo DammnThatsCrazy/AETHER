@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:4bd45a47d7c0d1685209308b78619fe278605e399d99cc5dcada049727be87f2"
+  ".github/workflows/": "sha256:dc0ac7c8235f48156363485fa5d49b5d8d1a1f3d95c97395c4af8da1defe79fa"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -463,8 +463,9 @@ delivery run's evidence instead of mutating those surfaces a second time.
 The public web layer follows the infrastructure topology but has its own
 Amplify build path. `olympus-marketing`, `aether-marketing`, `docs`,
 `aether-app`, and `status` are connected to the checked-in monorepo build
-configuration; staging reuses the verified `*.staging.olympuslabsml.com`
-associations and production adds the reviewed `*.olympuslabsml.com` associations.
+configuration; on staging the site app (`aether-marketing`) holds the `aether`,
+`www`, `docs` and `status` hosts and `aether-app` holds `app`, and production
+adds the reviewed `*.olympuslabsml.com` associations, one per app.
 The protected tenant and Kyber artifacts remain part of the immutable release.
 The canonical `deploy.yml` workflow publishes lane-selected SPA artifacts to
 their private S3 origins; the staging rehearsal verifies those origins against
