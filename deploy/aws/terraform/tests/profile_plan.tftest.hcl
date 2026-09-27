@@ -248,6 +248,22 @@ run "staging_profile_plan" {
     error_message = "The staging plan provisions a cost-capped data store it must not."
   }
 
+  # The site app serves aether, www, docs and status; the product app keeps
+  # app. The old www, docs and status apps hold no domain association.
+  assert {
+    condition = alltrue([
+      local.site_host_prefixes == tolist(["aether", "www", "docs", "status"]),
+      local.amplify_host_apps == {
+        aether = "aether-marketing"
+        www    = "aether-marketing"
+        docs   = "aether-marketing"
+        status = "aether-marketing"
+        app    = "aether-app"
+      },
+    ])
+    error_message = "Staging hosts are not all served by the site app (with app on the product app)."
+  }
+
   # Olympus and status shells are prerendered and receive no rules. The
   # runtime-routed app and docs receive catch-all fallbacks. The Aether host
   # serves the unified site: /app/* and the legacy auth paths redirect to the
@@ -260,13 +276,17 @@ run "staging_profile_plan" {
       local.aether_host_serves_site,
       local.amplify_apps["aether-marketing"].app_root == "frontend/site",
       [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == [
+        "https://docs.${var.amplify_domain_name}/<*>", "https://status.${var.amplify_domain_name}/<*>",
         "/app/signin", "/app/signup", "/app", "/app/<*>", "/login", "/signup", "/forgot-password", "/<*>",
       ],
-      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 7) :
+      local.amplify_custom_rules["aether-marketing"][0].target == "https://aether.${var.amplify_domain_name}/docs/<*>",
+      local.amplify_custom_rules["aether-marketing"][1].target == "https://aether.${var.amplify_domain_name}/status",
+      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 2) : rule.status == "301"]),
+      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 2, 9) :
         rule.status == "302" && startswith(rule.target, var.aether_app_url)
       ]),
-      local.amplify_custom_rules["aether-marketing"][7].target == "/index.html",
-      local.amplify_custom_rules["aether-marketing"][7].status == "404-200",
+      local.amplify_custom_rules["aether-marketing"][9].target == "/index.html",
+      local.amplify_custom_rules["aether-marketing"][9].status == "404-200",
       length(lookup(local.amplify_custom_rules, "olympus-marketing", [])) == 0,
       length(lookup(local.amplify_custom_rules, "status", [])) == 0,
     ])
@@ -899,6 +919,18 @@ run "production_lean_profile_plan" {
       local.assign_public_ip,
     ])
     error_message = "production-lean no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
+  }
+
+  # Production keeps one app per host until its own cutover.
+  assert {
+    condition = local.amplify_host_apps == {
+      www    = "olympus-marketing"
+      aether = "aether-marketing"
+      docs   = "docs"
+      app    = "aether-app"
+      status = "status"
+    }
+    error_message = "production-lean moved a host off its own app before the production cutover."
   }
 
   # Only staging's Aether host serves the unified site. Production keeps the

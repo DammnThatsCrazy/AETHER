@@ -153,12 +153,12 @@
           }
         },
         {
-          "address": "aws_route53_record.amplify_subdomain[\"olympus-marketing\"]",
+          "address": "aws_route53_record.amplify_subdomain[\"www\"]",
           "mode": "managed",
           "type": "aws_route53_record",
           "name": "amplify_subdomain",
           "provider_name": "registry.terraform.io/hashicorp/aws",
-          "index": "olympus-marketing",
+          "index": "www",
           "schema_version": 2,
           "values": {
             "zone_id": "Z01866633FQOV3YDH5J11",
@@ -166,17 +166,17 @@
             "type": "CNAME",
             "ttl": 3600,
             "records": [
-              "d1jhuc6vzs0ypj.cloudfront.net"
+              "d2gtus3swzdvnn.cloudfront.net"
             ]
           }
         },
         {
-          "address": "aws_route53_record.amplify_subdomain[\"aether-marketing\"]",
+          "address": "aws_route53_record.amplify_subdomain[\"aether\"]",
           "mode": "managed",
           "type": "aws_route53_record",
           "name": "amplify_subdomain",
           "provider_name": "registry.terraform.io/hashicorp/aws",
-          "index": "aether-marketing",
+          "index": "aether",
           "schema_version": 2,
           "values": {
             "zone_id": "Z01866633FQOV3YDH5J11",
@@ -202,17 +202,17 @@
             "type": "CNAME",
             "ttl": 3600,
             "records": [
-              "d13cf8nqxf3501.cloudfront.net"
+              "d2gtus3swzdvnn.cloudfront.net"
             ]
           }
         },
         {
-          "address": "aws_route53_record.amplify_subdomain[\"aether-app\"]",
+          "address": "aws_route53_record.amplify_subdomain[\"app\"]",
           "mode": "managed",
           "type": "aws_route53_record",
           "name": "amplify_subdomain",
           "provider_name": "registry.terraform.io/hashicorp/aws",
-          "index": "aether-app",
+          "index": "app",
           "schema_version": 2,
           "values": {
             "zone_id": "Z01866633FQOV3YDH5J11",
@@ -238,7 +238,7 @@
             "type": "CNAME",
             "ttl": 3600,
             "records": [
-              "d35we41rmr3xy7.cloudfront.net"
+              "d2gtus3swzdvnn.cloudfront.net"
             ]
           }
         },
@@ -3143,12 +3143,12 @@
       }
     },
     {
-      "address": "aws_route53_record.amplify_subdomain[\"olympus-marketing\"]",
+      "address": "aws_route53_record.amplify_subdomain[\"www\"]",
       "mode": "managed",
       "type": "aws_route53_record",
       "name": "amplify_subdomain",
       "provider_name": "registry.terraform.io/hashicorp/aws",
-      "index": "olympus-marketing",
+      "index": "www",
       "change": {
         "actions": [
           "create"
@@ -3160,7 +3160,7 @@
           "type": "CNAME",
           "ttl": 3600,
           "records": [
-            "d1jhuc6vzs0ypj.cloudfront.net"
+            "d2gtus3swzdvnn.cloudfront.net"
           ]
         },
         "after_unknown": {
@@ -3172,12 +3172,12 @@
       }
     },
     {
-      "address": "aws_route53_record.amplify_subdomain[\"aether-marketing\"]",
+      "address": "aws_route53_record.amplify_subdomain[\"aether\"]",
       "mode": "managed",
       "type": "aws_route53_record",
       "name": "amplify_subdomain",
       "provider_name": "registry.terraform.io/hashicorp/aws",
-      "index": "aether-marketing",
+      "index": "aether",
       "change": {
         "actions": [
           "create"
@@ -3218,7 +3218,7 @@
           "type": "CNAME",
           "ttl": 3600,
           "records": [
-            "d13cf8nqxf3501.cloudfront.net"
+            "d2gtus3swzdvnn.cloudfront.net"
           ]
         },
         "after_unknown": {
@@ -3230,12 +3230,12 @@
       }
     },
     {
-      "address": "aws_route53_record.amplify_subdomain[\"aether-app\"]",
+      "address": "aws_route53_record.amplify_subdomain[\"app\"]",
       "mode": "managed",
       "type": "aws_route53_record",
       "name": "amplify_subdomain",
       "provider_name": "registry.terraform.io/hashicorp/aws",
-      "index": "aether-app",
+      "index": "app",
       "change": {
         "actions": [
           "create"
@@ -3276,7 +3276,7 @@
           "type": "CNAME",
           "ttl": 3600,
           "records": [
-            "d35we41rmr3xy7.cloudfront.net"
+            "d2gtus3swzdvnn.cloudfront.net"
           ]
         },
         "after_unknown": {

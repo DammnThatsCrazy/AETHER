@@ -40,7 +40,9 @@ resource contract keeps hosted zones out of it (`config/terraform_resource_contr
 `product_dns_zone_id` in `profiles/staging.tfvars` hands the zone to the root,
 which manages every record in it:
 
-- the Amplify subdomains, from each app's custom-domain association;
+- the Amplify hosts, one record per host from its app's custom-domain
+  association (the site app serves `aether`, `www`, `docs` and `status`; the
+  product app serves `app`);
 - `api`, pointing at the staging load balancer;
 - the certificate validation CNAMEs (`product_dns_validation_cnames`), so
   Amplify and ACM renewals keep working.

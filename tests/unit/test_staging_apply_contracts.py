@@ -1471,8 +1471,26 @@ def test_amplify_subdomain_records_use_only_the_cname_target() -> None:
     main = (TF / "main.tf").read_text(encoding="utf-8")
     start = main.index('resource "aws_route53_record" "amplify_subdomain"')
     block = main[start:main.index("\n}\n", start)]
-    assert 'regex("[^ ]+$", trimspace(one(aws_amplify_domain_association.frontend[each.key].sub_domain).dns_record))' in block
-    assert "for_each = local.product_dns_enabled ? local.amplify_apps : {}" in block
+    assert 'regex("[^ ]+$", trimspace(local.amplify_host_dns_records[each.key]))' in block
+    assert "for_each = local.product_dns_enabled ? local.amplify_host_apps : {}" in block
+    # Each host's record reads its own sub_domain's dns_record, so a site
+    # app serving several hosts gets one record per host.
+    locals_start = main.index("amplify_host_dns_records = merge(")
+    records = main[locals_start:main.index("\n  )\n", locals_start)]
+    assert "one(a.sub_domain).prefix => one(a.sub_domain).dns_record" in records
+    assert "sub.prefix => sub.dns_record" in records
+
+
+def test_site_association_claims_hosts_after_old_apps_release_them() -> None:
+    """Amplify maps a host to one app, so the site app's association must be
+    applied after the old apps' associations are removed."""
+    main = (TF / "main.tf").read_text(encoding="utf-8")
+    start = main.index('resource "aws_amplify_domain_association" "site"')
+    block = main[start:main.index("\n}\n", start)]
+    assert "depends_on = [aws_amplify_domain_association.frontend]" in block
+    assert "for_each = toset(local.site_host_prefixes)" in block
+    assert 'from = aws_amplify_domain_association.frontend["aether-marketing"]' in main
+    assert "to   = aws_amplify_domain_association.site[0]" in main
 
 
 def test_dns_zone_modes_are_mutually_exclusive() -> None:

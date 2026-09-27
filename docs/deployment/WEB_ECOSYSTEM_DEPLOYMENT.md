@@ -90,9 +90,13 @@ and publishes that workspace's `dist/` directory. The managed apps are:
 
 Staging sets `amplify_custom_domain_enabled = true` for
 `staging.olympuslabsml.com` and records each app's default domain plus the
-reviewed association outputs in SSM. The state-reconciliation workflow imports
-the five existing associations before planning, so Terraform cannot create a
-second owner or detach the live targets. `production-lean` enables the reviewed
+reviewed association outputs in SSM. On staging the site app answers for
+`aether`, `www`, `docs` and `status` (the last two redirect to `/docs` and
+`/status` on the Aether host), the product app for `app`, and the old
+`olympus-marketing`, `docs` and `status` apps hold no domain until they are
+removed. The state-reconciliation workflow imports the site and product
+associations before planning, so Terraform cannot create a second owner or
+detach the live targets. `production-lean` enables the reviewed
 custom-domain associations under `olympuslabsml.com` and exports their DNS
 targets for Squarespace. The apex remains on Squarespace and redirects to the `www` surface;
 the Route 53 hosted-zone path is an explicit opt-in. `kyber` is not an Amplify

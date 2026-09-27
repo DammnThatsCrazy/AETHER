@@ -54,9 +54,9 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:8df5f83f20c8ec516fb41d8a4d1b6458a3f3df39ffa2bb5b45130c068b02350e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:0f86b1f43ff85a1f9859f82d730428ede391c6a69fb54f9d7fcdf0cf09340a16"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:0706269831438f33559105a92c6d21c720fb5cd2331da5d3499832481b504478"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
-  ".github/workflows/terraform-promote.yml": "sha256:168b4dbc20e7209115839beb9f6ca14df8ad64f0a2f27002c92075fed39c013f"
+  ".github/workflows/terraform-promote.yml": "sha256:deb0d48dda09507411ea088c16aa40396bf89bd73fa2f810dc617b81c72daad4"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:aae9a18a11444499b2602d85749261112b03a356080a77cdd485420499822ac9"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -71,9 +71,9 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:1f20352cbc328bacc0313069e88098655b5efcce7368039eb72344d5880f82fd"
+  "deploy/aws/terraform/": "sha256:ce5eb5ed0de358b85709e6862584baedbd9f1bf77d54e59e9be0147a65ce6aff"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:fa89f5014fe809824d1f87a04ff5fb1a0c4e9083d0afdef27030465b986c07c4"
+  "scripts/release/check_amplify_app_contract.py": "sha256:c53accd2aca901dba3ab63e757d413e1659be3a415ce3d0ac90eeeb7be739d3a"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -564,6 +564,17 @@ targets the main branch. Custom domain associations map each app to its
 canonical subdomain under `var.amplify_domain_name`. SSM parameters export
 Amplify app IDs and default domains for downstream consumption.
 
+On staging, the site app (`aether-marketing`, building `frontend/site`) serves
+`aether`, `www`, `docs` and `status` from one association
+(`aws_amplify_domain_association.site`); the product app keeps `app`. `www`
+shows the Olympus pages, and the `docs` and `status` hosts redirect (301) to
+`aether.*/docs` and `aether.*/status`. The old `olympus-marketing`, `docs` and
+`status` apps hold no domain and are removed after a reviewed hold. Amplify maps
+a host to one app, so the site association depends on the others: when a host
+moves, Terraform removes the old app's association before the site claims it.
+Route 53 records are keyed by host. Production keeps one app per host until its
+own cutover.
+
 Staging also gets a repository-unconnected app for per-PR previews of the
 Aether app (`enable_frontend_previews` in `profiles/staging.tfvars`).
 `frontend-preview.yml` deploys its `pr-<N>` branches and deletes them when the
@@ -574,11 +585,11 @@ sets the API's `CORS_PREVIEW_ORIGIN_SUFFIX`. See
 
 The apex domain remains on Squarespace and redirects to the canonical
 `www.olympuslabsml.com` Amplify surface. The `www` host itself is served by
-Amplify when the custom-domain association is enabled. Staging uses the five
-verified `*.staging.olympuslabsml.com` associations; the import-only state
-reconciliation workflow adopts those live associations before the reviewed
-plan. If an existing association is missing one of the five reviewed `main`
-prefixes, the lifecycle passes the explicit `REPAIR-STAGING-AMPLIFY` token;
+Amplify when the custom-domain association is enabled. Staging uses the
+verified `*.staging.olympuslabsml.com` associations of the site and product
+apps; the import-only state reconciliation workflow adopts those live
+associations before the reviewed plan. If an existing association is missing
+one of its reviewed `main` hosts, the lifecycle passes the explicit `REPAIR-STAGING-AMPLIFY` token;
 reconciliation preserves the association, adds only the missing reviewed
 mapping, waits for `AVAILABLE` and DNS verification, and then imports state.
 It never creates or deletes a domain association and never changes Squarespace

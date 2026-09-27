@@ -4,7 +4,7 @@ import { querySelectedSite, resolveSite, siteHref, siteOrigins } from './site';
 
 describe('resolveSite', () => {
   it('serves Olympus on the company hosts', () => {
-    for (const host of ['olympuslabsml.com', 'www.olympuslabsml.com', 'staging.olympuslabsml.com', 'OlympusLabsML.com']) {
+    for (const host of ['olympuslabsml.com', 'www.olympuslabsml.com', 'staging.olympuslabsml.com', 'www.staging.olympuslabsml.com', 'OlympusLabsML.com']) {
       expect(resolveSite(host, '', undefined)).toBe('olympus');
     }
   });
@@ -55,9 +55,10 @@ describe('siteOrigins', () => {
   });
 
   it('keeps staging hosts on their staging pair', () => {
-    const staging = { olympus: 'https://staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' };
+    const staging = { olympus: 'https://www.staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' };
     expect(siteOrigins({}, 'staging.olympuslabsml.com')).toEqual(staging);
     expect(siteOrigins({}, 'aether.staging.olympuslabsml.com')).toEqual(staging);
+    expect(siteOrigins({}, 'www.staging.olympuslabsml.com')).toEqual(staging);
     expect(siteHref('olympus', 'aether', '/pricing', siteOrigins({}, 'staging.olympuslabsml.com'))).toBe(
       'https://aether.staging.olympuslabsml.com/pricing',
     );

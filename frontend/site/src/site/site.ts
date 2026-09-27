@@ -1,7 +1,8 @@
 /**
  * One build serves two sites:
  *
- * - olympuslabsml.com (and staging.olympuslabsml.com): Olympus Labs company pages
+ * - olympuslabsml.com (and staging.olympuslabsml.com, www.staging.olympuslabsml.com):
+ *   Olympus Labs company pages
  * - aether.olympuslabsml.com (and aether.staging.olympuslabsml.com): Aether
  *   marketing, docs, status, contact, legal and the portal at /app
  *
@@ -17,6 +18,7 @@ const OLYMPUS_HOSTS = new Set([
   'olympuslabsml.com',
   'www.olympuslabsml.com',
   'staging.olympuslabsml.com',
+  'www.staging.olympuslabsml.com',
 ]);
 
 export function isSiteId(value: unknown): value is SiteId {
@@ -64,8 +66,8 @@ function trimOrigin(value: string | undefined, fallback: string): string {
 }
 
 const PRODUCTION: SiteOrigins = { olympus: 'https://olympuslabsml.com', aether: 'https://aether.olympuslabsml.com' };
-const STAGING: SiteOrigins = { olympus: 'https://staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' };
-const STAGING_HOSTS = new Set(['staging.olympuslabsml.com', 'aether.staging.olympuslabsml.com']);
+const STAGING: SiteOrigins = { olympus: 'https://www.staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' };
+const STAGING_HOSTS = new Set(['staging.olympuslabsml.com', 'www.staging.olympuslabsml.com', 'aether.staging.olympuslabsml.com']);
 
 function currentHostname(): string {
   return typeof window === 'undefined' ? '' : window.location.hostname;

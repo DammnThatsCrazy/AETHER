@@ -89,3 +89,20 @@ applications:
       cache:
         paths:
           - node_modules/**/*
+  - appRoot: frontend/site
+    frontend:
+      buildPath: /
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build --workspace=frontend/site
+      artifacts:
+        baseDirectory: frontend/site/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*

@@ -32,7 +32,10 @@ def _client(
     domain_branch: str = "main",
     domain_verified: bool = True,
     domain_dns_record: str | None = None,
+    site_hosts: tuple[str, ...] = (),
 ):
+    """``site_hosts`` moves those hosts onto the site app; their old apps then
+    hold no association."""
     apps = []
     for name, app_id in APP_IDS.items():
         apps.append(
@@ -67,6 +70,10 @@ def _client(
             commit = production_commit if app_id == "d-production-status" else COMMIT
             return {"jobSummaries": [{"jobId": "10", "status": "SUCCEED", "commitId": commit}]}
         if args[:2] == ["amplify", "get-domain-association"]:
+            app_id = args[args.index("--app-id") + 1]
+            old_owner = {"www": "d-olympus", "docs": "d-docs", "status": "d-status"}
+            if app_id in {old_owner[host] for host in site_hosts}:
+                raise RuntimeError("AWS Amplify metadata request failed for amplify")
             prefix = {
                 "d-olympus": "www",
                 "d-aether-marketing": "aether",
@@ -74,13 +81,14 @@ def _client(
                 "d-aether-app": "app",
                 "d-status": "status",
                 "d-production-status": "status",
-            }[args[args.index("--app-id") + 1]]
+            }[app_id]
+            prefixes = [prefix, *site_hosts] if app_id == "d-aether-marketing" else [prefix]
             return {
                 "domainAssociation": {
                     "domainStatus": "AVAILABLE",
                     "subDomains": [
                         {
-                            "subDomainSetting": {"prefix": prefix, "branchName": domain_branch},
+                            "subDomainSetting": {"prefix": item, "branchName": domain_branch},
                             "verified": domain_verified,
                             **(
                                 {"dnsRecord": domain_dns_record}
@@ -88,6 +96,7 @@ def _client(
                                 else {}
                             ),
                         }
+                        for item in prefixes
                     ],
                 }
             }
@@ -187,6 +196,35 @@ def test_staging_domain_requires_the_main_branch_mapping():
         client=_client(domain_branch="preview"),
     )
     assert any("staging domain lacks an AVAILABLE" in error for error in errors)
+
+
+def test_staging_accepts_hosts_moved_onto_the_site_app():
+    """After the consolidation apply, the site app serves www, docs and status
+    and their old apps hold no association."""
+    errors = checker.contract_errors(
+        mode="staging",
+        expected_commit=COMMIT,
+        client=_client(site_hosts=("www", "docs", "status")),
+    )
+    assert errors == []
+
+
+def test_staging_rejects_a_host_that_no_app_serves():
+    base = _client(site_hosts=("www", "docs", "status"))
+
+    def client(args: list[str]) -> dict[str, Any]:
+        payload = base(args)
+        if args[:2] == ["amplify", "get-domain-association"] and args[args.index("--app-id") + 1] == "d-aether-marketing":
+            payload["domainAssociation"]["subDomains"] = [
+                item for item in payload["domainAssociation"]["subDomains"]
+                if item["subDomainSetting"]["prefix"] != "docs"
+            ]
+        return payload
+
+    errors = checker.contract_errors(mode="staging", expected_commit=COMMIT, client=client)
+    assert errors == [
+        "Amplify app AETHER-staging-aether-marketing staging domain lacks an AVAILABLE docs subdomain with a live DNS target"
+    ]
 
 
 def test_staging_runtime_contract_requires_api_and_custom_status_origins():
