@@ -96,9 +96,17 @@ applications:
         preBuild:
           commands:
             - npm ci
+            - npm run build --workspace=packages/shared
+            - npm run build --workspace=packages/web
         build:
           commands:
             - npm run build --workspace=frontend/site
+            # One app per environment: the product is built under /app and
+            # published inside the site's output (aether.<domain>/app).
+            - VITE_BASE_PATH=/app/ npm run build --workspace=frontend/aether
+            - test -f frontend/aether/dist/index.html
+            - mkdir -p frontend/site/dist/app
+            - cp -R frontend/aether/dist/. frontend/site/dist/app/
       artifacts:
         baseDirectory: frontend/site/dist
         files:

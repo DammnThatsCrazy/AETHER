@@ -52,7 +52,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
-  ".github/workflows/terraform-promote.yml": "sha256:deb0d48dda09507411ea088c16aa40396bf89bd73fa2f810dc617b81c72daad4"
+  ".github/workflows/terraform-promote.yml": "sha256:94e0e1c155df32a790090337a6a8282b4723943fec7d40325afbc5d26e5c25f0"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -67,7 +67,7 @@ source_hashes:
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:db7c10e85f2053f977d69778e290eacb2af233a4af83bd40cb8e2eff25a12797"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:36628a1e727bfbd77da202ed071642585950a5838f152e9af132bda46223353c"
+  "scripts/release/check_amplify_app_contract.py": "sha256:c7915cea9bff84db19c1cac00af09b414b7234c25624935a7304e488e42cde95"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:5d5711a9409d7cd9659b30cebd9f961f6e5db55e36297cd4c783f541c152e032"
@@ -282,7 +282,7 @@ the migration uses metadata-only Secrets Manager calls and does not read the
 secret value.
 
 The staging Amplify preflight is also race-safe for a merged `main` push. The
-site and product apps can auto-start their reviewed-commit builds before
+staging web app can auto-start its reviewed-commit build before
 the pilot wrapper reaches its provenance gate, so the gate waits for an active
 job only when its commit is exactly the reviewed SHA. It polls for up to 15
 minutes, then requires a terminal `SUCCEED` status and the exact commit; an

@@ -77,11 +77,14 @@ The public hosts are `www`, `aether`, `docs`, `app`, and `status`: under
 `production-lean`, which exports the association CNAME targets for the
 authoritative DNS.
 
-- **Staging runs two Amplify applications.** `aether-marketing` builds the
-  unified Olympus + Aether site (`frontend/site`) and serves `aether`, `www`,
-  `docs` and `status` from one domain association; `docs.*` and `status.*`
-  redirect to the site's `/docs` and `/status` pages. `aether-app` serves
-  `app`. The former `olympus-marketing`, `docs` and `status` staging apps are
+- **Staging runs one Amplify application**, `AETHER-staging-web` (key
+  `aether-marketing`). It builds the unified Olympus + Aether site
+  (`frontend/site`) with the product (`frontend/aether`) under `/app`, and
+  serves `aether`, `www`, `docs`, `status` and `app` from one domain
+  association. `docs.*`, `status.*` and `app.*` redirect to the site's
+  `/docs`, `/status` and `/app` paths on the Aether host, so the product's
+  public URL is `aether.staging.olympuslabsml.com/app`. The former
+  `olympus-marketing`, `docs`, `status` and `aether-app` staging apps are
   deleted, and the post-apply staging Amplify check rejects them if they
   reappear.
 - **Production keeps five applications**, one per host: `olympus-marketing`,

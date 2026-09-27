@@ -1,12 +1,13 @@
 # Least-privilege role for per-PR frontend previews
 # (.github/workflows/frontend-preview.yml). The role can only manage pr-*
-# branches of the staging preview Amplify app, plus read the staging Aether
+# branches of the staging preview Amplify app, plus read the staging web
 # app's public VITE_* build settings. It cannot touch the staging or
 # production apps, the backend, data, or Terraform state.
 #
 # Placeholders: ${account_id}; ${frontend_preview_app_id} is the Terraform
 # output frontend_preview_app_id; ${staging_aether_app_id} is the id of
-# AETHER-staging-aether-app. The workflow finds both apps by name (ListApps
+# AETHER-staging-web (the one staging app, which builds the product under
+# /app). The workflow finds both apps by name (ListApps
 # cannot be resource-scoped); the role ARN is the repository variable
 # FRONTEND_PREVIEW_ROLE_ARN.
 version: 1

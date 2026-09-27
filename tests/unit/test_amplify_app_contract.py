@@ -15,14 +15,19 @@ checker = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(checker)
 
 COMMIT = "a" * 40
+WEB = "AETHER-staging-web"
+SITE_BEFORE = "AETHER-staging-aether-marketing"
+PRODUCT_BEFORE = "AETHER-staging-aether-app"
 APP_IDS = {
+    WEB: "d-web",
+    SITE_BEFORE: "d-aether-marketing",
+    PRODUCT_BEFORE: "d-aether-app",
     "AETHER-staging-olympus-marketing": "d-olympus",
-    "AETHER-staging-aether-marketing": "d-aether-marketing",
     "AETHER-staging-docs": "d-docs",
-    "AETHER-staging-aether-app": "d-aether-app",
     "AETHER-staging-status": "d-status",
     "aether-status": "d-production-status",
 }
+ALL_HOSTS = ("aether", "www", "docs", "status", "app")
 
 
 def _client(
@@ -32,27 +37,33 @@ def _client(
     domain_branch: str = "main",
     domain_verified: bool = True,
     domain_dns_record: str | None = None,
-    site_hosts: tuple[str, ...] = ("www", "docs", "status"),
-    retired_apps: tuple[str, ...] | None = None,
+    consolidated: bool = True,
+    extra_apps: tuple[str, ...] = (),
+    web_hosts: tuple[str, ...] = ALL_HOSTS,
 ):
-    """``site_hosts`` are served by the site app; their retired apps hold no
-    association. Pass ``()`` for the pre-consolidation layout. ``retired_apps``
-    lists the retired staging apps that still exist (by default: none once
-    consolidated, all three before)."""
-    if retired_apps is None:
-        retired_apps = () if site_hosts else checker.RETIRED_STAGING_APPS
-    apps = []
-    for name, app_id in APP_IDS.items():
-        if name in checker.RETIRED_STAGING_APPS and name not in retired_apps:
-            continue
-        apps.append(
-            {
-                "name": name,
-                "appId": app_id,
-                "repository": production_repository if name == "aether-status" else checker.REPOSITORY,
-                "platform": "WEB",
-            }
-        )
+    """``consolidated`` is the one-app layout (AETHER-staging-web serves every
+    host); otherwise the pre-apply layout: the site app (old name) serves
+    aether, www, docs and status and the product app serves app.
+    ``extra_apps`` are apps that still exist beyond the layout."""
+    present = {WEB} if consolidated else {SITE_BEFORE, PRODUCT_BEFORE}
+    present |= set(extra_apps)
+    present.add("aether-status")
+    hosts_by_app = (
+        {"d-web": list(web_hosts)}
+        if consolidated
+        else {"d-aether-marketing": ["aether", "www", "docs", "status"], "d-aether-app": ["app"]}
+    )
+    hosts_by_app["d-production-status"] = ["status"]
+    apps = [
+        {
+            "name": name,
+            "appId": app_id,
+            "repository": production_repository if name == "aether-status" else checker.REPOSITORY,
+            "platform": "WEB",
+        }
+        for name, app_id in APP_IDS.items()
+        if name in present
+    ]
 
     def call(args: list[str]) -> dict[str, Any]:
         if args[:2] == ["amplify", "list-apps"]:
@@ -78,18 +89,9 @@ def _client(
             return {"jobSummaries": [{"jobId": "10", "status": "SUCCEED", "commitId": commit}]}
         if args[:2] == ["amplify", "get-domain-association"]:
             app_id = args[args.index("--app-id") + 1]
-            old_owner = {"www": "d-olympus", "docs": "d-docs", "status": "d-status"}
-            if app_id in {old_owner[host] for host in site_hosts}:
+            prefixes = hosts_by_app.get(app_id)
+            if not prefixes:
                 raise RuntimeError("AWS Amplify metadata request failed for amplify")
-            prefix = {
-                "d-olympus": "www",
-                "d-aether-marketing": "aether",
-                "d-docs": "docs",
-                "d-aether-app": "app",
-                "d-status": "status",
-                "d-production-status": "status",
-            }[app_id]
-            prefixes = [prefix, *site_hosts] if app_id == "d-aether-marketing" else [prefix]
             return {
                 "domainAssociation": {
                     "domainStatus": "AVAILABLE",
@@ -125,7 +127,7 @@ def test_staging_contract_waits_for_an_active_reviewed_commit_job():
 
     def client(args: list[str]) -> dict[str, Any]:
         payload = base_client(args)
-        if args[:2] == ["amplify", "list-jobs"] and args[args.index("--app-id") + 1] == "d-aether-marketing":
+        if args[:2] == ["amplify", "list-jobs"] and args[args.index("--app-id") + 1] == "d-web":
             payload["jobSummaries"][0]["status"] = next(statuses)
         return payload
 
@@ -205,86 +207,57 @@ def test_staging_domain_requires_the_main_branch_mapping():
     assert any("staging domain lacks an AVAILABLE" in error for error in errors)
 
 
-def test_staging_accepts_hosts_moved_onto_the_site_app():
-    """After the consolidation apply, the site app serves www, docs and status
-    and their old apps hold no association."""
-    errors = checker.contract_errors(
-        mode="staging",
-        expected_commit=COMMIT,
-        client=_client(site_hosts=("www", "docs", "status")),
-    )
-    assert errors == []
+def test_staging_is_one_app_serving_every_host():
+    assert checker.STAGING_APPS == (WEB,)
+    assert set(checker.STAGING_RUNTIME_ENVIRONMENT) == {WEB}
+    assert set(checker.STAGING_HOSTS) == set(ALL_HOSTS)
+    for owners in checker.STAGING_HOSTS.values():
+        assert owners[0] == WEB
+
+
+def test_pre_apply_preflight_accepts_the_layout_the_apply_consolidates():
+    """The preflight gates the apply that renames the site app and moves the
+    app host onto it, so it accepts the site app's old name and the product
+    app still serving app; the post-apply check does not."""
+    client = _client(consolidated=False)
+    assert checker.contract_errors(mode="staging", expected_commit=COMMIT, client=client) == []
+    runtime = checker.contract_errors(mode="staging-runtime", expected_commit=COMMIT, client=client)
+    assert any(WEB in error for error in runtime)
+    assert f"{PRODUCT_BEFORE}: retired staging Amplify app still exists; the unified site serves its hosts" in runtime
 
 
 def test_staging_rejects_a_host_that_no_app_serves():
-    base = _client(site_hosts=("www", "docs", "status"))
-
-    def client(args: list[str]) -> dict[str, Any]:
-        payload = base(args)
-        if args[:2] == ["amplify", "get-domain-association"] and args[args.index("--app-id") + 1] == "d-aether-marketing":
-            payload["domainAssociation"]["subDomains"] = [
-                item for item in payload["domainAssociation"]["subDomains"]
-                if item["subDomainSetting"]["prefix"] != "docs"
-            ]
-        return payload
-
-    errors = checker.contract_errors(mode="staging", expected_commit=COMMIT, client=client)
-    assert errors == [
-        "Amplify app AETHER-staging-aether-marketing staging domain lacks an AVAILABLE docs subdomain with a live DNS target"
-    ]
-
-
-def test_staging_runtime_contract_requires_api_and_auth_origins():
-    client = _client()
     errors = checker.contract_errors(
         mode="staging",
         expected_commit=COMMIT,
-        check_runtime_environment=True,
-        client=client,
+        client=_client(web_hosts=("aether", "www", "status", "app")),
     )
-    assert any("aether-app" in error and "VITE_API_BASE_URL" in error for error in errors)
-    assert any("aether-app" in error and "VITE_AUTH0_REDIRECT_URI" in error for error in errors)
-    assert any("aether-marketing" in error and "VITE_STATUS_API_URL" in error for error in errors)
-
-
-def test_staging_checks_only_the_site_and_product_apps():
-    assert checker.STAGING_APPS == ("AETHER-staging-aether-marketing", "AETHER-staging-aether-app")
-    assert set(checker.STAGING_RUNTIME_ENVIRONMENT) == set(checker.STAGING_APPS)
-    assert {owner for owners in checker.STAGING_HOSTS.values() for owner in owners} == set(checker.STAGING_APPS)
-
-
-def test_staging_rejects_the_pre_consolidation_layout():
-    """Once the old apps are deleted, a host still mapped only to its old app
-    is a failure, not a pass."""
-    errors = checker.contract_errors(mode="staging", expected_commit=COMMIT, client=_client(site_hosts=()))
-    assert sorted(errors) == sorted(
-        f"Amplify app AETHER-staging-aether-marketing staging domain lacks an AVAILABLE {host} subdomain with a live DNS target"
-        for host in ("www", "docs", "status")
-    )
+    assert errors == [
+        f"Amplify app {WEB} staging domain lacks an AVAILABLE docs subdomain with a live DNS target"
+    ]
 
 
 def test_retired_apps_fail_only_the_post_apply_check():
-    """The pre-apply preflight (mode staging) must let the first rollout run the
-    apply that deletes the retired apps; the post-apply staging-runtime check
-    then fails while one still exists (left behind or recreated out of band)."""
-    client = _client(retired_apps=("AETHER-staging-docs",))
+    """A retired app that still exists (left behind, or recreated out of band)
+    fails the post-apply staging-runtime check, never the pre-apply preflight."""
+    client = _client(extra_apps=("AETHER-staging-docs", PRODUCT_BEFORE))
     assert checker.contract_errors(mode="staging", expected_commit=COMMIT, client=client) == []
-    assert checker.contract_errors(mode="staging-runtime", expected_commit=COMMIT, client=client) == [
-        "AETHER-staging-docs: retired staging Amplify app still exists; the unified site serves its hosts"
-    ]
+    assert sorted(checker.contract_errors(mode="staging-runtime", expected_commit=COMMIT, client=client)) == sorted(
+        f"{name}: retired staging Amplify app still exists; the unified site serves its hosts"
+        for name in ("AETHER-staging-docs", PRODUCT_BEFORE)
+    )
 
 
-def test_staging_runtime_contract_requires_the_unified_site_settings():
-    """The staging Aether host builds the unified site; a branch missing its
-    API, status, pricing or cross-site settings builds a broken site."""
-    client = _client()
+def test_staging_runtime_contract_requires_the_site_and_product_settings():
+    """The one app builds the site and the product under /app; a branch missing
+    their API, status, pricing, cross-site or Auth0 settings builds a broken app."""
     errors = checker.contract_errors(
         mode="staging",
         expected_commit=COMMIT,
         check_runtime_environment=True,
-        client=client,
+        client=_client(),
     )
-    site_errors = [error for error in errors if "aether-marketing" in error]
+    web_errors = [error for error in errors if WEB in error]
     for key in (
         "VITE_API_BASE_URL",
         "VITE_STATUS_API_URL",
@@ -292,33 +265,32 @@ def test_staging_runtime_contract_requires_the_unified_site_settings():
         "VITE_PUBLISH_PRICES",
         "VITE_SITE_AETHER_URL",
         "VITE_SITE_OLYMPUS_URL",
+        "VITE_AETHER_ENDPOINT",
+        "VITE_AUTH0_REDIRECT_URI",
+        "VITE_AUTH0_DOMAIN",
     ):
-        assert any(key in error for error in site_errors), key
+        assert any(key in error for error in web_errors), key
 
 
 def test_staging_runtime_contract_accepts_exact_branch_origins():
     def client(args: list[str]) -> dict[str, Any]:
         payload = _client()(args)
-        if args[:2] == ["amplify", "get-branch"]:
-            app_id = args[args.index("--app-id") + 1]
-            name = next(name for name, value in APP_IDS.items() if value == app_id)
-            environment = dict(checker.STAGING_RUNTIME_ENVIRONMENT[name])
-            if name == "AETHER-staging-aether-app":
-                environment.update(
-                    {
-                        "VITE_AUTH0_DOMAIN": "tenant.example.auth0.com",
-                        "VITE_AUTH0_CLIENT_ID": "client-id",
-                        "VITE_AUTH0_AUDIENCE": "https://api.example.com",
-                    }
-                )
+        if args[:2] == ["amplify", "get-branch"] and args[args.index("--app-id") + 1] == "d-web":
+            environment = dict(checker.STAGING_RUNTIME_ENVIRONMENT[WEB])
+            environment.update(
+                {
+                    "VITE_AUTH0_DOMAIN": "tenant.example.auth0.com",
+                    "VITE_AUTH0_CLIENT_ID": "client-id",
+                    "VITE_AUTH0_AUDIENCE": "https://api.example.com",
+                }
+            )
             payload["branch"]["environmentVariables"] = environment
         return payload
 
-    assert checker.contract_errors(
-        mode="staging-runtime",
-        expected_commit=COMMIT,
-        client=client,
-    ) == []
+    assert checker.contract_errors(mode="staging-runtime", expected_commit=COMMIT, check_runtime_environment=True, client=client) == []
+    assert checker.STAGING_RUNTIME_ENVIRONMENT[WEB]["VITE_AUTH0_REDIRECT_URI"] == (
+        "https://aether.staging.olympuslabsml.com/app/callback"
+    )
 
 
 def test_rejects_invalid_expected_commit_before_aws_calls():

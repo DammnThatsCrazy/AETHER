@@ -90,11 +90,13 @@ and publishes that workspace's `dist/` directory. The managed apps are:
 
 Staging sets `amplify_custom_domain_enabled = true` for
 `staging.olympuslabsml.com` and records each app's default domain plus the
-reviewed association outputs in SSM. On staging the site app answers for
-`aether`, `www`, `docs` and `status` (the site sends the last two to `/docs`
-and `/status` on the Aether host), the product app for `app`, and the old
-`olympus-marketing`, `docs` and `status` staging apps are deleted. The state-reconciliation workflow imports the site and product
-associations before planning, so Terraform cannot create a second owner or
+reviewed association outputs in SSM. On staging one app (`AETHER-staging-web`) answers for
+`aether`, `www`, `docs`, `status` and `app`: its `frontend/site` build also
+builds the product with `VITE_BASE_PATH=/app/` into `dist/app`, and the site
+sends the `docs`, `status` and `app` hosts to `/docs`, `/status` and `/app` on
+the Aether host. The old `olympus-marketing`, `docs`, `status` and
+`aether-app` staging apps are deleted. The state-reconciliation workflow imports the site
+association before planning, so Terraform cannot create a second owner or
 detach the live targets. `production-lean` enables the reviewed
 custom-domain associations under `olympuslabsml.com` and exports their DNS
 targets for Squarespace. The apex remains on Squarespace and redirects to the `www` surface;
@@ -115,11 +117,11 @@ The prerendered marketing bundles retain the following delivery guarantees:
   `frontend/aether` and `frontend/docs` their SPA fallback because those apps
   resolve route content at runtime. On staging, the Aether host serves the
   unified site (`frontend/site`), a client-routed app. `/app/signin` and the
-  legacy `/login` and `/forgot-password` paths redirect (302) to the product
-  app's sign-in (`aether_app_url`), and `/app/signup` and the legacy `/signup`
-  to its Auth0 sign-up with the chosen `?plan=`; `/app`
-  redirects to the product app's root and any other `/app/*` path to the same
-  path on the product app; every other page route is rewritten to the site's
+  legacy `/login` and `/forgot-password` paths redirect (302) to the product's
+  `/app/login`, and the legacy `/signup` to `/app/signup` (Auth0 sign-up with
+  the chosen `?plan=`); `/app` redirects to `/app/`, and product routes
+  (`/app/...` without a file extension) are rewritten to `/app/index.html`
+  with a `200`; every other page route is rewritten to the site's
   `/index.html` with a `200` (paths without a static-asset extension), whose router
   redirects the previous marketing app's URLs to their new pages. Other
   environments keep the prerendered `aether-marketing` build and its targeted

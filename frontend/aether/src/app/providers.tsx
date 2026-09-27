@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { BrowserRouter, useLocation } from 'react-router-dom';
+import { APP_BASENAME } from '@aether-app/lib/app-path';
 import { CapabilityProvider, ErrorState, LoadingState, ThemeProvider, TimeProvider, ToastProvider, useQuery } from '@aether/ui';
 import { GraphContextProvider, isKnownSurface } from '@aether/ui/exploration';
 import { AuthProvider, useAuth } from '@aether-app/features/auth';
@@ -119,7 +120,7 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
       <AetherAuth0Provider>
-        <BrowserRouter>
+        <BrowserRouter basename={APP_BASENAME || '/'}>
           <ThemeProvider storageKey="aether-theme">
             <TimeProvider>
               <ToastProvider>

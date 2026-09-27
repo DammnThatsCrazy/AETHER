@@ -2,6 +2,7 @@
  * Auth hook for Aether customer app — wraps @auth0/auth0-react's useAuth0
  * with typed helpers and a consistent interface.
  */
+import { appHref } from '@aether-app/lib/app-path';
 import { useAuth0, type User } from '@auth0/auth0-react';
 import { env } from '@aether-app/lib/env';
 
@@ -55,7 +56,7 @@ export function useAuth(): AetherAuth {
     logout: () =>
       auth0.logout({
         logoutParams: {
-          returnTo: env.VITE_AUTH0_LOGOUT_URI ?? window.location.origin,
+          returnTo: env.VITE_AUTH0_LOGOUT_URI ?? `${window.location.origin}${appHref('/login')}`,
         },
       }),
     getAccessToken: async () => {

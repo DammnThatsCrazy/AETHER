@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:24b504f12bb4ae94088076e758d3e69060dd495a27e6501b38826a5dc81a2f4b"
+  "frontend/aether/src/": "sha256:a1cb9aadc08568ee3d96954db7c9a5aba1a97cf4451902f482c45d92697281ba"
   "frontend/kyber/src/": "sha256:d745484d6bb47de269337f554f9d67e30abfbf1c521bec42dadd0b55a6cc5b8d"
   "frontend/shared/src/": "sha256:abef2b4bb7b38a0124fbf2180dd1de701e533d1bbd57866d57b1848815332a2c"
 ---
@@ -60,6 +60,14 @@ There are two separate frontend applications. **Do not mix them up.**
 |-----|-----------|----------|---------|
 | **Aether** | `frontend/aether/` | External paying tenants / customers / clients | Self-service: sign up, install SDK, manage API keys, view their own intelligence graph, entity profiles, campaigns, geographic intelligence |
 | **Kyber** | `frontend/kyber/` | Internal Aether team / operators only | Operator mission control: monitor real tenants, diagnose system health, approve agent actions, and review entity clusters |
+
+The Aether app can be served under a path prefix. Vite's `base` comes from
+`VITE_BASE_PATH` (default `/`); the router's `basename` and every hard-coded
+in-app URL (the Auth0 callback and logout defaults, SSO callbacks, links
+opened in a new tab) go through `appHref()` in `src/lib/app-path.ts`. On
+staging the site build publishes the app under `aether.staging.olympuslabsml.com/app`
+(`VITE_BASE_PATH=/app/`); per-PR previews and other environments serve it at
+the root.
 
 ### What belongs where
 

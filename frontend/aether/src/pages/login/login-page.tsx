@@ -1,3 +1,4 @@
+import { appHref } from "@aether-app/lib/app-path";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
@@ -95,7 +96,7 @@ export function LoginPage() {
 
   function handleSso(provider: SocialProvider) {
     setSsoLoading("loading");
-    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + "/callback")}`;
+    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + appHref("/callback"))}`;
   }
 
   return (

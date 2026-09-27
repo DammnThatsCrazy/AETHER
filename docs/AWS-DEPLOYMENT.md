@@ -54,11 +54,11 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:8df5f83f20c8ec516fb41d8a4d1b6458a3f3df39ffa2bb5b45130c068b02350e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:fce7be3e0ac09a1466c0646332632e9d76d4647d63b563c7ed42b3789c9ec1f6"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:e337fbfb5016422499720de7fe11c9df879bf590695cc34362cea93a1f265dc6"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
-  ".github/workflows/terraform-promote.yml": "sha256:deb0d48dda09507411ea088c16aa40396bf89bd73fa2f810dc617b81c72daad4"
+  ".github/workflows/terraform-promote.yml": "sha256:94e0e1c155df32a790090337a6a8282b4723943fec7d40325afbc5d26e5c25f0"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
-  "config/staging_apply_iam_policy.yaml": "sha256:aae9a18a11444499b2602d85749261112b03a356080a77cdd485420499822ac9"
+  "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
@@ -71,9 +71,9 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:217f49ab0f2e0962c937bc9426baa0bd65f2d37e29dc77990dd1c4c9b3e0a1b7"
+  "deploy/aws/terraform/": "sha256:a943d88aef3c797de42a9471e20eebf5d5178ed28a1838971a3d50d792e75073"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:36628a1e727bfbd77da202ed071642585950a5838f152e9af132bda46223353c"
+  "scripts/release/check_amplify_app_contract.py": "sha256:c7915cea9bff84db19c1cac00af09b414b7234c25624935a7304e488e42cde95"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -564,20 +564,29 @@ targets the main branch. Custom domain associations map each app to its
 canonical subdomain under `var.amplify_domain_name`. SSM parameters export
 Amplify app IDs and default domains for downstream consumption.
 
-On staging, the site app (`aether-marketing`, building `frontend/site`) serves
-`aether`, `www`, `docs` and `status` from one association
-(`aws_amplify_domain_association.site`); the product app keeps `app`. `www`
-shows the Olympus pages, and the site itself sends the `docs` and `status`
-hosts to the matching `aether.*/docs` page (the retired portal's
-`/doc/<slug>` pages map to site page ids, and pages with no public equivalent
-open the docs home) and to `aether.*/status` (Amplify does not apply
-host-based rewrite rules that carry a path). The old `olympus-marketing`,
-`docs` and `status` staging apps are deleted (the post-apply staging Amplify
-check fails if one still exists; the pre-apply preflight allows them so the
-first rollout can delete them): staging's public web runs on the site app and
-the product app. Amplify maps
+On staging, one Amplify app (`AETHER-staging-web`, key `aether-marketing`,
+building `frontend/site`) serves the whole public web: the Olympus pages,
+Aether marketing, pricing, docs, status, and the product itself under
+`aether.*/app` (the `frontend/site` entry in `amplify.yml` builds
+`frontend/aether` with `VITE_BASE_PATH=/app/` and publishes it into the site's
+`dist/app`). One association (`aws_amplify_domain_association.site`) holds
+`aether`, `www`, `docs`, `status` and `app`. `www` shows the Olympus pages, and
+the site itself sends the retired hosts on (Amplify does not apply host-based
+rewrite rules that carry a path):
+- `docs.*` to the matching `aether.*/docs` page (the retired portal's
+  `/doc/<slug>` pages map to site page ids, and pages with no public
+  equivalent open the docs home);
+- `status.*` to `aether.*/status`;
+- `app.*` to the same path under `aether.*/app`.
+
+The old `olympus-marketing`, `docs`, `status` and `aether-app` staging apps are
+deleted. The post-apply staging Amplify check fails if one still exists; the
+pre-apply preflight allows them, and the app's previous name, so the first
+rollout can delete and rename them. Amplify maps
 a host to one app, so the site association depends on the others: when a host
 moves, Terraform removes the old app's association before the site claims it.
+The deploy role holds `route53:ListHostedZones` because Amplify calls it with
+the caller's credentials when it updates a domain association.
 Route 53 records are keyed by host. Production keeps one app per host until its
 own cutover.
 
@@ -601,9 +610,10 @@ sets the API's `CORS_PREVIEW_ORIGIN_SUFFIX`. See
 The apex domain remains on Squarespace and redirects to the canonical
 `www.olympuslabsml.com` Amplify surface. The `www` host itself is served by
 Amplify when the custom-domain association is enabled. Staging uses the
-verified `*.staging.olympuslabsml.com` associations of the site and product
-apps; the import-only state reconciliation workflow adopts those live
-associations before the reviewed plan. If an existing association is missing
+verified `*.staging.olympuslabsml.com` association of the one web app; the
+import-only state reconciliation workflow adopts it before the reviewed plan
+(its repair never adds `app`, which Terraform moves to the web app after
+deleting the retired product app's association). If an existing association is missing
 one of its reviewed `main` hosts, the lifecycle passes the explicit `REPAIR-STAGING-AMPLIFY` token;
 reconciliation preserves the association, adds only the missing reviewed
 mapping, waits for `AVAILABLE` and DNS verification, and then imports state.
@@ -655,17 +665,22 @@ release archives.
 
 Routing is app-specific. Olympus marketing and status serve prerendered files
 without a catch-all rewrite. On staging, the `aether-marketing` app builds the
-unified site (`frontend/site`) for the `aether` host. It redirects
-`/app/signin` and the legacy `/login` and `/forgot-password` paths to the
-product app's sign-in (`aether_app_url`), `/app/signup` and the legacy
-`/signup` to the product app's sign-up (Auth0 sign-up, keeping the pricing
-page's `?plan=` so a new account lands on that plan's checkout), sends `/app` to the product app's root and any other `/app/*` path to the same
-path on the product app, and rewrites every other page route to
+unified site (`frontend/site`) for the `aether` host, with the product under
+`/app`. It redirects `/app/signin` and the legacy `/login` and
+`/forgot-password` paths to `/app/login`, the legacy `/signup` to
+`/app/signup` (Auth0 sign-up, keeping the pricing page's `?plan=` so a new
+account lands on that plan's checkout) and `/app` to `/app/`. It rewrites
+product routes (`/app/...` without a file extension) to `/app/index.html`
+with a `200`, so the product's bundles under `/app/assets/` are still served
+as files. It rewrites every other page route to
 `/index.html` with a `200` (AWS's single-page-app pattern: paths without a
 file extension, or whose extension is not a static asset), so routes are not
 404s and bundles, images and fonts are still served as files; the site's
 router redirects the previous
-marketing app's URLs to their new pages. Its status page reads the backend's 90-day per-component uptime feed (`VITE_STATUS_HISTORY_URL`, `GET /v1/status/history`). Other environments keep the
+marketing app's URLs to their new pages. Its status page reads the backend's 90-day per-component uptime feed (`VITE_STATUS_HISTORY_URL`, `GET /v1/status/history`). Because the product is served from `aether.*/app`, the staging Auth0 callback,
+logout and web-origin lists, the API's app URL and the Stripe checkout return
+URLs all use `https://aether.<domain>/app`, and the site build carries the
+product's `VITE_AUTH0_*` and `VITE_AETHER_*` settings. Other environments keep the
 prerendered `frontend/aether-marketing` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders
 its own route metadata. The end-user app and docs portal

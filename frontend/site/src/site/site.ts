@@ -150,8 +150,9 @@ export function legacyDocsPath(pathname: string): string {
  * The docs and status sites used to have their own hosts (docs.* and
  * status.*). Those hosts now point at this build, which sends visitors to the
  * same content on the Aether site: docs.<domain>/<path> → the matching
- * <aether>/docs page (legacyDocsPath, keeping the query and #anchor) and
- * status.<domain>/* → <aether>/status. Returns null for every other host.
+ * <aether>/docs page (legacyDocsPath, keeping the query and #anchor),
+ * status.<domain>/* → <aether>/status, and app.<domain>/<path> → the product
+ * at <aether>/app/<path>. Returns null for every other host.
  */
 export function retiredHostRedirect(
   hostname: string,
@@ -165,5 +166,11 @@ export function retiredHostRedirect(
     return `${origins.aether}${legacyDocsPath(pathname)}${search}${hash}`;
   }
   if (label === 'status') return `${origins.aether}/status`;
+  // The product moved under the Aether host (one app per environment); the
+  // app host keeps old links and bookmarks working.
+  if (label === 'app') {
+    const rest = pathname.replace(/^\/+/, '');
+    return `${origins.aether}/app/${rest}${search}${hash}`;
+  }
   return null;
 }

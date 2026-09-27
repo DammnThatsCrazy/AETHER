@@ -1,3 +1,4 @@
+import { appHref } from '@aether-app/lib/app-path';
 import { useState } from 'react';
 import { useExploration, useExplorationClient, useExplorationContext } from '@aether/ui/exploration';
 import { exactContextHandoffLimitations } from './exploration-context';
@@ -53,13 +54,13 @@ export function NoesisContextActions() {
           {isSaving ? 'Saving…' : 'Save exact context'}
         </button>
         <a
-          href={`/explore?${toQuery()}`}
+          href={appHref(`/explore?${toQuery()}`)}
           className="inline-flex h-8 items-center rounded border border-border-default px-3 text-xs font-medium text-text-secondary hover:border-accent/50 hover:text-text-primary"
         >
           Open in Explore
         </a>
         <a
-          href="/settings/data-exchange"
+          href={appHref("/settings/data-exchange")}
           className="inline-flex h-8 items-center rounded border border-border-default px-3 text-xs font-medium text-text-secondary hover:border-accent/50 hover:text-text-primary"
         >
           Open reporting

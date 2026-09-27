@@ -1,3 +1,4 @@
+import { appHref } from "@aether-app/lib/app-path";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AetherLogo } from "@aether-app/components/aether-logo";
@@ -129,7 +130,7 @@ function Auth0SignupRedirect() {
         <Button variant="primary" size="sm" className="w-full" onClick={start}>
           Create your account
         </Button>
-        <a href="/login" className="block text-xs text-text-muted">
+        <a href={appHref("/login")} className="block text-xs text-text-muted">
           Already have an account? Sign in
         </a>
       </div>
@@ -267,7 +268,7 @@ export function EmailSignupPage() {
 
   function handleSso(provider: SocialProvider) {
     setSsoLoading(true);
-    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + "/callback")}`;
+    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + appHref("/callback"))}`;
   }
 
   async function copyKey() {
@@ -596,7 +597,7 @@ export function EmailSignupPage() {
                       />
                       <button
                         onClick={() =>
-                          window.open("/docs/sdks/web", "_blank", "noopener")
+                          window.open("/docs/sdk-web", "_blank", "noopener")
                         }
                         className="text-xs text-accent underline mt-1"
                       >
@@ -612,7 +613,7 @@ export function EmailSignupPage() {
                       />
                       <button
                         onClick={() =>
-                          window.open("/docs/sdks/ios", "_blank", "noopener")
+                          window.open("/docs/sdk-ios", "_blank", "noopener")
                         }
                         className="text-xs text-accent underline mt-1"
                       >
