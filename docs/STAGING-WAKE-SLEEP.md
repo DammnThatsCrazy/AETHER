@@ -56,7 +56,7 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
-  "config/staging_plan_iam_policy.yaml": "sha256:e4c818162c2ede98217a53c123c2581bcf771cc9e2d1ccf58e048fff591598c3"
+  "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
   "config/staging_plan_reconcile_trust_policy.json": "sha256:4d413822419f32fb1cd82b99f8cabbda1b66a72c02f819d65b0213d15b14001a"
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
@@ -64,8 +64,8 @@ source_hashes:
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:2752b8bd08fee324f5abd3f0bca0c57b62b906dc309192b7247ac2aae7a450f0"
   "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:c3759e7f469b72ea1a6b2c043bf8a7066421d1836ba9f231a4cd1b0abe3cf974"
-  "deploy/aws/terraform/variables.tf": "sha256:907e085cc68866db0370c9f27b5bd332dc240892e95db3c3a0c6bf6873b1a73d"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:65090a6bedea3bba7947535726b193486ccea315613c0915ba7e701397d15608"
+  "deploy/aws/terraform/variables.tf": "sha256:f62ff6504ed532ff09f5ac3f3a9bfd1e7f9f209df9263e6f7ee8b32e2b7fa413"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
@@ -77,7 +77,7 @@ source_hashes:
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:6755ca3b1e088bafbe260272f7df26ebf12a0b227a4fcfe902cf728ce54372e6"
   "scripts/release/ensure_staging_autoscaling_target_tags.py": "sha256:2f0733c66a6df555537336d88edf30dab740b1d8c30bbaf8140bab9463cb6b00"
-  "scripts/release/reconcile_staging_plan_role.py": "sha256:0e886d472c9a6e4d317c4b0ae627461a5ce2af8caf548290a37a8f28708a9c5c"
+  "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
   "services/backend/alembic/versions/20260702_delivery_infrastructure.py": "sha256:df8a6bf971bd9db9a907414a8b7e8f0695b6a7c01aa55719e40f869509510916"
 ---
 

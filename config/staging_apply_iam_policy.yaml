@@ -723,6 +723,22 @@ statements:
       - amplify:DeleteDomainAssociation
     resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*
     scope: staging-amplify-domains
+  # ----- Route 53 (delegated staging product zone; records only) -----
+  # The zone itself is created outside this root; the apply role only reads
+  # it and manages its records (product_dns_zone_id).
+  - sid: ManageStagingProductDnsRecords
+    actions:
+      - route53:GetHostedZone
+      - route53:ListResourceRecordSets
+      - route53:ChangeResourceRecordSets
+      - route53:ListTagsForResource
+    resource: arn:aws:route53:::hostedzone/Z01866633FQOV3YDH5J11
+    scope: staging-product-dns-zone
+  - sid: ReadRoute53ChangeStatus
+    actions:
+      - route53:GetChange
+    resource: arn:aws:route53:::change/*
+    scope: global-read-required-by-api
   - sid: TagStagingAmplifyResources
     actions:
       - amplify:TagResource

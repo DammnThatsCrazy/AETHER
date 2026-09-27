@@ -67,7 +67,7 @@ def test_flat_conditions_are_rendered_as_string_equals() -> None:
         ],
     }
 
-    rendered = module.render_policy_document(manifest, account_id="123456789012")
+    rendered = module.render_policy_document(manifest, account_id="123456789012", product_dns_zone=None)
 
     assert rendered["Statement"][0]["Condition"] == {
         "StringEquals": {"aws:ResourceTag/Environment": ["staging"]}
@@ -90,7 +90,7 @@ def test_condition_operator_override_and_nested_conditions_are_preserved() -> No
             }
         ],
     }
-    assert module.render_policy_document(base, account_id="123456789012")["Statement"][0][
+    assert module.render_policy_document(base, account_id="123456789012", product_dns_zone=None)["Statement"][0][
         "Condition"
     ] == {"StringLike": {"kms:RequestAlias": ["alias/aether-staging-*"]}}
 
@@ -107,7 +107,7 @@ def test_condition_operator_override_and_nested_conditions_are_preserved() -> No
             }
         ],
     }
-    assert module.render_policy_document(nested, account_id="123456789012")["Statement"][0][
+    assert module.render_policy_document(nested, account_id="123456789012", product_dns_zone=None)["Statement"][0][
         "Condition"
     ] == {"StringEquals": {"aws:ResourceTag/Environment": ["staging"]}}
 
@@ -205,3 +205,38 @@ def test_authority_registry_owns_the_reconciliation_workflow() -> None:
     infrastructure = next(item for item in registry["authorities"] if item["id"] == "infrastructure")
     assert ".github/workflows/reconcile-staging-plan-role.yml" in infrastructure["workflows"]
     assert "scripts/release/reconcile_staging_plan_role.py" in infrastructure["required_commands"]
+
+
+def test_plan_role_zone_grant_follows_the_staging_profile(monkeypatch) -> None:
+    """The plan role reads exactly the zone Terraform manages: a stale or
+    missing hosted-zone grant fails before anything is written."""
+    module = _module()
+    manifest = yaml.safe_load(
+        (ROOT / "config/staging_plan_iam_policy.yaml").read_text(encoding="utf-8")
+    )
+    rendered = module.render_policy_document(manifest, account_id="544471417928")
+    zone = module.staging_product_dns_zone()
+    assert zone and any(zone in statement["Resource"] for statement in rendered["Statement"])
+
+    monkeypatch.setattr(module, "staging_product_dns_zone", lambda: "arn:aws:route53:::hostedzone/ZREPLACED123")
+    with pytest.raises(SystemExit):
+        module.render_policy_document(manifest, account_id="544471417928")
+
+    # A dropped or partial grant fails too: every plan refresh needs it.
+    monkeypatch.setattr(module, "staging_product_dns_zone", lambda: zone)
+    without_zone = {
+        **manifest,
+        "statements": [s for s in manifest["statements"] if "route53" not in json.dumps(s)],
+    }
+    with pytest.raises(SystemExit):
+        module.render_policy_document(without_zone, account_id="544471417928")
+    partial = {
+        **manifest,
+        "statements": [
+            {**s, "actions": ["route53:GetHostedZone"]} if "route53" in json.dumps(s) else s
+            for s in manifest["statements"]
+        ],
+    }
+    with pytest.raises(SystemExit):
+        module.render_policy_document(partial, account_id="544471417928")
+

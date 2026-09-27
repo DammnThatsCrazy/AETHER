@@ -104,6 +104,14 @@ statements:
       - amplify:ListDomainAssociations
     resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*
     scope: staging-amplify-domains
+  # ----- Route 53 (delegated staging product zone; read only) -----
+  - sid: ReadStagingProductDnsZone
+    actions:
+      - route53:GetHostedZone
+      - route53:ListResourceRecordSets
+      - route53:ListTagsForResource
+    resource: arn:aws:route53:::hostedzone/Z01866633FQOV3YDH5J11
+    scope: staging-product-dns-zone
   - sid: ReadStagingAmplifyJobs
     actions:
       - amplify:ListJobs

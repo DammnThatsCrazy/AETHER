@@ -29,6 +29,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / "config/staging_plan_iam_policy.yaml"
 DEFAULT_SUPPLEMENTAL_MANIFEST = ROOT / "config/terraform_plan_state_access_policy.yaml"
 VERIFY_SCRIPT = ROOT / "scripts/release/verify_effective_staging_apply_policy.py"
+STAGING_TFVARS = ROOT / "deploy/aws/terraform/profiles/staging.tfvars"
+HOSTED_ZONE_PREFIX = "arn:aws:route53:::hostedzone/"
 EXPECTED_ROLE = "AetherStagingPlan"
 EXPECTED_POLICY_NAME = "AetherStagingPlanContract"
 CONFIRMATION = "RECONCILE-STAGING-PLAN-IAM"
@@ -134,7 +136,21 @@ def _render_condition(statement: dict[str, Any], *, account_id: str) -> dict[str
     return rendered
 
 
-def render_policy_document(manifest: dict[str, Any], *, account_id: str) -> dict[str, Any]:
+def staging_product_dns_zone(tfvars: Path = STAGING_TFVARS) -> str | None:
+    """The delegated staging DNS zone ARN from the staging profile, if any."""
+    match = re.search(r'^product_dns_zone_id\s*=\s*"(Z[A-Z0-9]+)"', tfvars.read_text(encoding="utf-8"), re.M)
+    return f"{HOSTED_ZONE_PREFIX}{match.group(1)}" if match else None
+
+
+_PROFILE_ZONE = object()
+PRODUCT_DNS_READ_ACTIONS = frozenset(
+    {"route53:GetHostedZone", "route53:ListResourceRecordSets", "route53:ListTagsForResource"}
+)
+
+
+def render_policy_document(
+    manifest: dict[str, Any], *, account_id: str, product_dns_zone: Any = _PROFILE_ZONE
+) -> dict[str, Any]:
     """Render the reviewed YAML contract as an account-bound IAM document."""
     if not ACCOUNT_PATTERN.fullmatch(account_id):
         fail("AWS account id must contain exactly 12 digits")
@@ -186,6 +202,22 @@ def render_policy_document(manifest: dict[str, Any], *, account_id: str) -> dict
         if condition:
             item["Condition"] = condition
         rendered.append(item)
+
+    # The plan role reads exactly the zone Terraform manages, and all of what
+    # a plan refresh needs from it. A replaced zone would otherwise leave the
+    # role reading the old one, and a dropped grant would fail every refresh
+    # of the zone's records; both are refused before anything is written.
+    # product_dns_zone defaults to product_dns_zone_id in staging.tfvars.
+    expected_zone = staging_product_dns_zone() if product_dns_zone is _PROFILE_ZONE else product_dns_zone
+    zone_actions: dict[str, set[str]] = {}
+    for item in rendered:
+        for resource in item["Resource"]:
+            if resource.startswith(HOSTED_ZONE_PREFIX):
+                zone_actions.setdefault(resource, set()).update(item["Action"])
+    if set(zone_actions) != ({expected_zone} if expected_zone else set()):
+        fail("staging plan IAM hosted-zone grants must be exactly product_dns_zone_id from staging.tfvars")
+    if expected_zone and not PRODUCT_DNS_READ_ACTIONS <= zone_actions[expected_zone]:
+        fail("staging plan IAM must grant " + ", ".join(sorted(PRODUCT_DNS_READ_ACTIONS)) + " on the product DNS zone")
 
     return {"Version": "2012-10-17", "Statement": rendered}
 

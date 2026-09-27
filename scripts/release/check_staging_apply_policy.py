@@ -98,6 +98,12 @@ REQUIRED_ACTIONS = {
     "amplify:TagResource",
     "amplify:UntagResource",
     "amplify:ListTagsForResource",
+    # Route 53: records in the delegated staging product zone only
+    "route53:GetHostedZone",
+    "route53:ListResourceRecordSets",
+    "route53:ChangeResourceRecordSets",
+    "route53:ListTagsForResource",
+    "route53:GetChange",
     # KMS
     "kms:CreateKey",
     "kms:TagResource",
@@ -550,6 +556,21 @@ _AMPLIFY_BRANCHES = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*"
 _AMPLIFY_DOMAINS = "arn:aws:amplify:us-east-1:${account_id}:apps/*/domains/*"
 _AMPLIFY_JOBS = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*/jobs/*"
 _DYNAMO_TABLE = "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*"
+
+
+def _staging_product_dns_zone() -> str:
+    """The delegated staging DNS zone ARN, read from the staging profile so the
+    IAM contract cannot drift from the zone Terraform manages."""
+    import re
+
+    tfvars = Path(__file__).resolve().parents[2] / "deploy/aws/terraform/profiles/staging.tfvars"
+    match = re.search(r'^product_dns_zone_id\s*=\s*"(Z[A-Z0-9]+)"', tfvars.read_text(encoding="utf-8"), re.M)
+    if not match:
+        fail("staging.tfvars must set product_dns_zone_id for the Route 53 record grants")
+    return f"arn:aws:route53:::hostedzone/{match.group(1)}"
+
+
+_ROUTE53_CHANGES = "arn:aws:route53:::change/*"
 _SQS_QUEUE = "arn:aws:sqs:us-east-1:${account_id}:AETHER-staging-*"
 _EVENTS_RULE = "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*"
 _KMS_KEY = "arn:aws:kms:us-east-1:${account_id}:key/*"
@@ -784,6 +805,16 @@ def main() -> int:
     expected_resources["amplify:TagResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
     expected_resources["amplify:UntagResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
     expected_resources["amplify:ListTagsForResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
+
+    # Route 53: the apply role manages records in exactly the delegated staging
+    # zone; it can never create, delete or touch any other zone.
+    _dns_zone = _staging_product_dns_zone()
+    for _dns in (
+        "route53:GetHostedZone", "route53:ListResourceRecordSets",
+        "route53:ChangeResourceRecordSets", "route53:ListTagsForResource",
+    ):
+        expected_resources[_dns] = _dns_zone
+    expected_resources["route53:GetChange"] = _ROUTE53_CHANGES
 
     # KMS
     expected_resources["kms:CreateKey"] = "*"

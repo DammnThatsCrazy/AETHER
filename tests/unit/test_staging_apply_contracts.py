@@ -368,7 +368,9 @@ def test_pilot_first_admin_handoff_is_explicit_and_staging_only() -> None:
     # Operator emails ride the same pilot-only overlay and never reach another lane.
     assert '{ name = "PLATFORM_OPERATOR_EMAILS", value = join(",", [for e in var.platform_operator_emails : lower(trimspace(e))]) }' in ecs
     main = (TF / "main.tf").read_text(encoding="utf-8")
-    assert 'platform_operator_emails = var.deployment_lane == "pilot" ? var.platform_operator_emails : []' in main
+    assert re.search(
+        r'platform_operator_emails\s+= var\.deployment_lane == "pilot" \? var\.platform_operator_emails : \[\]', main
+    )
 
 
 def test_backend_task_definition_has_an_explicit_api_runtime_role() -> None:
@@ -1462,3 +1464,22 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
     assert set(iam_role_mgmt["resource"]) == _staging_lambda_roles
     assert "iam:CreateRole" in iam_role_mgmt["actions"]
     assert "iam:DeleteRole" in iam_role_mgmt["actions"]
+
+
+def test_amplify_subdomain_records_use_only_the_cname_target() -> None:
+    """Amplify reports "<prefix> CNAME <target>"; Route 53 must get the target."""
+    main = (TF / "main.tf").read_text(encoding="utf-8")
+    start = main.index('resource "aws_route53_record" "amplify_subdomain"')
+    block = main[start:main.index("\n}\n", start)]
+    assert 'regex("[^ ]+$", trimspace(one(aws_amplify_domain_association.frontend[each.key].sub_domain).dns_record))' in block
+    assert "for_each = local.product_dns_enabled ? local.amplify_apps : {}" in block
+
+
+def test_dns_zone_modes_are_mutually_exclusive() -> None:
+    """A delegated product_dns_zone_id is never silently ignored in favor of
+    the Squarespace-shaped zone this root would create."""
+    main = (TF / "main.tf").read_text(encoding="utf-8")
+    start = main.index('resource "aws_route53_zone" "production"')
+    block = main[start:main.index("\n}\n", start)]
+    assert 'condition     = var.product_dns_zone_id == ""' in block
+    assert "mutually exclusive" in block

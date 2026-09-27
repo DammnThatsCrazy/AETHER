@@ -57,9 +57,9 @@ source_hashes:
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
   ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
-  "config/staging_apply_iam_policy.yaml": "sha256:4fed4eaf122b29db49acd252c2b07487ac3e33fc88925b17a0de7ad34bf31ab7"
+  "config/staging_apply_iam_policy.yaml": "sha256:aae9a18a11444499b2602d85749261112b03a356080a77cdd485420499822ac9"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
-  "config/staging_plan_iam_policy.yaml": "sha256:e4c818162c2ede98217a53c123c2581bcf771cc9e2d1ccf58e048fff591598c3"
+  "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
   "config/staging_plan_reconcile_trust_policy.json": "sha256:4d413822419f32fb1cd82b99f8cabbda1b66a72c02f819d65b0213d15b14001a"
   "config/staging_plan_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
@@ -70,7 +70,7 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:783b675caacbc37058cb51525a2dd694ab87c948d81f14e2a879bcd1b2b23d60"
+  "deploy/aws/terraform/": "sha256:be3e9fef8bc560a53dfd240af71d2f9265695670e7e1637d7ba1b9d6db772451"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -83,7 +83,7 @@ source_hashes:
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:6755ca3b1e088bafbe260272f7df26ebf12a0b227a4fcfe902cf728ce54372e6"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
-  "scripts/release/reconcile_staging_plan_role.py": "sha256:0e886d472c9a6e4d317c4b0ae627461a5ce2af8caf548290a37a8f28708a9c5c"
+  "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
@@ -608,8 +608,9 @@ waits for any unrelated active branch job to clear, and only then starts a
 new release when needed. This prevents Amplify's one-job-per-branch race
 without weakening exact-commit provenance.
 The dedicated empty `AETHER-staging-amplify-domain-role` remains constrained
-to Amplify-only trust for the staging infrastructure contract, has no
-permissions or Route 53 access, and Squarespace remains authoritative.
+to Amplify-only trust for the staging infrastructure contract, and has no
+permissions or Route 53 access. Staging DNS is a delegated Route 53 zone whose
+records Terraform manages; see [Route 53 and Squarespace DNS](#route-53-and-squarespace-dns).
 The staging apply contract grants `amplify:CreateApp` only at the API-required
 global scope, keeps existing-app and branch operations constrained to the
 generated staging Amplify app and branch ARN families, and scopes custom-domain
@@ -637,7 +638,23 @@ parameter group remains `aurora-postgresql16`.
 
 ### Route 53 and Squarespace DNS
 
-Squarespace remains the authoritative DNS provider for the first release. After
+**Staging.** `staging.olympuslabsml.com` is a Route 53 zone delegated from
+Squarespace (four `staging` NS records). The zone is created outside this root;
+the resource contract keeps hosted zones out of it. `product_dns_zone_id` in
+`profiles/staging.tfvars` hands the zone to Terraform, which manages its records:
+
+- each Amplify subdomain, pointing at its custom-domain association target;
+- `api`, pointing at the ALB;
+- the Amplify and ACM certificate validation CNAMEs (`product_dns_validation_cnames`).
+
+The apply role (`AetherStagingDeploy`) may change records in that one zone only.
+The plan role may only read it. Both contract checkers
+(`check_staging_apply_policy.py`, `reconcile_staging_plan_role.py`) reject any
+hosted-zone grant other than `product_dns_zone_id` from `staging.tfvars`. See [Domain & DNS Readiness](DOMAIN-DNS-READINESS.md)
+for the delegation steps.
+
+**Production.** Squarespace remains the authoritative DNS provider for
+`olympuslabsml.com` (it also carries the Google Workspace mail records). After
 the Amplify custom-domain association is created, add the exported
 `amplify_custom_domain_dns_records` CNAME targets in Squarespace for `www`,
 `aether`, `docs`, `app`, and `status`; keep the apex redirect in Squarespace.
