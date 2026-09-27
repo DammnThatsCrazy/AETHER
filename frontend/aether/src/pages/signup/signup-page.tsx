@@ -86,13 +86,20 @@ function Auth0SignupRedirect() {
   const auth0 = useAuth0();
   const [searchParams] = useSearchParams();
   const [failed, setFailed] = useState(false);
+  // Precedence: a pricing-page plan (billing and its checkout), then the same
+  // validated ?redirect and marketing provider hand-off the email form uses,
+  // then onboarding.
   const plan = parseSelfServePlan(searchParams.get("plan"));
   const redirectParam = searchParams.get("redirect");
+  const explicitRedirect = resolvePostAuthRedirect(redirectParam);
+  const handoff = parseSettingsHandoff(searchParams);
   const destination = plan
     ? `/billing?plan=${plan}`
-    : redirectParam !== null
-      ? resolvePostAuthRedirect(redirectParam)
-      : "/onboarding";
+    : redirectParam !== null && explicitRedirect !== "/settings"
+      ? explicitRedirect
+      : handoff.family !== null || handoff.experience !== null
+        ? buildSettingsRedirectFromHandoff(handoff)
+        : "/onboarding";
 
   const start = () => {
     setFailed(false);

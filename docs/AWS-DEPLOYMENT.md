@@ -568,7 +568,9 @@ On staging, the site app (`aether-marketing`, building `frontend/site`) serves
 `aether`, `www`, `docs` and `status` from one association
 (`aws_amplify_domain_association.site`); the product app keeps `app`. `www`
 shows the Olympus pages, and the site itself sends the `docs` and `status`
-hosts to `aether.*/docs/<path>` and `aether.*/status` (Amplify does not apply
+hosts to the matching `aether.*/docs` page (the retired portal's
+`/doc/<slug>` pages map to site page ids, and pages with no public equivalent
+open the docs home) and to `aether.*/status` (Amplify does not apply
 host-based rewrite rules that carry a path). The old `olympus-marketing`,
 `docs` and `status` staging apps are deleted: staging's public web runs on the
 site app and the product app. Amplify maps

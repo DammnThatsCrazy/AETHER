@@ -105,7 +105,7 @@ describe('retiredHostRedirect', () => {
       'https://aether.staging.olympuslabsml.com/docs',
     );
     expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/quickstart/', '?x=1', '', staging)).toBe(
-      'https://aether.staging.olympuslabsml.com/docs/quickstart?x=1',
+      'https://aether.staging.olympuslabsml.com/docs/quickstart-web?x=1',
     );
     expect(retiredHostRedirect('DOCS.olympuslabsml.com', '/sdk-web', '', '', staging)).toBe(
       'https://aether.staging.olympuslabsml.com/docs/sdk-web',
@@ -114,8 +114,21 @@ describe('retiredHostRedirect', () => {
 
   it('keeps the heading anchor of a docs deep link', () => {
     expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/quickstart', '?x=1', '#installation', staging)).toBe(
-      'https://aether.staging.olympuslabsml.com/docs/quickstart?x=1#installation',
+      'https://aether.staging.olympuslabsml.com/docs/quickstart-web?x=1#installation',
     );
+  });
+
+  it("translates the retired portal's /doc/<slug> and artifact pages", () => {
+    const go = (path: string) => retiredHostRedirect('docs.staging.olympuslabsml.com', path, '', '', staging);
+    expect(go('/doc/overview')).toBe('https://aether.staging.olympuslabsml.com/docs/overview');
+    expect(go('/doc/concepts%2Fsignals')).toBe('https://aether.staging.olympuslabsml.com/docs/signals');
+    expect(go('/doc/concepts/journeys')).toBe('https://aether.staging.olympuslabsml.com/docs/journeys');
+    expect(go('/doc/quickstart/node-sdk')).toBe('https://aether.staging.olympuslabsml.com/docs/quickstart-backend');
+    expect(go('/doc/api/ingestion')).toBe('https://aether.staging.olympuslabsml.com/docs/ingestion-api');
+    expect(go('/doc/aether/how-it-works')).toBe('https://aether.staging.olympuslabsml.com/docs/how-it-works');
+    expect(go('/artifacts/events')).toBe('https://aether.staging.olympuslabsml.com/docs');
+    expect(go('/doc/no-such-page')).toBe('https://aether.staging.olympuslabsml.com/docs');
+    expect(go('/doc/%E0%A4%A')).toBe('https://aether.staging.olympuslabsml.com/docs');
   });
 
   it('sends status hosts to the status page', () => {

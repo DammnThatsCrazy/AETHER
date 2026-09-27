@@ -82,7 +82,14 @@ describe("SignupPage with Auth0", () => {
   it("ignores an unknown plan and an off-site redirect", async () => {
     renderSignup("/signup?plan=enterprise&redirect=//evil.example");
     await waitFor(() => expect(loginWithRedirect).toHaveBeenCalled());
-    expect(readPostAuthDestination()).toBe("/settings");
+    expect(readPostAuthDestination()).toBe("/onboarding");
+  });
+
+  it("keeps a marketing provider hand-off, as the email form does", async () => {
+    renderSignup("/signup?family=google_ads&experience=advertising_campaigns&intent=connect");
+    await waitFor(() => expect(loginWithRedirect).toHaveBeenCalled());
+    expect(readPostAuthDestination()).toMatch(/^\/settings\/integrations\?/);
+    expect(readPostAuthDestination()).toContain("family=google_ads");
   });
 
   it("offers a retry when Auth0 cannot be reached", async () => {

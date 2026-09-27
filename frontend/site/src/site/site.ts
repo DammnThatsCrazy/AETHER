@@ -12,6 +12,8 @@
  * unrecognised is Aether, the product site.
  */
 
+import { resolveDocId } from '@site/pages/docs/docs-model';
+
 export type SiteId = 'olympus' | 'aether';
 
 const OLYMPUS_HOSTS = new Set([
@@ -105,11 +107,51 @@ export function siteHref(
 }
 
 /**
+ * Pages of the retired docs portal (frontend/docs: /doc/<slug>, where the
+ * slug is its content path) whose topic lives under another id on the site.
+ * Other slugs resolve by their last segment (concepts/signals → signals).
+ */
+const LEGACY_DOC_SLUGS: Record<string, string> = {
+  'quickstart/web-sdk': 'quickstart-web',
+  'quickstart/react-sdk': 'quickstart-web',
+  'quickstart/node-sdk': 'quickstart-backend',
+  'api/ingestion': 'ingestion-api',
+  'api/authentication': 'api-conventions',
+  'api/webhooks': 'api-conventions',
+  'api/profiles': 'profiles',
+  'tutorials/shopify-integration': 'connector-catalog',
+  'tutorials/stripe-integration': 'connector-catalog',
+  'developers/connection-model': 'connectors',
+  'developers/events-and-consent': 'events',
+  'developers/identity-and-relationships': 'relationships',
+  'developers/security-and-privacy': 'sdk-privacy',
+};
+
+/**
+ * The site's docs path for a path on the retired docs host: its /doc/<slug>
+ * pages and bare page names map to a site page id, and anything without a
+ * public equivalent (the /artifacts pages, unknown slugs) opens the docs home
+ * rather than a not-found page.
+ */
+export function legacyDocsPath(pathname: string): string {
+  const path = pathname.replace(/^\/+|\/+$/g, '');
+  let slug = path.startsWith('doc/') ? path.slice('doc/'.length) : path;
+  try {
+    slug = decodeURIComponent(slug);
+  } catch {
+    // A malformed escape is treated as an unknown page.
+  }
+  if (!slug || slug === 'artifacts' || slug.startsWith('artifacts/')) return '/docs';
+  const id = resolveDocId(LEGACY_DOC_SLUGS[slug] ?? slug.split('/').pop());
+  return id ? `/docs/${id}` : '/docs';
+}
+
+/**
  * The docs and status sites used to have their own hosts (docs.* and
  * status.*). Those hosts now point at this build, which sends visitors to the
- * same content on the Aether site: docs.<domain>/<path> → <aether>/docs/<path>
- * (keeping the query and #anchor)
- * and status.<domain>/* → <aether>/status. Returns null for every other host.
+ * same content on the Aether site: docs.<domain>/<path> → the matching
+ * <aether>/docs page (legacyDocsPath, keeping the query and #anchor) and
+ * status.<domain>/* → <aether>/status. Returns null for every other host.
  */
 export function retiredHostRedirect(
   hostname: string,
@@ -120,8 +162,7 @@ export function retiredHostRedirect(
 ): string | null {
   const label = hostname.toLowerCase().split('.')[0];
   if (label === 'docs') {
-    const rest = pathname.replace(/^\/+|\/+$/g, '');
-    return `${origins.aether}/docs${rest ? `/${rest}` : ''}${search}${hash}`;
+    return `${origins.aether}${legacyDocsPath(pathname)}${search}${hash}`;
   }
   if (label === 'status') return `${origins.aether}/status`;
   return null;
