@@ -25,6 +25,7 @@ source_files:
   - scripts/release/check_staging_credential_contract.py
   - scripts/release/bootstrap_staging_admin_key.py
   - scripts/release/check_amplify_app_contract.py
+  - scripts/release/release_changed_amplify_apps.py
   - scripts/release/check_staging_secret_payload_contract.py
   - scripts/release/check_staging_secret_preflight_policy.py
   - scripts/release/check_staging_task_definition_contract.py
@@ -70,7 +71,7 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:142feed4a8c305238f244f969f8a5b48d4d9dae0de31a205f48a538386272c5d"
+  "deploy/aws/terraform/": "sha256:1f20352cbc328bacc0313069e88098655b5efcce7368039eb72344d5880f82fd"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:fa89f5014fe809824d1f87a04ff5fb1a0c4e9083d0afdef27030465b986c07c4"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -84,6 +85,7 @@ source_hashes:
   "scripts/release/check_staging_task_definition_contract.py": "sha256:6755ca3b1e088bafbe260272f7df26ebf12a0b227a4fcfe902cf728ce54372e6"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
+  "scripts/release/release_changed_amplify_apps.py": "sha256:cc584d65fd667420713cbe2de6a3ddca46e72f980c921828707ca9239940b6d2"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
@@ -586,8 +588,9 @@ change. The public status application consumes its profile's verified
 `status_api_url`; a missing or unverified API origin renders an explicit
 unverified state. After a reviewed staging apply, the promotion workflow
 first rebuilds every Amplify app whose build spec or build variables the plan
-changed (`scripts/release/release_changed_amplify_apps.py` starts a RELEASE
-job pinned to the reviewed commit and waits for it), because Amplify builds
+changed (`scripts/release/release_changed_amplify_apps.py` waits out any
+running or cancelling branch job, starts a RELEASE job for the reviewed commit,
+and fails unless the finished job reports that exact commit), because Amplify builds
 only on a push and would otherwise keep serving a bundle built from the old
 inputs. It then checks the live branch-level API, Auth0, unified-site, and
 custom status-shell origins before publishing apply evidence. The separate `amplify-status-production.yml`
@@ -629,7 +632,8 @@ without a catch-all rewrite. On staging, the `aether-marketing` app builds the
 unified site (`frontend/site`) for the `aether` host. It redirects
 `/app/signin`, `/app/signup` and the legacy `/login`, `/signup` and
 `/forgot-password` paths to the product app's sign-in (`aether_app_url`),
-sends any other `/app/*` path to the same path on the product app, and uses an
+sends `/app` to the product app's root and any other `/app/*` path to the same
+path on the product app, and uses an
 index fallback for everything else; the site's router redirects the previous
 marketing app's URLs to their new pages. Other environments keep the
 prerendered `frontend/aether-marketing` build, with index rewrites for its

@@ -874,6 +874,7 @@ locals {
     "aether-marketing" = local.aether_host_serves_site ? [
       { source = "/app/signin", target = "${var.aether_app_url}/login", status = "302" },
       { source = "/app/signup", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/app", target = "${var.aether_app_url}/", status = "302" },
       { source = "/app/<*>", target = "${var.aether_app_url}/<*>", status = "302" },
       { source = "/login", target = "${var.aether_app_url}/login", status = "302" },
       { source = "/signup", target = "${var.aether_app_url}/login", status = "302" },

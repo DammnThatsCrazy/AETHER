@@ -260,13 +260,13 @@ run "staging_profile_plan" {
       local.aether_host_serves_site,
       local.amplify_apps["aether-marketing"].app_root == "frontend/site",
       [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == [
-        "/app/signin", "/app/signup", "/app/<*>", "/login", "/signup", "/forgot-password", "/<*>",
+        "/app/signin", "/app/signup", "/app", "/app/<*>", "/login", "/signup", "/forgot-password", "/<*>",
       ],
-      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 6) :
+      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 7) :
         rule.status == "302" && startswith(rule.target, var.aether_app_url)
       ]),
-      local.amplify_custom_rules["aether-marketing"][6].target == "/index.html",
-      local.amplify_custom_rules["aether-marketing"][6].status == "404-200",
+      local.amplify_custom_rules["aether-marketing"][7].target == "/index.html",
+      local.amplify_custom_rules["aether-marketing"][7].status == "404-200",
       length(lookup(local.amplify_custom_rules, "olympus-marketing", [])) == 0,
       length(lookup(local.amplify_custom_rules, "status", [])) == 0,
     ])
