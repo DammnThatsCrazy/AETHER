@@ -1062,11 +1062,12 @@ resource "aws_amplify_branch" "main" {
     each.key == "aether-marketing" && local.aether_host_serves_site ? {
       # Public build settings for the unified site. Prices are published on
       # staging and production alike (owner decision).
-      VITE_API_BASE_URL     = "https://${var.domain_name}"
-      VITE_STATUS_API_URL   = var.status_api_url
-      VITE_PUBLISH_PRICES   = "true"
-      VITE_SITE_AETHER_URL  = "https://aether.${var.amplify_domain_name}"
-      VITE_SITE_OLYMPUS_URL = "https://www.${var.amplify_domain_name}"
+      VITE_API_BASE_URL       = "https://${var.domain_name}"
+      VITE_STATUS_API_URL     = var.status_api_url
+      VITE_STATUS_HISTORY_URL = "https://${var.domain_name}/v1/status/history"
+      VITE_PUBLISH_PRICES     = "true"
+      VITE_SITE_AETHER_URL    = "https://aether.${var.amplify_domain_name}"
+      VITE_SITE_OLYMPUS_URL   = "https://www.${var.amplify_domain_name}"
     } : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL = var.status_api_url
