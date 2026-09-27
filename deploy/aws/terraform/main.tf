@@ -809,6 +809,11 @@ resource "aws_ssm_parameter" "static_frontend_bucket" {
 # ---------------------------------------------------------------------------
 
 locals {
+  # Staging's Aether host serves the unified site (frontend/site). Other
+  # environments keep the prerendered aether-marketing build until the site
+  # prerenders its own per-route metadata, sitemap and robots file.
+  aether_host_serves_site = var.environment == "staging"
+
   amplify_apps = local.enable_static_frontends ? {
     olympus-marketing = {
       name        = "${var.project}-${var.environment}-olympus-marketing"
@@ -816,13 +821,13 @@ locals {
       description = "Olympus Labs corporate marketing site"
       subdomain   = "www"
     }
-    # The unified Olympus + Aether site (frontend/site). It keeps this app's
-    # key and name while it is the only host consolidated so far; the other
-    # marketing, docs and status hosts move onto it next.
+    # On staging, the unified Olympus + Aether site (frontend/site). It keeps
+    # this app's key and name while it is the only host consolidated so far;
+    # the other marketing, docs and status hosts move onto it next.
     aether-marketing = {
       name        = "${var.project}-${var.environment}-aether-marketing"
-      app_root    = "frontend/site"
-      description = "Unified Olympus Labs and Aether site"
+      app_root    = local.aether_host_serves_site ? "frontend/site" : "frontend/aether-marketing"
+      description = local.aether_host_serves_site ? "Unified Olympus Labs and Aether site" : "Aether product marketing site"
       subdomain   = "aether"
     }
     docs = {
@@ -862,10 +867,11 @@ locals {
     docs = [
       { source = "/<*>", target = "/index.html", status = "404-200" },
     ]
-    # The site's sign-in and sign-up paths lead to the product app until it is
-    # served under /app from this app; the legacy marketing auth paths follow.
-    # Everything else is client-routed with a 404-200 index fallback.
-    "aether-marketing" = [
+    # Unified site: its sign-in and sign-up paths lead to the product app until
+    # it is served under /app from this app, and the legacy marketing auth paths
+    # follow. Everything else is client-routed with a 404-200 index fallback.
+    # The prerendered aether-marketing build keeps its auth-threshold rewrites.
+    "aether-marketing" = local.aether_host_serves_site ? [
       { source = "/app/signin", target = "${var.aether_app_url}/login", status = "302" },
       { source = "/app/signup", target = "${var.aether_app_url}/login", status = "302" },
       { source = "/app/<*>", target = "${var.aether_app_url}/<*>", status = "302" },
@@ -873,6 +879,10 @@ locals {
       { source = "/signup", target = "${var.aether_app_url}/login", status = "302" },
       { source = "/forgot-password", target = "${var.aether_app_url}/login", status = "302" },
       { source = "/<*>", target = "/index.html", status = "404-200" },
+      ] : [
+      { source = "/login", target = "/index.html", status = "200" },
+      { source = "/signup", target = "/index.html", status = "200" },
+      { source = "/forgot-password", target = "/index.html", status = "200" },
     ]
   }
 }
@@ -960,7 +970,7 @@ resource "aws_amplify_app" "frontend" {
       VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
     } : {},
-    each.key == "aether-marketing" ? {
+    each.key == "aether-marketing" && local.aether_host_serves_site ? {
       # Public build settings for the unified site. Prices are published on
       # staging and production alike (owner decision).
       VITE_API_BASE_URL     = "https://${var.domain_name}"
@@ -1017,7 +1027,7 @@ resource "aws_amplify_branch" "main" {
       VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
     } : {},
-    each.key == "aether-marketing" ? {
+    each.key == "aether-marketing" && local.aether_host_serves_site ? {
       # Public build settings for the unified site. Prices are published on
       # staging and production alike (owner decision).
       VITE_API_BASE_URL     = "https://${var.domain_name}"

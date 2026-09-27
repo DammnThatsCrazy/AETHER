@@ -98,11 +98,12 @@ def test_amplify_branches_receive_only_their_declared_variables() -> None:
 
 
 def test_unified_site_branch_receives_only_public_site_settings() -> None:
-    """The unified site (served by the aether-marketing app) gets its public
-    build settings, with prices published, and nothing from the product app."""
+    """The unified site (served by the aether-marketing app on staging) gets
+    its public build settings, with prices published, and nothing from the
+    product app."""
     expression, _, _, _ = _branch_environment_variable_maps()
     site = re.search(
-        r'^    each\.key == "aether-marketing" \? \{\n(?P<body>.*?)^    \} : \{\},$',
+        r'^    each\.key == "aether-marketing" && local\.aether_host_serves_site \? \{\n(?P<body>.*?)^    \} : \{\},$',
         expression,
         re.MULTILINE | re.DOTALL,
     )

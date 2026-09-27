@@ -16,6 +16,7 @@ import { OlympusHomePage } from '@site/pages/olympus/olympus-home-page';
 import { OlympusPrinciplesPage } from '@site/pages/olympus/olympus-principles-page';
 import { OlympusResearchPage } from '@site/pages/olympus/olympus-research-page';
 import { OlympusStoriesPage } from '@site/pages/olympus/olympus-stories-page';
+import { LEGACY_AETHER_ROUTES } from './legacy-routes';
 
 /** Pages both sites serve (handoff route map). */
 const SHARED: RouteObject[] = [
@@ -49,6 +50,7 @@ export const ROUTES: Record<SiteId, RouteObject[]> = {
     { path: '/docs/:page', element: <DocsPage /> },
     { path: '/status', element: <StatusPage /> },
     ...SHARED,
+    ...LEGACY_AETHER_ROUTES,
     { path: '*', element: <NotFoundPage /> },
   ],
 };

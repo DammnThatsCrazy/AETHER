@@ -257,6 +257,8 @@ run "staging_profile_plan" {
       length(local.amplify_custom_rules["aether-app"]) == 1,
       local.amplify_custom_rules["aether-app"][0].source == "/<*>",
       length(local.amplify_custom_rules.docs) == 1,
+      local.aether_host_serves_site,
+      local.amplify_apps["aether-marketing"].app_root == "frontend/site",
       [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == [
         "/app/signin", "/app/signup", "/app/<*>", "/login", "/signup", "/forgot-password", "/<*>",
       ],
@@ -897,6 +899,18 @@ run "production_lean_profile_plan" {
       local.assign_public_ip,
     ])
     error_message = "production-lean no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
+  }
+
+  # Only staging's Aether host serves the unified site. Production keeps the
+  # prerendered aether-marketing build and its auth-threshold rewrites until
+  # the site prerenders its own route metadata.
+  assert {
+    condition = alltrue([
+      !local.aether_host_serves_site,
+      local.amplify_apps["aether-marketing"].app_root == "frontend/aether-marketing",
+      [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == ["/login", "/signup", "/forgot-password"],
+    ])
+    error_message = "production-lean switched the Aether host to the unified site before it prerenders route metadata."
   }
 
   # Task placement, same reasoning as the staging run: no NAT means the private
