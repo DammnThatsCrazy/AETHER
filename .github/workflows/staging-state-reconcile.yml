@@ -742,11 +742,17 @@ jobs:
               rm -f "$association_file"
               echo "::error::staging Amplify domain association for ${app_key} is not AVAILABLE (status=${status:-unknown})"; exit 1;
             }
-            prefix="${app_subdomains[$app_key]}"
-            if ! main_mapping_live "$(cat "$association_file")" "$prefix"; then
+            # Every reviewed host of this association must be live, not only
+            # its primary prefix; any missing or dead host triggers the repair.
+            missing_prefixes=()
+            for reviewed_prefix in ${reviewed_prefixes[$app_key]}; do
+              main_mapping_live "$(cat "$association_file")" "$reviewed_prefix" || missing_prefixes+=("$reviewed_prefix")
+            done
+            if [ "${#missing_prefixes[@]}" -gt 0 ]; then
+              prefix="${missing_prefixes[*]}"
               if [ "$repair_requested" != true ]; then
                 rm -f "$association_file"
-                echo "::error::staging Amplify domain association for ${app_key} lacks the reviewed ${prefix} main subdomain; rerun the reviewed reconciliation with REPAIR-STAGING-AMPLIFY"; exit 1;
+                echo "::error::staging Amplify domain association for ${app_key} lacks the reviewed ${prefix} main subdomain(s); rerun the reviewed reconciliation with REPAIR-STAGING-AMPLIFY"; exit 1;
               fi
               reviewed_settings="$(jq -nc --arg prefixes "${reviewed_prefixes[$app_key]}" \
                 '$prefixes | split(" ") | map({prefix: ., branchName: "main"})')"
@@ -763,9 +769,11 @@ jobs:
                 --domain-name "$STAGING_AMPLIFY_DOMAIN_NAME" \
                 --sub-domain-settings "$settings" \
                 --output json >/dev/null
-              echo "Requested the reviewed ${prefix} main subdomain mapping for existing ${app_key}; waiting for Amplify verification."
+              echo "Requested the reviewed ${prefix} main subdomain mapping(s) for existing ${app_key}; waiting for each to become live."
               rm -f "$association_file"
-              wait_for_reviewed_mapping "$app_id" "$prefix"
+              for reviewed_prefix in "${missing_prefixes[@]}"; do
+                wait_for_reviewed_mapping "$app_id" "$reviewed_prefix"
+              done
             else
               rm -f "$association_file"
             fi

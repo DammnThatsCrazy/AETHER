@@ -619,6 +619,12 @@ def test_staging_reconciliation_accepts_live_dns_when_amplify_leaves_verified_fa
     assert '[ "$live_target" = "$expected_target" ]' in reconcile
     assert "test -n \"$expected_target\" || return 1" in reconcile
     assert ".subDomainSetting.branchName == \"main\" and .verified == true" not in reconcile
+    # Every reviewed host must be live, not only the primary prefix, and a
+    # repair waits for each host it adds.
+    assert 'for reviewed_prefix in ${reviewed_prefixes[$app_key]}; do' in reconcile
+    assert 'missing_prefixes+=("$reviewed_prefix")' in reconcile
+    assert 'for reviewed_prefix in "${missing_prefixes[@]}"; do' in reconcile
+    assert 'wait_for_reviewed_mapping "$app_id" "$reviewed_prefix"' in reconcile
 
 
 def test_legacy_price_secrets_have_an_explicit_metadata_only_rekey_path():
