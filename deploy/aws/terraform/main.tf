@@ -469,12 +469,17 @@ module "ecs" {
   first_admin_bootstrap_email = var.deployment_lane == "pilot" ? var.alert_email : ""
   # Internal staff who join the operator tenant as owner on a verified
   # sign-in. Pilot staging only; no other lane admits anyone by email.
-  platform_operator_emails    = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
-  deployment_lane             = var.deployment_lane
-  stripe_billing_enabled      = var.deployment_lane == "pilot"
-  stripe_checkout_success_url = "${var.aether_app_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"
-  stripe_checkout_cancel_url  = "${var.aether_app_url}/billing/cancel"
-  stripe_portal_return_url    = "${var.aether_app_url}/billing"
+  platform_operator_emails     = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
+  deployment_lane              = var.deployment_lane
+  email_enabled                = var.email_enabled
+  self_signup_enabled          = local.self_signup_enabled
+  email_sender_domain          = var.email_sender_domain
+  lead_notification_email      = var.lead_notification_email
+  stripe_billing_enabled       = var.deployment_lane == "pilot"
+  stripe_annual_prices_enabled = var.stripe_annual_prices_enabled
+  stripe_checkout_success_url  = "${var.aether_app_url}/billing/success?session_id={CHECKOUT_SESSION_ID}"
+  stripe_checkout_cancel_url   = "${var.aether_app_url}/billing/cancel"
+  stripe_portal_return_url     = "${var.aether_app_url}/billing"
 
   # E3: Aurora Serverless v2 replaces RDS as the active database.
   # entrypoint.sh reads this ARN via DATABASE_URL_SECRET and builds DATABASE_URL.
@@ -813,23 +818,31 @@ locals {
   # environments keep the prerendered aether-marketing build until the site
   # prerenders its own per-route metadata, sitemap and robots file.
   aether_host_serves_site = var.environment == "staging"
+  # Unset keeps the backend's own default (invitation-only on staging, self
+  # sign-up elsewhere), written explicitly into the task definitions.
+  self_signup_enabled = var.self_signup_enabled != null ? var.self_signup_enabled : var.environment != "staging"
 
   # Hosts the site app answers for. On staging it also takes over www (the
-  # Olympus pages), docs and status, whose old apps then hold no domain and are
-  # removed after a reviewed hold. Elsewhere it serves only the aether host.
+  # Olympus pages), docs and status, and the old apps that served them are
+  # retired (removed from amplify_apps, so Terraform deletes them). Elsewhere
+  # the site serves only the aether host and every app keeps its own host.
   site_host_prefixes   = local.aether_host_serves_site ? ["aether", "www", "docs", "status"] : ["aether"]
   site_host_owner_apps = local.aether_host_serves_site ? ["olympus-marketing", "docs", "status"] : []
 
-  amplify_apps = local.enable_static_frontends ? {
+  amplify_apps = {
+    for key, app in local.amplify_app_catalog : key => app
+    if !contains(local.site_host_owner_apps, key)
+  }
+
+  amplify_app_catalog = local.enable_static_frontends ? {
     olympus-marketing = {
       name        = "${var.project}-${var.environment}-olympus-marketing"
       app_root    = "frontend/olympus-marketing"
       description = "Olympus Labs corporate marketing site"
       subdomain   = "www"
     }
-    # On staging, the unified Olympus + Aether site (frontend/site). It keeps
-    # this app's key and name while it is the only host consolidated so far;
-    # the other marketing, docs and status hosts move onto it next.
+    # On staging, the unified Olympus + Aether site (frontend/site), which
+    # keeps this app's key and name.
     aether-marketing = {
       name        = "${var.project}-${var.environment}-aether-marketing"
       app_root    = local.aether_host_serves_site ? "frontend/site" : "frontend/aether-marketing"
@@ -866,6 +879,10 @@ locals {
   # exists at the path). A plain "200" rewrite of "/<*>" also captures
   # /assets/*.js and *.css, so the browser receives HTML for its bundles and
   # the application renders blank.
+  # AWS's documented single-page-app rewrite source: paths without a file
+  # extension, or whose extension is not a static asset.
+  spa_route_pattern = "</^[^.]+$|\\.(?!(css|gif|ico|jpg|jpeg|js|png|txt|svg|woff|woff2|ttf|map|json|webp|xml|webmanifest)$)([^.]+$)/>"
+
   amplify_custom_rules = {
     "aether-app" = [
       { source = "/<*>", target = "/index.html", status = "404-200" },
@@ -873,24 +890,25 @@ locals {
     docs = [
       { source = "/<*>", target = "/index.html", status = "404-200" },
     ]
-    # Unified site: its sign-in and sign-up paths lead to the product app until
-    # it is served under /app from this app, and the legacy marketing auth paths
-    # follow. Everything else is client-routed with a 404-200 index fallback.
+    # Unified site: its sign-in and sign-up paths lead to the product app's
+    # /login and /signup (Auth0 sign-up, keeping the pricing page's ?plan=)
+    # until it is served under /app from this app, and the legacy marketing
+    # auth paths follow. The docs and status hosts are sent to /docs and /status by the
+    # site itself (Amplify does not apply host-based rules with paths).
+    # Every other page route is rewritten to index.html with a 200: the regex
+    # matches paths with no file extension, or an extension that is not a
+    # static asset, so bundles, images and fonts are still served as files and
+    # routes are neither 404s nor redirected to a trailing slash.
     # The prerendered aether-marketing build keeps its auth-threshold rewrites.
-    #
-    # On staging the docs and status hosts now land on the site's /docs and
-    # /status pages; www serves the Olympus pages from the same build.
     "aether-marketing" = local.aether_host_serves_site ? [
-      { source = "https://docs.${var.amplify_domain_name}/<*>", target = "https://aether.${var.amplify_domain_name}/docs/<*>", status = "301" },
-      { source = "https://status.${var.amplify_domain_name}/<*>", target = "https://aether.${var.amplify_domain_name}/status", status = "301" },
       { source = "/app/signin", target = "${var.aether_app_url}/login", status = "302" },
-      { source = "/app/signup", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/app/signup", target = "${var.aether_app_url}/signup", status = "302" },
       { source = "/app", target = "${var.aether_app_url}/", status = "302" },
       { source = "/app/<*>", target = "${var.aether_app_url}/<*>", status = "302" },
       { source = "/login", target = "${var.aether_app_url}/login", status = "302" },
-      { source = "/signup", target = "${var.aether_app_url}/login", status = "302" },
+      { source = "/signup", target = "${var.aether_app_url}/signup", status = "302" },
       { source = "/forgot-password", target = "${var.aether_app_url}/login", status = "302" },
-      { source = "/<*>", target = "/index.html", status = "404-200" },
+      { source = local.spa_route_pattern, target = "/index.html", status = "200" },
       ] : [
       { source = "/login", target = "/index.html", status = "200" },
       { source = "/signup", target = "/index.html", status = "200" },
@@ -1201,9 +1219,10 @@ resource "aws_route53_record" "squarespace_apex" {
   records = local.squarespace_ips
 }
 
-# www → Squarespace (CNAME)
+# www → Squarespace (CNAME), only when no Amplify app serves www (the Olympus
+# app on production, the unified site on staging).
 resource "aws_route53_record" "squarespace_www" {
-  count   = var.squarespace_hosted_zone_enabled && !contains(keys(local.amplify_apps), "olympus-marketing") ? 1 : 0
+  count   = var.squarespace_hosted_zone_enabled && !contains(keys(local.amplify_host_apps), "www") ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "www.${var.amplify_domain_name}"
   type    = "CNAME"
@@ -1305,9 +1324,9 @@ resource "aws_route53_record" "kyber" {
   records = [var.kyber_cname_target]
 }
 
-# Status page subdomain
+# Status page subdomain, only when no Amplify app serves status.
 resource "aws_route53_record" "status" {
-  count   = local.product_dns_enabled && !contains(keys(local.amplify_apps), "status") && var.status_cname_target != "" ? 1 : 0
+  count   = local.product_dns_enabled && !contains(keys(local.amplify_host_apps), "status") && var.status_cname_target != "" ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "status.${var.amplify_domain_name}"
   type    = "CNAME"

@@ -83,6 +83,9 @@ _ENV_VAR_TO_SECRET_PATH: dict[str, str] = {
     "STRIPE_PRICE_EPSILON": "stripe-price-epsilon",
     "STRIPE_PRICE_OMICRON": "stripe-price-omicron",
     "STRIPE_PRICE_OMEGA": "stripe-price-omega",
+    "STRIPE_PRICE_BETA_ANNUAL": "stripe-price-beta-annual",
+    "STRIPE_PRICE_GAMMA_ANNUAL": "stripe-price-gamma-annual",
+    "STRIPE_PRICE_DELTA_ANNUAL": "stripe-price-delta-annual",
     "KYBER_GOOGLE_CLIENT_ID": "kyber-google-client-id",
     "KYBER_GOOGLE_CLIENT_SECRET": "kyber-google-client-secret",
 }
@@ -106,6 +109,9 @@ _STRIPE_PRICE_ENV_VARS = (
     "STRIPE_PRICE_EPSILON",
     "STRIPE_PRICE_OMICRON",
     "STRIPE_PRICE_OMEGA",
+    "STRIPE_PRICE_BETA_ANNUAL",
+    "STRIPE_PRICE_GAMMA_ANNUAL",
+    "STRIPE_PRICE_DELTA_ANNUAL",
 )
 _STRIPE_PRICE_RE = re.compile(r"^price_[A-Za-z0-9]+$")
 _STRIPE_PRICE_PLACEHOLDERS = {

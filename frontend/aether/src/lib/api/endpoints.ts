@@ -256,6 +256,7 @@ export type GraphScopeAuthority = z.infer<typeof graphScopeAuthoritySchema>;
 
 export type CustomerApiKey = z.infer<typeof apiKeySchema>;
 export type CustomerBillingPlan = z.infer<typeof billingPlanSchema>;
+export type BillingInterval = 'monthly' | 'annual';
 export type CustomerInvoice = z.infer<typeof invoiceSchema>;
 export type OrganizationProfile = z.infer<typeof organizationProfileSchema>;
 export type OrganizationMember = z.infer<typeof organizationMemberSchema>;
@@ -1935,24 +1936,26 @@ export const api = {
 
   // ── Billing & plans ────────────────────────────────────────────────────────
   billing: {
+    // Mirrors stripe_client.capability_status(): `missing` names the absent
+    // settings when degraded; `annual_plans` lists tiers with a yearly price.
     capability: () =>
       restClient.get('/v1/billing/capability', wrap(z.object({
         provider: z.literal('stripe'),
         status: z.enum(['not_configured', 'degraded', 'available']),
         enabled: z.boolean(),
-        required: z.boolean(),
-        detail: z.string(),
+        missing: z.array(z.string()).optional(),
+        annual_plans: z.array(z.string()).optional(),
       }))).then(r => r.data),
 
     plans: () =>
       restClient.get('/v1/billing/plans', wrap(z.object({ plans: z.array(billingPlanSchema) })))
         .then(r => r.data),
 
-    createCheckout: (planTier: string) =>
+    createCheckout: (planTier: string, billingInterval: BillingInterval = 'monthly') =>
       restClient.post('/v1/billing/checkout', wrap(z.object({
         session_id: z.string(),
         url: z.string().url(),
-      })), { plan_tier: planTier }).then(r => r.data),
+      })), { plan_tier: planTier, billing_interval: billingInterval }).then(r => r.data),
 
     portal: () =>
       restClient.post('/v1/billing/portal', wrap(unknownSchema))

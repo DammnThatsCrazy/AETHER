@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:a58964e42ec6abd2c538d2c332b9b885cf3934acb34fbfbfc438e0ebb5652667"
+  "frontend/aether/src/": "sha256:24b504f12bb4ae94088076e758d3e69060dd495a27e6501b38826a5dc81a2f4b"
   "frontend/kyber/src/": "sha256:d745484d6bb47de269337f554f9d67e30abfbf1c521bec42dadd0b55a6cc5b8d"
   "frontend/shared/src/": "sha256:abef2b4bb7b38a0124fbf2180dd1de701e533d1bbd57866d57b1848815332a2c"
 ---
@@ -73,8 +73,20 @@ There are two separate frontend applications. **Do not mix them up.**
   build carries Auth0 settings, login offers **Continue with Olympus sign-in**
   (Auth0 Universal Login); `/callback` exchanges the Auth0 token through
   `/v1/auth/sso/callback`, which links a verified email to its existing user or
-  pending invitation. This is how the staging operator and invited teammates
-  sign in; `/signup` always registers a new tenant on a plan. The
+  pending invitation, or provisions a new tenant when self sign-up is on. With
+  Auth0 configured, `/signup` opens Auth0's hosted sign-up
+  (`screen_hint=signup`); the pricing page's `?plan=alpha|beta|gamma|delta`
+  (or a validated `?redirect`, else the marketing provider hand-off's
+  `/settings/integrations?…`, else `/onboarding`) is kept in session storage
+  across the round trip (`rememberPostAuthDestination` /
+  `readPostAuthDestination`, validated and expiring after 30 minutes), and
+  `/callback` lands on it. `/billing?plan=<id>` starts that plan's Stripe
+  checkout once when billing is available and it is not the current plan,
+  first replacing the URL with plain `/billing` so Back from Stripe or a
+  reload does not start another checkout;
+  the billing page lists only the self-serve plans (contract tiers go through
+  Contact sales). Without Auth0 settings, `/signup` is the email form, which
+  registers a new tenant on a plan. The
   Aether public marketing threshold (`frontend/aether-marketing`) hands users
   into these pages with optional prefill query params — login accepts `?email`,
   signup accepts `?name` and `?email` — read once via a `useState` initializer

@@ -78,6 +78,9 @@ def _complete_bootstrap() -> str:
             ("STRIPE_PRICE_EPSILON", "stripe-price-epsilon"),
             ("STRIPE_PRICE_OMICRON", "stripe-price-omicron"),
             ("STRIPE_PRICE_OMEGA", "stripe-price-omega"),
+            ("STRIPE_PRICE_BETA_ANNUAL", "stripe-price-beta-annual"),
+            ("STRIPE_PRICE_GAMMA_ANNUAL", "stripe-price-gamma-annual"),
+            ("STRIPE_PRICE_DELTA_ANNUAL", "stripe-price-delta-annual"),
         )
     )
 

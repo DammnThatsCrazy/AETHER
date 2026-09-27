@@ -68,6 +68,11 @@ output "backend_secret_environment_names" {
       "STRIPE_PRICE_GAMMA",
       "STRIPE_PRICE_DELTA",
     ] : [],
+    var.stripe_billing_enabled && var.stripe_annual_prices_enabled ? [
+      "STRIPE_PRICE_BETA_ANNUAL",
+      "STRIPE_PRICE_GAMMA_ANNUAL",
+      "STRIPE_PRICE_DELTA_ANNUAL",
+    ] : [],
     var.enable_elasticache ? ["REDIS_PASSWORD"] : [],
   ))
 }

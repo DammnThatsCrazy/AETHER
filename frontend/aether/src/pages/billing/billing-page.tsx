@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { SELF_SERVE_PLAN_IDS, parseBillingInterval, parseSelfServePlan } from '@aether-app/features/auth/post-auth-redirect';
 import {
   Badge,
   Button,
@@ -33,9 +34,11 @@ import {
   useMeProfile,
 } from '@aether-app/features/account';
 import { env } from '@aether-app/lib/env';
-import type { CustomerBillingPlan } from '@aether-app/lib/api/endpoints';
+import type { BillingInterval, CustomerBillingPlan } from '@aether-app/lib/api/endpoints';
 
-const PLAN_ORDER = ['P1', 'P2', 'P3', 'P4'];
+// Self-serve plans in price order (shared/plans/catalog.py). The contract
+// tiers (epsilon, omicron, omega) have no checkout; the Enterprise card covers them.
+const PLAN_ORDER: readonly string[] = SELF_SERVE_PLAN_IDS;
 
 function PlanCard({
   plan,
@@ -51,7 +54,7 @@ function PlanCard({
   disabled: boolean;
 }) {
   const timeCtx = useTimeContext();
-  const isHighTier = ['P3', 'P4'].includes(plan.plan_id);
+  const isHighTier = ['gamma', 'delta'].includes(plan.plan_id);
   return (
     <Card className={isCurrent ? 'border-accent/50 bg-accent/5' : ''}>
       <CardHeader>
@@ -273,13 +276,13 @@ export function BillingPage() {
   const enterpriseEmailVerified = env.VITE_ENTERPRISE_EMAIL_VERIFIED === 'true';
   const billingAvailable = billingCapability?.status === 'available';
 
-  async function handleUpgrade(planId: string) {
+  async function handleUpgrade(planId: string, interval: BillingInterval = 'monthly') {
     if (!billingAvailable) {
       toast.error('Billing is not configured for this deployment');
       return;
     }
     setCheckoutingPlan(planId);
-    const result = await createCheckout(planId);
+    const result = await createCheckout({ planTier: planId, interval });
     setCheckoutingPlan(null);
     if (!result?.url) {
       toast.error('Checkout unavailable — please try again or contact support');
@@ -303,6 +306,33 @@ export function BillingPage() {
 
   const currentPlanId = profile?.plan.plan_id ?? '';
 
+  // Arriving from the pricing page (through sign-up) with ?plan=… starts that
+  // plan's checkout once, when billing is available and it is not already the
+  // current plan. Alpha is free and needs no checkout.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedPlan = parseSelfServePlan(searchParams.get('plan'));
+  // Annual only where the deployment has that plan's yearly price.
+  const requestedInterval: BillingInterval =
+    parseBillingInterval(searchParams.get('interval')) === 'annual' &&
+    !!requestedPlan &&
+    (billingCapability?.annual_plans ?? []).includes(requestedPlan)
+      ? 'annual'
+      : 'monthly';
+  const checkoutStarted = useRef(false);
+  useEffect(() => {
+    if (checkoutStarted.current || !requestedPlan || requestedPlan === 'alpha') return;
+    if (!profile || !billingAvailable || currentPlanId === requestedPlan) return;
+    checkoutStarted.current = true;
+    if (requestedInterval === 'monthly' && parseBillingInterval(searchParams.get('interval')) === 'annual') {
+      toast.info('Annual billing is not available for this plan yet, so checkout is monthly.');
+    }
+    // Consume the hand-off first, so Back from Stripe or a reload lands on
+    // plain /billing instead of starting another checkout.
+    setSearchParams({}, { replace: true });
+    void handleUpgrade(requestedPlan, requestedInterval);
+    // handleUpgrade is recreated each render; the ref makes this run once.
+  }, [requestedPlan, requestedInterval, profile, billingAvailable, currentPlanId]);
+
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
@@ -316,7 +346,8 @@ export function BillingPage() {
 
       {billingCapability && !billingAvailable && (
         <p className="mb-4 text-xs font-mono text-warning" role="status">
-          Billing provider unavailable: {billingCapability.detail}
+          Billing provider unavailable
+          {billingCapability.missing?.length ? ` (missing: ${billingCapability.missing.join(', ')})` : ''}
         </p>
       )}
 
@@ -330,7 +361,8 @@ export function BillingPage() {
 
       {!plansLoading && plans && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...plans]
+          {plans
+            .filter(plan => !plan.contact_sales && PLAN_ORDER.includes(plan.plan_id))
             .sort((a, b) => PLAN_ORDER.indexOf(a.plan_id) - PLAN_ORDER.indexOf(b.plan_id))
             .map(plan => (
               <PlanCard

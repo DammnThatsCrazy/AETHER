@@ -64,12 +64,21 @@ bound by the single-use first-admin bootstrap
 (`shared/auth/platform_operator.py`). This does **not** grant Kyber access, which
 stays behind `KYBER_OPERATOR_TENANT_IDS` and the operator permission above.
 
-## Staging sign-in (internal only)
+## Staging sign-in
 
-Staging is for Olympus staff and invited advisors. An Auth0 sign-in there never
-provisions a new tenant (`SSO_SELF_SIGNUP_ENABLED` defaults to `false` when
-`AETHER_ENV=staging`). A sign-in whose `sub` is not yet linked succeeds only
-when its identity-provider-verified email:
+The staging profile sets `self_signup_enabled = true`, so staging exercises the
+public journey: an Auth0 sign-in from an email the platform has never seen
+provisions its own tenant, as production does. The product app's `/signup`
+opens Auth0's hosted sign-up (Google, or email and password); the site's
+"Create an account" and pricing buttons send `/app/signup?plan=<id>` there, the
+chosen plan survives the Auth0 round trip, and `/callback` lands the new
+account on `/billing?plan=<id>`, which starts that plan's Stripe checkout once
+(Alpha is free and needs none). Terraform always sets
+`SSO_SELF_SIGNUP_ENABLED` explicitly: `self_signup_enabled` when a profile
+sets it, otherwise the backend's own default (on everywhere except staging, so
+production keeps self-serve sign-up). Without it the backend defaults to
+`false` when `AETHER_ENV=staging`, and a sign-in whose `sub` is not yet linked
+then succeeds only when its identity-provider-verified email:
 
 1. matches an existing active user with no Auth0 link (for example the staging
    first-admin user), which is then linked; or
@@ -83,7 +92,10 @@ when its identity-provider-verified email:
 3. has an unexpired pending organization invitation, which is accepted: the
    person joins the inviting tenant with the invited role.
 
-Anything else gets `403` ("Sign-in is by invitation only"). A rejected Auth0
+With self sign-up off, anything else gets `403` ("Sign-in is by invitation
+only"). The same three checks run first with self sign-up on, so a known
+person is linked, an operator joins the operator tenant and an invitation is
+accepted rather than creating a second tenant. A rejected Auth0
 token or `/userinfo` call returns `400` and logs the reason (never the token)
 with `sso_token_rejected_total`. The browser sends an
 access token for the Aether API audience, which carries no email claims, so the

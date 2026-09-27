@@ -264,6 +264,13 @@ run "staging_profile_plan" {
     error_message = "Staging hosts are not all served by the site app (with app on the product app)."
   }
 
+  # The retired Olympus, docs and status apps are deleted; staging's public
+  # web runs on the site app and the product app.
+  assert {
+    condition     = sort(keys(local.amplify_apps)) == tolist(["aether-app", "aether-marketing"])
+    error_message = "Staging still defines a retired Amplify app (Olympus, docs or status)."
+  }
+
   # Olympus and status shells are prerendered and receive no rules. The
   # runtime-routed app and docs receive catch-all fallbacks. The Aether host
   # serves the unified site: /app/* and the legacy auth paths redirect to the
@@ -276,35 +283,32 @@ run "staging_profile_plan" {
       local.aether_host_serves_site,
       local.amplify_apps["aether-marketing"].app_root == "frontend/site",
       [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == [
-        "https://docs.${var.amplify_domain_name}/<*>", "https://status.${var.amplify_domain_name}/<*>",
-        "/app/signin", "/app/signup", "/app", "/app/<*>", "/login", "/signup", "/forgot-password", "/<*>",
+        "/app/signin", "/app/signup", "/app", "/app/<*>", "/login", "/signup", "/forgot-password", local.spa_route_pattern,
       ],
-      local.amplify_custom_rules["aether-marketing"][0].target == "https://aether.${var.amplify_domain_name}/docs/<*>",
-      local.amplify_custom_rules["aether-marketing"][1].target == "https://aether.${var.amplify_domain_name}/status",
-      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 2) : rule.status == "301"]),
-      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 2, 9) :
+      alltrue([for rule in slice(local.amplify_custom_rules["aether-marketing"], 0, 7) :
         rule.status == "302" && startswith(rule.target, var.aether_app_url)
       ]),
-      local.amplify_custom_rules["aether-marketing"][9].target == "/index.html",
-      local.amplify_custom_rules["aether-marketing"][9].status == "404-200",
+      local.amplify_custom_rules["aether-marketing"][1].target == "${var.aether_app_url}/signup",
+      local.amplify_custom_rules["aether-marketing"][5].target == "${var.aether_app_url}/signup",
+      local.amplify_custom_rules["aether-marketing"][7].target == "/index.html",
+      local.amplify_custom_rules["aether-marketing"][7].status == "200",
+      startswith(local.spa_route_pattern, "</^[^.]+$|"),
+      strcontains(local.spa_route_pattern, "css|gif|ico|jpg|jpeg|js|png"),
       length(lookup(local.amplify_custom_rules, "olympus-marketing", [])) == 0,
       length(lookup(local.amplify_custom_rules, "status", [])) == 0,
     ])
     error_message = "Amplify custom rules would rewrite a prerendered Olympus or status surface, or drift from the unified-site redirects and fallback."
   }
 
-  # The status shell must stay inside the same staging environment. These
-  # branch variables are derived from the sibling Amplify apps and the
-  # verified staging custom-domain profile rather than hard-coded production
-  # origins.
+  # The status page lives on the site now. Its branch must read the staging
+  # health endpoint and link to the staging hosts, never production origins.
   assert {
     condition = alltrue([
-      aws_amplify_branch.main["status"].environment_variables.AETHER_ENV == "staging",
-      aws_amplify_branch.main["status"].environment_variables.VITE_STATUS_API_URL == var.status_api_url,
-      contains(keys(aws_amplify_branch.main["status"].environment_variables), "VITE_STATUS_DOCS_URL"),
-      contains(keys(aws_amplify_branch.main["status"].environment_variables), "VITE_STATUS_AETHER_MARKETING_URL"),
+      aws_amplify_branch.main["aether-marketing"].environment_variables.AETHER_ENV == "staging",
+      aws_amplify_branch.main["aether-marketing"].environment_variables.VITE_STATUS_API_URL == var.status_api_url,
+      aws_amplify_branch.main["aether-marketing"].environment_variables.VITE_SITE_AETHER_URL == "https://aether.${var.amplify_domain_name}",
     ])
-    error_message = "The staging status branch is missing environment-local links to the docs and Aether marketing shells."
+    error_message = "The staging site branch is missing its environment-local status and site links."
   }
 
   # required_resources: credential_kms — the provider-credential envelope-
@@ -507,6 +511,33 @@ run "staging_listener_maintenance_transition" {
   assert {
     condition     = module.alb.backend_target_group_name == "aether-staging-backend"
     error_message = "The maintenance transition must preserve the deterministic backend target-group name."
+  }
+}
+
+# The unified site serves www and status on staging, so the legacy DNS
+# fallbacks (Squarespace www CNAME, external status CNAME) stay off even in the
+# Squarespace hosted-zone mode or with a status target configured.
+run "staging_consolidated_hosts_skip_legacy_dns" {
+  command = plan
+
+  variables {
+    deployment_profile              = "staging"
+    environment                     = "staging"
+    network_egress_mode             = null
+    skip_aurora                     = true
+    product_dns_zone_id             = ""
+    squarespace_hosted_zone_enabled = true
+    status_cname_target             = "status.example.test"
+  }
+
+  assert {
+    condition = alltrue([
+      contains(keys(local.amplify_host_apps), "www"),
+      contains(keys(local.amplify_host_apps), "status"),
+      length(aws_route53_record.squarespace_www) == 0,
+      length(aws_route53_record.status) == 0,
+    ])
+    error_message = "A legacy www or status DNS fallback would duplicate the unified site's record."
   }
 }
 
@@ -910,6 +941,14 @@ run "production_lean_profile_plan" {
     aurora_max_acu      = 4
     log_retention_days  = 3
     skip_aurora         = false
+  }
+
+  # Production keeps self-serve sign-up unless a profile turns it off: the
+  # tasks always carry SSO_SELF_SIGNUP_ENABLED, so the default must match the
+  # backend's non-staging default.
+  assert {
+    condition     = local.self_signup_enabled
+    error_message = "production-lean would stop new Auth0 users from provisioning a tenant (SSO_SELF_SIGNUP_ENABLED=false)."
   }
 
   assert {

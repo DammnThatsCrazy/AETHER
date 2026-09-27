@@ -249,6 +249,9 @@ def runtime_wiring_errors(
         ("STRIPE_PRICE_EPSILON", "stripe-price-epsilon"),
         ("STRIPE_PRICE_OMICRON", "stripe-price-omicron"),
         ("STRIPE_PRICE_OMEGA", "stripe-price-omega"),
+        ("STRIPE_PRICE_BETA_ANNUAL", "stripe-price-beta-annual"),
+        ("STRIPE_PRICE_GAMMA_ANNUAL", "stripe-price-gamma-annual"),
+        ("STRIPE_PRICE_DELTA_ANNUAL", "stripe-price-delta-annual"),
     ):
         registry_token = f'"{env_name}": "{secret_name}"'
         if registry_token not in bootstrap_text:

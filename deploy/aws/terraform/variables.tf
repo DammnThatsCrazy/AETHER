@@ -597,3 +597,44 @@ variable "status_cname_target" {
   description = "Legacy external status CNAME target. The managed Amplify status app takes precedence when static frontends are enabled."
   default     = ""
 }
+
+variable "email_enabled" {
+  type        = bool
+  description = "Send transactional email (lead notifications, account mail) through SES from email_sender_domain. The SES domain identity must be verified; while the account is in the SES sandbox only verified recipients receive mail."
+  default     = false
+}
+
+variable "email_sender_domain" {
+  type        = string
+  description = "Verified SES domain identity the backend sends from."
+  default     = "olympuslabsml.com"
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]+(\\.[a-z0-9-]+)+$", var.email_sender_domain))
+    error_message = "email_sender_domain must be a bare domain name."
+  }
+}
+
+variable "lead_notification_email" {
+  type        = string
+  description = "Inbox that receives contact and pilot-request notifications."
+  default     = "team@olympuslabsml.com"
+
+  validation {
+    condition     = can(regex("^[^@\\s,]+@[a-z0-9.-]+\\.[a-z]{2,}$", lower(var.lead_notification_email)))
+    error_message = "lead_notification_email must be a plain email address."
+  }
+}
+
+variable "stripe_annual_prices_enabled" {
+  type        = bool
+  description = "Offer yearly billing for Beta, Gamma and Delta: tasks mount aether/stripe-price-{beta,gamma,delta}-annual. Turn on only after those secrets hold Price IDs."
+  default     = false
+}
+
+variable "self_signup_enabled" {
+  type        = bool
+  description = "Let a verified Auth0 sign-in from an unknown email create its own tenant (SSO_SELF_SIGNUP_ENABLED). Null keeps the backend's default: off on staging (only existing and invited users), on elsewhere."
+  default     = null
+  nullable    = true
+}

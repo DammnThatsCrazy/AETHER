@@ -5,7 +5,7 @@ import { Button, SocialProviderIcon } from "@aether/ui";
 import { AetherLogo } from "@aether-app/components/aether-logo";
 import type { SocialProvider } from "@aether/ui";
 import { useAuth, resolveAuthGrant } from "@aether-app/features/auth";
-import { resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
+import { rememberPostAuthDestination, resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
 import { api } from "@aether-app/lib/api/endpoints";
 import { env } from "@aether-app/lib/env";
 
@@ -191,6 +191,7 @@ export function LoginPage() {
                 disabled={ssoLoading === "loading"}
                 onClick={() => {
                   setSsoLoading("loading");
+                  rememberPostAuthDestination(resolvePostAuthRedirect(searchParams.get("redirect")));
                   void auth0.loginWithRedirect().catch(() => {
                     setSsoLoading("idle");
                     setError("Could not reach the sign-in service. Try again.");

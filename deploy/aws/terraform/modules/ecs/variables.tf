@@ -265,6 +265,12 @@ variable "stripe_billing_enabled" {
   default     = false
 }
 
+variable "stripe_annual_prices_enabled" {
+  type        = bool
+  description = "Mount the yearly Beta, Gamma and Delta Stripe Price IDs (aether/stripe-price-*-annual). Turn on only after those secrets are populated."
+  default     = false
+}
+
 variable "stripe_checkout_success_url" {
   type        = string
   description = "Stripe Checkout success URL for the customer-facing Aether app."
@@ -578,5 +584,29 @@ variable "credential_kms_key_id" {
 variable "assign_public_ip" {
   type        = bool
   description = "Assign a public IP to every task ENI. Required when tasks run in public subnets with no NAT gateway; false for private subnets reaching AWS through NAT or VPC endpoints."
+  default     = false
+}
+
+variable "email_enabled" {
+  type        = bool
+  description = "Whether tasks send transactional email through SES."
+  default     = false
+}
+
+variable "email_sender_domain" {
+  type        = string
+  description = "Verified SES domain identity; the From address is noreply@ this domain and the task role may send only from it."
+  default     = "olympuslabsml.com"
+}
+
+variable "lead_notification_email" {
+  type        = string
+  description = "Inbox that receives contact and pilot-request notifications."
+  default     = "team@olympuslabsml.com"
+}
+
+variable "self_signup_enabled" {
+  type        = bool
+  description = "Set SSO_SELF_SIGNUP_ENABLED: a verified Auth0 sign-in from an unknown email provisions its own tenant."
   default     = false
 }

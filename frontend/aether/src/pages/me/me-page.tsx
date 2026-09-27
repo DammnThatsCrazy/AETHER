@@ -36,7 +36,7 @@ import {
 } from '@aether-app/features/account/use-me-sessions';
 
 function planBadgeVariant(planId: string): 'default' | 'accent' {
-  return ['P3', 'P4', 'protocol-plus'].includes(planId) ? 'accent' : 'default';
+  return ['gamma', 'delta', 'epsilon', 'omicron', 'omega'].includes(planId) ? 'accent' : 'default';
 }
 
 function formatDate(iso: string | null | undefined, ctx: TimeContext): string {

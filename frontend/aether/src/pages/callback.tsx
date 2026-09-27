@@ -5,6 +5,7 @@ import { Button, ErrorState } from '@aether/ui';
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import { useAuth, resolveAuthGrant } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
+import { readPostAuthDestination } from '@aether-app/features/auth/post-auth-redirect';
 
 export function CallbackPage() {
   const { isLoading, isAuthenticated, getAccessTokenSilently, error: auth0Error } = useAuth0();
@@ -34,7 +35,9 @@ export function CallbackPage() {
           } else {
             await apiKeyLogin(grant.apiKey);
           }
-          void navigate('/settings', { replace: true });
+          // Auth0 sign-up/sign-in stored where to land (e.g. billing with the plan
+          // chosen on the pricing page); otherwise the tenant home.
+          void navigate(readPostAuthDestination(), { replace: true });
         })
         .catch(err => {
           setExchangeError(err instanceof Error ? err.message : 'Sign-in failed');

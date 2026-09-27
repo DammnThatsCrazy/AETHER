@@ -47,6 +47,7 @@ kyber_revops_router = APIRouter(
 
 class CheckoutRequest(BaseModel):
     plan_tier: str = Field(pattern="^(alpha|beta|gamma|delta)$")
+    billing_interval: str = Field(default="monthly", pattern="^(monthly|annual)$")
 
 
 class PortalRequest(BaseModel):
@@ -118,8 +119,12 @@ async def create_checkout_session(body: CheckoutRequest, request: Request):
         plan_tier=plan_tier,
         contact_email=contact_email,
         customer_id=customer_id,
+        billing_interval=body.billing_interval,
     )
-    metrics.increment("billing_checkout_sessions_created", labels={"plan": plan_tier.value})
+    metrics.increment(
+        "billing_checkout_sessions_created",
+        labels={"plan": plan_tier.value, "interval": body.billing_interval},
+    )
     return APIResponse(data={
         "session_id": session.session_id,
         "url": session.url,

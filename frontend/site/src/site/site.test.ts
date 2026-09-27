@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { manualChunks } from '../../chunks';
-import { querySelectedSite, resolveSite, siteHref, siteOrigins } from './site';
+import { querySelectedSite, resolveSite, retiredHostRedirect, siteHref, siteOrigins } from './site';
 
 describe('resolveSite', () => {
   it('serves Olympus on the company hosts', () => {
@@ -94,5 +94,52 @@ describe('preview selector', () => {
     expect(siteHref('olympus', 'olympus', '/#contact', origins, true)).toBe('/?site=olympus#contact');
     expect(siteHref('olympus', 'aether', '/pricing', origins, true)).toBe('https://aether.olympuslabsml.com/pricing');
     expect(siteHref('olympus', 'olympus', '/company', origins)).toBe('/company');
+  });
+});
+
+describe('retiredHostRedirect', () => {
+  const staging = { olympus: 'https://www.staging.olympuslabsml.com', aether: 'https://aether.staging.olympuslabsml.com' };
+
+  it('sends docs hosts to the same page under /docs on the Aether site', () => {
+    expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/', '', '', staging)).toBe(
+      'https://aether.staging.olympuslabsml.com/docs',
+    );
+    expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/quickstart/', '?x=1', '', staging)).toBe(
+      'https://aether.staging.olympuslabsml.com/docs/quickstart-web?x=1',
+    );
+    expect(retiredHostRedirect('DOCS.olympuslabsml.com', '/sdk-web', '', '', staging)).toBe(
+      'https://aether.staging.olympuslabsml.com/docs/sdk-web',
+    );
+  });
+
+  it('keeps the heading anchor of a docs deep link', () => {
+    expect(retiredHostRedirect('docs.staging.olympuslabsml.com', '/quickstart', '?x=1', '#installation', staging)).toBe(
+      'https://aether.staging.olympuslabsml.com/docs/quickstart-web?x=1#installation',
+    );
+  });
+
+  it("translates the retired portal's /doc/<slug> and artifact pages", () => {
+    const go = (path: string) => retiredHostRedirect('docs.staging.olympuslabsml.com', path, '', '', staging);
+    expect(go('/doc/overview')).toBe('https://aether.staging.olympuslabsml.com/docs/overview');
+    expect(go('/doc/concepts%2Fsignals')).toBe('https://aether.staging.olympuslabsml.com/docs/signals');
+    expect(go('/doc/concepts/journeys')).toBe('https://aether.staging.olympuslabsml.com/docs/journeys');
+    expect(go('/doc/quickstart/node-sdk')).toBe('https://aether.staging.olympuslabsml.com/docs/quickstart-backend');
+    expect(go('/doc/api/ingestion')).toBe('https://aether.staging.olympuslabsml.com/docs/ingestion-api');
+    expect(go('/doc/aether/how-it-works')).toBe('https://aether.staging.olympuslabsml.com/docs/how-it-works');
+    expect(go('/artifacts/events')).toBe('https://aether.staging.olympuslabsml.com/docs');
+    expect(go('/doc/no-such-page')).toBe('https://aether.staging.olympuslabsml.com/docs');
+    expect(go('/doc/%E0%A4%A')).toBe('https://aether.staging.olympuslabsml.com/docs');
+  });
+
+  it('sends status hosts to the status page', () => {
+    expect(retiredHostRedirect('status.staging.olympuslabsml.com', '/anything', '', '', staging)).toBe(
+      'https://aether.staging.olympuslabsml.com/status',
+    );
+  });
+
+  it('leaves the site, product and preview hosts alone', () => {
+    for (const host of ['aether.staging.olympuslabsml.com', 'www.staging.olympuslabsml.com', 'olympuslabsml.com', 'pr-7.d39k0b8z1d75nj.amplifyapp.com', 'localhost']) {
+      expect(retiredHostRedirect(host, '/docs', '', '', staging)).toBeNull();
+    }
   });
 });

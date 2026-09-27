@@ -251,6 +251,79 @@ class TestPriceIdMapping:
             assert client.get_plan_for_price_id("") is None
 
 
+    def test_annual_prices_map_to_their_tier(self, monkeypatch):
+        _set_env(
+            monkeypatch,
+            AETHER_ENV="local", JWT_SECRET="x",
+            STRIPE_BILLING_ENABLED="true",
+            STRIPE_SECRET_KEY="sk_test_x",
+            STRIPE_WEBHOOK_SECRET="whsec_x",
+            STRIPE_PRICE_ALPHA="price_alpha",
+            STRIPE_PRICE_BETA="price_beta",
+            STRIPE_PRICE_GAMMA="price_gamma",
+            STRIPE_PRICE_DELTA="price_delta",
+            STRIPE_PRICE_BETA_ANNUAL="price_beta_year",
+            STRIPE_PRICE_GAMMA_ANNUAL="price_gamma_year",
+            STRIPE_PRICE_DELTA_ANNUAL=None,
+        )
+        with backend_path():
+            _reload_settings()
+            client = importlib.import_module("shared.billing.stripe_client")
+            common = importlib.import_module("shared.common.common")
+            from shared.auth.auth import PlanTier
+
+            assert client.get_stripe_price_id(PlanTier.BETA, "annual") == "price_beta_year"
+            assert client.get_stripe_price_id(PlanTier.GAMMA, "annual") == "price_gamma_year"
+            assert client.get_stripe_price_id(PlanTier.BETA, "monthly") == "price_beta"
+            # A yearly subscription resolves to the same tier in webhooks.
+            assert client.get_plan_for_price_id("price_beta_year") == PlanTier.BETA
+            assert client.get_plan_for_price_id("price_gamma_year") == PlanTier.GAMMA
+            # No yearly price: Delta (unset) and Alpha (free) fail clearly.
+            with pytest.raises(common.BadRequestError, match="Annual billing is not available"):
+                client.get_stripe_price_id(PlanTier.DELTA, "annual")
+            with pytest.raises(common.BadRequestError, match="Annual billing is not available"):
+                client.get_stripe_price_id(PlanTier.ALPHA, "annual")
+            with pytest.raises(common.BadRequestError, match="Invalid billing_interval"):
+                client.get_stripe_price_id(PlanTier.BETA, "weekly")
+            assert client.capability_status()["annual_plans"] == ["beta", "gamma"]
+
+    def test_annual_checkout_uses_yearly_price_and_its_own_idempotency_key(self, monkeypatch):
+        _set_env(
+            monkeypatch,
+            AETHER_ENV="local", JWT_SECRET="x",
+            STRIPE_BILLING_ENABLED="true",
+            STRIPE_SECRET_KEY="sk_test_x",
+            STRIPE_WEBHOOK_SECRET="whsec_x",
+            STRIPE_PRICE_ALPHA="price_alpha",
+            STRIPE_PRICE_BETA="price_beta",
+            STRIPE_PRICE_GAMMA="price_gamma",
+            STRIPE_PRICE_DELTA="price_delta",
+            STRIPE_PRICE_BETA_ANNUAL="price_beta_year",
+        )
+        with backend_path():
+            _reload_settings()
+            client = importlib.import_module("shared.billing.stripe_client")
+            from shared.auth.auth import PlanTier
+
+            created = MagicMock(return_value={"id": "cs_1", "url": "https://checkout.test/cs_1"})
+            fake_stripe = MagicMock()
+            fake_stripe.checkout.Session.create = created
+            monkeypatch.setattr(client, "stripe", fake_stripe, raising=False)
+            monkeypatch.setattr(client, "STRIPE_SDK_AVAILABLE", True)
+            monkeypatch.setattr(client, "_ensure_real_stripe", lambda: None)
+
+            session = asyncio.run(
+                client.create_checkout_session(
+                    tenant_id="t1", plan_tier=PlanTier.BETA, billing_interval="annual",
+                )
+            )
+            assert session.url == "https://checkout.test/cs_1"
+            kwargs = created.call_args.kwargs
+            assert kwargs["line_items"] == [{"price": "price_beta_year", "quantity": 1}]
+            assert kwargs["metadata"]["billing_interval"] == "annual"
+            assert kwargs["idempotency_key"] == "checkout:t1:beta:annual"
+
+
 # ---------------------------------------------------------------------------
 # Local-mode provider availability
 # ---------------------------------------------------------------------------

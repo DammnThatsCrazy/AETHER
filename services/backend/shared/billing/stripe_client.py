@@ -64,6 +64,8 @@ def capability_status() -> dict[str, Any]:
         "status": "degraded" if missing else "available",
         "enabled": True,
         "missing": missing,
+        # Paid tiers whose yearly price is configured; the rest bill monthly.
+        "annual_plans": [tier.value for tier, price in _annual_price_ids().items() if price],
     }
 
 
@@ -85,11 +87,34 @@ def _ensure_real_stripe() -> None:
 # Plan <-> Price ID mapping
 # ---------------------------------------------------------------------------
 
-def get_stripe_price_id(plan_tier: PlanTier) -> str:
-    """Return the configured Stripe Price ID for a PlanTier.
+BILLING_INTERVALS = ("monthly", "annual")
 
-    Raises BadRequestError if the plan_tier has no configured Price ID.
+
+def _annual_price_ids() -> dict[PlanTier, str]:
+    cfg = settings.stripe_billing
+    return {
+        PlanTier.BETA: cfg.price_beta_annual,
+        PlanTier.GAMMA: cfg.price_gamma_annual,
+        PlanTier.DELTA: cfg.price_delta_annual,
+    }
+
+
+def get_stripe_price_id(plan_tier: PlanTier, billing_interval: str = "monthly") -> str:
+    """Return the configured Stripe Price ID for a PlanTier and interval.
+
+    Raises BadRequestError if the plan_tier has no configured Price ID for
+    that interval (annual prices exist only for Beta, Gamma and Delta).
     """
+    if billing_interval not in BILLING_INTERVALS:
+        raise BadRequestError(f"Invalid billing_interval: {billing_interval!r}. Valid: monthly annual")
+    if billing_interval == "annual":
+        price_id = _annual_price_ids().get(plan_tier, "")
+        if not price_id:
+            raise BadRequestError(
+                f"Annual billing is not available for plan {plan_tier.value}. "
+                "Choose monthly billing."
+            )
+        return price_id
     cfg = settings.stripe_billing
     mapping = {
         PlanTier.ALPHA: cfg.price_alpha,
@@ -126,6 +151,10 @@ def get_plan_for_price_id(price_id: str) -> Optional[PlanTier]:
         cfg.price_omicron: PlanTier.OMICRON,
         cfg.price_omega: PlanTier.OMEGA,
     }
+    # Yearly prices resolve to the same tier (subscription webhooks carry the
+    # price the customer actually bought).
+    for tier, annual_price in _annual_price_ids().items():
+        reverse.setdefault(annual_price, tier)
     # Strip empty keys to avoid matching a stub against unconfigured plans.
     reverse.pop("", None)
     return reverse.get(price_id)
@@ -195,8 +224,12 @@ async def create_checkout_session(
     plan_tier: PlanTier,
     contact_email: Optional[str] = None,
     customer_id: Optional[str] = None,
+    billing_interval: str = "monthly",
 ) -> CheckoutSession:
     """Create a Stripe subscription Checkout Session for a plan_tier.
+
+    billing_interval is ``monthly`` (default) or ``annual``; annual uses the
+    tier's yearly price and fails with a BadRequestError when none is set.
 
     Metadata always includes tenant_id, requested_plan_tier, and (when known)
     contact_email so the webhook can resolve the Aether tenant on completion.
@@ -206,10 +239,11 @@ async def create_checkout_session(
 
     _ensure_real_stripe()
     cfg = settings.stripe_billing
-    price_id = get_stripe_price_id(plan_tier)
+    price_id = get_stripe_price_id(plan_tier, billing_interval)
     metadata = {
         "tenant_id": tenant_id,
         "requested_plan_tier": plan_tier.value,
+        "billing_interval": billing_interval,
     }
     if contact_email:
         metadata["contact_email"] = contact_email
@@ -230,7 +264,7 @@ async def create_checkout_session(
 
     try:
         session = stripe.checkout.Session.create(  # type: ignore[union-attr]
-            idempotency_key=f"checkout:{tenant_id}:{plan_tier.value}",
+            idempotency_key=f"checkout:{tenant_id}:{plan_tier.value}:{billing_interval}",
             **kwargs,
         )
         return CheckoutSession(

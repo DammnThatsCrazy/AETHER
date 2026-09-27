@@ -14,17 +14,17 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:ff7a558cf03301c9559bc5ee8ed429bfe505846b0e11b0b2d98ede2c79e0d92f"
+  "deploy/aws/terraform/main.tf": "sha256:b3fc449943055d90778fbf20e316871e9f80c596d611b5c7aa59e2d842a89d93"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:fcc3e84f90f6fb49d57f6e81bb31b5d5bb0c0febe1195c61512d45b40f23cb1c"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:ba27b2bbe46c96631c9787541aa5b1e6c7c1190e88d724c2b1d4b47d35d10098"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:ddc4bacad8ec5aa6047433d330c95afbcda39924c71f3d2c3a2f810ee6437eda"
   "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
-  "deploy/aws/terraform/variables.tf": "sha256:f62ff6504ed532ff09f5ac3f3a9bfd1e7f9f209df9263e6f7ee8b32e2b7fa413"
+  "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
   "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
   "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
-  "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
+  "scripts/release/check_staging_lane_contract.py": "sha256:5d5711a9409d7cd9659b30cebd9f961f6e5db55e36297cd4c783f541c152e032"
 ---
 
 # Deployment Profiles
@@ -263,15 +263,15 @@ staging apply policy can scope grants to staging resources. These tags and
 service conditions are part of the Terraform profile shape and must remain
 covered by the profile plan and cost/topology gates before promotion.
 
-The public web surfaces are five separate Amplify applications — Olympus
-marketing, Aether marketing, docs, the end-user app, and status. Staging reuses
-the verified `www`, `aether`, `docs`, `app`, and `status` subdomains under
-`staging.olympuslabsml.com`; production-lean associates the same surface under
-`olympuslabsml.com`. On staging, the Aether marketing app builds the unified
-Olympus + Aether site (`frontend/site`) and serves the `aether`, `www`, `docs`
-and `status` hosts, so the old Olympus, docs and status apps hold no domain
-until they are removed; production keeps one app per host and the prerendered
-Aether marketing build for now. Kyber is not one of those public apps and
+The public web hosts are `www`, `aether`, `docs`, `app`, and `status`: under
+`staging.olympuslabsml.com` on staging and under `olympuslabsml.com` for
+production-lean. Staging serves them from two Amplify applications: the
+Aether marketing app builds the unified Olympus + Aether site
+(`frontend/site`) for the `aether`, `www`, `docs` and `status` hosts, and the
+end-user app serves `app`; the old Olympus, docs and status staging apps are
+deleted. Production keeps five apps, one per host (Olympus marketing, Aether
+marketing with the prerendered build, docs, the end-user app, and status), for
+now. Kyber is not one of those public apps and
 has no public DNS route. The protected tenant and Kyber release archives remain
 private S3 artifacts for the staging rehearsal and internal operator path.
 
@@ -288,8 +288,8 @@ delete/recreate plan.
 | **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |
 | **Selection** | `terraform plan -var-file=profiles/staging.tfvars`, or `.github/workflows/staging-lifecycle.yml`, which dispatches `terraform-promote.yml` for every mutation. `environment = "staging"` is set explicitly; the root default is `production`. |
 | **Deployment lane** | `deployment_lane=full` preserves this existing release rehearsal. `deployment_lane=pilot` is an additive, complete lean AWS staging lane that keeps `deployment_profile=staging` and the unchanged `profiles/staging/terraform.tfstate` state key; it does not create a second Terraform profile or state namespace. |
-| **Pilot contract** | Pilot retains all five public Aether/Olympus surfaces, the AWS backend, durable Aurora/persistence, networking, Secrets Manager, tenant isolation, Stripe billing/webhooks/entitlements, CloudWatch observability, lifecycle/redeploy controls, migrations and full smoke coverage. Only Kyber operator/workforce identity and GCP/Google hosting/credentials are deferred. The existing Kyber Auth0 client association is preserved by the one shared enabled-client-set resource; its duplicate Terraform state address is forgotten without destroying remote state. Pilot plans fail closed on ECS service replacement or capacity-provider strategy drift, autoscaling-target replacement or identity/role/maximum-capacity drift, Application Auto Scaling ownership-tag drift, destructive Aether Auth0 changes, or Auth0 mutations outside the Aether path. `scripts/release/check_staging_lane_contract.py` fails closed until ECS/bootstrap Stripe wiring is complete and the four real self-service Stripe test price secrets (`aether/stripe-price-{alpha,beta,gamma,delta}`) have populated current versions; Epsilon/Omicron/Omega remain optional contract-tier mappings. Bootstrap validates identifiers before write and no price IDs are invented. |
-| **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, private S3 SPA artifacts + SSM pointers, five Amplify public web apps (plus one unconnected Amplify app for per-PR previews when `enable_frontend_previews` is on; see [Preview Environments](PREVIEW-ENVIRONMENTS.md)), ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. The reviewed paid-account staging profile uses the customer-managed Aurora KMS key; free-tier rehearsals may set `aurora_express_mode = true` or `skip_aurora = true` according to the account-plan guard. Aurora and Postgres graph remain omitted from the staging `required_resources` list only so a free-tier rehearsal can defer them safely. |
+| **Pilot contract** | Pilot retains all five public Aether/Olympus hosts (served by the unified site and the end-user app), the AWS backend, durable Aurora/persistence, networking, Secrets Manager, tenant isolation, Stripe billing/webhooks/entitlements, CloudWatch observability, lifecycle/redeploy controls, migrations and full smoke coverage. Only Kyber operator/workforce identity and GCP/Google hosting/credentials are deferred. The existing Kyber Auth0 client association is preserved by the one shared enabled-client-set resource; its duplicate Terraform state address is forgotten without destroying remote state. Pilot plans fail closed on ECS service replacement or capacity-provider strategy drift, autoscaling-target replacement or identity/role/maximum-capacity drift, Application Auto Scaling ownership-tag drift, destructive Aether Auth0 changes, or Auth0 mutations outside the Aether path. `scripts/release/check_staging_lane_contract.py` fails closed until ECS/bootstrap Stripe wiring is complete and the four real self-service Stripe test price secrets (`aether/stripe-price-{alpha,beta,gamma,delta}`) have populated current versions; Epsilon/Omicron/Omega remain optional contract-tier mappings, and the yearly Beta/Gamma/Delta prices (`aether/stripe-price-{beta,gamma,delta}-annual`) are optional and mounted only with `stripe_annual_prices_enabled`. Bootstrap validates identifiers before write and no price IDs are invented. |
+| **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, private S3 SPA artifacts + SSM pointers, two Amplify public web apps (the unified site for `www`, `aether`, `docs` and `status`, and the end-user app; plus one unconnected Amplify app for per-PR previews when `enable_frontend_previews` is on; see [Preview Environments](PREVIEW-ENVIRONMENTS.md)), ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. The reviewed paid-account staging profile uses the customer-managed Aurora KMS key; free-tier rehearsals may set `aurora_express_mode = true` or `skip_aurora = true` according to the account-plan guard. Aurora and Postgres graph remain omitted from the staging `required_resources` list only so a free-tier rehearsal can defer them safely. |
 | **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks when awake: `api` (1 vCPU / 2 GiB, max 2) and `lean-worker` (1 vCPU / 4 GiB, max 2) hosting all eight worker roles. `staging_state: asleep` drives every desired count **and every autoscaling floor** to zero. |
 | **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. The canonical and retained legacy staging Aurora clusters use 0–2 ACU and auto-pause after 300 idle seconds; storage and other non-compute charges continue. For the imported legacy cluster, Terraform manages only this scaling configuration and preserves its existing write-forwarding and final-snapshot settings. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. Tasks carry a public IP on the task ENI for egress; inbound is governed entirely by the task security group, which accepts traffic only from the ALB. |

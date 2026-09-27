@@ -287,8 +287,21 @@ resource "aws_iam_role_policy" "task" {
       jsondecode(jsonencode(local.sns_statements)),
       jsondecode(jsonencode(local.dynamodb_statements)),
       jsondecode(jsonencode(local.neptune_statements)),
+      jsondecode(jsonencode(local.ses_statements)),
     )
   })
+}
+
+locals {
+  # Send only from the verified sender domain identity.
+  ses_statements = var.email_enabled ? [
+    {
+      Sid      = "SendTransactionalEmail"
+      Effect   = "Allow"
+      Action   = ["ses:SendEmail"]
+      Resource = "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/${var.email_sender_domain}"
+    },
+  ] : []
 }
 
 # --------------------------------------------------------------------------
@@ -362,6 +375,25 @@ locals {
       { name = "STRIPE_PORTAL_RETURN_URL", value = var.stripe_portal_return_url },
     ],
   ) : local.stripe_runtime_environment
+
+  # Transactional email through SES, sent only from the verified sender domain.
+  # Disabled tasks carry EMAIL_ENABLED=false so the backend logs instead.
+  # Explicit either way, so the lane never falls back to the backend's
+  # environment-dependent default.
+  self_signup_runtime_environment = [
+    { name = "SSO_SELF_SIGNUP_ENABLED", value = var.self_signup_enabled ? "true" : "false" },
+  ]
+
+  email_runtime_environment = var.email_enabled ? [
+    { name = "EMAIL_ENABLED", value = "true" },
+    { name = "EMAIL_PROVIDER", value = "ses" },
+    { name = "EMAIL_AWS_REGION", value = data.aws_region.current.name },
+    { name = "EMAIL_FROM_ADDRESS", value = "noreply@${var.email_sender_domain}" },
+    { name = "EMAIL_FROM_NAME", value = "Olympus Labs" },
+    { name = "LEAD_NOTIFICATION_EMAIL", value = var.lead_notification_email },
+    ] : [
+    { name = "EMAIL_ENABLED", value = "false" },
+  ]
 
   # Pilot staging must be able to complete the documented one-time first-admin
   # handoff after a fresh or recovered database. The route remains staging
@@ -438,6 +470,13 @@ locals {
       STRIPE_PRICE_BETA  = lookup(var.secret_arns, "stripe-price-beta", "")
       STRIPE_PRICE_GAMMA = lookup(var.secret_arns, "stripe-price-gamma", "")
       STRIPE_PRICE_DELTA = lookup(var.secret_arns, "stripe-price-delta", "")
+    } : {},
+    # Yearly prices are optional: mounted only once the profile turns them on
+    # (after the secrets hold Price IDs), so an empty stub never blocks a task.
+    var.stripe_billing_enabled && var.stripe_annual_prices_enabled ? {
+      STRIPE_PRICE_BETA_ANNUAL  = lookup(var.secret_arns, "stripe-price-beta-annual", "")
+      STRIPE_PRICE_GAMMA_ANNUAL = lookup(var.secret_arns, "stripe-price-gamma-annual", "")
+      STRIPE_PRICE_DELTA_ANNUAL = lookup(var.secret_arns, "stripe-price-delta-annual", "")
     } : {},
     # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
     # Only mounted when ElastiCache exists; every task (API and workers)
@@ -555,6 +594,8 @@ resource "aws_ecs_task_definition" "backend" {
         concat(
           local.kyber_runtime_environment,
           local.stripe_runtime_environment_with_urls,
+          local.email_runtime_environment,
+          local.self_signup_runtime_environment,
           local.first_admin_bootstrap_runtime_environment,
           [
             { name = "CREDENTIAL_CIPHER", value = var.credential_kms_key_id != "" ? "aws_kms" : "local" },
@@ -778,6 +819,8 @@ resource "aws_ecs_task_definition" "runtime_service" {
       concat(
         local.kyber_runtime_environment,
         local.stripe_runtime_environment_with_urls,
+        local.email_runtime_environment,
+        local.self_signup_runtime_environment,
         local.first_admin_bootstrap_runtime_environment,
         [
           { name = "CREDENTIAL_CIPHER", value = var.credential_kms_key_id != "" ? "aws_kms" : "local" },
