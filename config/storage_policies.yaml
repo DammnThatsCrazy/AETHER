@@ -7698,3 +7698,23 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false
+
+  - resource_type: status_component_daily
+    # Public status history: per-component daily health-sample counts folded
+    # in by API processes (services/gateway/status_history.py). Platform-global
+    # aggregate availability, no tenant data; pruned on write after 400 days.
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: false
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false

@@ -38,6 +38,69 @@ All endpoints require an API key passed as:
 
 Public paths (`/`, `/health`, `/v1/health`, `/v1/metrics`, `/docs`,
 `/openapi.json`, `/redoc`) bypass authentication and rate limiting.
+`/v1/status/history` is public too; it bypasses API-key auth and the plan
+limits but applies its own per-client-IP limit (see below).
+
+## Public Status History
+
+`GET /v1/status/history?days=90` — unauthenticated, read-only feed behind the
+public status page's 90-day uptime bars (`VITE_STATUS_HISTORY_URL` in
+`frontend/site`; parsed by `frontend/site/src/site/status.ts`). Implemented in
+`services/backend/services/gateway/routes.py` and
+`services/backend/services/gateway/status_history.py`.
+
+| Query | Default | Rule |
+|---|---|---|
+| `days` | `90` | Integer 1–90; anything else returns `422`. The window is the `days` UTC dates ending today. |
+
+```json
+{
+  "generated_at": "2026-09-27T12:00:00+00:00",
+  "window_days": 90,
+  "start_date": "2026-06-30",
+  "end_date": "2026-09-27",
+  "components": [
+    {
+      "name": "api",
+      "days": [
+        { "date": "2026-09-25", "status": "outage", "uptime_pct": 99.65 },
+        { "date": "2026-09-27", "status": "operational", "uptime_pct": 100.0 }
+      ]
+    },
+    { "name": "ingestion", "days": [] }
+  ],
+  "incidents": []
+}
+```
+
+- **Components**: `api` (the `/v1/health` top-level status) plus every
+  component `/v1/health` reports (`services/gateway/component_status.py`),
+  always listed in that order, each with only the days that have data.
+- **Samples**: each API process folds its own `/v1/health` verdict into the
+  `status_component_daily` table (one row per UTC day and component holding
+  `ok` / `degraded` / `down` / `unknown` sample counts) at most once every
+  `STATUS_HISTORY_SAMPLE_INTERVAL_SECONDS` (default 300). The write runs as a
+  background task after the liveness response and cannot fail it. The
+  `STATUS_HISTORY_RECORDING_ENABLED=false` setting stops recording.
+- **Scoring**: `unknown` samples are unobserved and excluded.
+  `uptime_pct = (ok + degraded) / (ok + degraded + down)`, rounded *down* to two
+  decimals, so a day with any `down` sample never shows 100%. `status` is the
+  worst observed sample (`outage` > `degraded` > `operational`).
+- **Missing days are omitted**, never reported as 0% or 100%; the page renders
+  them as "no data". A period when no API process is serving records no
+  samples, so it counts neither for nor against a day's uptime. The feed
+  reports what the platform observed about itself. It is not an external
+  probe.
+- **Public data only**: date, status and uptime per component. No tenant data,
+  hostnames, dependency names, error text or sample counts. `incidents` is
+  always `[]`, because this feed does not publish incidents.
+- **Caching and limits**: `Cache-Control: public, max-age=300,
+  stale-while-revalidate=600`, a 60-second in-process response cache, and 60
+  requests per minute per client IP (the right-most `X-Forwarded-For` hop,
+  which the load balancer appends) before `429` with `Retry-After`. CORS uses
+  the same `CORS_ORIGINS` allowlist as every other endpoint.
+- **Errors**: when the rollups cannot be read the route returns a generic
+  `503` problem body with `Cache-Control: no-store`.
 
 ## Plans, Rate Limits & Quotas
 

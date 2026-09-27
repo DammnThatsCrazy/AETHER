@@ -1,27 +1,29 @@
 """
 Aether Service — API Gateway
-Health checks, root endpoint, and metrics.
+Health checks, root endpoint, metrics, and the public status history feed.
 In production: AWS API Gateway + Lambda authorizer.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Query, Request
 from fastapi.responses import JSONResponse
 
 from config.settings import settings
-from shared.common.common import APIResponse, utc_now
-from shared.logger.logger import metrics
+from shared.common.common import APIResponse, problem_response, utc_now
+from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_registry
-from services.gateway import component_status
+from services.gateway import component_status, status_history
 from services.gateway.readiness import readiness_report
+
+logger = get_logger("aether.service.gateway")
 
 router = APIRouter(tags=["Gateway"])
 
 
 @router.get("/health")
 @router.get("/v1/health")
-async def health_check(request: Request):
+async def health_check(request: Request, background_tasks: BackgroundTasks):
     """Container liveness probe — is this process alive and serving?
 
     ECS uses this route as the API container's ``healthCheck`` command and the
@@ -35,6 +37,11 @@ async def health_check(request: Request):
     supervisor, published backlog gauges, model registry, work counters), and a
     signal this process cannot observe is reported as unknown and listed under
     the component's ``unverified`` key. See services/gateway/component_status.py.
+
+    The same verdict feeds the public status history: at most once per sample
+    interval per process it is folded into the daily rollups behind
+    ``/v1/status/history``, as a background task that runs after this response
+    is sent and swallows its own failures (services/gateway/status_history.py).
     """
     registry = get_registry()
     dependency_health = await registry.health_check()
@@ -51,9 +58,16 @@ async def health_check(request: Request):
         if isinstance(entry, dict)
     )
     components_ok = component_status.aggregate_status(components) == component_status.STATUS_OK
+    overall_healthy = dependencies_ok and components_ok
+
+    record = status_history.recorder.claim(
+        overall_healthy=overall_healthy, components=components
+    )
+    if record is not None:
+        background_tasks.add_task(record)
 
     return {
-        "status": "healthy" if dependencies_ok and components_ok else "degraded",
+        "status": "healthy" if overall_healthy else "degraded",
         "probe": "liveness",
         "readiness_probe": "/v1/ready",
         "timestamp": utc_now().isoformat(),
@@ -125,3 +139,60 @@ async def health_pipeline():
     from services.ingestion.ingestion_observability import pipeline_snapshot
 
     return pipeline_snapshot()
+
+
+@router.get("/v1/status/history")
+async def status_history_feed(
+    request: Request,
+    days: int = Query(
+        status_history.DEFAULT_HISTORY_DAYS,
+        ge=1,
+        le=status_history.MAX_HISTORY_DAYS,
+        description="Days of history ending today (UTC), 1-90.",
+    ),
+):
+    """Public per-component daily uptime for the status page (read-only).
+
+    Unauthenticated (listed in ``feature_gate.PUBLIC_PATHS``) and aggregate
+    only: each component lists the UTC days that have observed health samples,
+    with ``status`` (operational / degraded / outage) and ``uptime_pct``. Days
+    without samples are omitted so the page renders them as "no data". Rate
+    limited per client IP and cached briefly in-process; the response carries
+    a public ``Cache-Control``. Scoring and sample provenance:
+    services/gateway/status_history.py.
+    """
+    request_id = getattr(request.state, "request_id", "")
+    peer = request.client.host if request.client else None
+    redis = getattr(getattr(get_registry(), "cache", None), "_redis", None)
+    retry_after = await status_history.rate_limiter.check(
+        status_history.client_ip(request.headers, peer), redis
+    )
+    if retry_after is not None:
+        metrics.increment("status_history_rate_limited_total")
+        return problem_response(
+            429,
+            "Too Many Requests",
+            "Status history rate limit exceeded",
+            code="RATE_LIMITED",
+            retryable=True,
+            request_id=request_id,
+            headers={"Retry-After": str(retry_after)},
+        )
+    try:
+        body = await status_history.service.history(days)
+    except Exception as exc:  # noqa: BLE001 - public surface: no internals leak
+        logger.warning(f"status history unavailable: {type(exc).__name__}")
+        metrics.increment("status_history_read_failures_total")
+        return problem_response(
+            503,
+            "Service Unavailable",
+            "Status history is temporarily unavailable",
+            code="STATUS_HISTORY_UNAVAILABLE",
+            retryable=True,
+            request_id=request_id,
+            headers={"Cache-Control": "no-store"},
+        )
+    return JSONResponse(
+        content=body,
+        headers={"Cache-Control": status_history.CACHE_CONTROL},
+    )

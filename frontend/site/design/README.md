@@ -101,7 +101,7 @@ Use `amplify.yml` in this folder as the **new root `/amplify.yml`** (single appl
 |---|---|
 | `VITE_API_URL` | Aether API base |
 | `VITE_STATUS_API_URL` | existing health endpoint (see Status) |
-| `VITE_STATUS_HISTORY_URL` | new 90-day history endpoint |
+| `VITE_STATUS_HISTORY_URL` | 90-day history endpoint: `https://<api-host>/v1/status/history` |
 | `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_REGION` | Amplify Auth |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe Elements |
 | `VITE_SITE_OLYMPUS_URL`, `VITE_SITE_AETHER_URL` | absolute cross-host links |
@@ -127,7 +127,7 @@ Tabbed sections, left page nav, content pane, per-section accent glyph + color. 
 
 ### Status
 - **Current state:** `GET ${VITE_STATUS_API_URL}` → `{ status, components: { [name]: { status } } }` (already parsed by `componentsFromPayload` in `frontend/status/src/main.tsx` — reuse that logic).
-- **History (new, backend work):** `GET ${VITE_STATUS_HISTORY_URL}?days=90` →
+- **History:** `GET ${VITE_STATUS_HISTORY_URL}?days=90` (served by `GET /v1/status/history`, see `docs/BACKEND-API.md#public-status-history`; days without samples are omitted and render as `no_data`, and `incidents` is currently always empty) →
   `{ components: [{ name, days: [{ date: "YYYY-MM-DD", status: "operational"|"degraded"|"outage"|"no_data", uptime_pct: number|null }] }], incidents: [{ id, title, status, started_at, resolved_at|null, components: [] }] }`
 - Render 90 bars per component: green operational, amber degraded, red outage, **stone `no_data` (distinct from zero)**. Components are collapsible accordions. Missing URL → "Status unavailable" empty state, never fake green.
 
