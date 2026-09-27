@@ -87,12 +87,18 @@ STAGING_HOSTS: dict[str, tuple[str, ...]] = {
     "docs": _SITE_OWNERS,
     "status": _SITE_OWNERS,
 }
-STATUS_APP = "aether-status"
-PRODUCTION_STATUS_ENVIRONMENT = {
+# One app per environment: production's single web app (the former
+# aether-status app, repurposed) builds the unified site with the product
+# under /app and serves every production host.
+PRODUCTION_WEB_APP = "AETHER-production-web"
+PRODUCTION_HOSTS = ("www", "aether", "docs", "status", "app")
+PRODUCTION_WEB_ENVIRONMENT = {
     "AETHER_ENV": "production",
     "VITE_STATUS_API_URL": "https://api.olympuslabsml.com/health",
-    "VITE_STATUS_DOCS_URL": "https://docs.olympuslabsml.com",
-    "VITE_STATUS_AETHER_MARKETING_URL": "https://aether.olympuslabsml.com",
+    "VITE_STATUS_HISTORY_URL": "https://api.olympuslabsml.com/v1/status/history",
+    "VITE_SITE_AETHER_URL": "https://aether.olympuslabsml.com",
+    "VITE_SITE_OLYMPUS_URL": "https://www.olympuslabsml.com",
+    "VITE_PUBLISH_PRICES": "true",
 }
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
@@ -486,14 +492,18 @@ def contract_errors(
             for prefix, owners in STAGING_HOSTS.items():
                 errors.extend(_staging_host_errors(prefix, owners, apps, dns_resolver, client))
     elif mode == "production-status":
+        # Production runs one web app for every host; check the app, its
+        # reviewed build settings and commit once (on status), then each
+        # remaining host's mapping.
+        production_app = apps.get(PRODUCTION_WEB_APP)
         errors.extend(
             _check_app(
-                name=STATUS_APP,
-                app=apps.get(STATUS_APP),
+                name=PRODUCTION_WEB_APP,
+                app=production_app,
                 branch_stage="PRODUCTION",
                 expected_commit=expected_commit,
                 subdomain_prefix="status",
-                expected_branch_environment=PRODUCTION_STATUS_ENVIRONMENT,
+                expected_branch_environment=PRODUCTION_WEB_ENVIRONMENT,
                 domain_name=PRODUCTION_DOMAIN,
                 wait_for_current_job=wait_for_current_job,
                 job_timeout_seconds=job_timeout_seconds,
@@ -504,6 +514,21 @@ def contract_errors(
                 dns_resolver=dns_resolver,
             )
         )
+        production_app_id = production_app.get("appId") if production_app is not None else None
+        if isinstance(production_app_id, str) and production_app_id:
+            for prefix in PRODUCTION_HOSTS:
+                if prefix == "status":
+                    continue
+                errors.extend(
+                    _domain_errors(
+                        name=PRODUCTION_WEB_APP,
+                        app_id=production_app_id,
+                        subdomain_prefix=prefix,
+                        domain_name=PRODUCTION_DOMAIN,
+                        dns_resolver=dns_resolver,
+                        client=client,
+                    )
+                )
     else:
         errors.append(f"unsupported Amplify contract mode {mode}")
     return errors

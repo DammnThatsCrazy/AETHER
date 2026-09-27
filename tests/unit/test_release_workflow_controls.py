@@ -333,7 +333,7 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert 'domain_names_json="$(aws amplify list-domain-associations' in workflow
     assert "--output json)" in workflow
     assert "aws amplify get-domain-association" in workflow
-    assert "Verify canonical status domain mapping" in workflow
+    assert "Verify canonical production domain mappings" in workflow
     assert "aws amplify update-domain-association" not in workflow
     assert "aws amplify delete-branch" not in workflow
     assert "status-repository-migration" not in workflow
@@ -342,16 +342,23 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "app.repository // empty" in workflow
     assert "aws amplify create-branch \"${branch_args[@]}\"" in workflow
     assert "aws amplify update-branch \"${branch_args[@]}\"" in workflow
-    assert "appRoot: frontend/status" in workflow
-    assert "npm run build --workspace=frontend/status" in workflow
-    assert "VITE_STATUS_API_URL=https://api.olympuslabsml.com/health" in workflow
+    # One production web app: the site build with the product under /app,
+    # production settings and the staging routing rules, on every host.
+    assert "AMPLIFY_APP_NAME: AETHER-production-web" in workflow
+    assert "appRoot: frontend/site" in workflow
+    assert "VITE_BASE_PATH=/app/ npm run build --workspace=frontend/aether" in workflow
+    assert "cp -R frontend/aether/dist/. frontend/site/dist/app/" in workflow
+    assert '"VITE_STATUS_API_URL": "https://api.olympuslabsml.com/health"' in workflow
+    assert '"VITE_SITE_AETHER_URL": "https://aether.olympuslabsml.com"' in workflow
+    assert '"VITE_SITE_OLYMPUS_URL": "https://www.olympuslabsml.com"' in workflow
+    assert '--custom-rules "file://$web_rules"' in workflow
+    assert "for prefix in www aether docs status app; do" in workflow
+    assert "appRoot: frontend/status" not in workflow
     assert "aws amplify list-jobs" in workflow
     assert "Reusing active Amplify status deployment job" in workflow
     assert "already have pending or running jobs" in workflow
     assert "commitId == $expected" in workflow
     assert ")] " + chr(92) not in workflow
-    assert "VITE_STATUS_DOCS_URL=https://docs.olympuslabsml.com" in workflow
-    assert "VITE_STATUS_AETHER_MARKETING_URL=https://aether.olympuslabsml.com" in workflow
     assert "--stage PRODUCTION" in workflow
 
 

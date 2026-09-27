@@ -50,7 +50,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:c135b99b58cf0408675b1afce06c846981e8b092c2289e3655763635a9a7b490"
+  ".github/workflows/amplify-status-production.yml": "sha256:f2b555580ea9d40562cae1288180b8980f6c7b238892894c1bc9816e07448a09"
   ".github/workflows/deploy.yml": "sha256:8df5f83f20c8ec516fb41d8a4d1b6458a3f3df39ffa2bb5b45130c068b02350e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
@@ -73,7 +73,7 @@ source_hashes:
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:a943d88aef3c797de42a9471e20eebf5d5178ed28a1838971a3d50d792e75073"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:c7915cea9bff84db19c1cac00af09b414b7234c25624935a7304e488e42cde95"
+  "scripts/release/check_amplify_app_contract.py": "sha256:645ad3320ea6ba0335b59fbae64d9e6a9f465c6d0f5be5d10d10446af45e61e9"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -587,8 +587,12 @@ a host to one app, so the site association depends on the others: when a host
 moves, Terraform removes the old app's association before the site claims it.
 The deploy role holds `route53:ListHostedZones` because Amplify calls it with
 the caller's credentials when it updates a domain association.
-Route 53 records are keyed by host. Production keeps one app per host until its
-own cutover.
+Route 53 records are keyed by host. Production also runs one app,
+`AETHER-production-web` (the former `aether-status` app), with the same build
+and routing rules and the five hosts under `olympuslabsml.com`; Squarespace
+holds their CNAMEs. `amplify-status-production.yml` deploys it on each `main`
+push, and the staging lifecycle preflight checks its production settings, exact
+commit and host mappings. It is not Terraform-managed yet.
 
 Transactional email goes through Amazon SES from the verified
 `olympuslabsml.com` domain identity (`email_enabled`, on in the staging

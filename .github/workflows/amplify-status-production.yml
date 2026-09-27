@@ -1,9 +1,11 @@
-name: Bind and deploy production Aether status
+name: Bind and deploy the production web app
 
-# The legacy public status app was created as a manual/static Amplify app. This
-# workflow makes its provenance durable: every main push binds that exact app to
-# this repository, keeps main in PRODUCTION stage, and starts a commit-pinned
-# release job. It never changes DNS; Squarespace remains the DNS authority.
+# Production runs ONE Amplify app (AETHER-production-web, the former
+# aether-status app) that builds the unified site with the product under /app
+# and serves www, aether, docs, status and app. Every main push binds that exact
+# app to this repository with the reviewed build, rules and production
+# settings, keeps main in PRODUCTION stage, and starts a commit-pinned release
+# job. It never changes DNS; Squarespace remains the DNS authority.
 
 on:
   push:
@@ -28,7 +30,7 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   AMPLIFY_REPOSITORY: https://github.com/DammnThatsCrazy/AETHER
-  AMPLIFY_APP_NAME: aether-status
+  AMPLIFY_APP_NAME: AETHER-production-web
 
 jobs:
   verify-main-integration:
@@ -157,7 +159,7 @@ jobs:
             --query 'domainAssociations[].domainName' --output json)"
           expected_domain_present="$(jq 'index("olympuslabsml.com") != null' <<<"$domain_names_json")"
           test "$expected_domain_present" = true || {
-            echo '::error::aether-status is missing the canonical olympuslabsml.com domain association'; exit 1;
+            echo '::error::AETHER-production-web is missing the canonical olympuslabsml.com domain association'; exit 1;
           }
 
           domain_has_mappings=false
@@ -177,7 +179,7 @@ jobs:
 
           if [ -z "$repository" ]; then
             if [ "$branch_count" -ne 0 ] || [ "$domain_has_mappings" = true ]; then
-              echo '::error::aether-status is still in legacy manual state.'
+              echo '::error::AETHER-production-web is still in legacy manual state.'
               echo '::error::One-time administrative cleanup must remove its manual branches and detach domain mappings before CI can bind the repository.'
               exit 1
             fi
@@ -188,7 +190,7 @@ jobs:
 
           unexpected_branches="$(jq -r 'map(select(. != "main")) | join(",")' <<<"$branches_json")"
           test -z "$unexpected_branches" || {
-            echo "::error::repository-backed aether-status has unexpected manual branches: ${unexpected_branches}"; exit 1;
+            echo "::error::repository-backed AETHER-production-web has unexpected manual branches: ${unexpected_branches}"; exit 1;
           }
           if [ "$domain_has_mappings" = false ]; then
             echo 'The status app is repository-backed but its canonical domain mapping is not restored yet; this run will stop before release.'
@@ -198,40 +200,82 @@ jobs:
           printf 'bootstrap_required=false\n' >> "$GITHUB_OUTPUT"
           echo 'Status app is repository-backed with only the canonical main branch; CI will verify its domain mapping without mutating it.'
 
-      - name: Bind the existing status app to the canonical repository
+      - name: Bind the production web app to the canonical repository
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          status_build_spec="$(mktemp)"
-          trap 'rm -f "$status_build_spec"' EXIT
-          cat > "$status_build_spec" <<'YAML'
+          web_build_spec="$(mktemp)"
+          web_environment="$(mktemp)"
+          web_rules="$(mktemp)"
+          trap 'rm -f "$web_build_spec" "$web_environment" "$web_rules"' EXIT
+          # The frontend/site entry of amplify.yml: the unified site plus the
+          # product built under /app.
+          cat > "$web_build_spec" <<'YAML'
           version: 1
           applications:
-            - appRoot: frontend/status
+            - appRoot: frontend/site
               frontend:
                 buildPath: /
                 phases:
                   preBuild:
                     commands:
                       - npm ci
+                      - npm run build --workspace=packages/shared
+                      - npm run build --workspace=packages/web
                   build:
                     commands:
-                      - npm run build --workspace=frontend/status
+                      - npm run build --workspace=frontend/site
+                      - VITE_BASE_PATH=/app/ npm run build --workspace=frontend/aether
+                      - test -f frontend/aether/dist/index.html
+                      - mkdir -p frontend/site/dist/app
+                      - cp -R frontend/aether/dist/. frontend/site/dist/app/
                 artifacts:
-                  baseDirectory: frontend/status/dist
+                  baseDirectory: frontend/site/dist
                   files:
                     - '**/*'
                 cache:
                   paths:
                     - node_modules/**/*
           YAML
+          # Public production build settings (no secrets). Auth0 settings join
+          # when the production backend and sign-in exist.
+          cat > "$web_environment" <<'JSON'
+          {
+            "AETHER_ENV": "production",
+            "VITE_AETHER_ENV": "production",
+            "VITE_API_BASE_URL": "https://api.olympuslabsml.com",
+            "VITE_AETHER_ENDPOINT": "https://api.olympuslabsml.com",
+            "VITE_PUBLISH_PRICES": "true",
+            "VITE_SITE_AETHER_URL": "https://aether.olympuslabsml.com",
+            "VITE_SITE_OLYMPUS_URL": "https://www.olympuslabsml.com",
+            "VITE_STATUS_API_URL": "https://api.olympuslabsml.com/health",
+            "VITE_STATUS_HISTORY_URL": "https://api.olympuslabsml.com/v1/status/history",
+            "_LIVE_UPDATES": "[{\"pkg\":\"node\",\"type\":\"nvm\",\"version\":\"20\"}]"
+          }
+          JSON
+          # The same routing rules as the staging web app (Terraform main.tf).
+          cat > "$web_rules" <<'JSON'
+          [
+            {"source": "/app/signin", "target": "/app/login", "status": "302"},
+            {"source": "/app", "target": "/app/", "status": "302"},
+            {"source": "</^\\/app\\/[^.]*$/>", "target": "/app/index.html", "status": "200"},
+            {"source": "/login", "target": "/app/login", "status": "302"},
+            {"source": "/signup", "target": "/app/signup", "status": "302"},
+            {"source": "/forgot-password", "target": "/app/login", "status": "302"},
+            {"source": "</^[^.]+$|\\.(?!(css|gif|ico|jpg|jpeg|js|png|txt|svg|woff|woff2|ttf|map|json|webp|xml|webmanifest)$)([^.]+$)/>", "target": "/index.html", "status": "200"}
+          ]
+          JSON
+          jq -e 'type == "object"' "$web_environment" >/dev/null
+          jq -e 'type == "array" and length == 7' "$web_rules" >/dev/null
           aws amplify update-app \
             --app-id "$APP_ID" \
             --repository "$AMPLIFY_REPOSITORY" \
             --access-token "$AMPLIFY_GITHUB_ACCESS_TOKEN" \
-            --build-spec "$(cat "$status_build_spec")" \
+            --build-spec "$(cat "$web_build_spec")" \
+            --environment-variables "file://$web_environment" \
+            --custom-rules "file://$web_rules" \
             --enable-branch-auto-build \
             >/dev/null
           branch_args=(
@@ -239,16 +283,16 @@ jobs:
             --branch-name main
             --stage PRODUCTION
             --enable-auto-build
-            --environment-variables 'AETHER_ENV=production,VITE_STATUS_API_URL=https://api.olympuslabsml.com/health,VITE_STATUS_DOCS_URL=https://docs.olympuslabsml.com,VITE_STATUS_AETHER_MARKETING_URL=https://aether.olympuslabsml.com'
+            --environment-variables "file://$web_environment"
           )
           if aws amplify get-branch --app-id "$APP_ID" --branch-name main >/dev/null 2>&1; then
             aws amplify update-branch "${branch_args[@]}" >/dev/null
           else
             aws amplify create-branch "${branch_args[@]}" >/dev/null
           fi
-          echo 'Bound the existing status app to the reviewed repository, canonical status build, runtime links, and PRODUCTION main branch.'
+          echo 'Bound the production web app to the reviewed repository, the site build with the product under /app, production settings and rules, and the PRODUCTION main branch.'
 
-      - name: Verify canonical status domain mapping
+      - name: Verify canonical production domain mappings
         if: steps.state.outputs.bootstrap_required != 'true'
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
@@ -260,12 +304,14 @@ jobs:
           test "$status" = AVAILABLE || {
             echo "::error::production status domain association is ${status:-unknown}"; exit 1;
           }
-          status_mapping_count="$(jq '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == "status")) | length' <<<"$domain_json")"
-          main_mapping_count="$(jq '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == "status" and .branchName == "main")) | length' <<<"$domain_json")"
-          test "$status_mapping_count" = 1 && test "$main_mapping_count" = 1 || {
-            echo '::error::production status domain must have exactly one status mapping to the canonical main branch'; exit 1;
-          }
-          echo 'Verified the production status domain is AVAILABLE and maps status to the canonical main branch without a CI domain mutation.'
+          for prefix in www aether docs status app; do
+            mapping_count="$(jq --arg prefix "$prefix" '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == $prefix)) | length' <<<"$domain_json")"
+            main_mapping_count="$(jq --arg prefix "$prefix" '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == $prefix and .branchName == "main")) | length' <<<"$domain_json")"
+            test "$mapping_count" = 1 && test "$main_mapping_count" = 1 || {
+              echo "::error::production domain must have exactly one ${prefix} mapping to the canonical main branch"; exit 1;
+            }
+          done
+          echo 'Verified the production domain is AVAILABLE and maps www, aether, docs, status and app to the canonical main branch without a CI domain mutation.'
 
       - name: Complete one-time status app bootstrap
         if: steps.state.outputs.bootstrap_required == 'true'

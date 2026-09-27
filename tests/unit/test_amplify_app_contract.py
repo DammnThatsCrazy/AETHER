@@ -25,7 +25,7 @@ APP_IDS = {
     "AETHER-staging-olympus-marketing": "d-olympus",
     "AETHER-staging-docs": "d-docs",
     "AETHER-staging-status": "d-status",
-    "aether-status": "d-production-status",
+    "AETHER-production-web": "d-production-status",
 }
 ALL_HOSTS = ("aether", "www", "docs", "status", "app")
 
@@ -47,18 +47,18 @@ def _client(
     ``extra_apps`` are apps that still exist beyond the layout."""
     present = {WEB} if consolidated else {SITE_BEFORE, PRODUCT_BEFORE}
     present |= set(extra_apps)
-    present.add("aether-status")
+    present.add("AETHER-production-web")
     hosts_by_app = (
         {"d-web": list(web_hosts)}
         if consolidated
         else {"d-aether-marketing": ["aether", "www", "docs", "status"], "d-aether-app": ["app"]}
     )
-    hosts_by_app["d-production-status"] = ["status"]
+    hosts_by_app["d-production-status"] = list(checker.PRODUCTION_HOSTS)
     apps = [
         {
             "name": name,
             "appId": app_id,
-            "repository": production_repository if name == "aether-status" else checker.REPOSITORY,
+            "repository": production_repository if name == "AETHER-production-web" else checker.REPOSITORY,
             "platform": "WEB",
         }
         for name, app_id in APP_IDS.items()
@@ -77,7 +77,7 @@ def _client(
                     "stage": "PRODUCTION" if app_id == "d-production-status" else "DEVELOPMENT",
                     "enableAutoBuild": True,
                     "environmentVariables": (
-                        checker.PRODUCTION_STATUS_ENVIRONMENT
+                        checker.PRODUCTION_WEB_ENVIRONMENT
                         if app_id == "d-production-status"
                         else {}
                     ),
