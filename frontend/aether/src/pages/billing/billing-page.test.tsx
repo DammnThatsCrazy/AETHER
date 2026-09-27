@@ -12,7 +12,10 @@ import { BillingPage } from "./billing-page";
 const state = vi.hoisted(() => ({
   capability: "available" as string,
   currentPlan: "alpha",
-  createCheckout: vi.fn(async (_plan: string) => ({ url: "https://checkout.stripe.test/s" })),
+  annualPlans: [] as string[],
+  createCheckout: vi.fn(async (_args: { planTier: string; interval?: string }) => ({
+    url: "https://checkout.stripe.test/s",
+  })),
 }));
 
 function plan(plan_id: string, price: number, contact_sales = false) {
@@ -44,7 +47,7 @@ vi.mock("@aether-app/features/account", () => ({
     isLoading: false,
     error: null,
   }),
-  useBillingCapability: () => ({ data: { status: state.capability } }),
+  useBillingCapability: () => ({ data: { status: state.capability, annual_plans: state.annualPlans } }),
   useMeProfile: () => ({
     data: { name: "Ada", contact_email: "ada@example.com", plan: { plan_id: state.currentPlan } },
   }),
@@ -77,6 +80,7 @@ describe("BillingPage plan hand-off", () => {
     state.capability = "available";
     state.currentPlan = "alpha";
     state.createCheckout.mockClear();
+    state.annualPlans = [];
     Object.defineProperty(window, "location", {
       configurable: true,
       value: { ...window.location, href: "http://localhost/billing" },
@@ -86,7 +90,7 @@ describe("BillingPage plan hand-off", () => {
   it("starts checkout for the plan chosen on the pricing page, once", async () => {
     const { rerender } = renderBilling("/billing?plan=beta");
 
-    await waitFor(() => expect(state.createCheckout).toHaveBeenCalledWith("beta"));
+    await waitFor(() => expect(state.createCheckout).toHaveBeenCalledWith({ planTier: "beta", interval: "monthly" }));
     rerender(
       <ThemeProvider>
         <ToastProvider>
@@ -120,6 +124,23 @@ describe("BillingPage plan hand-off", () => {
     renderBilling("/billing?plan=delta");
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(state.createCheckout).not.toHaveBeenCalled();
+  });
+
+  it("uses the yearly price when the pricing page chose annual and it is offered", async () => {
+    state.annualPlans = ["beta", "gamma"];
+    renderBilling("/billing?plan=gamma&interval=annual");
+    await waitFor(() =>
+      expect(state.createCheckout).toHaveBeenCalledWith({ planTier: "gamma", interval: "annual" }),
+    );
+  });
+
+  it("falls back to monthly, and says so, when the plan has no yearly price", async () => {
+    state.annualPlans = ["beta"];
+    renderBilling("/billing?plan=delta&interval=annual");
+    await waitFor(() =>
+      expect(state.createCheckout).toHaveBeenCalledWith({ planTier: "delta", interval: "monthly" }),
+    );
+    expect(await screen.findByText(/Annual billing is not available for this plan yet/)).toBeTruthy();
   });
 
   it("lists only the self-serve plans, in price order", () => {

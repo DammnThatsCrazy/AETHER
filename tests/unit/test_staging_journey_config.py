@@ -64,7 +64,7 @@ def test_self_signup_defaults_follow_the_backend_outside_staging() -> None:
         'self_signup_enabled = var.self_signup_enabled != null ? var.self_signup_enabled : var.environment != "staging"'
         in main
     )
-    assert "self_signup_enabled         = local.self_signup_enabled" in main
+    assert re.search(r"^\s*self_signup_enabled\s+=\s+local\.self_signup_enabled$", main, re.MULTILINE)
     for profile in ("production", "production-lean"):
         path = TF / "profiles" / f"{profile}.tfvars"
         if path.exists():

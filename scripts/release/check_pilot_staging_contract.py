@@ -61,6 +61,9 @@ STRIPE_SECRET_NAMES = (
     "stripe-price-epsilon",
     "stripe-price-omicron",
     "stripe-price-omega",
+    "stripe-price-beta-annual",
+    "stripe-price-gamma-annual",
+    "stripe-price-delta-annual",
 )
 STRIPE_REQUIRED_RUNTIME_SECRET_NAMES = (
     "stripe-secret-key",

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@aether/ui';
-import { api } from '@aether-app/lib/api/endpoints';
+import { api, type BillingInterval } from '@aether-app/lib/api/endpoints';
 
 export function useBillingPlans() {
   return useQuery({
@@ -17,7 +17,8 @@ export function useBillingCapability() {
 
 export function useCreateCheckout() {
   return useMutation({
-    mutationFn: (planTier: string) => api.billing.createCheckout(planTier),
+    mutationFn: ({ planTier, interval = 'monthly' }: { planTier: string; interval?: BillingInterval }) =>
+      api.billing.createCheckout(planTier, interval),
   });
 }
 

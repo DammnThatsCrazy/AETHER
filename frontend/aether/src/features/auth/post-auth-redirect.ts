@@ -34,6 +34,11 @@ export function parseSelfServePlan(raw: string | null): SelfServePlanId | null {
   return (SELF_SERVE_PLAN_IDS as readonly string[]).includes(value) ? (value as SelfServePlanId) : null;
 }
 
+/** The pricing page's billing interval (?interval=monthly|annual). */
+export function parseBillingInterval(raw: string | null): "monthly" | "annual" {
+  return (raw ?? "").trim().toLowerCase() === "annual" ? "annual" : "monthly";
+}
+
 const DESTINATION_KEY = "aether:post-auth-destination";
 /** A stored destination older than this is ignored (an abandoned sign-in). */
 const DESTINATION_TTL_MS = 30 * 60 * 1000;

@@ -165,6 +165,17 @@ locals {
     "stripe-price-omega" = {
       description = "Stripe Price ID for the Omega contract plan"
     }
+    # Optional yearly prices for the paid self-service tiers. Tasks mount them
+    # only when stripe_annual_prices_enabled is on, after they are populated.
+    "stripe-price-beta-annual" = {
+      description = "Stripe Price ID for the Beta self-service plan, billed yearly"
+    }
+    "stripe-price-gamma-annual" = {
+      description = "Stripe Price ID for the Gamma self-service plan, billed yearly"
+    }
+    "stripe-price-delta-annual" = {
+      description = "Stripe Price ID for the Delta self-service plan, billed yearly"
+    }
     "oracle-signer-private-key" = {
       description = "Private key for the AETHER oracle signing service"
     }

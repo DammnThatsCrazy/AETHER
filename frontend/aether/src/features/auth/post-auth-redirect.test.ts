@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  parseBillingInterval,
   parseSelfServePlan,
   readPostAuthDestination,
   rememberPostAuthDestination,
@@ -54,5 +55,15 @@ describe("post-auth destination across the Auth0 round trip", () => {
     rememberPostAuthDestination("/billing?plan=beta", 1_000);
     rememberPostAuthDestination("/graph", 2_000);
     expect(readPostAuthDestination(3_000)).toBe("/graph");
+  });
+});
+
+describe("parseBillingInterval", () => {
+  it("is annual only when the pricing page says so", () => {
+    expect(parseBillingInterval("annual")).toBe("annual");
+    expect(parseBillingInterval(" Annual ")).toBe("annual");
+    expect(parseBillingInterval("monthly")).toBe("monthly");
+    expect(parseBillingInterval(null)).toBe("monthly");
+    expect(parseBillingInterval("yearly")).toBe("monthly");
   });
 });

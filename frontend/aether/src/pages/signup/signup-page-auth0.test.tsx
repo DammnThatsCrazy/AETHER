@@ -73,6 +73,12 @@ describe("SignupPage with Auth0", () => {
     expect(readPostAuthDestination()).toBe("/billing?plan=beta");
   });
 
+  it("keeps the annual interval with the plan", async () => {
+    renderSignup("/signup?plan=gamma&interval=annual");
+    await waitFor(() => expect(loginWithRedirect).toHaveBeenCalled());
+    expect(readPostAuthDestination()).toBe("/billing?plan=gamma&interval=annual");
+  });
+
   it("lands on onboarding without a plan, or on a safe ?redirect=", async () => {
     renderSignup("/signup");
     await waitFor(() => expect(loginWithRedirect).toHaveBeenCalled());

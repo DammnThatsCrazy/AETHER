@@ -1078,6 +1078,23 @@ accounts when their names would otherwise collide.
    `aether/stripe-price-{alpha,beta,gamma,delta}` values, plus the Stripe API and
    webhook secrets. Contract-tier mappings (`epsilon`, `omicron`, and `omega`)
    remain optional and are only needed when those operator-managed tiers are enabled.
+   Yearly prices (`aether/stripe-price-{beta,gamma,delta}-annual`) are
+   optional too: tasks mount them only when the profile sets
+   `stripe_annual_prices_enabled = true`, which is turned on after the three
+   secrets hold Price IDs. A tier without a yearly price bills monthly only.
+   Each environment uses its own Stripe account, and staging never holds
+   live-mode keys or prices:
+
+   | Environment | Stripe account | Mode | Webhook endpoint |
+   |---|---|---|---|
+   | Staging (test bed) | Olympus Labs sandbox (`acct_1TOploG4IgWgDCUX`) | test (`sk_test_`) | `https://api.staging.olympuslabsml.com/v1/admin/billing/stripe/webhook` |
+   | Production | Olympus Labs (`acct_1TOpldQIy0mqIx3U`) | live (`sk_live_`) | `https://api.olympuslabsml.com/v1/admin/billing/stripe/webhook` |
+
+   Both accounts carry the same product IDs, and prices matching
+   `shared/plans/catalog.py` in cents: monthly $0 / $299 / $899 / $3,449, and
+   yearly $3,050 / $9,170 / $35,180 for Beta, Gamma and Delta.
+   `scripts/validate_stripe.py` checks each configured Price ID's product,
+   amount, interval and mode against the key in use.
    The secure bootstrap creates new
    secrets with the Terraform staging CMK; it validates price-ID shape before
    writing and never prints values. Full staging and production-class Kyber

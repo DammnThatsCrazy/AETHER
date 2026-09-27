@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { SELF_SERVE_PLAN_IDS, parseSelfServePlan } from '@aether-app/features/auth/post-auth-redirect';
+import { SELF_SERVE_PLAN_IDS, parseBillingInterval, parseSelfServePlan } from '@aether-app/features/auth/post-auth-redirect';
 import {
   Badge,
   Button,
@@ -34,7 +34,7 @@ import {
   useMeProfile,
 } from '@aether-app/features/account';
 import { env } from '@aether-app/lib/env';
-import type { CustomerBillingPlan } from '@aether-app/lib/api/endpoints';
+import type { BillingInterval, CustomerBillingPlan } from '@aether-app/lib/api/endpoints';
 
 // Self-serve plans in price order (shared/plans/catalog.py). The contract
 // tiers (epsilon, omicron, omega) have no checkout; the Enterprise card covers them.
@@ -276,13 +276,13 @@ export function BillingPage() {
   const enterpriseEmailVerified = env.VITE_ENTERPRISE_EMAIL_VERIFIED === 'true';
   const billingAvailable = billingCapability?.status === 'available';
 
-  async function handleUpgrade(planId: string) {
+  async function handleUpgrade(planId: string, interval: BillingInterval = 'monthly') {
     if (!billingAvailable) {
       toast.error('Billing is not configured for this deployment');
       return;
     }
     setCheckoutingPlan(planId);
-    const result = await createCheckout(planId);
+    const result = await createCheckout({ planTier: planId, interval });
     setCheckoutingPlan(null);
     if (!result?.url) {
       toast.error('Checkout unavailable — please try again or contact support');
@@ -311,17 +311,27 @@ export function BillingPage() {
   // current plan. Alpha is free and needs no checkout.
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPlan = parseSelfServePlan(searchParams.get('plan'));
+  // Annual only where the deployment has that plan's yearly price.
+  const requestedInterval: BillingInterval =
+    parseBillingInterval(searchParams.get('interval')) === 'annual' &&
+    !!requestedPlan &&
+    (billingCapability?.annual_plans ?? []).includes(requestedPlan)
+      ? 'annual'
+      : 'monthly';
   const checkoutStarted = useRef(false);
   useEffect(() => {
     if (checkoutStarted.current || !requestedPlan || requestedPlan === 'alpha') return;
     if (!profile || !billingAvailable || currentPlanId === requestedPlan) return;
     checkoutStarted.current = true;
+    if (requestedInterval === 'monthly' && parseBillingInterval(searchParams.get('interval')) === 'annual') {
+      toast.info('Annual billing is not available for this plan yet, so checkout is monthly.');
+    }
     // Consume the hand-off first, so Back from Stripe or a reload lands on
     // plain /billing instead of starting another checkout.
     setSearchParams({}, { replace: true });
-    void handleUpgrade(requestedPlan);
+    void handleUpgrade(requestedPlan, requestedInterval);
     // handleUpgrade is recreated each render; the ref makes this run once.
-  }, [requestedPlan, profile, billingAvailable, currentPlanId]);
+  }, [requestedPlan, requestedInterval, profile, billingAvailable, currentPlanId]);
 
   return (
     <div className="p-8 max-w-4xl">
@@ -336,7 +346,8 @@ export function BillingPage() {
 
       {billingCapability && !billingAvailable && (
         <p className="mb-4 text-xs font-mono text-warning" role="status">
-          Billing provider unavailable: {billingCapability.detail}
+          Billing provider unavailable
+          {billingCapability.missing?.length ? ` (missing: ${billingCapability.missing.join(', ')})` : ''}
         </p>
       )}
 

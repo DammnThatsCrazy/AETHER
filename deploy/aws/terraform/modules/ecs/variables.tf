@@ -265,6 +265,12 @@ variable "stripe_billing_enabled" {
   default     = false
 }
 
+variable "stripe_annual_prices_enabled" {
+  type        = bool
+  description = "Mount the yearly Beta, Gamma and Delta Stripe Price IDs (aether/stripe-price-*-annual). Turn on only after those secrets are populated."
+  default     = false
+}
+
 variable "stripe_checkout_success_url" {
   type        = string
   description = "Stripe Checkout success URL for the customer-facing Aether app."

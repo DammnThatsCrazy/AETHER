@@ -471,6 +471,13 @@ locals {
       STRIPE_PRICE_GAMMA = lookup(var.secret_arns, "stripe-price-gamma", "")
       STRIPE_PRICE_DELTA = lookup(var.secret_arns, "stripe-price-delta", "")
     } : {},
+    # Yearly prices are optional: mounted only once the profile turns them on
+    # (after the secrets hold Price IDs), so an empty stub never blocks a task.
+    var.stripe_billing_enabled && var.stripe_annual_prices_enabled ? {
+      STRIPE_PRICE_BETA_ANNUAL  = lookup(var.secret_arns, "stripe-price-beta-annual", "")
+      STRIPE_PRICE_GAMMA_ANNUAL = lookup(var.secret_arns, "stripe-price-gamma-annual", "")
+      STRIPE_PRICE_DELTA_ANNUAL = lookup(var.secret_arns, "stripe-price-delta-annual", "")
+    } : {},
     # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
     # Only mounted when ElastiCache exists; every task (API and workers)
     # shares this block, so an unconditional mapping would pin the

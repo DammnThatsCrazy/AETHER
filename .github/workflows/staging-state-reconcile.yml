@@ -218,7 +218,8 @@ jobs:
           fi
           for name in \
             stripe-price-alpha stripe-price-beta stripe-price-gamma stripe-price-delta \
-            stripe-price-epsilon stripe-price-omicron stripe-price-omega
+            stripe-price-epsilon stripe-price-omicron stripe-price-omega \
+            stripe-price-beta-annual stripe-price-gamma-annual stripe-price-delta-annual
           do
             metadata_file="$(mktemp)"
             error_file="$(mktemp)"
@@ -573,7 +574,7 @@ jobs:
           IFS=',' read -ra secrets <<< "$normalized_secrets"
           for name in "${secrets[@]}"; do
             case "$name" in
-              jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret|jwt-secret-previous|byok-encryption-key-previous) ;;
+              jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|stripe-price-beta-annual|stripe-price-gamma-annual|stripe-price-delta-annual|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret|jwt-secret-previous|byok-encryption-key-previous) ;;
               *) echo "::error::Refusing secret import: '$name' is not a reviewed staging secret"; exit 1 ;;
             esac
             describe_file="$(mktemp)"
@@ -1335,7 +1336,7 @@ jobs:
             terraform state list >"$state_list_file"
             for name in "${secrets[@]}"; do
               case "$name" in
-                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret)
+                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|stripe-price-beta-annual|stripe-price-gamma-annual|stripe-price-delta-annual|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret)
                   address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]" ;;
                 jwt-secret-previous) address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous' ;;
                 byok-encryption-key-previous) address='module.secrets.aws_secretsmanager_secret.byok_key_previous' ;;
@@ -1408,7 +1409,7 @@ jobs:
             IFS=',' read -ra secrets <<< "$normalized_secrets"
             for name in "${secrets[@]}"; do
               case "$name" in
-                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret)
+                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|stripe-price-alpha|stripe-price-beta|stripe-price-gamma|stripe-price-delta|stripe-price-epsilon|stripe-price-omicron|stripe-price-omega|stripe-price-beta-annual|stripe-price-gamma-annual|stripe-price-delta-annual|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|kyber-google-client-id|kyber-google-client-secret)
                   address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]" ;;
                 jwt-secret-previous) address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous' ;;
                 byok-encryption-key-previous) address='module.secrets.aws_secretsmanager_secret.byok_key_previous' ;;

@@ -70,6 +70,27 @@ REQUIRED_PRICE_CONTRACTS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Optional yearly prices (shared/plans/catalog.py annual amounts). Checked
+# with the same contract, in cents and billed yearly, whenever configured: a
+# yearly price entered in dollars instead of cents is caught here.
+OPTIONAL_ANNUAL_PRICE_CONTRACTS: dict[str, dict[str, Any]] = {
+    "Beta annual": {
+        "env_var": "STRIPE_PRICE_BETA_ANNUAL",
+        "product_id": "prod_V8G5BQNKwGiwJY",
+        "unit_amount": 305000,
+    },
+    "Gamma annual": {
+        "env_var": "STRIPE_PRICE_GAMMA_ANNUAL",
+        "product_id": "prod_V8G5BcUyK9FTN3",
+        "unit_amount": 917000,
+    },
+    "Delta annual": {
+        "env_var": "STRIPE_PRICE_DELTA_ANNUAL",
+        "product_id": "prod_V8G6eoKilEbNf0",
+        "unit_amount": 3518000,
+    },
+}
+
 
 def _price_contract_errors(
     price: dict[str, Any],
@@ -77,6 +98,7 @@ def _price_contract_errors(
     expected_product_id: str,
     expected_unit_amount: int,
     expected_livemode: bool,
+    expected_interval: str = "month",
 ) -> list[str]:
     """Return value-free contract errors for a self-service Stripe Price."""
     errors: list[str] = []
@@ -96,8 +118,10 @@ def _price_contract_errors(
     if not isinstance(recurring, dict):
         errors.append("price must be recurring for subscription Checkout")
     else:
-        if recurring.get("interval") != "month":
-            errors.append("recurring interval must be monthly")
+        if recurring.get("interval") != expected_interval:
+            errors.append(
+                "recurring interval must be monthly" if expected_interval == "month" else "recurring interval must be yearly"
+            )
         if recurring.get("interval_count") != 1:
             errors.append("recurring interval_count must be 1")
     return errors
@@ -205,6 +229,29 @@ def run(skip_webhook: bool) -> bool:
             if errors:
                 detail += f" ({'; '.join(errors)})"
                 all_pass &= _check(f"Price ID {label}", False, detail)
+            else:
+                _check(f"Price ID {label}", True, detail)
+        except Exception as e:
+            all_pass &= _check(f"Price ID {label}", False, f"{price_id} — {e}")
+
+    for label, contract in OPTIONAL_ANNUAL_PRICE_CONTRACTS.items():
+        env_var = contract["env_var"]
+        price_id = os.getenv(env_var, "")
+        if not price_id:
+            print(f"  [SKIP] Price ID {label}  — optional yearly price not configured")
+            continue
+        try:
+            price = stripe.Price.retrieve(price_id)  # type: ignore[attr-defined]
+            detail = f"{price_id} — {str(price.get('currency', '?')).upper()} {price.get('unit_amount')} / year"
+            errors = _price_contract_errors(
+                price,
+                expected_product_id=contract["product_id"],
+                expected_unit_amount=contract["unit_amount"],
+                expected_livemode=not is_test,
+                expected_interval="year",
+            )
+            if errors:
+                all_pass &= _check(f"Price ID {label}", False, f"{detail} ({'; '.join(errors)})")
             else:
                 _check(f"Price ID {label}", True, detail)
         except Exception as e:

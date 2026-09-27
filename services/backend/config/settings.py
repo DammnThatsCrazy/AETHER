@@ -469,6 +469,11 @@ class StripeBillingConfig:
     price_epsilon: str = _env("STRIPE_PRICE_EPSILON", "")
     price_omicron: str = _env("STRIPE_PRICE_OMICRON", "")
     price_omega: str = _env("STRIPE_PRICE_OMEGA", "")
+    # Optional yearly prices for the paid self-service tiers. A tier without
+    # one offers monthly billing only; Alpha is free and has no annual price.
+    price_beta_annual: str = _env("STRIPE_PRICE_BETA_ANNUAL", "")
+    price_gamma_annual: str = _env("STRIPE_PRICE_GAMMA_ANNUAL", "")
+    price_delta_annual: str = _env("STRIPE_PRICE_DELTA_ANNUAL", "")
     overage_price_id: str = _env("STRIPE_OVERAGE_PRICE_ID", "")
     checkout_success_url: str = _env(
         "STRIPE_CHECKOUT_SUCCESS_URL",
@@ -2625,6 +2630,13 @@ class Settings:
                 if not price_id:
                     missing.append(field_name)
                 elif not re.fullmatch(r"price_[A-Za-z0-9]+", price_id):
+                    missing.append(f"{field_name} (must match price_...)")
+            for field_name, price_id in (
+                ("STRIPE_PRICE_BETA_ANNUAL", sb.price_beta_annual),
+                ("STRIPE_PRICE_GAMMA_ANNUAL", sb.price_gamma_annual),
+                ("STRIPE_PRICE_DELTA_ANNUAL", sb.price_delta_annual),
+            ):
+                if price_id and not re.fullmatch(r"price_[A-Za-z0-9]+", price_id):
                     missing.append(f"{field_name} (must match price_...)")
             if not sb.checkout_success_url:
                 missing.append("STRIPE_CHECKOUT_SUCCESS_URL")

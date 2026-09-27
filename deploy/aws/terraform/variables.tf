@@ -626,6 +626,12 @@ variable "lead_notification_email" {
   }
 }
 
+variable "stripe_annual_prices_enabled" {
+  type        = bool
+  description = "Offer yearly billing for Beta, Gamma and Delta: tasks mount aether/stripe-price-{beta,gamma,delta}-annual. Turn on only after those secrets hold Price IDs."
+  default     = false
+}
+
 variable "self_signup_enabled" {
   type        = bool
   description = "Let a verified Auth0 sign-in from an unknown email create its own tenant (SSO_SELF_SIGNUP_ENABLED). Null keeps the backend's default: off on staging (only existing and invited users), on elsewhere."

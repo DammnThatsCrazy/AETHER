@@ -15,6 +15,7 @@ import type { SocialProvider } from "@aether/ui";
 import { useAuth, resolveAuthGrant } from "@aether-app/features/auth";
 import { useAuth0 } from "@auth0/auth0-react";
 import {
+  parseBillingInterval,
   parseSelfServePlan,
   rememberPostAuthDestination,
   resolvePostAuthRedirect,
@@ -65,8 +66,8 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
 const PLAN_OPTIONS = [
   { value: "alpha", label: "Alpha — Free" },
   { value: "beta", label: "Beta — $299/mo" },
-  { value: "gamma", label: "Gamma — $599/mo" },
-  { value: "delta", label: "Delta — $1,999/mo" },
+  { value: "gamma", label: "Gamma — $899/mo" },
+  { value: "delta", label: "Delta — $3,449/mo" },
 ];
 
 /**
@@ -96,8 +97,9 @@ function Auth0SignupRedirect() {
   const explicitRedirect =
     redirectParam !== null && resolvePostAuthRedirect(redirectParam) === redirectParam ? redirectParam : null;
   const handoff = parseSettingsHandoff(searchParams);
+  const annual = parseBillingInterval(searchParams.get("interval")) === "annual";
   const destination = plan
-    ? `/billing?plan=${plan}`
+    ? `/billing?plan=${plan}${annual && plan !== "alpha" ? "&interval=annual" : ""}`
     : explicitRedirect !== null
       ? explicitRedirect
       : handoff.family !== null || handoff.experience !== null
