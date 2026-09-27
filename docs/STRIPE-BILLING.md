@@ -16,10 +16,10 @@ canonical_owner: billing@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "scripts/validate_stripe.py": "sha256:a51619588351a11b1da4c2596d0ec352e31898cbd9a418b266a6558880208d67"
+  "scripts/validate_stripe.py": "sha256:8f4cb22ddd72665bab55def524d5575dcc3dd7c2396baada9b8027dd21384f1c"
   "services/backend/services/admin/webhook_routes.py": "sha256:3aba83f48123dd7b459cfb03b4727e3fe6707036dac99487c24fb67a68e01096"
-  "services/backend/services/billing/routes.py": "sha256:c5da14570c9272a06f1e9b3f296ac7892d33916d94d31c4fcfd3421bb1956429"
-  "services/backend/shared/billing/stripe_client.py": "sha256:6b218eea6bf9dffd0e398722948813ccea454863270693c8200cd278ab0b1742"
+  "services/backend/services/billing/routes.py": "sha256:884dbaac1268d2ff9eebb30553d2a4c1079dfae946532544e7e94acb61f1d4a3"
+  "services/backend/shared/billing/stripe_client.py": "sha256:036625098e863c9bf5ee488da84d755212494243a427a6a47d638cee8c0494d5"
   "services/backend/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
 ---
 # Stripe Billing — Aether Alpha–Omega Integration

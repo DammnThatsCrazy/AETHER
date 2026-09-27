@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:ade858963817918cdb8c0b7ec4fbb9d52d4a8c6b1cf0254dc903c1269e291de7"
+  "services/backend/services/": "sha256:0881861bc402a066c7427c4ee52fe81d4b06b257746532b6361a4685bb656c23"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
