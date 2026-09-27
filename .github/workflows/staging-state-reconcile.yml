@@ -667,6 +667,28 @@ jobs:
           declare -A reviewed_prefixes=(
             [aether-marketing]="aether www docs status"
           )
+          # A main-branch host is live when Amplify marks it verified or, as
+          # check_amplify_app_contract.py accepts, its public CNAME already
+          # resolves to the target in the subdomain's dnsRecord. Amplify leaves
+          # verified=false on every association it has updated
+          # (updateStatus UPDATE_COMPLETE), even when the host serves traffic.
+          main_mapping_live() {
+            local association_json="$1"
+            local prefix="$2"
+            local subdomain dns_record expected_target live_target
+            subdomain="$(jq -c --arg prefix "$prefix" \
+              'first((.domainAssociation.subDomains // [])[] | select(.subDomainSetting.prefix == $prefix and .subDomainSetting.branchName == "main")) // empty' \
+              <<<"$association_json")"
+            test -n "$subdomain" || return 1
+            if jq -e '.verified == true' <<<"$subdomain" >/dev/null; then
+              return 0
+            fi
+            dns_record="$(jq -r '.dnsRecord // empty' <<<"$subdomain")"
+            expected_target="$(awk '{print $NF}' <<<"$dns_record" | sed 's/\.$//' | tr '[:upper:]' '[:lower:]')"
+            test -n "$expected_target" || return 1
+            live_target="$(dig +short CNAME "${prefix}.${STAGING_AMPLIFY_DOMAIN_NAME}" | head -n 1 | sed 's/\.$//' | tr '[:upper:]' '[:lower:]')"
+            [ "$live_target" = "$expected_target" ]
+          }
           wait_for_reviewed_mapping() {
             local app_id="$1"
             local prefix="$2"
@@ -682,14 +704,12 @@ jobs:
                   echo "::error::staging Amplify domain association for ${prefix} ended with status=${current_status}"; return 1
                   ;;
               esac
-              if [ "$current_status" = AVAILABLE ] && jq -e --arg prefix "$prefix" \
-                'any((.domainAssociation.subDomains // [])[]; .subDomainSetting.prefix == $prefix and .subDomainSetting.branchName == "main" and .verified == true)' \
-                <<<"$association_json" >/dev/null; then
+              if [ "$current_status" = AVAILABLE ] && main_mapping_live "$association_json" "$prefix"; then
                 return 0
               fi
               sleep 15
             done
-            echo "::error::staging Amplify domain association for ${prefix} did not become AVAILABLE with a verified main mapping within 900 seconds"; return 1
+            echo "::error::staging Amplify domain association for ${prefix} did not become AVAILABLE with a verified or live main mapping within 900 seconds"; return 1
           }
           # One app per environment: the site app (aether-marketing) owns
           # every staging host (aether, www, docs, status and app). The retired
@@ -723,9 +743,7 @@ jobs:
               echo "::error::staging Amplify domain association for ${app_key} is not AVAILABLE (status=${status:-unknown})"; exit 1;
             }
             prefix="${app_subdomains[$app_key]}"
-            if ! jq -e --arg prefix "$prefix" \
-              'any((.domainAssociation.subDomains // [])[]; .subDomainSetting.prefix == $prefix and .subDomainSetting.branchName == "main" and .verified == true)' \
-              "$association_file" >/dev/null; then
+            if ! main_mapping_live "$(cat "$association_file")" "$prefix"; then
               if [ "$repair_requested" != true ]; then
                 rm -f "$association_file"
                 echo "::error::staging Amplify domain association for ${app_key} lacks the reviewed ${prefix} main subdomain; rerun the reviewed reconciliation with REPAIR-STAGING-AMPLIFY"; exit 1;

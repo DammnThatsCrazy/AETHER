@@ -54,7 +54,7 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:8df5f83f20c8ec516fb41d8a4d1b6458a3f3df39ffa2bb5b45130c068b02350e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:e337fbfb5016422499720de7fe11c9df879bf590695cc34362cea93a1f265dc6"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:9e0128f49dea5f2494fc040994de5e6a53db4f196ede51ac9af5ea24c83e6ac8"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
   ".github/workflows/terraform-promote.yml": "sha256:94e0e1c155df32a790090337a6a8282b4723943fec7d40325afbc5d26e5c25f0"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
@@ -616,7 +616,10 @@ import-only state reconciliation workflow adopts it before the reviewed plan
 deleting the retired product app's association). If an existing association is missing
 one of its reviewed `main` hosts, the lifecycle passes the explicit `REPAIR-STAGING-AMPLIFY` token;
 reconciliation preserves the association, adds only the missing reviewed
-mapping, waits for `AVAILABLE` and DNS verification, and then imports state.
+mapping, waits for `AVAILABLE` and a live mapping, and then imports state. A
+mapping is live when Amplify marks it verified or its public CNAME already
+resolves to the subdomain's `dnsRecord` target: Amplify leaves `verified`
+false on every association it has updated, even while the host serves traffic.
 It never creates or deletes a domain association and never changes Squarespace
 DNS. Production-lean leaves Squarespace authoritative by default; the
 Amplify association's DNS targets are exported for the controlled manual DNS

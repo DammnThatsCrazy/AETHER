@@ -606,6 +606,21 @@ def test_staging_reconciliation_repairs_only_reviewed_amplify_main_mappings():
     assert lifecycle.count("-f repair_staging_amplify_subdomains=REPAIR-STAGING-AMPLIFY") == 2
 
 
+def test_staging_reconciliation_accepts_live_dns_when_amplify_leaves_verified_false():
+    # Amplify reports verified=false on every association it has updated, even
+    # while the host serves traffic. Like check_amplify_app_contract.py, a main
+    # mapping is live when verified or when its public CNAME matches the
+    # subdomain's dnsRecord target; a mapping that is neither still fails.
+    reconcile = _workflow("staging-state-reconcile.yml")
+    assert "main_mapping_live()" in reconcile
+    assert reconcile.count('main_mapping_live "') == 2
+    assert 'jq -e \'.verified == true\' <<<"$subdomain"' in reconcile
+    assert 'dig +short CNAME "${prefix}.${STAGING_AMPLIFY_DOMAIN_NAME}"' in reconcile
+    assert '[ "$live_target" = "$expected_target" ]' in reconcile
+    assert "test -n \"$expected_target\" || return 1" in reconcile
+    assert ".subDomainSetting.branchName == \"main\" and .verified == true" not in reconcile
+
+
 def test_legacy_price_secrets_have_an_explicit_metadata_only_rekey_path():
     text = _workflow("staging-state-reconcile.yml")
     assert "migrate_legacy_secret_kms" in text
