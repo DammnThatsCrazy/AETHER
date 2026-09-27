@@ -71,15 +71,23 @@ build status for each surface.
 | `docs.olympuslabsml.com` | Documentation | Public | `frontend/docs` | Existing |
 | `status.olympuslabsml.com` | Status | Public | `frontend/status` | Code-complete and Amplify/Terraform-wired; live API status remains unverified until credentialed staging |
 
-The public web provisioning path is now part of the AWS deployment contract:
-`olympus-marketing`, `aether-marketing`, `docs`, `aether-app`, and `status` are
-separate Amplify applications. Staging reuses the verified `www`, `aether`,
-`docs`, `app`, and `status` associations under `staging.olympuslabsml.com`;
-`production-lean` associates the same surfaces under `olympuslabsml.com` and
-exports the association CNAME targets for the authoritative Squarespace DNS.
-The live staging associations are imported into Terraform state before the next
-reviewed plan. Kyber remains outside
-this public set and has no public DNS record by default.
+The public web provisioning path is now part of the AWS deployment contract.
+The public hosts are `www`, `aether`, `docs`, `app`, and `status`: under
+`staging.olympuslabsml.com` on staging and under `olympuslabsml.com` for
+`production-lean`, which exports the association CNAME targets for the
+authoritative DNS.
+
+- **Staging runs two Amplify applications.** `aether-marketing` builds the
+  unified Olympus + Aether site (`frontend/site`) and serves `aether`, `www`,
+  `docs` and `status` from one domain association; `docs.*` and `status.*`
+  redirect to the site's `/docs` and `/status` pages. `aether-app` serves
+  `app`. The former `olympus-marketing`, `docs` and `status` staging apps are
+  deleted, and the staging Amplify contract rejects them if they reappear.
+- **Production keeps five applications**, one per host: `olympus-marketing`,
+  `aether-marketing` (the prerendered build), `docs`, `aether-app`, and
+  `status`, until production moves to the unified site.
+
+Kyber remains outside this public set and has no public DNS record by default.
 
 The authentication routes belong to the **Aether public** surface
 (`aether.olympuslabsml.com`), not to the tenant origin. The public experience

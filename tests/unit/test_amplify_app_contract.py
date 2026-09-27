@@ -33,11 +33,18 @@ def _client(
     domain_verified: bool = True,
     domain_dns_record: str | None = None,
     site_hosts: tuple[str, ...] = ("www", "docs", "status"),
+    retired_apps: tuple[str, ...] | None = None,
 ):
     """``site_hosts`` are served by the site app; their retired apps hold no
-    association. Pass ``()`` for the pre-consolidation layout."""
+    association. Pass ``()`` for the pre-consolidation layout. ``retired_apps``
+    lists the retired staging apps that still exist (by default: none once
+    consolidated, all three before)."""
+    if retired_apps is None:
+        retired_apps = () if site_hosts else checker.RETIRED_STAGING_APPS
     apps = []
     for name, app_id in APP_IDS.items():
+        if name in checker.RETIRED_STAGING_APPS and name not in retired_apps:
+            continue
         apps.append(
             {
                 "name": name,
@@ -251,9 +258,24 @@ def test_staging_rejects_the_pre_consolidation_layout():
     is a failure, not a pass."""
     errors = checker.contract_errors(mode="staging", expected_commit=COMMIT, client=_client(site_hosts=()))
     assert sorted(errors) == sorted(
-        f"Amplify app AETHER-staging-aether-marketing staging domain lacks an AVAILABLE {host} subdomain with a live DNS target"
-        for host in ("www", "docs", "status")
+        [
+            f"Amplify app AETHER-staging-aether-marketing staging domain lacks an AVAILABLE {host} subdomain with a live DNS target"
+            for host in ("www", "docs", "status")
+        ]
+        + [
+            f"{name}: retired staging Amplify app still exists; the unified site serves its hosts"
+            for name in checker.RETIRED_STAGING_APPS
+        ]
     )
+
+
+def test_staging_rejects_a_retired_app_left_behind():
+    """The consolidated hosts pass on their own, but a retired app that still
+    exists (not deleted, or recreated out of band) is drift."""
+    client = _client(retired_apps=("AETHER-staging-docs",))
+    for mode in ("staging", "staging-runtime"):
+        errors = checker.contract_errors(mode=mode, expected_commit=COMMIT, client=client)
+        assert errors == ["AETHER-staging-docs: retired staging Amplify app still exists; the unified site serves its hosts"]
 
 
 def test_staging_runtime_contract_requires_the_unified_site_settings():

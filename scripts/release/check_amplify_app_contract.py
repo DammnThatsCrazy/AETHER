@@ -65,6 +65,14 @@ STAGING_APPS: tuple[str, ...] = (
     "AETHER-staging-aether-marketing",
     "AETHER-staging-aether-app",
 )
+# Staging apps replaced by the unified site. The contract runs after apply, so
+# any of these still present (left behind or recreated out of band) is drift
+# that serves stale pages and costs money.
+RETIRED_STAGING_APPS: tuple[str, ...] = (
+    "AETHER-staging-olympus-marketing",
+    "AETHER-staging-docs",
+    "AETHER-staging-status",
+)
 # Each staging host and the app that serves it. The unified site app
 # (aether-marketing) serves aether, www, docs and status; the product app
 # serves app. The retired Olympus, docs and status apps are deleted.
@@ -435,6 +443,9 @@ def contract_errors(
     errors.extend(app_errors)
     if mode in ("staging", "staging-runtime"):
         runtime_only = mode == "staging-runtime"
+        for name in RETIRED_STAGING_APPS:
+            if name in apps:
+                errors.append(f"{name}: retired staging Amplify app still exists; the unified site serves its hosts")
         for name in STAGING_APPS:
             errors.extend(
                 _check_app(

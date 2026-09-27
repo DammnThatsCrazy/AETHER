@@ -81,7 +81,9 @@ There are two separate frontend applications. **Do not mix them up.**
   across the round trip (`rememberPostAuthDestination` /
   `readPostAuthDestination`, validated and expiring after 30 minutes), and
   `/callback` lands on it. `/billing?plan=<id>` starts that plan's Stripe
-  checkout once when billing is available and it is not the current plan;
+  checkout once when billing is available and it is not the current plan,
+  first replacing the URL with plain `/billing` so Back from Stripe or a
+  reload does not start another checkout;
   the billing page lists only the self-serve plans (contract tiers go through
   Contact sales). Without Auth0 settings, `/signup` is the email form, which
   registers a new tenant on a plan. The

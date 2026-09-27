@@ -5,7 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { ThemeProvider, ToastProvider } from "@aether/ui";
 import { BillingPage } from "./billing-page";
 
@@ -54,12 +54,18 @@ vi.mock("@aether-app/features/account", () => ({
   useEnterpriseContact: () => ({ mutate: vi.fn(), isLoading: false }),
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname + location.search}</div>;
+}
+
 function renderBilling(entry: string) {
   return render(
     <ThemeProvider>
       <ToastProvider>
         <MemoryRouter initialEntries={[entry]}>
           <BillingPage />
+          <LocationProbe />
         </MemoryRouter>
       </ToastProvider>
     </ThemeProvider>,
@@ -92,6 +98,12 @@ describe("BillingPage plan hand-off", () => {
     );
     await waitFor(() => expect(window.location.href).toBe("https://checkout.stripe.test/s"));
     expect(state.createCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  it("consumes the hand-off, so Back from Stripe or a reload does not start another checkout", async () => {
+    renderBilling("/billing?plan=beta");
+    await waitFor(() => expect(state.createCheckout).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("location").textContent).toBe("/billing");
   });
 
   it("does not start checkout for the free plan, the current plan, or an unknown plan", async () => {

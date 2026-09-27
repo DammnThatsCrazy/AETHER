@@ -91,11 +91,14 @@ function Auth0SignupRedirect() {
   // then onboarding.
   const plan = parseSelfServePlan(searchParams.get("plan"));
   const redirectParam = searchParams.get("redirect");
-  const explicitRedirect = resolvePostAuthRedirect(redirectParam);
+  // A redirect is explicit when the resolver accepts it as given (/settings
+  // included); anything it rewrites was invalid.
+  const explicitRedirect =
+    redirectParam !== null && resolvePostAuthRedirect(redirectParam) === redirectParam ? redirectParam : null;
   const handoff = parseSettingsHandoff(searchParams);
   const destination = plan
     ? `/billing?plan=${plan}`
-    : redirectParam !== null && explicitRedirect !== "/settings"
+    : explicitRedirect !== null
       ? explicitRedirect
       : handoff.family !== null || handoff.experience !== null
         ? buildSettingsRedirectFromHandoff(handoff)
@@ -162,10 +165,13 @@ export function EmailSignupPage() {
   // builds /settings/integrations?family=… so a brand-new visitor lands on the
   // provider they came to connect; (3) otherwise the tenant home.
   const rawRedirectParam = searchParams.get("redirect");
-  const explicitRedirect = resolvePostAuthRedirect(rawRedirectParam);
+  const explicitRedirect =
+    rawRedirectParam !== null && resolvePostAuthRedirect(rawRedirectParam) === rawRedirectParam
+      ? rawRedirectParam
+      : null;
   const handoff = parseSettingsHandoff(searchParams);
   const signupTarget =
-    rawRedirectParam !== null && explicitRedirect !== "/settings"
+    explicitRedirect !== null
       ? explicitRedirect
       : handoff.family !== null || handoff.experience !== null
         ? buildSettingsRedirectFromHandoff(handoff)

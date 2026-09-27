@@ -85,6 +85,12 @@ describe("SignupPage with Auth0", () => {
     expect(readPostAuthDestination()).toBe("/onboarding");
   });
 
+  it("honors an explicit ?redirect=/settings over a provider hand-off", async () => {
+    renderSignup("/signup?redirect=/settings&family=google_ads&experience=advertising_campaigns");
+    await waitFor(() => expect(loginWithRedirect).toHaveBeenCalled());
+    expect(readPostAuthDestination()).toBe("/settings");
+  });
+
   it("keeps a marketing provider hand-off, as the email form does", async () => {
     renderSignup("/signup?family=google_ads&experience=advertising_campaigns&intent=connect");
     await waitFor(() => expect(loginWithRedirect).toHaveBeenCalled());

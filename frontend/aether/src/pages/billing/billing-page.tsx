@@ -309,13 +309,16 @@ export function BillingPage() {
   // Arriving from the pricing page (through sign-up) with ?plan=… starts that
   // plan's checkout once, when billing is available and it is not already the
   // current plan. Alpha is free and needs no checkout.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const requestedPlan = parseSelfServePlan(searchParams.get('plan'));
   const checkoutStarted = useRef(false);
   useEffect(() => {
     if (checkoutStarted.current || !requestedPlan || requestedPlan === 'alpha') return;
     if (!profile || !billingAvailable || currentPlanId === requestedPlan) return;
     checkoutStarted.current = true;
+    // Consume the hand-off first, so Back from Stripe or a reload lands on
+    // plain /billing instead of starting another checkout.
+    setSearchParams({}, { replace: true });
     void handleUpgrade(requestedPlan);
     // handleUpgrade is recreated each render; the ref makes this run once.
   }, [requestedPlan, profile, billingAvailable, currentPlanId]);
