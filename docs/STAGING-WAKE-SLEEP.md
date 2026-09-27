@@ -67,7 +67,7 @@ source_hashes:
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:db7c10e85f2053f977d69778e290eacb2af233a4af83bd40cb8e2eff25a12797"
   "deploy/aws/terraform/variables.tf": "sha256:870284a5138f0034b1583f30ee66639ac222e30a55b9ff93cfdd3f24ac063d1a"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:3de18a5a775e1b426726039459742338449bfabb6403c66dcceeac3577f05018"
+  "scripts/release/check_amplify_app_contract.py": "sha256:26b6ea29375da71fca61962512f3c5e695e0c90ad4ee364a2549a6d9e6c6ecfc"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
