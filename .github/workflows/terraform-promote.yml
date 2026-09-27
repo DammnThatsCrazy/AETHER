@@ -1580,6 +1580,18 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/release/ensure_staging_autoscaling_target_tags.py
+      - name: Rebuild staging Amplify apps whose build inputs changed
+        if: inputs.profile == 'staging'
+        env:
+          REVIEWED_COMMIT: ${{ steps.reviewed.outputs.commit }}
+        run: |
+          set -euo pipefail
+          # An apply that changes an app's build spec or build variables starts
+          # no Amplify build, so the host would keep the bundle built from the
+          # old inputs. Release those branches at the reviewed commit and wait.
+          python scripts/release/release_changed_amplify_apps.py \
+            --plan-json deploy/aws/terraform/reviewed.tfplan.json \
+            --commit "$REVIEWED_COMMIT"
       - name: Verify applied staging frontend runtime links
         if: inputs.profile == 'staging'
         run: |

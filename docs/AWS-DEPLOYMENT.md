@@ -25,6 +25,7 @@ source_files:
   - scripts/release/check_staging_credential_contract.py
   - scripts/release/bootstrap_staging_admin_key.py
   - scripts/release/check_amplify_app_contract.py
+  - scripts/release/release_changed_amplify_apps.py
   - scripts/release/check_staging_secret_payload_contract.py
   - scripts/release/check_staging_secret_preflight_policy.py
   - scripts/release/check_staging_task_definition_contract.py
@@ -55,7 +56,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/staging-state-reconcile.yml": "sha256:0f86b1f43ff85a1f9859f82d730428ede391c6a69fb54f9d7fcdf0cf09340a16"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
-  ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
+  ".github/workflows/terraform-promote.yml": "sha256:168b4dbc20e7209115839beb9f6ca14df8ad64f0a2f27002c92075fed39c013f"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:aae9a18a11444499b2602d85749261112b03a356080a77cdd485420499822ac9"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -70,9 +71,9 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:be3e9fef8bc560a53dfd240af71d2f9265695670e7e1637d7ba1b9d6db772451"
+  "deploy/aws/terraform/": "sha256:1f20352cbc328bacc0313069e88098655b5efcce7368039eb72344d5880f82fd"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
+  "scripts/release/check_amplify_app_contract.py": "sha256:fa89f5014fe809824d1f87a04ff5fb1a0c4e9083d0afdef27030465b986c07c4"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -84,6 +85,7 @@ source_hashes:
   "scripts/release/check_staging_task_definition_contract.py": "sha256:6755ca3b1e088bafbe260272f7df26ebf12a0b227a4fcfe902cf728ce54372e6"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
+  "scripts/release/release_changed_amplify_apps.py": "sha256:cc584d65fd667420713cbe2de6a3ddca46e72f980c921828707ca9239940b6d2"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
@@ -585,8 +587,13 @@ Amplify association's DNS targets are exported for the controlled manual DNS
 change. The public status application consumes its profile's verified
 `status_api_url`; a missing or unverified API origin renders an explicit
 unverified state. After a reviewed staging apply, the promotion workflow
-checks the live branch-level API, Auth0, and custom status-shell origins before
-publishing apply evidence. The separate `amplify-status-production.yml`
+first rebuilds every Amplify app whose build spec or build variables the plan
+changed (`scripts/release/release_changed_amplify_apps.py` waits out any
+running or cancelling branch job, starts a RELEASE job for the reviewed commit,
+and fails unless the finished job reports that exact commit), because Amplify builds
+only on a push and would otherwise keep serving a bundle built from the old
+inputs. It then checks the live branch-level API, Auth0, unified-site, and
+custom status-shell origins before publishing apply evidence. The separate `amplify-status-production.yml`
 workflow binds the existing public status app to this repository, pins its
 `main` branch to `PRODUCTION`, deploys the exact main SHA, and verifies the
 production runtime links, the AVAILABLE status association, and the live
@@ -621,14 +628,22 @@ Amplify serves the public web surfaces; S3 stores the protected tenant and Kyber
 release archives.
 
 Routing is app-specific. Olympus marketing and status serve prerendered files
-without a catch-all rewrite. Aether marketing has only the explicit
-`/login`, `/signup`, and `/forgot-password` fallbacks needed by its public auth
-threshold; the end-user app and docs portal use an index fallback because they
-resolve client routes at runtime. That fallback is a `404-200` rewrite: it
+without a catch-all rewrite. On staging, the `aether-marketing` app builds the
+unified site (`frontend/site`) for the `aether` host. It redirects
+`/app/signin`, `/app/signup` and the legacy `/login`, `/signup` and
+`/forgot-password` paths to the product app's sign-in (`aether_app_url`),
+sends `/app` to the product app's root and any other `/app/*` path to the same
+path on the product app, and uses an
+index fallback for everything else; the site's router redirects the previous
+marketing app's URLs to their new pages. Other environments keep the
+prerendered `frontend/aether-marketing` build, with index rewrites for its
+`/login`, `/signup` and `/forgot-password` routes, until the site prerenders
+its own route metadata. The end-user app and docs portal
+also use an index fallback, because they resolve client routes at runtime. That fallback is a `404-200` rewrite: it
 serves `index.html` only when no file exists at the path, so built bundles
 under `/assets/` are still served as files (a plain `200` rewrite of `/<*>`
 returns HTML for them and the app renders blank). This keeps route-specific
-marketing metadata intact while preserving direct navigation for the two
+marketing metadata intact while preserving direct navigation for the
 runtime-routed apps.
 
 The Aurora module pins the standard provisioned Aurora PostgreSQL 16.8 engine

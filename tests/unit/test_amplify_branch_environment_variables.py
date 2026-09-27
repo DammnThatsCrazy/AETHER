@@ -95,3 +95,26 @@ def test_amplify_branches_receive_only_their_declared_variables() -> None:
     assert '"https://${aws_amplify_app.frontend["docs"].default_domain}"' in status
     assert '"https://aether.${var.amplify_domain_name}"' in status
     assert '"https://${aws_amplify_app.frontend["aether-marketing"].default_domain}"' in status
+
+
+def test_unified_site_branch_receives_only_public_site_settings() -> None:
+    """The unified site (served by the aether-marketing app on staging) gets
+    its public build settings, with prices published, and nothing from the
+    product app."""
+    expression, _, _, _ = _branch_environment_variable_maps()
+    site = re.search(
+        r'^    each\.key == "aether-marketing" && local\.aether_host_serves_site \? \{\n(?P<body>.*?)^    \} : \{\},$',
+        expression,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert site is not None, "the unified site must receive its own variable map"
+    body = site.group("body")
+    assert _keys(body) == {
+        "VITE_API_BASE_URL",
+        "VITE_STATUS_API_URL",
+        "VITE_PUBLISH_PRICES",
+        "VITE_SITE_AETHER_URL",
+        "VITE_SITE_OLYMPUS_URL",
+    }
+    assert _value(body, "VITE_PUBLISH_PRICES") == '"true"'
+    assert _value(body, "VITE_API_BASE_URL") == '"https://${var.domain_name}"'

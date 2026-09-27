@@ -202,6 +202,27 @@ def test_staging_runtime_contract_requires_api_and_custom_status_origins():
     assert any("VITE_STATUS_AETHER_MARKETING_URL" in error for error in errors)
 
 
+def test_staging_runtime_contract_requires_the_unified_site_settings():
+    """The staging Aether host builds the unified site; a branch missing its
+    API, status, pricing or cross-site settings builds a broken site."""
+    client = _client()
+    errors = checker.contract_errors(
+        mode="staging",
+        expected_commit=COMMIT,
+        check_runtime_environment=True,
+        client=client,
+    )
+    site_errors = [error for error in errors if "aether-marketing" in error]
+    for key in (
+        "VITE_API_BASE_URL",
+        "VITE_STATUS_API_URL",
+        "VITE_PUBLISH_PRICES",
+        "VITE_SITE_AETHER_URL",
+        "VITE_SITE_OLYMPUS_URL",
+    ):
+        assert any(key in error for error in site_errors), key
+
+
 def test_staging_runtime_contract_accepts_exact_branch_origins():
     def client(args: list[str]) -> dict[str, Any]:
         payload = _client()(args)
