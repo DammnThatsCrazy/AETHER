@@ -82,7 +82,7 @@ source_hashes:
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:8cd68695ad396311269081bab35cf7752c4bb106560d0c06428cd7b7cfd8c403"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:0756789cec8705a2c239de128738f3289e2536279824e797955244d3b9a2e6f1"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
   "scripts/release/release_changed_amplify_apps.py": "sha256:cc584d65fd667420713cbe2de6a3ddca46e72f980c921828707ca9239940b6d2"
