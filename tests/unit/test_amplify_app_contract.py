@@ -288,6 +288,7 @@ def test_staging_runtime_contract_requires_the_unified_site_settings():
     for key in (
         "VITE_API_BASE_URL",
         "VITE_STATUS_API_URL",
+        "VITE_STATUS_HISTORY_URL",
         "VITE_PUBLISH_PRICES",
         "VITE_SITE_AETHER_URL",
         "VITE_SITE_OLYMPUS_URL",

@@ -306,6 +306,7 @@ run "staging_profile_plan" {
     condition = alltrue([
       aws_amplify_branch.main["aether-marketing"].environment_variables.AETHER_ENV == "staging",
       aws_amplify_branch.main["aether-marketing"].environment_variables.VITE_STATUS_API_URL == var.status_api_url,
+      aws_amplify_branch.main["aether-marketing"].environment_variables.VITE_STATUS_HISTORY_URL == "https://${var.domain_name}/v1/status/history",
       aws_amplify_branch.main["aether-marketing"].environment_variables.VITE_SITE_AETHER_URL == "https://aether.${var.amplify_domain_name}",
     ])
     error_message = "The staging site branch is missing its environment-local status and site links."

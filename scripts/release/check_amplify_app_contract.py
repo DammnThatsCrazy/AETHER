@@ -40,6 +40,7 @@ STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
         "AETHER_ENV": "staging",
         "VITE_API_BASE_URL": "https://api.staging.olympuslabsml.com",
         "VITE_STATUS_API_URL": "https://api.staging.olympuslabsml.com/health",
+        "VITE_STATUS_HISTORY_URL": "https://api.staging.olympuslabsml.com/v1/status/history",
         "VITE_PUBLISH_PRICES": "true",
         "VITE_SITE_AETHER_URL": "https://aether.staging.olympuslabsml.com",
         "VITE_SITE_OLYMPUS_URL": "https://www.staging.olympuslabsml.com",
