@@ -1218,9 +1218,10 @@ resource "aws_route53_record" "squarespace_apex" {
   records = local.squarespace_ips
 }
 
-# www → Squarespace (CNAME)
+# www → Squarespace (CNAME), only when no Amplify app serves www (the Olympus
+# app on production, the unified site on staging).
 resource "aws_route53_record" "squarespace_www" {
-  count   = var.squarespace_hosted_zone_enabled && !contains(keys(local.amplify_apps), "olympus-marketing") ? 1 : 0
+  count   = var.squarespace_hosted_zone_enabled && !contains(keys(local.amplify_host_apps), "www") ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "www.${var.amplify_domain_name}"
   type    = "CNAME"
@@ -1322,9 +1323,9 @@ resource "aws_route53_record" "kyber" {
   records = [var.kyber_cname_target]
 }
 
-# Status page subdomain
+# Status page subdomain, only when no Amplify app serves status.
 resource "aws_route53_record" "status" {
-  count   = local.product_dns_enabled && !contains(keys(local.amplify_apps), "status") && var.status_cname_target != "" ? 1 : 0
+  count   = local.product_dns_enabled && !contains(keys(local.amplify_host_apps), "status") && var.status_cname_target != "" ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "status.${var.amplify_domain_name}"
   type    = "CNAME"

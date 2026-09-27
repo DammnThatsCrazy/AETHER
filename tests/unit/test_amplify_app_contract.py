@@ -258,24 +258,20 @@ def test_staging_rejects_the_pre_consolidation_layout():
     is a failure, not a pass."""
     errors = checker.contract_errors(mode="staging", expected_commit=COMMIT, client=_client(site_hosts=()))
     assert sorted(errors) == sorted(
-        [
-            f"Amplify app AETHER-staging-aether-marketing staging domain lacks an AVAILABLE {host} subdomain with a live DNS target"
-            for host in ("www", "docs", "status")
-        ]
-        + [
-            f"{name}: retired staging Amplify app still exists; the unified site serves its hosts"
-            for name in checker.RETIRED_STAGING_APPS
-        ]
+        f"Amplify app AETHER-staging-aether-marketing staging domain lacks an AVAILABLE {host} subdomain with a live DNS target"
+        for host in ("www", "docs", "status")
     )
 
 
-def test_staging_rejects_a_retired_app_left_behind():
-    """The consolidated hosts pass on their own, but a retired app that still
-    exists (not deleted, or recreated out of band) is drift."""
+def test_retired_apps_fail_only_the_post_apply_check():
+    """The pre-apply preflight (mode staging) must let the first rollout run the
+    apply that deletes the retired apps; the post-apply staging-runtime check
+    then fails while one still exists (left behind or recreated out of band)."""
     client = _client(retired_apps=("AETHER-staging-docs",))
-    for mode in ("staging", "staging-runtime"):
-        errors = checker.contract_errors(mode=mode, expected_commit=COMMIT, client=client)
-        assert errors == ["AETHER-staging-docs: retired staging Amplify app still exists; the unified site serves its hosts"]
+    assert checker.contract_errors(mode="staging", expected_commit=COMMIT, client=client) == []
+    assert checker.contract_errors(mode="staging-runtime", expected_commit=COMMIT, client=client) == [
+        "AETHER-staging-docs: retired staging Amplify app still exists; the unified site serves its hosts"
+    ]
 
 
 def test_staging_runtime_contract_requires_the_unified_site_settings():

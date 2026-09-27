@@ -82,7 +82,8 @@ authoritative DNS.
   `docs` and `status` from one domain association; `docs.*` and `status.*`
   redirect to the site's `/docs` and `/status` pages. `aether-app` serves
   `app`. The former `olympus-marketing`, `docs` and `status` staging apps are
-  deleted, and the staging Amplify contract rejects them if they reappear.
+  deleted, and the post-apply staging Amplify check rejects them if they
+  reappear.
 - **Production keeps five applications**, one per host: `olympus-marketing`,
   `aether-marketing` (the prerendered build), `docs`, `aether-app`, and
   `status`, until production moves to the unified site.

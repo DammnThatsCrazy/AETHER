@@ -514,6 +514,33 @@ run "staging_listener_maintenance_transition" {
   }
 }
 
+# The unified site serves www and status on staging, so the legacy DNS
+# fallbacks (Squarespace www CNAME, external status CNAME) stay off even in the
+# Squarespace hosted-zone mode or with a status target configured.
+run "staging_consolidated_hosts_skip_legacy_dns" {
+  command = plan
+
+  variables {
+    deployment_profile              = "staging"
+    environment                     = "staging"
+    network_egress_mode             = null
+    skip_aurora                     = true
+    product_dns_zone_id             = ""
+    squarespace_hosted_zone_enabled = true
+    status_cname_target             = "status.example.test"
+  }
+
+  assert {
+    condition = alltrue([
+      contains(keys(local.amplify_host_apps), "www"),
+      contains(keys(local.amplify_host_apps), "status"),
+      length(aws_route53_record.squarespace_www) == 0,
+      length(aws_route53_record.status) == 0,
+    ])
+    error_message = "A legacy www or status DNS fallback would duplicate the unified site's record."
+  }
+}
+
 # ---------------------------------------------------------------------------
 # demo — ephemeral-class. Temporary live demo with a seeded backend tenant.
 # Cost-capped and TTL-cleanup-required: same forbidden set and egress posture

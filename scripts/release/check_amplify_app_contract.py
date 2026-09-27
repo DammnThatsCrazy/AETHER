@@ -65,9 +65,10 @@ STAGING_APPS: tuple[str, ...] = (
     "AETHER-staging-aether-marketing",
     "AETHER-staging-aether-app",
 )
-# Staging apps replaced by the unified site. The contract runs after apply, so
-# any of these still present (left behind or recreated out of band) is drift
-# that serves stale pages and costs money.
+# Staging apps replaced by the unified site. The post-apply staging-runtime
+# check (terraform-promote) fails while any of these still exists (left behind
+# or recreated out of band). The pre-apply staging preflight allows them: the
+# first rollout deletes them in the apply that the preflight gates.
 RETIRED_STAGING_APPS: tuple[str, ...] = (
     "AETHER-staging-olympus-marketing",
     "AETHER-staging-docs",
@@ -443,7 +444,7 @@ def contract_errors(
     errors.extend(app_errors)
     if mode in ("staging", "staging-runtime"):
         runtime_only = mode == "staging-runtime"
-        for name in RETIRED_STAGING_APPS:
+        for name in RETIRED_STAGING_APPS if runtime_only else ():
             if name in apps:
                 errors.append(f"{name}: retired staging Amplify app still exists; the unified site serves its hosts")
         for name in STAGING_APPS:
