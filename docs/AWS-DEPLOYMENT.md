@@ -55,7 +55,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/staging-state-reconcile.yml": "sha256:0f86b1f43ff85a1f9859f82d730428ede391c6a69fb54f9d7fcdf0cf09340a16"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
-  ".github/workflows/terraform-promote.yml": "sha256:e26e2608beb6cac5287a3b521cc0e3b0eb441da41daa59627292b74f543d17a5"
+  ".github/workflows/terraform-promote.yml": "sha256:168b4dbc20e7209115839beb9f6ca14df8ad64f0a2f27002c92075fed39c013f"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:aae9a18a11444499b2602d85749261112b03a356080a77cdd485420499822ac9"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -72,7 +72,7 @@ source_hashes:
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:142feed4a8c305238f244f969f8a5b48d4d9dae0de31a205f48a538386272c5d"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:73a2b2aea0910f3267a58f0c3e27084bcbebfd210abdf13a702e717ef30717c8"
+  "scripts/release/check_amplify_app_contract.py": "sha256:fa89f5014fe809824d1f87a04ff5fb1a0c4e9083d0afdef27030465b986c07c4"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -585,8 +585,12 @@ Amplify association's DNS targets are exported for the controlled manual DNS
 change. The public status application consumes its profile's verified
 `status_api_url`; a missing or unverified API origin renders an explicit
 unverified state. After a reviewed staging apply, the promotion workflow
-checks the live branch-level API, Auth0, and custom status-shell origins before
-publishing apply evidence. The separate `amplify-status-production.yml`
+first rebuilds every Amplify app whose build spec or build variables the plan
+changed (`scripts/release/release_changed_amplify_apps.py` starts a RELEASE
+job pinned to the reviewed commit and waits for it), because Amplify builds
+only on a push and would otherwise keep serving a bundle built from the old
+inputs. It then checks the live branch-level API, Auth0, unified-site, and
+custom status-shell origins before publishing apply evidence. The separate `amplify-status-production.yml`
 workflow binds the existing public status app to this repository, pins its
 `main` branch to `PRODUCTION`, deploys the exact main SHA, and verifies the
 production runtime links, the AVAILABLE status association, and the live

@@ -38,8 +38,14 @@ STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
     "AETHER-staging-olympus-marketing": {
         "AETHER_ENV": "staging",
     },
+    # The unified site (frontend/site) on the staging Aether host.
     "AETHER-staging-aether-marketing": {
         "AETHER_ENV": "staging",
+        "VITE_API_BASE_URL": "https://api.staging.olympuslabsml.com",
+        "VITE_STATUS_API_URL": "https://api.staging.olympuslabsml.com/health",
+        "VITE_PUBLISH_PRICES": "true",
+        "VITE_SITE_AETHER_URL": "https://aether.staging.olympuslabsml.com",
+        "VITE_SITE_OLYMPUS_URL": "https://www.staging.olympuslabsml.com",
     },
     "AETHER-staging-docs": {
         "AETHER_ENV": "staging",
