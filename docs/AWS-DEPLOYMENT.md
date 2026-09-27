@@ -665,7 +665,7 @@ path on the product app, and rewrites every other page route to
 file extension, or whose extension is not a static asset), so routes are not
 404s and bundles, images and fonts are still served as files; the site's
 router redirects the previous
-marketing app's URLs to their new pages. Other environments keep the
+marketing app's URLs to their new pages. Its status page reads the backend's 90-day per-component uptime feed (`VITE_STATUS_HISTORY_URL`, `GET /v1/status/history`). Other environments keep the
 prerendered `frontend/aether-marketing` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders
 its own route metadata. The end-user app and docs portal
