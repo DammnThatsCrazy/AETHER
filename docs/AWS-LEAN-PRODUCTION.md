@@ -24,7 +24,7 @@ estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
-  ".github/workflows/terraform-promote.yml": "sha256:94e0e1c155df32a790090337a6a8282b4723943fec7d40325afbc5d26e5c25f0"
+  ".github/workflows/terraform-promote.yml": "sha256:6212c4d61af48158fe4c6c2b0d219e2614e4c786a48f5f41ae5e0fb126c026ad"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
@@ -33,7 +33,7 @@ source_hashes:
   "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
   "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
-  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:f9c5d7c11f893989c577ed342fcfb8a780ee2bfebc661250490817024aa0c3aa"
+  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:4eb03ce529255774d2adb66cc8a064850447ef24193230be031ffdf90115ae45"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
 ---
 

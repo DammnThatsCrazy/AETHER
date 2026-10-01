@@ -56,7 +56,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
   ".github/workflows/staging-state-reconcile.yml": "sha256:d598a942c1f156576a9fbb78ac35efdda512be546c720b1ed4cecddf6fe70b8d"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
-  ".github/workflows/terraform-promote.yml": "sha256:94e0e1c155df32a790090337a6a8282b4723943fec7d40325afbc5d26e5c25f0"
+  ".github/workflows/terraform-promote.yml": "sha256:6212c4d61af48158fe4c6c2b0d219e2614e4c786a48f5f41ae5e0fb126c026ad"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -71,13 +71,13 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:a943d88aef3c797de42a9471e20eebf5d5178ed28a1838971a3d50d792e75073"
+  "deploy/aws/terraform/": "sha256:0411fdee150c22539f9d29b6dd2a07fc882e4a1168f544f4c2190d1fd22f6eb6"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:645ad3320ea6ba0335b59fbae64d9e6a9f465c6d0f5be5d10d10446af45e61e9"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
-  "scripts/release/check_staging_lane_contract.py": "sha256:5d5711a9409d7cd9659b30cebd9f961f6e5db55e36297cd4c783f541c152e032"
+  "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:001a5330f78fb4c334c3ddf56448c464355bee4b16c1640a1cbd5041be499fb5"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
@@ -1102,8 +1102,19 @@ accounts when their names would otherwise collide.
    remain optional and are only needed when those operator-managed tiers are enabled.
    Yearly prices (`aether/stripe-price-{beta,gamma,delta}-annual`) are
    optional too: tasks mount them only when the profile sets
-   `stripe_annual_prices_enabled = true`, which is turned on after the three
-   secrets hold Price IDs. A tier without a yearly price bills monthly only.
+   `stripe_annual_prices_enabled = true`, and only in the pilot lane, which is
+   the one that runs Stripe billing. A tier without a yearly price bills
+   monthly only. The staging profile turns the flag on with the sandbox yearly
+   Price IDs; no production profile sets it. With the flag on, the three
+   secrets must hold a Price ID before the pilot plan, exactly like the monthly
+   ones: create them through the secure bootstrap (raw `price_...` string,
+   staging secrets CMK), then run `staging-state-reconcile`, which discovers
+   existing price secrets and imports their metadata. The pilot plan refuses
+   to run until each yearly secret is at its canonical Terraform address, and
+   the plan and apply preflights (`check_staging_lane_contract.py`) fail closed
+   on a yearly secret without an `AWSCURRENT` version, so an empty stub is
+   never mounted. Turning the flag on in a profile whose first apply would
+   create the stubs is not a supported order.
    Each environment uses its own Stripe account, and staging never holds
    live-mode keys or prices:
 

@@ -65,6 +65,15 @@ def _complete_ecs_wiring() -> str:
     return f"{env}\n{mounts}\n"
 
 
+_ANNUAL_ON = "stripe_annual_prices_enabled = true\n"
+_ANNUAL_OFF = "stripe_annual_prices_enabled = false\n"
+_ANNUAL_SECRETS = (
+    "stripe-price-beta-annual",
+    "stripe-price-gamma-annual",
+    "stripe-price-delta-annual",
+)
+
+
 def _complete_bootstrap() -> str:
     return "\n".join(
         f'"{env}": "{secret}"'
@@ -117,6 +126,7 @@ def test_pilot_runtime_wiring_contract_passes_only_when_all_mounts_and_env_exist
         check_runtime_wiring=True,
         bootstrap_text=_complete_bootstrap(),
         ecs_text=_complete_ecs_wiring(),
+        tfvars_text=_ANNUAL_OFF,
     )
     assert errors == []
 
@@ -161,6 +171,107 @@ def test_aws_price_preflight_checks_metadata_without_reading_values():
         runner=_fake_aws_runner(),
     ) == []
     assert len(contract.REQUIRED_POPULATED_PRICE_SECRETS) == 4
+
+
+def _stub_annual_runner(checked: list[str]):
+    """Monthly secrets hold a value; the yearly ones are Terraform stubs."""
+
+    def run(args, **kwargs):
+        assert "describe-secret" in args, f"secret value read is forbidden: {args}"
+        secret_id = args[args.index("--secret-id") + 1]
+        checked.append(secret_id)
+        versions = {} if secret_id.endswith("-annual") else {"version": ["AWSCURRENT"]}
+        return subprocess.CompletedProcess(args, 0, json.dumps({"VersionIdsToStages": versions}), "")
+
+    return run
+
+
+def test_staging_profile_turns_on_annual_prices_and_other_profiles_do_not():
+    contract = _load()
+    assert contract.staging_annual_prices_enabled() is True
+    assert contract.staging_annual_prices_enabled("") is False
+    assert contract.staging_annual_prices_enabled(_ANNUAL_OFF) is False
+    assert contract.staging_annual_prices_enabled("stripe_annual_prices_enabled = true # yearly\n") is True
+    try:
+        contract.staging_annual_prices_enabled(_ANNUAL_ON + _ANNUAL_OFF)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("an ambiguous double assignment must be rejected")
+    # The live Stripe account is out of scope: only the staging sandbox turns
+    # yearly prices on.
+    for profile in (ROOT / "deploy/aws/terraform/profiles").glob("*.tfvars"):
+        if profile.name == "staging.tfvars":
+            continue
+        assert "stripe_annual_prices_enabled" not in profile.read_text(encoding="utf-8"), profile.name
+
+
+def test_aws_price_preflight_fails_closed_on_annual_stubs_only_when_enabled():
+    contract = _load()
+    checked: list[str] = []
+    errors = contract.validate(
+        profile="staging",
+        deployment_lane="pilot",
+        require_aws_price_secrets=True,
+        tfvars_text=_ANNUAL_ON,
+        runner=_stub_annual_runner(checked),
+    )
+    assert sorted(errors) == sorted(
+        f"required Stripe test price secret aether/{name} has no AWSCURRENT version"
+        for name in _ANNUAL_SECRETS
+    )
+    assert {f"aether/{name}" for name in _ANNUAL_SECRETS} <= set(checked)
+
+    checked.clear()
+    assert contract.validate(
+        profile="staging",
+        deployment_lane="pilot",
+        require_aws_price_secrets=True,
+        tfvars_text=_ANNUAL_OFF,
+        runner=_stub_annual_runner(checked),
+    ) == []
+    assert not any(name.endswith("-annual") for name in checked)
+
+
+def test_aws_staging_preflight_requires_annual_secrets_in_pilot_when_enabled():
+    contract = _load()
+    errors = contract.aws_staging_secret_errors(
+        deployment_lane="pilot",
+        annual_prices_enabled=True,
+        runner=_stub_annual_runner([]),
+    )
+    assert sorted(errors) == sorted(
+        f"required staging secret aether/{name} has no AWSCURRENT version"
+        for name in _ANNUAL_SECRETS
+    )
+    # Full staging does not enable Stripe billing, so it never mounts them.
+    assert contract.aws_staging_secret_errors(
+        deployment_lane="full",
+        annual_prices_enabled=True,
+        runner=_stub_annual_runner([]),
+    ) == []
+
+
+def test_pilot_runtime_wiring_requires_annual_mounts_when_enabled():
+    contract = _load()
+    errors = contract.validate(
+        profile="staging",
+        deployment_lane="pilot",
+        check_runtime_wiring=True,
+        bootstrap_text=_complete_bootstrap(),
+        ecs_text=_complete_ecs_wiring(),
+        tfvars_text=_ANNUAL_ON,
+    )
+    assert sorted(errors) == sorted(f"ECS secret mount missing aether/{name}" for name in _ANNUAL_SECRETS)
+    annual_mounts = "\n".join(f'lookup(var.secret_arns, "{name}", "")' for name in _ANNUAL_SECRETS)
+    assert contract.validate(
+        profile="staging",
+        deployment_lane="pilot",
+        check_runtime_wiring=True,
+        bootstrap_text=_complete_bootstrap(),
+        ecs_text=_complete_ecs_wiring() + annual_mounts,
+        tfvars_text=_ANNUAL_ON,
+    ) == []
 
 
 def test_aws_staging_preflight_covers_every_mounted_secret_without_values():
@@ -212,3 +323,19 @@ def test_workflows_dispatch_and_record_the_same_lane_without_changing_state_key(
     assert "deployment_lane:" in delivery
     assert "check_staging_lane_contract.py" in pilot_entrypoint
     assert "-f profile=staging -f deployment_lane=pilot" in pilot_entrypoint
+
+
+def test_pilot_plan_requires_annual_state_owners_when_the_profile_enables_them():
+    """A pilot plan must not create an empty yearly stub that tasks then mount."""
+    promote = (ROOT / ".github/workflows/terraform-promote.yml").read_text(encoding="utf-8")
+    start = promote.index("      - name: Create immutable reviewed plan")
+    end = promote.index("      - name:", start + 1)
+    block = promote[start:end]
+    assert "working-directory: deploy/aws/terraform" in block
+    flag_gate = block.index("stripe_annual_prices_enabled[[:space:]]*=[[:space:]]*true")
+    assert "profiles/staging.tfvars" in block[flag_gate:flag_gate + 200]
+    owners = block[flag_gate:block.index('for name in "${required_pilot_secret_names[@]}"', flag_gate)]
+    for name in _ANNUAL_SECRETS:
+        assert name in owners
+    assert 'required_staging_secret_names+=("${required_pilot_secret_names[@]}")' in block
+    assert "run staging-state-reconcile" in block
