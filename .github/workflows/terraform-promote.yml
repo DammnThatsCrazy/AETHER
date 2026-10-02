@@ -1674,10 +1674,13 @@ jobs:
           set -euo pipefail
           # Terraform and the delivery workflow must converge the registered
           # revisions, not merely the source module. This metadata-only gate
-          # proves the live API and lean-worker tasks match the selected lane
-          # and that secret values are never read.
+          # proves the revisions delivery will deploy for the API and
+          # lean-worker match the selected lane, and never reads secret values.
+          # The API service ignores task-definition drift and keeps running its
+          # previous revision until delivery rolls it, so the gate checks each
+          # family's latest ACTIVE revision, which is what delivery clones.
           python scripts/release/check_staging_task_definition_contract.py \
-            --lane "$DEPLOYMENT_LANE"
+            --lane "$DEPLOYMENT_LANE" --revision family-latest
       - name: Verify applied staging ECS cache IAM permissions
         if: inputs.profile == 'staging'
         working-directory: deploy/aws/terraform

@@ -253,6 +253,21 @@ def test_staging_delivery_rejects_a_live_task_lane_mismatch_before_mutation():
     assert lane_check < mutation
     assert "check_staging_task_definition_contract.py" in workflow[lane_check:mutation]
     assert "DEPLOYMENT_LANE" in workflow[lane_check:mutation]
+    # The rollout clones each family's latest ACTIVE revision, so the gate
+    # checks that source revision, not the one the API service still runs.
+    assert '--lane "$DEPLOYMENT_LANE" --revision family-latest' in workflow[lane_check:mutation]
+    assert 'aws ecs describe-task-definition --task-definition "$family"' in workflow[mutation:]
+
+
+def test_post_apply_task_definition_gate_checks_what_delivery_will_deploy():
+    # Terraform registers a new API revision but the service ignores
+    # task-definition drift, so right after apply it still runs the old one.
+    workflow = _workflow("terraform-promote.yml")
+    gate = workflow.index("Verify applied staging ECS task-definition lane")
+    end = workflow.index("- name:", gate + 1)
+    assert '--lane "$DEPLOYMENT_LANE" --revision family-latest' in workflow[gate:end]
+    lifecycle = _workflow("staging-lifecycle.yml")
+    assert '--lane "$DEPLOYMENT_LANE" --revision family-latest' in lifecycle
 
 
 def test_staging_smoke_uses_the_authoritative_proof_environment_and_fails_closed():
@@ -275,7 +290,8 @@ def test_staging_smoke_uses_the_authoritative_proof_environment_and_fails_closed
     assert "secrets.AWS_STAGING_SECRET_PREFLIGHT_ROLE_ARN" in workflow
     assert "secrets.AWS_TERRAFORM_PLAN_ROLE_ARN" in workflow
     assert "AetherStagingPlan" in workflow
-    assert "check_staging_task_definition_contract.py --lane pilot" in workflow
+    # After delivery the running revision is the one to prove.
+    assert "check_staging_task_definition_contract.py --lane pilot\n" in workflow
     assert "Load the pilot Stripe test key without logging it" in workflow
     assert 'echo "::add-mask::$stripe_key"' in workflow
     assert "STRIPE_SECRET_KEY" in workflow

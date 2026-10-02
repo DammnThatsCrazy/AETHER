@@ -6,6 +6,13 @@ secret *names* from ECS, never secret values. The pilot gate is intentionally
 stricter than a source-text check: it proves the registered revisions have the
 four self-service Stripe price mounts and do not still carry the deferred Kyber
 Google mounts from an older full-lane revision.
+
+``--revision service`` (the default) checks the revision each ECS service is
+running. ``--revision family-latest`` checks the family's latest ACTIVE
+revision instead: the one ``deploy.yml`` clones for the next rollout. The API
+service ignores Terraform task-definition drift, so between a Terraform apply
+and the delivery rollout it still runs the previous revision; checks that run
+before delivery must validate what delivery will deploy, not what it replaces.
 """
 
 from __future__ import annotations
@@ -20,6 +27,8 @@ from typing import Any, NoReturn
 
 
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
+
+REVISION_SOURCES = frozenset({"service", "family-latest"})
 
 # The staging product is served by the one web app under /app (#721); Stripe
 # checkout and portal returns land there.
@@ -243,9 +252,12 @@ def contract_errors(
     client: AwsCall,
     cluster: str = "AETHER-staging",
     expected_account_id: str | None = None,
+    revision: str = "service",
 ) -> list[str]:
     if lane not in {"pilot", "full"}:
         return [f"deployment lane must be pilot or full, got {lane!r}"]
+    if revision not in REVISION_SOURCES:
+        return [f"revision source must be one of {sorted(REVISION_SOURCES)}, got {revision!r}"]
 
     errors: list[str] = []
     expected_env = dict(REQUIRED_ENV)
@@ -270,6 +282,15 @@ def contract_errors(
 
         definition_payload = client(["ecs", "describe-task-definition", "--task-definition", task_definition])
         definition = _mapping(definition_payload.get("taskDefinition"))
+        if revision == "family-latest":
+            family = definition.get("family")
+            if not isinstance(family, str) or not family:
+                errors.append(f"{service}: running task definition has no family")
+                continue
+            # A bare family name resolves to its latest ACTIVE revision, the
+            # same lookup deploy.yml uses to pick the revision it clones.
+            definition_payload = client(["ecs", "describe-task-definition", "--task-definition", family])
+            definition = _mapping(definition_payload.get("taskDefinition"))
         containers = definition.get("containerDefinitions")
         if not isinstance(containers, list):
             errors.append(f"{service}: task definition has no container definitions")
@@ -334,6 +355,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lane", choices=("pilot", "full"), required=True)
     parser.add_argument("--cluster", default="AETHER-staging")
+    parser.add_argument(
+        "--revision",
+        choices=sorted(REVISION_SOURCES),
+        default="service",
+        help="check the revision each service runs, or the family's latest ACTIVE revision that delivery clones",
+    )
     args = parser.parse_args(argv)
     identity = aws_json(["sts", "get-caller-identity"])
     expected_account_id = identity.get("Account")
@@ -344,13 +371,17 @@ def main(argv: list[str] | None = None) -> int:
         cluster=args.cluster,
         client=aws_json,
         expected_account_id=expected_account_id,
+        revision=args.revision,
     )
     if errors:
         print("staging ECS task-definition contract FAILED:", file=sys.stderr)
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print(f"staging ECS task-definition contract valid: lane={args.lane}; secret values were not read")
+    print(
+        f"staging ECS task-definition contract valid: lane={args.lane}; revision={args.revision}; "
+        "secret values were not read"
+    )
     return 0
 
 
