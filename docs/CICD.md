@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:6eb3cc9ba28e5fd84bb62553ad7c77c51556a9a090c35e103dafe15f214f2993"
+  ".github/workflows/": "sha256:3ac76ef3715a33de221d0e834d478d46ce7add898c11fca73c052b0846498ba7"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -276,7 +276,11 @@ dispatches canonical delivery with `rehearsal_run_id` set to its own run. Delive
 verifies through the Actions API that the run is an in-progress
 `staging-lifecycle.yml` run on the same commit and only then defers its
 fixed-key golden-path smoke to the rehearsal; a failed check fails delivery.
-Every other staging, push, and production delivery still runs it. The certificate-
+Every other staging, push, and production delivery still runs it. On staging,
+where the fixed key is never provisioned, `scripts/release/staging_delivery_smoke.py`
+uses the verified `STAGING_ADMIN_API_KEY` to create a run-scoped enterprise
+tenant and key, runs the same smoke with that key, and always removes the tenant;
+an incomplete cleanup fails delivery. Production deliveries keep `SMOKE_API_KEY`. The certificate-
 covered API hostname and raw ALB name are captured from reviewed Terraform
 apply output. Terraform writes the staging `api` record once the delegated
 staging zone is in use (see [Domain & DNS Readiness](DOMAIN-DNS-READINESS.md)),

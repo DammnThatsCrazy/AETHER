@@ -10,6 +10,7 @@ source_files:
   - .github/workflows/staging-lifecycle.yml
   - .github/workflows/deploy.yml
   - .github/workflows/staging-ttl-guard.yml
+  - .github/workflows/staging-business-hours.yml
   - .github/workflows/terraform-promote.yml
   - .github/workflows/pilot-staging.yml
   - .github/workflows/reconcile-staging-plan-role.yml
@@ -46,9 +47,10 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:f2b555580ea9d40562cae1288180b8980f6c7b238892894c1bc9816e07448a09"
-  ".github/workflows/deploy.yml": "sha256:4565ee6e18dd414fe0db6d8c1ff6b23f98de1cd4abf0ab367617dda44063a458"
+  ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
+  ".github/workflows/staging-business-hours.yml": "sha256:1c98e9019319d685635b04c4131abb01020700719cedd8e82342d27103bc660a"
   ".github/workflows/staging-lifecycle.yml": "sha256:2dcb69dca4c0f699dd67e6e9a519acfc6430b941bdfb0cd6361eab7574210352"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
@@ -64,7 +66,7 @@ source_hashes:
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
   "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:9b551210945268adfeb3672655eb28ff564bb07a5732f9bd64205a7f8cacd320"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:13bfa71ca795f6920b6e41eb844bfd6cecb6c6d34c326d69af2a0209eb52003f"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:645ad3320ea6ba0335b59fbae64d9e6a9f465c6d0f5be5d10d10446af45e61e9"
@@ -396,6 +398,28 @@ same original `awake_since`; the refresh never resets the total-awake clock.
 | `staging-ttl-guard.yml` mode `extend` | **overwrites** with `now + extend_hours` (1–4 h); does not add to the existing deadline |
 | `staging-lifecycle.yml` → `sleep` | deletes it (`always()`) |
 | `staging-ttl-guard.yml` enforcement | deletes it after scaling to zero |
+
+### Business hours
+
+`staging-business-hours.yml` keeps staging up for demos on weekdays and asleep
+otherwise, in New York time:
+
+| When (Mon–Fri) | What it starts |
+|---|---|
+| 08:15 | `plan-wake` for the newest release built from `main`, then `apply-wake` with that run's reviewed `plan_run_id`/`plan_checksum` and `max_awake_hours=8`. Staging is ready at about 08:45. |
+| 17:00 | `apply-sleep` |
+
+It holds no AWS credentials and runs no Terraform. It dispatches the same
+lifecycle actions an operator would, so every check above still applies:
+`apply-wake` re-validates the plan it was handed, and `terraform-promote.yml`
+stays `workflow_dispatch`-only and applies only the stored plan. Each
+transition has two UTC crons, one per New York offset (EDT and EST). The run
+acts only on the cron that matches the current offset, so daylight-saving
+changes need no edits. The 8-hour lease outlasts the 17:00 sleep, and the TTL
+guard still scales staging to zero if a sleep is missed.
+
+For a demo outside these hours, dispatch the workflow with
+`transition=wake`, and later `transition=sleep`.
 
 ## The TTL guard
 

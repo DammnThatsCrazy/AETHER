@@ -164,7 +164,10 @@ isolated run-scoped data-plane keys. The canonical delivery the rehearsal
 dispatches therefore names its own run as `rehearsal_run_id`. Delivery verifies
 that run is an in-progress `staging-lifecycle.yml` run on the same commit, then
 defers only its fixed-key golden-path smoke to the rehearsal's authenticated
-capability checks; if the check fails, delivery fails instead of skipping the smoke. Never put the raw admin key or AWS
+capability checks; if the check fails, delivery fails instead of skipping the smoke.
+A staging delivery the rehearsal does not own runs the same smoke with a
+run-scoped tenant key created from the durable admin key
+(`scripts/release/staging_delivery_smoke.py`), then removes that tenant. Never put the raw admin key or AWS
 bootstrap token in source, plans, logs, or artifacts.
 
 If a retry is needed, reuse the same saved key and request from the helper. Do

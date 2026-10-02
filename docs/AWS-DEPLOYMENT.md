@@ -51,7 +51,7 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:f2b555580ea9d40562cae1288180b8980f6c7b238892894c1bc9816e07448a09"
-  ".github/workflows/deploy.yml": "sha256:4565ee6e18dd414fe0db6d8c1ff6b23f98de1cd4abf0ab367617dda44063a458"
+  ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:2dcb69dca4c0f699dd67e6e9a519acfc6430b941bdfb0cd6361eab7574210352"
   ".github/workflows/staging-state-reconcile.yml": "sha256:d598a942c1f156576a9fbb78ac35efdda512be546c720b1ed4cecddf6fe70b8d"
@@ -71,7 +71,7 @@ source_hashes:
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:0411fdee150c22539f9d29b6dd2a07fc882e4a1168f544f4c2190d1fd22f6eb6"
+  "deploy/aws/terraform/": "sha256:4c6b12523b325d5afd9231f439c5446f92a5dddfda23e384ac9da21736657d66"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:645ad3320ea6ba0335b59fbae64d9e6a9f465c6d0f5be5d10d10446af45e61e9"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -601,7 +601,8 @@ commit and host mappings. It is not Terraform-managed yet.
 Transactional email goes through Amazon SES from the verified
 `olympuslabsml.com` domain identity (`email_enabled`, on in the staging
 profile). The tasks send from `noreply@olympuslabsml.com`, contact and pilot
-requests notify `lead_notification_email` (`team@olympuslabsml.com`), and the
+requests notify `lead_notification_email` (`osaze@olympuslabsml.com` on
+staging; the default `team@olympuslabsml.com` elsewhere), and the
 task role may only call `ses:SendEmail` on that identity, in the deployment
 region (the tasks get `EMAIL_AWS_REGION`). The staging release manifest
 resolves `EMAIL_ENABLED` on. While the SES account is in the

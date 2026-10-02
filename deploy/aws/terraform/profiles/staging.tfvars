@@ -45,8 +45,11 @@ amplify_domain_name           = "staging.olympuslabsml.com"
 status_api_url                = "https://api.staging.olympuslabsml.com/health"
 
 # Lead notifications (contact and pilot requests) and account mail go through
-# SES from the verified olympuslabsml.com identity to team@olympuslabsml.com.
-email_enabled = true
+# SES from the verified olympuslabsml.com identity. Staging leads go to the
+# founder's inbox until a paying pilot funds production and the shared team@
+# inbox (the variable's default).
+email_enabled           = true
+lead_notification_email = "osaze@olympuslabsml.com"
 
 # Anyone can create an account on staging through Auth0 sign-up (Google or
 # email) to exercise the full journey: sign-up, tenant, plan, Stripe test-mode
