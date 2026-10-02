@@ -51,12 +51,12 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:f2b555580ea9d40562cae1288180b8980f6c7b238892894c1bc9816e07448a09"
-  ".github/workflows/deploy.yml": "sha256:8df5f83f20c8ec516fb41d8a4d1b6458a3f3df39ffa2bb5b45130c068b02350e"
+  ".github/workflows/deploy.yml": "sha256:4565ee6e18dd414fe0db6d8c1ff6b23f98de1cd4abf0ab367617dda44063a458"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:4b5370e5b26053ff5b72bcd5a0347122724c267edccd074647a062416417a5c3"
+  ".github/workflows/staging-lifecycle.yml": "sha256:2dcb69dca4c0f699dd67e6e9a519acfc6430b941bdfb0cd6361eab7574210352"
   ".github/workflows/staging-state-reconcile.yml": "sha256:d598a942c1f156576a9fbb78ac35efdda512be546c720b1ed4cecddf6fe70b8d"
   ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
-  ".github/workflows/terraform-promote.yml": "sha256:6212c4d61af48158fe4c6c2b0d219e2614e4c786a48f5f41ae5e0fb126c026ad"
+  ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -82,7 +82,7 @@ source_hashes:
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:0756789cec8705a2c239de128738f3289e2536279824e797955244d3b9a2e6f1"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:c50654e19fa30de91b78dc954f967301a28aa45c8cef2bbf449eeca5f96f11e9"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
   "scripts/release/release_changed_amplify_apps.py": "sha256:cc584d65fd667420713cbe2de6a3ddca46e72f980c921828707ca9239940b6d2"
@@ -246,7 +246,11 @@ no-secret-values boundary intact while still proving that the actual values
 mounted by ECS are raw, non-placeholder staging values before a plan, wake, or
 smoke path proceeds. The post-apply ECS task-definition check is metadata-only
 and proves the registered API and `lean-worker` revisions match the selected
-pilot/full lane.
+pilot/full lane. It checks each family's latest ACTIVE revision
+(`--revision family-latest`), the one delivery clones: the API service ignores
+Terraform task-definition drift and still runs its previous revision until
+delivery rolls it. Delivery's pre-mutation check and the lifecycle preflight do
+the same; post-delivery checks verify the running revision.
 
 The direct immutable application-delivery path has its own supplemental
 contract at `config/staging_application_delivery_iam_policy.yaml`. It covers

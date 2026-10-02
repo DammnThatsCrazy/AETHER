@@ -632,8 +632,9 @@ jobs:
           simulate_allowed "$repository_arn" \
             ecr:BatchCheckLayerAvailability ecr:BatchGetImage \
             ecr:DescribeImages ecr:GetDownloadUrlForLayer
+          # Before delivery: check the revisions delivery will clone.
           python scripts/release/check_staging_task_definition_contract.py \
-            --lane "$DEPLOYMENT_LANE"
+            --lane "$DEPLOYMENT_LANE" --revision family-latest
           python scripts/release/check_staging_runtime_iam.py \
             --live-ecs-cluster AETHER-staging \
             --expected-table-name AETHER-staging-cache \

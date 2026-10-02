@@ -819,12 +819,14 @@ jobs:
           DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'pilot' || inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
-          # The rollout below clones each live task definition and changes only
-          # its image and AETHER_ROLE. Prove that the source revision already
-          # belongs to the requested lane so an earlier pilot/full rollout
-          # cannot silently carry the wrong Stripe, Kyber, or secret shape.
+          # The rollout below clones each family's latest ACTIVE revision and
+          # changes only its image and AETHER_ROLE. Prove that this source
+          # revision already belongs to the requested lane so an earlier
+          # pilot/full rollout cannot silently carry the wrong Stripe, Kyber,
+          # or secret shape. The API service still runs the revision it is
+          # about to replace, so check the source, not the service pointer.
           python scripts/release/check_staging_task_definition_contract.py \
-            --lane "$DEPLOYMENT_LANE"
+            --lane "$DEPLOYMENT_LANE" --revision family-latest
       - name: Apply packaged migrations, then register exact task revision for every profile service
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}

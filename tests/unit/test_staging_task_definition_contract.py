@@ -37,7 +37,8 @@ def _client(*, pilot: bool = True):
             role = "api" if service.endswith("backend") else "lean-worker"
             return {"services": [{"taskDefinition": f"arn:task-definition/staging-{role}:7"}], "failures": []}
         if args[:2] == ["ecs", "describe-task-definition"]:
-            role = "api" if "-api:" in args[-1] else "lean-worker"
+            # A revision ARN (staging-api:7) or a bare family name (staging-api).
+            role = "api" if "-api" in args[-1] else "lean-worker"
             environment = dict(checker.REQUIRED_ENV)
             environment.update(checker.PILOT_ENV if pilot else checker.FULL_ENV)
             environment["AETHER_ROLE"] = role
@@ -62,6 +63,7 @@ def _client(*, pilot: bool = True):
                 environment.update({name: "configured" for name in checker.KYBER_ONLY_ENV})
             return {
                 "taskDefinition": {
+                    "family": f"staging-{role}",
                     "containerDefinitions": [
                         {"name": "aether-backend" if role == "api" else "lean-worker", "environment": [{"name": k, "value": v} for k, v in environment.items()], "secrets": [{"name": k, "valueFrom": v} for k, v in secrets.items()]}
                     ]
@@ -247,3 +249,57 @@ def test_pilot_rejects_secret_mounts_from_wrong_account_or_region():
     )
     assert any("STRIPE_PRICE_ALPHA" in error and "region" in error for error in errors)
     assert any("STRIPE_PRICE_ALPHA" in error and "account" in error for error in errors)
+
+
+def _with_api_revisions(*, running_urls_under_app: bool, latest_urls_under_app: bool):
+    """Running API revision and the family's latest ACTIVE revision differ."""
+    original = _client()
+
+    def call(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] != ["ecs", "describe-task-definition"] or "-api" not in args[-1]:
+            return payload
+        under_app = latest_urls_under_app if args[-1] == "staging-api" else running_urls_under_app
+        if not under_app:
+            for item in payload["taskDefinition"]["containerDefinitions"][0]["environment"]:
+                if item["name"].startswith("STRIPE_") and item["name"].endswith("_URL"):
+                    item["value"] = item["value"].replace("aether.staging.olympuslabsml.com/app", "app.staging.olympuslabsml.com")
+        return payload
+
+    return call
+
+
+def test_family_latest_checks_the_revision_delivery_will_clone():
+    # After a Terraform apply the API service still runs its previous revision
+    # (it ignores task-definition drift); the family's latest ACTIVE revision is
+    # what deploy.yml clones next, so pre-delivery gates must check that one.
+    client = _with_api_revisions(running_urls_under_app=False, latest_urls_under_app=True)
+    assert checker.contract_errors(lane="pilot", client=client, revision="family-latest") == []
+    running = checker.contract_errors(lane="pilot", client=client)
+    assert any("STRIPE_CHECKOUT_SUCCESS_URL is not a staging HTTPS billing URL" in error for error in running)
+
+
+def test_family_latest_still_rejects_a_wrong_latest_revision():
+    client = _with_api_revisions(running_urls_under_app=True, latest_urls_under_app=False)
+    assert checker.contract_errors(lane="pilot", client=client) == []
+    errors = checker.contract_errors(lane="pilot", client=client, revision="family-latest")
+    assert "AETHER-staging-backend: STRIPE_PORTAL_RETURN_URL is not a staging HTTPS billing URL" in errors
+
+
+def test_family_latest_requires_the_running_revision_family():
+    original = _client()
+
+    def call(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            payload["taskDefinition"].pop("family")
+        return payload
+
+    errors = checker.contract_errors(lane="pilot", client=call, revision="family-latest")
+    assert "AETHER-staging-backend: running task definition has no family" in errors
+
+
+def test_rejects_an_unknown_revision_source():
+    assert checker.contract_errors(lane="pilot", client=_client(), revision="newest") == [
+        "revision source must be one of ['family-latest', 'service'], got 'newest'"
+    ]

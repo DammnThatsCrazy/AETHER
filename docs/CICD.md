@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:df0749599332029277f06de949d18cca4fd77a718f71ff9dd5cdaea80cb9a560"
+  ".github/workflows/": "sha256:6eb3cc9ba28e5fd84bb62553ad7c77c51556a9a090c35e103dafe15f214f2993"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -177,16 +177,20 @@ read-only preflight. It assumes `AetherStagingSecretPreflight`, which can read
 only the `aether/*` secret prefix and decrypt only the staging Secrets Manager
 CMK through its reviewed alias/tag conditions; the plan, deploy, and lifecycle
 roles do not receive `secretsmanager:GetSecretValue`. After apply, a
-metadata-only ECS task-definition gate proves that the running backend and
-worker revisions carry the selected pilot/full lane contract before smoke
-proceeds. The pilot smoke gate switches to the existing read-only
+metadata-only ECS task-definition gate proves that the backend and worker
+revisions delivery will deploy, each family's latest ACTIVE revision
+(`--revision family-latest`), carry the selected pilot/full lane contract.
+The pilot smoke gate, which runs after delivery, checks the running revisions
+and switches to the existing read-only
 `AetherStagingPlan` role for that ECS metadata check rather than widening the
 secret-value role. The immutable delivery path performs the same lane check
-before cloning a live task definition, closing the gap between a correct
-source plan and an old registered task definition still running in ECS.
+on the revision it is about to clone, closing the gap between a correct
+source plan and an old registered task definition.
 Delivery clones the family's latest ACTIVE revision rather than the
 service's pointer, because a wake apply re-registers the backend family and
-deregisters the revision the service still runs, and it passes only
+deregisters the revision the service still runs (the backend service ignores
+Terraform task-definition drift), so every pre-delivery gate checks that same
+revision; and it passes only
 `register-task-definition` input fields so read-only describe fields such as
 `deregisteredAt` cannot fail the rollout.
 Before an apply, the promotion workflow parses the reviewed plan for ECR
