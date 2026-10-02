@@ -16,6 +16,7 @@ import {
   type StatusHistory,
 } from '@site/site/status';
 import { BrandMark } from '@site/components/brand-mark';
+import { pilotOnly } from '@site/site/access';
 
 /**
  * Status.dc.html at /status. Live state from VITE_STATUS_API_URL, history from
@@ -40,8 +41,9 @@ const TONE: Record<HealthState, [glyph: string, label: string, ink: string, bg: 
 
 type Overall = [glyph: string, title: string, pill: string, color: string];
 
-function overallFor(snapshot: HealthSnapshot | null): Overall {
+function overallFor(snapshot: HealthSnapshot | null, pilot = false): Overall {
   if (!snapshot) return ['○', 'Checking the monitored service', 'Checking', '#9c9b95'];
+  if (snapshot.source === 'unconfigured' && pilot) return ['○', 'Status is shared with pilot partners', 'Private pilot', '#9c9b95'];
   if (snapshot.source === 'unconfigured') return ['○', 'Status not yet verified', 'Not configured', '#9c9b95'];
   if (snapshot.source === 'unreachable') return ['■', 'Status endpoint unreachable', 'Unreachable', '#b5564a'];
   switch (snapshot.state) {
@@ -104,8 +106,11 @@ function Bars({ label, days }: { label: string; days: ReturnType<typeof fillDays
 
 export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
   const { href } = useSite();
-  const apiUrl = import.meta.env.VITE_STATUS_API_URL?.trim() ?? '';
-  const historyUrl = import.meta.env.VITE_STATUS_HISTORY_URL?.trim() ?? '';
+  // A pilot-only build has no public service to monitor yet, whatever API it
+  // will use once production opens.
+  const pilot = pilotOnly();
+  const apiUrl = pilot ? '' : (import.meta.env.VITE_STATUS_API_URL?.trim() ?? '');
+  const historyUrl = pilot ? '' : (import.meta.env.VITE_STATUS_HISTORY_URL?.trim() ?? '');
   const [snapshot, setSnapshot] = useState<HealthSnapshot | null>(null);
   const [history, setHistory] = useState<StatusHistory | null>(null);
   const [checking, setChecking] = useState(true);
@@ -157,7 +162,7 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
     };
   }, [refresh, apiUrl]);
 
-  const [glyph, title, pill, color] = checking && !snapshot ? overallFor(null) : overallFor(snapshot);
+  const [glyph, title, pill, color] = checking && !snapshot ? overallFor(null) : overallFor(snapshot, pilot);
   // Pin "today" per fetch so the bars and incident range agree within a render.
   const today = useMemo(() => now(), [now, history, snapshot]);
 
@@ -217,7 +222,9 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
                 {title}
               </h1>
               <p className="m-0 max-w-[580px] text-[14px] leading-[1.6] text-graphite-body">
-                {snapshot?.detail ?? 'Contacting the status endpoint. No state is assumed before the check returns.'}
+                {pilot && snapshot?.source === 'unconfigured'
+                  ? 'Pilot partners receive service status from their Olympus Labs contact.'
+                  : (snapshot?.detail ?? 'Contacting the status endpoint. No state is assumed before the check returns.')}
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">
@@ -240,7 +247,7 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
           </div>
           <div className="flex flex-wrap justify-between gap-3 border-t border-ink/[0.08] pt-3.5">
             <span className="font-mono text-caption text-slate">
-              {snapshot?.checkedAt ? `Last checked ${formatTime(snapshot.checkedAt)}` : snapshot?.source === 'unconfigured' ? 'No check has run · monitor not configured' : 'Checking…'}
+              {snapshot?.checkedAt ? `Last checked ${formatTime(snapshot.checkedAt)}` : snapshot?.source === 'unconfigured' ? (pilot ? 'Aether is in private pilot' : 'No check has run · monitor not configured') : 'Checking…'}
             </span>
             <div className="flex flex-wrap gap-3.5 text-caption text-graphite-body">
               {(['operational', 'degraded', 'outage', 'no_data'] as DayStatus[]).map((s) => (
@@ -255,9 +262,13 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
 
         {components.length === 0 ? (
           <div className="flex flex-col items-start gap-1.5 rounded-lg border border-dashed border-line-strong bg-stone-100 p-6">
-            <span className="text-[14px] font-medium">{snapshot?.source === 'unconfigured' ? 'No component data' : checking ? 'Waiting for the check' : 'No components reported'}</span>
+            <span className="text-[14px] font-medium">
+              {snapshot?.source === 'unconfigured' ? (pilot ? 'Shared directly with pilot partners' : 'No component data') : checking ? 'Waiting for the check' : 'No components reported'}
+            </span>
             <span className="max-w-[560px] text-body-sm leading-[1.55] text-slate">
-              {snapshot?.source === 'unconfigured'
+              {snapshot?.source === 'unconfigured' && pilot
+                ? 'Aether runs in private pilots, and each pilot partner receives service status from its Olympus Labs contact. A public status page opens with general availability.'
+                : snapshot?.source === 'unconfigured'
                 ? 'VITE_STATUS_API_URL is not set for this build, so no component can be verified. Nothing is shown as operational by default.'
                 : 'Components appear once the endpoint reports them.'}
             </span>

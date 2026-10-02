@@ -14,6 +14,10 @@ interface ImportMetaEnv {
   readonly VITE_STATUS_HISTORY_URL?: string;
   /** 'true' shows plan prices; otherwise pricing reads "on request". */
   readonly VITE_PUBLISH_PRICES?: string;
+  /** Standalone lead intake URL for the contact form (production before its backend). */
+  readonly VITE_LEAD_URL?: string;
+  /** 'true' for a marketing-only build: product and status links give way to a pilot request. */
+  readonly VITE_PILOT_ONLY?: string;
 }
 
 interface ImportMeta {

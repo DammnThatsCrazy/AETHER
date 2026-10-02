@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import { PageShell } from '@site/components/page-shell';
 import { useSite } from '@site/site/site-context';
 import { NOT_FOUND_LINKS, type AccentId } from '@site/site/navigation';
+import { pathOffered } from '@site/site/access';
 
 // Full class strings per accent so Tailwind keeps them in the build.
 const ACCENT_CLASSES: Record<AccentId, { card: string; chip: string }> = {
@@ -36,7 +37,7 @@ export function NotFoundPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          {NOT_FOUND_LINKS[site].map((l) => {
+          {NOT_FOUND_LINKS[site].filter((l) => pathOffered(l.path)).map((l) => {
             const accent = ACCENT_CLASSES[l.accent];
             return (
               <a

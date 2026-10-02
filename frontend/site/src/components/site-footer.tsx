@@ -1,6 +1,7 @@
 import { useSite } from '@site/site/site-context';
 import { FOOTER_COLUMNS } from '@site/site/navigation';
 import { BrandMark } from '@site/components/brand-mark';
+import { pathOffered } from '@site/site/access';
 
 export function SiteFooter() {
   const { href } = useSite();
@@ -28,7 +29,7 @@ export function SiteFooter() {
           {FOOTER_COLUMNS.map((column) => (
             <nav key={column.title} aria-label={column.title} className="flex flex-col gap-2.5">
               <span className="text-label uppercase text-slate">{column.title}</span>
-              {column.links.map((l) => (
+              {column.links.filter((l) => pathOffered(l.path)).map((l) => (
                 <a
                   key={l.label}
                   href={href(l.site, l.path)}
@@ -43,9 +44,11 @@ export function SiteFooter() {
         <div className="mt-10 flex flex-wrap justify-between gap-3 border-t border-line pt-5 text-caption text-slate">
           <span>© 2026 Olympus Labs. All rights reserved.</span>
           <span className="flex gap-4 font-mono">
-            <a href={href('aether', '/status')} className="text-slate no-underline">
-              status.olympuslabsml.com
-            </a>
+            {pathOffered('/status') && (
+              <a href={href('aether', '/status')} className="text-slate no-underline">
+                status.olympuslabsml.com
+              </a>
+            )}
             <span className="inline-flex items-center gap-1.5">
               <BrandMark brand="aether" className="h-3.5 w-3.5" />
               Aether by

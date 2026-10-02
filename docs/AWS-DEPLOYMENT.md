@@ -11,6 +11,7 @@ source_files:
   - deploy/aws/main.py
   - deploy/aws/terraform/
   - deploy/aws/config/
+  - deploy/aws/lead-intake/template.yaml
   - scripts/release/verify_terraform_state_role.py
   - .github/workflows/terraform-promote.yml
   - .github/workflows/amplify-status-production.yml
@@ -50,7 +51,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:f2b555580ea9d40562cae1288180b8980f6c7b238892894c1bc9816e07448a09"
+  ".github/workflows/amplify-status-production.yml": "sha256:9f64aa440a4ba31f914350e150e3d5937060e988eef5797e2f8d7e540d72f8db"
   ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:2dcb69dca4c0f699dd67e6e9a519acfc6430b941bdfb0cd6361eab7574210352"
@@ -70,10 +71,11 @@ source_hashes:
   "config/terraform_state_access_policy.yaml": "sha256:474ebd2cd035d8c27e09e6fd20da2b752ba5171225d8c832ab1c1fcb72a724d6"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
+  "deploy/aws/lead-intake/template.yaml": "sha256:2df847eeb6c89621e25d6b905e9fc18cc2071e3add4b1012905d9deeb814e7b0"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:4c6b12523b325d5afd9231f439c5446f92a5dddfda23e384ac9da21736657d66"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:645ad3320ea6ba0335b59fbae64d9e6a9f465c6d0f5be5d10d10446af45e61e9"
+  "scripts/release/check_amplify_app_contract.py": "sha256:f69b00625931ae6892e6a7446efbce0c0ea32bd41eb9ce0b93e1cab808ae131b"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -598,6 +600,15 @@ holds their CNAMEs. `amplify-status-production.yml` deploys it on each `main`
 push, and the staging lifecycle preflight checks its production settings, exact
 commit and host mappings. It is not Terraform-managed yet.
 
+Until the production backend exists, the production site is pilot-only
+(`VITE_PILOT_ONLY=true`). It shows no sign-in, sign-up or status links, and the
+pricing page's plan choices open a pilot request. Its routing rules send `/app`,
+`/login`, `/signup` and `/forgot-password` to `/contact?type=pilot`, and the
+status page says status is shared with pilot partners. The production API
+values stay in its settings for when production opens; the pilot-only site
+does not call them. To open production, remove the flag and restore the
+staging web app's rules in that workflow.
+
 Transactional email goes through Amazon SES from the verified
 `olympuslabsml.com` domain identity (`email_enabled`, on in the staging
 profile). The tasks send from `noreply@olympuslabsml.com`, contact and pilot
@@ -707,6 +718,39 @@ The Aurora module pins the standard provisioned Aurora PostgreSQL 16.8 engine
 release. The repository previously used 16.4, but that exact standard engine
 version is not available in the staging account/region; the major-family
 parameter group remains `aurora-postgresql16`.
+
+### Production lead intake
+
+The production contact and pilot forms post to an always-on lead intake
+(`VITE_LEAD_URL`), not the API. It is the CloudFormation stack
+`aether-production-lead-intake` from `deploy/aws/lead-intake/template.yaml`:
+
+- A Lambda function URL accepts the same body as `POST /v1/contact/lead` for
+  the site's six contact topics. CORS allows only the three production site
+  origins.
+- Each valid lead is stored in the DynamoDB table `aether-production-leads`
+  (on-demand, point-in-time recovery, retained if the stack is deleted). The
+  intake reports success only once the row is stored.
+- It then emails `LeadNotificationEmail` (default `osaze@olympuslabsml.com`)
+  through SES from `noreply@olympuslabsml.com`, with the visitor as reply-to.
+  An email failure leaves the lead stored with status `email_failed`.
+- Logs carry the lead id, type and status but no contact details, and are
+  kept for 30 days. The account's concurrency limit of 10 bounds the function.
+
+At pilot volume it costs cents a month. Deploy or update it with:
+
+```bash
+aws cloudformation deploy --stack-name aether-production-lead-intake \
+  --template-file deploy/aws/lead-intake/template.yaml --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset --tags Project=aether Purpose=production-lead-intake
+```
+
+If the stack is ever recreated, its `LeadUrl` output changes. Update
+`VITE_LEAD_URL` in `amplify-status-production.yml` and `PRODUCTION_LEAD_URL` in
+`scripts/release/check_amplify_app_contract.py` to match. Read leads with
+`aws dynamodb scan --table-name aether-production-leads`. When the production
+backend opens, point the form back at the API and retire the stack. The table
+is retained.
 
 ### Route 53 and Squarespace DNS
 
