@@ -995,16 +995,29 @@ jobs:
       - name: Golden-path smoke test
         if: steps.smoke_owner.outputs.deferred != 'true'
         env:
+          TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
           ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME || secrets.TF_DOMAIN_NAME }}
           SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
           test -n "${ALB_DNS_NAME:-}" || { echo '::error::ALB_DNS_NAME is required for the smoke test'; exit 1; }
-          test -n "${SMOKE_API_KEY:-}" || { echo '::error::SMOKE_API_KEY is required for the smoke test'; exit 1; }
-          python scripts/smoke_test.py \
-            --base-url "https://${ALB_DNS_NAME}" \
-            --api-key "${SMOKE_API_KEY}" \
-            --timeout 15
+          if [ "$TARGET_ENV" = staging ]; then
+            # Pilot staging never provisions the fixed SMOKE_API_KEY; its durable
+            # credential is the verified staging admin key. Like the rehearsal,
+            # smoke with a run-scoped tenant key and always remove the tenant.
+            test -n "${STAGING_ADMIN_API_KEY:-}" \
+              || { echo '::error::STAGING_ADMIN_API_KEY is required for the staging smoke test'; exit 1; }
+            python scripts/release/staging_delivery_smoke.py \
+              --base-url "https://${ALB_DNS_NAME}" \
+              --timeout 15
+          else
+            test -n "${SMOKE_API_KEY:-}" || { echo '::error::SMOKE_API_KEY is required for the smoke test'; exit 1; }
+            python scripts/smoke_test.py \
+              --base-url "https://${ALB_DNS_NAME}" \
+              --api-key "${SMOKE_API_KEY}" \
+              --timeout 15
+          fi
       - name: Publish private static SPA origins
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}

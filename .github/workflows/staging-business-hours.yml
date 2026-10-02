@@ -1,0 +1,212 @@
+name: Staging business hours
+
+# Keeps staging awake on weekdays from about 08:45 to 17:00 New York time and
+# asleep the rest of the time, so the demo environment costs roughly a quarter
+# of an always-on one.
+#
+# This workflow runs no Terraform and holds no AWS credentials. It only starts
+# the existing reviewed lifecycle actions in staging-lifecycle.yml, exactly as an
+# operator would dispatch them:
+#
+#   wake  : plan-wake (credentialed reviewed plan, checksummed), then apply-wake
+#           with that run's plan_run_id/plan_checksum. apply-wake re-validates
+#           the plan (policy + budget + awake shape) before terraform-promote.yml
+#           applies the stored binary plan; nothing is re-planned.
+#   sleep : apply-sleep, which plans and applies the reviewed sleep shape.
+#
+# Every guarantee of the lifecycle and of terraform-promote.yml (which stays
+# workflow_dispatch-only) is inherited unchanged. The hourly TTL guard still
+# scales staging to zero if a lease ever overruns.
+#
+# Both transitions are staging-only and pilot-lane only. Wake always deploys the
+# newest release built from main, the same release a manual wake would use.
+
+on:
+  schedule:
+    # Monday to Friday. Each transition has one UTC time per New York offset;
+    # the "Choose the transition" step runs only the one that matches the
+    # current offset, so daylight-saving changes need no edits.
+    - cron: "15 12 * * 1-5" # wake  08:15 EDT (UTC-4)
+    - cron: "15 13 * * 1-5" # wake  08:15 EST (UTC-5)
+    - cron: "0 21 * * 1-5" # sleep 17:00 EDT (UTC-4)
+    - cron: "0 22 * * 1-5" # sleep 17:00 EST (UTC-5)
+  workflow_dispatch:
+    inputs:
+      transition:
+        description: Wake staging now (e.g. for an out-of-hours demo) or put it to sleep now
+        type: choice
+        options: [wake, sleep]
+        required: true
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: staging-business-hours
+  cancel-in-progress: false
+
+env:
+  LIFECYCLE_WORKFLOW: staging-lifecycle.yml
+  DEPLOYMENT_LANE: pilot
+  # The lifecycle caps a lease at 8 hours; a wake that lands around 08:45 stays
+  # up past the 17:00 sleep, and the TTL guard backs up a missed sleep.
+  MAX_AWAKE_HOURS: "8"
+  RUN_TIMEOUT_MINUTES: "90"
+
+jobs:
+  transition:
+    name: Staging business-hours transition
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    env:
+      GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Choose the transition
+        id: choose
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          REQUESTED: ${{ inputs.transition }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            transition="$REQUESTED"
+          else
+            # Run only the cron that matches New York's current UTC offset.
+            offset="$(TZ=America/New_York date +%z)"
+            case "$SCHEDULE|$offset" in
+              "15 12 * * 1-5|-0400"|"15 13 * * 1-5|-0500") transition=wake ;;
+              "0 21 * * 1-5|-0400"|"0 22 * * 1-5|-0500") transition=sleep ;;
+              *) transition=skip ;;
+            esac
+          fi
+          case "$transition" in
+            wake|sleep|skip) ;;
+            *) echo "::error::unknown transition '${transition}'"; exit 1 ;;
+          esac
+          echo "transition=${transition}" >> "$GITHUB_OUTPUT"
+          echo "New York time $(TZ=America/New_York date '+%a %H:%M %Z'); transition: ${transition}"
+
+      - name: Find the newest approved release built from main
+        id: release
+        if: steps.choose.outputs.transition == 'wake'
+        run: |
+          set -euo pipefail
+          # The newest successful push-to-main delivery run that still carries
+          # its release artifact is the release a manual wake would deploy.
+          runs="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=20" \
+            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')"
+          release_run_id=""
+          release_sha=""
+          while read -r run_id head_sha; do
+            [ -n "$run_id" ] || continue
+            if gh api "repos/${REPO}/actions/runs/${run_id}/artifacts" \
+                --jq ".artifacts[] | select(.name == \"release-${head_sha}\" and .expired == false) | .id" \
+                | grep -q .; then
+              release_run_id="$run_id"
+              release_sha="$head_sha"
+              break
+            fi
+          done <<< "$runs"
+          test -n "$release_run_id" || { echo '::error::no successful main delivery run with a release artifact'; exit 1; }
+          rm -rf release
+          gh run download "$release_run_id" --repo "$REPO" --name "release-${release_sha}" --dir release
+          checksum="$(tr -d '[:space:]' < release/release.json.sha256)"
+          [[ "$checksum" =~ ^sha256:[0-9a-f]{64}$ ]] \
+            || { echo '::error::release.json.sha256 is not a sha256: checksum'; exit 1; }
+          [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::release head SHA is malformed'; exit 1; }
+          {
+            echo "release_run_id=${release_run_id}"
+            echo "release_sha=${release_sha}"
+            echo "checksum=${checksum}"
+          } >> "$GITHUB_OUTPUT"
+          echo "release run ${release_run_id} for ${release_sha} (${checksum})"
+
+      - name: Wake through the reviewed plan
+        if: steps.choose.outputs.transition == 'wake'
+        env:
+          RELEASE_RUN_ID: ${{ steps.release.outputs.release_run_id }}
+          RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
+          RELEASE_CHECKSUM: ${{ steps.release.outputs.checksum }}
+        run: |
+          set -euo pipefail
+          dispatch() {
+            # Prints the created run ID; refuses an ambiguous correlation.
+            local output run_id
+            output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref main "$@" 2>&1)"
+            printf '%s\n' "$output" >&2
+            run_id="$(printf '%s\n' "$output" | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+            test -n "$run_id" || { echo '::error::lifecycle dispatch did not return its run URL' >&2; return 1; }
+            printf '%s\n' "$run_id"
+          }
+          wait_for() {
+            local run_id="$1" deadline status conclusion
+            deadline="$(( $(date -u +%s) + RUN_TIMEOUT_MINUTES * 60 ))"
+            while :; do
+              status="$(gh api "repos/${REPO}/actions/runs/${run_id}" --jq '.status')"
+              [ "$status" = completed ] && break
+              [ "$(date -u +%s)" -lt "$deadline" ] \
+                || { echo "::error::lifecycle run ${run_id} did not finish in ${RUN_TIMEOUT_MINUTES}m"; return 1; }
+              sleep 30
+            done
+            conclusion="$(gh api "repos/${REPO}/actions/runs/${run_id}" --jq '.conclusion')"
+            [ "$conclusion" = success ] || { echo "::error::lifecycle run ${run_id} concluded ${conclusion}"; return 1; }
+          }
+
+          plan_run="$(dispatch \
+            -f action=plan-wake \
+            -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f release_run_id="$RELEASE_RUN_ID" \
+            -f release_manifest_checksum="$RELEASE_CHECKSUM" \
+            -f intended_release_sha="$RELEASE_SHA" \
+            -f max_awake_hours="$MAX_AWAKE_HOURS")"
+          echo "plan-wake run: ${plan_run}"
+          wait_for "$plan_run"
+
+          # The plan job publishes its reviewed plan identity in its log; job
+          # outputs are not visible outside that run.
+          plan_job="$(gh api "repos/${REPO}/actions/runs/${plan_run}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name | startswith("Credentialed wake plan")) | .id' | head -n 1)"
+          test -n "$plan_job" || { echo '::error::plan-wake run has no credentialed wake plan job'; exit 1; }
+          identity="$(gh api "repos/${REPO}/actions/jobs/${plan_job}/logs" \
+            | grep -oE 'reviewed wake plan: plan_run_id=[0-9]+ plan_checksum=[0-9a-f]{64}' | tail -n 1)"
+          plan_run_id="$(sed -nE 's/.*plan_run_id=([0-9]+).*/\1/p' <<< "$identity")"
+          plan_checksum="$(sed -nE 's/.*plan_checksum=([0-9a-f]{64}).*/\1/p' <<< "$identity")"
+          test -n "$plan_run_id" && test -n "$plan_checksum" \
+            || { echo '::error::could not read the reviewed wake plan identity'; exit 1; }
+          echo "reviewed wake plan: ${plan_run_id} ${plan_checksum}"
+
+          apply_run="$(dispatch \
+            -f action=apply-wake \
+            -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f release_run_id="$RELEASE_RUN_ID" \
+            -f release_manifest_checksum="$RELEASE_CHECKSUM" \
+            -f intended_release_sha="$RELEASE_SHA" \
+            -f plan_run_id="$plan_run_id" \
+            -f plan_checksum="$plan_checksum" \
+            -f max_awake_hours="$MAX_AWAKE_HOURS" \
+            -f confirm_runtime_wake=true)"
+          echo "apply-wake run: ${apply_run}"
+          wait_for "$apply_run"
+          echo "Staging is awake on release ${RELEASE_SHA}."
+
+      - name: Sleep through the reviewed lifecycle
+        if: steps.choose.outputs.transition == 'sleep'
+        run: |
+          set -euo pipefail
+          output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref main \
+            -f action=apply-sleep -f deployment_lane="$DEPLOYMENT_LANE" 2>&1)"
+          printf '%s\n' "$output"
+          run_id="$(printf '%s\n' "$output" | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
+          test -n "$run_id" || { echo '::error::lifecycle dispatch did not return its run URL'; exit 1; }
+          deadline="$(( $(date -u +%s) + RUN_TIMEOUT_MINUTES * 60 ))"
+          until [ "$(gh api "repos/${REPO}/actions/runs/${run_id}" --jq '.status')" = completed ]; do
+            [ "$(date -u +%s)" -lt "$deadline" ] \
+              || { echo "::error::apply-sleep run ${run_id} did not finish in ${RUN_TIMEOUT_MINUTES}m"; exit 1; }
+            sleep 30
+          done
+          conclusion="$(gh api "repos/${REPO}/actions/runs/${run_id}" --jq '.conclusion')"
+          [ "$conclusion" = success ] || { echo "::error::apply-sleep run ${run_id} concluded ${conclusion}"; exit 1; }
+          echo "Staging is asleep."

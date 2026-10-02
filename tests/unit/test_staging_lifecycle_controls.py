@@ -1425,6 +1425,55 @@ def test_the_scheduled_guard_can_never_reach_a_terraform_apply():
     assert _triggers(_workflow_yaml(PROMOTE_WORKFLOW)) == {"workflow_dispatch"}
 
 
+BUSINESS_HOURS = "staging-business-hours.yml"
+
+
+def test_business_hours_schedule_only_drives_the_reviewed_lifecycle():
+    """The weekday wake/sleep timer starts the reviewed lifecycle, nothing more.
+
+    It holds no AWS credentials, runs no Terraform, never dispatches
+    terraform-promote.yml directly, and can only ask for the pilot staging
+    lane's plan-wake, apply-wake (with the plan it just reviewed) or
+    apply-sleep. terraform-promote.yml stays workflow_dispatch-only.
+    """
+    doc = _workflow_yaml(BUSINESS_HOURS)
+    assert _triggers(doc) == {"schedule", "workflow_dispatch"}
+    text = _workflow(BUSINESS_HOURS)
+    assert "aws-actions/configure-aws-credentials" not in text
+    assert "id-token: write" not in text
+    assert doc["permissions"] == {"contents": "read", "actions": "write"}
+    for job, step, run in _all_run_blocks(doc):
+        assert "terraform" not in run, f"{job}:{step} runs Terraform"
+        assert PROMOTE_WORKFLOW not in run, f"{job}:{step} reaches terraform-promote.yml directly"
+        actions = set(re.findall(r"-f action=([a-z-]+)", run))
+        assert actions <= {"plan-wake", "apply-wake", "apply-sleep"}, (job, step, actions)
+        if "gh workflow run" in run:
+            assert '"$LIFECYCLE_WORKFLOW"' in run
+    assert doc["env"]["LIFECYCLE_WORKFLOW"] == LIFECYCLE
+    assert doc["env"]["DEPLOYMENT_LANE"] == "pilot"
+    wake = next(run for _, step, run in _all_run_blocks(doc) if step == "Wake through the reviewed plan")
+    # apply-wake consumes exactly the plan this run produced and reviewed.
+    assert '-f plan_run_id="$plan_run_id"' in wake
+    assert '-f plan_checksum="$plan_checksum"' in wake
+    assert "-f confirm_runtime_wake=true" in wake
+    assert wake.index("action=plan-wake") < wake.index("action=apply-wake")
+    assert _triggers(_workflow_yaml(PROMOTE_WORKFLOW)) == {"workflow_dispatch"}
+
+
+def test_business_hours_follow_new_york_time_on_weekdays():
+    """One cron per New York UTC offset; only the matching one acts."""
+    doc = _workflow_yaml(BUSINESS_HOURS)
+    crons = {entry["cron"] for entry in _on(doc)["schedule"]}
+    assert crons == {"15 12 * * 1-5", "15 13 * * 1-5", "0 21 * * 1-5", "0 22 * * 1-5"}
+    choose = next(run for _, step, run in _all_run_blocks(doc) if step == "Choose the transition")
+    assert "TZ=America/New_York date +%z" in choose
+    assert '"15 12 * * 1-5|-0400"|"15 13 * * 1-5|-0500") transition=wake' in choose
+    assert '"0 21 * * 1-5|-0400"|"0 22 * * 1-5|-0500") transition=sleep' in choose
+    assert "*) transition=skip" in choose
+    # A lease longer than the lifecycle cap would be refused at wake time.
+    assert int(doc["env"]["MAX_AWAKE_HOURS"]) <= 8
+
+
 # ---------------------------------------------------------------------------
 # Shell hygiene
 # ---------------------------------------------------------------------------
