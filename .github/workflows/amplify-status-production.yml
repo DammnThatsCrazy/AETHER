@@ -300,7 +300,8 @@ jobs:
             aws amplify create-branch "${branch_args[@]}" >/dev/null
           fi
           # Build settings apply only to jobs that start after this point; the
-          # release step must not reuse a job started before it.
+          # release step must not reuse a job started before it. Whole seconds:
+          # the release step treats a job from this same second as stale.
           printf 'bound_at=%s\n' "$(date -u +%s)" >> "$GITHUB_OUTPUT"
           echo 'Bound the production web app to the reviewed repository, the site build with the product under /app, production settings and rules, and the PRODUCTION main branch.'
 
@@ -364,7 +365,7 @@ jobs:
               --output json)"
             job_id="$(jq -r --arg expected "$EXPECTED_COMMIT_SHA" --argjson active "$active_statuses" --argjson bound "$BOUND_AT" \
               '[.jobSummaries[] | select(.commitId == $expected and (.status as $status | $active | index($status) != null)
-                and ((.startTime // "") | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | (try fromdateiso8601 catch 0)) >= $bound)]
+                and ((.startTime // "") | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | (try fromdateiso8601 catch 0)) > $bound)]
               | sort_by((.jobId | tonumber)) | last | .jobId // empty' <<<"$jobs_json")"
             if [ -n "$job_id" ]; then
               echo "Reusing active Amplify status deployment job ${job_id} for ${EXPECTED_COMMIT_SHA}."
