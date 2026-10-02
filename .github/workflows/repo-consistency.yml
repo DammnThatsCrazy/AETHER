@@ -359,6 +359,9 @@ jobs:
             release-evidence/backend-image.tar.gz
             release-evidence/build-timing.json
           if-no-files-found: error
+          # The ~840 MB image tarball is only read by candidate-verification in
+          # this run; at the 90-day default it exhausted the Actions storage quota.
+          retention-days: 1
 
   candidate-verification:
     name: Candidate verification

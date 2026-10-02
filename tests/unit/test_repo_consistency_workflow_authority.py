@@ -119,6 +119,19 @@ def test_backend_image_is_bound_to_candidate_and_loaded_by_consumer() -> None:
     assert "--backend-image release-evidence/backend-image.tar.gz" in selected
 
 
+def test_backend_image_tarball_expires_after_its_run() -> None:
+    # Only candidate-verification in the same run reads the image tarball;
+    # kept for the 90-day default, it exhausted the Actions storage quota.
+    steps = _workflow()["jobs"]["build-backend-image"]["steps"]
+    upload = next(
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith("actions/upload-artifact")
+        and step["with"]["name"] == "backend-image-evidence"
+    )
+    assert upload["with"]["retention-days"] == 1
+
+
 def test_publication_fails_when_any_required_stage_did_not_pass() -> None:
     publication = _workflow()["jobs"]["publish-evidence"]
     assert str(publication["if"]) == "always()"
