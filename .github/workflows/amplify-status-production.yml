@@ -201,6 +201,7 @@ jobs:
           echo 'Status app is repository-backed with only the canonical main branch; CI will verify its domain mapping without mutating it.'
 
       - name: Bind the production web app to the canonical repository
+        id: bind
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
@@ -298,6 +299,9 @@ jobs:
           else
             aws amplify create-branch "${branch_args[@]}" >/dev/null
           fi
+          # Build settings apply only to jobs that start after this point; the
+          # release step must not reuse a job started before it.
+          printf 'bound_at=%s\n' "$(date -u +%s)" >> "$GITHUB_OUTPUT"
           echo 'Bound the production web app to the reviewed repository, the site build with the product under /app, production settings and rules, and the PRODUCTION main branch.'
 
       - name: Verify canonical production domain mappings
@@ -335,13 +339,20 @@ jobs:
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
+          BOUND_AT: ${{ steps.bind.outputs.bound_at }}
         run: |
           set -euo pipefail
           # Repository-bound Amplify apps can auto-start a release for the push
           # before this workflow reaches the deploy job. Reusing the exact
           # commit's active job avoids Amplify's one-job-per-branch race while
-          # preserving exact-commit provenance. If another commit is active,
-          # wait for that job to clear before starting this reviewed commit.
+          # preserving exact-commit provenance, but only a job that started
+          # after the bind step: an earlier one was built with the previous
+          # build settings (environment variables are read when a job starts).
+          # Any other active job, including such a stale one, is waited out
+          # before this reviewed commit starts.
+          printf '%s' "$BOUND_AT" | grep -Eq '^[0-9]+$' || {
+            echo '::error::the bind step did not record when the build settings were applied'; exit 1;
+          }
           active_statuses='["PENDING", "QUEUED", "PROVISIONING", "RUNNING"]'
           job_id=""
           deadline=$((SECONDS + 2400))
@@ -351,8 +362,9 @@ jobs:
               --branch-name main \
               --max-results 50 \
               --output json)"
-            job_id="$(jq -r --arg expected "$EXPECTED_COMMIT_SHA" --argjson active "$active_statuses" \
-              '[.jobSummaries[] | select(.commitId == $expected and (.status as $status | $active | index($status) != null))]
+            job_id="$(jq -r --arg expected "$EXPECTED_COMMIT_SHA" --argjson active "$active_statuses" --argjson bound "$BOUND_AT" \
+              '[.jobSummaries[] | select(.commitId == $expected and (.status as $status | $active | index($status) != null)
+                and ((.startTime // "") | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | (try fromdateiso8601 catch 0)) >= $bound)]
               | sort_by((.jobId | tonumber)) | last | .jobId // empty' <<<"$jobs_json")"
             if [ -n "$job_id" ]; then
               echo "Reusing active Amplify status deployment job ${job_id} for ${EXPECTED_COMMIT_SHA}."

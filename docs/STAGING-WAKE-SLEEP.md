@@ -46,7 +46,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:9f64aa440a4ba31f914350e150e3d5937060e988eef5797e2f8d7e540d72f8db"
+  ".github/workflows/amplify-status-production.yml": "sha256:c8cfb8d8199dbda785bfc6da74cf6095df07448cee9f9f80adeba6f87f0500ce"
   ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
@@ -513,8 +513,9 @@ canonical `main` mapping before release. Squarespace remains authoritative.
 A repository-backed status app is updated in place on later runs; it is never
 treated as a staging ECS or Terraform mutation. Since Amplify can auto-start
 the branch build for the pushed SHA, the workflow reuses an active exact-SHA
-job, waits for unrelated active jobs to clear, and starts a release only when
-no matching job exists.
+job that started after it applied the build settings, waits for every other
+active job (including an earlier auto-build with the previous settings) to
+clear, and starts a release only when no matching job exists.
 
 Steps, in order, with what each proves:
 

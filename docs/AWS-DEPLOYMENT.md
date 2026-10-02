@@ -51,7 +51,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:9f64aa440a4ba31f914350e150e3d5937060e988eef5797e2f8d7e540d72f8db"
+  ".github/workflows/amplify-status-production.yml": "sha256:c8cfb8d8199dbda785bfc6da74cf6095df07448cee9f9f80adeba6f87f0500ce"
   ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:2dcb69dca4c0f699dd67e6e9a519acfc6430b941bdfb0cd6361eab7574210352"
@@ -670,9 +670,11 @@ dependent `iam:PassRole` authorization for domain mutations, so the status
 workflow intentionally does not make that API call from its OIDC deploy role.
 Because a repository-bound app can auto-start the branch build for a pushed
 commit, the workflow first reuses an active job for the exact reviewed SHA,
-waits for any unrelated active branch job to clear, and only then starts a
-new release when needed. This prevents Amplify's one-job-per-branch race
-without weakening exact-commit provenance.
+but only one that started after it applied the build settings: a job reads its
+environment variables when it starts, so an earlier auto-build would publish
+the previous settings. It waits for any other active branch job to clear, and
+only then starts a new release when needed. This prevents Amplify's
+one-job-per-branch race without weakening exact-commit or settings provenance.
 The dedicated empty `AETHER-staging-amplify-domain-role` remains constrained
 to Amplify-only trust for the staging infrastructure contract, and has no
 permissions or Route 53 access. Staging DNS is a delegated Route 53 zone whose
