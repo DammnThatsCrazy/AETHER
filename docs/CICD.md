@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:891193ec9f9b761c3996590f0ef2217c1dd711c0964ace9f32449e06c967514f"
+  ".github/workflows/": "sha256:615676b0b89f1697a94233220ec64de46cb81e40e269bfa274202cb876969eba"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -474,7 +474,11 @@ configuration. Staging has one app, `AETHER-staging-web` (key `aether-marketing`
 `frontend/site` with the product under `/app`), which holds the `aether`,
 `www`, `docs`, `status` and `app` hosts. Production also has one app, `AETHER-production-web`, which holds the same five
 hosts under `olympuslabsml.com` (Squarespace DNS) and is deployed by
-`amplify-status-production.yml`.
+`amplify-status-production.yml`. Until the production backend exists that app
+builds the site pilot-only (`VITE_PILOT_ONLY=true`): its rules send `/app` and
+the sign-in paths to a pilot request, and its contact form posts to the
+always-on lead intake (`VITE_LEAD_URL`; see AWS-DEPLOYMENT.md, "Production lead
+intake").
 The protected tenant and Kyber artifacts remain part of the immutable release.
 The canonical `deploy.yml` workflow publishes lane-selected SPA artifacts to
 their private S3 origins; the staging rehearsal verifies those origins against

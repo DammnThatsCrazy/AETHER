@@ -1,0 +1,235 @@
+AWSTemplateFormatVersion: "2010-09-09"
+# Always-on public lead intake for the production site while production has no
+# backend. The site's contact and pilot forms POST to the function URL; each
+# lead is stored in DynamoDB first (no stored row means no success response),
+# then the lead inbox is emailed through SES. Accepts the same body as the
+# backend's POST /v1/contact/lead for the site's six contact topics and answers
+# with the same {"data": {"received": true, "lead_id": ...}} shape, so the site
+# needs only a different URL. Deploy: see docs/AWS-DEPLOYMENT.md "Production
+# lead intake". Long-form intrinsics keep the file plain YAML for its tests.
+Description: Aether production lead intake - Lambda function URL, DynamoDB lead table, SES notification
+
+Parameters:
+  LeadNotificationEmail:
+    Type: String
+    Default: osaze@olympuslabsml.com
+    Description: Inbox notified of each lead (an address on the SES-verified domain)
+  SenderAddress:
+    Type: String
+    Default: noreply@olympuslabsml.com
+    Description: From address on the SES-verified domain
+  SenderDomain:
+    Type: String
+    Default: olympuslabsml.com
+    Description: SES-verified domain identity the function may send from
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Default: https://www.olympuslabsml.com,https://aether.olympuslabsml.com,https://olympuslabsml.com
+    Description: Browser origins allowed to submit leads
+
+Resources:
+  LeadTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: aether-production-leads
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: lead_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: lead_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: aether
+        - Key: Purpose
+          Value: production-lead-intake
+
+  LeadLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/aether-production-lead-intake
+      RetentionInDays: 30
+
+  LeadRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: lead-intake
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::Sub: "${LeadLogGroup.Arn}"
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource:
+                  Fn::GetAtt: [LeadTable, Arn]
+              - Effect: Allow
+                Action: ses:SendEmail
+                Resource:
+                  Fn::Sub: "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SenderDomain}"
+                Condition:
+                  StringEquals:
+                    ses:FromAddress:
+                      Ref: SenderAddress
+      Tags:
+        - Key: Project
+          Value: aether
+
+  LeadFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: aether-production-lead-intake
+      Description: Stores production site leads and emails the lead inbox
+      Runtime: python3.12
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 10
+      Role:
+        Fn::GetAtt: [LeadRole, Arn]
+      LoggingConfig:
+        LogGroup:
+          Ref: LeadLogGroup
+      Environment:
+        Variables:
+          LEAD_TABLE:
+            Ref: LeadTable
+          LEAD_FROM:
+            Ref: SenderAddress
+          LEAD_TO:
+            Ref: LeadNotificationEmail
+      Tags:
+        - Key: Project
+          Value: aether
+      Code:
+        ZipFile: |
+          import base64, datetime, json, os, re, uuid
+          import boto3
+          LABELS = {"pilot": "Pilot request", "product": "Product question",
+                    "developer": "Developer question", "security": "Security review request",
+                    "proof": "Proof partner request", "research": "Research inquiry"}
+          LIMITS = {"name": 200, "company": 200, "role": 100, "use_case": 200,
+                    "message": 2000, "source": 100}
+          EMAIL = re.compile(r"[^@\s]{1,64}@[^@\s]+\.[^@\s]+")
+          MAX_BODY = 16384
+          table = boto3.resource("dynamodb").Table(os.environ["LEAD_TABLE"])
+          ses = boto3.client("sesv2")
+
+          def reply(status, payload):
+              return {"statusCode": status, "headers": {"content-type": "application/json"},
+                      "body": json.dumps(payload)}
+
+          def bad(message, status=400):
+              return reply(status, {"error": {"message": message}})
+
+          def handler(event, context):
+              if event.get("requestContext", {}).get("http", {}).get("method") != "POST":
+                  return bad("method not allowed", 405)
+              raw = event.get("body") or ""
+              if len(raw) > MAX_BODY * 2:
+                  return bad("request too large", 413)
+              if event.get("isBase64Encoded"):
+                  raw = base64.b64decode(raw).decode("utf-8", "replace")
+              if len(raw) > MAX_BODY:
+                  return bad("request too large", 413)
+              try:
+                  body = json.loads(raw)
+              except ValueError:
+                  return bad("body must be JSON")
+              if not isinstance(body, dict):
+                  return bad("body must be a JSON object")
+              lead_type, email = body.get("lead_type"), body.get("email")
+              if lead_type not in LABELS:
+                  return bad("invalid lead_type")
+              if not isinstance(email, str) or len(email) > 320 or not EMAIL.fullmatch(email):
+                  return bad("invalid email")
+              fields = {}
+              for key, limit in LIMITS.items():
+                  value = body.get(key, "")
+                  if not isinstance(value, str) or len(value) > limit:
+                      return bad(f"invalid {key}")
+                  if value:
+                      fields[key] = value
+              lead_id = str(uuid.uuid4())
+              now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+              table.put_item(Item={"lead_id": lead_id, "created_at": now, "lead_type": lead_type,
+                                   "email": email, "status": "received", **fields},
+                             ConditionExpression="attribute_not_exists(lead_id)")
+              lines = [f"Type: {LABELS[lead_type]}", f"Email: {email}"]
+              lines += [f"{key.replace('_', ' ').capitalize()}: {fields[key]}" for key in LIMITS if key in fields]
+              lines += ["", f"Lead id: {lead_id}", f"Received: {now}"]
+              status = "notified"
+              try:
+                  ses.send_email(
+                      FromEmailAddress=os.environ["LEAD_FROM"],
+                      Destination={"ToAddresses": [os.environ["LEAD_TO"]]},
+                      ReplyToAddresses=[email],
+                      Content={"Simple": {"Subject": {"Data": f"[{LABELS[lead_type]}] {email}"},
+                                          "Body": {"Text": {"Data": "\n".join(lines)}}}})
+              except Exception:
+                  status = "email_failed"
+              table.update_item(Key={"lead_id": lead_id}, UpdateExpression="SET #s = :s",
+                                ExpressionAttributeNames={"#s": "status"},
+                                ExpressionAttributeValues={":s": status})
+              print(json.dumps({"event": "lead_captured", "lead_id": lead_id,
+                                "lead_type": lead_type, "status": status}))
+              return reply(200, {"data": {"received": True, "lead_id": lead_id}})
+
+  LeadFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn:
+        Fn::GetAtt: [LeadFunction, Arn]
+      AuthType: NONE
+      Cors:
+        AllowOrigins:
+          Ref: AllowedOrigins
+        AllowMethods: [POST]
+        AllowHeaders: [content-type]
+        MaxAge: 86400
+
+  LeadFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: LeadFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  LeadFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: LeadFunction
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+Outputs:
+  LeadUrl:
+    Description: Value for the production site's VITE_LEAD_URL
+    Value:
+      Fn::GetAtt: [LeadFunctionUrl, FunctionUrl]
+  LeadTableName:
+    Value:
+      Ref: LeadTable

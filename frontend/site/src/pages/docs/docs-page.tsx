@@ -5,6 +5,7 @@ import { Glyph } from '@site/components/ui';
 import { ProviderMark } from '@site/components/provider-mark';
 import { ACCENTS, tint, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
+import { pilotOnly } from '@site/site/access';
 import {
   DEFAULT_DOC,
   DOCS_ORDER,
@@ -547,14 +548,17 @@ export function DocsPage() {
             <a href={href('aether', '/')} className="p-2 text-slate no-underline hover:text-ink">
               Aether
             </a>
-            <a href={href('aether', '/status')} className="inline-flex items-center gap-1.5 p-2 text-slate no-underline hover:text-ink">
-              <Glyph className="text-sage">●</Glyph>Status
-            </a>
+            {!pilotOnly() && (
+              <a href={href('aether', '/status')} className="inline-flex items-center gap-1.5 p-2 text-slate no-underline hover:text-ink">
+                <Glyph className="text-sage">●</Glyph>Status
+              </a>
+            )}
             <a
-              href={href('aether', '/app/signin')}
+              href={href('aether', pilotOnly() ? '/contact?type=pilot' : '/app/signin')}
               className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-control border border-ink bg-ink px-3.5 text-body-sm font-medium text-stone-50 no-underline hover:border-[#2e2e34] hover:bg-[#2e2e34] hover:text-stone-50"
             >
-              Open the app<Glyph className="text-ochre">→</Glyph>
+              {pilotOnly() ? 'Request a pilot' : 'Open the app'}
+              <Glyph className="text-ochre">→</Glyph>
             </a>
           </nav>
         </div>

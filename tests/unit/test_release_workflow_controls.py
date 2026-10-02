@@ -368,6 +368,18 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert '"VITE_SITE_AETHER_URL": "https://aether.olympuslabsml.com"' in workflow
     assert '"VITE_SITE_OLYMPUS_URL": "https://www.olympuslabsml.com"' in workflow
     assert '--custom-rules "file://$web_rules"' in workflow
+    # Pilot-only until the production backend exists: leads go to the
+    # always-on intake, and the product routes send visitors to a pilot request.
+    assert '"VITE_PILOT_ONLY": "true"' in workflow
+    spec = importlib.util.spec_from_file_location(
+        "_amplify_contract", ROOT / "scripts" / "release" / "check_amplify_app_contract.py"
+    )
+    amplify_contract = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(amplify_contract)
+    assert f'"VITE_LEAD_URL": "{amplify_contract.PRODUCTION_LEAD_URL}"' in workflow
+    assert '{"source": "/app/<*>", "target": "/contact?type=pilot", "status": "302"}' in workflow
+    assert '"target": "/app/index.html"' not in workflow
+    assert "length == 6" in workflow
     assert "for prefix in www aether docs status app; do" in workflow
     assert "appRoot: frontend/status" not in workflow
     assert "aws amplify list-jobs" in workflow

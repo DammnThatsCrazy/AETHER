@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PageShell } from '@site/components/page-shell';
 import { Glyph, accentVars } from '@site/components/ui';
 import { submitLead, type ContactTopic } from '@site/site/api';
-import { CONTRACT_PLANS } from '@site/site/plans';
+import { CONTRACT_PLANS, SELF_SERVE_PLANS } from '@site/site/plans';
 import { ACCENTS, tint, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
 
@@ -59,7 +59,8 @@ export function ContactPage() {
   );
   const topic = topics.find((t) => t.id === topicId) ?? topics[0]!;
   // Pricing links carry the contract package the visitor chose.
-  const plan = CONTRACT_PLANS.find((p) => p.id === params.get('plan'));
+  // Contract packages, or a self-serve plan chosen on a pilot-only pricing page.
+  const plan = [...CONTRACT_PLANS, ...SELF_SERVE_PLANS].find((p) => p.id === params.get('plan'));
   const c = ACCENTS[topic.accent];
 
   const [name, setName] = useState('');

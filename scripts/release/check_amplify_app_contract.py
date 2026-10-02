@@ -92,8 +92,14 @@ STAGING_HOSTS: dict[str, tuple[str, ...]] = {
 # under /app and serves every production host.
 PRODUCTION_WEB_APP = "AETHER-production-web"
 PRODUCTION_HOSTS = ("www", "aether", "docs", "status", "app")
+# Until the production backend exists the site is pilot-only and its contact
+# form posts to the always-on lead intake (deploy/aws/lead-intake, stack
+# aether-production-lead-intake, output LeadUrl).
+PRODUCTION_LEAD_URL = "https://cbikbmj7wtuz6atqb62avzcn6e0bpquf.lambda-url.us-east-1.on.aws/"
 PRODUCTION_WEB_ENVIRONMENT = {
     "AETHER_ENV": "production",
+    "VITE_PILOT_ONLY": "true",
+    "VITE_LEAD_URL": PRODUCTION_LEAD_URL,
     "VITE_STATUS_API_URL": "https://api.olympuslabsml.com/health",
     "VITE_STATUS_HISTORY_URL": "https://api.olympuslabsml.com/v1/status/history",
     "VITE_SITE_AETHER_URL": "https://aether.olympuslabsml.com",

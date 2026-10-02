@@ -5,6 +5,7 @@ import { RelationshipExplorer } from '@site/components/relationship-explorer';
 import { ButtonLink, Eyebrow, Glyph, SectionHead } from '@site/components/ui';
 import { ACCENTS, tint, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
+import { pilotOnly } from '@site/site/access';
 
 /** Aether Home.dc.html */
 
@@ -676,11 +677,13 @@ export function AetherHomePage() {
               Request a pilot
             </ButtonLink>
             <ButtonLink href={href('aether', '/pricing')} variant="stone" className="min-h-[42px] px-[18px]">
-              Start self-service
+              {pilotOnly() ? 'See packages' : 'Start self-service'}
             </ButtonLink>
-            <a href={href('aether', '/app/signup')} className="inline-flex gap-1.5 px-2 text-[14px] font-medium text-ink no-underline hover:text-cobalt">
-              Create an account<Glyph>→</Glyph>
-            </a>
+            {!pilotOnly() && (
+              <a href={href('aether', '/app/signup')} className="inline-flex gap-1.5 px-2 text-[14px] font-medium text-ink no-underline hover:text-cobalt">
+                Create an account<Glyph>→</Glyph>
+              </a>
+            )}
           </div>
         </div>
       </section>

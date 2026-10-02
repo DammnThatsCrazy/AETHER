@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useSite } from '@site/site/site-context';
 import { HEADER_NAV, type SiteLink } from '@site/site/navigation';
 import { BrandMark } from '@site/components/brand-mark';
+import { pathOffered } from '@site/site/access';
 
 const secondaryButton =
   'inline-flex items-center justify-center whitespace-nowrap rounded-control border border-line bg-stone-100 font-medium text-ink ' +
@@ -18,6 +19,8 @@ export function SiteHeader({ active = '' }: { active?: string }) {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const to = (l: SiteLink) => href(l.site, l.path);
+  // A pilot-only build has no product to sign in to.
+  const secondary = pathOffered(nav.secondary.path) ? nav.secondary : null;
 
   // Close the mobile menu whenever the route or fragment changes.
   useEffect(() => setOpen(false), [location.pathname, location.hash]);
@@ -63,9 +66,11 @@ export function SiteHeader({ active = '' }: { active?: string }) {
           ))}
         </nav>
         <div className="hidden items-center gap-2 min-[1000px]:flex">
-          <a href={to(nav.secondary)} className={`${secondaryButton} min-h-9 px-3.5 text-body-sm`}>
-            {nav.secondary.label}
-          </a>
+          {secondary && (
+            <a href={to(secondary)} className={`${secondaryButton} min-h-9 px-3.5 text-body-sm`}>
+              {secondary.label}
+            </a>
+          )}
           <a href={to(nav.primary)} className={`${primaryButton} min-h-9 px-3.5 text-body-sm`}>
             {nav.primary.label}
           </a>
@@ -109,9 +114,11 @@ export function SiteHeader({ active = '' }: { active?: string }) {
             ))}
           </div>
           <div className="mt-4 flex flex-col gap-2">
-            <a href={to(nav.secondary)} className={`${secondaryButton} min-h-[42px] px-[18px] text-[14px]`}>
-              {nav.secondary.label}
-            </a>
+            {secondary && (
+              <a href={to(secondary)} className={`${secondaryButton} min-h-[42px] px-[18px] text-[14px]`}>
+                {secondary.label}
+              </a>
+            )}
             <a href={to(nav.primary)} className={`${primaryButton} min-h-[42px] px-[18px] text-[14px]`}>
               {nav.primary.label}
             </a>

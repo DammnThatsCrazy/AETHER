@@ -12,10 +12,12 @@ import {
   type SelfServePlan,
 } from '@site/site/plans';
 import { useSite } from '@site/site/site-context';
+import { pilotOnly, planChoicePath } from '@site/site/access';
 
 /**
  * Aether Pricing.dc.html. Choosing a plan continues to /app/signup, where
- * sign-up, plan and payment share one card (handoff README, "/app").
+ * sign-up, plan and payment share one card (handoff README, "/app"); a
+ * pilot-only build sends the choice to a pilot request instead.
  */
 
 const CONTRACT_COPY: Record<string, { body: string; type: string; cta: string }> = {
@@ -58,7 +60,8 @@ export function AetherPricingPage() {
     ['Connector fees', '', () => 'none'],
   ];
 
-  const choose = (plan: SelfServePlan) => href('aether', `/app/signup?plan=${plan.id}&interval=${interval}`);
+  const pilot = pilotOnly();
+  const choose = (plan: SelfServePlan) => href('aether', planChoicePath(plan.id, interval));
 
   const chooseButton = (plan: SelfServePlan) => {
     const c = ACCENTS[plan.accent];
@@ -125,8 +128,8 @@ export function AetherPricingPage() {
           <div className="hidden overflow-hidden rounded border border-line min-[1100px]:block">
             <div className="grid bg-stone-100 [grid-template-columns:200px_repeat(4,minmax(0,1fr))]">
               <div className="flex flex-col justify-end border-r border-line p-5">
-                <span className="text-label uppercase text-slate">Self-service</span>
-                <span className="mt-1.5 text-body-sm text-slate">Pay online and start today.</span>
+                <span className="text-label uppercase text-slate">{pilot ? 'Packages' : 'Self-service'}</span>
+                <span className="mt-1.5 text-body-sm text-slate">{pilot ? 'Start with a pilot on any package.' : 'Pay online and start today.'}</span>
               </div>
               {SELF_SERVE_PLANS.map((p) => {
                 const c = ACCENTS[p.accent];

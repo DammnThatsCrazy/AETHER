@@ -240,11 +240,17 @@ jobs:
                     - node_modules/**/*
           YAML
           # Public production build settings (no secrets). Auth0 settings join
-          # when the production backend and sign-in exist.
+          # when the production backend and sign-in exist. Until then the site
+          # is pilot-only (no sign-in, sign-up or status links; plan choices
+          # become pilot requests) and its contact form posts to the always-on
+          # lead intake (deploy/aws/lead-intake). The API values are the ones
+          # production will use; the pilot-only site does not call them.
           cat > "$web_environment" <<'JSON'
           {
             "AETHER_ENV": "production",
             "VITE_AETHER_ENV": "production",
+            "VITE_PILOT_ONLY": "true",
+            "VITE_LEAD_URL": "https://cbikbmj7wtuz6atqb62avzcn6e0bpquf.lambda-url.us-east-1.on.aws/",
             "VITE_API_BASE_URL": "https://api.olympuslabsml.com",
             "VITE_AETHER_ENDPOINT": "https://api.olympuslabsml.com",
             "VITE_PUBLISH_PRICES": "true",
@@ -255,20 +261,22 @@ jobs:
             "_LIVE_UPDATES": "[{\"pkg\":\"node\",\"type\":\"nvm\",\"version\":\"20\"}]"
           }
           JSON
-          # The same routing rules as the staging web app (Terraform main.tf).
+          # Pilot-only routing: the product (/app and the legacy sign-in paths)
+          # sends visitors to a pilot request until the production backend
+          # exists; every other page route is the site. When production opens,
+          # restore the staging web app's rules (Terraform main.tf).
           cat > "$web_rules" <<'JSON'
           [
-            {"source": "/app/signin", "target": "/app/login", "status": "302"},
-            {"source": "/app", "target": "/app/", "status": "302"},
-            {"source": "</^\\/app\\/[^.]*$/>", "target": "/app/index.html", "status": "200"},
-            {"source": "/login", "target": "/app/login", "status": "302"},
-            {"source": "/signup", "target": "/app/signup", "status": "302"},
-            {"source": "/forgot-password", "target": "/app/login", "status": "302"},
+            {"source": "/app", "target": "/contact?type=pilot", "status": "302"},
+            {"source": "/app/<*>", "target": "/contact?type=pilot", "status": "302"},
+            {"source": "/login", "target": "/contact?type=pilot", "status": "302"},
+            {"source": "/signup", "target": "/contact?type=pilot", "status": "302"},
+            {"source": "/forgot-password", "target": "/contact?type=pilot", "status": "302"},
             {"source": "</^[^.]+$|\\.(?!(css|gif|ico|jpg|jpeg|js|png|txt|svg|woff|woff2|ttf|map|json|webp|xml|webmanifest)$)([^.]+$)/>", "target": "/index.html", "status": "200"}
           ]
           JSON
           jq -e 'type == "object"' "$web_environment" >/dev/null
-          jq -e 'type == "array" and length == 7' "$web_rules" >/dev/null
+          jq -e 'type == "array" and length == 6' "$web_rules" >/dev/null
           aws amplify update-app \
             --app-id "$APP_ID" \
             --repository "$AMPLIFY_REPOSITORY" \

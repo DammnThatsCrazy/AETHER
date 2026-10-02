@@ -8,6 +8,18 @@ export function apiBase(env: { VITE_API_BASE_URL?: string } = import.meta.env): 
   return (env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
 }
 
+/**
+ * Where the contact form posts. VITE_LEAD_URL names a standalone lead intake
+ * (production's, before its backend exists: deploy/aws/lead-intake) that takes
+ * the same body and answers like the API; otherwise the API's lead route.
+ */
+export function leadUrl(env: { VITE_API_BASE_URL?: string; VITE_LEAD_URL?: string } = import.meta.env): string {
+  const intake = env.VITE_LEAD_URL?.trim();
+  if (intake) return intake;
+  const base = apiBase(env);
+  return base ? `${base}/v1/contact/lead` : '';
+}
+
 /** Topics accepted by POST /v1/contact/lead as `lead_type`. */
 export type ContactTopic = 'pilot' | 'product' | 'developer' | 'security' | 'proof' | 'research';
 
@@ -24,10 +36,10 @@ export interface LeadPayload {
 export type LeadResult = { status: 'ok'; leadId: string } | { status: 'error' } | { status: 'unconfigured' };
 
 /** Success only on a 2xx response that carries a lead id. */
-export async function submitLead(payload: LeadPayload, base = apiBase(), fetchImpl: typeof fetch = fetch): Promise<LeadResult> {
-  if (!base) return { status: 'unconfigured' };
+export async function submitLead(payload: LeadPayload, url = leadUrl(), fetchImpl: typeof fetch = fetch): Promise<LeadResult> {
+  if (!url) return { status: 'unconfigured' };
   try {
-    const res = await fetchImpl(`${base}/v1/contact/lead`, {
+    const res = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
