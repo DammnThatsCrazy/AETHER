@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="../_ds/colors_and_type.css">
+  <script src="../_ds/_ds_bundle.js"></script>
+  <title>Symbol key — Aether</title>
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Symbol key — Aether">
+  <meta property="og:description" content="What every symbol and line style means across Aether, in the product and in these docs.">
+  <meta property="og:image" content="../assets/og/symbol-key.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="description" content="What every symbol and line style means across Aether, in the product and in these docs.">
+  <style>
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; background: #111114; }
+    a { color: #9fbad6; } a:hover { color: #c4d6e8; }
+  </style>
+</helmet>
+<div data-theme="dark" style="min-height: 100vh; background: #111114; color: #e8e6e1; font-family: var(--font-sans);" data-screen-label="Symbol key">
+  <dc-import name="Site Header" brand="aether" active="Developers" hint-size="100%,56px"></dc-import>
+  <main style="max-width: 760px; margin: 0 auto; padding: clamp(80px, 12vw, 152px) 24px clamp(72px, 10vw, 128px); display: flex; flex-direction: column; gap: 56px;">
+    <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px;">
+      <span style="display: flex; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;"><a href="Docs.dc.html" style="color: #a09f99; text-decoration: none;">Docs</a><span>/</span><span style="color: #e8e6e1;">Symbol key</span></span>
+      <h1 style="font-size: clamp(40px, 6vw, 72px); font-weight: 500; line-height: 0.98; letter-spacing: -0.045em; margin: 0; color: #e8e6e1;">One small alphabet.</h1>
+      <p style="font-size: 16px; line-height: 1.6; color: #a09f99; margin: 0; max-width: 480px;">The same symbols mean the same thing everywhere in Aether.</p>
+    </div>
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+      <section style="display: flex; flex-direction: column;">
+        <h2 style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99; margin: 0 0 12px;">{{ g.title }}</h2>
+        <div style="border-top: 1px solid #2a2a2f;">
+          <sc-for list="{{ g.rows }}" as="r"><div style="display: grid; grid-template-columns: 72px 140px minmax(0, 1fr); gap: 16px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid #2a2a2f;"><span style="{{ r.style }}">{{ r.g }}</span><span style="font-size: 16px; font-weight: 500;">{{ r.k }}</span><span style="font-size: 14px; line-height: 1.5; color: #a09f99;">{{ r.v }}</span></div></sc-for>
+        </div>
+      </section>
+    </sc-for>
+  </main>
+  <dc-import name="Site Footer" hint-size="100%,300px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const m = (g, k, v, c) => ({ g, k, v, style: 'font-family: var(--font-mono); font-size: 22px; color: ' + (c || '#e8e6e1') + ';' });
+    return { groups: [
+      { title: 'Things', rows: [m('●', 'Person', 'A human.', '#9fbad6'), m('⬡', 'Agent', 'Software acting for someone.', '#dcb683'), m('◈', 'Company', 'An organization.', '#c9b088'), m('○', 'System', 'An app, tool, or service.', '#8fb0cc'), m('□', 'Device', 'A phone, browser, or machine.', '#a09f99'), m('↑', 'Value', 'Money or worth.', '#9cc4a9')] },
+      { title: 'Connections', rows: [m('→', 'Movement', 'Something happened, or was handed on.'), m('↔', 'Relationship', 'Two things are linked.'), m('— solid', 'Seen', 'Aether saw this happen.'), m('- - dashed', 'Worked out', 'Aether inferred this from evidence.'), m('thick / faint', 'Strength', 'Strong evidence is thick. Weak is faint.')] },
+      { title: 'States', rows: [m('●', 'Observed', 'Something directly occurred.', '#9fbad6'), m('↔', 'Resolved', 'Records were matched as one.', '#9fbad6'), m('✓', 'Verified', 'The expected effect was seen.', '#9cc4a9'), m('▲', 'Risk', 'Worth a closer look.', '#e09a8f'), m('■', 'Problem', 'Something is wrong or stopped.', '#e09a8f')] },
+    ] };
+  }
+}
+</script>
+</body>
+</html>

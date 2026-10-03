@@ -1,346 +1,311 @@
-import { useRef, useState, type FormEvent } from 'react';
+/**
+ * Built from design/designs/Contact.dc.html (copy, layout and styles verbatim).
+ */
+import { Fragment } from 'react';
+import { css, hoverClass, useDesignState, useLink } from '@site/design/runtime';
+import { usePageMeta } from '@site/design/page-meta';
+import { SiteFooter } from '@site/components/site-footer';
+import { SiteHeader } from '@site/components/site-header';
+import './contact-page.css';
+
+import { useRef, type ChangeEvent, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PageShell } from '@site/components/page-shell';
-import { Glyph, accentVars } from '@site/components/ui';
 import { submitLead, type ContactTopic } from '@site/site/api';
 import { CONTRACT_PLANS, SELF_SERVE_PLANS } from '@site/site/plans';
-import { ACCENTS, tint, type Accent } from '@site/site/palette';
 import { useSite } from '@site/site/site-context';
 
 /**
- * Contact.dc.html, shared by both sites. Sends to POST /v1/contact/lead with
- * the topic as `lead_type`; success shows only after a 2xx response.
+ * Contact.dc.html, shared by both sites. Sends to the lead endpoint with the
+ * topic as `lead_type`; success shows only after a 2xx response.
  */
-
 interface Topic {
   id: ContactTopic;
   label: string;
-  glyph: string;
-  accent: Accent;
+  g: string;
+  c: [string, string];
   desc: string;
   next: string;
   route: string;
   msg: string;
-  placeholder: string;
+  ph: string;
   extra: string;
 }
 
 const TOPICS: Topic[] = [
-  { id: 'pilot', label: 'Pilot', glyph: '→', accent: 'sage', desc: 'Connect a bounded set of sources around one question.', next: 'A product lead replies with a proposed scope.', route: 'product', msg: 'What relationship question are you trying to answer?', placeholder: 'e.g. Which accounts are expanding, and what shows it?', extra: 'Where does the evidence live? (CRM, payments, app…)' },
-  { id: 'product', label: 'Product', glyph: '◈', accent: 'cobalt', desc: 'Questions about what Aether does today.', next: 'A product lead replies.', route: 'product', msg: 'What would you like to know?', placeholder: 'A sentence or two is enough.', extra: 'Anything else we should know' },
-  { id: 'developer', label: 'Developer', glyph: '⌘', accent: 'ochre', desc: 'SDKs, connectors, webhooks, imports, and APIs.', next: 'An engineer replies, usually with a docs link.', route: 'engineering', msg: 'What are you trying to connect?', placeholder: 'e.g. Send checkout events from a React Native app', extra: 'Runtime or language' },
-  { id: 'security', label: 'Security', glyph: '✓', accent: 'ember', desc: 'Architecture, tenant scope, consent, DPA, retention.', next: 'The security owner replies. Missing documents are stated plainly.', route: 'security', msg: 'What does your review need to cover?', placeholder: 'e.g. Vendor questionnaire due in three weeks', extra: 'Timeline' },
-  { id: 'proof', label: 'Proof partner', glyph: '◉', accent: 'solar', desc: 'Document a governed loop with your own data.', next: 'We agree question, baseline, and method first.', route: 'product · proof', msg: 'What outcome would you want to document?', placeholder: 'The question and the baseline you would measure against.', extra: 'Baseline or current metric' },
+  { id: 'pilot', label: 'Pilot', g: '→', c: ['#4f7a5e', 'rgba(107,154,124,0.16)'], desc: 'Try Aether on one question with a few of your tools.', next: 'Someone on the team replies with a proposed plan.', route: 'product', msg: 'What do you want to understand?', ph: 'e.g. Which customers are growing, and why?', extra: 'Where does the data live? (CRM, payments, app…)' },
+  { id: 'product', label: 'Product', g: '◈', c: ['#2d5373', 'rgba(58,104,150,0.12)'], desc: 'Questions about what Aether can do today.', next: 'A product lead replies.', route: 'product', msg: 'What would you like to know?', ph: 'A sentence or two is enough.', extra: 'Anything else we should know' },
+  { id: 'developer', label: 'Developer', g: '⌘', c: ['#8a6433', 'rgba(201,151,90,0.18)'], desc: 'Connecting websites, apps, and servers.', next: 'An engineer replies, usually with a docs link.', route: 'engineering', msg: 'What are you trying to connect?', ph: 'e.g. Send checkout events from a mobile app', extra: 'Language or platform' },
+  { id: 'security', label: 'Security', g: '✓', c: ['#a3473c', 'rgba(181,86,74,0.12)'], desc: 'How your data is kept separate, consent, retention, and agreements.', next: 'The security owner replies. If a document doesn’t exist yet, they say so.', route: 'security', msg: 'What does your review need to cover?', ph: 'e.g. Vendor questionnaire due in three weeks', extra: 'Timeline' },
+  { id: 'proof', label: 'Proof partner', g: '◉', c: ['#7d6538', 'rgba(168,138,90,0.18)'], desc: 'Measure a real result using your own data.', next: 'You agree the question, the starting point, and the method first.', route: 'product · proof', msg: 'What result would you want to measure?', ph: 'The question, and where you are today.', extra: 'Current number, if you have one' },
 ];
-
-const RESEARCH: Topic = { id: 'research', label: 'Research', glyph: '⚗', accent: 'steel', desc: 'Research directions in governed intelligence.', next: 'A research lead replies if it matches current work.', route: 'research', msg: 'What would you like to discuss?', placeholder: 'Topic, and any paper or dataset involved.', extra: 'Link to paper or dataset' };
+const RESEARCH: Topic = { id: 'research', label: 'Research', g: '⚗', c: ['#3f6a8c', 'rgba(90,133,168,0.14)'], desc: 'Open research questions.', next: 'A research lead replies if it matches current work.', route: 'research', msg: 'What would you like to discuss?', ph: 'Topic, and any paper or dataset involved.', extra: 'Link to paper or dataset' };
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const CONTACT_EMAIL = 'contact@olympuslabsml.com';
-
 type Phase = 'idle' | 'validation' | 'pending' | 'success' | 'error' | 'unconfigured';
-
-const BANNERS: Partial<Record<Phase, { glyph: string; title: string; body: string; color: string; bg: string }>> = {
-  validation: { glyph: '▲', title: 'A few fields need attention', body: 'Name, work email, and a short message are required.', color: ACCENTS.ochre.ink, bg: tint('ochre', 0.14) },
-  error: { glyph: '■', title: 'That did not go through', body: `Nothing was lost. Try again, or email ${CONTACT_EMAIL}.`, color: ACCENTS.ember.ink, bg: tint('ember', 0.1) },
-  unconfigured: { glyph: '○', title: 'The form is not connected here', body: `Email ${CONTACT_EMAIL} instead. Your text is still in the form.`, color: '#6b6a65', bg: 'rgba(156, 155, 149, 0.16)' },
+const BANNERS: Partial<Record<Phase, [g: string, title: string, body: string, color: string, bg: string]>> = {
+  error: ['■', 'That did not go through', 'Nothing was lost. Try again, or email team@olympuslabsml.com.', '#a3473c', 'rgba(181,86,74,0.1)'],
+  unconfigured: ['○', 'The form is not connected here', 'Email team@olympuslabsml.com instead. Your text is still in the form.', '#6b6a65', 'rgba(156,155,149,0.16)'],
+  validation: ['▲', 'A few fields need attention', 'Name, work email, and a short message are required.', '#8a6433', 'rgba(201,151,90,0.14)'],
 };
-
-const input =
-  'box-border w-full rounded-control border bg-stone-50 text-[14px] text-ink placeholder:text-ash aria-[invalid=true]:border-ember';
+const EMPTY = { st: 'idle' as Phase, name: '', email: '', msg: '', company: '', extraText: '', leadId: '' };
 
 export function ContactPage() {
-  const { site, href } = useSite();
-  const olympus = site === 'olympus';
-  const topics = olympus ? [...TOPICS, RESEARCH] : TOPICS;
+  const link = useLink();
+  const { site } = useSite();
   const [params] = useSearchParams();
-  const [topicId, setTopicId] = useState<ContactTopic>(
-    () => topics.find((t) => t.id === params.get('type'))?.id ?? 'pilot',
-  );
-  const topic = topics.find((t) => t.id === topicId) ?? topics[0]!;
-  // Pricing links carry the contract package the visitor chose.
-  // Contract packages, or a self-serve plan chosen on a pilot-only pricing page.
-  const plan = [...CONTRACT_PLANS, ...SELF_SERVE_PLANS].find((p) => p.id === params.get('plan'));
-  const c = ACCENTS[topic.accent];
-
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [msg, setMsg] = useState('');
-  const [company, setCompany] = useState('');
-  const [extra, setExtra] = useState('');
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [leadId, setLeadId] = useState('');
+  const olympus = site === 'olympus';
+  const brand = site;
+  const T = olympus ? [...TOPICS, RESEARCH] : TOPICS;
+  const [s, setState] = useDesignState<typeof EMPTY & { type: string }>(() => ({ ...EMPTY, type: params.get('type') ?? 'pilot' }));
   const formRef = useRef<HTMLFormElement>(null);
-
-  const showErrors = phase === 'validation';
-  const nameBad = showErrors && !name.trim();
-  const emailBad = showErrors && !EMAIL_RE.test(email.trim());
-  const msgBad = showErrors && !msg.trim();
-  const pending = phase === 'pending';
-  const banner = BANNERS[phase];
-
-  const onSubmit = async (e: FormEvent) => {
+  const cur = T.find((t) => t.id === s.type) ?? T[0]!;
+  // Pricing links carry the package the visitor chose.
+  const plan = [...CONTRACT_PLANS, ...SELF_SERVE_PLANS].find((p) => p.id === params.get('plan'));
+  const errs = s.st === 'validation';
+  const emailOk = EMAIL_RE.test(s.email.trim());
+  const ib = 'font-family: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; border-radius: 6px; background: #f5f4f1; color: #1a1a1e; width: 100%; box-sizing: border-box; border: 1px solid ';
+  const pending = s.st === 'pending';
+  const b = BANNERS[s.st];
+  usePageMeta('contact', { title: olympus ? 'Contact — Olympus Labs' : 'Contact — Aether' });
+  const title = olympus ? 'Tell us what you are trying to understand' : 'Tell us what you need to make visible';
+  const types = T.map((t) => {
+    const on = t.id === cur.id;
+    return {
+      label: t.label, glyph: t.g, checked: on ? 'true' : 'false', pick: () => setState({ type: t.id }),
+      glyphStyle: 'font-family: var(--font-mono); color: ' + (on ? '#f5f4f1' : t.c[0]) + ';',
+      style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; min-height: 36px; padding: 0 13px; border-radius: 999px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color 120ms, border-color 120ms; ' + (on ? 'background: ' + t.c[0] + '; color: #f5f4f1; border: 1px solid ' + t.c[0] + ';' : 'background: #f5f4f1; color: #1a1a1e; border: 1px solid #d8d6d0;'),
+      hover: on ? 'background: ' + t.c[0] + ';' : 'background: ' + t.c[1] + '; border-color: ' + t.c[0] + '66;',
+    };
+  });
+  const desc = cur.desc + (plan ? ' About the ' + plan.name + ' package.' : '');
+  const hintStyle = 'font-size: 12px; color: ' + cur.c[0] + ';';
+  const typeLabel = cur.label.toLowerCase();
+  const next = cur.next;
+  const routeTo = cur.route;
+  const isSuccess = s.st === 'success';
+  const isForm = !isSuccess;
+  const bannerShow = !!b;
+  const bannerGlyph = b ? b[0] : '';
+  const bannerTitle = b ? b[1] : '';
+  const bannerBody = b ? b[2] : '';
+  const bannerStyle = 'display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 6px; font-size: 13px; line-height: 1.5; color: ' + (b ? b[3] : '#1a1a1e') + '; background: ' + (b ? b[4] : '#eceae5') + '; border: 1px solid ' + (b ? b[3] : '#d8d6d0') + '44;';
+  const { name, email, msg, company, extraText, leadId } = s;
+  const onName = (e: ChangeEvent<HTMLInputElement>) => setState({ name: e.target.value });
+  const onEmail = (e: ChangeEvent<HTMLInputElement>) => setState({ email: e.target.value });
+  const onMsg = (e: ChangeEvent<HTMLTextAreaElement>) => setState({ msg: e.target.value });
+  const onCompany = (e: ChangeEvent<HTMLInputElement>) => setState({ company: e.target.value });
+  const onExtra = (e: ChangeEvent<HTMLInputElement>) => setState({ extraText: e.target.value });
+  const nameErr = errs && !name.trim();
+  const emailErr = errs && !emailOk;
+  const msgErr = errs && !msg.trim();
+  const nameInvalid = nameErr ? 'true' : 'false';
+  const emailInvalid = emailErr ? 'true' : 'false';
+  const msgInvalid = msgErr ? 'true' : 'false';
+  const baseInput = ib + '#d8d6d0;';
+  const nameStyle = ib + (nameErr ? '#b5564a;' : '#d8d6d0;');
+  const emailStyle = ib + (emailErr ? '#b5564a;' : '#d8d6d0;');
+  const msgStyle = 'font-family: inherit; font-size: 14px; line-height: 1.5; padding: 10px 12px; border-radius: 6px; background: #f5f4f1; color: #1a1a1e; resize: vertical; width: 100%; box-sizing: border-box; border: 1px solid ' + (msgErr ? '#b5564a;' : '#d8d6d0;');
+  const msgLabel = cur.msg;
+  const msgPlaceholder = cur.ph;
+  const extraLabel = cur.extra;
+  const pendingStr = pending ? 'true' : 'false';
+  const submitLabel = pending ? 'Sending…' : s.st === 'error' ? 'Try again' : 'Send';
+  const submitStyle = 'font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 22px; border-radius: 6px; border: 1px solid #4f7a5e; color: #f5f4f1; background: #4f7a5e; font-size: 14px; font-weight: 500; cursor: ' + (pending ? 'wait' : 'pointer') + '; opacity: ' + (pending ? '0.6' : '1') + '; transition: background-color 120ms;';
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (pending) return;
-    if (!name.trim() || !EMAIL_RE.test(email.trim()) || !msg.trim()) {
-      setPhase('validation');
-      formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], #c-name')?.focus();
+    if (!name.trim() || !emailOk || !msg.trim()) {
+      setState({ st: 'validation' });
+      formRef.current?.querySelector<HTMLElement>('#c-name')?.focus();
       return;
     }
-    setPhase('pending');
+    setState({ st: 'pending' });
     const result = await submitLead({
-      lead_type: topic.id,
+      lead_type: cur.id,
       name: name.trim(),
       email: email.trim(),
       message: msg.trim(),
       company: company.trim(),
       // The lead API has no plan field; use_case carries it (200 characters max).
-      use_case: [plan ? `Plan: ${plan.name}` : '', extra.trim()].filter(Boolean).join(' · ').slice(0, 200),
+      use_case: [plan ? `Plan: ${plan.name}` : '', extraText.trim()].filter(Boolean).join(' · ').slice(0, 200),
       source: olympus ? 'olympus-marketing' : 'aether-marketing',
     });
-    if (result.status === 'ok') {
-      setLeadId(result.leadId);
-      setPhase('success');
-    } else {
-      setPhase(result.status);
-    }
+    if (result.status === 'ok') setState({ st: 'success', leadId: result.leadId });
+    else setState({ st: result.status });
   };
-
-  const reset = () => {
-    setName('');
-    setEmail('');
-    setMsg('');
-    setCompany('');
-    setExtra('');
-    setPhase('idle');
-  };
-
+  const reset = () => setState({ ...EMPTY });
   return (
-    <PageShell title={olympus ? 'Contact — Olympus Labs' : 'Contact — Aether'} active="Contact">
-      <div className="px-5 pb-[clamp(56px,8vw,96px)] pt-[clamp(32px,6vw,72px)]">
-        <div className="mx-auto flex max-w-[640px] flex-col gap-6">
-          <div className="flex flex-col gap-2.5">
-            <span className="inline-flex items-center gap-2 text-label uppercase" style={{ color: c.ink }}>
-              <Glyph>✉</Glyph>
-              {olympus ? 'Contact Olympus Labs' : 'Contact Aether'}
-            </span>
-            <h1 className="m-0 text-balance text-[clamp(30px,4.4vw,44px)] font-medium leading-[1.06] tracking-[-0.03em]">
-              {olympus ? 'Tell us what you are trying to understand' : 'Tell us what you need to make visible'}
+    <div className="dc pg-contact">
+    <div data-page="contact" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
+      <SiteHeader brand={brand} active="Contact" />
+      <main style={css("padding: clamp(72px, 11vw, 136px) 20px clamp(72px, 10vw, 120px);")}>
+        <div style={css("max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px;")}>
+          <div style={css("display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px;")}>
+            <h1 style={css("font-size: clamp(36px, 5.4vw, 60px); font-weight: 500; line-height: 1; letter-spacing: -0.04em; margin: 0; color: #1a1a1e; text-wrap: balance;")}>
+              {title}
             </h1>
-            <p className="m-0 text-[15px] leading-[1.6] text-slate">
-              Pick a topic, add a sentence or two, and it reaches the right person. No package or connector name needed.
+            <p style={css("font-size: 16px; line-height: 1.6; color: #6b6a65; margin: 0;")}>
+              {"Pick a topic and add a sentence or two. It reaches the right person."}
             </p>
           </div>
-
-          {phase === 'success' ? (
-            <div
-              role="status"
-              className="flex flex-col gap-3.5 rounded-lg border border-t-4 p-7"
-              style={{ background: tint('sage', 0.12), borderColor: tint('sage', 0.45), borderTopColor: ACCENTS.sage.base }}
-            >
-              <Glyph className="text-[24px] text-sage-ink">✓</Glyph>
-              <h2 className="m-0 text-[22px] font-medium tracking-[-0.4px]">Request received</h2>
-              <p className="m-0 text-[14px] leading-[1.6] text-[#3a3935]">
-                Your <span className="font-medium">{topic.label.toLowerCase()}</span> request is recorded. Replies go to{' '}
-                <span className="font-mono">{email.trim()}</span>. {topic.next}
-              </p>
-              <span className="font-mono text-caption text-sage-ink">
-                lead:{leadId.slice(0, 8)} · routed to {topic.route}
-              </span>
-              <div className="flex flex-wrap gap-3">
-                <a
-                  href={href('aether', '/docs')}
-                  className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-control border border-ink bg-ink px-4 text-[14px] font-medium text-stone-50 no-underline hover:bg-[#2e2e34] hover:text-stone-50"
-                >
-                  Read the docs <Glyph className="text-ochre">→</Glyph>
-                </a>
-                <button
-                  type="button"
-                  onClick={reset}
-                  className="min-h-10 cursor-pointer whitespace-nowrap rounded-control border border-line bg-stone-50 px-4 text-[14px] font-medium text-ink hover:border-line-strong hover:bg-stone-200"
-                >
-                  Send another
-                </button>
-              </div>
-            </div>
-          ) : (
-            <form
-              ref={formRef}
-              noValidate
-              onSubmit={onSubmit}
-              aria-busy={pending}
-              className="flex flex-col gap-[18px] rounded-lg border border-line bg-stone-100 p-[clamp(20px,3vw,28px)]"
-            >
-              <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-                <legend className="mb-2 p-0 text-body-sm font-medium">What is this about?</legend>
-                <div className="flex flex-wrap gap-1.5">
-                  {topics.map((t) => {
-                    const on = t.id === topic.id;
-                    return (
-                      <label key={t.id} className="relative" style={accentVars(t.accent)}>
-                        <input
-                          type="radio"
-                          name="topic"
-                          value={t.id}
-                          checked={on}
-                          onChange={() => setTopicId(t.id)}
-                          className="peer absolute inset-0 m-0 cursor-pointer opacity-0"
-                        />
-                        <span
-                          className={
-                            'inline-flex min-h-9 cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-full border px-[13px] text-body-sm font-medium transition-colors duration-120 ease-site peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-cobalt ' +
-                            (on
-                              ? 'text-stone-50 [background:var(--a-ink)] [border-color:var(--a-ink)]'
-                              : 'border-line bg-stone-50 text-ink peer-hover:[background:var(--a-soft)] peer-hover:[border-color:var(--a-line)]')
-                          }
-                        >
-                          <Glyph>
-                            <span style={{ color: on ? '#f5f4f1' : ACCENTS[t.accent].ink }}>{t.glyph}</span>
-                          </Glyph>
-                          {t.label}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <span className="text-caption" style={{ color: c.ink }}>
-                  {topic.desc}
+          {(isSuccess) ? (
+            <>
+              <div role="status" style={css("border-radius: 8px; padding: 28px; display: flex; flex-direction: column; gap: 14px; background: rgba(107,154,124,0.12); border: 1px solid rgba(107,154,124,0.45); border-top: 4px solid #6b9a7c;")}>
+                <span style={css("font-family: var(--font-mono); font-size: 24px; color: #4f7a5e;")}>
+                  {"✓"}
                 </span>
-                {plan && <span className="text-caption text-slate">About the {plan.name} package.</span>}
-              </fieldset>
-
-              {banner && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-3 rounded-control border px-3.5 py-3 text-body-sm leading-[1.5]"
-                  style={{ color: banner.color, background: banner.bg, borderColor: `${banner.color}44` }}
-                >
-                  <Glyph>{banner.glyph}</Glyph>
-                  <span className="flex flex-col gap-0.5">
-                    <span className="font-medium text-ink">{banner.title}</span>
-                    <span className="text-graphite-body">{banner.body}</span>
+                <h2 style={css("font-size: 22px; font-weight: 500; letter-spacing: -0.4px; margin: 0; color: #1a1a1e;")}>
+                  {"Request received"}
+                </h2>
+                <p style={css("font-size: 14px; line-height: 1.6; color: #3a3935; margin: 0;")}>
+                  {"Your "}
+                  <span style={css("font-weight: 500;")}>
+                    {typeLabel}
                   </span>
-                </div>
-              )}
-
-              <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="c-name" className="text-body-sm font-medium">
-                    Name
-                  </label>
-                  <input
-                    id="c-name"
-                    autoComplete="name"
-                    maxLength={200}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    aria-invalid={nameBad}
-                    aria-describedby={nameBad ? 'c-name-err' : undefined}
-                    className={`${input} min-h-10 border-line px-3`}
-                  />
-                  {nameBad && (
-                    <span id="c-name-err" className="text-caption text-ember-ink">
-                      Enter your name.
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="c-email" className="text-body-sm font-medium">
-                    Work email
-                  </label>
-                  <input
-                    id="c-email"
-                    type="email"
-                    autoComplete="email"
-                    maxLength={320}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    aria-invalid={emailBad}
-                    aria-describedby={emailBad ? 'c-email-err' : undefined}
-                    className={`${input} min-h-10 border-line px-3`}
-                  />
-                  {emailBad && (
-                    <span id="c-email-err" className="text-caption text-ember-ink">
-                      Enter a full work email.
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="c-msg" className="text-body-sm font-medium">
-                  {topic.msg}
-                </label>
-                <textarea
-                  id="c-msg"
-                  rows={4}
-                  maxLength={2000}
-                  value={msg}
-                  onChange={(e) => setMsg(e.target.value)}
-                  placeholder={topic.placeholder}
-                  aria-invalid={msgBad}
-                  aria-describedby={msgBad ? 'c-msg-err' : undefined}
-                  className={`${input} resize-y border-line px-3 py-2.5 leading-[1.5]`}
-                />
-                {msgBad && (
-                  <span id="c-msg-err" className="text-caption text-ember-ink">
-                    Add a sentence or two.
+                  {" request is recorded. Replies go to "}
+                  <span style={css("font-family: var(--font-mono);")}>
+                    {email}
                   </span>
-                )}
-              </div>
-
-              <details className="text-body-sm">
-                <summary className="cursor-pointer font-medium text-graphite-body">
-                  Add organization and details <span className="font-normal text-ash">· optional</span>
-                </summary>
-                <div className="flex flex-col gap-3 pt-3">
-                  <input
-                    aria-label="Organization"
-                    autoComplete="organization"
-                    placeholder="Organization"
-                    maxLength={200}
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    className={`${input} min-h-10 border-line px-3`}
-                  />
-                  <input
-                    aria-label={topic.extra}
-                    placeholder={topic.extra}
-                    maxLength={200}
-                    value={extra}
-                    onChange={(e) => setExtra(e.target.value)}
-                    className={`${input} min-h-10 border-line px-3`}
-                  />
-                </div>
-              </details>
-
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-caption text-slate">
-                  Or email{' '}
-                  <a href={`mailto:${CONTACT_EMAIL}`} className="font-mono text-sage-ink no-underline">
-                    {CONTACT_EMAIL}
+                  {". "}{next}
+                </p>
+                <span style={css("font-family: var(--font-mono); font-size: 12px; color: #4f7a5e;")}>
+                  {leadId ? "lead:" + leadId.slice(0, 8) + " · routed to " : "routed to "}{routeTo}
+                </span>
+                <div style={css("display: flex; flex-wrap: wrap; gap: 12px;")}>
+                  <a href={link("Docs.dc.html")} style={css("display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #2563eb; color: #f5f4f1; border: 1px solid #2563eb;")} className="hv-7e3a2e7d">
+                    {"Read the docs"}
+                    <span style={css("font-family: var(--font-mono); color: #c9975a;")}>
+                      {"→"}
+                    </span>
                   </a>
-                </span>
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-control border border-sage-ink bg-sage-ink px-[22px] text-[14px] font-medium text-stone-50 transition-colors duration-120 ease-site hover:border-[#41664e] hover:bg-[#41664e] disabled:cursor-wait disabled:opacity-60"
-                >
-                  {pending ? 'Sending…' : phase === 'error' ? 'Try again' : 'Send'}
-                  <Glyph>→</Glyph>
-                </button>
+                  <button type="button" onClick={reset} style={css("font-family: inherit; white-space: nowrap; min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500; color: #1a1a1e; background: #f5f4f1; border: 1px solid #d8d6d0; cursor: pointer;")} className="hv-4dee937b">
+                    {"Send another"}
+                  </button>
+                </div>
               </div>
-
-              <p className="m-0 border-t border-line pt-3 text-caption leading-[1.55] text-slate">
-                Used only to reply and route this request. No marketing list, no phone number.{' '}
-                <a href={href(site, '/legal/privacy')} className="text-cobalt hover:text-cobalt-ink">
-                  Privacy and data use
-                </a>.
-              </p>
-            </form>
-          )}
+            </>
+          ) : null}
+          {(isForm) ? (
+            <>
+              <form ref={formRef} noValidate onSubmit={submit} style={css("display: flex; flex-direction: column; gap: 22px;")}>
+                <fieldset style={css("border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px;")}>
+                  <legend style={css("font-size: 13px; font-weight: 500; padding: 0; margin-bottom: 8px;")}>
+                    {"What is this about?"}
+                  </legend>
+                  <div role="radiogroup" style={css("display: flex; flex-wrap: wrap; gap: 6px;")}>
+                    {(types).map((t: any, tIndex: number) => (
+                      <Fragment key={tIndex}>
+                        <button type="button" role="radio" aria-checked={t.checked} onClick={t.pick} style={css(t.style)} className={`${hoverClass(t.hover, 'hover')}`}>
+                          <span style={css(t.glyphStyle)}>
+                            {t.glyph}
+                          </span>
+                          {t.label}
+                        </button>
+                      </Fragment>
+                    ))}
+                  </div>
+                  <span style={css(hintStyle)}>
+                    {desc}
+                  </span>
+                </fieldset>
+                {(bannerShow) ? (
+                  <>
+                    <div role="alert" style={css(bannerStyle)}>
+                      <span style={css("font-family: var(--font-mono);")}>
+                        {bannerGlyph}
+                      </span>
+                      <span style={css("display: flex; flex-direction: column; gap: 2px;")}>
+                        <span style={css("font-weight: 500; color: #1a1a1e;")}>
+                          {bannerTitle}
+                        </span>
+                        <span style={css("color: #4a4945;")}>
+                          {bannerBody}
+                        </span>
+                      </span>
+                    </div>
+                  </>
+                ) : null}
+                <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px;")}>
+                  <div style={css("display: flex; flex-direction: column; gap: 6px;")}>
+                    <label htmlFor="c-name" style={css("font-size: 13px; font-weight: 500;")}>
+                      {"Name"}
+                    </label>
+                    <input id="c-name" autoComplete="name" value={name} onChange={onName} aria-invalid={nameInvalid} style={css(nameStyle)} />
+                    {(nameErr) ? (
+                      <>
+                        <span style={css("font-size: 12px; color: #a3473c;")}>
+                          {"Enter your name."}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                  <div style={css("display: flex; flex-direction: column; gap: 6px;")}>
+                    <label htmlFor="c-email" style={css("font-size: 13px; font-weight: 500;")}>
+                      {"Work email"}
+                    </label>
+                    <input id="c-email" type="email" autoComplete="email" value={email} onChange={onEmail} aria-invalid={emailInvalid} style={css(emailStyle)} />
+                    {(emailErr) ? (
+                      <>
+                        <span style={css("font-size: 12px; color: #a3473c;")}>
+                          {"Enter a full work email."}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <div style={css("display: flex; flex-direction: column; gap: 6px;")}>
+                  <label htmlFor="c-msg" style={css("font-size: 13px; font-weight: 500;")}>
+                    {msgLabel}
+                  </label>
+                  <textarea id="c-msg" rows={4} value={msg} onChange={onMsg} aria-invalid={msgInvalid} placeholder={msgPlaceholder} style={css(msgStyle)} />
+                  {(msgErr) ? (
+                    <>
+                      <span style={css("font-size: 12px; color: #a3473c;")}>
+                        {"Add a sentence or two."}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+                <details style={css("font-size: 13px;")}>
+                  <summary style={css("cursor: pointer; color: #4a4945; font-weight: 500;")}>
+                    {"Add organization and details "}
+                    <span style={css("color: #9c9b95; font-weight: 400;")}>
+                      {"· optional"}
+                    </span>
+                  </summary>
+                  <div style={css("display: flex; flex-direction: column; gap: 12px; padding-top: 12px;")}>
+                    <input aria-label="Organization" autoComplete="organization" placeholder="Organization" value={company} onChange={onCompany} style={css(baseInput)} />
+                    <input aria-label={extraLabel} placeholder={extraLabel} value={extraText} onChange={onExtra} style={css(baseInput)} />
+                  </div>
+                </details>
+                <div style={css("display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;")}>
+                  <span style={css("font-size: 12px; color: #6b6a65;")}>
+                    {"Or email "}
+                    <a href={link("mailto:team@olympuslabsml.com")} style={css("font-family: var(--font-mono); color: #4f7a5e; text-decoration: none;")}>
+                      {"team@olympuslabsml.com"}
+                    </a>
+                  </span>
+                  <button type="submit" disabled={pending} aria-busy={pendingStr} style={css(submitStyle)} className="hv-a7897056">
+                    {submitLabel}
+                    <span style={css("font-family: var(--font-mono);")}>
+                      {"→"}
+                    </span>
+                  </button>
+                </div>
+                <p style={css("font-size: 12px; line-height: 1.55; color: #6b6a65; margin: 0; padding-top: 12px; border-top: 1px solid #d8d6d0;")}>
+                  {"Used only to reply and route this request. No marketing list, no phone number. "}
+                  <a href={link("Legal.dc.html?doc=privacy")}>
+                    {"Privacy and data use"}
+                  </a>
+                  {"."}
+                </p>
+              </form>
+            </>
+          ) : null}
         </div>
-      </div>
-    </PageShell>
+      </main>
+      <SiteFooter />
+    </div>
+    </div>
   );
 }

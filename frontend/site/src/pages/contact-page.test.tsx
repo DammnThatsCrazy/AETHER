@@ -19,7 +19,7 @@ function renderContact(site: SiteId, search = '') {
 async function fillValid() {
   await userEvent.type(screen.getByLabelText('Name'), 'Jordan Lee');
   await userEvent.type(screen.getByLabelText('Work email'), 'jordan@northwind.example');
-  await userEvent.type(screen.getByRole('textbox', { name: /relationship question|would you like|trying to connect|review need|outcome/ }), 'One view of trial-to-paid.');
+  await userEvent.type(screen.getByRole('textbox', { name: /want to understand|would you like|trying to connect|review need|result/ }), 'One view of trial-to-paid.');
 }
 
 const jsonResponse = (status: number, body: unknown) =>
@@ -33,13 +33,13 @@ describe('Contact page', () => {
 
   it('preselects the topic from ?type= and offers Research only on Olympus', () => {
     const { unmount } = renderContact('olympus', '?type=security');
-    expect((screen.getByRole('radio', { name: /Security/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole('radio', { name: /Security/ })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('radio', { name: /Research/ })).toBeTruthy();
     unmount();
 
     renderContact('aether', '?type=research');
     expect(screen.queryByRole('radio', { name: /Research/ })).toBeNull();
-    expect((screen.getByRole('radio', { name: /Pilot/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole('radio', { name: /Pilot/ })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('marks missing fields and does not send', async () => {
@@ -81,7 +81,7 @@ describe('Contact page', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test/');
     renderContact('aether', '?type=security&plan=omega');
-    expect(screen.getByText('About the Omega package.')).toBeTruthy();
+    expect(screen.getByText(/About the Omega package\./)).toBeTruthy();
     await fillValid();
     await userEvent.click(screen.getByRole('button', { name: /Send/ }));
 

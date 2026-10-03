@@ -1,157 +1,143 @@
-import { PageShell } from '@site/components/page-shell';
-import { ButtonLink, Card, CardRow, ClosingCta, DataTable, PageHero, Section, SectionHead, StepList } from '@site/components/ui';
-import { ProviderMark } from '@site/components/provider-mark';
-import { ACCENTS, soft, type Accent } from '@site/site/palette';
-import { useSite } from '@site/site/site-context';
-
 /**
- * Aether Procurement.dc.html. The design routes "Start procurement" to a
- * procurement contact topic that Contact does not have; security review is
- * the topic that covers DPA, questionnaires, and deployment review.
+ * Built from design/designs/Aether Procurement.dc.html (copy, layout and styles verbatim).
  */
+import { Fragment } from 'react';
+import { css, useDesignState, useLink, useReducedMotion } from '@site/design/runtime';
+import { usePageMeta } from '@site/design/page-meta';
+import { SiteFooter } from '@site/components/site-footer';
+import { SiteHeader } from '@site/components/site-header';
+import './aether-procurement-page.css';
 
-const PROCESS: Array<{ title: string; body: string; accent: Accent }> = [
-  { title: 'Introduction', body: 'The relationship question, the systems involved, and the outcome that matters.', accent: 'cobalt' },
-  { title: 'Security review', body: 'Architecture, tenant scope, consent, retention, and deployment model.', accent: 'ember' },
-  { title: 'Pilot scope', body: 'Sources, success measures, baseline, and timeline — agreed in writing.', accent: 'ochre' },
-  { title: 'Order', body: 'Package, term, and billing. Self-service plans check out through Stripe.', accent: 'solar' },
-  { title: 'Onboarding', body: 'Connect sources, verify first events, review the first perspective.', accent: 'sage' },
-];
+import { useEffect } from 'react';
 
-const DOCUMENTS: Array<[string, string, string, string]> = [
-  ['Security overview', 'Controls, key scopes, incident response', '● on request', ACCENTS.sage.ink],
-  ['Architecture summary', 'Pipeline, storage tiers, tenancy', '● on request', ACCENTS.sage.ink],
-  ['Data processing terms', 'Roles, sub-processors, retention', '▲ owner review', ACCENTS.ochre.ink],
-  ['Security questionnaire', 'Your standard form, answered', '● on request', ACCENTS.sage.ink],
-  ['Certification reports', 'SOC 2 and similar', '○ not available', '#6b6a65'],
+const EASE = 'cubic-bezier(0.22,1,0.36,1)';
+const STEPS: [label: string, body: string, ask: string][] = [
+  ['Introduction', 'The question you want answered, the tools involved, and the result that matters.', 'a short call, a written summary'],
+  ['Security review', 'Architecture, data separation, consent, retention, and how Aether is run.', 'architecture notes, data-handling summary, subprocessor list'],
+  ['Pilot scope', 'Which tools, how success is measured, the starting baseline, and the timeline — agreed in writing.', 'a written plan with a named contact'],
+  ['Order', 'The plan, term, and billing. Self-service plans check out online through Stripe.', 'an order form or online checkout'],
+  ['Onboarding', 'Connect your tools, confirm the first events arrive, and review the first results together.', 'a setup walkthrough'],
 ];
-
-const FAQ: Array<[string, string, Accent]> = [
-  ['Who owns the data?', 'You own raw operational data, event streams, and records. Tenant intelligence never crosses tenants.', 'cobalt'],
-  ['Can we deploy in our own environment?', 'Enterprise isolated tenants are available for pilots. Regulated cloud, on-premise, and air-gapped deployment are planned and not deployable today.', 'sage'],
-  ['What happens at the end of a term?', 'Export through the data exchange API, then request deletion. Deletion removes raw data and stops ingestion.', 'ochre'],
-  ['Is Aether generally available?', 'No. Aether is in pre-production private alpha.', 'ember'],
-  ['How is support provided?', 'Through contact@olympuslabsml.com and a named contact during pilots.', 'steel'],
-];
+const TERMS = [['Plans', 'Alpha, Beta, Gamma, and Delta grow with how much Aether does for you. Larger plans are by agreement.'], ['Billing', 'Monthly subscriptions and invoices through Stripe. Enterprise terms are agreed in writing.'], ['Pilots', 'Limited in scope and time, with the success measures agreed up front.']].map(([k, v]) => ({ k, v }));
 
 export function AetherProcurementPage() {
-  const { href } = useSite();
-  const startProcurement = href('aether', '/contact?type=security');
+  const link = useLink();
+  usePageMeta('aether-procurement');
+  const [state, setState] = useDesignState({ step: 0, held: false });
+  const reduce = useReducedMotion();
+  useEffect(() => {
+    if (reduce || state.held) return undefined;
+    const timer = setInterval(() => setState((s) => ({ step: (s.step + 1) % STEPS.length })), 4000);
+    return () => clearInterval(timer);
+  }, [reduce, state.held, setState]);
+  const k = state.step;
+  const tabs = STEPS.map(([l], i) => {
+    const on = i === k;
+    return { label: i + 1 + ' · ' + l, sel: on ? 'true' : 'false', go: () => setState({ step: i, held: true }), style: 'font-family: inherit; min-height: 36px; padding: 0 14px; border-radius: 7px; border: 0; cursor: pointer; font-size: 13px; font-weight: 500; transition: background-color 120ms ' + EASE + ', color 120ms ' + EASE + '; ' + (on ? 'background: #e8e6e1; color: #111114;' : 'background: transparent; color: #a09f99;') };
+  });
+  const cur = { n: '0' + (k + 1), t: STEPS[k]![0], b: STEPS[k]![1], ask: STEPS[k]![2] };
+  const terms = TERMS;
   return (
-    <PageShell title="Procurement — Aether">
-      <PageHero
-        crumbs={[{ label: 'Aether', href: href('aether', '/') }, { label: 'Procurement' }]}
-        accent="cobalt"
-        glyph="◈"
-        eyebrow="Procurement"
-        title="Everything your review will ask for, in one place"
-        lede="How Aether is bought, billed, reviewed, and deployed — and what to request at each step."
-        actions={
-          <>
-            <ButtonLink href={startProcurement} arrow>
-              Start procurement
-            </ButtonLink>
-            <ButtonLink href={href('aether', '/pricing')} variant="soft" accent="ochre" glyph="↑">
-              Compare packages
-            </ButtonLink>
-          </>
-        }
-        toc={[
-          { id: 'process', label: 'Process', accent: 'cobalt' },
-          { id: 'commercial', label: 'Commercial', accent: 'ochre' },
-          { id: 'documents', label: 'Documents', accent: 'sage' },
-          { id: 'faq', label: 'Questions', accent: 'steel' },
-        ]}
-      />
-
-      <Section id="process">
-        <SectionHead accent="cobalt" glyph="→" eyebrow="Process" title="Five steps from first call to live" />
-        <StepList steps={PROCESS} />
-      </Section>
-
-      <Section id="commercial" tone="stone">
-        <SectionHead accent="ochre" glyph="↑" eyebrow="Commercial" title="How Aether is priced and billed" />
-        <CardRow>
-          <Card
-            href={href('aether', '/pricing')}
-            accent="cobalt"
-            flex="1 1 280px"
-            glyph="◈"
-            title="Packages"
-            body="Alpha, Beta, Gamma, and Delta scale with graph depth, entity intelligence, and throughput."
-            cta="See pricing"
-          />
-          <Card flex="1 1 280px" title="Billing" body="Monthly subscriptions and invoices through Stripe. Enterprise terms by agreement.">
-            <span className="inline-flex items-center gap-1.5 text-caption text-graphite-body">
-              <ProviderMark provider="stripe" size={16} className="rounded-control border border-stone-200 bg-white" />
-              Payments processed by Stripe
+    <div className="dc pg-aether-procurement">
+    <div data-page="aether-procurement" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
+      <SiteHeader brand="aether" active="" />
+      <main id="main">
+        <section>
+          <div style={css("max-width: 960px; margin: 0 auto; padding: clamp(96px, 14vw, 176px) 24px clamp(56px, 8vw, 96px); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 24px;")}>
+            <span style={css("display: flex; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
+              <a href={link("Aether Trust.dc.html")} style={css("color: #6b6a65; text-decoration: none;")}>
+                {"Trust"}
+              </a>
+              <span>
+                {"/"}
+              </span>
+              <span style={css("color: #1a1a1e;")}>
+                {"Procurement"}
+              </span>
             </span>
-          </Card>
-          <Card
-            href={href('aether', '/contact?type=pilot')}
-            accent="steel"
-            flex="1 1 280px"
-            glyph="⚗"
-            title="Pilots"
-            body="Bounded in scope and time, with the success measures agreed up front."
-            cta="Request a pilot"
-          />
-        </CardRow>
-      </Section>
-
-      <Section id="documents">
-        <SectionHead
-          accent="sage"
-          glyph="✓"
-          eyebrow="Documents"
-          title="Available through a review"
-          lede="Request any of these through Contact → Security review. Each comes from the current deployment."
-        />
-        <DataTable
-          caption="Procurement documents"
-          headers={['Document', 'What it covers', 'Status']}
-          rows={DOCUMENTS.map(([doc, covers, status, color]) => [
-            doc,
-            covers,
-            <span key="s" className="font-mono" style={{ color }}>
-              {status}
-            </span>,
-          ])}
-        />
-      </Section>
-
-      <Section id="faq" tone="stone">
-        <SectionHead accent="steel" glyph="?" eyebrow="Questions" title="Common procurement questions" />
-        <div className="flex flex-col gap-2">
-          {FAQ.map(([q, a, accent]) => (
-            <details
-              key={q}
-              className="group rounded-[10px] border border-l-[3px] border-line bg-stone-50"
-              style={{ borderLeftColor: ACCENTS[accent].base }}
-            >
-              <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-[13px] text-[14px] font-medium [&::-webkit-details-marker]:hidden">
-                <span
-                  aria-hidden="true"
-                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-control font-mono"
-                  style={{ background: soft(accent), color: ACCENTS[accent].ink }}
-                >
-                  <span className="group-open:hidden">+</span>
-                  <span className="hidden group-open:inline">−</span>
+            <h1 style={css("font-size: clamp(44px, 7vw, 96px); font-weight: 500; line-height: 0.95; letter-spacing: -0.048em; margin: 0; text-wrap: balance;")}>
+              {"Everything your review will ask for."}
+            </h1>
+            <p style={css("font-size: clamp(17px, 1.6vw, 19px); line-height: 1.55; color: #4a4945; margin: 0; max-width: 560px;")}>
+              {"How Aether is bought, billed, reviewed, and deployed — and what to ask for at each step."}
+            </p>
+          </div>
+        </section>
+        <section data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+          <div style={css("max-width: 880px; margin: 0 auto; padding: clamp(72px, 10vw, 128px) 24px; display: flex; flex-direction: column; align-items: center; gap: 36px;")}>
+            <h2 style={css("font-size: clamp(28px, 3.6vw, 44px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.06; margin: 0; color: #e8e6e1; text-align: center;")}>
+              {"Five steps from first call to live."}
+            </h2>
+            <div role="tablist" aria-label="Steps" style={css("display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; border-radius: 10px; background: #1a1a1e; border: 1px solid #2a2a2f;")}>
+              {(tabs).map((t: any, tIndex: number) => (
+                <Fragment key={tIndex}>
+                  <button type="button" role="tab" aria-selected={t.sel} onClick={t.go} style={css(t.style)}>
+                    {t.label}
+                  </button>
+                </Fragment>
+              ))}
+            </div>
+            <div style={css("width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 14px; text-align: center; align-items: center; min-height: 180px; animation: pcIn 200ms cubic-bezier(0.22,1,0.36,1) both;")}>
+              <span style={css("font-family: var(--font-mono); font-size: 12px; color: #8a8984;")}>
+                {cur.n}{" of 05"}
+              </span>
+              <span style={css("font-size: clamp(24px, 3vw, 34px); font-weight: 500; letter-spacing: -0.02em; color: #e8e6e1;")}>
+                {cur.t}
+              </span>
+              <span style={css("font-size: 16px; line-height: 1.6; color: #a09f99;")}>
+                {cur.b}
+              </span>
+              <span style={css("font-family: var(--font-mono); font-size: 12px; color: #dcb683;")}>
+                {"You can ask for: "}{cur.ask}
+              </span>
+            </div>
+          </div>
+        </section>
+        <section style={css("border-bottom: 1px solid #d8d6d0;")}>
+          <div style={css("max-width: 880px; margin: 0 auto; padding: clamp(72px, 10vw, 128px) 24px; display: flex; flex-direction: column; align-items: center; gap: 36px;")}>
+            <h2 style={css("font-size: clamp(28px, 3.6vw, 44px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.06; margin: 0; text-align: center;")}>
+              {"Pricing, billing, and pilots."}
+            </h2>
+            <dl style={css("width: 100%; margin: 0; display: flex; flex-direction: column; border-top: 1px solid #d8d6d0;")}>
+              {(terms).map((x: any, xIndex: number) => (
+                <Fragment key={xIndex}>
+                  <div style={css("display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 20px; align-items: baseline; padding: 20px 0; border-bottom: 1px solid #d8d6d0;")}>
+                    <dt style={css("font-size: 17px; font-weight: 500;")}>
+                      {x.k}
+                    </dt>
+                    <dd style={css("margin: 0; font-size: 15px; line-height: 1.6; color: #4a4945;")}>
+                      {x.v}
+                    </dd>
+                  </div>
+                </Fragment>
+              ))}
+            </dl>
+          </div>
+        </section>
+        <section>
+          <div style={css("max-width: 960px; margin: 0 auto; padding: clamp(96px, 13vw, 160px) 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px;")}>
+            <h2 style={css("font-size: clamp(32px, 4.8vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; text-wrap: balance;")}>
+              {"Tell us what your process needs."}
+            </h2>
+            <p style={css("font-size: 16px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 460px;")}>
+              {"It goes to the person who can answer."}
+            </p>
+            <div style={css("display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;")}>
+              <a href={link("Contact.dc.html?brand=aether&type=security")} style={css("display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 22px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #2563eb; color: #f5f4f1;")} className="hv-7e3a2e7d">
+                {"Request a security review"}
+                <span style={css("font-family: var(--font-mono);")}>
+                  {"→"}
                 </span>
-                {q}
-              </summary>
-              <div className="pb-3.5 pl-[46px] pr-4 text-body-sm leading-[1.65] text-[#3a3935]">{a}</div>
-            </details>
-          ))}
-        </div>
-      </Section>
-
-      <ClosingCta
-        title="Tell us what your process needs."
-        body="We will route it to the person who can answer."
-        primary={{ href: startProcurement, label: 'Start procurement', accent: 'cobalt' }}
-        secondary={{ href: href('aether', '/security'), label: 'Security overview' }}
-      />
-    </PageShell>
+              </a>
+              <a href={link("Aether Pricing.dc.html")} style={css("display: inline-flex; align-items: center; min-height: 46px; padding: 0 22px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; color: #1a1a1e; border: 1px solid #d8d6d0;")} className="hv-67a914b1">
+                {"See pricing"}
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+      <SiteFooter />
+    </div>
+    </div>
   );
 }

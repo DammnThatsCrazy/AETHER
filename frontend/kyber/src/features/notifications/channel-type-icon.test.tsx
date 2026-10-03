@@ -4,13 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { ChannelTypeIcon } from './channel-type-icon';
 
 describe('ChannelTypeIcon', () => {
-  it('uses the central neutral provider fallback rather than feature-local third-party SVG geometry', () => {
+  it('uses the central reviewed provider mark rather than feature-local third-party SVG geometry', () => {
     const { container } = render(<ChannelTypeIcon type="slack" />);
 
     expect(container.querySelector('[data-provider="slack"]')).not.toBeNull();
-    expect(container.querySelector('[data-provider-mark="fallback"]')).not.toBeNull();
+    expect(container.querySelector('[data-provider-mark="reviewed-local"] img')?.getAttribute('src')).toBe('/providers/slack.svg');
     expect(container.querySelector('svg')).toBeNull();
-    expect(container).toHaveTextContent('S');
   });
 
   it('keeps a generic webhook neutral and decorative when its text label is adjacent', () => {

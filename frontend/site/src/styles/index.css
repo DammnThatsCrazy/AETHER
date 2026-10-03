@@ -18,6 +18,23 @@
   font-display: swap;
 }
 
+/* Design system v2.0 tokens used by pages built from the design handoff
+   (design/designs/_ds colors_and_type.css). */
+:root {
+  --font-sans: 'Geist', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Consolas, monospace;
+  --signal-blue: #2563eb;
+  --signal-blue-hover: #1d4ed8;
+  --bg: #f5f4f1;
+  --fg: #1a1a1e;
+  --accent: var(--signal-blue);
+  --accent-hover: var(--signal-blue-hover);
+}
+[data-theme='dark'] {
+  --bg: #111114;
+  --fg: #e8e6e1;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -29,8 +46,12 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
+  body {
+    margin: 0;
+  }
+  /* Signal Blue focus ring (design system v2.0). */
   :focus-visible {
-    outline: 2px solid #3a6896;
+    outline: 1px solid #2563eb;
     outline-offset: 2px;
   }
 }

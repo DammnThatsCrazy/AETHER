@@ -16,55 +16,51 @@ function renderAt(site: SiteId, path: string) {
   );
 }
 
-const hrefOf = (name: string, scope: HTMLElement) =>
+const hrefOf = (name: string | RegExp, scope: HTMLElement) =>
   within(scope).getByRole('link', { name }).getAttribute('href');
 
 describe('site header', () => {
-  it('shows the Aether navigation with relative links on the Aether site', () => {
+  it('shows the Aether navigation with relative links on the Aether site', async () => {
     renderAt('aether', '/missing');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual([
-      'About', 'How it works', 'Connections', 'Pricing', 'Developers', 'Security',
+    expect(within(nav).getAllByRole('button').map((b) => b.textContent?.replace(/[↓⌄▾]/g, '').trim())).toEqual([
+      'Platform', 'Applications', 'Connect', 'Developers',
     ]);
     expect(hrefOf('Pricing', nav)).toBe('/pricing');
+    await userEvent.click(within(nav).getByRole('button', { name: /Platform/ }));
+    const menu = within(nav).getByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: /Lenses/ }).getAttribute('href')).toBe('/platform/lenses');
+    expect(within(menu).getByRole('menuitem', { name: /Profiles/ }).getAttribute('href')).toBe('/platform/profiles');
     const header = screen.getByRole('banner');
     expect(hrefOf('Sign in', header)).toBe('/app/signin');
     expect(hrefOf('Request a pilot', header)).toBe('/contact?type=pilot');
+    expect(hrefOf('Get started', header)).toBe('/app/signup');
     expect(hrefOf('Olympus Labs', header)).toBe('https://olympuslabsml.com/');
   });
 
   it('links from Olympus to Aether with absolute URLs', () => {
     renderAt('olympus', '/missing');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
-    expect(hrefOf('Company', nav)).toBe('/company');
+    expect(hrefOf('Research', nav)).toBe('/research');
     expect(hrefOf('Aether', nav)).toBe('https://aether.olympuslabsml.com/');
     expect(hrefOf('Explore Aether', screen.getByRole('banner'))).toBe('https://aether.olympuslabsml.com/');
+    expect(hrefOf('Contact', screen.getByRole('banner'))).toBe('/contact');
   });
 
-  it('opens and closes the mobile menu', async () => {
-    renderAt('aether', '/missing');
+  it('opens the mobile menu and closes it when a link is chosen', async () => {
+    renderAt('aether', '/');
     const toggle = screen.getByRole('button', { name: 'Open menu' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(toggle);
-    expect(screen.getByRole('navigation', { name: 'Mobile' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }));
-    expect(screen.queryByRole('navigation', { name: 'Mobile' })).toBeNull();
-  });
-
-  it('closes the mobile menu when a same-page fragment link is chosen', async () => {
-    renderAt('aether', '/');
-    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     const mobile = screen.getByRole('navigation', { name: 'Mobile' });
-    const about = within(mobile).getByRole('link', { name: /About/ });
-    expect(about.getAttribute('href')).toBe('/#about');
-    await userEvent.click(about);
+    const revenue = within(mobile).getByRole('link', { name: 'Revenue intelligence' });
+    expect(revenue.getAttribute('href')).toBe('/applications#revenue');
+    await userEvent.click(revenue);
     expect(screen.queryByRole('navigation', { name: 'Mobile' })).toBeNull();
   });
-});
 
-describe('page shell', () => {
   it('offers a skip link to a focusable main landmark', () => {
-    renderAt('olympus', '/missing');
+    renderAt('olympus', '/');
     const skip = screen.getByRole('link', { name: 'Skip to content' });
     expect(skip.getAttribute('href')).toBe('#main');
     const main = screen.getByRole('main');
@@ -80,26 +76,37 @@ describe('site footer', () => {
     expect(hrefOf('Company', within(footer).getByRole('navigation', { name: 'Olympus Labs' }))).toBe(
       'https://olympuslabsml.com/company',
     );
+    expect(hrefOf('Connect', within(footer).getByRole('navigation', { name: 'Aether' }))).toBe('/connect');
     expect(hrefOf('Documentation', footer)).toBe('/docs');
-    expect(hrefOf('contact@olympuslabsml.com', footer)).toBe('mailto:contact@olympuslabsml.com');
+    expect(hrefOf('Glossary', footer)).toBe('/docs/glossary');
+    expect(hrefOf('Privacy and data use', footer)).toBe('/legal/privacy');
+    expect(hrefOf('team@olympuslabsml.com', footer)).toBe('mailto:team@olympuslabsml.com');
+  });
+
+  it('keeps legal links on the visitor’s site', () => {
+    renderAt('olympus', '/missing');
+    const footer = screen.getByRole('contentinfo');
+    expect(hrefOf('Terms and use', footer)).toBe('/legal/terms');
+    expect(hrefOf('Documentation', footer)).toBe('https://aether.olympuslabsml.com/docs');
   });
 });
 
 describe('not found page', () => {
   it('shows the requested path and the site-specific way back', () => {
     renderAt('aether', '/no/such/page');
-    expect(screen.getByRole('heading', { level: 1, name: 'This page does not exist' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'This page doesn’t exist.' })).toBeInTheDocument();
     expect(screen.getByText('/no/such/page')).toBeInTheDocument();
-    const main = screen.getByRole('main');
-    expect(hrefOf('Documentation Quickstarts, SDKs, connectors', main)).toBe('/docs');
+    const way = screen.getByRole('navigation', { name: 'Go somewhere else' });
+    expect(hrefOf(/Documentation/, way)).toBe('/docs');
+    expect(hrefOf(/Status/, way)).toBe('/status');
     expect(document.title).toBe('Page not found');
   });
 
   it('offers Olympus destinations on the Olympus site', () => {
     renderAt('olympus', '/gone');
-    const main = screen.getByRole('main');
-    expect(hrefOf('Aether The flagship product', main)).toBe('https://aether.olympuslabsml.com/');
-    expect(hrefOf('Research Open questions', main)).toBe('/research');
+    const way = screen.getByRole('navigation', { name: 'Go somewhere else' });
+    expect(hrefOf(/^Aether/, way)).toBe('https://aether.olympuslabsml.com/');
+    expect(hrefOf(/Research/, way)).toBe('/research');
   });
 });
 

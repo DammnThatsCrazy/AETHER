@@ -1,252 +1,233 @@
-import { useState, type CSSProperties } from 'react';
-import { PageShell } from '@site/components/page-shell';
-import { ACCENTS, tint } from '@site/site/palette';
-import {
-  CONTRACT_PLANS,
-  SELF_SERVE_PLANS,
-  SUGGESTED_PLAN,
-  formatPrice,
-  formatQuota,
-  pricesPublished,
-  type Interval,
-  type SelfServePlan,
-} from '@site/site/plans';
-import { useSite } from '@site/site/site-context';
-import { pilotOnly, planChoicePath } from '@site/site/access';
-
 /**
- * Aether Pricing.dc.html. Choosing a plan continues to /app/signup, where
- * sign-up, plan and payment share one card (handoff README, "/app"); a
- * pilot-only build sends the choice to a pilot request instead.
+ * Built from design/designs/Aether Pricing.dc.html (copy, layout and styles verbatim).
  */
+import { Fragment } from 'react';
+import { asset, css, useDesignState, useLink } from '@site/design/runtime';
+import { usePageMeta } from '@site/design/page-meta';
+import { SiteFooter } from '@site/components/site-footer';
+import { SiteHeader } from '@site/components/site-header';
+import './aether-pricing-page.css';
 
-const CONTRACT_COPY: Record<string, { body: string; type: string; cta: string }> = {
-  epsilon: { body: 'Higher volume, more teams, stronger support.', type: 'product', cta: 'Talk through scope' },
-  omicron: { body: 'Dedicated or governed deployment, procurement review, assurance artifacts.', type: 'security', cta: 'Request a review' },
-  omega: { body: 'Private or regulated environments with negotiated isolation, residency, and control.', type: 'security', cta: 'Request a review' },
-};
+import { useSite } from '@site/site/site-context';
+import { planChoicePath } from '@site/site/access';
+import { SELF_SERVE_PLANS, SUGGESTED_PLAN, formatPrice, formatQuota, pricesPublished, type Interval } from '@site/site/plans';
 
-const SCOPE = [
-  'Platform and tenant scope',
-  'Evidence volume and retention',
-  'Intelligence and workflow surfaces',
-  'Governance, audit, and support',
-  'Deployment complexity',
-  'Capabilities enabled for the tenant',
-];
-
-function priceParts(plan: SelfServePlan, interval: Interval, published: boolean) {
-  if (!published) return { price: 'On request', per: '', note: 'Pricing shared during onboarding' };
-  const amount = interval === 'annual' ? plan.annual : plan.monthly;
-  if (plan.monthly === 0) return { price: '$0', per: '', note: 'No charge · card not required' };
-  return {
-    price: formatPrice(amount),
-    per: interval === 'annual' ? '/ year' : '/ month',
-    note: interval === 'annual' ? 'Billed yearly' : 'Billed monthly',
-  };
-}
+const btn = (primary: boolean) => 'font-family: inherit; white-space: nowrap; font-size: 14px; font-weight: 500; min-height: 44px; padding: 0 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; text-decoration: none; box-sizing: border-box; ' + (primary ? 'background: #1a1a1e; color: #f5f4f1; border: 1px solid #1a1a1e;' : 'background: #eceae5; color: #1a1a1e; border: 1px solid #d8d6d0;');
+const seg = (on: boolean) => 'font-family: inherit; font-size: 13px; font-weight: 500; padding: 7px 16px; border-radius: 999px; border: 0; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1); ' + (on ? 'background: #fbfaf8; color: #1a1a1e; box-shadow: 0 0 0 1px #d8d6d0;' : 'background: transparent; color: #6b6a65;');
+const STAGES = [['01', 'start', 'Explore', 'Connect your first tool and see your first customer. No card needed.', 'alpha', '#4f7a5e'], ['02', 'connect', 'Build', 'For teams connecting more tools and more of their customers.', 'beta', '#2d5373'], ['03', 'understand', 'Operate', 'For teams using Aether every day, at higher volume.', 'gamma · delta', '#8a6433'], ['04', 'operate', 'Enterprise', 'For larger companies that need custom limits and a security review.', 'epsilon · omicron', '#7d6538'], ['05', 'scale', 'Sovereign', 'For organizations that need Aether run in their own environment.', 'omega', '#a3473c']].map(([n, k, name, who, plans]) => ({ n, k, name, who, plans }));
 
 export function AetherPricingPage() {
+  const link = useLink();
+  usePageMeta('aether-pricing');
   const { href } = useSite();
-  const [interval, setInterval] = useState<Interval>('monthly');
+  const [state, setState] = useDesignState<{ interval: Interval }>({ interval: 'monthly' });
+  const annual = state.interval === 'annual';
+  // Prices show only in builds that publish them (VITE_PUBLISH_PRICES); the rest say "On request".
   const published = pricesPublished();
-
-  const rows: Array<[label: string, hint: string, cell: (p: SelfServePlan) => string]> = [
-    ['Included events', 'per month', (p) => formatQuota(p.monthlyQuota)],
-    ['Members', 'workspace seats', (p) => String(p.memberCap)],
-    ['Burst rate', 'requests / min', (p) => p.burstRpm.toLocaleString('en-US')],
-    ['Services enabled', 'service catalog', (p) => String(p.serviceCount)],
-    ...(published ? [['Event overage', 'per 1k events', (p: SelfServePlan) => `$${p.eventOveragePer1k}`] as [string, string, (p: SelfServePlan) => string]] : []),
-    ['Connector fees', '', () => 'none'],
-  ];
-
-  const pilot = pilotOnly();
-  const choose = (plan: SelfServePlan) => href('aether', planChoicePath(plan.id, interval));
-
-  const chooseButton = (plan: SelfServePlan) => {
-    const c = ACCENTS[plan.accent];
-    const primary = plan.id === SUGGESTED_PLAN;
-    return (
-      <a
-        href={choose(plan)}
-        className="mt-auto inline-flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-control border px-3.5 text-body-sm font-medium no-underline transition-colors duration-120 hover:[border-color:var(--hover-border)]"
-        style={
-          {
-            background: primary ? c.ink : tint(plan.accent, 0.12),
-            color: primary ? '#f5f4f1' : c.ink,
-            borderColor: primary ? c.ink : `${c.base}66`,
-            '--hover-border': c.base,
-          } as CSSProperties
-        }
-      >
-        Choose {plan.name}
-      </a>
-    );
-  };
-
+  const plans = SELF_SERVE_PLANS.map((p) => ({
+    id: p.id,
+    name: p.name,
+    fit: p.fit,
+    suggested: p.id === SUGGESTED_PLAN,
+    price: !published ? 'On request' : formatPrice(annual ? p.annual : p.monthly),
+    per: !published || p.monthly === 0 ? '' : annual ? '/ year' : '/ month',
+    note: !published ? 'Pricing shared during onboarding' : p.monthly === 0 ? 'No charge · card not required' : annual ? 'Billed yearly' : 'Billed monthly',
+    cta: 'Choose ' + p.name,
+    btnStyle: btn(p.id === SUGGESTED_PLAN),
+    href: href('aether', planChoicePath(p.id, state.interval)),
+    specs: [
+      { k: 'Events / month', v: formatQuota(p.monthlyQuota) },
+      { k: 'Members', v: String(p.memberCap) },
+      { k: 'Burst rate', v: p.burstRpm.toLocaleString('en-US') + ' / min' },
+      { k: 'Services', v: String(p.serviceCount) },
+      ...(published ? [{ k: 'Overage / 1k events', v: '$' + p.eventOveragePer1k }] : []),
+      { k: 'Integration fees', v: 'none' },
+    ],
+    cardStyle: 'display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: 18px; box-sizing: border-box; ' + (p.id === SUGGESTED_PLAN ? 'background: #fbfaf8; border: 1px solid #1a1a1e;' : 'background: #fbfaf8; border: 1px solid #d8d6d0;'),
+  }));
+  const stages = STAGES;
+  const monthlyChecked = annual ? 'false' : 'true';
+  const annualChecked = annual ? 'true' : 'false';
+  const monthlyStyle = seg(!annual);
+  const annualStyle = seg(annual);
+  const setMonthly = () => setState({ interval: 'monthly' });
+  const setAnnual = () => setState({ interval: 'annual' });
   return (
-    <PageShell title="Pricing and packages — Aether" active="Pricing">
-      <section className="border-b border-line">
-        <div className="mx-auto flex max-w-page flex-col gap-[18px] px-6 pb-8 pt-[clamp(40px,6vw,72px)]">
-          <span className="text-label uppercase text-slate">Pricing and packages</span>
-          <h1 className="m-0 max-w-[820px] text-balance text-[clamp(34px,5vw,56px)] font-medium leading-[1.04] tracking-[-0.03em]">
-            Package the infrastructure around the relationship question
-          </h1>
-          <p className="m-0 max-w-[620px] text-[16px] leading-[1.6] text-slate">
-            Scope reflects what it takes to connect evidence, form perspectives, govern decisions, and observe outcomes. It is not a
-            connector fee or an SDK tax. Start with the smallest useful package.
-          </p>
-          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-4">
-            {published ? (
-              <div role="radiogroup" aria-label="Billing interval" className="inline-flex rounded border border-line bg-stone-100 p-0.5">
-                {(['monthly', 'annual'] as Interval[]).map((i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    role="radio"
-                    aria-checked={interval === i}
-                    onClick={() => setInterval(i)}
-                    className={`cursor-pointer rounded-[3px] border-0 px-3 py-1.5 text-body-sm font-medium ${interval === i ? 'bg-stone-50 text-ink shadow-[0_0_0_1px_#d8d6d0]' : 'bg-transparent text-slate'}`}
-                  >
-                    {i === 'monthly' ? 'Monthly' : 'Annual'}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <span />
-            )}
-            <a href={href('aether', '/contact?type=pilot')} className="text-body-sm font-medium text-cobalt no-underline hover:text-cobalt-ink">
-              Not sure where to start? Talk through a pilot →
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-line">
-        <div className="mx-auto max-w-page px-6 pb-[clamp(48px,6vw,72px)] pt-8">
-          {/* Wide: comparison table */}
-          <div className="hidden overflow-hidden rounded border border-line min-[1100px]:block">
-            <div className="grid bg-stone-100 [grid-template-columns:200px_repeat(4,minmax(0,1fr))]">
-              <div className="flex flex-col justify-end border-r border-line p-5">
-                <span className="text-label uppercase text-slate">{pilot ? 'Packages' : 'Self-service'}</span>
-                <span className="mt-1.5 text-body-sm text-slate">{pilot ? 'Start with a pilot on any package.' : 'Pay online and start today.'}</span>
-              </div>
-              {SELF_SERVE_PLANS.map((p) => {
-                const c = ACCENTS[p.accent];
-                const { price, per, note } = priceParts(p, interval, published);
-                return (
-                  <div
-                    key={p.id}
-                    className="box-border flex h-full flex-col gap-2 border-r border-line p-5 last:border-r-0"
-                    style={{ background: tint(p.accent, 0.12), boxShadow: `inset 0 ${p.id === SUGGESTED_PLAN ? 4 : 3}px 0 ${c.base}` }}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[18px] font-medium tracking-[-0.3px]">{p.name}</span>
-                      {p.id === SUGGESTED_PLAN && <span className="whitespace-nowrap text-label uppercase text-cobalt-ink">Common start</span>}
-                    </div>
-                    <span className="min-h-10 text-body-sm text-slate">{p.fit}</span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-[28px] font-medium tracking-[-0.6px]">{price}</span>
-                      <span className="text-body-sm text-slate">{per}</span>
-                    </div>
-                    <span className="min-h-4 text-caption text-slate">{note}</span>
-                    {chooseButton(p)}
-                  </div>
-                );
-              })}
-            </div>
-            <table className="w-full border-collapse text-body-sm">
-              <caption className="sr-only">Plan limits</caption>
-              <tbody>
-                {rows.map(([label, hint, cell]) => (
-                  <tr key={label} className="grid border-t border-line [grid-template-columns:200px_repeat(4,minmax(0,1fr))]">
-                    <th scope="row" className="flex flex-col gap-0.5 border-r border-line px-5 py-[11px] text-left font-normal text-slate">
-                      <span className="text-ink">{label}</span>
-                      {hint && <span className="text-caption">{hint}</span>}
-                    </th>
-                    {SELF_SERVE_PLANS.map((p) => (
-                      <td key={p.id} className="flex items-center border-r border-stone-200 px-5 py-[11px] font-mono last:border-r-0">
-                        {cell(p)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Narrow: one card per plan */}
-          <div className="flex flex-col gap-2 min-[1100px]:hidden">
-            {SELF_SERVE_PLANS.map((p) => {
-              const { price, per } = priceParts(p, interval, published);
-              return (
-                <div key={p.id} className="flex flex-col gap-2.5 rounded border border-line bg-stone-100 p-[18px]">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-[18px] font-medium">{p.name}</span>
-                    <span className="text-[22px] font-medium">
-                      {price}
-                      <span className="text-body-sm font-normal text-slate"> {per}</span>
-                    </span>
-                  </div>
-                  <span className="text-body-sm text-slate">{p.fit}</span>
-                  <dl className="m-0 grid gap-x-3 gap-y-1.5 border-y border-line py-2.5 text-body-sm [grid-template-columns:1fr_auto]">
-                    {rows.slice(0, 4).map(([label, , cell]) => (
-                      <div key={label} className="contents">
-                        <dt className="text-slate">{label === 'Included events' ? 'Events / month' : label === 'Burst rate' ? 'Burst' : label === 'Services enabled' ? 'Services' : label}</dt>
-                        <dd className="m-0 font-mono">{label === 'Burst rate' ? `${cell(p)} rpm` : cell(p)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  {chooseButton(p)}
+    <div className="dc pg-aether-pricing">
+    <div data-page="aether-pricing" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
+      <SiteHeader brand="aether" active="Pricing" />
+          <main id="main" tabIndex={-1}>
+            <section>
+              <div style={css("max-width: 1000px; margin: 0 auto; padding: clamp(80px, 12vw, 152px) 24px 40px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px;")}>
+                <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
+                  {"Pricing"}
+                </span>
+                <h1 style={css("font-size: clamp(44px, 6.8vw, 92px); font-weight: 500; line-height: 0.95; letter-spacing: -0.048em; margin: 0; text-wrap: balance;")}>
+                  {"Choose how you want to start."}
+                </h1>
+                <p style={css("font-size: 17px; line-height: 1.6; color: #4a4945; margin: 0; max-width: 520px;")}>
+                  {"Start free and grow when you need to. No plan charges per integration."}
+                </p>
+                <div style={css("display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; margin-top: 4px;")}>
+                  {(stages).map((st: any, stIndex: number) => (
+                    <Fragment key={stIndex}>
+                      <span style={css("display: inline-flex; gap: 8px; align-items: baseline; font-size: 13px; color: #6b6a65;")} title={st.who}>
+                        <span style={css("font-family: var(--font-mono); font-size: 11px; color: #9c9b95;")}>
+                          {st.n}
+                        </span>
+                        <span style={css("color: #1a1a1e; font-weight: 500;")}>
+                          {st.name}
+                        </span>
+                        {st.plans}
+                      </span>
+                    </Fragment>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-6 flex flex-col gap-2.5">
-            <span className="text-label uppercase text-slate">Contract scope · no online checkout</span>
-            <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))]">
-              {CONTRACT_PLANS.map((p) => {
-                const copy = CONTRACT_COPY[p.id]!;
-                return (
-                  <div key={p.id} className="flex flex-col gap-2 rounded border border-line p-[18px]">
-                    <span className="text-[16px] font-medium">{p.name}</span>
-                    <span className="text-body-sm leading-[1.5] text-slate">
-                      {copy.body}
-                      {p.monthly_quota > 0 && <span className="font-mono text-caption"> {formatQuota(p.monthly_quota)} events / mo</span>}
-                    </span>
-                    <a
-                      href={href('aether', `/contact?type=${copy.type}&plan=${p.id}`)}
-                      className="mt-auto text-body-sm font-medium text-cobalt no-underline hover:text-cobalt-ink"
-                    >
-                      {copy.cta} →
-                    </a>
+                {published ? (
+                <div role="radiogroup" aria-label="Billing interval" style={css("display: inline-flex; border: 1px solid #d8d6d0; border-radius: 999px; padding: 3px; background: #eceae5; margin-top: 10px;")}>
+                  <button type="button" role="radio" aria-checked={monthlyChecked} onClick={setMonthly} style={css(monthlyStyle)}>
+                    {"Monthly"}
+                  </button>
+                  <button type="button" role="radio" aria-checked={annualChecked} onClick={setAnnual} style={css(annualStyle)}>
+                    {"Annual"}
+                  </button>
+                </div>
+                ) : null}
+              </div>
+            </section>
+            <section style={css("border-bottom: 1px solid #d8d6d0;")}>
+              <div style={css("max-width: 1200px; margin: 0 auto; padding: 24px 24px clamp(64px, 8vw, 96px);")}>
+                <div className="pr-plans" style={css("display: grid; gap: 12px; align-items: stretch;")}>
+                  {(plans).map((p: any, pIndex: number) => (
+                    <Fragment key={pIndex}>
+                      <div style={css(p.cardStyle)}>
+                        <div style={css("display: flex; justify-content: space-between; align-items: center; gap: 8px;")}>
+                          <span style={css("font-size: 20px; font-weight: 500; letter-spacing: -0.3px;")}>
+                            {p.name}
+                          </span>
+                          {(p.suggested) ? (
+                            <>
+                              <span style={css("font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 999px; background: #1a1a1e; color: #f5f4f1;")}>
+                                {"Most teams start here"}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                        <span style={css("font-size: 14px; line-height: 1.5; color: #6b6a65; min-height: 42px;")}>
+                          {p.fit}
+                        </span>
+                        <div style={css("display: flex; align-items: baseline; gap: 4px;")}>
+                          <span style={css("font-size: 40px; font-weight: 500; letter-spacing: -0.04em;")}>
+                            {p.price}
+                          </span>
+                          <span style={css("font-size: 13px; color: #6b6a65;")}>
+                            {p.per}
+                          </span>
+                        </div>
+                        <span style={css("font-size: 12px; color: #6b6a65; margin-top: -8px;")}>
+                          {p.note}
+                        </span>
+                        <a href={p.href} style={css(p.btnStyle)}>
+                          {p.cta}
+                        </a>
+                        <div style={css("display: flex; flex-direction: column; border-top: 1px solid #e2e0da; margin-top: 4px;")}>
+                          {(p.specs).map((s: any, sIndex: number) => (
+                            <Fragment key={sIndex}>
+                              <span style={css("display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #ecebe6; font-size: 13px;")}>
+                                <span style={css("color: #6b6a65;")}>
+                                  {s.k}
+                                </span>
+                                <span style={css("font-family: var(--font-mono); color: #1a1a1e;")}>
+                                  {s.v}
+                                </span>
+                              </span>
+                            </Fragment>
+                          ))}
+                        </div>
+                      </div>
+                    </Fragment>
+                  ))}
+                </div>
+                <div style={css("margin-top: 24px; display: flex; flex-direction: column; gap: 10px;")}>
+                  <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
+                    {"Contract scope · no online checkout"}
+                  </span>
+                  <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 8px;")}>
+                    <div style={css("border: 1px solid #d8d6d0; border-radius: 4px; padding: 18px; display: flex; flex-direction: column; gap: 8px;")}>
+                      <span style={css("font-size: 16px; font-weight: 500;")}>
+                        {"Epsilon"}
+                      </span>
+                      <span style={css("font-size: 13px; line-height: 1.5; color: #6b6a65;")}>
+                        {"Higher volume, more teams, stronger support. "}
+                        <span style={css("font-family: var(--font-mono); font-size: 12px;")}>
+                          {"54M events / mo"}
+                        </span>
+                      </span>
+                      <a href={link("Contact.dc.html?brand=aether&type=product&plan=epsilon")} style={css("font-size: 13px; font-weight: 500; text-decoration: none; margin-top: auto;")}>
+                        {"Talk through scope →"}
+                      </a>
+                    </div>
+                    <div style={css("border: 1px solid #d8d6d0; border-radius: 4px; padding: 18px; display: flex; flex-direction: column; gap: 8px;")}>
+                      <span style={css("font-size: 16px; font-weight: 500;")}>
+                        {"Omicron"}
+                      </span>
+                      <span style={css("font-size: 13px; line-height: 1.5; color: #6b6a65;")}>
+                        {"Dedicated or governed deployment, procurement review, assurance artifacts."}
+                      </span>
+                      <a href={link("Contact.dc.html?brand=aether&type=security&plan=omicron")} style={css("font-size: 13px; font-weight: 500; text-decoration: none; margin-top: auto;")}>
+                        {"Request a review →"}
+                      </a>
+                    </div>
+                    <div style={css("border: 1px solid #d8d6d0; border-radius: 4px; padding: 18px; display: flex; flex-direction: column; gap: 8px;")}>
+                      <span style={css("font-size: 16px; font-weight: 500;")}>
+                        {"Omega"}
+                      </span>
+                      <span style={css("font-size: 13px; line-height: 1.5; color: #6b6a65;")}>
+                        {"Private or regulated environments with negotiated isolation, residency, and control."}
+                      </span>
+                      <a href={link("Contact.dc.html?brand=aether&type=security&plan=omega")} style={css("font-size: 13px; font-weight: 500; text-decoration: none; margin-top: auto;")}>
+                        {"Request a review →"}
+                      </a>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-line bg-stone-100">
-        <div className="mx-auto grid max-w-page gap-10 px-6 py-[clamp(48px,6vw,72px)] [grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr))]">
-          <div className="flex flex-col gap-3">
-            <h2 className="m-0 text-[clamp(22px,2.6vw,28px)] font-medium tracking-[-0.5px]">What package scope reflects</h2>
-            <p className="m-0 max-w-[440px] text-[14px] leading-[1.6] text-slate">
-              A connection is valuable when it answers a relationship question or makes an outcome observable. No package charges per
-              connector.
-            </p>
-          </div>
-          <ul className="m-0 grid list-none border-t border-line p-0 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
-            {SCOPE.map((x) => (
-              <li key={x} className="border-b border-line py-3 pr-3 text-body-sm">
-                {x}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-    </PageShell>
+                </div>
+              </div>
+            </section>
+            <section style={css("background: #eceae5; border-bottom: 1px solid #d8d6d0;")}>
+              <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(48px, 6vw, 72px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 40px;")}>
+                <div style={css("display: flex; flex-direction: column; gap: 12px;")}>
+                  <h2 style={css("font-size: clamp(22px, 2.6vw, 28px); font-weight: 500; letter-spacing: -0.5px; margin: 0;")}>
+                    {"What you’re paying for"}
+                  </h2>
+                  <p style={css("font-size: 14px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 440px;")}>
+                    {"You pay for how much Aether does for you — not for how many tools you connect."}
+                  </p>
+                </div>
+                <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); border-top: 1px solid #d8d6d0;")}>
+                  <span style={css("padding: 12px 12px 12px 0; border-bottom: 1px solid #d8d6d0; font-size: 13px;")}>
+                    {"Platform and tenant scope"}
+                  </span>
+                  <span style={css("padding: 12px 12px 12px 0; border-bottom: 1px solid #d8d6d0; font-size: 13px;")}>
+                    {"Evidence volume and retention"}
+                  </span>
+                  <span style={css("padding: 12px 12px 12px 0; border-bottom: 1px solid #d8d6d0; font-size: 13px;")}>
+                    {"Intelligence and workflow surfaces"}
+                  </span>
+                  <span style={css("padding: 12px 12px 12px 0; border-bottom: 1px solid #d8d6d0; font-size: 13px;")}>
+                    {"Governance, audit, and support"}
+                  </span>
+                  <span style={css("padding: 12px 12px 12px 0; border-bottom: 1px solid #d8d6d0; font-size: 13px;")}>
+                    {"Deployment complexity"}
+                  </span>
+                  <span style={css("padding: 12px 12px 12px 0; border-bottom: 1px solid #d8d6d0; font-size: 13px;")}>
+                    {"Capabilities enabled for the tenant"}
+                  </span>
+                </div>
+              </div>
+            </section>
+          </main>
+      <SiteFooter />
+    </div>
+    </div>
   );
 }

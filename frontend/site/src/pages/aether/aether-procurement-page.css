@@ -1,0 +1,10 @@
+/* Generated from design/designs/Aether Procurement.dc.html: page-scoped helmet styles and hover rules. */
+.pg-aether-procurement { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; background: #f5f4f1; }
+.pg-aether-procurement a { color: #3a6896; }
+.pg-aether-procurement a:hover { color: #2d5373; }
+@keyframes pcIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+.pg-aether-procurement * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+.hv-67a914b1:hover { background: #eceae5 !important; color: #1a1a1e !important; }
+.hv-7e3a2e7d:hover { background: #1d4ed8 !important; color: #f5f4f1 !important; }

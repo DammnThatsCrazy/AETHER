@@ -1,0 +1,13 @@
+/* Generated from design/designs/Status.dc.html: page-scoped helmet styles and hover rules. */
+.pg-status summary::-webkit-details-marker { display: none; }
+.pg-status details[open] > summary span:first-child > span:first-child { transform: rotate(0deg); }
+.pg-status { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+.pg-status a { color: #3a6896; }
+.pg-status a:hover { color: #2d5373; }
+.hv-2a0af8aa:hover { background: #eceae5 !important; }
+.hv-4dee937b:hover { background: #e2e0da !important; border-color: #c9c7c0 !important; }
+.hv-75877933:hover { color: #1a1a1e !important; }
+.hv-7e3a2e7d:hover { background: #1d4ed8 !important; color: #f5f4f1 !important; }
+
+/* Phones: the header keeps the logo and Contact support. */
+@media (max-width: 480px) { .pg-status .st-narrow-hide { display: none !important; } }

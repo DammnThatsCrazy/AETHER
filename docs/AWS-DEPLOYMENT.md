@@ -51,7 +51,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:daf030bc8e3d443ee4b43a0e2d65020d2c6bb22845491728b5a9e935b282765f"
+  ".github/workflows/amplify-status-production.yml": "sha256:179a285bb3252c8c3b9d01e189afb910348c52a4356862abf2c277465fda034d"
   ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:2dcb69dca4c0f699dd67e6e9a519acfc6430b941bdfb0cd6361eab7574210352"
@@ -75,7 +75,7 @@ source_hashes:
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:4c6b12523b325d5afd9231f439c5446f92a5dddfda23e384ac9da21736657d66"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:f69b00625931ae6892e6a7446efbce0c0ea32bd41eb9ce0b93e1cab808ae131b"
+  "scripts/release/check_amplify_app_contract.py": "sha256:dc15fe4bf6544e97ca419063de64f895b92492a51ce379235cea79884307f87b"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -595,10 +595,29 @@ The deploy role holds `route53:ListHostedZones` because Amplify calls it with
 the caller's credentials when it updates a domain association.
 Route 53 records are keyed by host. Production also runs one app,
 `AETHER-production-web` (the former `aether-status` app), with the same build
-and routing rules and the five hosts under `olympuslabsml.com`; Squarespace
-holds their CNAMEs. `amplify-status-production.yml` deploys it on each `main`
-push, and the staging lifecycle preflight checks its production settings, exact
-commit and host mappings. It is not Terraform-managed yet.
+and the five hosts under `olympuslabsml.com`; Squarespace holds their CNAMEs.
+It has two branches built from the same `main` commit, because each site build
+prerenders its own pages: `main` builds the Aether site (with the product under
+`/app`) for `aether`, `docs`, `status` and `app`, and `production-olympus`
+builds the Olympus Labs site (`VITE_SITE=olympus`) for `www`.
+`amplify-status-production.yml` deploys both on each `main` push: it checks the
+commit is on `main`, force-pushes it to the `production-olympus` Git branch (a
+mirror only that workflow writes), binds both branches in `PRODUCTION` stage
+(`production-olympus` does not auto-build), and starts and waits for a
+commit-pinned release job on each. It verifies, without changing, that `www`
+maps to `production-olympus` and the other hosts to `main`. The staging
+lifecycle preflight checks the production settings, exact commit and host
+mappings. It is not Terraform-managed yet.
+
+Each production page is a prerendered file (`scripts/prerender.mjs` in
+`frontend/site`): `/platform` is served from `platform.html` with its own
+title, description, canonical URL, Open Graph and Twitter cards and JSON-LD,
+and each site build writes its `sitemap.xml` and `robots.txt`. The catch-all
+rule is therefore a `404-200` rewrite to `/index.html`: a path with no file
+gets the app shell with a `404` status, and the app renders the route (such as
+a docs alias) or its not-found page. A plain `200` rewrite would hide the
+prerendered files. Retired Aether marketing URLs are prerendered as redirect
+pages to their new pages.
 
 Until the production backend exists, the production site is pilot-only
 (`VITE_PILOT_ONLY=true`). It shows no sign-in, sign-up or status links, and the
@@ -607,7 +626,8 @@ pricing page's plan choices open a pilot request. Its routing rules send `/app`,
 status page says status is shared with pilot partners. The production API
 values stay in its settings for when production opens; the pilot-only site
 does not call them. To open production, remove the flag and restore the
-staging web app's rules in that workflow.
+staging web app's product rules (keeping the `404-200` page fallback) in that
+workflow.
 
 Transactional email goes through Amazon SES from the verified
 `olympuslabsml.com` domain identity (`email_enabled`, on in the staging

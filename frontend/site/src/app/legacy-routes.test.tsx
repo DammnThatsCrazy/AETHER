@@ -14,7 +14,7 @@ vi.stubEnv('VITE_SITE_AETHER_URL', 'https://aether.olympuslabsml.com');
  * serves at the same path. Each must land somewhere other than the 404 page.
  */
 const LEGACY_PATHS = [
-  '/platform', '/solutions', '/developers', '/integrations', '/resources', '/company',
+  '/solutions', '/developers', '/integrations', '/resources', '/company',
   '/platform/identity-resolution', '/platform/intelligence-graph', '/platform/journey-intelligence',
   '/platform/campaign-intelligence', '/platform/communications-intelligence',
   '/platform/financial-observability', '/platform/agent-access-intelligence',
@@ -70,12 +70,15 @@ describe('Legacy Aether marketing URLs', () => {
   });
 
   it.each([
-    ['/platform/identity-resolution', '/how-it-works'],
-    ['/integrations', '/connections'],
+    ['/platform/identity-resolution', '/platform/profiles'],
+    ['/platform/governance-and-consent', '/trust/governance'],
+    ['/solutions/fintech', '/applications'],
+    ['/integrations', '/connect'],
+    ['/connections', '/connect'],
     ['/start-pilot', '/contact?type=pilot'],
     ['/developers/quickstart/ios', '/docs/quickstart-ios'],
     ['/developers/sdk/react-native', '/docs/sdk-react-native'],
-    ['/developers/unknown-page', '/docs/overview'],
+    ['/developers/unknown-page', '/docs'],
     ['/faq', '/docs/faq'],
   ])('redirects %s to %s', (from, to) => {
     renderAt(from);

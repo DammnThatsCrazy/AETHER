@@ -46,18 +46,18 @@ export interface StatusHistory {
 
 export const COMPONENT_LABELS: Record<string, string> = {
   api: 'Aether API',
-  ingestion: 'Ingestion & processing',
-  identity: 'Identity & graph',
-  analytics: 'Analytics & perspective',
-  ml_serving: 'Model serving',
-  agent: 'Agent intelligence',
-  campaign: 'Campaign intelligence',
-  consent: 'Consent & tenant governance',
-  notification: 'Delivery & workflow',
   admin: 'Tenant administration',
-  rewards: 'Rewards',
+  analytics: 'Analytics and views',
+  identity: 'People and connections',
+  ingestion: 'Data intake',
+  provider_credentials: 'Connected tools',
+  notification: 'Messages and workflows',
+  consent: 'Consent and data separation',
+  ml_serving: 'Model serving',
+  agent: 'AI agents',
+  campaign: 'Campaigns',
   commerce: 'Commerce',
-  provider_credentials: 'Providers & connectors',
+  rewards: 'Rewards',
 };
 
 export type ComponentGroup = 'product' | 'connections' | 'supporting';

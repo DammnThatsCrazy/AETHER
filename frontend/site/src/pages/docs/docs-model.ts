@@ -23,7 +23,7 @@ export type DocsBlock =
   | { t: 'code'; lang: string; x: string }
   | { t: 'table'; head: string[]; rows: string[][] }
   | { t: 'callout'; tone: 'info' | 'warn' | 'ok' | 'risk'; title: string; x: string }
-  | { t: 'cards'; items: Array<{ g: string; c: DocsColor; title: string; x: string; link?: string }> }
+  | { t: 'cards'; items: Array<{ g: string; c: DocsColor; title: string; x: string; link?: string; logo?: string }> }
   | { t: 'steps'; items: Array<{ title: string; x: string }> }
   | { t: 'flow'; items: Array<[string, string]> }
   | { t: 'kv'; items: Array<[string, string]> }
@@ -35,8 +35,37 @@ export interface DocsPageContent {
   blocks: DocsBlock[];
 }
 
-export const DOCS_SECTIONS = raw.sections as DocsSection[];
 export const DOCS_PAGES = raw.pages as unknown as Record<string, DocsPageContent>;
+
+/**
+ * Sidebar sections from Docs.dc.html: the content's pages regrouped by what a
+ * reader is doing. Pages the grouping does not name go to Resources.
+ */
+const GROUPS: Array<[id: string, label: string, glyph: string, color: DocsColor, pages: string[]]> = [
+  ['start', 'Get started', '◉', 'sage', ['overview', 'start-here', 'quickstart-web']],
+  ['understand', 'Understand', '◈', 'cobalt', ['why-aether', 'how-it-works', 'product-structure', 'signals', 'sources', 'profiles', 'relationships', 'journeys', 'lenses', 'communications', 'evidence-states']],
+  ['use', 'Use Aether', '→', 'ochre', ['guide-customer-purchase', 'guide-investigate-profile', 'guide-agent-hierarchy', 'guide-campaign-revenue', 'guide-lenses', 'guide-communications', 'guide-risk', 'role-executives', 'role-growth', 'role-data', 'role-developers', 'role-security', 'role-analysts']],
+  ['connect', 'Connect', '⚙', 'steel', ['connectors', 'imports', 'quickstart-ios', 'quickstart-android', 'quickstart-react-native', 'quickstart-backend']],
+  ['build', 'Build', '⌘', 'solar', ['sdk-overview', 'sdk-web', 'sdk-ios', 'sdk-android', 'sdk-react-native', 'exports']],
+  ['operate', 'Operate', '✓', 'ember', ['governance', 'tenants', 'sdk-privacy']],
+  ['reference', 'Reference', '≡', 'ash', ['ingestion-api', 'events', 'connector-catalog', 'imports-api', 'data-exchange-api', 'api-conventions']],
+  ['resources', 'Resources', '○', 'ash', ['features', 'faq', 'troubleshooting', 'changelog']],
+];
+
+function regroup(): DocsSection[] {
+  const used = new Set<string>();
+  const sections = GROUPS.map(([id, label, glyph, color, pages]) => {
+    const own = pages.filter((p) => DOCS_PAGES[p] && !used.has(p));
+    own.forEach((p) => used.add(p));
+    return { id, label, glyph, color, pages: own };
+  });
+  const contentOrder = (raw.sections as DocsSection[]).flatMap((s) => s.pages);
+  const rest = [...contentOrder, ...Object.keys(DOCS_PAGES)].filter((p, i, a) => DOCS_PAGES[p] && !used.has(p) && a.indexOf(p) === i);
+  sections[sections.length - 1]!.pages.push(...rest);
+  return sections.filter((s) => s.pages.length);
+}
+
+export const DOCS_SECTIONS = regroup();
 export const DOCS_ORDER = DOCS_SECTIONS.flatMap((s) => s.pages);
 export const DEFAULT_DOC = 'overview';
 

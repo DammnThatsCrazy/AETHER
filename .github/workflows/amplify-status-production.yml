@@ -1,11 +1,18 @@
 name: Bind and deploy the production web app
 
 # Production runs ONE Amplify app (AETHER-production-web, the former
-# aether-status app) that builds the unified site with the product under /app
-# and serves www, aether, docs, status and app. Every main push binds that exact
-# app to this repository with the reviewed build, rules and production
-# settings, keeps main in PRODUCTION stage, and starts a commit-pinned release
-# job. It never changes DNS; Squarespace remains the DNS authority.
+# aether-status app) with two branches built from the same main commit:
+#
+# - main: the Aether site (with the product under /app) for aether, docs,
+#   status and app;
+# - production-olympus: the Olympus Labs site (VITE_SITE=olympus) for www.
+#
+# Each site build prerenders its own pages for search and link previews, so
+# the two hosts need separate builds. Every main push binds the app to this
+# repository with the reviewed build, rules and production settings, mirrors
+# the exact main SHA to the production-olympus Git branch, keeps both branches
+# in PRODUCTION stage, and starts a commit-pinned release job on each. It never
+# changes DNS or domain mappings; Squarespace remains the DNS authority.
 
 on:
   push:
@@ -31,6 +38,9 @@ env:
   AWS_REGION: us-east-1
   AMPLIFY_REPOSITORY: https://github.com/DammnThatsCrazy/AETHER
   AMPLIFY_APP_NAME: AETHER-production-web
+  # Git and Amplify branch for the Olympus Labs site: always an exact copy of
+  # a reviewed main commit, written only by this workflow.
+  OLYMPUS_BRANCH: production-olympus
 
 jobs:
   verify-main-integration:
@@ -77,8 +87,11 @@ jobs:
     needs: verify-main-integration
     if: needs.verify-main-integration.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     environment: staging
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,6 +151,21 @@ jobs:
           printf 'app_id=%s\n' "${app_ids[0]}" >> "$GITHUB_OUTPUT"
           printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Mirror the exact main commit to the Olympus site branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
+        run: |
+          set -euo pipefail
+          # Only a commit already on main may be published to www.
+          comparison="$(gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_COMMIT_SHA...main" --jq .status)"
+          case "$comparison" in
+            identical|ahead) ;;
+            *) echo "::error::$EXPECTED_COMMIT_SHA is not on main (compare status: ${comparison:-unknown})"; exit 1 ;;
+          esac
+          git push --force origin "${EXPECTED_COMMIT_SHA}:refs/heads/${OLYMPUS_BRANCH}"
+          echo "Mirrored ${EXPECTED_COMMIT_SHA} to ${OLYMPUS_BRANCH}."
+
       - name: Assess status app state before repository binding
         id: state
         env:
@@ -188,9 +216,9 @@ jobs:
             exit 0
           fi
 
-          unexpected_branches="$(jq -r 'map(select(. != "main")) | join(",")' <<<"$branches_json")"
+          unexpected_branches="$(jq -r --arg olympus "$OLYMPUS_BRANCH" 'map(select(. != "main" and . != $olympus)) | join(",")' <<<"$branches_json")"
           test -z "$unexpected_branches" || {
-            echo "::error::repository-backed AETHER-production-web has unexpected manual branches: ${unexpected_branches}"; exit 1;
+            echo "::error::repository-backed AETHER-production-web has unexpected branches: ${unexpected_branches}"; exit 1;
           }
           if [ "$domain_has_mappings" = false ]; then
             echo 'The status app is repository-backed but its canonical domain mapping is not restored yet; this run will stop before release.'
@@ -198,7 +226,7 @@ jobs:
             exit 0
           fi
           printf 'bootstrap_required=false\n' >> "$GITHUB_OUTPUT"
-          echo 'Status app is repository-backed with only the canonical main branch; CI will verify its domain mapping without mutating it.'
+          echo 'Status app is repository-backed with only the main and Olympus site branches; CI will verify its domain mapping without mutating it.'
 
       - name: Bind the production web app to the canonical repository
         id: bind
@@ -210,7 +238,8 @@ jobs:
           web_build_spec="$(mktemp)"
           web_environment="$(mktemp)"
           web_rules="$(mktemp)"
-          trap 'rm -f "$web_build_spec" "$web_environment" "$web_rules"' EXIT
+          olympus_environment="$(mktemp)"
+          trap 'rm -f "$web_build_spec" "$web_environment" "$web_rules" "$olympus_environment"' EXIT
           # The frontend/site entry of amplify.yml: the unified site plus the
           # product built under /app.
           cat > "$web_build_spec" <<'YAML'
@@ -264,8 +293,11 @@ jobs:
           JSON
           # Pilot-only routing: the product (/app and the legacy sign-in paths)
           # sends visitors to a pilot request until the production backend
-          # exists; every other page route is the site. When production opens,
-          # restore the staging web app's rules (Terraform main.tf).
+          # exists. Every page is a prerendered file (/platform is served from
+          # platform.html); a path with no file gets the app shell with a 404
+          # status ("404-200"), and the app renders the route or its not-found
+          # page. The rules are shared by both branches. When production opens,
+          # restore the staging web app's product rules (Terraform main.tf).
           cat > "$web_rules" <<'JSON'
           [
             {"source": "/app", "target": "/contact?type=pilot", "status": "302"},
@@ -273,10 +305,13 @@ jobs:
             {"source": "/login", "target": "/contact?type=pilot", "status": "302"},
             {"source": "/signup", "target": "/contact?type=pilot", "status": "302"},
             {"source": "/forgot-password", "target": "/contact?type=pilot", "status": "302"},
-            {"source": "</^[^.]+$|\\.(?!(css|gif|ico|jpg|jpeg|js|png|txt|svg|woff|woff2|ttf|map|json|webp|xml|webmanifest)$)([^.]+$)/>", "target": "/index.html", "status": "200"}
+            {"source": "/<*>", "target": "/index.html", "status": "404-200"}
           ]
           JSON
+          # The Olympus Labs site: the same settings, built as the Olympus site.
+          jq '. + {"VITE_SITE": "olympus"}' "$web_environment" > "$olympus_environment"
           jq -e 'type == "object"' "$web_environment" >/dev/null
+          jq -e '.VITE_SITE == "olympus"' "$olympus_environment" >/dev/null
           jq -e 'type == "array" and length == 6' "$web_rules" >/dev/null
           aws amplify update-app \
             --app-id "$APP_ID" \
@@ -299,11 +334,25 @@ jobs:
           else
             aws amplify create-branch "${branch_args[@]}" >/dev/null
           fi
+          # The Olympus branch builds only the commits this workflow mirrors and
+          # releases; it does not auto-build on its own.
+          olympus_args=(
+            --app-id "$APP_ID"
+            --branch-name "$OLYMPUS_BRANCH"
+            --stage PRODUCTION
+            --no-enable-auto-build
+            --environment-variables "file://$olympus_environment"
+          )
+          if aws amplify get-branch --app-id "$APP_ID" --branch-name "$OLYMPUS_BRANCH" >/dev/null 2>&1; then
+            aws amplify update-branch "${olympus_args[@]}" >/dev/null
+          else
+            aws amplify create-branch "${olympus_args[@]}" >/dev/null
+          fi
           # Build settings apply only to jobs that start after this point; the
           # release step must not reuse a job started before it. Whole seconds:
           # the release step treats a job from this same second as stale.
           printf 'bound_at=%s\n' "$(date -u +%s)" >> "$GITHUB_OUTPUT"
-          echo 'Bound the production web app to the reviewed repository, the site build with the product under /app, production settings and rules, and the PRODUCTION main branch.'
+          echo "Bound the production web app to the reviewed repository, the site build with the product under /app, production settings and rules, and the PRODUCTION main and ${OLYMPUS_BRANCH} branches."
 
       - name: Verify canonical production domain mappings
         if: steps.state.outputs.bootstrap_required != 'true'
@@ -318,13 +367,15 @@ jobs:
             echo "::error::production status domain association is ${status:-unknown}"; exit 1;
           }
           for prefix in www aether docs status app; do
+            branch=main
+            if [ "$prefix" = www ]; then branch="$OLYMPUS_BRANCH"; fi
             mapping_count="$(jq --arg prefix "$prefix" '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == $prefix)) | length' <<<"$domain_json")"
-            main_mapping_count="$(jq --arg prefix "$prefix" '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == $prefix and .branchName == "main")) | length' <<<"$domain_json")"
-            test "$mapping_count" = 1 && test "$main_mapping_count" = 1 || {
-              echo "::error::production domain must have exactly one ${prefix} mapping to the canonical main branch"; exit 1;
+            branch_mapping_count="$(jq --arg prefix "$prefix" --arg branch "$branch" '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == $prefix and .branchName == $branch)) | length' <<<"$domain_json")"
+            test "$mapping_count" = 1 && test "$branch_mapping_count" = 1 || {
+              echo "::error::production domain must have exactly one ${prefix} mapping to the ${branch} branch"; exit 1;
             }
           done
-          echo 'Verified the production domain is AVAILABLE and maps www, aether, docs, status and app to the canonical main branch without a CI domain mutation.'
+          echo "Verified the production domain is AVAILABLE and maps www to ${OLYMPUS_BRANCH} and aether, docs, status and app to main, without a CI domain mutation."
 
       - name: Complete one-time status app bootstrap
         if: steps.state.outputs.bootstrap_required == 'true'
@@ -334,7 +385,7 @@ jobs:
           echo '::notice::One-time administrative action required: restore olympuslabsml.com status -> main, then dispatch this workflow for the first commit-pinned release.'
           echo 'Bootstrap intentionally stops before release so the domain association is restored before public provenance is claimed.'
 
-      - name: Start the commit-pinned Amplify release
+      - name: Start the commit-pinned Amplify releases
         id: job
         if: steps.state.outputs.bootstrap_required != 'true'
         env:
@@ -355,90 +406,104 @@ jobs:
             echo '::error::the bind step did not record when the build settings were applied'; exit 1;
           }
           active_statuses='["PENDING", "QUEUED", "PROVISIONING", "RUNNING"]'
-          job_id=""
-          deadline=$((SECONDS + 2400))
-          while [ "$SECONDS" -lt "$deadline" ]; do
-            jobs_json="$(aws amplify list-jobs \
-              --app-id "$APP_ID" \
-              --branch-name main \
-              --max-results 50 \
-              --output json)"
-            job_id="$(jq -r --arg expected "$EXPECTED_COMMIT_SHA" --argjson active "$active_statuses" --argjson bound "$BOUND_AT" \
-              '[.jobSummaries[] | select(.commitId == $expected and (.status as $status | $active | index($status) != null)
-                and ((.startTime // "") | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | (try fromdateiso8601 catch 0)) > $bound)]
-              | sort_by((.jobId | tonumber)) | last | .jobId // empty' <<<"$jobs_json")"
-            if [ -n "$job_id" ]; then
-              echo "Reusing active Amplify status deployment job ${job_id} for ${EXPECTED_COMMIT_SHA}."
-              break
-            fi
 
-            active_count="$(jq --argjson active "$active_statuses" \
-              '[.jobSummaries[] | select(.status as $status | $active | index($status) != null)] | length' <<<"$jobs_json")"
-            if [ "$active_count" -gt 0 ]; then
-              echo "Another Amplify status deployment is active; waiting for the branch to become available."
-              sleep 15
-              continue
-            fi
+          release_branch() {
+            local branch="$1" job_id="" jobs_json active_count start_output start_status
+            local deadline=$((SECONDS + 2400))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              jobs_json="$(aws amplify list-jobs \
+                --app-id "$APP_ID" \
+                --branch-name "$branch" \
+                --max-results 50 \
+                --output json)"
+              job_id="$(jq -r --arg expected "$EXPECTED_COMMIT_SHA" --argjson active "$active_statuses" --argjson bound "$BOUND_AT" \
+                '[.jobSummaries[] | select(.commitId == $expected and (.status as $status | $active | index($status) != null)
+                  and ((.startTime // "") | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | (try fromdateiso8601 catch 0)) > $bound)]
+                | sort_by((.jobId | tonumber)) | last | .jobId // empty' <<<"$jobs_json")"
+              if [ -n "$job_id" ]; then
+                echo "Reusing active Amplify status deployment job ${job_id} on ${branch} for ${EXPECTED_COMMIT_SHA}." >&2
+                break
+              fi
 
-            start_output="$(mktemp)"
-            if aws amplify start-job \
-              --app-id "$APP_ID" \
-              --branch-name main \
-              --job-type RELEASE \
-              --commit-id "$EXPECTED_COMMIT_SHA" \
-              --query 'jobSummary.jobId' --output text >"$start_output" 2>&1; then
-              job_id="$(tr -d '[:space:]' <"$start_output")"
-              rm -f "$start_output"
-              break
-            else
-              start_status=$?
-              if grep -Fq 'already have pending or running jobs' "$start_output"; then
-                echo 'Amplify reported a concurrent branch job after the availability check; rechecking for the exact commit.'
-                rm -f "$start_output"
-                sleep 5
+              active_count="$(jq --argjson active "$active_statuses" \
+                '[.jobSummaries[] | select(.status as $status | $active | index($status) != null)] | length' <<<"$jobs_json")"
+              if [ "$active_count" -gt 0 ]; then
+                echo "Another Amplify deployment is active on ${branch}; waiting for the branch to become available." >&2
+                sleep 15
                 continue
               fi
-              cat "$start_output" >&2
-              rm -f "$start_output"
-              exit "$start_status"
-            fi
-          done
-          test -n "$job_id" && test "$job_id" != None || {
-            echo '::error::Amplify did not provide an active or newly-created status deployment job ID'; exit 1;
-          }
-          printf 'job_id=%s\n' "$job_id" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for the exact status deployment
+              start_output="$(mktemp)"
+              if aws amplify start-job \
+                --app-id "$APP_ID" \
+                --branch-name "$branch" \
+                --job-type RELEASE \
+                --commit-id "$EXPECTED_COMMIT_SHA" \
+                --query 'jobSummary.jobId' --output text >"$start_output" 2>&1; then
+                job_id="$(tr -d '[:space:]' <"$start_output")"
+                rm -f "$start_output"
+                break
+              else
+                start_status=$?
+                if grep -Fq 'already have pending or running jobs' "$start_output"; then
+                  echo "Amplify reported a concurrent ${branch} job after the availability check; rechecking for the exact commit." >&2
+                  rm -f "$start_output"
+                  sleep 5
+                  continue
+                fi
+                cat "$start_output" >&2
+                rm -f "$start_output"
+                return "$start_status"
+              fi
+            done
+            test -n "$job_id" && test "$job_id" != None || {
+              echo "::error::Amplify did not provide an active or newly-created ${branch} deployment job ID" >&2; return 1;
+            }
+            printf '%s' "$job_id"
+          }
+
+          main_job_id="$(release_branch main)"
+          olympus_job_id="$(release_branch "$OLYMPUS_BRANCH")"
+          printf 'main_job_id=%s\n' "$main_job_id" >> "$GITHUB_OUTPUT"
+          printf 'olympus_job_id=%s\n' "$olympus_job_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the exact deployments
         if: steps.state.outputs.bootstrap_required != 'true'
         env:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
-          JOB_ID: ${{ steps.job.outputs.job_id }}
+          MAIN_JOB_ID: ${{ steps.job.outputs.main_job_id }}
+          OLYMPUS_JOB_ID: ${{ steps.job.outputs.olympus_job_id }}
         run: |
           set -euo pipefail
-          deadline=$((SECONDS + 2400))
-          while [ "$SECONDS" -lt "$deadline" ]; do
-            job_json="$(aws amplify get-job --app-id "$APP_ID" --branch-name main --job-id "$JOB_ID")"
-            status="$(jq -r '.job.summary.status // empty' <<<"$job_json")"
-            commit="$(jq -r '.job.summary.commitId // empty' <<<"$job_json")"
-            case "$status" in
-              SUCCEED)
-                test "$commit" = "$EXPECTED_COMMIT_SHA" || {
-                  echo '::error::Amplify status deployment succeeded for a different commit'; exit 1;
-                }
-                echo "Aether status deployed successfully for ${EXPECTED_COMMIT_SHA}."
-                exit 0
-                ;;
-              FAILED|CANCELLED|CANCELLING)
-                echo "::error::Amplify status deployment ended with ${status}"; exit 1
-                ;;
-              *)
-                echo "Aether status deployment job ${JOB_ID} is ${status:-UNKNOWN}; waiting"
-                sleep 15
-                ;;
-            esac
-          done
-          echo '::error::Aether status deployment exceeded the 40-minute deadline'; exit 1
+          wait_for() {
+            local branch="$1" job_id="$2" job_json status commit
+            local deadline=$((SECONDS + 2400))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              job_json="$(aws amplify get-job --app-id "$APP_ID" --branch-name "$branch" --job-id "$job_id")"
+              status="$(jq -r '.job.summary.status // empty' <<<"$job_json")"
+              commit="$(jq -r '.job.summary.commitId // empty' <<<"$job_json")"
+              case "$status" in
+                SUCCEED)
+                  test "$commit" = "$EXPECTED_COMMIT_SHA" || {
+                    echo "::error::Amplify ${branch} deployment succeeded for a different commit"; return 1;
+                  }
+                  echo "The ${branch} site deployed successfully for ${EXPECTED_COMMIT_SHA}."
+                  return 0
+                  ;;
+                FAILED|CANCELLED|CANCELLING)
+                  echo "::error::Amplify ${branch} deployment ended with ${status}"; return 1
+                  ;;
+                *)
+                  echo "The ${branch} deployment job ${job_id} is ${status:-UNKNOWN}; waiting"
+                  sleep 15
+                  ;;
+              esac
+            done
+            echo "::error::the ${branch} deployment exceeded the 40-minute deadline"; return 1
+          }
+          wait_for main "$MAIN_JOB_ID"
+          wait_for "$OLYMPUS_BRANCH" "$OLYMPUS_JOB_ID"
 
       - name: Verify production status provenance and branch stage
         if: steps.state.outputs.bootstrap_required != 'true'

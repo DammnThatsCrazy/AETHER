@@ -67,10 +67,10 @@ describe('a pilot-only build', () => {
     expect(linkNames(header)).not.toContain('Sign in');
     expect(within(header).getByRole('link', { name: 'Request a pilot' }).getAttribute('href')).toBe('/contact?type=pilot');
     const footer = screen.getByRole('contentinfo');
-    for (const hidden of ['Sign in', 'Create an account', 'Status', 'status.olympuslabsml.com']) {
+    for (const hidden of ['Sign in', 'Get started', 'Status', 'status.olympuslabsml.com']) {
       expect(linkNames(footer)).not.toContain(hidden);
     }
-    expect(screen.queryByRole('link', { name: /Create an account/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Get started/ })).toBeNull();
     for (const a of screen.getAllByRole('link')) {
       expect(a.getAttribute('href') ?? '').not.toMatch(/\/app(\/|$)|\/status$/);
     }
@@ -79,7 +79,7 @@ describe('a pilot-only build', () => {
   it('keeps the full journey when the build does not opt in', () => {
     renderAt('aether', '/');
     expect(within(screen.getByRole('banner')).getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/app/signin');
-    expect(linkNames(screen.getByRole('contentinfo'))).toEqual(expect.arrayContaining(['Sign in', 'Create an account', 'Status']));
+    expect(linkNames(screen.getByRole('contentinfo'))).toEqual(expect.arrayContaining(['Sign in', 'Get started', 'Status']));
   });
 
   it('turns plan choices on Pricing into pilot requests', () => {
@@ -119,7 +119,7 @@ describe('a pilot-only build', () => {
     renderAt('aether', '/contact?type=pilot&plan=beta');
     await userEvent.type(screen.getByLabelText('Name'), 'Jordan Lee');
     await userEvent.type(screen.getByLabelText('Work email'), 'jordan@northwind.example');
-    await userEvent.type(screen.getByRole('textbox', { name: /relationship question|would you like|trying to connect|review need|outcome/ }), 'A pilot.');
+    await userEvent.type(screen.getByRole('textbox', { name: /want to understand|would you like|trying to connect|review need|result/ }), 'A pilot.');
     await userEvent.click(screen.getByRole('button', { name: /Send/ }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;

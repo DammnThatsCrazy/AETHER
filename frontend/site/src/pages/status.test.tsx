@@ -58,7 +58,7 @@ describe('status page', () => {
 
   it('says the monitor is not configured instead of showing green', async () => {
     renderStatus();
-    expect((await screen.findByRole('status')).textContent).toContain('Status not yet verified');
+    expect((await screen.findByRole('status')).textContent).toContain('Status not checked yet');
     expect(screen.getByText('No component data')).toBeTruthy();
     expect(screen.queryByText('All systems operational')).toBeNull();
     expect(screen.getByRole('link', { name: 'Skip to content' }).getAttribute('href')).toBe('#main');
@@ -78,10 +78,10 @@ describe('status page', () => {
     );
     renderStatus();
     expect((await screen.findByText('All systems operational')).closest('h1')).toBeTruthy();
-    const bars = screen.getByRole('img', { name: /Identity & graph: 90-day history, no history yet/ });
+    const bars = screen.getByRole('img', { name: /People and connections: 90-day history, no history yet/ });
     expect(bars.children).toHaveLength(90);
     expect(screen.getByText('No incidents reported in the last 90 days.')).toBeTruthy();
-    const product = screen.getByText('Customer-visible product').closest('details')!;
+    const product = screen.getByText('The product').closest('details')!;
     expect(within(product).getByText('all 1 operational')).toBeTruthy();
   });
 

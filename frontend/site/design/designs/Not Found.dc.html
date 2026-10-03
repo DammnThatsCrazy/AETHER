@@ -8,9 +8,15 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
-  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <link rel="stylesheet" href="../_ds/colors_and_type.css">
+  <script src="../_ds/_ds_bundle.js"></script>
   <title>Page not found</title>
+  <meta property="og:type" content="website">
+  <meta name="description" content="This page doesn’t exist. Try one of these instead.">
+  <meta property="og:title" content="Page not found">
+  <meta property="og:description" content="This page doesn’t exist. Try one of these instead.">
+  <meta property="og:image" content="../assets/og/not-found.png">
+  <meta name="twitter:card" content="summary_large_image">
   <style>
     body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
     a { color: #3a6896; }
@@ -19,17 +25,17 @@
 </helmet>
 <div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans); display: flex; flex-direction: column;" data-screen-label="404">
   <dc-import name="Site Header" brand="{{ brand }}" active="" hint-size="100%,56px"></dc-import>
-  <main style="flex: 1; max-width: 1200px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: clamp(48px, 9vw, 120px) 24px; display: flex; flex-direction: column; gap: 28px;">
-    <div style="display: flex; flex-direction: column; gap: 16px; max-width: 640px;">
-      <span style="display: inline-flex; align-items: center; gap: 10px;"><span style="font-family: var(--font-mono); font-size: 13px; padding: 4px 10px; border-radius: 999px; background: rgba(181,86,74,0.12); color: #a3473c;">■ 404</span><code style="font-size: 12px; color: #6b6a65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px;">{{ path }}</code></span>
-      <h1 style="font-size: clamp(36px, 5.6vw, 60px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.04; margin: 0;">This page does not exist</h1>
-      <p style="font-size: 16px; line-height: 1.6; color: #4a4945; margin: 0;">The link may be old, or the page may have moved. Nothing was lost — pick up from one of these.</p>
+  <main style="flex: 1; max-width: 1200px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: clamp(96px, 14vw, 176px) 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 40px;">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 18px; max-width: 640px;">
+      <span style="display: inline-flex; align-items: center; gap: 10px;"><span style="font-family: var(--font-mono); font-size: 13px; color: #6b6a65;">404</span><code style="font-size: 12px; color: #6b6a65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px;">{{ path }}</code></span>
+      <h1 style="font-size: clamp(44px, 7vw, 88px); font-weight: 500; letter-spacing: -0.045em; line-height: 0.98; margin: 0;">This page doesn’t exist.</h1>
+      <p style="font-size: 16px; line-height: 1.6; color: #4a4945; margin: 0;">The link may be old, or the page may have moved.</p>
     </div>
-    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+    <nav aria-label="Go somewhere else" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 28px;">
       <sc-for list="{{ links }}" as="l" hint-placeholder-count="4">
-        <a href="{{ l.href }}" style="{{ l.style }}" style-hover="{{ l.hover }}"><span style="{{ l.chip }}">{{ l.g }}</span><span style="font-size: 16px; font-weight: 500; margin-top: auto;">{{ l.title }}</span><span style="font-size: 13px; color: #4a4945;">{{ l.body }}</span></a>
+        <a href="{{ l.href }}" style="display: inline-flex; gap: 6px; font-size: 15px; font-weight: 500; color: #1a1a1e; text-decoration: none;" style-hover="color: #3a6896;">{{ l.title }}<span style="font-family: var(--font-mono); color: #9c9b95;">→</span></a>
       </sc-for>
-    </div>
+    </nav>
   </main>
   <dc-import name="Site Footer" hint-size="100%,300px"></dc-import>
 </div>
@@ -42,8 +48,8 @@ class Component extends DCLogic {
     const brand = q.brand === 'olympus' ? 'olympus' : 'aether';
     const C = [['#3a6896', '#2d5373', 'rgba(58,104,150,0.12)'], ['#6b9a7c', '#4f7a5e', 'rgba(107,154,124,0.15)'], ['#c9975a', '#8a6433', 'rgba(201,151,90,0.16)'], ['#5a85a8', '#3f6a8c', 'rgba(90,133,168,0.14)']];
     const L = brand === 'olympus'
-      ? [['◈', 'Olympus Labs home', 'The company and its principles', 'Olympus Home.dc.html'], ['⬡', 'Aether', 'The flagship product', 'Aether Home.dc.html'], ['⚗', 'Research', 'Open questions', 'Olympus Research.dc.html'], ['✉', 'Contact', 'Reach the team', 'Contact.dc.html?brand=olympus']]
-      : [['⬡', 'Aether home', 'What Aether is and does', 'Aether Home.dc.html'], ['⌘', 'Documentation', 'Quickstarts, SDKs, connectors', 'Docs.dc.html'], ['◉', 'Status', 'Service health', 'Status.dc.html'], ['✉', 'Contact', 'Reach an engineer', 'Contact.dc.html?brand=aether&type=developer']];
+      ? [['◈', 'Olympus Labs home', 'The company and what it believes', 'Olympus Home.dc.html'], ['⬡', 'Aether', 'The product', 'Aether Home.dc.html'], ['⚗', 'Research', 'Hard questions we work on', 'Olympus Research.dc.html'], ['✉', 'Contact', 'Reach the team', 'Contact.dc.html?brand=olympus']]
+      : [['⬡', 'Aether home', 'What Aether does', 'Aether Home.dc.html'], ['⌘', 'Documentation', 'Guides, SDKs, and integrations', 'Docs.dc.html'], ['◉', 'Status', 'Is everything working?', 'Status.dc.html'], ['✉', 'Contact', 'Ask an engineer', 'Contact.dc.html?brand=aether&type=developer']];
     return {
       brand, path: q.path || '/this-page',
       links: L.map(([g, title, body, href], i) => ({ g, title, body, href,
