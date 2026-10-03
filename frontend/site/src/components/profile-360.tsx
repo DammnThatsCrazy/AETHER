@@ -3,6 +3,7 @@
  */
 import { Fragment } from 'react';
 import { asset, css, hoverClass, useDesignState } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 
 import './profile-360.css';
 
@@ -235,7 +236,7 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
         <>
           <div data-theme="dark" style={css("display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #1a1a1e; border: 1px solid #2a2a2f; border-bottom: 0; border-radius: 8px 8px 0 0; color: #e8e6e1; font-size: 12px;")}>
             <span style={css("display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap;")}>
-              <img src={asset("../assets/logo-aether-layers.svg")} alt="" style={css("width: 16px; height: 16px;")} />
+              <img src={markSrc('aether')} alt="" style={css("width: 16px; height: 16px;")} />
               <span style={css("color: #a09f99;")}>
                 {"360"}
               </span>

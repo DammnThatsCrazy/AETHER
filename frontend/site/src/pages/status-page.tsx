@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { asset, css, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { pilotOnly } from '@site/site/access';
 import { SkipLink } from '@site/components/skip-link';
@@ -197,7 +198,7 @@ export function StatusPage({ now = () => new Date() }: { now?: () => Date }) {
         <header style={css('border-bottom: 1px solid #d8d6d0; background: #f5f4f1;')}>
           <div style={css('max-width: 920px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px;')}>
             <a href={link('Status.dc.html')} style={css('display: flex; align-items: center; gap: 8px; text-decoration: none; color: #1a1a1e;')}>
-              <img src={asset('../assets/logo-aether-layers.svg')} alt="" style={css('width: 20px; height: 20px;')} />
+              <img src={markSrc('aether')} alt="" style={css('width: 20px; height: 20px;')} />
               <span style={css('font-size: 15px; font-weight: 500;')}>Aether</span>
               <span style={css('font-size: 15px; color: #6b6a65;')}>Status</span>
             </a>

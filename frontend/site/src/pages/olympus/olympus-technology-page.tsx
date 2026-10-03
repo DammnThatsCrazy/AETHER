@@ -3,6 +3,7 @@
  */
 import { Fragment } from 'react';
 import { asset, css, useDesignState, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { AetherScene } from '@site/components/aether-scene';
 import { SiteFooter } from '@site/components/site-footer';
@@ -250,7 +251,7 @@ export function OlympusTechnologyPage() {
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 32px; align-items: center;")}>
             <div style={css("display: flex; flex-direction: column; gap: 16px;")}>
               <span style={css("display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
-                <img src={asset("../assets/logo-aether-layers.svg")} alt="" style={css("width: 16px; height: 16px;")} />
+                <img src={markSrc('aether')} alt="" style={css("width: 16px; height: 16px;")} />
                 {"The implementation"}
               </span>
               <h2 style={css("font-size: clamp(30px, 3.8vw, 48px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.04; margin: 0; text-wrap: balance;")}>

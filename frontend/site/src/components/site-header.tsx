@@ -7,6 +7,7 @@
  */
 import { Fragment, useEffect } from 'react';
 import { asset, css, useDesignState, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { pilotOnly } from '@site/site/access';
 import { SkipLink } from '@site/components/skip-link';
 import { useSite } from '@site/site/site-context';
@@ -160,7 +161,7 @@ export function SiteHeader({ brand, active = '' }: { brand?: 'aether' | 'olympus
           {isAether ? (
             <>
               <a href={link('Aether Home.dc.html')} aria-label="Aether home" style={css('display: flex; align-items: center; gap: 8px; text-decoration: none; color: #1a1a1e;')}>
-                <img src={asset('../assets/logo-aether-layers.svg')} alt="" style={css('width: 22px; height: 22px; display: block;')} />
+                <img src={markSrc('aether')} alt="" style={css('width: 22px; height: 22px; display: block;')} />
                 <span style={css('font-size: 17px; font-weight: 500; letter-spacing: -0.4px;')}>Aether</span>
               </a>
               <span style={css('font-size: 12px; color: #6b6a65;')}>
@@ -172,7 +173,7 @@ export function SiteHeader({ brand, active = '' }: { brand?: 'aether' | 'olympus
             </>
           ) : (
             <a href={link('Olympus Home.dc.html')} aria-label="Olympus Labs home" style={css('display: flex; align-items: center; gap: 9px; text-decoration: none; color: #1a1a1e;')}>
-              <img src={asset('../assets/logo-olympus-arch.svg')} alt="" style={css('width: 18px; height: 18px; display: block;')} />
+              <img src={markSrc('olympus')} alt="" style={css('width: 18px; height: 18px; display: block;')} />
               <span style={css('font-size: 16px; font-weight: 500; letter-spacing: -0.3px;')}>Olympus Labs</span>
             </a>
           )}

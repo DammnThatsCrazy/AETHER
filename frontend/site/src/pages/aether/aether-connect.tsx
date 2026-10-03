@@ -4,6 +4,7 @@
 import { Fragment } from 'react';
 import { createElement as h, type ReactNode } from 'react';
 import { asset, css, portalLabel, useDesignState, useLink, useReducedMotion } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { SiteFooter } from '@site/components/site-footer';
 import { SiteHeader } from '@site/components/site-header';
@@ -358,7 +359,7 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
       );
     }),
     h('rect', { x: cx - 52, y: cy - 30, width: 104, height: 60, rx: 10, fill: '#e8e6e1' }),
-    h('image', { href: assetUrl('../assets/logo-aether-layers.svg'), x: cx - 40, y: cy - 12, width: 24, height: 24 }),
+    h('image', { href: markSrc('aether'), x: cx - 40, y: cy - 12, width: 24, height: 24 }),
     h('text', { x: cx - 10, y: cy + 5, fill: '#1a1a1e', style: { fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 500 } }, 'Aether'),
   );
   return {

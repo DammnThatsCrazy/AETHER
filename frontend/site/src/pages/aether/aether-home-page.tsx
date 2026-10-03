@@ -3,6 +3,7 @@
  */
 import { Fragment } from 'react';
 import { asset, css, portalLabel, useDesignState, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { AetherScene } from '@site/components/aether-scene';
 import { IOSDevice } from '@site/components/ios-device';
@@ -124,7 +125,7 @@ export function AetherHomePage() {
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(48px, 7vw, 96px) 24px clamp(48px, 7vw, 80px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: clamp(32px, 5vw, 64px); align-items: center;")}>
             <div style={css("display: flex; flex-direction: column; gap: 24px; min-width: 0;")}>
               <span style={css("display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
-                <img src={asset("../assets/logo-aether-layers.svg")} alt="" style={css("width: 16px; height: 16px;")} />
+                <img src={markSrc('aether')} alt="" style={css("width: 16px; height: 16px;")} />
                 {"Aether by Olympus Labs"}
               </span>
               <h1 style={css("font-size: clamp(48px, 7vw, 88px); font-weight: 500; line-height: 0.96; letter-spacing: -0.045em; margin: 0; color: #1a1a1e; text-wrap: balance;")}>

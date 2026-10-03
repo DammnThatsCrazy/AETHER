@@ -3,6 +3,7 @@
  * verbatim). Pilot-only builds leave out the product and status links.
  */
 import { asset, css, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { pilotOnly } from '@site/site/access';
 import './site-footer.css';
 
@@ -79,12 +80,12 @@ export function SiteFooter() {
           <div style={css('display: flex; flex-direction: column; gap: 14px; min-width: 200px;')}>
             <div style={css('display: flex; align-items: center; gap: 14px;')}>
               <span style={css('display: flex; align-items: center; gap: 7px;')}>
-                <img src={asset('../assets/logo-olympus-arch.svg')} alt="" style={css('width: 15px; height: 15px;')} />
+                <img src={markSrc('olympus')} alt="" style={css('width: 15px; height: 15px;')} />
                 <span style={css('font-size: 14px; font-weight: 500; color: #1a1a1e;')}>Olympus Labs</span>
               </span>
               <span aria-hidden="true" style={css('width: 1px; height: 14px; background: #d8d6d0;')} />
               <span style={css('display: flex; align-items: center; gap: 6px;')}>
-                <img src={asset('../assets/logo-aether-layers.svg')} alt="" style={css('width: 17px; height: 17px;')} />
+                <img src={markSrc('aether')} alt="" style={css('width: 17px; height: 17px;')} />
                 <span style={css('font-size: 14px; font-weight: 500; color: #1a1a1e;')}>Aether</span>
               </span>
             </div>
@@ -113,9 +114,9 @@ export function SiteFooter() {
               </a>
             )}
             <span style={css('display: inline-flex; align-items: center; gap: 6px;')}>
-              <img src={asset('../assets/logo-aether-layers.svg')} alt="" style={css('width: 14px; height: 14px;')} />
+              <img src={markSrc('aether')} alt="" style={css('width: 14px; height: 14px;')} />
               Aether by
-              <img src={asset('../assets/logo-olympus-arch.svg')} alt="" style={css('width: 13px; height: 13px;')} />
+              <img src={markSrc('olympus')} alt="" style={css('width: 13px; height: 13px;')} />
               Olympus Labs
             </span>
           </span>

@@ -3,6 +3,7 @@
  */
 import { Fragment } from 'react';
 import { asset, css, useDesignState, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 
 import './docs-page.css';
@@ -299,7 +300,7 @@ export function DocsPage() {
         <div style={css("padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1440px; margin: 0 auto;")}>
           <div style={css("display: flex; align-items: center; gap: 10px; flex-shrink: 0;")}>
             <a href={link("Docs.dc.html")} onClick={goDocsHome} style={css("display: flex; align-items: center; gap: 8px; text-decoration: none; color: #e8e6e1;")}>
-              <img src={asset("../assets/logo-aether-layers.svg")} alt="" style={css("width: 20px; height: 20px;")} />
+              <img src={markSrc('aether')} alt="" style={css("width: 20px; height: 20px;")} />
               <span style={css("font-size: 15px; font-weight: 500;")}>
                 {"Aether"}
               </span>
