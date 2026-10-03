@@ -20,6 +20,7 @@ function renderDocs(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/docs" element={<DocsPage />} />
+          <Route path="/docs/section/:section" element={<DocsPage />} />
           <Route path="/docs/:page" element={<DocsPage />} />
         </Routes>
         <Where />
@@ -29,9 +30,9 @@ function renderDocs(path: string) {
 }
 
 describe('docs content', () => {
-  it('has 45 public pages, each in exactly one section', () => {
-    expect(DOCS_ORDER).toHaveLength(45);
-    expect(new Set(DOCS_ORDER).size).toBe(45);
+  it('has 52 public pages, each in exactly one section', () => {
+    expect(DOCS_ORDER).toHaveLength(52);
+    expect(new Set(DOCS_ORDER).size).toBe(52);
     expect(Object.keys(DOCS_PAGES).sort()).toEqual([...DOCS_ORDER].sort());
   });
 
@@ -96,11 +97,27 @@ describe('docs page', () => {
     expect(screen.getByTestId('where').textContent).toBe('/docs/overview');
   });
 
-  it('switches sections from the tab bar', async () => {
+  it('opens a section from the sidebar and lists its pages on the section page', async () => {
     renderDocs('/docs/overview');
-    const reference = DOCS_SECTIONS.find((s) => s.id === 'reference')!;
-    await userEvent.click(screen.getByRole('tab', { name: new RegExp(reference.label) }));
+    const reference = DOCS_SECTIONS.find((x) => x.id === 'reference')!;
+    const nav = screen.getByRole('navigation', { name: 'Documentation' });
+    await userEvent.click(within(nav).getByRole('button', { name: new RegExp(reference.label) }));
     expect(screen.getByTestId('where').textContent).toBe(`/docs/${reference.pages[0]}`);
+  });
+
+  it('shows the docs home with section cards', async () => {
+    renderDocs('/docs');
+    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: /pages Reference Exact APIs/ }));
+    expect(screen.getByTestId('where').textContent).toBe('/docs/section/reference');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Reference');
+  });
+
+  it('shows every provider logo in the connector catalog', () => {
+    renderDocs('/docs/connector-catalog');
+    const logos = [...document.querySelectorAll('main img')].map((i) => i.getAttribute('src'));
+    expect(logos).toHaveLength(21);
+    expect(logos).toContain('/providers/x-dark.svg');
+    expect(logos).toContain('/providers/phantom.svg');
   });
 
   it('opens search with ⌘K and navigates to a result', async () => {

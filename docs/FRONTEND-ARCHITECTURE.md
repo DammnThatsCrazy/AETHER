@@ -43,9 +43,9 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:a1cb9aadc08568ee3d96954db7c9a5aba1a97cf4451902f482c45d92697281ba"
-  "frontend/kyber/src/": "sha256:d745484d6bb47de269337f554f9d67e30abfbf1c521bec42dadd0b55a6cc5b8d"
-  "frontend/shared/src/": "sha256:abef2b4bb7b38a0124fbf2180dd1de701e533d1bbd57866d57b1848815332a2c"
+  "frontend/aether/src/": "sha256:5786cd6f2b681b7f5eebe69321170ff90887780d2e7983a42a5bc640ba668b0d"
+  "frontend/kyber/src/": "sha256:5be6084c1c17b8787018e1070b6cf8aca4e9277b1704d31720c004449d790557"
+  "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -177,7 +177,9 @@ the root.
   `KyberLockup`, `NavigationIcon`, `ProviderMark`, `EntityAvatar`, semantic
   indicators, and surfaces). Applications consume those renderers rather than
   embedding marks, provider assets, raw navigation glyphs, or per-route visual
-  theme forks. Unreviewed provider marks render the named neutral fallback.
+  theme forks. A provider with a reviewed local mark (listed in
+  `packages/brand/src/providers/registry.ts`) renders it from `/providers/`;
+  any other provider renders the named neutral fallback.
   See the [Aether consumer matrix](brand-system/aether-consumer-matrix.md),
   [brand-system architecture](brand-system/architecture.md), and
   [migration guide](brand-system/migration.md).

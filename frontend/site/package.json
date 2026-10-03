@@ -7,7 +7,7 @@
   "description": "Unified Olympus Labs + Aether site (olympuslabsml.com and aether.olympuslabsml.com) from one Vite build. Replaces olympus-marketing, aether-marketing, docs, status and the aether app after cutover.",
   "scripts": {
     "dev": "vite --port 5180",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr --emptyOutDir && node scripts/prerender.mjs",
     "preview": "vite preview --port 5180",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",

@@ -1,0 +1,14 @@
+/* Generated from design/designs/Aether Pricing.dc.html: page-scoped helmet styles and hover rules. */
+.pg-aether-pricing { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+.pg-aether-pricing a { color: #3a6896; }
+.pg-aether-pricing a:hover { color: #2d5373; }
+@keyframes aeSkel { 0% { opacity: 0.55; } 50% { opacity: 1; } 100% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+.pg-aether-pricing * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+.hv-7e3a2e7d:hover { background: #1d4ed8 !important; color: #f5f4f1 !important; }
+
+/* Plan grid: four columns from 960px, two from 560px (the design measured the window). */
+.pg-aether-pricing .pr-plans { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 560px) { .pg-aether-pricing .pr-plans { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 960px) { .pg-aether-pricing .pr-plans { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

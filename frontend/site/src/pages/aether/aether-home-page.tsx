@@ -1,752 +1,554 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
-import { PageShell } from '@site/components/page-shell';
+/**
+ * Built from design/designs/Aether Home.dc.html (copy, layout and styles verbatim).
+ */
+import { Fragment } from 'react';
+import { asset, css, portalLabel, useDesignState, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
+import { usePageMeta } from '@site/design/page-meta';
+import { AetherScene } from '@site/components/aether-scene';
+import { IOSDevice } from '@site/components/ios-device';
 import { Profile360 } from '@site/components/profile-360';
-import { RelationshipExplorer } from '@site/components/relationship-explorer';
-import { ButtonLink, Eyebrow, Glyph, SectionHead } from '@site/components/ui';
-import { ACCENTS, tint, type Accent } from '@site/site/palette';
-import { useSite } from '@site/site/site-context';
-import { pilotOnly } from '@site/site/access';
+import { SiteFooter } from '@site/components/site-footer';
+import { SiteHeader } from '@site/components/site-header';
+import { CONNECT_CONNECTORS } from './aether-connect';
+import './aether-home-page.css';
 
-/** Aether Home.dc.html */
+import { useEffect } from 'react';
 
-type AboutTab = 'what' | 'does' | 'how' | 'value' | 'gov';
-
-const ABOUT_TABS: Array<[AboutTab, string, string, Accent]> = [
-  ['what', '◈', 'What it is', 'cobalt'],
-  ['does', '→', 'What it does', 'sage'],
-  ['how', '⌘', 'How it works', 'solar'],
-  ['value', '↑', 'Example of value', 'ochre'],
-  ['gov', '✓', 'Governance', 'ember'],
+const EASE = 'cubic-bezier(0.22,1,0.36,1)';
+const STEPS: [kicker: string, title: string, body: string, chips: string][] = [
+  ['Disconnected activity', 'Your systems know pieces of the story.', 'An ad platform, a website, a mobile app, an email tool, a support agent, a payment processor. Each keeps its own record — and none of them knows the others exist.', 'GA4 · HubSpot · Stripe · App · Agent'],
+  ['Aether connects them', 'Aether understands how those pieces belong together.', 'Aether recognizes that seven separate records are really one person. Things it saw directly are solid lines; things it worked out are dashed.', 'one person · seven records'],
+  ['Add time', 'Then turns activity into history and journeys.', 'Put in order, those records become a story — from the first ad to the support ticket.', 'timeline · journeys'],
+  ['Add intelligence', 'Explore the same reality from any perspective.', 'Same data, different angle. Switch to the value view and the moments that led to the sale stand out.', 'views · value · credit'],
 ];
-
-type LayerId = 'events' | 'entities' | 'graph' | 'intelligence' | 'governance';
-
-export const PRODUCT_LAYERS: Array<{ id: LayerId; glyph: string; name: string; short: string; accent: Accent; body: string; items: string[] }> = [
-  { id: 'events', glyph: '◉', name: 'Aether Events', short: 'ingestion · timeline', accent: 'sage', body: 'The event ingestion and operational timeline layer. Every observation arrives through one contract with its source, consent, and order preserved.', items: ['event pipelines', 'event continuity', 'temporal intelligence', 'operational sequencing', 'attribution lineage'] },
-  { id: 'entities', glyph: '⬡', name: 'Aether Entities', short: 'unified identity', accent: 'steel', body: 'The unified operational identity layer. People, organizations, agents, systems, devices, and economic identities become entities you can inspect.', items: ['human entities', 'organizational entities', 'AI agents', 'systems and devices', 'economic entities'] },
-  { id: 'graph', glyph: '↔', name: 'Aether Graph', short: 'relationships', accent: 'cobalt', body: 'The relationship intelligence layer. It resolves entities, draws edges between them, and keeps identity continuous as evidence changes.', items: ['entity resolution', 'graph relationships', 'identity continuity', 'behavioral mapping', 'operational lineage'] },
-  { id: 'intelligence', glyph: '◈', name: 'Aether Intelligence', short: 'the primary surface', accent: 'ochre', body: 'The primary operational surface: a live feed of entities, relationships, and insights, with attribution and risk explained.', items: ['graph visualization', 'entity intelligence', 'relationship intelligence', 'event intelligence', 'attribution analysis'] },
-  { id: 'governance', glyph: '✓', name: 'Aether Governance', short: 'trust and control', accent: 'ember', body: 'The governance and trust layer. Consent, policy, explainability, audit, and access control apply to everything above it.', items: ['consent systems', 'policy enforcement', 'explainability', 'auditability', 'access controls'] },
+const MODEL: [n: string, g: string, title: string, body: string, feats: string[], href: string, c: string, soft: string][] = [
+  ['01', '→', 'Connect', 'Bring together activity from the applications, platforms, devices, agents, providers, and systems you already use.', ['Connectors', 'SDKs', 'APIs', 'Events'], 'Aether Connect.dc.html', '#3a6896', 'rgba(58,104,150,0.12)'],
+  ['02', '⬡', 'Understand', 'Aether identifies the people, agents, organizations, events, relationships, and value behind that activity.', ['Profiles', 'Identity', 'Relationships', 'Signals'], 'Aether Platform.dc.html#understand', '#4f7a5e', 'rgba(107,154,124,0.16)'],
+  ['03', '↔', 'Explore', 'Follow a person, journey, interaction, campaign, agent, relationship, location, or transaction through a connected model instead of searching across separate tools.', ['Graph', 'Journeys', 'Lenses', '360s', 'Timeline'], 'Aether Platform.dc.html#explore', '#8a6433', 'rgba(201,151,90,0.18)'],
+  ['04', '✓', 'Act', 'Use that understanding to make decisions, automate actions, investigate changes, personalize experiences, measure outcomes, or give agents reliable context.', ['Recommendations', 'Agents', 'Communications', 'Risk', 'Outcomes'], 'Aether Platform.dc.html#act', '#a3473c', 'rgba(181,86,74,0.12)'],
 ];
-
-const DOES: Array<[string, string, string, Accent, string]> = [
-  ['⬡', 'Resolve identities across systems', 'One person, account, or agent — joined across web, CRM, commerce, and payments, with confidence shown.', 'cobalt', '2 1 360px'],
-  ['↔', 'Map relationships between entities', 'Humans, agents, organizations, and devices, with every edge traced to its evidence.', 'sage', '1 1 240px'],
-  ['→', 'Explain attribution and behavioral flows', 'Which touchpoints led to value, and which assumptions sit underneath.', 'solar', '1 1 240px'],
-  ['▲', 'Detect hidden patterns and risk', 'Clusters, anomalies, and exposure that no single source would show.', 'ember', '1 1 240px'],
-  ['◉', 'Understand operational behavior', 'What is happening now, and how it compares to before.', 'ochre', '1 1 240px'],
-  ['◈', 'Unify fragmented intelligence', 'One governed perspective instead of four partial dashboards.', 'steel', '2 1 360px'],
-  ['✓', 'Coordinate decisions', 'Recommendations wait for people above set thresholds.', 'sage', '1 1 240px'],
+const QUESTIONS: [q: string, a: string, g: string, c: string, href: string][] = [
+  ['Who is this?', 'Profiles', '⬡', '#5a85a8', 'Aether Platform.dc.html#understand'],
+  ['What happened?', 'Signals', '◉', '#4f7a5e', 'Aether Platform.dc.html#understand'],
+  ['How did they get here?', 'Journeys', '→', '#4f7a5e', 'Aether Platform.dc.html#explore'],
+  ['What is related?', 'Graph', '↔', '#3a6896', 'Aether Platform.dc.html#explore'],
+  ['What changed over time?', 'Timeline', '◷', '#6b6a65', 'Aether Platform.dc.html#explore'],
+  ['What influenced this outcome?', 'Attribution and value', '↑', '#4f7a5e', 'Aether Platform.dc.html#act'],
+  ['What does this look like from another perspective?', 'Lenses', '◈', '#8a6433', 'Aether Lenses.dc.html'],
+  ['What did the agent do?', 'Agent 360', '⬡', '#a8783e', 'Aether Agents.dc.html'],
+  ['What communication occurred?', 'Communications', '✉', '#5a85a8', 'Aether Platform.dc.html#act'],
+  ['Where is the risk?', 'Risk', '▲', '#a3473c', 'Aether Platform.dc.html#act'],
 ];
-
-const MAPS: Array<[string, string, Accent]> = [
-  ['●', 'humans', 'cobalt'], ['●', 'organizations', 'sage'], ['⬡', 'AI agents', 'ochre'], ['●', 'systems', 'steel'],
-  ['●', 'devices', 'solar'], ['⬡', 'financial activity', 'sage'], ['●', 'events', 'cobalt'], ['●', 'autonomous processes', 'ember'],
+const SCENARIOS: [title: string, g: string, c: string, flow: string[], close: string, href: string][] = [
+  ['Understand a customer', '●', '#3a6896', ['Ad impression', 'Website visit', 'Mobile app', 'Email interaction', 'AI agent conversation', 'Purchase', 'Support interaction'], 'Aether understands that as one connected journey rather than seven unrelated records.', 'Aether Customer Intelligence.dc.html'],
+  ['Understand an agent', '⬡', '#a8783e', ['Human instruction', 'Orchestrator', 'Research, data, and execution agents', 'Application', 'Customer action', 'Outcome'], 'Aether preserves who acted, under whose authority, against what system, and what resulted.', 'Aether Agents.dc.html'],
+  ['Understand value', '↑', '#4f7a5e', ['Campaign', 'Interaction', 'Person', 'Journey', 'Conversion', 'Revenue'], 'Now attribution and value flows make intuitive sense.', 'Aether Applications.dc.html#revenue'],
 ];
-
-const FIRST_EXPERIENCE: Array<[string, Accent]> = [
-  ['Install the SDK', 'sage'], ['Connect systems', 'cobalt'], ['Ingest events', 'ochre'],
-  ['Generate entity relationships', 'ember'], ['Construct the graph', 'solar'], ['Observe relationship intelligence', 'steel'],
+const APPS: [g: string, title: string, body: string, c: string, href: string][] = [
+  ['●', 'Customer intelligence', 'One explainable history per customer, across every system.', '#9fbad6', 'Aether Customer Intelligence.dc.html'],
+  ['↑', 'Revenue intelligence', 'The path from first signal to revenue, and what put it at risk.', '#9cc4a9', 'Aether Applications.dc.html#revenue'],
+  ['⬡', 'Agent intelligence', 'Who created whom, under whose authority, with what result.', '#dcb683', 'Aether Agents.dc.html'],
+  ['✉', 'Communications', 'Messages as part of the relationship history, not another inbox.', '#8fb0cc', 'Aether Applications.dc.html#communications'],
+  ['▲', 'Risk and trust', 'How risk emerges from relationships — evidence separate from inference.', '#e09a8f', 'Aether Applications.dc.html#risk'],
+  ['◉', 'Operations', 'What is happening now, and how it compares to before.', '#c9b088', 'Aether Applications.dc.html#operations'],
 ];
-
-const WEDGE: Array<[string, string, string]> = [
-  ['⬡ Profiles', 'One account and buyer view across web, CRM, commerce, and payments.', '#5a85a8'],
-  ['→ Journeys', 'The path from first signal to paid, with evidence for each step.', '#6b9a7c'],
-  ['◉ Signals', 'Attribution pathways from campaigns and communications to revenue.', '#c9975a'],
-  ['◈ Value', 'Revenue connected to the relationships that produced it.', '#a88a5a'],
-  ['▲ Risk', 'Churn, dispute, and exposure indicators — each with its confidence and source.', '#b5564a'],
-];
-
-/** Maturity groups (capabilities.ts / capability-state.ts); nothing is described as generally available. */
-const SURFACES = {
-  alpha: [['◉', 'Signals and Events', 'Canonical observations from SDKs and connectors.', '2 1 340px'], ['⬡', 'Profiles', 'A resolved person, account, or organization.', '1 1 220px'], ['⚙', 'Connectors', 'Authorize, sync, and monitor each source.', '1 1 220px'], ['→', 'Journeys', 'Ordered paths through touchpoints and outcomes.', '1 1 220px']],
-  partner: [['◈', 'Lenses', 'Saved perspectives for one question.'], ['✉', 'Communications', 'Messages as part of the relationship record.'], ['↑', 'Value', 'Revenue linked to relationships.'], ['▲', 'Risk', 'Exposure with confidence and source.']],
-  direction: [['◈', 'Syndicates.', 'Relationship clusters across people, agents, and organizations.'], ['⚗', 'Wider agent governance.', 'Agent-to-agent authorization beyond observation.']],
-} as const;
-
-const PROOF_STANDARD: Array<[string, string, string]> = [
-  ['◈', 'The relationship question and baseline', '#3a6896'],
-  ['●', 'Sources connected and their readiness', '#6b9a7c'],
-  ['○', 'The perspective, with uncertainty shown', '#c9975a'],
-  ['✓', 'Who approved what, and when', '#3a6896'],
-  ['◉', 'The observed outcome and method', '#a88a5a'],
-];
-
-const section = 'border-b border-line';
-const inner = 'mx-auto flex max-w-page flex-col px-6';
-const pad = 'py-[clamp(64px,9vw,112px)]';
-const h2 = 'm-0 text-balance text-[clamp(28px,3.6vw,44px)] font-medium leading-[1.06] tracking-[-0.028em] text-ink';
-const ledeClass = 'm-0 text-[15px] leading-[1.6] text-slate';
-const cardHover = 'transition-colors duration-120 ease-site hover:border-line-strong hover:bg-stone-200';
-const pill = 'rounded-full px-2.5 py-[5px] text-caption';
-
-function MarkRow({ mark, color, children }: { mark: string; color: string; children: string }) {
-  return (
-    <span className="flex gap-2.5 text-[14px] leading-[1.5]">
-      <Glyph>
-        <span style={{ color }}>{mark}</span>
-      </Glyph>
-      <span>{children}</span>
-    </span>
-  );
-}
-
-function AboutPanels({ tab }: { tab: AboutTab }) {
-  const [layerId, setLayerId] = useState<LayerId>('graph');
-  const layer = PRODUCT_LAYERS.find((l) => l.id === layerId) ?? PRODUCT_LAYERS[2]!;
-  const lc = ACCENTS[layer.accent];
-
-  if (tab === 'what') {
-    return (
-      <div className="flex flex-wrap gap-3">
-        <div className="flex min-w-0 flex-[2_1_420px] flex-col gap-2.5 rounded-lg border border-ink bg-ink p-6 text-bone transition-colors duration-120 hover:bg-graphite-hover">
-          <span className="text-label uppercase text-mist">Aether is</span>
-          <span className="text-h text-bone">The operational intelligence layer, built on a graph that maps how people, agents, and organizations relate.</span>
-          <div className="mt-auto flex flex-wrap gap-1.5">
-            <span className={`${pill} bg-steel/20 text-[#9fbad6]`}>intelligence graph infrastructure</span>
-            <span className={`${pill} bg-sage/20 text-mint`}>relationship intelligence</span>
-            <span className={`${pill} bg-ochre/20 text-[#dcb683]`}>governed operational intelligence</span>
-          </div>
-        </div>
-        <div className={`flex min-w-0 flex-[1_1_260px] flex-col gap-2.5 rounded-lg border border-line bg-stone-50 p-6 ${cardHover}`}>
-          <span className="text-label uppercase text-slate">Aether is not</span>
-          {['A customer data platform', 'An analytics dashboard', 'A marketing platform', 'A chatbot'].map((x) => (
-            <MarkRow key={x} mark="■" color={ACCENTS.ember.ink}>
-              {x}
-            </MarkRow>
-          ))}
-        </div>
-        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-2.5 rounded-lg border border-cobalt/35 bg-cobalt/[0.08] p-6">
-          <span className="text-label uppercase text-cobalt-ink">It maps relationships between</span>
-          <div className="flex flex-wrap gap-1.5">
-            {MAPS.map(([g, label, accent]) => (
-              <span key={label} className={`${pill} border border-line bg-stone-50 text-ink`}>
-                <Glyph>
-                  <span style={{ color: ACCENTS[accent].base }}>{g}</span>
-                </Glyph>{' '}
-                {label}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="flex min-w-0 flex-[2_1_420px] flex-col gap-2.5 rounded-lg border border-ochre/40 bg-ochre/10 p-6">
-          <span className="text-label uppercase text-ochre-ink">What it replaces</span>
-          <span className="text-[15px] leading-[1.55]">
-            The manual stitching of analytics, attribution, identity, fraud intelligence, and disconnected event pipelines. Aether
-            becomes the connective layer across them, rather than one more silo.
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  if (tab === 'does') {
-    return (
-      <div className="flex flex-wrap gap-3">
-        {DOES.map(([g, title, body, accent, flex]) => (
-          <div key={title} className={`flex min-w-0 flex-col gap-2.5 rounded-lg border border-line bg-stone-100 p-6 ${cardHover}`} style={{ flex }}>
-            <span
-              aria-hidden="true"
-              className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] font-mono text-[16px]"
-              style={{ background: tint(accent, 0.15), color: ACCENTS[accent].ink }}
-            >
-              {g}
-            </span>
-            <span className="mt-auto text-[16px] font-medium">{title}</span>
-            <span className="text-body-sm leading-[1.55] text-slate">{body}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (tab === 'how') {
-    return (
-      <>
-        <div className="flex flex-wrap gap-3" role="group" aria-label="Product layers">
-          {PRODUCT_LAYERS.map((l) => {
-            const on = l.id === layer.id;
-            const c = ACCENTS[l.accent];
-            return (
-              <button
-                key={l.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setLayerId(l.id)}
-                className="flex min-h-[130px] flex-[1_1_180px] cursor-pointer flex-col items-start gap-1.5 rounded-card border border-b-[3px] p-4 text-left text-ink transition-colors duration-120 hover:[background:var(--hover-bg)]"
-                style={
-                  {
-                    background: on ? tint(l.accent, 0.16) : '#f5f4f1',
-                    borderColor: on ? c.base : '#d8d6d0',
-                    borderBottomColor: c.base,
-                    '--hover-bg': tint(l.accent, 0.16),
-                  } as CSSProperties
-                }
-              >
-                <span
-                  aria-hidden="true"
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] font-mono text-[16px]"
-                  style={{ background: on ? c.base : tint(l.accent, 0.16), color: on ? '#f5f4f1' : c.base }}
-                >
-                  {l.glyph}
-                </span>
-                <span className="mt-auto text-[15px] font-medium">{l.name}</span>
-                <span className="text-caption text-slate">{l.short}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex flex-col gap-2.5 rounded-lg border p-6" style={{ background: tint(layer.accent, 0.16), borderColor: `${lc.base}66` }}>
-          <span className="flex items-center gap-2.5">
-            <Glyph className="text-[20px]">
-              <span style={{ color: lc.base }}>{layer.glyph}</span>
-            </Glyph>
-            <span className="text-[18px] font-medium">{layer.name}</span>
-            <span className="font-mono text-caption text-slate">layer {PRODUCT_LAYERS.indexOf(layer) + 1} / 5</span>
-          </span>
-          <span className="max-w-[720px] text-[14px] leading-[1.6] text-[#3a3935]">{layer.body}</span>
-          <div className="flex flex-wrap gap-1.5">
-            {layer.items.map((x) => (
-              <span key={x} className={`${pill} border border-line bg-stone-50`}>
-                {x}
-              </span>
-            ))}
-          </div>
-        </div>
-        <ol className="m-0 flex list-none flex-wrap items-center gap-1.5 p-0 text-body-sm" aria-label="First experience">
-          <li className="text-label uppercase text-slate">First experience</li>
-          {FIRST_EXPERIENCE.map(([label, accent], i) => (
-            <li key={label} className="flex items-center gap-1.5">
-              {i > 0 && (
-                <span aria-hidden="true" className="font-mono text-ash">
-                  →
-                </span>
-              )}
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full px-[11px] py-1.5 font-medium"
-                style={{ background: tint(accent, 0.16), color: ACCENTS[accent].ink }}
-              >
-                <span className="font-mono">{String(i + 1).padStart(2, '0')}</span>
-                {label}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </>
-    );
-  }
-
-  if (tab === 'value') {
-    return (
-      <>
-        <div className="flex flex-wrap gap-3">
-          <div className="flex min-w-0 flex-[2_1_440px] flex-col gap-3.5 rounded-lg border border-ink bg-ink p-6 text-bone">
-            <span className="flex justify-between gap-2">
-              <span className="text-label uppercase text-mist">Example · synthetic ecommerce tenant</span>
-              <span className="font-mono text-[11px] text-ochre">the moment it clicks</span>
-            </span>
-            <span className="text-h text-bone">
-              A top customer looks healthy in every dashboard. The graph shows she is two hops from a flagged settlement cluster —
-              through an agent acting for her.
-            </span>
-            <div className="mt-auto grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1.5 rounded-[10px] border border-graphite-hairline p-3">
-                <span className="font-mono text-[11px] text-ember">■ before</span>
-                <span className="text-body-sm leading-[1.5] text-mist">
-                  Analytics, CRM, payments, and fraud tooling — four partial views, no relationship between them.
-                </span>
-              </div>
-              <div className="flex flex-col gap-1.5 rounded-[10px] border border-sage/50 bg-sage/10 p-3">
-                <span className="font-mono text-[11px] text-sage">● with Aether</span>
-                <span className="text-body-sm leading-[1.5] text-bone">
-                  One path from customer to agent to cluster, with each edge&apos;s evidence and confidence.
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="grid flex-[1_1_280px] grid-cols-2 gap-2">
-            {([
-              ['4 → 1', 'systems to one perspective', 'cobalt'],
-              ['2 hops', 'to the hidden cluster', 'ochre'],
-              ['0.88', 'confidence, shown not hidden', 'ember'],
-              ['1', 'human decision, recorded', 'sage'],
-            ] as Array<[string, string, Accent]>).map(([v, k, accent]) => (
-              <div
-                key={k}
-                className="flex flex-col gap-1 rounded-card border p-4"
-                style={{ background: tint(accent, 0.12), borderColor: tint(accent, 0.38) }}
-              >
-                <span className="text-[28px] font-medium tracking-[-0.5px]" style={{ color: ACCENTS[accent].ink }}>
-                  {v}
-                </span>
-                <span className="text-caption text-[#3a3935]">{k}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <span className="text-body-sm text-slate">
-          Open the Profile 360 at the top of this page and use the Risk tab to walk through the same example.
-        </span>
-      </>
-    );
-  }
-
-  return (
-    <div className="flex flex-wrap gap-3">
-      <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-2.5 rounded-lg border border-sage/40 bg-sage/10 p-6">
-        <span className="text-label uppercase text-sage-ink">Aether may</span>
-        {['Recommend', 'Identify', 'Coordinate', 'Predict', 'Analyze'].map((x) => (
-          <MarkRow key={x} mark="✓" color={ACCENTS.sage.ink}>
-            {x}
-          </MarkRow>
-        ))}
-      </div>
-      <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-2.5 rounded-lg border border-ember/35 bg-ember/[0.08] p-6">
-        <span className="text-label uppercase text-ember-ink">Aether may not</span>
-        {['Execute irreversible, high-impact actions without human approval', 'Operate outside governed policy boundaries', 'Remove human oversight from critical decisions'].map((x) => (
-          <MarkRow key={x} mark="■" color={ACCENTS.ember.ink}>
-            {x}
-          </MarkRow>
-        ))}
-      </div>
-      <div className={`flex min-w-0 flex-[1_1_300px] flex-col gap-2.5 rounded-lg border border-line bg-stone-100 p-6 ${cardHover}`}>
-        <span className="text-label uppercase text-slate">Your data</span>
-        <MarkRow mark="◈" color={ACCENTS.cobalt.base}>
-          You own raw data, event streams, and records.
-        </MarkRow>
-        <MarkRow mark="⬡" color={ACCENTS.cobalt.base}>
-          Tenant intelligence never crosses tenants.
-        </MarkRow>
-        <MarkRow mark="↺" color={ACCENTS.cobalt.base}>
-          Deletion removes raw data and stops ingestion.
-        </MarkRow>
-      </div>
-      <div className="flex min-w-0 flex-[1_1_100%] flex-row flex-wrap items-center gap-2 rounded-lg border border-line bg-stone-50 p-6">
-        <span className="text-label uppercase text-slate">Deployment models</span>
-        {([
-          ['multi-tenant cloud', 'sage'],
-          ['enterprise isolated', 'cobalt'],
-          ['regulated cloud · planned', 'ochre'],
-          ['on-premise · planned', 'ember'],
-          ['air-gapped · planned', 'solar'],
-        ] as Array<[string, Accent]>).map(([label, accent]) => (
-          <span key={label} className={`${pill} font-medium`} style={{ background: tint(accent, 0.16), color: ACCENTS[accent].ink }}>
-            {label}
-          </span>
-        ))}
-        <span className="ml-auto text-caption text-slate">Designed for GDPR and SOC 2 readiness · no certification claimed</span>
-      </div>
-    </div>
-  );
-}
 
 export function AetherHomePage() {
-  const { href } = useSite();
-  const [about, setAbout] = useState<AboutTab>('what');
-
+  const link = useLink();
+  usePageMeta('aether-home');
+  // Width starts at the prerender default and updates after mount, so the
+  // static HTML and the first client render agree.
+  const [state, setState] = useDesignState<{ stage: number; w: number }>({ stage: 0, w: 1280 });
+  useEffect(() => {
+    const onR = () => setState({ w: window.innerWidth });
+    const onS = () => {
+      const els = document.querySelectorAll('[data-step]');
+      if (!els.length) return;
+      const mid = window.innerHeight * 0.5;
+      let best = 0;
+      let bd = Infinity;
+      els.forEach((el) => {
+        const r = el.getBoundingClientRect();
+        const d = Math.abs(r.top + r.height / 2 - mid);
+        if (d < bd) {
+          bd = d;
+          best = Number(el.getAttribute('data-step'));
+        }
+      });
+      setState((s) => (best !== s.stage ? { stage: best } : {}));
+    };
+    onR();
+    window.addEventListener('resize', onR);
+    window.addEventListener('scroll', onS, { passive: true });
+    const t = setTimeout(onS, 300);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', onR);
+      window.removeEventListener('scroll', onS);
+    };
+  }, [setState]);
+  const st = state.stage;
+  const narrow = state.w < 1000;
+  const steps = STEPS.map(([kicker, title, body, chips], i) => ({
+    i, n: '0' + (i + 1), kicker, title, body, chips,
+    style: 'min-height: ' + (narrow ? 'auto' : '64vh') + '; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: ' + (narrow ? '28px 0' : '0') + '; border-left: 2px solid ' + (i === st ? '#c9975a' : '#2a2a2f') + '; padding-left: 24px; opacity: ' + (i === st || narrow ? 1 : 0.38) + '; transition: opacity 320ms ' + EASE + ', border-color 200ms ' + EASE + ';',
+  }));
+  const scrollStage = narrow ? null : st;
+  const stageLabel = ['01 · fragmented', '02 · connected', '03 · history', '04 · value lens'][st];
+  const bars = [0, 1, 2, 3].map((i) => 'height: 2px; border-radius: 2px; background: ' + (i <= st ? '#c9975a' : '#2a2a2f') + '; transition: background-color 200ms ' + EASE + ';');
+  const stickyStyle = narrow ? 'position: relative; order: -1;' : 'position: sticky; top: calc(50vh - 290px); margin-top: 18vh;';
+  const model = MODEL.map(([n, g, title, body, feats, href, c]) => ({
+    n, g, title, body, href, featLine: feats.join(' · '),
+    gStyle: 'font-family: var(--font-mono); font-size: 16px; color: ' + c + ';',
+    style: 'display: flex; flex-direction: column; gap: 12px; padding-top: 20px; border-top: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; transition: border-color 200ms cubic-bezier(0.22,1,0.36,1);',
+  }));
+  const questions = QUESTIONS.map(([q, a, g, c, href]) => ({ q, a, g, href, dot: 'width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; transform: translateY(-3px); background: ' + c + ';', aStyle: 'font-size: 13px; font-weight: 500; white-space: nowrap; color: ' + c + ';' }));
+  const scenarios = SCENARIOS.map(([title, g, c, flow, close, href]) => ({
+    title, close, href, gStyle: 'font-family: var(--font-mono); color: ' + c + ';',
+    topStyle: 'display: flex; flex-direction: column; gap: 20px; padding-top: 20px; border-top: 2px solid ' + c + '; text-decoration: none; color: #1a1a1e;',
+    lineStyle: 'display: flex; flex-direction: column; border-left: 1px solid ' + c + '66;',
+    arrowStyle: 'font-family: var(--font-mono); color: ' + c + ';',
+    flow: flow.map((label, i) => {
+      const last = i === flow.length - 1;
+      return { label, dot: 'width: 7px; height: 7px; margin-left: -4px; border-radius: 999px; flex-shrink: 0; box-sizing: border-box; ' + (last ? 'background: ' + c + ';' : 'background: #eceae5; border: 1px solid ' + c + ';'), tStyle: 'font-size: 14px; ' + (last ? 'font-weight: 500; color: #1a1a1e;' : 'color: #4a4945;') };
+    }),
+  }));
+  const profileParts = [['⬡', 'Identity'], ['◉', 'Timeline'], ['↔', 'Relationships'], ['→', 'Journeys'], ['↑', 'Value'], ['✓', 'Evidence']].map(([g, l]) => ({ g, l }));
+  const apps = APPS.map(([g, title, body, c, href]) => ({ g, title, body, href, gStyle: 'font-family: var(--font-mono); font-size: 16px; color: ' + c + ';' }));
   return (
-    <PageShell title="Aether — Connection and relationship intelligence">
-      {/* Hero */}
-      <section className={section}>
-        <div className="mx-auto grid max-w-page items-center gap-[clamp(32px,5vw,56px)] px-6 pb-[clamp(56px,8vw,96px)] pt-[clamp(56px,9vw,120px)] [grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))]">
-          <div className="flex min-w-0 flex-col gap-6">
-            <span className="inline-flex items-center gap-2 text-label uppercase text-slate">
-              <Glyph className="text-body-sm text-cobalt">◈</Glyph>
-              Connection and relationship intelligence
-            </span>
-            <h1 className="m-0 text-balance text-[clamp(44px,6.4vw,80px)] font-medium leading-[0.98] tracking-[-0.042em]">
-              Connect the systems. See the relationships.
-            </h1>
-            <p className="m-0 max-w-[520px] text-pretty text-[17px] leading-[1.55] text-slate">
-              Aether connects where people, agents, organizations, and value flows create evidence — then turns that evidence into
-              governed relationships, perspectives, and observable outcomes.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <ButtonLink href="#connections" variant="ink" arrow className="min-h-[42px] px-[18px]">
-                Explore connections
-              </ButtonLink>
-              <ButtonLink href={href('aether', '/how-it-works')} variant="stone" className="min-h-[42px] px-[18px]">
-                See how Aether works
-              </ButtonLink>
-            </div>
-            <div className="flex flex-wrap gap-2 pt-2">
-              {([
-                ['◈', 'Revenue leaders', 'journeys, value, risk', '#3a6896'],
-                ['⌘', 'Data and engineering', 'what connects, and how', '#8a6433'],
-                ['✓', 'Security and procurement', 'scope, consent, authority', '#4f8466'],
-              ] as const).map(([g, title, sub, color]) => (
-                <span key={title} className="flex flex-[1_1_150px] flex-col gap-1 rounded-control border border-line p-3 text-caption text-slate">
-                  <Glyph>
-                    <span style={{ color }}>{g}</span>
-                  </Glyph>
-                  <span className="text-body-sm font-medium text-ink">{title}</span>
-                  {sub}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="flex min-w-0 flex-col">
-            <Profile360 />
-          </div>
-        </div>
-        <div className="border-t border-line">
-          <dl className="m-0 mx-auto grid max-w-page px-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))]">
-            {([
-              ['5', 'product layers', '#2d5373'],
-              ['4', 'relationship types', '#4f8466'],
-              ['13', 'managed connectors', '#8a6433'],
-              ['4', 'first-party SDKs', '#7d6538'],
-            ] as const).map(([v, k, color], i) => (
-              <div key={k} className={`flex flex-row-reverse items-baseline justify-end gap-2.5 py-[22px] ${i ? 'border-l border-line pl-6' : ''}`}>
-                <dt className="text-body-sm text-slate">{k}</dt>
-                <dd className="m-0 text-[32px] font-medium tracking-[-0.04em]" style={{ color }}>
-                  {v}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
-
-      {/* About */}
-      <section id="about" className={`${section} scroll-mt-14`}>
-        <div className={`${inner} ${pad} gap-6`}>
-          <div className="flex max-w-[760px] flex-col gap-3">
-            <span className="text-label uppercase text-cobalt">About Aether</span>
-            <h2 className={h2}>Intelligence graph infrastructure for organizations operating in an AI-native world</h2>
-          </div>
-          <div role="tablist" aria-label="About Aether" className="flex max-w-full flex-wrap gap-1.5 self-start rounded-[14px] border border-line bg-stone-100 p-1">
-            {ABOUT_TABS.map(([id, g, label, accent]) => {
-              const on = about === id;
-              const base = ACCENTS[accent].base;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  id={`about-tab-${id}`}
-                  aria-selected={on}
-                  aria-controls="about-panel"
-                  onClick={() => setAbout(id)}
-                  className={`inline-flex min-h-[38px] cursor-pointer items-center gap-2 whitespace-nowrap rounded-[10px] border-0 px-3.5 text-body-sm font-medium transition-colors duration-120 ${on ? 'text-stone-50' : 'bg-transparent text-ink hover:bg-stone-200'}`}
-                  style={on ? { background: base } : undefined}
-                >
-                  <Glyph>
-                    <span style={{ color: on ? '#f5f4f1' : base }}>{g}</span>
-                  </Glyph>
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          <div id="about-panel" role="tabpanel" aria-labelledby={`about-tab-${about}`} className="flex flex-col gap-6">
-            <AboutPanels tab={about} />
-          </div>
-        </div>
-      </section>
-
-      {/* Relationships */}
-      <section id="relationships" className={`${section} scroll-mt-14 bg-stone-100`}>
-        <div className={`${inner} ${pad} gap-6`}>
-          <SectionHead
-            accent="sage"
-            eyebrow="Human and agentic relationships"
-            title="Four kinds of relationship. One graph."
-            lede="The economy no longer runs only person to person. Pick a relationship to see what it means, what Aether learns from it, and which layers of the product light up."
-          />
-          <RelationshipExplorer />
-        </div>
-      </section>
-
-      {/* Connections */}
-      <section id="connections" className={`${section} scroll-mt-14`}>
-        <div className={`${inner} ${pad} gap-7`}>
-          <SectionHead
-            eyebrow="Connections"
-            title="The SDK is one path. The relationship layer is the value."
-            lede="The connection method answers where evidence came from. Value appears when that evidence keeps its context, joins the right relationships, and supports a perspective someone can review."
-          />
-          <div className="flex flex-wrap gap-3">
-            <a
-              href={href('aether', '/docs/quickstart')}
-              className={`box-border flex min-h-[220px] flex-[1_1_460px] flex-col gap-2.5 rounded-control border border-line bg-stone-100 p-5 text-ink no-underline hover:text-ink ${cardHover}`}
-            >
-              <ConnectionHead glyph="⌘" accent="cobalt" label="01 · first-party" />
-              <span className="mt-auto text-[20px] font-medium tracking-[-0.3px]">Your applications</span>
-              <span className="text-body-sm leading-[1.55] text-slate">
-                Web, iOS, Android, and React Native SDKs send consent-gated observations to <code className="text-caption">/v1/batch</code>.
+    <div className="dc pg-aether-home">
+    <div data-page="aether-home" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
+      <SiteHeader brand="aether" active="" />
+      <main id="main">
+        <section style={css("border-bottom: 1px solid #d8d6d0;")}>
+          <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(48px, 7vw, 96px) 24px clamp(48px, 7vw, 80px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: clamp(32px, 5vw, 64px); align-items: center;")}>
+            <div style={css("display: flex; flex-direction: column; gap: 24px; min-width: 0;")}>
+              <span style={css("display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
+                <img src={markSrc('aether')} alt="" style={css("width: 16px; height: 16px;")} />
+                {"Aether by Olympus Labs"}
               </span>
-              <span className="flex flex-wrap gap-1.5">
-                {['@aether/web', 'AetherSDK', 'sdk-android', '@aether/react-native'].map((x) => (
-                  <span key={x} className="rounded border border-line bg-stone-50 px-[7px] py-[3px] font-mono text-[11px]">
-                    {x}
+              <h1 style={css("font-size: clamp(48px, 7vw, 88px); font-weight: 500; line-height: 0.96; letter-spacing: -0.045em; margin: 0; color: #1a1a1e; text-wrap: balance;")}>
+                {"See how everything connects."}
+              </h1>
+              <p style={css("font-size: 18px; line-height: 1.55; color: #4a4945; margin: 0; max-width: 500px; text-wrap: pretty;")}>
+                {"Aether brings together activity from all your tools — customers, AI agents, payments, messages — into one live picture you can actually follow."}
+              </p>
+              <div style={css("display: flex; flex-wrap: wrap; gap: 8px; align-items: center;")}>
+                <a href={link("Aether Portal.dc.html?mode=signup")} style={css("display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 20px; box-sizing: border-box; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #2563eb; color: #f5f4f1; border: 1px solid #2563eb; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-979e54bc">
+                  {portalLabel("Get started")}
+                  <span style={css("font-family: var(--font-mono);")}>
+                    {"→"}
                   </span>
-                ))}
-              </span>
-            </a>
-            <div className={`box-border flex min-h-[220px] flex-[1_1_300px] flex-col gap-2.5 rounded-control border border-line bg-stone-100 p-5 ${cardHover}`}>
-              <ConnectionHead glyph="◈" accent="ochre" label="02 · business systems" />
-              <span className="mt-auto text-[20px] font-medium tracking-[-0.3px]">Where the work is recorded</span>
-              <span className="text-body-sm leading-[1.55] text-slate">
-                Commerce, payments, CRM, analytics, support, campaigns, and communications through managed connectors.
-              </span>
+                </a>
+                <a href={link("Contact.dc.html?brand=aether&type=pilot")} style={css("display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 20px; box-sizing: border-box; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #eceae5; color: #1a1a1e; border: 1px solid #d8d6d0; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-dafa5f55">
+                  {"Request a pilot"}
+                </a>
+                <a href={link("Aether How It Works.dc.html")} style={css("display: inline-flex; gap: 6px; font-size: 14px; font-weight: 500; color: #1a1a1e; text-decoration: none; padding: 0 8px;")} className="hv-cc8e330e">
+                  {"See how Aether works"}
+                  <span style={css("font-family: var(--font-mono);")}>
+                    {"→"}
+                  </span>
+                </a>
+              </div>
             </div>
-            <div className="box-border flex min-h-[200px] flex-[1_1_300px] flex-col gap-2.5 rounded-control border border-line bg-stone-50 p-5 transition-colors duration-120 hover:border-line-strong hover:bg-stone-100">
-              <ConnectionHead glyph="↔" accent="sage" label="03 · external" />
-              <span className="mt-auto text-[20px] font-medium tracking-[-0.3px]">Beyond your stack</span>
-              <span className="text-body-sm leading-[1.55] text-slate">
-                Social, community, partner, identity, and market sources — only when authorized and enabled for the tenant.
-              </span>
-            </div>
-            <div className="box-border flex min-h-[200px] flex-[1_1_460px] flex-col gap-2.5 rounded-control border border-ink bg-ink p-5 text-bone transition-colors duration-120 hover:border-graphite-hairline hover:bg-graphite-hover">
-              <ConnectionHead glyph="→" accent="solar" label="04 · direct paths" dark />
-              <span className="mt-auto text-[20px] font-medium tracking-[-0.3px] text-bone">APIs, webhooks, imports, agents</span>
-              <span className="rounded-control border border-graphite-hairline bg-graphite-base px-3 py-2.5 font-mono text-caption text-mist">
-                <span className="text-sage">POST</span> /v1/batch · signed · idempotent
-              </span>
+            <div style={css("min-width: 0; background: #eceae5; border: 1px solid #d8d6d0; border-radius: 12px; padding: 20px;")}>
+              <AetherScene autoplay={true} rotate={true} controls={true} story="customer" />
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 text-body-sm text-slate">
-            <span>Start with the minimum source set that answers the first question. Readiness is shown per connection and per tenant.</span>
-            <a href={href('aether', '/docs/quickstart')} className="inline-flex gap-1.5 text-[14px] font-medium text-ink no-underline hover:text-cobalt">
-              Read the connection docs<Glyph>→</Glyph>
-            </a>
+          <div style={css("border-top: 1px solid #d8d6d0;")}>
+            <div style={css("max-width: 1200px; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));")}>
+              <div style={css("display: flex; align-items: baseline; gap: 10px; padding: 22px 0;")}>
+                <span style={css("font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #2d5373;")}>
+                  {"4"}
+                </span>
+                <span style={css("font-size: 13px; color: #6b6a65;")}>
+                  {"steps · connect, understand, explore, act"}
+                </span>
+              </div>
+              <div style={css("display: flex; align-items: baseline; gap: 10px; padding: 22px 0 22px 24px; border-left: 1px solid #d8d6d0;")}>
+                <span style={css("font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #4f7a5e;")}>
+                  {"1"}
+                </span>
+                <span style={css("font-size: 13px; color: #6b6a65;")}>
+                  {"picture across all your tools"}
+                </span>
+              </div>
+              <div style={css("display: flex; align-items: baseline; gap: 10px; padding: 22px 0 22px 24px; border-left: 1px solid #d8d6d0;")}>
+                <span style={css("font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #8a6433;")}>
+                  {String(CONNECT_CONNECTORS.length)}
+                </span>
+                <span style={css("font-size: 13px; color: #6b6a65;")}>
+                  {"ready-made integrations"}
+                </span>
+              </div>
+              <div style={css("display: flex; align-items: baseline; gap: 10px; padding: 22px 0 22px 24px; border-left: 1px solid #d8d6d0;")}>
+                <span style={css("font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #7d6538;")}>
+                  {"4"}
+                </span>
+                <span style={css("font-size: 13px; color: #6b6a65;")}>
+                  {"SDKs for web and mobile"}
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
-
-      {/* Revenue Intelligence Graph */}
-      <section id="wedge" data-theme="dark" className="scroll-mt-14 bg-ink text-bone">
-        <div className={`mx-auto grid max-w-page gap-10 px-6 ${pad} [grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr))]`}>
-          <div className="flex flex-col gap-4">
-            <span className="inline-flex items-center gap-2 text-label uppercase text-mist">
-              <Glyph className="text-ochre">◈</Glyph>
-              The first commercial package
+        </section>
+        <section id="story" data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+          <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px 0; display: flex; flex-direction: column; gap: 12px; max-width: 1200px;")}>
+            <span style={css("display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
+              <span style={css("font-family: var(--font-mono); color: #c9975a;")}>
+                {"◉"}
+              </span>
+              {"From fragmented to connected"}
             </span>
-            <h2 className={`${h2} text-bone`}>Revenue Intelligence Graph</h2>
-            <p className="m-0 max-w-[480px] text-[15px] leading-[1.6] text-mist">
-              For digital businesses that need one governed view of how customers move from first signal to revenue — and what puts
-              that revenue at risk. A concrete starting point, not the edge of the platform.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <ButtonLink href={href('aether', '/pricing')} variant="bone" arrow className="min-h-[42px] px-[18px]">
-                See packages
-              </ButtonLink>
-              <ButtonLink href={href('aether', '/contact?type=pilot')} variant="ghost-dark" className="min-h-[42px] px-[18px]">
-                Request a pilot
-              </ButtonLink>
+            <h2 style={css("font-size: clamp(32px, 4.4vw, 56px); font-weight: 500; letter-spacing: -0.032em; line-height: 1.02; margin: 0; color: #e8e6e1; max-width: 760px; text-wrap: balance;")}>
+              {"Something happened. Aether works out what it means."}
+            </h2>
+          </div>
+          <div style={css("max-width: 1200px; margin: 0 auto; padding: 36px 24px clamp(64px, 9vw, 112px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(24px, 5vw, 72px); align-items: start;")}>
+            <div style={css("display: flex; flex-direction: column;")}>
+              {(steps).map((s: any, sIndex: number) => (
+                <Fragment key={sIndex}>
+                  <div data-step={s.i} style={css(s.style)}>
+                    <span style={css("font-family: var(--font-mono); font-size: 12px; color: #c9975a;")}>
+                      {s.n}{" · "}{s.kicker}
+                    </span>
+                    <span style={css("font-size: clamp(24px, 2.6vw, 32px); font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; color: #e8e6e1; text-wrap: balance;")}>
+                      {s.title}
+                    </span>
+                    <span style={css("font-size: 15px; line-height: 1.6; color: #a09f99; max-width: 440px;")}>
+                      {s.body}
+                    </span>
+                    <span style={css("font-family: var(--font-mono); font-size: 12px; color: #6b6a65;")}>
+                      {s.chips}
+                    </span>
+                  </div>
+                </Fragment>
+              ))}
+            </div>
+            <div style={css(stickyStyle)}>
+              <div style={css("border: 1px solid #2a2a2f; border-radius: 12px; background: #1a1a1e; padding: 20px; display: flex; flex-direction: column; gap: 14px;")}>
+                <div style={css("display: flex; justify-content: space-between; align-items: center; gap: 8px;")}>
+                  <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
+                    {"Understand a customer"}
+                  </span>
+                  <span style={css("font-family: var(--font-mono); font-size: 11px; color: #c9975a;")}>
+                    {stageLabel}
+                  </span>
+                </div>
+                <AetherScene dark={true} story="customer" stage={scrollStage} autoplay={true} controls={false} />
+                <div style={css("display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;")}>
+                  {(bars).map((b: any, bIndex: number) => (
+                    <Fragment key={bIndex}>
+                      <span style={css(b)} />
+                    </Fragment>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap content-start gap-2">
-            {WEDGE.map(([label, body, color], i) => (
-              <div
-                key={label}
-                className={`flex flex-col gap-1.5 rounded-control border border-graphite-hairline bg-graphite-base p-4 transition-colors duration-120 hover:bg-graphite-hover ${i === WEDGE.length - 1 ? 'flex-[1_1_100%]' : 'flex-[1_1_260px]'}`}
-              >
-                <span className="font-mono text-caption" style={{ color }}>
-                  {label}
-                </span>
-                <span className="text-[14px] text-bone">{body}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Product surfaces */}
-      <section id="surfaces" className={`${section} scroll-mt-14`}>
-        <div className={`${inner} ${pad} gap-6`}>
-          <div className="flex max-w-[720px] flex-col gap-3">
-            <Eyebrow>Product surfaces</Eyebrow>
-            <h2 className={h2}>What exists, what is in validation, what is direction</h2>
-            <p className={ledeClass}>Aether is in pre-production private alpha. Nothing below is described as generally available.</p>
-          </div>
-          <SurfaceGroup dot={<span className="h-2 w-2 rounded-full bg-sage" />} label="Private alpha" note="available to alpha tenants">
-            {SURFACES.alpha.map(([g, title, body, flex]) => (
-              <div key={title} className={`box-border flex min-h-[140px] flex-col gap-2 rounded-control border border-line bg-stone-100 p-[18px] ${cardHover}`} style={{ flex }}>
-                <Glyph className="text-[18px] text-sage-ink">{g}</Glyph>
-                <span className="mt-auto text-[16px] font-medium">{title}</span>
-                <span className="text-body-sm text-slate">{body}</span>
-              </div>
-            ))}
-          </SurfaceGroup>
-          <SurfaceGroup dot={<span className="h-2 w-2 rounded-full bg-ochre" />} label="Design partner" note="bounded validation">
-            {SURFACES.partner.map(([g, title, body]) => (
-              <div
-                key={title}
-                className="box-border flex min-h-[120px] flex-[1_1_220px] flex-col gap-2 rounded-control border border-line bg-stone-50 p-[18px] transition-colors duration-120 hover:border-line-strong hover:bg-stone-100"
-              >
-                <Glyph className="text-[16px] text-ochre-ink">{g}</Glyph>
-                <span className="mt-auto text-[15px] font-medium">{title}</span>
-                <span className="text-body-sm text-slate">{body}</span>
-              </div>
-            ))}
-          </SurfaceGroup>
-          <SurfaceGroup dot={<span className="h-2 w-2 rounded-full border border-ash" />} label="Direction" note="not a current capability">
-            {SURFACES.direction.map(([g, title, body]) => (
-              <div key={title} className="box-border flex flex-[1_1_300px] items-baseline gap-3 rounded-control border border-dashed border-line-strong px-[18px] py-4">
-                <Glyph className="text-ash">{g}</Glyph>
-                <span className="text-body-sm text-slate">
-                  <span className="font-medium text-ink">{title}</span> {body}
-                </span>
-              </div>
-            ))}
-          </SurfaceGroup>
-        </div>
-      </section>
-
-      {/* Go deeper */}
-      <section id="deeper" className={`${section} scroll-mt-14 bg-stone-100`}>
-        <div className={`${inner} ${pad} gap-7`}>
-          <div className="flex max-w-[720px] flex-col gap-3">
-            <Eyebrow>Go deeper</Eyebrow>
-            <h2 className={h2}>Three ways to evaluate Aether</h2>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <DeeperCard
-              href={href('aether', '/how-it-works')}
-              glyph="⌘"
-              accent="cobalt"
-              audience="For decision makers"
-              title="How it works"
-              body="The pipeline, the five product layers, the six evidence states, and a worked example from click to approval."
-              cta="Read how it works"
-            />
-            <DeeperCard
-              href={href('aether', '/security')}
-              glyph="✓"
-              accent="ember"
-              audience="For reviewers"
-              title="Security and trust"
-              body="Tenant isolation, consent gating, key scopes, deletion, and deployment models — with no claims beyond the evidence."
-              cta="Review security"
-            />
-            <DeeperCard
-              href={href('aether', '/docs/quickstart-web')}
-              glyph="◉"
-              accent="sage"
-              audience="For developers"
-              title="A verified event in six steps"
-              body="Install an SDK, send a consent-gated observation, and trace it to a perspective you can inspect."
-              cta="Open the quickstart"
-              dark
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Proof */}
-      <section id="proof" className={`${section} scroll-mt-14 bg-stone-100`}>
-        <div className="mx-auto grid max-w-page items-start gap-10 px-6 py-[clamp(56px,8vw,96px)] [grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr))]">
-          <div className="flex flex-col gap-3.5">
-            <Eyebrow>Proof</Eyebrow>
-            <h2 className="m-0 text-[clamp(26px,3.2vw,36px)] font-medium leading-[1.1] tracking-[-0.026em]">No customer outcomes are published yet</h2>
-            <p className={`${ledeClass} max-w-[460px]`}>Stories appear here only when a proof partner approves them. Each follows the same standard.</p>
-            <a href={href('aether', '/contact?type=proof')} className="inline-flex gap-1.5 text-[14px] font-medium text-ink no-underline hover:text-cobalt">
-              Become a proof partner<Glyph>→</Glyph>
-            </a>
-          </div>
-          <div className="flex flex-col gap-3 rounded-control border border-dashed border-line-strong bg-stone-50 p-5">
-            <Eyebrow>Proof standard</Eyebrow>
-            <ul className="m-0 grid list-none gap-x-2.5 gap-y-2 p-0 text-body-sm leading-[1.5] [grid-template-columns:24px_minmax(0,1fr)]">
-              {PROOF_STANDARD.map(([g, text, color]) => (
-                <li key={text} className="contents">
-                  <Glyph>
-                    <span style={{ color }}>{g}</span>
-                  </Glyph>
-                  <span>{text}</span>
-                </li>
+        </section>
+        <section id="model" style={css("border-bottom: 1px solid #d8d6d0;")}>
+          <div style={css("max-width: 1100px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; align-items: center; gap: clamp(40px, 6vw, 72px);")}>
+            <div style={css("display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px;")}>
+              <h2 style={css("font-size: clamp(32px, 4.6vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; text-wrap: balance;")}>
+                {"Connect. Understand. Explore. Act."}
+              </h2>
+              <p style={css("font-size: 16px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 480px;")}>
+                {"Aether does four things. Everything in the product fits into one of them."}
+              </p>
+            </div>
+            <div style={css("width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: clamp(24px, 3vw, 40px);")}>
+              {(model).map((m: any, mIndex: number) => (
+                <Fragment key={mIndex}>
+                  <a href={link(m.href)} style={css(m.style)} className="hv-580d1153">
+                    <span style={css("display: flex; align-items: baseline; gap: 10px;")}>
+                      <span style={css(m.gStyle)}>
+                        {m.g}
+                      </span>
+                      <span style={css("font-family: var(--font-mono); font-size: 12px; color: #9c9b95;")}>
+                        {m.n}
+                      </span>
+                    </span>
+                    <span style={css("font-size: 22px; font-weight: 500; letter-spacing: -0.33px;")}>
+                      {m.title}
+                    </span>
+                    <span style={css("font-size: 14px; line-height: 1.6; color: #6b6a65;")}>
+                      {m.body}
+                    </span>
+                    <span style={css("font-size: 12px; line-height: 1.6; color: #9c9b95; margin-top: auto; padding-top: 8px;")}>
+                      {m.featLine}
+                    </span>
+                  </a>
+                </Fragment>
               ))}
-            </ul>
+            </div>
           </div>
-        </div>
-      </section>
-
-      {/* Closing */}
-      <section>
-        <div className="mx-auto flex max-w-page flex-col items-start gap-5 px-6 py-[clamp(72px,10vw,128px)]">
-          <h2 className="m-0 max-w-[720px] text-balance text-[clamp(28px,4vw,48px)] font-medium leading-[1.05] tracking-[-0.025em]">
-            Bring one relationship question. Start the loop.
-          </h2>
-          <p className={`${ledeClass} max-w-[560px]`}>
-            You do not need to know the package or the connection path. Describe the question, where the evidence lives, and the
-            outcome that matters.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <ButtonLink href={href('aether', '/contact?type=pilot')} variant="ink" arrow className="min-h-[42px] px-[18px]">
-              Request a pilot
-            </ButtonLink>
-            <ButtonLink href={href('aether', '/pricing')} variant="stone" className="min-h-[42px] px-[18px]">
-              {pilotOnly() ? 'See packages' : 'Start self-service'}
-            </ButtonLink>
-            {!pilotOnly() && (
-              <a href={href('aether', '/app/signup')} className="inline-flex gap-1.5 px-2 text-[14px] font-medium text-ink no-underline hover:text-cobalt">
-                Create an account<Glyph>→</Glyph>
+        </section>
+        <section id="understand" style={css("border-bottom: 1px solid #d8d6d0;")}>
+          <div style={css("max-width: 880px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; align-items: center; gap: clamp(36px, 5vw, 56px);")}>
+            <div style={css("display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px;")}>
+              <h2 style={css("font-size: clamp(32px, 4.6vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; text-wrap: balance;")}>
+                {"Ask a question. Get a clear answer."}
+              </h2>
+              <p style={css("font-size: 16px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 460px;")}>
+                {"Every part of Aether answers one everyday question, from the same connected picture."}
+              </p>
+            </div>
+            <div style={css("width: 100%; display: flex; flex-direction: column; border-top: 1px solid #d8d6d0;")}>
+              {(questions).map((q: any, qIndex: number) => (
+                <Fragment key={qIndex}>
+                  <a href={link(q.href)} style={css("display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 16px; padding: 16px 0; border-bottom: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; transition: padding 200ms cubic-bezier(0.22,1,0.36,1);")} className="hv-33c6c939">
+                    <span style={css("display: flex; align-items: baseline; gap: 14px;")}>
+                      <span style={css(q.dot)} />
+                      <span style={css("font-size: clamp(17px, 1.8vw, 21px); font-weight: 500; letter-spacing: -0.01em;")}>
+                        {q.q}
+                      </span>
+                    </span>
+                    <span style={css(q.aStyle)}>
+                      <span style={css("font-family: var(--font-mono); margin-right: 6px;")}>
+                        {q.g}
+                      </span>
+                      {q.a}{" "}
+                      <span style={css("font-family: var(--font-mono);")}>
+                        {"→"}
+                      </span>
+                    </span>
+                  </a>
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        </section>
+        <section id="scenarios" style={css("border-bottom: 1px solid #d8d6d0; background: #eceae5;")}>
+          <div style={css("max-width: 1100px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; align-items: center; gap: clamp(40px, 6vw, 72px);")}>
+            <div style={css("display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px;")}>
+              <h2 style={css("font-size: clamp(32px, 4.6vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; text-wrap: balance;")}>
+                {"One product. Very different stories."}
+              </h2>
+              <p style={css("font-size: 16px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 500px;")}>
+                {"A customer’s path to purchase, an AI agent’s chain of tasks, the source of a sale — Aether follows whatever actually happened."}
+              </p>
+            </div>
+            <div style={css("width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: clamp(24px, 4vw, 56px);")}>
+              {(scenarios).map((sc: any, scIndex: number) => (
+                <Fragment key={scIndex}>
+                  <a href={link(sc.href)} style={css(sc.topStyle)} className="hv-75877933">
+                    <span style={css("font-size: 20px; font-weight: 500; letter-spacing: -0.3px;")}>
+                      {sc.title}
+                    </span>
+                    <span style={css(sc.lineStyle)}>
+                      {(sc.flow).map((f: any, fIndex: number) => (
+                        <Fragment key={fIndex}>
+                          <span style={css("display: flex; align-items: center; gap: 14px; padding: 6px 0;")}>
+                            <span style={css(f.dot)} />
+                            <span style={css(f.tStyle)}>
+                              {f.label}
+                            </span>
+                          </span>
+                        </Fragment>
+                      ))}
+                    </span>
+                    <span style={css("font-size: 13px; line-height: 1.55; color: #6b6a65; margin-top: auto;")}>
+                      {sc.close}{" "}
+                      <span style={css(sc.arrowStyle)}>
+                        {"→"}
+                      </span>
+                    </span>
+                  </a>
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        </section>
+        <section id="product" style={css("border-bottom: 1px solid #d8d6d0; background: #eceae5;")}>
+          <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(32px, 5vw, 64px); align-items: center;")}>
+            <div style={css("min-width: 0; display: flex; justify-content: center; align-items: flex-start;")}>
+              <div style={css("zoom: 0.8; flex-shrink: 0; width: 402px; height: 874px;")}>
+                <IOSDevice dark={true} style={css("display: block; width: 402px; height: 874px;")}>
+                  <div style={css("padding-top: 54px; background: #000; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column;")}>
+                    <Profile360 ios={true} style={css("flex: 1; display: flex; flex-direction: column;")} />
+                  </div>
+                </IOSDevice>
+              </div>
+            </div>
+            <div style={css("display: flex; flex-direction: column; gap: 16px;")}>
+              <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #3a6896;")}>
+                {"What using it looks like"}
+              </span>
+              <h2 style={css("font-size: clamp(30px, 3.8vw, 48px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.04; margin: 0; text-wrap: balance;")}>
+                {"Everything about one customer, in one view."}
+              </h2>
+              <p style={css("font-size: 15px; line-height: 1.6; color: #4a4945; margin: 0; max-width: 460px;")}>
+                {"Your CRM knows an email. Your analytics knows a browser. Stripe knows a customer ID. Aether figures out they’re all the same person — and shows you everything about them in one place, with the reasons why."}
+              </p>
+              <div style={css("display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 460px;")}>
+                {(profileParts).map((p: any, pIndex: number) => (
+                  <Fragment key={pIndex}>
+                    <span style={css("display: flex; gap: 8px; font-size: 13px; padding: 10px 12px; border-radius: 6px; background: #f5f4f1; border: 1px solid #d8d6d0;")}>
+                      <span style={css("font-family: var(--font-mono); color: #3a6896;")}>
+                        {p.g}
+                      </span>
+                      {p.l}
+                    </span>
+                  </Fragment>
+                ))}
+              </div>
+              <a href={link("Aether Platform.dc.html")} style={css("display: inline-flex; gap: 6px; font-size: 14px; font-weight: 500; color: #1a1a1e; text-decoration: none; margin-top: 4px;")} className="hv-cc8e330e">
+                {"Explore the platform"}
+                <span style={css("font-family: var(--font-mono);")}>
+                  {"→"}
+                </span>
               </a>
-            )}
+            </div>
           </div>
-        </div>
-      </section>
-    </PageShell>
-  );
-}
-
-function ConnectionHead({ glyph, accent, label, dark }: { glyph: string; accent: Accent; label: string; dark?: boolean }) {
-  return (
-    <span className="flex items-center justify-between">
-      <span
-        aria-hidden="true"
-        className="flex h-8 w-8 items-center justify-center rounded-control font-mono text-[16px]"
-        style={{ background: tint(accent, dark ? 0.2 : 0.16), color: dark ? ACCENTS.ochre.base : ACCENTS[accent].ink }}
-      >
-        {glyph}
-      </span>
-      <span className={`font-mono text-caption ${dark ? 'text-mist' : 'text-slate'}`}>{label}</span>
-    </span>
-  );
-}
-
-function SurfaceGroup({ dot, label, note, children }: { dot: ReactNode; label: string; note: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <span className="flex items-center gap-2 text-body-sm font-medium">
-        {dot}
-        {label}
-        <span className="font-normal text-slate">· {note}</span>
-      </span>
-      <div className="flex flex-wrap gap-3">{children}</div>
+        </section>
+        <section id="applications" data-theme="dark" style={css("background: #1a1a1e; color: #e8e6e1;")}>
+          <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(32px, 5vw, 72px); align-items: start;")}>
+            <div style={css("display: flex; flex-direction: column; gap: 16px;")}>
+              <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
+                {"Applications of Aether"}
+              </span>
+              <h2 style={css("font-size: clamp(30px, 3.8vw, 48px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.04; margin: 0; color: #e8e6e1; text-wrap: balance;")}>
+                {"Endless applications."}
+              </h2>
+              <p style={css("font-size: 15px; line-height: 1.6; color: #a09f99; margin: 0; max-width: 440px;")}>
+                {"Not separate products — the same Aether, pointed at different questions."}
+              </p>
+              <div style={css("display: flex; flex-direction: column; align-items: center; gap: 0; margin-top: 16px; padding: 24px; border: 1px solid #2a2a2f; border-radius: 12px; background: #111114; font-family: var(--font-mono); font-size: 13px; max-width: 360px; box-sizing: border-box;")}>
+                <span style={css("display: flex; gap: 8px;")}>
+                  <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #9fbad6;")}>
+                    {"● people"}
+                  </span>
+                  <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #dcb683;")}>
+                    {"⬡ agents"}
+                  </span>
+                  <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #8fb0cc;")}>
+                    {"○ systems"}
+                  </span>
+                </span>
+                <span style={css("color: #6b6a65; padding: 6px 0;")}>
+                  {"↓"}
+                </span>
+                <span style={css("padding: 6px 10px; border: 1px solid #3a3a40; border-radius: 6px; color: #e8e6e1;")}>
+                  {"↔ relationships"}
+                </span>
+                <span style={css("color: #6b6a65; padding: 6px 0;")}>
+                  {"↓"}
+                </span>
+                <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #a09f99;")}>
+                  {"◉ activity"}
+                </span>
+                <span style={css("color: #6b6a65; padding: 6px 0;")}>
+                  {"↓"}
+                </span>
+                <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #9cc4a9;")}>
+                  {"↑ value"}
+                </span>
+                <span style={css("color: #6b6a65; padding: 6px 0;")}>
+                  {"↓"}
+                </span>
+                <span style={css("padding: 6px 12px; border-radius: 6px; background: #e8e6e1; color: #1a1a1e;")}>
+                  {"✓ outcomes"}
+                </span>
+              </div>
+            </div>
+            <div style={css("display: flex; flex-direction: column; border-top: 1px solid #2a2a2f;")}>
+              {(apps).map((a: any, aIndex: number) => (
+                <Fragment key={aIndex}>
+                  <a href={link(a.href)} style={css("display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: baseline; padding: 20px 4px; border-bottom: 1px solid #2a2a2f; text-decoration: none; color: #e8e6e1; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-51ea9421">
+                    <span style={css(a.gStyle)}>
+                      {a.g}
+                    </span>
+                    <span style={css("display: flex; flex-direction: column; gap: 4px;")}>
+                      <span style={css("font-size: 18px; font-weight: 500; letter-spacing: -0.2px;")}>
+                        {a.title}
+                      </span>
+                      <span style={css("font-size: 13px; color: #a09f99; line-height: 1.5;")}>
+                        {a.body}
+                      </span>
+                    </span>
+                    <span style={css("font-family: var(--font-mono); color: #6b6a65;")}>
+                      {"→"}
+                    </span>
+                  </a>
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        </section>
+        <section id="depth" style={css("border-bottom: 1px solid #d8d6d0;")}>
+          <div style={css("max-width: 880px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; align-items: center; gap: clamp(36px, 5vw, 56px);")}>
+            <h2 style={css("font-size: clamp(32px, 4.6vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; text-align: center; text-wrap: balance;")}>
+              {"Read as much or as little as you need."}
+            </h2>
+            <div style={css("width: 100%; display: flex; flex-direction: column; border-top: 1px solid #d8d6d0;")}>
+              <a href={link("Olympus Technology.dc.html")} style={css("display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 24px; align-items: baseline; padding: 28px 0; border-bottom: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; transition: padding 200ms cubic-bezier(0.22,1,0.36,1);")} className="hv-33c6c939">
+                <span style={css("font-family: var(--font-mono); font-size: 12px; color: #6b6a65;")}>
+                  {"10 seconds"}
+                </span>
+                <span style={css("font-size: clamp(17px, 1.8vw, 21px); font-weight: 500; letter-spacing: -0.01em; line-height: 1.4;")}>
+                  {"Olympus builds technology that connects activity across people, agents and systems so organizations can understand what is happening and act on it."}
+                </span>
+                <span style={css("font-family: var(--font-mono); color: #9c9b95;")}>
+                  {"→"}
+                </span>
+              </a>
+              <a href={link("Aether Platform.dc.html")} style={css("display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 24px; align-items: baseline; padding: 28px 0; border-bottom: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; transition: padding 200ms cubic-bezier(0.22,1,0.36,1);")} className="hv-33c6c939">
+                <span style={css("font-family: var(--font-mono); font-size: 12px; color: #6b6a65;")}>
+                  {"60 seconds"}
+                </span>
+                <span style={css("font-size: clamp(17px, 1.8vw, 21px); font-weight: 500; letter-spacing: -0.01em; line-height: 1.4;")}>
+                  {"Aether creates a connected model of identities, relationships, journeys, activity and value across your systems, then lets you explore that understanding from different perspectives."}
+                </span>
+                <span style={css("font-family: var(--font-mono); color: #9c9b95;")}>
+                  {"→"}
+                </span>
+              </a>
+              <a href={link("Docs.dc.html")} style={css("display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 24px; align-items: baseline; padding: 28px 0; border-bottom: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; transition: padding 200ms cubic-bezier(0.22,1,0.36,1);")} className="hv-33c6c939">
+                <span style={css("font-family: var(--font-mono); font-size: 12px; color: #6b6a65;")}>
+                  {"Technical evaluation"}
+                </span>
+                <span style={css("font-family: var(--font-mono); font-size: 13px; line-height: 1.65; color: #4a4945;")}>
+                  {"Aether is a tenant-scoped intelligence graph and runtime built around canonical event contracts, normalization, entity resolution, temporal relationships, graph projection and application surfaces."}
+                </span>
+                <span style={css("font-family: var(--font-mono); color: #9c9b95;")}>
+                  {"→"}
+                </span>
+              </a>
+            </div>
+          </div>
+        </section>
+        <section>
+          <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(72px, 10vw, 128px) 24px; display: flex; flex-direction: column; gap: 20px; align-items: center; text-align: center;")}>
+            <h2 style={css("font-size: clamp(32px, 4.6vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; max-width: 820px; color: #1a1a1e; text-wrap: balance;")}>
+              {"Connect your tools. See who’s who, what happened, and how it all fits together."}
+            </h2>
+            <p style={css("font-size: 15px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 560px;")}>
+              {"Start on your own with one connection, or talk to us about a question you want answered."}
+            </p>
+            <div style={css("display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;")}>
+              <a href={link("Aether Portal.dc.html?mode=signup")} style={css("display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 20px; box-sizing: border-box; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #2563eb; color: #f5f4f1; border: 1px solid #2563eb; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-7e3a2e7d">
+                {portalLabel("Get started")}
+                <span style={css("font-family: var(--font-mono);")}>
+                  {"→"}
+                </span>
+              </a>
+              <a href={link("Contact.dc.html?brand=aether&type=pilot")} style={css("display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 44px; padding: 0 20px; box-sizing: border-box; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #eceae5; color: #1a1a1e; border: 1px solid #d8d6d0;")} className="hv-4d1362f5">
+                {"Request a pilot"}
+              </a>
+              <a href={link("Aether Pricing.dc.html")} style={css("display: inline-flex; gap: 6px; font-size: 14px; font-weight: 500; color: #1a1a1e; text-decoration: none; padding: 0 8px;")} className="hv-cc8e330e">
+                {"See pricing"}
+                <span style={css("font-family: var(--font-mono);")}>
+                  {"→"}
+                </span>
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+      <SiteFooter />
     </div>
-  );
-}
-
-function DeeperCard(props: { href: string; glyph: string; accent: Accent; audience: string; title: string; body: string; cta: string; dark?: boolean }) {
-  const { href, glyph, accent, audience, title, body, cta, dark } = props;
-  const c = ACCENTS[accent];
-  return (
-    <a
-      href={href}
-      className={
-        'box-border flex min-h-[260px] flex-[1_1_320px] flex-col gap-3 rounded-lg border p-7 no-underline transition-colors duration-120 ' +
-        (dark
-          ? 'border-ink bg-ink text-bone hover:border-graphite-hairline hover:bg-graphite-hover hover:text-bone'
-          : 'border-line bg-stone-50 text-ink hover:border-line-strong hover:bg-stone-200 hover:text-ink')
-      }
-    >
-      <span className="flex items-center justify-between">
-        <span
-          aria-hidden="true"
-          className="flex h-10 w-10 items-center justify-center rounded-control font-mono text-[18px]"
-          style={{ background: tint(accent, dark ? 0.2 : 0.12), color: dark ? '#9cc4a9' : c.ink }}
-        >
-          {glyph}
-        </span>
-        <span className={`text-label uppercase ${dark ? 'text-mist' : 'text-slate'}`}>{audience}</span>
-      </span>
-      <span className="mt-auto text-[24px] font-medium leading-[1.2] tracking-[-0.4px]">{title}</span>
-      <span className={`text-[14px] leading-[1.6] ${dark ? 'text-mist' : 'text-graphite-body'}`}>{body}</span>
-      <span className="text-[14px] font-medium" style={{ color: dark ? '#9cc4a9' : c.ink }}>
-        {cta} →
-      </span>
-    </a>
+    </div>
   );
 }

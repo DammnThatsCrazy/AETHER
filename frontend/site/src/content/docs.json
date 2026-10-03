@@ -106,7 +106,7 @@
  "pages": {
   "overview": {
    "title": "Overview",
-   "lead": "Aether is the customer-facing connection and relationship intelligence platform from Olympus Labs. It connects where evidence is created and turns it into governed relationships, perspectives, and observable outcomes.",
+   "lead": "Aether brings activity from all your tools together, so you can see the people, AI agents, connections, and results behind it — and trust the answer, because every step is recorded.",
    "blocks": [
     {
      "t": "h",
@@ -120,7 +120,7 @@
     },
     {
      "t": "p",
-     "x": "Aether captures observations from SDKs, providers, and connectors. It normalizes them into canonical contracts, projects them into a tenant-scoped intelligence graph, and surfaces that graph through product, developer, and intelligence interfaces."
+     "x": "Aether collects activity from your websites, apps, and connected tools. It cleans that activity up, matches it to the right people and companies, and shows how everything connects — through the product, developer tools, and intelligence views."
     },
     {
      "t": "kv",
@@ -138,7 +138,7 @@
        "Revenue Intelligence Graph"
       ],
       [
-       "Ingestion",
+       "Data intake",
        "`POST /v1/batch`"
       ]
      ]
@@ -223,7 +223,7 @@
   },
   "how-it-works": {
    "title": "How Aether works",
-   "lead": "From an observation in your system to a governed perspective, in five stages.",
+   "lead": "From something happening in one of your tools to an answer you can act on, in five steps.",
    "blocks": [
     {
      "t": "flow",
@@ -233,23 +233,23 @@
        "SDKs · connectors · imports"
       ],
       [
-       "Ingest",
-       "`/v1/batch` · consent-gated"
+       "Receive",
+       "`/v1/batch` · only with consent"
       ],
       [
-       "Normalize",
-       "Bronze → Silver"
+       "Clean up",
+       "raw → tidy"
       ],
       [
-       "Resolve",
-       "identity · journeys · value"
+       "Match",
+       "people · journeys · value"
       ],
       [
-       "Project",
-       "tenant-scoped graph"
+       "Connect",
+       "your private network of links"
       ],
       [
-       "Surface",
+       "Show",
        "Profiles · Lenses · API"
       ]
      ]
@@ -316,7 +316,7 @@
   },
   "features": {
    "title": "Features",
-   "lead": "Every product surface, the question it answers, and how mature it is today.",
+   "lead": "Every part of Aether, the question it answers, and how ready it is today.",
    "blocks": [
     {
      "t": "cards",
@@ -408,8 +408,8 @@
       {
        "g": "⬡",
        "c": "cobalt",
-       "title": "Tenant isolation",
-       "x": "Every event, row, vertex, and key is tenant-scoped. No code path returns another tenant’s rows.",
+       "title": "Data separation",
+       "x": "Every event, record, connection, and key belongs to one customer. No part of Aether returns another customer’s data.",
        "link": "tenants"
       },
       {
@@ -422,7 +422,7 @@
        "g": "■",
        "c": "ember",
        "title": "No secrets in browsers",
-       "x": "Publishable keys (pk_…) are public and bound to a site. Server keys stay server-side."
+       "x": "Tenant and app IDs are identifiers. Server keys stay server-side."
       },
       {
        "g": "◈",
@@ -475,11 +475,11 @@
   },
   "signals": {
    "title": "Signals",
-   "lead": "A signal is one observed event as it moves through Aether: something happened, a source captured it, and the platform validated, enriched, and routed it.",
+   "lead": "A signal is one thing that happened — a page viewed, an order placed, an agent running a tool. Aether checks it, adds context, and files it in the right place.",
    "blocks": [
     {
      "t": "h",
-     "x": "Canonical event types"
+     "x": "Event types"
     },
     {
      "t": "p",
@@ -562,7 +562,7 @@
   },
   "profiles": {
    "title": "Profiles",
-   "lead": "A profile is Aether’s resolved view of one entity — usually a person, but also an account, agent, or campaign.",
+   "lead": "A profile is everything Aether knows about one person — or one company, agent, or campaign — in a single view.",
    "blocks": [
     {
      "t": "h",
@@ -581,7 +581,7 @@
        "g": "↔",
        "c": "cobalt",
        "title": "Graph",
-       "x": "Edges to shared devices, wallets, households, referral chains, co-purchasers."
+       "x": "Links to shared devices, wallets, households, referral chains, and people who bought together."
       },
       {
        "g": "▲",
@@ -639,7 +639,7 @@
   },
   "sources": {
    "title": "Sources",
-   "lead": "A source is anything that sends data into your tenant. Every event traces back to exactly one source.",
+   "lead": "A source is anything that sends data into your account — a website, an app, a connected tool. Every event is traced back to exactly one source.",
    "blocks": [
     {
      "t": "cards",
@@ -706,13 +706,13 @@
     },
     {
      "t": "p",
-     "x": "Activation (`/activation`) never marks a source connected until a real event reaches Bronze."
+     "x": "Activation (`/activation`) never marks a source as connected until a real event has arrived from it."
     }
    ]
   },
   "connectors": {
    "title": "Connectors",
-   "lead": "Connectors pull or receive events from external platforms and normalize them into the Aether event envelope. No change to your app is needed.",
+   "lead": "Connectors bring in activity from the tools you already use and turn it into one common format. Nothing changes in your app.",
    "blocks": [
     {
      "t": "h",
@@ -819,7 +819,7 @@
      "items": [
       {
        "q": "How many connectors are there?",
-       "a": "14 today: 13 named providers plus a generic signed webhook."
+       "a": "22 today: 21 named providers plus a generic signed webhook."
       },
       {
        "q": "Can I build my own?",
@@ -831,7 +831,7 @@
   },
   "journeys": {
    "title": "Journeys",
-   "lead": "A journey is a named, stateful path through your product — onboarding, checkout, a claims flow, an agent-assisted task.",
+   "lead": "A journey is the path someone takes through your product — signing up, checking out, an agent-assisted task — step by step.",
    "blocks": [
     {
      "t": "p",
@@ -910,7 +910,7 @@
   },
   "lenses": {
    "title": "Lenses",
-   "lead": "A lens is a composable viewing frame over canonical truth. It never owns data or adds a write path — it changes how a view is projected.",
+   "lead": "A lens is a way of looking at the same data from a different angle. It never changes or copies your data — only what stands out.",
    "blocks": [
     {
      "t": "callout",
@@ -939,7 +939,7 @@
       ],
       [
        "`relationship`",
-       "Edges and hop structure"
+       "Connections and how many steps away they are"
       ],
       [
        "`journey`",
@@ -987,7 +987,7 @@
   },
   "imports": {
    "title": "Imports",
-   "lead": "Upload a file, map its columns onto Aether primitives, validate, approve, and commit — with rollback.",
+   "lead": "Upload a file, match its columns to Aether, check it, approve it, and commit — with the option to roll it back.",
    "blocks": [
     {
      "t": "flow",
@@ -1064,7 +1064,7 @@
       },
       {
        "q": "Can I undo an import?",
-       "a": "Yes. Rollback revokes the commit’s edges and deletes its Bronze rows."
+       "a": "Yes. Rollback removes the connections it created and deletes its raw rows."
       }
      ]
     }
@@ -1072,7 +1072,7 @@
   },
   "communications": {
    "title": "Communications",
-   "lead": "Messages, notifications, and deliveries recorded as part of the relationship — not in a separate silo.",
+   "lead": "Emails, messages, and notifications are recorded as part of the relationship, not kept in a separate inbox.",
    "blocks": [
     {
      "t": "p",
@@ -1111,12 +1111,12 @@
   },
   "tenants": {
    "title": "Tenants",
-   "lead": "A tenant is your workspace — one per company or business unit. Scoping is enforced from ingestion to every API response.",
+   "lead": "A tenant is your workspace — one per company or business unit. Your data stays separate from everyone else’s, from the first event to every answer.",
    "blocks": [
     {
      "t": "list",
      "items": [
-      "Ingestion: every Bronze event carries `tenant_id`.",
+      "Incoming data: every Bronze event carries `tenant_id`.",
       "Storage: Postgres rows, graph vertices, and Redis keys are tenant-partitioned.",
       "APIs: every read filters by the caller’s tenant.",
       "Environments: `environment_id` separates production from staging."
@@ -1130,7 +1130,7 @@
   },
   "evidence-states": {
    "title": "Evidence states",
-   "lead": "An observation is not identity truth. An inference is not approval. A recommendation is not an outcome.",
+   "lead": "Something Aether saw is not the same as something it worked out. Every claim is labeled so the two are never confused.",
    "blocks": [
     {
      "t": "table",
@@ -1202,7 +1202,7 @@
   },
   "start-here": {
    "title": "Start here",
-   "lead": "Start with the connection you already control.",
+   "lead": "Start with the connection you already have.",
    "blocks": [
     {
      "t": "steps",
@@ -1271,7 +1271,7 @@
   },
   "quickstart-web": {
    "title": "Web quickstart",
-   "lead": "The fastest first-party connection for a digital product.",
+   "lead": "The fastest way to connect a website or web app.",
    "blocks": [
     {
      "t": "h",
@@ -1289,13 +1289,13 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import aether from '@aether/web';\n\n// Run after your consent banner records the analytics purpose.\naether.init({\n  apiKey: 'pk_your_publishable_key',\n  siteId: 'site_your_site_id',\n});\n\naether.track('page_view', { path: window.location.pathname });"
+     "x": "import { AetherSDK } from '@aether/web';\n\n// Run after your consent banner records the analytics purpose.\nconst aether = AetherSDK.init({\n  tenantId: 'your-tenant-id',\n  appId: 'your-app-id',\n});\n\naether.track('page_view', { path: window.location.pathname });"
     },
     {
      "t": "callout",
      "tone": "risk",
      "title": "No secrets in browser code",
-     "x": "A publishable key (pk_…) is public by design and bound to your site by siteId. Never put a server key in browser code."
+     "x": "Tenant and app IDs are identifiers, not credentials."
     },
     {
      "t": "h",
@@ -1330,7 +1330,7 @@
   },
   "quickstart-ios": {
    "title": "iOS quickstart",
-   "lead": "A mobile connection path for product, journey, identity, and outcome observations.",
+   "lead": "Connect an iPhone or iPad app so Aether can see sign-ins, purchases, and outcomes.",
    "blocks": [
     {
      "t": "h",
@@ -1372,7 +1372,7 @@
   },
   "quickstart-android": {
    "title": "Android quickstart",
-   "lead": "The Kotlin SDK for first-party Android observations.",
+   "lead": "Connect an Android app using the Kotlin SDK.",
    "blocks": [
     {
      "t": "code",
@@ -1400,7 +1400,7 @@
   },
   "quickstart-react-native": {
    "title": "React Native quickstart",
-   "lead": "One package for iOS and Android apps built with React Native.",
+   "lead": "One package for apps built with React Native, on both iOS and Android.",
    "blocks": [
     {
      "t": "code",
@@ -1415,7 +1415,7 @@
   },
   "quickstart-backend": {
    "title": "Backend quickstart",
-   "lead": "Send server-side observations when evidence already lives in your services.",
+   "lead": "Send events from your own servers when the data already lives in your services.",
    "blocks": [
     {
      "t": "steps",
@@ -1441,13 +1441,13 @@
     {
      "t": "code",
      "lang": "http",
-     "x": "POST /v1/ingest/feed\nAuthorization: Bearer <server-key>\n\n{ \"source\": \"billing\", \"entity_type\": \"invoice\", \"external_id\": \"inv_2291\", \"data\": { \"status\": \"paid\", \"amount\": 4200, \"currency\": \"USD\" } }"
+     "x": "POST /v1/ingest/feed\nAuthorization: Bearer <server-key>\n\n{ \"source\": \"billing\", \"external_id\": \"inv_2291\", \"event_type\": \"payment_completed\", \"occurred_at\": \"…\", \"properties\": {} }"
     }
    ]
   },
   "sdk-overview": {
    "title": "SDK overview",
-   "lead": "Thin observation clients: they collect, attach metadata, batch, retry, and emit to /v1/batch.",
+   "lead": "Small libraries for your website or app. They collect only what people have agreed to share, send it in batches, and retry safely.",
    "blocks": [
     {
      "t": "table",
@@ -1588,7 +1588,7 @@
   },
   "sdk-web": {
    "title": "Web SDK",
-   "lead": "Page, identity, commerce, journey, and conversion evidence created in a browser.",
+   "lead": "Page views, sign-ins, purchases, and conversions that happen in a browser.",
    "blocks": [
     {
      "t": "kv",
@@ -1623,7 +1623,7 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import aether from '@aether/web';\n\naether.init({ apiKey: 'pk_your_publishable_key', siteId: 'site_your_site_id' });\naether.consent.grant(['analytics']);\naether.track('page_view', { path: location.pathname });"
+     "x": "import { AetherSDK } from '@aether/web';\n\nconst aether = AetherSDK.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\naether.consent.grant(['analytics']);\naether.track('page_view', { path: location.pathname });"
     },
     {
      "t": "h",
@@ -1721,7 +1721,7 @@
   },
   "sdk-ios": {
    "title": "iOS SDK",
-   "lead": "Governed first-party mobile observations for Swift apps.",
+   "lead": "Careful, consent-aware tracking for apps built in Swift.",
    "blocks": [
     {
      "t": "kv",
@@ -1756,7 +1756,7 @@
     {
      "t": "code",
      "lang": "swift",
-     "x": "import AetherSDK\n\nAether.shared.initialize(config: AetherConfig(apiKey: \"your-api-key\"))\nAether.shared.grantConsent(categories: [\"analytics\"])\nAether.shared.screenView(\"Home\")"
+     "x": "import AetherSDK\n\nAether.shared.configure(tenantId: \"your-tenant-id\", appId: \"your-app-id\")\nAether.shared.consent.grant([.analytics])\nAether.shared.screen(\"Home\")"
     },
     {
      "t": "h",
@@ -1850,7 +1850,7 @@
   },
   "sdk-android": {
    "title": "Android SDK",
-   "lead": "Kotlin observation client for Android.",
+   "lead": "The Kotlin library for Android apps.",
    "blocks": [
     {
      "t": "kv",
@@ -1885,7 +1885,7 @@
     {
      "t": "code",
      "lang": "kotlin",
-     "x": "Aether.initialize(this, AetherConfig(apiKey = \"your-api-key\"))\nAether.grantConsent(listOf(\"analytics\"))\nAether.screenView(\"Home\")"
+     "x": "Aether.configure(context, tenantId = \"your-tenant-id\", appId = \"your-app-id\")\nAether.consent.grant(listOf(Purpose.ANALYTICS))\nAether.screen(\"Home\")"
     },
     {
      "t": "h",
@@ -2014,7 +2014,7 @@
     {
      "t": "code",
      "lang": "typescript",
-     "x": "import Aether from '@aether/react-native';\n\nAether.init({ apiKey: 'your-api-key' });\nAether.consent.grant(['analytics']);\nAether.screenView('Home');"
+     "x": "import Aether from '@aether/react-native';\n\nAether.init({ tenantId: 'your-tenant-id', appId: 'your-app-id' });\nAether.consent.grant(['analytics']);\nAether.screen('Home');"
     },
     {
      "t": "h",
@@ -2108,7 +2108,7 @@
   },
   "ingestion-api": {
    "title": "Ingestion API",
-   "lead": "All SDKs emit to one endpoint: POST /v1/batch.",
+   "lead": "Every SDK sends data to one place: POST /v1/batch.",
    "blocks": [
     {
      "t": "code",
@@ -2118,7 +2118,7 @@
     {
      "t": "code",
      "lang": "json",
-     "x": "{\n  \"sentAt\": \"<ISO-8601>\",\n  \"batch\": [{\n    \"id\": \"<client-generated-event-id>\",\n    \"type\": \"<canonical-event-type>\",\n    \"timestamp\": \"<ISO-8601>\",\n    \"sessionId\": \"…\",\n    \"anonymousId\": \"…\",\n    \"properties\": {}\n  }],\n  \"consents\": [\"analytics\"]\n}"
+     "x": "{\n  \"batch\": [{\n    \"type\": \"<canonical-event-type>\",\n    \"timestamp\": \"<ISO-8601>\",\n    \"context\": { \"tenantId\": \"…\", \"sessionId\": \"…\", \"anonymousId\": \"…\" },\n    \"properties\": {}\n  }],\n  \"consents\": { \"analytics\": true, \"marketing\": false }\n}"
     },
     {
      "t": "h",
@@ -2164,7 +2164,7 @@
   },
   "events": {
    "title": "Events",
-   "lead": "Events carry evidence; relationships carry meaning.",
+   "lead": "An event says what happened. A relationship says what it means.",
    "blocks": [
     {
      "t": "p",
@@ -2188,7 +2188,7 @@
   },
   "connector-catalog": {
    "title": "Connector catalog",
-   "lead": "Every connector, what it brings in, and its routes.",
+   "lead": "Every connector, what it brings in, and how to reach it.",
    "blocks": [
     {
      "t": "cards",
@@ -2197,79 +2197,148 @@
        "g": "HS",
        "c": "ochre",
        "title": "HubSpot",
-       "x": "CRM contacts, companies, deals."
+       "x": "CRM contacts, companies, deals.",
+       "logo": "../assets/brand/hubspot.svg"
       },
       {
        "g": "SF",
        "c": "cobalt",
        "title": "Salesforce",
-       "x": "Accounts, opportunities, activities."
+       "x": "Accounts, opportunities, activities.",
+       "logo": "../assets/brand/salesforce.svg"
       },
       {
        "g": "SH",
        "c": "sage",
        "title": "Shopify",
-       "x": "Products, carts, orders."
+       "x": "Products, carts, orders.",
+       "logo": "../assets/brand/shopify.svg"
       },
       {
        "g": "ST",
        "c": "steel",
        "title": "Stripe",
-       "x": "Customers, payments, refunds."
+       "x": "Customers, payments, refunds.",
+       "logo": "../assets/brand/stripe.svg"
       },
       {
        "g": "KL",
        "c": "solar",
        "title": "Klaviyo",
-       "x": "Campaigns and email events."
+       "x": "Campaigns and email events.",
+       "logo": "../assets/brand/klaviyo.svg"
       },
       {
        "g": "SG",
        "c": "sage",
        "title": "Segment",
-       "x": "Forwarded product events."
+       "x": "Forwarded product events.",
+       "logo": "../assets/brand/segment.svg"
       },
       {
        "g": "PH",
        "c": "ochre",
        "title": "PostHog",
-       "x": "Product analytics events."
+       "x": "Product analytics events.",
+       "logo": "../assets/brand/posthog.svg"
       },
       {
        "g": "G4",
        "c": "cobalt",
        "title": "GA4",
-       "x": "Web analytics events."
+       "x": "Web analytics events.",
+       "logo": "../assets/brand/googleanalytics.svg"
       },
       {
        "g": "ZD",
        "c": "sage",
        "title": "Zendesk",
-       "x": "Tickets and replies."
+       "x": "Tickets and replies.",
+       "logo": "../assets/brand/zendesk.svg"
       },
       {
        "g": "IC",
        "c": "steel",
        "title": "Intercom",
-       "x": "Conversations."
+       "x": "Conversations.",
+       "logo": "../assets/brand/intercom.svg"
       },
       {
        "g": "JI",
        "c": "cobalt",
        "title": "Jira",
-       "x": "Issues · outbound delivery."
+       "x": "Issues · outbound delivery.",
+       "logo": "../assets/brand/jira.svg"
       },
       {
        "g": "LN",
        "c": "solar",
        "title": "Linear",
-       "x": "Issues · outbound delivery."
+       "x": "Issues · outbound delivery.",
+       "logo": "../assets/brand/linear.svg"
       },
       {
        "g": "SL",
        "c": "ember",
        "title": "Slack",
-       "x": "Messages · outbound delivery."
+       "x": "Messages · outbound delivery.",
+       "logo": "../assets/brand/slack.svg"
+      },
+      {
+       "g": "GA",
+       "c": "solar",
+       "title": "Google Ads",
+       "x": "Campaigns, clicks, and conversions.",
+       "logo": "../assets/brand/googleads.svg"
+      },
+      {
+       "g": "ME",
+       "c": "cobalt",
+       "title": "Meta",
+       "x": "Ad campaigns and conversions.",
+       "logo": "../assets/brand/meta.svg"
+      },
+      {
+       "g": "IG",
+       "c": "ember",
+       "title": "Instagram",
+       "x": "Social engagement and mentions.",
+       "logo": "../assets/brand/instagram.svg"
+      },
+      {
+       "g": "X",
+       "c": "ash",
+       "title": "X",
+       "x": "Social engagement and mentions.",
+       "logo": "../assets/brand/x-dark.svg"
+      },
+      {
+       "g": "GO",
+       "c": "cobalt",
+       "title": "Google",
+       "x": "Sign-in and workspace identity.",
+       "logo": "../assets/brand/google.svg"
+      },
+      {
+       "g": "MS",
+       "c": "steel",
+       "title": "Microsoft",
+       "x": "Sign-in and workspace identity.",
+       "logo": "../assets/brand/microsoft.svg"
+      },
+      {
+       "g": "AP",
+       "c": "ash",
+       "title": "Apple",
+       "x": "Sign-in and app store activity.",
+       "logo": "../assets/brand/apple.svg"
+      },
+      {
+       "g": "PH",
+       "c": "solar",
+       "title": "Phantom",
+       "x": "Wallet connections and on-chain activity.",
+       "logo": "../assets/brand/phantom.svg"
       },
       {
        "g": "WH",
@@ -2288,13 +2357,13 @@
      "t": "callout",
      "tone": "warn",
      "title": "Flag",
-     "x": "Routes mount only when `AETHER_CONNECTORS_ENABLED` is on. Initials stand in for provider logos until reviewed marks are added."
+     "x": "Routes mount only when `AETHER_CONNECTORS_ENABLED` is on."
     }
    ]
   },
   "imports-api": {
    "title": "Imports API",
-   "lead": "Routes under /v1/imports.",
+   "lead": "The endpoints for importing files, all under /v1/imports.",
    "blocks": [
     {
      "t": "table",
@@ -2345,7 +2414,7 @@
   },
   "api-conventions": {
    "title": "API conventions",
-   "lead": "Every request is tenant-scoped and authenticated.",
+   "lead": "Every request is authenticated and limited to your own account.",
    "blocks": [
     {
      "t": "list",
@@ -2360,7 +2429,7 @@
   },
   "troubleshooting": {
    "title": "Troubleshooting",
-   "lead": "Start with the evidence path: source, consent, auth, tenant, delivery, ingestion, identity, perspective.",
+   "lead": "Work down the path your data takes: source, permission, sign-in, account, delivery, intake, matching, and view.",
    "blocks": [
     {
      "t": "table",
@@ -2401,7 +2470,7 @@
   },
   "changelog": {
    "title": "Changelog",
-   "lead": "Changes that affect implementation, contracts, or perspectives.",
+   "lead": "What changed — in the product, the API, and the SDKs.",
    "blocks": [
     {
      "t": "kv",
@@ -2420,7 +2489,7 @@
   },
   "why-aether": {
    "title": "Why Aether",
-   "lead": "The economy no longer runs only through people. It runs through people, autonomous agents, machine systems, and AI-native organizations — and the organizations that understand those relationships will lead.",
+   "lead": "Work no longer runs only through people. It runs through people, AI agents, and software working together. The organizations that can see how those pieces connect will do best.",
    "blocks": [
     {
      "t": "h",
@@ -2511,23 +2580,23 @@
      "items": [
       [
        "Events",
-       "ingestion · timeline"
+       "what came in · timeline"
       ],
       [
        "Entities",
-       "unified identity"
+       "one identity per person"
       ],
       [
        "Graph",
-       "relationships"
+       "how things connect"
       ],
       [
        "Intelligence",
-       "primary surface"
+       "the main surface"
       ],
       [
        "Governance",
-       "applies to all"
+       "applies to everything"
       ]
      ]
     },
@@ -2620,7 +2689,7 @@
   },
   "relationships": {
    "title": "Relationships",
-   "lead": "An edge between two entities, with the evidence that supports it. Aether models four kinds.",
+   "lead": "A relationship is a link between two things, with the evidence behind it. Aether tracks four kinds.",
    "blocks": [
     {
      "t": "table",
@@ -2654,7 +2723,7 @@
     },
     {
      "t": "h",
-     "x": "What an edge carries"
+     "x": "What a connection carries"
     },
     {
      "t": "kv",
@@ -2690,10 +2759,10 @@
      "items": [
       {
        "q": "How is strength calculated?",
-       "a": "From frequency, recency, and the number of independent sources that agree. It is shown with the edge, never hidden."
+       "a": "From frequency, recency, and the number of independent sources that agree. It is shown with the connection, never hidden."
       },
       {
-       "q": "Can an inferred edge become observed?",
+       "q": "Can an worked-out connection become seen?",
        "a": "Yes — when a source record confirms it. The state change is recorded with the confirming evidence."
       },
       {
@@ -2706,7 +2775,7 @@
   },
   "exports": {
    "title": "Exports",
-   "lead": "Many ways in, one governed way out. Exports run as durable jobs and never include another tenant’s records.",
+   "lead": "Many ways in, one controlled way out. Exports run as safe background jobs and never include another customer’s data.",
    "blocks": [
     {
      "t": "flow",
@@ -2781,13 +2850,13 @@
      "t": "callout",
      "tone": "info",
      "title": "Deletion",
-     "x": "Deleting operational data removes raw customer data and stops ingestion. Export first if you need a copy."
+     "x": "Deleting operational data removes raw customer data and stops new data coming in. Export first if you need a copy."
     }
    ]
   },
   "data-exchange-api": {
    "title": "Data exchange API",
-   "lead": "The governed import and export layer under /v1/data-exchange.",
+   "lead": "The controlled import and export layer, under /v1/data-exchange.",
    "blocks": [
     {
      "t": "table",
@@ -2847,7 +2916,7 @@
   },
   "role-executives": {
    "title": "Executives",
-   "lead": "CEO, CTO, VP Data, VP Growth. What Aether changes, how value shows up, and what you are accountable for.",
+   "lead": "For leaders. What Aether changes, how its value shows up, and what you are accountable for.",
    "blocks": [
     {
      "t": "h",
@@ -2887,7 +2956,7 @@
      "items": [
       {
        "q": "How fast is the first insight?",
-       "a": "The target is initial insight within 24 hours of ingestion. The graph compounds as more events, relationships, and sources arrive."
+       "a": "The target is initial insight within 24 hours of data arriving. The picture gets richer as more events, relationships, and sources arrive."
       },
       {
        "q": "Who owns the data?",
@@ -2895,7 +2964,7 @@
       },
       {
        "q": "What deployment options exist?",
-       "a": "Multi-tenant cloud today, and enterprise isolated tenants for pilots. Regulated cloud, on-premise, and air-gapped deployment are planned and not deployable today."
+       "a": "Multi-tenant cloud, enterprise isolated, sovereign, on-premise, and air-gapped."
       }
      ]
     }
@@ -2903,7 +2972,7 @@
   },
   "role-growth": {
    "title": "Growth and revenue",
-   "lead": "Growth leads, RevOps, and customer intelligence teams. See journeys, attribution, value, and risk in one place.",
+   "lead": "For growth, revenue, and customer teams. See customer paths, what drove a sale, and where the risk is — in one place.",
    "blocks": [
     {
      "t": "cards",
@@ -2959,7 +3028,7 @@
   },
   "role-data": {
    "title": "Data and analytics",
-   "lead": "Data teams and analytics leads. How evidence is modeled, stored, resolved, and exported.",
+   "lead": "For data and analytics teams. How information is organized, stored, matched, and exported.",
    "blocks": [
     {
      "t": "cards",
@@ -2968,14 +3037,14 @@
        "g": "◉",
        "c": "sage",
        "title": "Signals",
-       "x": "One registry of ~400 canonical event types.",
+       "x": "One list of about 400 event types.",
        "link": "signals"
       },
       {
        "g": "↔",
        "c": "cobalt",
        "title": "Relationships",
-       "x": "Edges with strength, state, and evidence.",
+       "x": "Links with strength, state, and evidence.",
        "link": "relationships"
       },
       {
@@ -3027,7 +3096,7 @@
   },
   "role-developers": {
    "title": "Developers",
-   "lead": "Engineers integrating SDKs, connectors, webhooks, imports, and APIs.",
+   "lead": "For engineers connecting websites, apps, and services to Aether.",
    "blocks": [
     {
      "t": "cards",
@@ -3066,13 +3135,13 @@
      "t": "callout",
      "tone": "risk",
      "title": "Never ship secrets to clients",
-     "x": "Publishable keys (pk_…) are public and bound to a site. Server keys stay on the backend."
+     "x": "Tenant and app IDs are identifiers. Server keys stay on the backend."
     }
    ]
   },
   "role-security": {
    "title": "Security and compliance",
-   "lead": "Security reviewers, procurement, and privacy owners.",
+   "lead": "For security, privacy, and procurement reviewers.",
    "blocks": [
     {
      "t": "cards",
@@ -3080,8 +3149,8 @@
       {
        "g": "⬡",
        "c": "cobalt",
-       "title": "Tenant isolation",
-       "x": "Every row, vertex, and key is tenant-scoped.",
+       "title": "Data separation",
+       "x": "Every record, connection, and key belongs to one customer.",
        "link": "tenants"
       },
       {
@@ -3125,7 +3194,7 @@
   },
   "role-analysts": {
    "title": "Analysts and operators",
-   "lead": "The people who investigate, review, and approve in the product.",
+   "lead": "For the people who investigate, review, and approve inside the product.",
    "blocks": [
     {
      "t": "cards",
@@ -3166,7 +3235,7 @@
       },
       {
        "title": "Open the 360",
-       "x": "Check the timeline and the edges that drive the score."
+       "x": "Check the timeline and the connections behind the score."
       },
       {
        "title": "Decide",
@@ -3182,7 +3251,7 @@
   },
   "sdk-privacy": {
    "title": "Privacy and consent",
-   "lead": "Every SDK gates capture on consent, redacts sensitive fields, and honors opt-out.",
+   "lead": "Every SDK only collects what people have agreed to, removes sensitive fields, and respects opt-outs.",
    "blocks": [
     {
      "t": "table",
@@ -3245,7 +3314,433 @@
       },
       {
        "q": "Where is Aether hosted?",
-       "a": "Multi-tenant cloud by default, with enterprise isolated tenants for pilots. Regulated cloud, on-premise, and air-gapped deployment are planned and not deployable today."
+       "a": "Multi-tenant cloud by default. Enterprise isolated, sovereign, on-premise, and air-gapped are supported models."
+      }
+     ]
+    }
+   ]
+  },
+  "guide-customer-purchase": {
+   "title": "Follow a customer to purchase",
+   "lead": "See every step a customer took, from the first ad to the sale, in one place.",
+   "blocks": [
+    {
+     "t": "steps",
+     "items": [
+      {
+       "title": "Open Profiles",
+       "x": "Search for the customer by name or email."
+      },
+      {
+       "title": "Open Profile 360",
+       "x": "Check the match evidence to confirm these records are one person."
+      },
+      {
+       "title": "Open Timeline",
+       "x": "Read everything they did in order: ad, visit, sign-up, app, email, agent chat, purchase."
+      },
+      {
+       "title": "Open Journeys",
+       "x": "Pick the journey that ended in the purchase."
+      },
+      {
+       "title": "Inspect touchpoints",
+       "x": "Click any step to see where it came from."
+      },
+      {
+       "title": "Open Value",
+       "x": "See which steps helped, and how much credit each got."
+      },
+      {
+       "title": "Apply a campaign lens",
+       "x": "Bring forward only the steps tied to one campaign."
+      }
+     ]
+    },
+    {
+     "t": "callout",
+     "tone": "info",
+     "title": "What you’ll see",
+     "x": "One history instead of seven separate records, with the reason behind every match."
+    },
+    {
+     "t": "cards",
+     "items": [
+      {
+       "g": "⬡",
+       "c": "cobalt",
+       "title": "Profiles",
+       "x": "What a profile holds."
+      },
+      {
+       "g": "→",
+       "c": "sage",
+       "title": "Journeys",
+       "x": "How paths are built."
+      },
+      {
+       "g": "↑",
+       "c": "sage",
+       "title": "Value",
+       "x": "How credit is shared."
+      }
+     ]
+    }
+   ]
+  },
+  "guide-investigate-profile": {
+   "title": "Investigate a profile",
+   "lead": "Find out who someone is, what they did, and what they’re connected to.",
+   "blocks": [
+    {
+     "t": "steps",
+     "items": [
+      {
+       "title": "Search",
+       "x": "Use a name, email, phone, or any ID."
+      },
+      {
+       "title": "Read the summary",
+       "x": "Status, how sure Aether is it’s one person, and recent activity."
+      },
+      {
+       "title": "Check identity evidence",
+       "x": "See which records were matched, and why."
+      },
+      {
+       "title": "Open Relationships",
+       "x": "See people, companies, devices, and agents they’re linked to."
+      },
+      {
+       "title": "Open Communications",
+       "x": "Read messages sent to or from them."
+      },
+      {
+       "title": "Check Risk",
+       "x": "See any signals, and whether they were seen or worked out."
+      }
+     ]
+    },
+    {
+     "t": "callout",
+     "tone": "info",
+     "title": "What you’ll see",
+     "x": "Every claim shows its evidence, so you can agree with it or challenge it."
+    },
+    {
+     "t": "cards",
+     "items": [
+      {
+       "g": "⬡",
+       "c": "cobalt",
+       "title": "Identity",
+       "x": "How matches are made."
+      },
+      {
+       "g": "▲",
+       "c": "ember",
+       "title": "Risk",
+       "x": "Seen vs worked out."
+      },
+      {
+       "g": "✉",
+       "c": "steel",
+       "title": "Communications",
+       "x": "Messages in context."
+      }
+     ]
+    }
+   ]
+  },
+  "guide-agent-hierarchy": {
+   "title": "Trace an agent hierarchy",
+   "lead": "Follow an instruction from a person, through the AI agents it started, to the result.",
+   "blocks": [
+    {
+     "t": "steps",
+     "items": [
+      {
+       "title": "Open Agents",
+       "x": "Find the agent or the person who started the work."
+      },
+      {
+       "title": "Open Agent 360",
+       "x": "See who created it and who allowed what."
+      },
+      {
+       "title": "Follow the chain",
+       "x": "Move down through each agent it started."
+      },
+      {
+       "title": "Check authority",
+       "x": "See what each agent was allowed to do, and what it actually did."
+      },
+      {
+       "title": "Open tool calls",
+       "x": "See which systems it touched."
+      },
+      {
+       "title": "Read the outcome",
+       "x": "See what changed, and whether it was verified."
+      }
+     ]
+    },
+    {
+     "t": "callout",
+     "tone": "info",
+     "title": "What you’ll see",
+     "x": "Who created whom, who had authority, what was used, and what resulted."
+    },
+    {
+     "t": "cards",
+     "items": [
+      {
+       "g": "⬡",
+       "c": "ochre",
+       "title": "Agents",
+       "x": "The agent model."
+      },
+      {
+       "g": "✓",
+       "c": "sage",
+       "title": "Evidence",
+       "x": "Seen, worked out, verified."
+      },
+      {
+       "g": "◈",
+       "c": "cobalt",
+       "title": "Lenses",
+       "x": "Authority view."
+      }
+     ]
+    }
+   ]
+  },
+  "guide-campaign-revenue": {
+   "title": "Follow a campaign to revenue",
+   "lead": "Trace a sale back to the campaign, message, and referral that helped.",
+   "blocks": [
+    {
+     "t": "steps",
+     "items": [
+      {
+       "title": "Open Campaigns",
+       "x": "Choose the campaign."
+      },
+      {
+       "title": "Open Campaign 360",
+       "x": "See who it reached and what they did next."
+      },
+      {
+       "title": "Open Journeys",
+       "x": "Filter to journeys that touched the campaign."
+      },
+      {
+       "title": "Open Value",
+       "x": "See revenue and each step’s share of credit."
+      },
+      {
+       "title": "Apply the value lens",
+       "x": "Bring revenue forward, push low-value links back."
+      },
+      {
+       "title": "Compare",
+       "x": "Put it next to another campaign."
+      }
+     ]
+    },
+    {
+     "t": "callout",
+     "tone": "info",
+     "title": "What you’ll see",
+     "x": "Revenue traced backwards, with credit and uncertainty shown."
+    },
+    {
+     "t": "cards",
+     "items": [
+      {
+       "g": "↑",
+       "c": "sage",
+       "title": "Value",
+       "x": "How credit works."
+      },
+      {
+       "g": "→",
+       "c": "sage",
+       "title": "Journeys",
+       "x": "Paths to a sale."
+      },
+      {
+       "g": "◈",
+       "c": "cobalt",
+       "title": "Lenses",
+       "x": "Perspectives."
+      }
+     ]
+    }
+   ]
+  },
+  "guide-lenses": {
+   "title": "Apply and combine lenses",
+   "lead": "Look at the same data from a different perspective, without changing it.",
+   "blocks": [
+    {
+     "t": "steps",
+     "items": [
+      {
+       "title": "Open the Graph",
+       "x": "Start from the full picture."
+      },
+      {
+       "title": "Pick a lens",
+       "x": "Identity, Journey, Value, Risk, Agent, Geography, or Time."
+      },
+      {
+       "title": "Add a second lens",
+       "x": "Select more than one to combine them."
+      },
+      {
+       "title": "Read the result",
+       "x": "Anything matching either lens comes forward."
+      },
+      {
+       "title": "Save it",
+       "x": "Name the perspective and reuse it."
+      },
+      {
+       "title": "Remove it",
+       "x": "Return to the full graph any time."
+      }
+     ]
+    },
+    {
+     "t": "callout",
+     "tone": "info",
+     "title": "What you’ll see",
+     "x": "A lens only changes what stands out. Your data is never copied or altered."
+    },
+    {
+     "t": "cards",
+     "items": [
+      {
+       "g": "◈",
+       "c": "cobalt",
+       "title": "Lenses",
+       "x": "What a lens is."
+      },
+      {
+       "g": "↔",
+       "c": "cobalt",
+       "title": "Graph",
+       "x": "The full picture."
+      }
+     ]
+    }
+   ]
+  },
+  "guide-communications": {
+   "title": "Review communications",
+   "lead": "See every message in the context of the person and their journey.",
+   "blocks": [
+    {
+     "t": "steps",
+     "items": [
+      {
+       "title": "Open Communications",
+       "x": "Choose a person or campaign."
+      },
+      {
+       "title": "Filter",
+       "x": "By email, text, support, or agent chat."
+      },
+      {
+       "title": "Read the thread",
+       "x": "Opens, clicks, and replies appear in order."
+      },
+      {
+       "title": "Place on the journey",
+       "x": "See where each message landed in the path."
+      },
+      {
+       "title": "Check what followed",
+       "x": "See what the person did next."
+      }
+     ]
+    },
+    {
+     "t": "callout",
+     "tone": "info",
+     "title": "What you’ll see",
+     "x": "Messages as part of the relationship, not another inbox."
+    },
+    {
+     "t": "cards",
+     "items": [
+      {
+       "g": "✉",
+       "c": "steel",
+       "title": "Communications",
+       "x": "How messages are recorded."
+      },
+      {
+       "g": "→",
+       "c": "sage",
+       "title": "Journeys",
+       "x": "Where they fit."
+      }
+     ]
+    }
+   ]
+  },
+  "guide-risk": {
+   "title": "Investigate risk",
+   "lead": "Find out why something was flagged, and decide what to do.",
+   "blocks": [
+    {
+     "t": "steps",
+     "items": [
+      {
+       "title": "Open Risk",
+       "x": "Choose a flagged person, account, or agent."
+      },
+      {
+       "title": "Read the signal",
+       "x": "What triggered it and how sure Aether is."
+      },
+      {
+       "title": "Separate seen from worked out",
+       "x": "Evidence is labeled differently from inference."
+      },
+      {
+       "title": "Follow the links",
+       "x": "Shared devices, refunds, and other accounts."
+      },
+      {
+       "title": "Decide",
+       "x": "Aether records and recommends; a person decides."
+      }
+     ]
+    },
+    {
+     "t": "callout",
+     "tone": "info",
+     "title": "What you’ll see",
+     "x": "Risk usually shows up in connections, not in any single account."
+    },
+    {
+     "t": "cards",
+     "items": [
+      {
+       "g": "▲",
+       "c": "ember",
+       "title": "Risk",
+       "x": "Signals and confidence."
+      },
+      {
+       "g": "✓",
+       "c": "sage",
+       "title": "Evidence",
+       "x": "How claims are labeled."
       }
      ]
     }

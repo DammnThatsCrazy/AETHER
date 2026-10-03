@@ -1,0 +1,8 @@
+/* Generated from design/designs/Legal.dc.html: page-scoped helmet styles and hover rules. */
+.pg-legal { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
+.pg-legal a { color: #3a6896; }
+.pg-legal a:hover { color: #2d5373; }
+@media (prefers-reduced-motion: reduce) {
+.pg-legal * { transition-duration: 0.01ms !important; }
+}
+

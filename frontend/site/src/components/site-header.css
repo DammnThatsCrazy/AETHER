@@ -1,0 +1,14 @@
+/* From design/designs/Site Header.dc.html: menu entrance and hover rules. */
+@keyframes hdrIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.hv-67a914b1:hover { background: #eceae5 !important; color: #1a1a1e !important; }
+.hv-75877933:hover { color: #1a1a1e !important; }
+.hv-7e3a2e7d:hover { background: #1d4ed8 !important; color: #f5f4f1 !important; }
+.hv-dafa5f55:hover { background: #e2e0da !important; border-color: #c9c7c0 !important; color: #1a1a1e !important; }
+
+/* The design swaps layouts at 1080px; both render and CSS picks one. */
+.hdr-wide { display: none !important; }
+.hdr-narrow { display: flex !important; }
+@media (min-width: 1080px) {
+  .hdr-wide { display: flex !important; }
+  .hdr-narrow, .hdr-narrow-block { display: none !important; }
+}

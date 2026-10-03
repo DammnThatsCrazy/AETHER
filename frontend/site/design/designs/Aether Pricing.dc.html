@@ -8,9 +8,15 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
-  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <link rel="stylesheet" href="../_ds/colors_and_type.css">
+  <script src="../_ds/_ds_bundle.js"></script>
   <title>Pricing and packages — Aether</title>
+  <meta property="og:type" content="website">
+  <meta name="description" content="Choose how you want to start with Aether. Plans for individuals, teams, and enterprises, with no per-integration fees.">
+  <meta property="og:title" content="Pricing and packages — Aether">
+  <meta property="og:description" content="Choose how you want to start with Aether. Plans for individuals, teams, and enterprises, with no per-integration fees.">
+  <meta property="og:image" content="../assets/og/aether-pricing.png">
+  <meta name="twitter:card" content="summary_large_image">
   <style>
     body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #f5f4f1; }
     a { color: #3a6896; }
@@ -35,64 +41,40 @@
 
   <sc-if value="{{ isPricing }}" hint-placeholder-val="{{ true }}">
     <main>
-      <section style="border-bottom: 1px solid #d8d6d0;">
-        <div style="max-width: 1200px; margin: 0 auto; padding: clamp(40px, 6vw, 72px) 24px 32px; display: flex; flex-direction: column; gap: 18px;">
-          <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">Pricing and packages</span>
-          <h1 style="font-size: clamp(34px, 5vw, 56px); font-weight: 500; line-height: 1.04; letter-spacing: -0.03em; margin: 0; max-width: 820px; text-wrap: balance;">Package the infrastructure around the relationship question</h1>
-          <p style="font-size: 16px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 620px;">Scope reflects what it takes to connect evidence, form perspectives, govern decisions, and observe outcomes. It is not a connector fee or an SDK tax. Start with the smallest useful package.</p>
-          <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-top: 10px;">
-            <div role="radiogroup" aria-label="Billing interval" style="display: inline-flex; border: 1px solid #d8d6d0; border-radius: 4px; padding: 2px; background: #eceae5;">
-              <button type="button" role="radio" aria-checked="{{ monthlyChecked }}" onClick="{{ setMonthly }}" style="{{ monthlyStyle }}">Monthly</button>
-              <button type="button" role="radio" aria-checked="{{ annualChecked }}" onClick="{{ setAnnual }}" style="{{ annualStyle }}">Annual</button>
-            </div>
-            <a href="Contact.dc.html?brand=aether&amp;type=pilot" style="font-size: 13px; font-weight: 500; text-decoration: none;">Not sure where to start? Talk through a pilot →</a>
+      <section>
+        <div style="max-width: 1000px; margin: 0 auto; padding: clamp(80px, 12vw, 152px) 24px 40px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px;">
+          <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">Pricing</span>
+          <h1 style="font-size: clamp(44px, 6.8vw, 92px); font-weight: 500; line-height: 0.95; letter-spacing: -0.048em; margin: 0; text-wrap: balance;">Choose how you want to start.</h1>
+          <p style="font-size: 17px; line-height: 1.6; color: #4a4945; margin: 0; max-width: 520px;">Start free and grow when you need to. No plan charges per integration.</p>
+          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; margin-top: 4px;">
+            <sc-for list="{{ stages }}" as="st" hint-placeholder-count="5"><span style="display: inline-flex; gap: 8px; align-items: baseline; font-size: 13px; color: #6b6a65;" title="{{ st.who }}"><span style="font-family: var(--font-mono); font-size: 11px; color: #9c9b95;">{{ st.n }}</span><span style="color: #1a1a1e; font-weight: 500;">{{ st.name }}</span>{{ st.plans }}</span></sc-for>
           </div>
-          <sc-if value="{{ flags }}" hint-placeholder-val="{{ true }}">
-            <div style="display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border: 1px dashed #c9975a; border-radius: 4px; font-size: 13px; background: #f5f4f1;"><span style="font-family: var(--font-mono); color: #8a6433;">▲</span><span><span style="font-weight: 500;">Owner review.</span> Prices and limits are read from <code style="font-size: 12px;">services/backend/shared/plans/catalog.py</code>. <code style="font-size: 12px;">pricing-page.tsx</code> says not to publish price values until approved. Confirm before launch.</span></div>
+          <div role="radiogroup" aria-label="Billing interval" style="display: inline-flex; border: 1px solid #d8d6d0; border-radius: 999px; padding: 3px; background: #eceae5; margin-top: 10px;">
+            <button type="button" role="radio" aria-checked="{{ monthlyChecked }}" onClick="{{ setMonthly }}" style="{{ monthlyStyle }}">Monthly</button>
+            <button type="button" role="radio" aria-checked="{{ annualChecked }}" onClick="{{ setAnnual }}" style="{{ annualStyle }}">Annual</button>
+          </div>
+          <sc-if value="{{ flags }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border: 1px dashed #c9975a; border-radius: 4px; font-size: 13px; background: #f5f4f1; text-align: left;"><span style="font-family: var(--font-mono); color: #8a6433;">▲</span><span><span style="font-weight: 500;">Owner review.</span> Prices and limits are read from <code style="font-size: 12px;">services/backend/shared/plans/catalog.py</code>. Confirm before launch.</span></div>
           </sc-if>
         </div>
       </section>
 
       <section style="border-bottom: 1px solid #d8d6d0;">
-        <div style="max-width: 1200px; margin: 0 auto; padding: 32px 24px clamp(48px, 6vw, 72px);">
-          <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
-            <div style="border: 1px solid #d8d6d0; border-radius: 4px; overflow: hidden;">
-              <div style="display: grid; grid-template-columns: 200px repeat(4, minmax(0, 1fr)); background: #eceae5;">
-                <div style="padding: 20px; border-right: 1px solid #d8d6d0; display: flex; flex-direction: column; justify-content: flex-end;"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">Self-service</span><span style="font-size: 13px; color: #6b6a65; margin-top: 6px;">Pay online and start today.</span></div>
-                <sc-for list="{{ plans }}" as="p" hint-placeholder-count="4">
-                  <div style="{{ p.headStyle }}">
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;"><span style="font-size: 18px; font-weight: 500; letter-spacing: -0.3px;">{{ p.name }}</span><sc-if value="{{ p.suggested }}"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #2d5373; white-space: nowrap;">Common start</span></sc-if></div>
-                    <span style="font-size: 13px; color: #6b6a65; min-height: 40px;">{{ p.fit }}</span>
-                    <div style="display: flex; align-items: baseline; gap: 4px;"><span style="font-size: 28px; font-weight: 500; letter-spacing: -0.6px;">{{ p.price }}</span><span style="font-size: 13px; color: #6b6a65;">{{ p.per }}</span></div>
-                    <span style="font-size: 12px; color: #6b6a65; min-height: 16px;">{{ p.note }}</span>
-                    <button type="button" onClick="{{ p.choose }}" style="{{ p.btnStyle }}">{{ p.cta }}</button>
-                  </div>
-                </sc-for>
+        <div style="max-width: 1200px; margin: 0 auto; padding: 24px 24px clamp(64px, 8vw, 96px);">
+          <div style="display: grid; grid-template-columns: {{ planCols }}; gap: 12px; align-items: stretch;">
+            <sc-for list="{{ plans }}" as="p" hint-placeholder-count="4">
+              <div style="{{ p.cardStyle }}">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;"><span style="font-size: 20px; font-weight: 500; letter-spacing: -0.3px;">{{ p.name }}</span><sc-if value="{{ p.suggested }}"><span style="font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 999px; background: #1a1a1e; color: #f5f4f1;">Most teams start here</span></sc-if></div>
+                <span style="font-size: 14px; line-height: 1.5; color: #6b6a65; min-height: 42px;">{{ p.fit }}</span>
+                <div style="display: flex; align-items: baseline; gap: 4px;"><span style="font-size: 40px; font-weight: 500; letter-spacing: -0.04em;">{{ p.price }}</span><span style="font-size: 13px; color: #6b6a65;">{{ p.per }}</span></div>
+                <span style="font-size: 12px; color: #6b6a65; margin-top: -8px;">{{ p.note }}</span>
+                <button type="button" onClick="{{ p.choose }}" style="{{ p.btnStyle }}">{{ p.cta }}</button>
+                <div style="display: flex; flex-direction: column; border-top: 1px solid #e2e0da; margin-top: 4px;">
+                  <sc-for list="{{ p.specs }}" as="s" hint-placeholder-count="5"><span style="display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #ecebe6; font-size: 13px;"><span style="color: #6b6a65;">{{ s.k }}</span><span style="font-family: var(--font-mono); color: #1a1a1e;">{{ s.v }}</span></span></sc-for>
+                </div>
               </div>
-              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
-                <div style="display: grid; grid-template-columns: 200px repeat(4, minmax(0, 1fr)); border-top: 1px solid #d8d6d0; font-size: 13px;">
-                  <div style="padding: 11px 20px; border-right: 1px solid #d8d6d0; color: #6b6a65; display: flex; flex-direction: column; gap: 2px;"><span style="color: #1a1a1e;">{{ r.label }}</span><span style="font-size: 12px;">{{ r.hint }}</span></div>
-                  <sc-for list="{{ r.cells }}" as="cell" hint-placeholder-count="4">
-                    <div style="padding: 11px 20px; font-family: var(--font-mono); font-size: 13px; border-right: 1px solid #e2e0da; display: flex; align-items: center;">{{ cell }}</div>
-                  </sc-for>
-                </div>
-              </sc-for>
-            </div>
-          </sc-if>
-          <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <sc-for list="{{ plans }}" as="p" hint-placeholder-count="4">
-                <div style="border: 1px solid #d8d6d0; border-radius: 4px; background: #eceae5; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
-                  <div style="display: flex; justify-content: space-between; align-items: baseline;"><span style="font-size: 18px; font-weight: 500;">{{ p.name }}</span><span style="font-size: 22px; font-weight: 500;">{{ p.price }}<span style="font-size: 13px; color: #6b6a65; font-weight: 400;"> {{ p.per }}</span></span></div>
-                  <span style="font-size: 13px; color: #6b6a65;">{{ p.fit }}</span>
-                  <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 13px; padding: 10px 0; border-top: 1px solid #d8d6d0; border-bottom: 1px solid #d8d6d0;">
-                    <sc-for list="{{ p.specs }}" as="s" hint-placeholder-count="4"><span style="color: #6b6a65;">{{ s.k }}</span><span style="font-family: var(--font-mono);">{{ s.v }}</span></sc-for>
-                  </div>
-                  <button type="button" onClick="{{ p.choose }}" style="{{ p.btnStyle }}">{{ p.cta }}</button>
-                </div>
-              </sc-for>
-            </div>
-          </sc-if>
+            </sc-for>
+          </div>
 
           <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 10px;">
             <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">Contract scope · no online checkout</span>
@@ -108,8 +90,8 @@
       <section style="background: #eceae5; border-bottom: 1px solid #d8d6d0;">
         <div style="max-width: 1200px; margin: 0 auto; padding: clamp(48px, 6vw, 72px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 40px;">
           <div style="display: flex; flex-direction: column; gap: 12px;">
-            <h2 style="font-size: clamp(22px, 2.6vw, 28px); font-weight: 500; letter-spacing: -0.5px; margin: 0;">What package scope reflects</h2>
-            <p style="font-size: 14px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 440px;">A connection is valuable when it answers a relationship question or makes an outcome observable. No package charges per connector.</p>
+            <h2 style="font-size: clamp(22px, 2.6vw, 28px); font-weight: 500; letter-spacing: -0.5px; margin: 0;">What you’re paying for</h2>
+            <p style="font-size: 14px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 440px;">You pay for how much Aether does for you — not for how many tools you connect.</p>
           </div>
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); border-top: 1px solid #d8d6d0;">
             <span style="padding: 12px 12px 12px 0; border-bottom: 1px solid #d8d6d0; font-size: 13px;">Platform and tenant scope</span>
@@ -155,7 +137,7 @@
               </div>
 
               <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: baseline;"><span style="font-size: 13px; font-weight: 500;">Payment</span><span style="font-size: 12px; color: #6b6a65; font-family: var(--font-mono);"><img src="assets/brand/stripe.svg" alt="" style="width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px;">Secured by Stripe</span></div>
+                <div style="display: flex; justify-content: space-between; align-items: baseline;"><span style="font-size: 13px; font-weight: 500;">Payment</span><span style="font-size: 12px; color: #6b6a65; font-family: var(--font-mono);"><img src="../assets/brand/stripe.svg" alt="" style="width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px;">Secured by Stripe</span></div>
                 <div style="border: 1px dashed #9c9b95; border-radius: 6px; padding: 14px; background: #ffffff; display: flex; flex-direction: column; gap: 12px; position: relative;">
                   <span style="position: absolute; top: -9px; left: 12px; background: #ffffff; padding: 0 6px; font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">Stripe Payment Element · rendered by Stripe</span>
                   <sc-if value="{{ peLoading }}" hint-placeholder-val="{{ false }}">
@@ -244,7 +226,7 @@
   <dc-import name="Site Footer" hint-size="100%,300px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;showReviewFlags&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;showStateBar&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;freeze&quot;: {&quot;editor&quot;: null, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;showReviewFlags&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;showStateBar&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;freeze&quot;: {&quot;editor&quot;: null, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
 class Component extends DCLogic {
   constructor(p) {
     super(p);
@@ -278,15 +260,16 @@ class Component extends DCLogic {
       { id: 'delta', name: 'Delta', fit: 'Expand sources, volume, and governance.', m: 3449, a: 35180, ev: '27M', mem: '5', rpm: '5,000', svc: '41', ov: '$0.030' },
     ];
     const TC = { alpha: ['#6b9a7c', '#4f7a5e', 'rgba(107,154,124,0.12)'], beta: ['#3a6896', '#2d5373', 'rgba(58,104,150,0.10)'], gamma: ['#c9975a', '#8a6433', 'rgba(201,151,90,0.12)'], delta: ['#a88a5a', '#7d6538', 'rgba(168,138,90,0.14)'] };
-    const btn = (primary, id) => 'font-family: inherit; white-space: nowrap; font-size: 13px; font-weight: 500; min-height: 40px; padding: 0 14px; border-radius: 6px; cursor: pointer; margin-top: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; ' + (id && TC[id] ? (primary ? 'background: ' + TC[id][1] + '; color: #f5f4f1; border: 1px solid ' + TC[id][1] + ';' : 'background: ' + TC[id][2] + '; color: ' + TC[id][1] + '; border: 1px solid ' + TC[id][0] + '66;') : (primary ? 'background: #1a1a1e; color: #f5f4f1; border: 1px solid #1a1a1e;' : 'background: #eceae5; color: #1a1a1e; border: 1px solid #d8d6d0;'));
+    const btn = (primary, id) => 'font-family: inherit; white-space: nowrap; font-size: 14px; font-weight: 500; min-height: 44px; padding: 0 14px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; ' + (id && TC[id] ? (primary ? 'background: ' + TC[id][1] + '; color: #f5f4f1; border: 1px solid ' + TC[id][1] + ';' : 'background: ' + TC[id][2] + '; color: ' + TC[id][1] + '; border: 1px solid ' + TC[id][0] + '66;') : (primary ? 'background: #1a1a1e; color: #f5f4f1; border: 1px solid #1a1a1e;' : 'background: #eceae5; color: #1a1a1e; border: 1px solid #d8d6d0;'));
     const plans = P.map(p => ({
       ...p, suggested: p.id === 'beta',
       price: fmt(annual ? p.a : p.m), per: p.m === 0 ? '' : (annual ? '/ year' : '/ month'),
       note: p.m === 0 ? 'No charge · card not required' : (annual ? 'Billed yearly' : 'Billed monthly'),
       cta: 'Choose ' + p.name,
-      btnStyle: btn(p.id === 'beta', p.id),
+      btnStyle: btn(p.id === 'beta'),
       headStyle: 'padding: 20px; display: flex; flex-direction: column; gap: 8px; height: 100%; box-sizing: border-box; border-right: 1px solid #d8d6d0; background: ' + TC[p.id][2] + '; box-shadow: inset 0 ' + (p.id === 'beta' ? 4 : 3) + 'px 0 ' + TC[p.id][0] + ';',
-      specs: [{ k: 'Events / month', v: p.ev }, { k: 'Members', v: p.mem }, { k: 'Burst', v: p.rpm + ' rpm' }, { k: 'Services', v: p.svc }],
+      specs: [{ k: 'Events / month', v: p.ev }, { k: 'Members', v: p.mem }, { k: 'Burst rate', v: p.rpm + ' / min' }, { k: 'Services', v: p.svc }, { k: 'Overage / 1k events', v: p.ov }, { k: 'Integration fees', v: 'none' }],
+      cardStyle: 'display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: 18px; box-sizing: border-box; ' + (p.id === 'beta' ? 'background: #fbfaf8; border: 1px solid #1a1a1e;' : 'background: #fbfaf8; border: 1px solid #d8d6d0;'),
       choose: () => { clearTimeout(this.t); this.setState({ view: 'checkout', plan: p.id, cs: 'loading' }); this.t = setTimeout(() => this.setState({ cs: 'ready' }), 1400); try { window.scrollTo(0, 0); } catch (e) {} },
     }));
     const rows = [
@@ -299,7 +282,7 @@ class Component extends DCLogic {
     ];
     const plan = plans.find(p => p.id === s.plan) || plans[1];
     const free = plan.m === 0;
-    const seg = (on) => 'font-family: inherit; font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 3px; border: 0; cursor: pointer; ' + (on ? 'background: #f5f4f1; color: #1a1a1e; box-shadow: 0 0 0 1px #d8d6d0;' : 'background: transparent; color: #6b6a65;');
+    const seg = (on) => 'font-family: inherit; font-size: 13px; font-weight: 500; padding: 7px 16px; border-radius: 999px; border: 0; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1); ' + (on ? 'background: #fbfaf8; color: #1a1a1e; box-shadow: 0 0 0 1px #d8d6d0;' : 'background: transparent; color: #6b6a65;');
     const cs = s.cs;
     const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.email);
     const emailBad = cs === 'validation' || cs === 'duplicate';
@@ -316,7 +299,7 @@ class Component extends DCLogic {
     const b = banners[cs];
     const panels = {
       confirming: { glyph: '◉', glyphStyle: 'font-family: var(--font-mono); font-size: 22px; color: #3a6896;', title: 'Confirming payment', body: 'Stripe accepted the payment. Aether is waiting for server-side confirmation before creating your account. This usually takes a few seconds. Do not refresh.', log: 'pending → paid → provisioning', secondary: null, primary: null },
-      confirmed: { glyph: '✓', glyphStyle: 'font-family: var(--font-mono); font-size: 22px; color: #4f7a5e;', title: 'Payment confirmed', body: 'Continue to account setup in the Aether app. Your email carries over so you do not re-enter it.', log: 'paid · confirmed by server', primary: 'Continue to account setup →', primaryHref: 'Auth.dc.html?mode=signup&state=paid', secondary: null, handoffUrl: handoff },
+      confirmed: { glyph: '✓', glyphStyle: 'font-family: var(--font-mono); font-size: 22px; color: #4f7a5e;', title: 'Payment confirmed', body: 'Continue to account setup in the Aether app. Your email carries over so you do not re-enter it.', log: 'paid · confirmed by server', primary: 'Continue to account setup →', primaryHref: 'Aether Portal.dc.html?mode=signup&state=paid', secondary: null, handoffUrl: handoff },
     };
     const panel = panels[cs] || {};
     const payBusy = cs === 'processing';
@@ -330,11 +313,13 @@ class Component extends DCLogic {
     if (extra) events.push({ name: '✓ ' + extra, style: 'padding: 3px 7px; border-radius: 4px; border: 1px solid #d8d6d0; background: #eceae5; color: #1a1a1e;' });
     const inputBase = 'font-family: inherit; font-size: 14px; height: 40px; padding: 0 12px; border-radius: 4px; background: #ffffff; color: #1a1a1e; outline: none; ';
     return {
-      flags, stateBar: (this.props.showStateBar ?? true) && !/[?&]bar=0/.test(window.location.search),
+      stages: [['01', 'start', 'Explore', 'Connect your first tool and see your first customer. No card needed.', 'alpha', '#4f7a5e'], ['02', 'connect', 'Build', 'For teams connecting more tools and more of their customers.', 'beta', '#2d5373'], ['03', 'understand', 'Operate', 'For teams using Aether every day, at higher volume.', 'gamma · delta', '#8a6433'], ['04', 'operate', 'Enterprise', 'For larger companies that need custom limits and a security review.', 'epsilon · omicron', '#7d6538'], ['05', 'scale', 'Sovereign', 'For organizations that need Aether run in their own environment.', 'omega', '#a3473c']].map(([n, k, name, who, plans, c], i) => ({ n, k, name, who, plans, kStyle: 'font-family: var(--font-mono); font-size: 11px; color: ' + c + ';', style: 'display: flex; flex-direction: column; gap: 8px; padding: 18px; box-sizing: border-box; border-right: 1px solid #d8d6d0; border-top: 3px solid ' + c + ';' })),
+      flags, stateBar: (this.props.showStateBar ?? false) && !/[?&]bar=0/.test(window.location.search),
       stateChips: chipNames.map(([k, label]) => ({ label, go: () => this.go(k), style: 'font-family: inherit; font-size: 12px; padding: 4px 9px; border-radius: 4px; cursor: pointer; border: 1px solid ' + (k === curKey ? '#e8e6e1; background: #e8e6e1; color: #1a1a1e;' : '#2a2a2f; background: transparent; color: #e8e6e1;') })),
       isPricing: s.view === 'pricing', isCheckout: s.view === 'checkout',
       wide: s.w >= 1100, narrow: s.w < 1100,
       plans, rows, plan, steps,
+      planCols: s.w >= 960 ? 'repeat(4, minmax(0, 1fr))' : s.w >= 560 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)',
       monthlyChecked: annual ? 'false' : 'true', annualChecked: annual ? 'true' : 'false',
       monthlyStyle: seg(!annual), annualStyle: seg(annual),
       setMonthly: () => this.setState({ interval: 'monthly' }), setAnnual: () => this.setState({ interval: 'annual' }),

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { App } from '@site/app/app';
 
@@ -19,15 +20,15 @@ describe('Legal page', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Privacy and data use');
   });
 
-  it('shows terms with numbered sections and an outline', () => {
+  it('shows terms and switches documents from the tabs', async () => {
     renderAt('/legal/terms');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Terms and use');
-    const docs = screen.getByRole('navigation', { name: 'Legal documents' });
-    expect(within(docs).getByRole('link', { name: /Terms and use/ }).getAttribute('aria-current')).toBe('page');
-    expect(within(docs).getByRole('link', { name: /Privacy/ }).getAttribute('href')).toBe('/legal/privacy');
-    const outline = screen.getByRole('navigation', { name: 'On this page' });
-    expect(within(outline).getByRole('link', { name: 'Acceptable use' }).getAttribute('href')).toBe('#acceptable');
-    expect(document.getElementById('acceptable')?.textContent).toContain('04');
+    const tabs = screen.getByRole('tablist', { name: 'Legal documents' });
+    expect(within(tabs).getByRole('tab', { name: 'Terms and use' })).toHaveAttribute('aria-selected', 'true');
+    expect(document.getElementById('acceptable')?.textContent).toContain('Acceptable use');
+    await userEvent.click(within(tabs).getByRole('tab', { name: 'Privacy and data use' }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Privacy and data use');
+    expect(document.title).toBe('Privacy and data use — Olympus Labs');
   });
 
   it('states that the text is a draft and not in force', () => {

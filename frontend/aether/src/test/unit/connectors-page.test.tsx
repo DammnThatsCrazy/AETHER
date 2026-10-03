@@ -32,9 +32,10 @@ describe('Aether Connectors page', () => {
     expect(screen.getByText('Generic Signed Webhook')).toBeInTheDocument();
     expect(screen.getByText('HubSpot')).toBeInTheDocument();
     expect(screen.getByText('Connected')).toBeInTheDocument();
-    for (const provider of ['slack', 'webhook', 'hubspot']) {
-      expect(document.querySelector(`[data-provider="${provider}"][data-provider-mark="fallback"]`)).toBeInTheDocument();
+    for (const provider of ['slack', 'hubspot']) {
+      expect(document.querySelector(`[data-provider="${provider}"][data-provider-mark="reviewed-local"]`)).toBeInTheDocument();
     }
+    expect(document.querySelector('[data-provider="webhook"][data-provider-mark="fallback"]')).toBeInTheDocument();
   });
 
   it('renders the successful-empty state when no connectors are available', async () => {

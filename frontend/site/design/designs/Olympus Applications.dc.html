@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="../_ds/colors_and_type.css">
+  <script src="../_ds/_ds_bundle.js"></script>
+  <title>Applications — Olympus Labs</title>
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Applications — Olympus Labs">
+  <meta property="og:description" content="One technology, many kinds of work: commercial, human-agent, autonomous, trust, operational, and economic systems.">
+  <meta property="og:image" content="../assets/og/olympus-applications.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="description" content="One technology, many kinds of work: commercial, human-agent, autonomous, trust, operational, and economic systems.">
+  <style>
+    body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; background: #f5f4f1; }
+    a { color: #3a6896; } a:hover { color: #2d5373; }
+    @keyframes apIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+  </style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);" data-screen-label="Olympus applications">
+  <dc-import name="Site Header" brand="olympus" active="Applications" hint-size="100%,56px"></dc-import>
+  <main>
+    <section>
+      <div style="max-width: 1000px; margin: 0 auto; padding: clamp(96px, 14vw, 176px) 24px clamp(64px, 9vw, 112px); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 24px;">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">Applications</span>
+        <h1 style="font-size: clamp(48px, 7.6vw, 104px); font-weight: 500; line-height: 0.94; letter-spacing: -0.05em; margin: 0; max-width: 900px; text-wrap: balance;">One technology. Many kinds of work.</h1>
+        <p style="font-size: clamp(17px, 1.6vw, 19px); line-height: 1.55; color: #4a4945; margin: 0; max-width: 560px;">These aren’t six products. They’re six places the same technology is used. Pick one.</p>
+      </div>
+    </section>
+
+    <section data-theme="dark" style="background: #111114; color: #e8e6e1;">
+      <div style="max-width: 1000px; margin: 0 auto; padding: clamp(72px, 10vw, 128px) 24px; display: flex; flex-direction: column; align-items: center; gap: 40px;">
+        <div role="tablist" aria-label="Application areas" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; border-radius: 10px; background: #1a1a1e; border: 1px solid #2a2a2f;">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6"><button type="button" role="tab" aria-selected="{{ t.sel }}" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for>
+        </div>
+        <div style="width: 100%; max-width: 680px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; min-height: 260px; animation: apIn 200ms cubic-bezier(0.22,1,0.36,1) both;">
+          <span style="{{ cur.gStyle }}">{{ cur.g }}</span>
+          <span style="font-size: clamp(26px, 3.4vw, 40px); font-weight: 500; letter-spacing: -0.028em; line-height: 1.1; color: #e8e6e1; text-wrap: balance;">{{ cur.t }}</span>
+          <span style="font-size: 16px; line-height: 1.6; color: #a09f99;">{{ cur.b }}</span>
+          <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 6px;">
+            <sc-for list="{{ cur.sees }}" as="s"><span style="font-family: var(--font-mono); font-size: 12px; padding: 5px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #a09f99;">{{ s }}</span></sc-for>
+          </div>
+          <a href="{{ cur.href }}" style="display: inline-flex; gap: 6px; font-size: 14px; font-weight: 500; color: #e8e6e1; text-decoration: none; margin-top: 8px;" style-hover="color: #9fbad6;">{{ cur.cta }}<span style="font-family: var(--font-mono);">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div style="max-width: 960px; margin: 0 auto; padding: clamp(96px, 13vw, 168px) 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 24px;">
+        <h2 style="font-size: clamp(32px, 4.8vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; max-width: 720px; text-wrap: balance;">Seeing your own use case?</h2>
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;">
+          <a href="Contact.dc.html?brand=olympus&amp;type=pilot" style="display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 22px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; background: #1a1a1e; color: #f5f4f1;" style-hover="background: #2e2e34; color: #f5f4f1;">Start a conversation<span style="font-family: var(--font-mono);">→</span></a>
+          <a href="Aether Applications.dc.html" style="display: inline-flex; align-items: center; min-height: 46px; padding: 0 22px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; color: #1a1a1e; border: 1px solid #d8d6d0;" style-hover="background: #eceae5; color: #1a1a1e;">See Aether’s applications</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <dc-import name="Site Footer" hint-size="100%,300px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { k: 0, held: false };
+  componentDidMount() {
+    const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduce) this.timer = setInterval(() => { if (!this.state.held) this.setState(s => ({ k: (s.k + 1) % 6 })); }, 4200);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  renderVals() {
+    const ease = 'cubic-bezier(0.22,1,0.36,1)';
+    const A = [
+      ['Commercial', '◈', '#9fbad6', 'Know every customer, across every tool.', 'One person shows up as many records. Olympus technology puts them back together and shows what led to each sale.', ['identity', 'journeys', 'value'], 'Aether Customer Intelligence.dc.html', 'See the customer scenario'],
+      ['People and AI', '⬡', '#dcb683', 'Keep track of who asked, and who did it.', 'When people hand work to AI agents, and agents to other agents, someone should still be able to see who allowed what.', ['authority', 'lineage', 'outcomes'], 'Aether Agents.dc.html', 'See agent tracking'],
+      ['Autonomous', '◉', '#8fb0cc', 'Many systems acting at once, in sync.', 'Fleets of software and machines need a shared picture of what’s happening and what each one is doing.', ['coordination', 'activity', 'state'], 'Olympus Research.dc.html', 'Read the research'],
+      ['Trust', '✓', '#9cc4a9', 'Prove what was allowed, and what happened.', 'Consent, rules, approvals, and records that hold up when someone asks.', ['consent', 'evidence', 'accountability'], 'Aether Trust.dc.html', 'See how trust works'],
+      ['Operations', '○', '#c9b088', 'See what’s happening now, next to what happened before.', 'Activity from every system on one timeline, so change is visible while it matters.', ['activity', 'timeline', 'change'], 'Aether Applications.dc.html#operations', 'See operations'],
+      ['Money', '↑', '#e09a8f', 'Follow the money to the people behind it.', 'Payments, refunds, and settlements mean different things in different systems. Connect them to the journeys that produced them.', ['payments', 'settlement', 'credit'], 'Aether Applications.dc.html#revenue', 'See revenue tracing'],
+    ];
+    const k = this.state.k; const c = A[k];
+    return {
+      tabs: A.map(([label], i) => { const on = i === k; return { label, sel: on ? 'true' : 'false', go: () => this.setState({ k: i, held: true }), style: 'font-family: inherit; min-height: 36px; padding: 0 14px; border-radius: 7px; border: 0; cursor: pointer; font-size: 13px; font-weight: 500; transition: background-color 120ms ' + ease + ', color 120ms ' + ease + '; ' + (on ? 'background: #e8e6e1; color: #111114;' : 'background: transparent; color: #a09f99;') }; }),
+      cur: { t: c[3], b: c[4], sees: c[5], href: c[6], cta: c[7], g: c[1], gStyle: 'font-family: var(--font-mono); font-size: 28px; color: ' + c[2] + ';' },
+    };
+  }
+}
+</script>
+</body>
+</html>

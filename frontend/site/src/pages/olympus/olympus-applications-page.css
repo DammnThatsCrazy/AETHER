@@ -1,0 +1,11 @@
+/* Generated from design/designs/Olympus Applications.dc.html: page-scoped helmet styles and hover rules. */
+.pg-olympus-applications { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; background: #f5f4f1; }
+.pg-olympus-applications a { color: #3a6896; }
+.pg-olympus-applications a:hover { color: #2d5373; }
+@keyframes apIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+.pg-olympus-applications * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+.hv-67a914b1:hover { background: #eceae5 !important; color: #1a1a1e !important; }
+.hv-6f6d4759:hover { color: #9fbad6 !important; }
+.hv-7e3a2e7d:hover { background: #1d4ed8 !important; color: #f5f4f1 !important; }

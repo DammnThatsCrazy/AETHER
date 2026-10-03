@@ -395,6 +395,31 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "--stage PRODUCTION" in workflow
 
 
+def test_production_releases_the_olympus_site_from_a_mirror_of_the_same_main_commit():
+    """www is a separate build of the reviewed main commit (VITE_SITE=olympus),
+    so its prerendered pages are the Olympus Labs site."""
+    document = _workflow_yaml("amplify-status-production.yml")
+    workflow = _workflow("amplify-status-production.yml")
+    assert document["env"]["OLYMPUS_BRANCH"] == "production-olympus"
+    assert document["jobs"]["deploy"]["permissions"] == {"contents": "write", "id-token": "write"}
+    # Only a commit already on main is mirrored, by exact SHA.
+    assert "compare/$EXPECTED_COMMIT_SHA...main" in workflow
+    assert 'git push --force origin "${EXPECTED_COMMIT_SHA}:refs/heads/${OLYMPUS_BRANCH}"' in workflow
+    assert workflow.index("Mirror the exact main commit to the Olympus site branch") < workflow.index(
+        "Bind the production web app to the canonical repository"
+    )
+    assert "jq '. + {\"VITE_SITE\": \"olympus\"}' \"$web_environment\" > \"$olympus_environment\"" in workflow
+    assert '--branch-name "$OLYMPUS_BRANCH"' in workflow
+    assert "--no-enable-auto-build" in workflow
+    assert 'main_job_id="$(release_branch main)"' in workflow
+    assert 'olympus_job_id="$(release_branch "$OLYMPUS_BRANCH")"' in workflow
+    assert 'wait_for "$OLYMPUS_BRANCH" "$OLYMPUS_JOB_ID"' in workflow
+    assert 'if [ "$prefix" = www ]; then branch="$OLYMPUS_BRANCH"; fi' in workflow
+    # Prerendered pages are files: the shell is served only where no file exists.
+    assert '{"source": "/<*>", "target": "/index.html", "status": "404-200"}' in workflow
+    assert '"target": "/index.html", "status": "200"' not in workflow
+
+
 def test_production_status_waits_for_exact_main_integration_authority():
     document = _workflow_yaml("amplify-status-production.yml")
     workflow = _workflow("amplify-status-production.yml")

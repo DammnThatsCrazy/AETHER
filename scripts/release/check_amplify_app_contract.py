@@ -8,9 +8,10 @@ otherwise easy to miss explicit:
 * all five customer-facing staging apps must be connected to this repository,
   use ``main`` as a development branch, and have a successful job for the
   reviewed commit; and
-* the separate public status app must be connected to this repository, keep its
-  ``main`` branch in ``PRODUCTION`` stage, have a successful job for the same
-  reviewed commit, and expose a live custom-domain CNAME.
+* the production web app must be connected to this repository, keep its
+  ``main`` (Aether) and ``production-olympus`` (Olympus Labs) branches in
+  ``PRODUCTION`` stage with successful jobs for the same reviewed commit, and
+  map each production host to the branch that builds its site.
 """
 
 from __future__ import annotations
@@ -92,6 +93,11 @@ STAGING_HOSTS: dict[str, tuple[str, ...]] = {
 # under /app and serves every production host.
 PRODUCTION_WEB_APP = "AETHER-production-web"
 PRODUCTION_HOSTS = ("www", "aether", "docs", "status", "app")
+# The Olympus Labs site (www) is a separate build of the same commit: its pages
+# are prerendered for that site. The production workflow mirrors each released
+# main commit to this branch and releases it there.
+PRODUCTION_OLYMPUS_BRANCH = "production-olympus"
+PRODUCTION_HOST_BRANCHES = {prefix: (PRODUCTION_OLYMPUS_BRANCH if prefix == "www" else "main") for prefix in PRODUCTION_HOSTS}
 # Until the production backend exists the site is pilot-only and its contact
 # form posts to the always-on lead intake (deploy/aws/lead-intake, stack
 # aether-production-lead-intake, output LeadUrl).
@@ -106,6 +112,7 @@ PRODUCTION_WEB_ENVIRONMENT = {
     "VITE_SITE_OLYMPUS_URL": "https://www.olympuslabsml.com",
     "VITE_PUBLISH_PRICES": "true",
 }
+PRODUCTION_OLYMPUS_ENVIRONMENT = {**PRODUCTION_WEB_ENVIRONMENT, "VITE_SITE": "olympus"}
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
 DnsResolver = Callable[[str], str]
@@ -273,6 +280,8 @@ def _check_app(
     branch_stage: str,
     expected_commit: str | None,
     subdomain_prefix: str | None,
+    branch_name: str = "main",
+    auto_build: bool = True,
     expected_branch_environment: Mapping[str, str] | None = None,
     required_branch_environment_keys: tuple[str, ...] = (),
     check_job_provenance: bool = True,
@@ -296,34 +305,40 @@ def _check_app(
         errors.append(f"Amplify app {name} is not connected to the reviewed repository")
     if app.get("platform") != "WEB":
         errors.append(f"Amplify app {name} is not a WEB app")
-    branch_payload = client(["amplify", "get-branch", "--app-id", app_id, "--branch-name", "main"])
+    try:
+        branch_payload = client(["amplify", "get-branch", "--app-id", app_id, "--branch-name", branch_name])
+    except RuntimeError:
+        branch_payload = {}
     branch = _mapping(branch_payload.get("branch"))
-    if branch.get("branchName") != "main":
-        errors.append(f"Amplify app {name} has no canonical main branch")
+    if branch.get("branchName") != branch_name:
+        return errors + [f"Amplify app {name} has no {branch_name} branch"]
     if branch.get("stage") != branch_stage:
-        errors.append(f"Amplify app {name} main branch is {branch.get('stage')!r}, expected {branch_stage}")
-    if branch.get("enableAutoBuild") is not True:
-        errors.append(f"Amplify app {name} main branch does not have auto-build enabled")
+        errors.append(f"Amplify app {name} {branch_name} branch is {branch.get('stage')!r}, expected {branch_stage}")
+    if branch.get("enableAutoBuild") is not auto_build:
+        errors.append(
+            f"Amplify app {name} {branch_name} branch "
+            + ("does not have auto-build enabled" if auto_build else "must not auto-build; the workflow releases it")
+        )
     if expected_branch_environment is not None:
         environment = _mapping(branch.get("environmentVariables"))
         for key, expected in expected_branch_environment.items():
             if environment.get(key) != expected:
                 errors.append(
-                    f"Amplify app {name} main branch has {key}={environment.get(key)!r}, expected the reviewed production value"
+                    f"Amplify app {name} {branch_name} branch has {key}={environment.get(key)!r}, expected the reviewed production value"
                 )
         for key in required_branch_environment_keys:
             value = environment.get(key)
             if not isinstance(value, str) or not value.strip():
-                errors.append(f"Amplify app {name} main branch is missing non-empty {key}")
+                errors.append(f"Amplify app {name} {branch_name} branch is missing non-empty {key}")
     if check_job_provenance:
-        job, job_errors = _latest_job(app_id, "main", client)
+        job, job_errors = _latest_job(app_id, branch_name, client)
         errors.extend(f"Amplify app {name}: {error}" for error in job_errors)
         if job is not None:
             if wait_for_current_job:
                 job, wait_errors = _wait_for_current_commit_job(
                     name=name,
                     app_id=app_id,
-                    branch_name="main",
+                    branch_name=branch_name,
                     expected_commit=expected_commit,
                     job=job,
                     client=client,
@@ -335,9 +350,9 @@ def _check_app(
                 errors.extend(f"Amplify app {name}: {error}" for error in wait_errors)
         if job is not None:
             if job.get("status") != "SUCCEED":
-                errors.append(f"Amplify app {name} latest main job is {job.get('status')!r}, not SUCCEED")
+                errors.append(f"Amplify app {name} latest {branch_name} job is {job.get('status')!r}, not SUCCEED")
             if expected_commit is not None and job.get("commitId") != expected_commit:
-                errors.append(f"Amplify app {name} latest main job is not for the reviewed commit")
+                errors.append(f"Amplify app {name} latest {branch_name} job is not for the reviewed commit")
 
     if check_domain and subdomain_prefix is not None:
         errors.extend(
@@ -345,6 +360,7 @@ def _check_app(
                 name=name,
                 app_id=app_id,
                 subdomain_prefix=subdomain_prefix,
+                branch_name=branch_name,
                 domain_name=domain_name,
                 dns_resolver=dns_resolver,
                 client=client,
@@ -361,6 +377,7 @@ def _domain_errors(
     domain_name: str | None,
     dns_resolver: DnsResolver,
     client: AwsCall,
+    branch_name: str = "main",
 ) -> list[str]:
     errors: list[str] = []
     requested_domain = domain_name or STAGING_DOMAIN
@@ -389,7 +406,7 @@ def _domain_errors(
         for item in subdomains
         if isinstance(item, Mapping)
         and _mapping(item.get("subDomainSetting")).get("prefix") == subdomain_prefix
-        and _mapping(item.get("subDomainSetting")).get("branchName") == "main"
+        and _mapping(item.get("subDomainSetting")).get("branchName") == branch_name
     ] if isinstance(subdomains, list) else []
     live_dns = False
     if matching and matching[0].get("verified") is not True:
@@ -405,7 +422,7 @@ def _domain_errors(
         )
     if not matching or (matching[0].get("verified") is not True and not live_dns):
         errors.append(
-            f"Amplify app {name} {domain_label} domain lacks an AVAILABLE {subdomain_prefix} subdomain with a live DNS target"
+            f"Amplify app {name} {domain_label} domain lacks an AVAILABLE {subdomain_prefix} subdomain on {branch_name} with a live DNS target"
         )
     return errors
 
@@ -498,38 +515,46 @@ def contract_errors(
             for prefix, owners in STAGING_HOSTS.items():
                 errors.extend(_staging_host_errors(prefix, owners, apps, dns_resolver, client))
     elif mode == "production-status":
-        # Production runs one web app for every host; check the app, its
-        # reviewed build settings and commit once (on status), then each
-        # remaining host's mapping.
+        # Production runs one web app for every host: main builds the Aether
+        # site (status, aether, docs, app) and production-olympus the Olympus
+        # Labs site (www), both from the reviewed commit. Check each branch's
+        # settings and job once (on status and www), then the remaining hosts.
         production_app = apps.get(PRODUCTION_WEB_APP)
-        errors.extend(
-            _check_app(
-                name=PRODUCTION_WEB_APP,
-                app=production_app,
-                branch_stage="PRODUCTION",
-                expected_commit=expected_commit,
-                subdomain_prefix="status",
-                expected_branch_environment=PRODUCTION_WEB_ENVIRONMENT,
-                domain_name=PRODUCTION_DOMAIN,
-                wait_for_current_job=wait_for_current_job,
-                job_timeout_seconds=job_timeout_seconds,
-                job_poll_seconds=job_poll_seconds,
-                sleeper=sleeper,
-                clock=clock,
-                client=client,
-                dns_resolver=dns_resolver,
+        for branch_name, host, environment, auto_build in (
+            ("main", "status", PRODUCTION_WEB_ENVIRONMENT, True),
+            (PRODUCTION_OLYMPUS_BRANCH, "www", PRODUCTION_OLYMPUS_ENVIRONMENT, False),
+        ):
+            errors.extend(
+                _check_app(
+                    name=PRODUCTION_WEB_APP,
+                    app=production_app,
+                    branch_stage="PRODUCTION",
+                    expected_commit=expected_commit,
+                    subdomain_prefix=host,
+                    branch_name=branch_name,
+                    auto_build=auto_build,
+                    expected_branch_environment=environment,
+                    domain_name=PRODUCTION_DOMAIN,
+                    wait_for_current_job=wait_for_current_job,
+                    job_timeout_seconds=job_timeout_seconds,
+                    job_poll_seconds=job_poll_seconds,
+                    sleeper=sleeper,
+                    clock=clock,
+                    client=client,
+                    dns_resolver=dns_resolver,
+                )
             )
-        )
         production_app_id = production_app.get("appId") if production_app is not None else None
         if isinstance(production_app_id, str) and production_app_id:
             for prefix in PRODUCTION_HOSTS:
-                if prefix == "status":
+                if prefix in ("status", "www"):
                     continue
                 errors.extend(
                     _domain_errors(
                         name=PRODUCTION_WEB_APP,
                         app_id=production_app_id,
                         subdomain_prefix=prefix,
+                        branch_name=PRODUCTION_HOST_BRANCHES[prefix],
                         domain_name=PRODUCTION_DOMAIN,
                         dns_resolver=dns_resolver,
                         client=client,

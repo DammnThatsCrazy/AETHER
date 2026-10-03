@@ -28,8 +28,8 @@ function ProviderFallback({ identity, size }: { readonly identity: ProviderVisua
 
 /**
  * Safe provider identity renderer. It only renders a third-party image when
- * the registry supplies an approved *local* asset; every current registry
- * entry intentionally uses neutral initials until a review adds one.
+ * the registry supplies an approved *local* asset; providers without one use
+ * neutral initials.
  */
 export function ProviderMark({ provider, decorative = false, label, size = 24, className, ...props }: ProviderMarkProps) {
   const { identity } = resolveProvider(provider);
