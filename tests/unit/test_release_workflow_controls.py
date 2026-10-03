@@ -386,6 +386,11 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "Reusing active Amplify status deployment job" in workflow
     assert "already have pending or running jobs" in workflow
     assert "commitId == $expected" in workflow
+    # Settings are read when an Amplify job starts: a job auto-started by the
+    # push before the bind step applied them must not be reused as the release.
+    assert "printf 'bound_at=%s\\n' \"$(date -u +%s)\" >> \"$GITHUB_OUTPUT\"" in workflow
+    assert "BOUND_AT: ${{ steps.bind.outputs.bound_at }}" in workflow
+    assert "fromdateiso8601 catch 0)) > $bound)]" in workflow
     assert ")] " + chr(92) not in workflow
     assert "--stage PRODUCTION" in workflow
 
