@@ -91,7 +91,10 @@ authoritative DNS.
   former `aether-status` app, repurposed). It builds the same unified site with
   the product under `/app` and serves `www`, `aether`, `docs`, `status` and
   `app` under `olympuslabsml.com`; `amplify-status-production.yml` binds and
-  deploys it on every `main` push. The four former per-host production apps
+  deploys it on every `main` push. Each site build prerenders its own pages,
+  so the app has two branches built from the same commit: `main` (the Aether
+  site) for `aether`, `docs`, `status` and `app`, and `production-olympus`
+  (the Olympus Labs site, `VITE_SITE=olympus`) for `www`. The four former per-host production apps
   are deleted. It is not yet Terraform-managed, and the product's sign-in
   needs the production backend, which does not exist yet.
 
