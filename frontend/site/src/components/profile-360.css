@@ -1,0 +1,30 @@
+/* Generated from design/designs/Profile 360.dc.html: page-scoped helmet styles and hover rules. */
+.pg-profile-360 .p360 button:focus-visible, .pg-profile-360 .p360 a:focus-visible { outline: 1px solid #5a85a8; outline-offset: -1px; }
+.pg-profile-360 .p360 ::-webkit-scrollbar { height: 6px; width: 6px; }
+.pg-profile-360 .p360-ios .p360 { border: 0 !important; border-radius: 0 !important; background: #000 !important; }
+.pg-profile-360 .p360-ios { flex: 1; min-height: 100%; background: #000; }
+.pg-profile-360 .p360-ios .p360 { flex: 1; display: flex; flex-direction: column; }
+.pg-profile-360 .p360-ios .p360-body { flex: 1; padding: 16px 16px 20px !important; }
+.pg-profile-360 .p360-ios .p360-legend { display: none !important; }
+.pg-profile-360 .p360-ios [role="tablist"][aria-label="Profile sections"] { order: 9; position: sticky; bottom: 0; z-index: 5; margin-top: auto; padding: 8px 6px 30px !important; gap: 0 !important; justify-content: space-around; background: rgba(28,28,30,0.92); border-top: 0.5px solid rgba(84,84,88,0.65) !important; border-bottom: 0 !important; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); overflow: visible !important; }
+.pg-profile-360 .p360-ios span[aria-hidden="true"][style*="url("] { width: 20px !important; height: 20px !important; }
+.pg-profile-360 .p360-ios span[title][style*="width: 26px"] { width: 34px !important; height: 34px !important; border-radius: 10px !important; }
+.pg-profile-360 .p360-ios img[src*="brand"] { width: 20px !important; height: 20px !important; }
+.pg-profile-360 .p360-ios .p360 button { -webkit-tap-highlight-color: transparent; transition: transform 120ms cubic-bezier(0.22,1,0.36,1); }
+.pg-profile-360 .p360-ios .p360 button:active { transform: scale(0.97); }
+.pg-profile-360 .p360-ios .p360-body { animation: p360In 200ms cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes p360In { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.pg-profile-360 .p360-ios, .pg-profile-360 .p360-ios * { font-family: -apple-system, "SF Pro Text", system-ui, var(--font-sans); }
+.pg-profile-360 .p360-ios .p360 .mono, .pg-profile-360 .p360-ios code { font-family: var(--font-mono); }
+.pg-profile-360 .p360 ::-webkit-scrollbar-thumb { background: #2a2a2f; border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) {
+.pg-profile-360 .p360 * { transition-duration: 0.01ms !important; }
+}
+.hv-00bd5268:hover { background: #1f1f24 !important; border-color: #3a3a40 !important; }
+.hv-0fb9f849:hover { border-color: #3a3a40 !important; color: #e8e6e1 !important; }
+.hv-3defd665:hover { border-color: #3a3a40 !important; }
+.hv-761d44c6:hover { color: #e8e6e1 !important; }
+.hv-7f0f7148:hover { border-color: #3a3a40 !important; background: #1f1f24 !important; }
+.hv-cbfffb40:hover { background: #1f1f24 !important; }
+.hv-de76f755:hover { background: #1a1a1e !important; }
+.hv-f244a51d:hover { border-color: #3a3a40 !important; background: #16161a !important; }

@@ -71,15 +71,22 @@ describe('shared brand rendering layer', () => {
   });
 
   it('uses a neutral provider fallback until a reviewed local asset exists', () => {
-    const mark = renderToStaticMarkup(<ProviderMark provider="google" />);
-    const chip = renderToStaticMarkup(<ProviderSourceChip provider="google" />);
+    const mark = renderToStaticMarkup(<ProviderMark provider="privy" />);
+    const chip = renderToStaticMarkup(<ProviderSourceChip provider="privy" />);
 
     expect(mark).toContain('data-provider-mark="fallback"');
-    expect(mark).toContain('aria-label="Google"');
-    expect(mark).toContain('>G<');
+    expect(mark).toContain('aria-label="Privy"');
+    expect(mark).toContain('>P<');
     expect(mark).not.toContain('<img');
-    expect(chip).toContain('Google');
-    expect(chip).toContain('aria-label="Source: Google"');
+    expect(chip).toContain('Privy');
+    expect(chip).toContain('aria-label="Source: Privy"');
+  });
+
+  it('renders a reviewed local provider mark from the brand package', () => {
+    const mark = renderToStaticMarkup(<ProviderMark provider="google" />);
+    expect(mark).toContain('data-provider-mark="reviewed-local"');
+    expect(mark).toContain('aria-label="Google"');
+    expect(mark).toContain('src="/providers/google.svg"');
   });
 
   it('keeps status, severity, provenance, confidence, and entity identity textual as well as visual', () => {

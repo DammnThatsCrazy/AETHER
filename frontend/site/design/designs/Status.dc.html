@@ -8,9 +8,15 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
-  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <link rel="stylesheet" href="../_ds/colors_and_type.css">
+  <script src="../_ds/_ds_bundle.js"></script>
   <title>Aether service status</title>
+  <meta property="og:type" content="website">
+  <meta name="description" content="Live status of Aether and the systems it depends on.">
+  <meta property="og:title" content="Aether service status">
+  <meta property="og:description" content="Live status of Aether and the systems it depends on.">
+  <meta property="og:image" content="../assets/og/status.png">
+  <meta name="twitter:card" content="summary_large_image">
   <style>
     summary::-webkit-details-marker { display: none; }
     details[open] > summary span:first-child > span:first-child { transform: rotate(0deg); }
@@ -22,7 +28,7 @@
 <div style="min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);" data-screen-label="Status">
   <header style="border-bottom: 1px solid #d8d6d0; background: #f5f4f1;">
     <div style="max-width: 920px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-      <a href="Status.dc.html" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: #1a1a1e;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 20px; height: 20px;"><span style="font-size: 15px; font-weight: 500;">Aether</span><span style="font-size: 15px; color: #6b6a65;">Status</span></a>
+      <a href="Status.dc.html" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: #1a1a1e;"><img src="../assets/logo-aether-layers.svg" alt="" style="width: 20px; height: 20px;"><span style="font-size: 15px; font-weight: 500;">Aether</span><span style="font-size: 15px; color: #6b6a65;">Status</span></a>
       <nav aria-label="Status resources" style="display: flex; gap: 4px; font-size: 13px; align-items: center;">
         <a href="Docs.dc.html" style="color: #6b6a65; text-decoration: none; padding: 8px;" style-hover="color: #1a1a1e;">Docs</a>
         <a href="Aether Home.dc.html" style="color: #6b6a65; text-decoration: none; padding: 8px;" style-hover="color: #1a1a1e;">Aether</a>
@@ -67,12 +73,12 @@
     <sc-if value="{{ hasIncident }}" hint-placeholder-val="{{ false }}">
       <section aria-labelledby="inc" style="border: 1px solid rgba(181,86,74,0.4); border-radius: 8px; overflow: hidden; background: rgba(181,86,74,0.06);">
         <div style="padding: 14px 18px; border-bottom: 1px solid rgba(181,86,74,0.25); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px;">
-          <h2 id="inc" style="font-size: 16px; font-weight: 500; margin: 0; display: flex; gap: 8px; align-items: center; color: #1a1a1e;"><span style="font-family: var(--font-mono); color: #b5564a;">■</span>Delayed ingestion for batch imports</h2>
-          <span style="font-family: var(--font-mono); font-size: 12px; color: #a3473c;">affects: ingestion · started 14:05 UTC</span>
+          <h2 id="inc" style="font-size: 16px; font-weight: 500; margin: 0; display: flex; gap: 8px; align-items: center; color: #1a1a1e;"><span style="font-family: var(--font-mono); color: #b5564a;">■</span>Delayed data intake for batch imports</h2>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: #a3473c;">affects: data intake · started 14:05 UTC</span>
         </div>
         <ol style="list-style: none; margin: 0; padding: 4px 18px 8px;">
-          <li style="padding: 12px 0; border-bottom: 1px solid rgba(181,86,74,0.18); display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 12px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 13px; font-weight: 500; color: #8a6433;">Identified</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">14:22 UTC</span></span><span style="font-size: 13px; line-height: 1.55;">A queue consumer is falling behind after a deploy. Rolling back. Events are accepted and nothing is lost.</span></li>
-          <li style="padding: 12px 0; display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 12px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 13px; font-weight: 500; color: #a3473c;">Investigating</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">14:05 UTC</span></span><span style="font-size: 13px; line-height: 1.55;">Batch imports are taking longer than normal to appear in perspectives.</span></li>
+          <li style="padding: 12px 0; border-bottom: 1px solid rgba(181,86,74,0.18); display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 12px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 13px; font-weight: 500; color: #8a6433;">Identified</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">14:22 UTC</span></span><span style="font-size: 13px; line-height: 1.55;">Processing is running behind after an update, and it’s being rolled back. Events are still being accepted and nothing is lost.</span></li>
+          <li style="padding: 12px 0; display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 12px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 13px; font-weight: 500; color: #a3473c;">Investigating</span><span style="font-family: var(--font-mono); font-size: 11px; color: #6b6a65;">14:05 UTC</span></span><span style="font-size: 13px; line-height: 1.55;">Batch imports are taking longer than normal to show up.</span></li>
         </ol>
       </section>
     </sc-if>
@@ -80,9 +86,9 @@
     <sc-if value="{{ hasMaint }}" hint-placeholder-val="{{ false }}">
       <section aria-label="Scheduled maintenance" style="border: 1px solid rgba(90,133,168,0.4); border-radius: 8px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; background: rgba(90,133,168,0.08);">
         <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #3f6a8c;">◈ Scheduled maintenance</span>
-        <span style="font-size: 15px; font-weight: 500;">Graph projection storage upgrade</span>
-        <span style="font-family: var(--font-mono); font-size: 12px; color: #3f6a8c;">Sep 28, 2026 · 02:00–03:00 UTC · Identity and graph</span>
-        <span style="font-size: 13px; line-height: 1.55; color: #4a4945;">Perspectives may show data up to 15 minutes old during the window. Ingestion continues and catches up afterward.</span>
+        <span style="font-size: 15px; font-weight: 500;">Storage upgrade for connections</span>
+        <span style="font-family: var(--font-mono); font-size: 12px; color: #3f6a8c;">Sep 28, 2026 · 02:00–03:00 UTC · People and connections</span>
+        <span style="font-size: 13px; line-height: 1.55; color: #4a4945;">Views may show data up to 15 minutes old during this window. Data keeps arriving and catches up afterward.</span>
       </section>
     </sc-if>
 
@@ -98,10 +104,10 @@
     </sc-if>
 
     <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
-      <details open style="border: 1px solid #d8d6d0; border-radius: 12px; overflow: hidden; background: #f5f4f1;">
-        <summary style="list-style: none; cursor: pointer; padding: 12px 18px; background: #eceae5; border-bottom: 1px solid #d8d6d0; display: flex; justify-content: space-between; gap: 8px; align-items: center;" style-hover="background: #e2e0da;"><span style="display: flex; gap: 10px; align-items: center; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4a4945;"><span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65; width: 12px;">⌄</span><span style="{{ g.glyphStyle }}">{{ g.glyph }}</span>{{ g.name }}</span><span style="{{ g.summaryStyle }}">{{ g.summary }}</span></summary>
+      <details open style="border-top: 1px solid #d8d6d0;">
+        <summary style="list-style: none; cursor: pointer; padding: 14px 0; display: flex; justify-content: space-between; gap: 8px; align-items: center;"><span style="display: flex; gap: 10px; align-items: center; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4a4945;"><span style="font-family: var(--font-mono); font-size: 12px; color: #6b6a65; width: 12px;">⌄</span><span style="{{ g.glyphStyle }}">{{ g.glyph }}</span>{{ g.name }}</span><span style="{{ g.summaryStyle }}">{{ g.summary }}</span></summary>
         <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="3">
-          <div style="padding: 14px 18px; border-bottom: 1px solid #e2e0da; display: flex; flex-direction: column; gap: 8px;">
+          <div style="padding: 12px 0 16px; display: flex; flex-direction: column; gap: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
               <span style="display: flex; align-items: baseline; gap: 10px; min-width: 0;"><span style="font-size: 14px; font-weight: 500;">{{ c.label }}</span><span style="font-family: var(--font-mono); font-size: 11px; color: #9c9b95;">{{ c.key }}</span></span>
               <span style="display: flex; align-items: center; gap: 10px;"><span style="{{ c.pctStyle }}">{{ c.pct }}</span><span style="{{ c.badgeStyle }}"><span style="font-family: var(--font-mono);">{{ c.glyph }}</span>{{ c.stateLabel }}</span></span>
@@ -131,10 +137,7 @@
       <sc-if value="{{ noHistory }}" hint-placeholder-val="{{ true }}">
         <div style="border: 1px dashed #c9c7c0; border-radius: 8px; padding: 20px; font-size: 13px; line-height: 1.55; color: #6b6a65;">{{ historyEmpty }}</div>
       </sc-if>
-      <div style="border: 1px solid #d8d6d0; border-radius: 8px; padding: 16px 18px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; background: rgba(107,154,124,0.08);">
-        <span style="display: flex; flex-direction: column; gap: 3px;"><span style="font-size: 14px; font-weight: 500;"><span style="font-family: var(--font-mono); color: #4f7a5e;">✉</span> Follow updates</span><span style="font-size: 13px; color: #6b6a65;">Subscriptions aren't set up yet. For deployment-specific questions, contact support.</span></span>
-        <a href="Contact.dc.html?brand=aether&amp;type=developer" style="display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-height: 36px; padding: 0 14px; box-sizing: border-box; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; background: #4f7a5e; color: #f5f4f1; border: 1px solid #4f7a5e;" style-hover="background: #41664e; color: #f5f4f1;">Contact support</a>
-      </div>
+
     </section>
   </main>
 </div>
@@ -150,12 +153,12 @@ class Component extends DCLogic {
   renderVals() {
     const st = this.state.st;
     const C = [
-      ['api', 'Aether API', 'product'], ['admin', 'Tenant administration', 'product'], ['analytics', 'Analytics & perspective', 'product'], ['identity', 'Identity & graph', 'product'],
-      ['ingestion', 'Ingestion & processing', 'conn'], ['provider_credentials', 'Providers & connectors', 'conn'], ['notification', 'Delivery & workflow', 'conn'],
-      ['consent', 'Consent & tenant governance', 'sup'], ['ml_serving', 'Model serving', 'sup'], ['agent', 'Agent intelligence', 'sup'], ['campaign', 'Campaign intelligence', 'sup'], ['commerce', 'Commerce', 'sup'], ['rewards', 'Rewards', 'sup'],
+      ['api', 'Aether API', 'product'], ['admin', 'Tenant administration', 'product'], ['analytics', 'Analytics and views', 'product'], ['identity', 'People and connections', 'product'],
+      ['ingestion', 'Data intake', 'conn'], ['provider_credentials', 'Connected tools', 'conn'], ['notification', 'Messages and workflows', 'conn'],
+      ['consent', 'Consent and data separation', 'sup'], ['ml_serving', 'Model serving', 'sup'], ['agent', 'AI agents', 'sup'], ['campaign', 'Campaigns', 'sup'], ['commerce', 'Commerce', 'sup'], ['rewards', 'Rewards', 'sup'],
     ];
     const col = { up: '#6b9a7c', deg: '#c9975a', down: '#b5564a', none: '#d8d6d0' };
-    const tone = { operational: ['●', 'Operational', '#4f7a5e', 'rgba(107,154,124,0.14)'], degraded: ['▲', 'Degraded', '#8a6433', 'rgba(201,151,90,0.16)'], outage: ['■', 'Outage', '#a3473c', 'rgba(181,86,74,0.12)'], unknown: ['○', 'Not verified', '#6b6a65', 'rgba(156,155,149,0.16)'] };
+    const tone = { operational: ['●', 'Operational', '#4f7a5e', 'rgba(107,154,124,0.14)'], degraded: ['▲', 'Degraded', '#8a6433', 'rgba(201,151,90,0.16)'], outage: ['■', 'Outage', '#a3473c', 'rgba(181,86,74,0.12)'], unknown: ['○', 'Not checked', '#6b6a65', 'rgba(156,155,149,0.16)'] };
     const hasHist = !['unknown', 'loading'].includes(st);
     const current = key => {
       if (st === 'degraded') return key === 'ingestion' ? 'degraded' : 'operational';
@@ -168,7 +171,7 @@ class Component extends DCLogic {
     const fmt = i => { const d = new Date(today); d.setDate(d.getDate() - (89 - i)); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
     const showComps = ['operational', 'degraded', 'incident', 'stale', 'maintenance', 'outage'].includes(st);
     const hv = this.state.hover;
-    const groups = showComps ? [['product', 'Customer-visible product', '◈', '#3a6896'], ['conn', 'APIs and connections', '↔', '#8a6433'], ['sup', 'Supporting systems', '⚙', '#7d6538']].map(([id, name, glyph, gc]) => {
+    const groups = showComps ? [['product', 'The product', '◈', '#3a6896'], ['conn', 'Data in and out', '↔', '#8a6433'], ['sup', 'Behind the scenes', '⚙', '#7d6538']].map(([id, name, glyph, gc]) => {
       const items = C.filter(c => c[2] === id).map(([key, label], ci) => {
         const r = rand(key.length * 131 + ci * 17 + 7);
         const days = Array.from({ length: 90 }, (_, i) => { if (!hasHist) return 'none'; const v = r(); if (i < 6 && key.length % 3 === 0) return 'none'; return v > 0.985 ? 'down' : v > 0.95 ? 'deg' : 'up'; });
@@ -195,14 +198,14 @@ class Component extends DCLogic {
         summaryStyle: 'font-family: var(--font-mono); font-size: 11px; color: ' + (bad ? '#8a6433' : '#4f7a5e') + ';' };
     }) : [];
     const O = {
-      loading: ['○', 'Checking the monitored service', 'Contacting the status endpoint. No state is assumed before the check returns.', '#9c9b95', 'Checking'],
-      operational: ['●', 'All systems operational', 'The monitored API and its reported component surfaces are operational.', '#6b9a7c', 'Operational'],
-      degraded: ['▲', 'Degraded performance', 'The API is reachable, but one or more reported components are degraded.', '#c9975a', 'Degraded'],
-      incident: ['■', 'Investigating delayed ingestion', 'Events are accepted, but processing is delayed. Updates are posted below.', '#b5564a', 'Incident'],
-      maintenance: ['●', 'Operational · maintenance scheduled', 'All monitored components are operational. A maintenance window is planned.', '#5a85a8', 'Maintenance planned'],
-      outage: ['■', 'Status endpoint unreachable', 'The health endpoint could not be reached. This may be an outage or a network problem between this page and the API.', '#b5564a', 'Unreachable'],
-      unknown: ['○', 'Status not yet verified', 'The live monitoring source has not been connected to this status surface.', '#9c9b95', 'Not configured'],
-      stale: ['○', 'Status may be out of date', 'The last successful check was 47 minutes ago. Treat current states as unverified.', '#c9975a', 'Stale'],
+      loading: ['○', 'Checking the service', 'Waiting for the check to finish. Nothing is assumed until it does.', '#9c9b95', 'Checking'],
+      operational: ['●', 'All systems operational', 'Everything we monitor is working normally.', '#6b9a7c', 'Operational'],
+      degraded: ['▲', 'Degraded performance', 'Aether is reachable, but one or more parts are running slowly.', '#c9975a', 'Degraded'],
+      incident: ['■', 'Investigating delayed data intake', 'Events are still being accepted, but processing is delayed. Updates are posted below.', '#b5564a', 'Incident'],
+      maintenance: ['●', 'Operational · maintenance scheduled', 'Everything is working normally. A maintenance window is planned.', '#5a85a8', 'Maintenance planned'],
+      outage: ['■', 'Can’t reach the status check', 'The check couldn’t be reached. This may be an outage, or a network problem between this page and Aether.', '#b5564a', 'Unreachable'],
+      unknown: ['○', 'Status not checked yet', 'Live monitoring isn’t connected to this page yet.', '#9c9b95', 'Not connected'],
+      stale: ['○', 'Status may be out of date', 'The last successful check was 47 minutes ago. Treat what you see as unconfirmed.', '#c9975a', 'Stale'],
     }[st];
     const chips = [['loading', 'Checking'], ['operational', 'Operational'], ['degraded', 'Degraded'], ['incident', 'Active incident'], ['maintenance', 'Maintenance'], ['outage', 'Unreachable'], ['stale', 'Stale'], ['unknown', 'Not configured']];
     const ranges = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days']];
@@ -210,7 +213,7 @@ class Component extends DCLogic {
       flags: this.props.showReviewFlags ?? false,
       stateBar: (this.props.showStateBar ?? true) && !/[?&]bar=0/.test(window.location.search),
       stateChips: chips.map(([k, label]) => ({ label, go: () => this.setState({ st: k }), style: 'font-family: inherit; font-size: 12px; padding: 4px 9px; border-radius: 4px; cursor: pointer; border: 1px solid ' + (k === st ? '#e8e6e1; background: #e8e6e1; color: #1a1a1e;' : '#2a2a2f; background: transparent; color: #e8e6e1;') })),
-      heroStyle: 'border-radius: 8px; padding: clamp(20px, 3vw, 28px); display: flex; flex-direction: column; gap: 16px; border: 1px solid ' + O[3] + '66; border-top: 4px solid ' + O[3] + '; background: ' + O[3] + '14;',
+      heroStyle: 'padding: clamp(24px, 5vw, 56px) 0 8px; display: flex; flex-direction: column; gap: 20px;',
       overallGlyph: O[0], overallGlyphStyle: 'font-family: var(--font-mono); font-size: 22px; color: ' + O[3] + ';',
       overallLabel: O[1], overallDetail: O[2], pillLabel: O[4],
       pillStyle: 'display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 999px; color: #f5f4f1; background: ' + O[3] + ';',

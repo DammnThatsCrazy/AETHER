@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   ICON_SIZE,
   MOTION_DURATION,
@@ -45,10 +47,30 @@ describe('@olympus/brand provider registry', () => {
   });
 
   it('contains no remote provider asset URLs or invented asset paths', () => {
+    const marksDir = resolve(__dirname, 'identity/marks/providers');
+    const reviewed = [];
     for (const provider of Object.values(providerRegistry)) {
-      expect(provider.mark.kind).toBe('fallback');
-      expect(provider.mark.sourcePath).toBeUndefined();
-      expect(provider.mark.publicPath).toBeUndefined();
+      for (const mark of [provider.mark, provider.monochromeMark].filter((m) => m !== undefined)) {
+        if (mark.kind === 'fallback') {
+          expect(mark.sourcePath).toBeUndefined();
+          expect(mark.publicPath).toBeUndefined();
+          continue;
+        }
+        reviewed.push(provider.id);
+        expect(mark.publicPath).toMatch(/^\/providers\/[a-z0-9-]+\.svg$/);
+        expect(mark.sourcePath).toBe(`src/identity/marks/providers/${mark.publicPath!.slice('/providers/'.length)}`);
+        expect(existsSync(resolve(marksDir, mark.publicPath!.slice('/providers/'.length))), provider.id).toBe(true);
+      }
+    }
+    // Every committed provider file is attached to a registry entry.
+    const used = new Set(Object.values(providerRegistry).flatMap((p) => [p.mark.publicPath, p.monochromeMark?.publicPath]));
+    for (const file of readdirSync(marksDir)) expect(used.has(`/providers/${file}`), file).toBe(true);
+    expect(new Set(reviewed).size).toBeGreaterThanOrEqual(21);
+  });
+
+  it('keeps generic and unreviewed providers on the initials fallback', () => {
+    for (const id of ['webhook', 'privy', 'coinbase', 'moonpay', 'bridge']) {
+      expect(resolveProvider(id).identity.mark.kind, id).toBe('fallback');
     }
   });
 });

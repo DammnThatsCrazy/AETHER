@@ -18,6 +18,48 @@ function fallbackMark(label: string): ProviderAsset {
   };
 }
 
+/**
+ * Provider marks reviewed for use and committed under
+ * `src/identity/marks/providers/` (served at `/providers/<file>`). Approved by
+ * the site owner on 2026-10-03 with the Olympus Labs + Aether surfaces design
+ * handoff; see docs/brand-system/providers.md. `onDark` is a variant for dark
+ * backgrounds when the main mark is dark.
+ */
+const REVIEWED_MARKS: Readonly<Record<string, { file: string; background: 'light' | 'dark' | 'either'; onDark?: string }>> = {
+  google: { file: 'google.svg', background: 'either' },
+  google_analytics: { file: 'googleanalytics.svg', background: 'either' },
+  google_ads: { file: 'googleads.svg', background: 'either' },
+  apple: { file: 'apple.svg', background: 'light' },
+  microsoft: { file: 'microsoft.svg', background: 'either' },
+  stripe: { file: 'stripe.svg', background: 'either' },
+  phantom: { file: 'phantom.svg', background: 'either' },
+  shopify: { file: 'shopify.svg', background: 'either' },
+  hubspot: { file: 'hubspot.svg', background: 'either' },
+  salesforce: { file: 'salesforce.svg', background: 'either' },
+  segment: { file: 'segment.svg', background: 'either' },
+  posthog: { file: 'posthog.svg', background: 'either' },
+  klaviyo: { file: 'klaviyo.svg', background: 'light' },
+  intercom: { file: 'intercom.svg', background: 'either' },
+  zendesk: { file: 'zendesk.svg', background: 'light' },
+  slack: { file: 'slack.svg', background: 'either' },
+  jira: { file: 'jira.svg', background: 'either' },
+  linear: { file: 'linear.svg', background: 'either' },
+  instagram: { file: 'instagram.svg', background: 'either' },
+  meta: { file: 'meta.svg', background: 'either' },
+  meta_ads: { file: 'meta.svg', background: 'either' },
+  x: { file: 'x-dark.svg', background: 'light', onDark: 'x.svg' },
+};
+
+function localMark(file: string, label: string): ProviderAsset {
+  return {
+    kind: 'reviewed-local',
+    sourcePath: `src/identity/marks/providers/${file}`,
+    publicPath: `/providers/${file}`,
+    opticalScale: 1,
+    fallbackInitials: initials(label),
+  };
+}
+
 function provider(
   id: string,
   label: string,
@@ -26,26 +68,30 @@ function provider(
   attributionRequired = true,
 ): ProviderVisualIdentity {
   const fallbackInitials = initials(label);
+  const reviewed = REVIEWED_MARKS[id];
   return {
     id,
     label,
     category,
-    mark: fallbackMark(label),
-    preferredBackground: 'either',
+    mark: reviewed ? localMark(reviewed.file, label) : fallbackMark(label),
+    ...(reviewed?.onDark ? { monochromeMark: localMark(reviewed.onDark, label) } : {}),
+    preferredBackground: reviewed?.background ?? 'either',
     fallbackInitials,
     attributionRequired,
-    trademarkGuidance: attributionRequired
-      ? 'Use only an approved local mark. Until one is reviewed and added, render the neutral initials fallback with the provider name.'
-      : 'Generic integration type; render the neutral initials fallback and the supplied label.',
+    trademarkGuidance: reviewed
+      ? 'Reviewed local mark. Show it unmodified beside the provider name; it identifies the integration and implies no endorsement.'
+      : attributionRequired
+        ? 'Use only an approved local mark. Until one is reviewed and added, render the neutral initials fallback with the provider name.'
+        : 'Generic integration type; render the neutral initials fallback and the supplied label.',
     aliases,
   };
 }
 
 /**
- * Repository-discovered provider identities. This is intentionally metadata,
- * not a logo pack: none of the third-party marks below are fabricated or loaded
- * remotely. The shared renderer may show a mark only after a reviewed local
- * asset is attached to this registry; otherwise it renders `fallbackInitials`.
+ * Repository-discovered provider identities. None of the third-party marks are
+ * fabricated or loaded remotely: a provider shows a mark only when a reviewed
+ * local asset is listed in REVIEWED_MARKS; every other provider renders
+ * `fallbackInitials`.
  */
 export const providerRegistry = {
   // Auth and identity providers used by web, mobile, and payment flows.
@@ -136,6 +182,7 @@ export const providerRegistry = {
   asana: provider('asana', 'Asana', 'productivity'),
 
   // Advertising, social, and public intelligence sources.
+  meta: provider('meta', 'Meta', 'advertising', ['facebook']),
   meta_ads: provider('meta_ads', 'Meta Ads', 'advertising', ['facebook_ads']),
   google_ads: provider('google_ads', 'Google Ads', 'advertising'),
   tiktok_ads: provider('tiktok_ads', 'TikTok Ads', 'advertising'),

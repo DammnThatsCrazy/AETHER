@@ -1,0 +1,18 @@
+/* Generated from design/designs/Docs.dc.html: page-scoped helmet styles and hover rules. */
+.pg-docs { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #111114; color-scheme: dark; scrollbar-color: #2a2a2f #111114; }
+.pg-docs h1, .pg-docs h2, .pg-docs h3 { color: #e8e6e1; }
+.pg-docs code { color: #e8e6e1; background-color: #1f1f24 !important; border-color: #2a2a2f !important; }
+.pg-docs a { color: #9fbad6; }
+.pg-docs a:hover { color: #c4d6e8; }
+@media (prefers-reduced-motion: reduce) {
+.pg-docs * { transition-duration: 0.01ms !important; }
+}
+.hv-09c9425e:hover { background: #24242a !important; }
+.hv-3837c3f1:hover { background: #17171a !important; color: #e8e6e1 !important; }
+.hv-6f6d4759:hover { color: #9fbad6 !important; }
+.hv-761d44c6:hover { color: #e8e6e1 !important; }
+.hv-83180a19:hover { background: #17171a !important; border-color: #2a2a2f3 !important; }
+.hv-8992effa:hover { background: #2a2a2f !important; }
+.hv-a9ee1797:hover { border-color: #7d7c77 !important; color: #e8e6e1 !important; }
+.hv-b871c9ca:hover { background: #2a2a2f !important; border-color: #2a2a2f3 !important; }
+.hv-ed2a1fe4:hover { background: #2a2a2f !important; border-color: #2a2a2f !important; color: #111114 !important; }

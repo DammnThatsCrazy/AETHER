@@ -1,0 +1,15 @@
+/* Generated from design/designs/Aether Connect.dc.html: page-scoped helmet styles and hover rules. */
+.pg-aether-connect { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; background: #f5f4f1; }
+.pg-aether-connect a { color: #3a6896; }
+.pg-aether-connect a:hover { color: #2d5373; }
+@keyframes cnFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cnDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+.pg-aether-connect * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+.hv-2e012587:hover { background: #fbfaf8 !important; color: #1a1a1e !important; }
+.hv-4d1362f5:hover { background: #e2e0da !important; color: #1a1a1e !important; }
+.hv-6268baea:hover { border-color: #9c9b95 !important; color: #1a1a1e !important; }
+.hv-6f6d4759:hover { color: #9fbad6 !important; }
+.hv-7e3a2e7d:hover { background: #1d4ed8 !important; color: #f5f4f1 !important; }
+.hv-cc8e330e:hover { color: #3a6896 !important; }

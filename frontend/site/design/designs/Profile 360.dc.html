@@ -8,21 +8,47 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
-  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
+  <link rel="stylesheet" href="../_ds/colors_and_type.css">
+  <script src="../_ds/_ds_bundle.js"></script>
   <style>
     .p360 button:focus-visible, .p360 a:focus-visible { outline: 1px solid #5a85a8; outline-offset: -1px; }
     .p360 ::-webkit-scrollbar { height: 6px; width: 6px; }
+    .p360-ios .p360 { border: 0 !important; border-radius: 0 !important; background: #000 !important; }
+    .p360-ios { flex: 1; min-height: 100%; background: #000; }
+    .p360-ios .p360 { flex: 1; display: flex; flex-direction: column; }
+    .p360-ios .p360-body { flex: 1; padding: 16px 16px 20px !important; }
+    .p360-ios .p360-legend { display: none !important; }
+    .p360-ios [role="tablist"][aria-label="Profile sections"] { order: 9; position: sticky; bottom: 0; z-index: 5; margin-top: auto; padding: 8px 6px 30px !important; gap: 0 !important; justify-content: space-around; background: rgba(28,28,30,0.92); border-top: 0.5px solid rgba(84,84,88,0.65) !important; border-bottom: 0 !important; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); overflow: visible !important; }
+    .p360-ios span[aria-hidden="true"][style*="url("] { width: 20px !important; height: 20px !important; }
+    .p360-ios span[title][style*="width: 26px"] { width: 34px !important; height: 34px !important; border-radius: 10px !important; }
+    .p360-ios img[src*="brand"] { width: 20px !important; height: 20px !important; }
+    .p360-ios .p360 button { -webkit-tap-highlight-color: transparent; transition: transform 120ms cubic-bezier(0.22,1,0.36,1); }
+    .p360-ios .p360 button:active { transform: scale(0.97); }
+    .p360-ios .p360-body { animation: p360In 200ms cubic-bezier(0.22,1,0.36,1) both; }
+    @keyframes p360In { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .p360-ios, .p360-ios * { font-family: -apple-system, "SF Pro Text", system-ui, var(--font-sans); }
+    .p360-ios .p360 .mono, .p360-ios code { font-family: var(--font-mono); }
     .p360 ::-webkit-scrollbar-thumb { background: #2a2a2f; border-radius: 999px; }
     @media (prefers-reduced-motion: reduce) { .p360 * { transition-duration: 0.01ms !important; } }
   </style>
 </helmet>
-<div style="display: flex; flex-direction: column; min-width: 0; font-family: var(--font-sans);">
+<div class="{{ rootClass }}" style="display: flex; flex-direction: column; min-width: 0; font-family: var(--font-sans);">
+  <sc-if value="{{ isIos }}" hint-placeholder-val="{{ false }}">
+    <div data-theme="dark" style="background: rgba(0,0,0,0.88); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); position: sticky; top: 0; z-index: 6; padding: 54px 16px 10px; margin-top: -54px; display: flex; flex-direction: column; gap: 6px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span style="display: inline-flex; align-items: center; gap: 2px; color: #0A84FF; font-size: 17px;"><svg width="12" height="20" viewBox="0 0 12 20" fill="none"><path d="M10 2L2 10l8 8" stroke="#0A84FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Profiles</span>
+        <button type="button" onClick="{{ openSearch }}" aria-label="Search this profile" style="width: 36px; height: 36px; border-radius: 999px; border: 0; background: rgba(120,120,128,0.24); color: #e8e6e1; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;">⌕</button>
+      </div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;"><span style="font-size: 34px; font-weight: 700; letter-spacing: 0.4px; color: #fff;">Jane Doe</span><span title="Illustrative data — not a customer record" style="font-size: 11px; color: #8e8e93;">synthetic</span></div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ notIos }}" hint-placeholder-val="{{ true }}">
   <div data-theme="dark" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #1a1a1e; border: 1px solid #2a2a2f; border-bottom: 0; border-radius: 8px 8px 0 0; color: #e8e6e1; font-size: 12px;">
-    <span style="display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 16px; height: 16px;"><span style="color: #a09f99;">360</span><span style="color: #6b6a65;">/</span><span style="font-weight: 500;">Jane Doe</span></span>
+    <span style="display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap;"><img src="../assets/logo-aether-layers.svg" alt="" style="width: 16px; height: 16px;"><span style="color: #a09f99;">360</span><span style="color: #6b6a65;">/</span><span style="font-weight: 500;">Jane Doe</span></span>
     <button type="button" onClick="{{ openSearch }}" style="font-family: inherit; flex: 1; min-width: 0; max-width: 260px; margin-left: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding: 0 8px; border-radius: 4px; border: 1px solid #2a2a2f; background: #111114; color: #a09f99; font-size: 12px; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1), color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="border-color: #3a3a40; color: #e8e6e1;"><span style="display: flex; gap: 6px; overflow: hidden; white-space: nowrap;"><span style="font-family: var(--font-mono);">⌕</span>{{ searchLabel }}</span><kbd style="font-family: var(--font-mono); font-size: 10px; padding: 0 4px; border: 1px solid #2a2a2f; border-radius: 3px;">⌘K</kbd></button>
     <span title="Illustrative data — not a customer record" style="font-family: var(--font-mono); font-size: 10px; padding: 2px 7px; border-radius: 999px; border: 1px dashed #3a3a40; color: #a09f99; white-space: nowrap;">synthetic</span>
   </div>
+  </sc-if>
   <div data-theme="dark" style="background: #111114; border: 1px solid #2a2a2f; border-radius: 0 0 8px 8px; color: #e8e6e1; font-size: 13px; overflow: hidden;" class="p360">
     <sc-if value="{{ searchOpen }}" hint-placeholder-val="{{ false }}">
       <div style="border-bottom: 1px solid #2a2a2f; background: #16161a; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;">
@@ -54,14 +80,14 @@
     <div role="tablist" aria-label="Profile sections" style="display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid #2a2a2f; overflow-x: auto;">
       <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5"><button type="button" role="tab" aria-selected="{{ t.sel }}" onClick="{{ t.go }}" style="{{ t.style }}" style-hover="color: #e8e6e1;"><span style="{{ t.gStyle }}">{{ t.g }}</span>{{ t.label }}</button></sc-for>
     </div>
-    <div style="padding: 14px 16px; min-height: 320px; display: flex; flex-direction: column; gap: 12px;">
+    <div class="p360-body" style="padding: 14px 16px; min-height: 320px; display: flex; flex-direction: column; gap: 12px;">
       <sc-if value="{{ tOverview }}" hint-placeholder-val="{{ true }}">
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px;">
           <div style="border: 1px solid #2a2a2f; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 7px; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1), color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="border-color: #3a3a40; background: #16161a;">
             <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">Identity and contact</span>
             <span style="font-family: var(--font-mono); font-size: 12px;">j••••e@example.com</span>
             <span style="font-family: var(--font-mono); font-size: 12px;">+1 (415) •••-••42</span>
-            <span style="display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 12px;"><img src="assets/brand/phantom.svg" alt="" style="width: 16px; height: 16px;">Phantom <span style="color: #a09f99;">7xKX…9fQm</span></span>
+            <span style="display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 12px;"><img src="../assets/brand/phantom.svg" alt="" style="width: 16px; height: 16px;">Phantom <span style="color: #a09f99;">7xKX…9fQm</span></span>
           </div>
           <div style="border: 1px solid #2a2a2f; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 7px; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1), color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="border-color: #3a3a40; background: #16161a;">
             <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">Sources and consent</span>
@@ -72,7 +98,7 @@
         </div>
         <div style="border: 1px solid rgba(201,151,90,0.45); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; background: rgba(201,151,90,0.08);">
           <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #c9975a;">○ What the graph found</span>
-          <span style="font-size: 13px; line-height: 1.55;">A high-value customer is two hops from a flagged settlement cluster, through an agent acting on her behalf. No single source shows this.</span>
+          <span style="font-size: 13px; line-height: 1.55;">A top customer is two steps away from a flagged payment group, through an AI agent acting for her. No single tool shows this.</span>
           <button type="button" onClick="{{ goRisk }}" style="font-family: inherit; align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; min-height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 500; background: #c9975a; color: #1a1a1e; border: 0; cursor: pointer;">See why<span style="font-family: var(--font-mono);">→</span></button>
         </div>
         <div style="display: flex; flex-direction: column; gap: 7px;">
@@ -139,7 +165,7 @@
       <sc-if value="{{ tRisk }}" hint-placeholder-val="{{ false }}">
         <div style="display: flex; align-items: center; gap: 14px;">
           <span style="font-size: 34px; font-weight: 500; letter-spacing: -1px; color: #c9975a;">72</span>
-          <span style="display: flex; flex-direction: column; gap: 6px; flex: 1;"><span style="font-size: 12px; color: #a09f99;">Risk score · elevated · inferred</span><span style="height: 6px; border-radius: 999px; background: #2a2a2f; overflow: hidden;"><span style="display: block; width: 72%; height: 100%; background: linear-gradient(90deg, #6b9a7c, #c9975a 60%, #b5564a);"></span></span></span>
+          <span style="display: flex; flex-direction: column; gap: 6px; flex: 1;"><span style="font-size: 12px; color: #a09f99;">Risk score · elevated · worked out by Aether</span><span style="height: 6px; border-radius: 999px; background: #2a2a2f; overflow: hidden;"><span style="display: block; width: 72%; height: 100%; background: linear-gradient(90deg, #6b9a7c, #c9975a 60%, #b5564a);"></span></span></span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">What drives it</span>
@@ -165,45 +191,47 @@
           <div style="border-radius: 10px; padding: 12px; background: rgba(201,151,90,0.14); display: flex; flex-direction: column; gap: 4px; border: 1px solid transparent; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1), color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="border-color: #3a3a40;"><span style="font-size: 20px; font-weight: 500; color: #c9975a;">$1.8K</span><span style="font-size: 11px; color: #a09f99;">agent-sourced</span></div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 6px;">
-          <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">Attribution path · inferred</span>
+          <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">What led to the sale · worked out by Aether</span>
           <sc-for list="{{ attribution }}" as="a" hint-placeholder-count="4"><div style="display: grid; grid-template-columns: 22px 96px minmax(0,1fr) 40px; gap: 8px; align-items: center; font-size: 12px; padding: 5px 6px; margin: 0 -6px; border-radius: 4px; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1), color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="background: #1a1a1e;"><span style="width: 22px; height: 22px; border-radius: 6px; background: #f5f4f1; display: inline-flex; align-items: center; justify-content: center;"><span aria-hidden="true" style="display: block; width: 13px; height: 13px; background: url({{ a.logo }}) center / contain no-repeat;"></span></span><span style="font-family: var(--font-mono); color: #a09f99;">{{ a.src }}</span><span style="height: 8px; border-radius: 999px; background: #2a2a2f; overflow: hidden;"><span style="{{ a.bar }}"></span></span><span style="font-family: var(--font-mono); text-align: right;">{{ a.w }}</span></div></sc-for>
         </div>
       </sc-if>
     </div>
 
     <sc-if value="{{ hasNote }}" hint-placeholder-val="{{ false }}"><div role="status" style="border-top: 1px solid #2a2a2f; padding: 8px 16px; font-family: var(--font-mono); font-size: 11px; color: #9cc4a9; background: rgba(107,154,124,0.08);">{{ note }}</div></sc-if>
-    <div style="padding: 10px 16px; border-top: 1px solid #2a2a2f; font-family: var(--font-mono); font-size: 11px; color: #a09f99; display: flex; flex-wrap: wrap; gap: 14px; align-items: center;"><span style="color: #9cc4a9;">◉ live · updated 2h ago</span>
+    <div class="p360-legend" style="padding: 10px 16px; border-top: 1px solid #2a2a2f; font-family: var(--font-mono); font-size: 11px; color: #a09f99; display: flex; flex-wrap: wrap; gap: 14px; align-items: center;"><span style="color: #9cc4a9;">◉ live · updated 2h ago</span>
       <span><span style="color: #6b9a7c;">●</span> observed</span><span><span style="color: #c9975a;">○</span> inferred</span><span><span style="color: #5a85a8;">✓</span> approved</span><span><span style="color: #a88a5a;">◉</span> outcome</span><span><span style="color: #c9975a;">⬡</span> agent</span>
     </div>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 560, &quot;height&quot;: 720}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 560, &quot;height&quot;: 720}, &quot;ios&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
 class Component extends DCLogic {
+  get ios() { return !!this.props.ios; }
   state = { tab: 'overview', filter: 'all', open: 'mordred', decision: null, j: 'ig', watch: false, search: false, q: '', note: '' };
   searchRef = React.createRef();
   flash(x) { clearTimeout(this.nt); this.setState({ note: x }); this.nt = setTimeout(() => this.setState({ note: '' }), 2600); }
   componentWillUnmount() { clearTimeout(this.nt); }
   renderVals() {
+    const ios = !!this.props.ios;
     const s = this.state;
     const tab = k => () => this.setState({ tab: k });
-    const B = k => 'assets/brand/' + (k === 'x' ? 'x-dark' : k) + '.svg';
+    const B = k => '../assets/brand/' + (k === 'x' ? 'x-dark' : k) + '.svg';
     const TABS = [['overview', '◈', 'Overview', '#5a85a8'], ['rels', '↔', 'Relationships', '#6b9a7c'], ['journeys', '→', 'Journeys', '#a88a5a'], ['risk', '▲', 'Risk', '#c9975a'], ['value', '↑', 'Value', '#6b9a7c']];
     const AG = { Ptolemy: '#3a6896', Kierkegaard: '#5a85a8', Mordred: '#c9975a' };
     const act = (g, c, x, t) => ({ g, x, t, gStyle: 'font-family: var(--font-mono); color: ' + c + ';' });
     const R = [
-      { key: 'ptolemy', g: '⬡', name: 'Ptolemy', id: 'agt_2f18e', role: 'delegated agent', kind: 'H→A', type: 'agents', c: AG.Ptolemy, risk: 28, desc: 'Scores incoming supplier applications on Jane’s behalf and flags exceptions to Osiris.', facts: ['42 actions/day', 'strength 0.90', 'scope: scoring.read'],
+      { key: 'ptolemy', g: '⬡', name: 'Ptolemy', id: 'agt_2f18e', role: 'delegated agent', kind: 'H→A', type: 'agents', c: AG.Ptolemy, risk: 28, desc: 'Scores incoming supplier applications for Jane and flags exceptions to Osiris.', facts: ['42 actions/day', 'strength 0.90', 'scope: scoring.read'],
         actions: [act('✓', '#6b9a7c', 'Scored application app_71c · 0.82', '1h'), act('→', '#9fbad6', 'Flagged exception to Osiris', '5h'), act('✓', '#6b9a7c', 'Onboarded supplier to SF syndicate', '2d')] },
       { key: 'kierkegaard', g: '⬡', name: 'Kierkegaard', id: 'agt_5c02f', role: 'delegated agent', kind: 'H→A', type: 'agents', c: AG.Kierkegaard, risk: 31, desc: 'Audits cross-border settlement records for irregularities.', facts: ['9 actions/day', '$1.8K value', 'strength 0.82'],
         actions: [act('◉', '#a88a5a', 'Audited Stripe payout po_9x2 · clean', '3h'), act('✓', '#6b9a7c', 'Reconciled 14 settlements', '1d')] },
-      { key: 'mordred', g: '⬡', name: 'Mordred', id: 'agt_88ce1', role: 'flagged relationship', kind: 'A→A', type: 'agents', c: AG.Mordred, risk: 91, desc: 'Unusual message pattern with an external settlement agent inside a flagged cluster. Escalated to Percival.', facts: ['conf 0.88', '212 messages', 'strength 0.68'],
-        actions: [act('↔', '#c9975a', 'Messaged external agent in syn_dxb4 ×212', '6h'), act('▲', '#b5564a', 'Escalated pattern to Percival', '6h'), act('■', '#b5564a', 'Percival held the next settlement batch · observed', 'now')] },
-      { key: 'percival', g: '●', name: 'Percival', id: 'usr_91b2c', role: 'risk analyst', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 12, desc: 'Co-approves settlement batches with Jane. Receives Mordred’s escalations.', facts: ['14 shared approvals', 'slack · crm', 'strength 0.74'] },
-      { key: 'osiris', g: '●', name: 'Osiris', id: 'usr_c33a0', role: 'compliance', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 18, desc: 'Reviews policy exceptions raised by Ptolemy.', facts: ['6 reviews', 'strength 0.52'] },
+      { key: 'mordred', g: '⬡', name: 'Mordred', id: 'agt_88ce1', role: 'flagged relationship', kind: 'A→A', type: 'agents', c: AG.Mordred, risk: 91, desc: 'Unusual messages with an outside payments agent in a flagged group. Passed to Percival.', facts: ['conf 0.88', '212 messages', 'strength 0.68'],
+        actions: [act('↔', '#c9975a', 'Messaged external agent in syn_dxb4 ×212', '6h'), act('▲', '#b5564a', 'Escalated pattern to Percival', '6h'), act('■', '#b5564a', 'Percival paused the next payment batch · seen', 'now')] },
+      { key: 'percival', g: '●', name: 'Percival', id: 'usr_91b2c', role: 'risk analyst', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 12, desc: 'Approves payment batches together with Jane. Receives Mordred’s alerts.', facts: ['14 shared approvals', 'slack · crm', 'strength 0.74'] },
+      { key: 'osiris', g: '●', name: 'Osiris', id: 'usr_c33a0', role: 'compliance', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 18, desc: 'Reviews rule exceptions raised by Ptolemy.', facts: ['6 reviews', 'strength 0.52'] },
       { key: 'maya', g: '●', name: 'Maya Chen', id: 'usr_a81d3', role: 'referred by Jane', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 9, desc: 'Joined through Jane’s referral link on X. Now a repeat buyer.', facts: ['referral', '$2.1K value', '3 orders'] },
-      { key: 'supplier', g: '◈', name: 'SF supplier syndicate', id: 'syn_sf01', role: '5 humans · 2 agents', kind: 'cluster', type: 'syndicates', c: '#a88a5a', risk: 36, desc: 'Supplier network run through Ptolemy. Most common path: sourced → contracted → active.', facts: ['$14.6K value', '11 journeys'],
+      { key: 'supplier', g: '◈', name: 'SF supplier syndicate', id: 'syn_sf01', role: '5 humans · 2 agents', kind: 'cluster', type: 'syndicates', c: '#a88a5a', risk: 36, desc: 'Supplier network handled through Ptolemy. Most common path: sourced → contracted → active.', facts: ['$14.6K value', '11 journeys'],
         members: [['●', 'Jane Doe', '#6b9a7c'], ['●', 'Osiris', '#6b9a7c'], ['●', '+3 suppliers', '#6b9a7c'], ['⬡', 'Ptolemy', AG.Ptolemy], ['⬡', 'Kierkegaard', AG.Kierkegaard]] },
-      { key: 'settlement', g: '◈', name: 'Settlement syndicate', id: 'syn_dxb4', role: '2 humans · 3 agents', kind: 'cluster', type: 'syndicates', c: '#b5564a', risk: 84, desc: 'Flagged cluster in Dubai. Mordred communicates with one of its agents.', facts: ['flagged', '2 hops from Jane'],
+      { key: 'settlement', g: '◈', name: 'Settlement syndicate', id: 'syn_dxb4', role: '2 humans · 3 agents', kind: 'cluster', type: 'syndicates', c: '#b5564a', risk: 84, desc: 'Flagged group in Dubai. Mordred messages one of its agents.', facts: ['flagged', '2 hops from Jane'],
         members: [['●', '2 unknown humans', '#a09f99'], ['⬡', 'agt_x41 (external)', '#b5564a'], ['⬡', '+2 agents', '#b5564a']] },
     ];
     const counts = { all: R.length, humans: R.filter(r => r.type === 'humans').length, agents: R.filter(r => r.type === 'agents').length, syndicates: R.filter(r => r.type === 'syndicates').length };
@@ -227,6 +255,7 @@ class Component extends DCLogic {
     const hits = (ql ? IDX.filter(x => x[0].toLowerCase().includes(ql)) : IDX.slice(0, 4)).map(([label, where, tb, f]) => ({ label, where, go: () => this.setState({ tab: tb, filter: f || s.filter, search: false, q: '' }) }));
     const hAct = (g, label, on, go, tone) => ({ g, label, go, pressed: on ? 'true' : 'false', style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; min-height: 28px; padding: 0 10px; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1); ' + (on ? 'background: rgba(90,133,168,0.18); color: #9fbad6; border: 1px solid #5a85a8;' : tone === 'primary' ? 'background: #e8e6e1; color: #1a1a1e; border: 1px solid #e8e6e1;' : 'background: #1a1a1e; color: #e8e6e1; border: 1px solid #2a2a2f;'), hover: tone === 'primary' ? 'background: #d8d6d0; border-color: #d8d6d0;' : 'background: #1f1f24; border-color: #3a3a40;' });
     return {
+      isIos: ios, notIos: !ios, rootClass: ios ? 'p360-ios' : '',
       searchLabel: 'Search this profile', searchRef: this.searchRef, searchOpen: s.search, q: s.q, hits,
       openSearch: () => this.setState({ search: !s.search }, () => setTimeout(() => this.searchRef.current && this.searchRef.current.focus(), 0)),
       onQ: e => this.setState({ q: e.target.value }), onKey: e => { if (e.key === 'Escape') this.setState({ search: false, q: '' }); if (e.key === 'Enter' && hits[0]) hits[0].go(); },
@@ -236,8 +265,8 @@ class Component extends DCLogic {
       sources: [['stripe', 'Stripe'], ['hubspot', 'HubSpot'], ['x', 'X'], ['instagram', 'Instagram'], ['shopify', 'Shopify']].map(([k, name]) => ({ logo: B(k), name })),
       stats: [['$18.4K', 'value', '#6b9a7c', 'value'], ['8', 'relationships', '#9fbad6', 'rels'], ['3', 'agents', '#c9975a', 'rels'], ['2', 'journeys', '#a88a5a', 'journeys']].map(([v, k, c, t]) => ({ v, k, go: tab(t),
         vStyle: 'font-size: 17px; font-weight: 500; color: ' + c + ';', style: 'font-family: inherit; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; background: transparent; border: 0; border-right: 1px solid #2a2a2f; cursor: pointer; color: #e8e6e1;' })),
-      tabs: TABS.map(([k, g, label, c]) => ({ label, g, sel: s.tab === k ? 'true' : 'false', go: tab(k), gStyle: 'font-family: var(--font-mono); color: ' + c + ';',
-        style: 'font-family: inherit; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; font-weight: 500; padding: 10px 10px; border: 0; background: transparent; cursor: pointer; border-bottom: 2px solid ' + (s.tab === k ? c : 'transparent') + '; color: ' + (s.tab === k ? '#e8e6e1' : '#a09f99') + ';' })),
+      tabs: TABS.map(([k, g, label, c]) => ({ label, g, sel: s.tab === k ? 'true' : 'false', go: tab(k), gStyle: ios ? 'font-family: var(--font-mono); font-size: 20px; line-height: 24px; color: ' + (s.tab === k ? '#0A84FF' : '#8e8e93') + ';' : 'font-family: var(--font-mono); color: ' + c + ';',
+        style: ios ? 'font-family: inherit; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; font-weight: 500; padding: 4px 0; border: 0; background: transparent; cursor: pointer; transition: color 120ms cubic-bezier(0.22,1,0.36,1); color: ' + (s.tab === k ? '#0A84FF' : '#8e8e93') + ';' : 'font-family: inherit; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; font-weight: 500; padding: 10px 10px; border: 0; background: transparent; cursor: pointer; border-bottom: 2px solid ' + (s.tab === k ? c : 'transparent') + '; color: ' + (s.tab === k ? '#e8e6e1' : '#a09f99') + ';' })),
       tOverview: s.tab === 'overview', tRels: s.tab === 'rels', tJourneys: s.tab === 'journeys', tRisk: s.tab === 'risk', tValue: s.tab === 'value',
       goRisk: tab('risk'),
       timeline: [
@@ -267,7 +296,7 @@ class Component extends DCLogic {
         steps: jr.steps.map(([label, src, n, rate, jane, d], i) => ({ label, logo: B(src), n: n.toLocaleString('en-US'), rate, jane, d,
           bar: 'display: block; height: 100%; width: ' + Math.max(2, Math.sqrt(n / max) * 100) + '%; background: ' + ['#3a6896', '#5a85a8', '#6b9a7c', '#a88a5a', '#c9975a', '#6b9a7c'][i] + ';',
           rateStyle: 'font-family: var(--font-mono); font-size: 11px; text-align: right; color: ' + (i === 0 ? '#a09f99' : '#9cc4a9') + ';' })) },
-      drivers: [['Agent Mordred linked to flagged syndicate (2 hops)', '+31', '#b5564a'], ['Cross-border settlement velocity ↑ 3.1×', '+18', '#c9975a'], ['New counterparty in 7 days', '+9', '#c9975a'], ['Verified identity across 6 sources', '−12', '#6b9a7c']].map(([x, v, c]) => ({ x, v, vStyle: 'font-family: var(--font-mono); color: ' + c + ';' })),
+      drivers: [['Agent Mordred is two steps from a flagged group', '+31', '#b5564a'], ['Cross-border payments up 3.1× in speed', '+18', '#c9975a'], ['New counterparty in 7 days', '+9', '#c9975a'], ['Verified identity across 6 sources', '−12', '#6b9a7c']].map(([x, v, c]) => ({ x, v, vStyle: 'font-family: var(--font-mono); color: ' + c + ';' })),
       pending: !decided, approve: () => this.setState({ decision: 'approved' }), decline: () => this.setState({ decision: 'declined' }),
       decision: decided === 'approved' ? '✓ reviewed by you · just now' : decided === 'declined' ? '⚑ flagged for follow-up' : 'not yet reviewed',
       decisionStyle: 'font-family: var(--font-mono); font-size: 11px; color: ' + (decided === 'approved' ? '#6b9a7c' : decided === 'declined' ? '#b5564a' : '#a09f99') + ';',

@@ -1,235 +1,224 @@
-import { useState, type CSSProperties } from 'react';
-import { ACCENTS, tint, type Accent } from '@site/site/palette';
-
 /**
- * The four relationship kinds between people and agents, with a synthetic
- * example of each (Relationship Explorer.dc.html). Used on Olympus Home and
- * Aether Home; reused in /app.
+ * Built from design/designs/Relationship Explorer.dc.html (copy, layout and styles verbatim).
  */
+import { Fragment } from 'react';
+import { css, hoverClass, useDesignState } from '@site/design/runtime';
 
-interface Party {
-  glyph: '●' | '⬡';
+import './relationship-explorer.css';
+
+type Tone = [base: string, ink: string, soft: string];
+interface Endpoint {
+  g: string;
   label: string;
   sub: string;
   agent: boolean;
 }
-
-const human = (label: string, sub: string): Party => ({ glyph: '●', label, sub, agent: false });
-const agent = (label: string, sub: string): Party => ({ glyph: '⬡', label, sub, agent: true });
-
-type LayerId = 'events' | 'entities' | 'graph' | 'intelligence' | 'governance';
-
-interface RelationshipType {
-  id: 'h2h' | 'h2a' | 'a2a' | 'a2h';
+interface RelType {
+  id: string;
   code: string;
   name: string;
   short: string;
-  accent: Accent;
-  from: Party;
-  to: Party;
+  c: Tone;
+  from: Endpoint;
+  to: Endpoint;
   verb: string;
   strength: string;
   means: string;
   example: string;
   value: string;
   evidence: string[];
-  layers: LayerId[];
+  layers: string[];
 }
 
-export const RELATIONSHIP_TYPES: RelationshipType[] = [
-  {
-    id: 'h2h', code: 'H → H', name: 'Human to human', short: 'collaboration', accent: 'sage',
-    from: human('Jane Doe', 'account owner'), to: human('Percival', 'risk analyst'), verb: 'co-approves with', strength: '0.74',
-    means: 'People collaborating, communicating, and sharing decisions across teams and organizations.',
-    example: 'Jane and Percival co-approve settlement batches above $10k — 14 shared approvals in 90 days, across Slack and the CRM.',
-    value: 'Shows who actually decides, and who each decision depends on.',
-    evidence: ['approval_recorded ×14', 'slack · shared thread', 'crm · same account'],
-    layers: ['events', 'entities', 'graph', 'governance'],
-  },
-  {
-    id: 'h2a', code: 'H → A', name: 'Human to agent', short: 'delegation', accent: 'cobalt',
-    from: human('Jane Doe', 'usr_4f21a9'), to: agent('Ptolemy', 'agt_2f18e'), verb: 'delegates to', strength: '0.90',
-    means: 'A person hands a task to an agent while keeping the authority behind it.',
-    example: 'Jane delegated application scoring to Ptolemy. It takes 42 actions a day, and each one traces back to her grant and scope.',
-    value: 'Every agent action stays tied to the human authority that allowed it.',
-    evidence: ['delegation_granted', 'agent_tool_called ×42/day', 'scope: scoring.read'],
-    layers: ['events', 'entities', 'graph', 'intelligence', 'governance'],
-  },
-  {
-    id: 'a2a', code: 'A → A', name: 'Agent to agent', short: 'orchestration', accent: 'ochre',
-    from: agent('Mordred', 'agt_88ce1'), to: agent('Settlement agent', 'external'), verb: 'messages', strength: '0.68',
-    means: 'Agents orchestrating, depending on, and handing work to other agents.',
-    example: 'Mordred began an unusual message pattern with an external settlement agent that belongs to a flagged cluster. Inferred at 0.88 confidence.',
-    value: 'Surfaces machine-to-machine patterns no person would see in a single log.',
-    evidence: ['agent_message ×212', 'new counterparty', 'inferred · conf 0.88'],
-    layers: ['events', 'graph', 'intelligence'],
-  },
-  {
-    id: 'a2h', code: 'A → H', name: 'Agent to human', short: 'escalation', accent: 'ember',
-    from: agent('Mordred', 'agt_88ce1'), to: human('Percival', 'risk analyst'), verb: 'escalates to', strength: '0.81',
-    means: 'Agents notifying, recommending, or escalating to people for a decision.',
-    example: 'Mordred escalated the pattern to Percival with its evidence attached. The settlement batch is on hold until he decides.',
-    value: 'Consequential actions wait for a person, so the loop stays accountable.',
-    evidence: ['escalation_created', '▲ review required', 'outcome: pending'],
-    layers: ['events', 'intelligence', 'governance'],
-  },
-];
+const TONES: Record<'sage' | 'cobalt' | 'ochre' | 'ember', Tone> = {
+  sage: ['#6b9a7c', '#4f7a5e', 'rgba(107,154,124,0.16)'],
+  cobalt: ['#3a6896', '#2d5373', 'rgba(58,104,150,0.14)'],
+  ochre: ['#c9975a', '#8a6433', 'rgba(201,151,90,0.18)'],
+  ember: ['#b5564a', '#a3473c', 'rgba(181,86,74,0.14)'],
+};
+const H = (label: string, sub: string): Endpoint => ({ g: '●', label, sub, agent: false });
+const A = (label: string, sub: string): Endpoint => ({ g: '⬡', label, sub, agent: true });
 
-const LAYERS: Array<[LayerId, string, string, string]> = [
-  ['events', '◉', 'Events', 'Ingestion and the operational timeline.'],
-  ['entities', '⬡', 'Entities', 'Humans, organizations, agents, devices.'],
-  ['graph', '↔', 'Graph', 'Resolution and relationship edges.'],
-  ['intelligence', '◈', 'Intelligence', 'Patterns, attribution, and risk.'],
-  ['governance', '✓', 'Governance', 'Consent, policy, approval, audit.'],
+export const RELATIONSHIP_TYPES: RelType[] = [
+  { id: 'h2h', code: 'H → H', name: 'Human to human', short: 'working together', c: TONES.sage, from: H('Jane Doe', 'account owner'), to: H('Percival', 'risk analyst'), verb: 'approves together with', strength: '0.74',
+    means: 'People working together and sharing decisions across teams and companies.', example: 'Jane and Percival both approve large payment batches — 14 shared approvals in 90 days, seen across Slack and the CRM.', value: 'Shows who really makes decisions, and who each one depends on.',
+    evidence: ['approval_recorded ×14', 'slack · shared thread', 'crm · same account'], layers: ['events', 'entities', 'graph', 'governance'] },
+  { id: 'h2a', code: 'H → A', name: 'Human to agent', short: 'handing off a task', c: TONES.cobalt, from: H('Jane Doe', 'usr_4f21a9'), to: A('Ptolemy', 'agt_2f18e'), verb: 'hands a task to', strength: '0.90',
+    means: 'A person gives a task to an AI agent and stays responsible for it.', example: 'Jane asked Ptolemy to score applications. It takes 42 actions a day, and each one traces back to what she allowed.', value: 'Every agent action stays tied to the person who allowed it.',
+    evidence: ['delegation_granted', 'agent_tool_called ×42/day', 'scope: scoring.read'], layers: ['events', 'entities', 'graph', 'intelligence', 'governance'] },
+  { id: 'a2a', code: 'A → A', name: 'Agent to agent', short: 'coordinating', c: TONES.ochre, from: A('Mordred', 'agt_88ce1'), to: A('Settlement agent', 'external'), verb: 'messages', strength: '0.68',
+    means: 'AI agents coordinating with, relying on, and handing work to other agents.', example: 'Mordred started an unusual pattern of messages with an outside payments agent linked to a flagged group. Aether is 88% sure.', value: 'Shows patterns between machines that no one would spot in a single log.',
+    evidence: ['agent_message ×212', 'new counterparty', 'inferred · conf 0.88'], layers: ['events', 'graph', 'intelligence'] },
+  { id: 'a2h', code: 'A → H', name: 'Agent to human', short: 'asking for a decision', c: TONES.ember, from: A('Mordred', 'agt_88ce1'), to: H('Percival', 'risk analyst'), verb: 'asks for a decision from', strength: '0.81',
+    means: 'AI agents alerting, recommending, or asking people for a decision.', example: 'Mordred passed the pattern to Percival with its evidence. The payment batch is on hold until he decides.', value: 'Big actions wait for a person, so someone is always accountable.',
+    evidence: ['escalation_created', '▲ review required', 'outcome: pending'], layers: ['events', 'intelligence', 'governance'] },
 ];
-
-const eyebrow = 'text-label uppercase';
+const LAYERS: [id: string, g: string, name: string, role: string][] = [
+  ['events', '◉', 'Events', 'What came in, and when.'], ['entities', '⬡', 'Entities', 'People, companies, agents, devices.'], ['graph', '↔', 'Graph', 'Who is the same, and who is linked.'],
+  ['intelligence', '◈', 'Intelligence', 'Patterns, credit, and risk.'], ['governance', '✓', 'Governance', 'Consent, rules, approvals, records.'],
+];
 
 export function RelationshipExplorer() {
-  const [selected, setSelected] = useState<RelationshipType['id']>('h2a');
-  const cur = RELATIONSHIP_TYPES.find((t) => t.id === selected) ?? RELATIONSHIP_TYPES[1]!;
-  const c = ACCENTS[cur.accent];
-
-  const node = (party: Party) => (
-    <span
-      aria-hidden="true"
-      className="flex h-[60px] w-[60px] items-center justify-center font-mono text-[22px] text-ink"
-      style={{ borderRadius: party.agent ? 14 : 999, background: c.base, boxShadow: `0 0 0 5px ${tint(cur.accent, 0.16)}` }}
-    >
-      {party.glyph}
-    </span>
-  );
-
-  const partyColumn = (party: Party) => (
-    <div className="flex flex-col items-center gap-2 text-center">
-      {node(party)}
-      <span className="text-[14px] font-medium text-bone">{party.label}</span>
-      <span className="font-mono text-[11px] text-mist">{party.sub}</span>
-    </div>
-  );
-
+  const [state, setState] = useDesignState<{ t: string }>({ t: 'h2a' });
+  const cur = RELATIONSHIP_TYPES.find((t) => t.id === state.t) ?? RELATIONSHIP_TYPES[1]!;
+  const node = (n: Endpoint) =>
+    'width: 60px; height: 60px; border-radius: ' + (n.agent ? '14px' : '999px') + '; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 22px; color: #1a1a1e; background: ' + cur.c[0] + '; box-shadow: 0 0 0 5px ' + cur.c[2] + ';';
+  const types = RELATIONSHIP_TYPES.map((t) => {
+    const on = t.id === cur.id;
+    return {
+      code: t.code, name: t.name, short: t.short, sel: on, pick: () => setState({ t: t.id }),
+      codeStyle: 'font-family: var(--font-mono); font-size: 13px; font-weight: 500; padding: 6px 9px; border-radius: 8px; white-space: nowrap; background: ' + (on ? '#f5f4f1' : t.c[2]) + '; color: ' + t.c[1] + ';',
+      subStyle: 'font-family: var(--font-mono); font-size: 11px; color: ' + (on ? 'rgba(245,244,241,0.85)' : '#6b6a65') + ';',
+      style: 'font-family: inherit; flex: 1 1 200px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; cursor: pointer; text-align: left; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms; ' + (on ? 'background: ' + t.c[1] + '; border: 1px solid ' + t.c[1] + '; color: #f5f4f1;' : 'background: #eceae5; border: 1px solid #d8d6d0; color: #1a1a1e;'),
+      hover: on ? 'background: ' + t.c[1] + ';' : 'background: ' + t.c[2] + '; border-color: ' + t.c[0] + ';',
+    };
+  });
+  const fromNode = node(cur.from);
+  const toNode = node(cur.to);
+  const codePill = 'font-family: var(--font-mono); font-size: 12px; padding: 3px 9px; border-radius: 999px; color: #1a1a1e; background: ' + cur.c[0] + ';';
+  const verbStyle = 'font-size: 12px; font-weight: 500; color: ' + cur.c[0] + '; text-align: center;';
+  const lineStyle = 'height: 2px; width: 100%; border-radius: 2px; background: linear-gradient(90deg, ' + cur.c[0] + ' 0 88%, transparent 88%); position: relative;';
+  const evStyle = 'font-family: var(--font-mono); font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1px solid #2a2a2f; background: #111114; color: #e8e6e1;';
+  const valueBox = 'flex: 1; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 6px; background: ' + cur.c[2] + '; border: 1px solid ' + cur.c[0] + '66;';
+  const valueLabel = 'font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: ' + cur.c[1] + ';';
+  const layers = LAYERS.map(([id, g, name, role]) => {
+    const on = cur.layers.includes(id);
+    return {
+      g, name, role,
+      glyphStyle: 'font-family: var(--font-mono); font-size: 16px; color: ' + (on ? cur.c[1] : '#9c9b95') + ';',
+      style: 'flex: 1 1 160px; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; transition: background-color 200ms, border-color 200ms, opacity 200ms; ' + (on ? 'background: ' + cur.c[2] + '; border: 1px solid ' + cur.c[0] + '; opacity: 1;' : 'background: #f5f4f1; border: 1px dashed #d8d6d0; opacity: 0.6;'),
+    };
+  });
   return (
-    <div className="flex flex-col gap-3 font-sans text-ink">
-      <div role="tablist" aria-label="Relationship types" className="flex flex-wrap gap-3">
-        {RELATIONSHIP_TYPES.map((t) => {
-          const on = t.id === cur.id;
-          const tc = ACCENTS[t.accent];
-          return (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              onClick={() => setSelected(t.id)}
-              className={
-                'flex flex-[1_1_200px] cursor-pointer items-center gap-3 rounded-card border px-3.5 py-3 text-left transition-colors duration-120 ease-site ' +
-                (on ? 'text-stone-50' : 'border-line bg-stone-100 text-ink hover:[background:var(--tint)] hover:[border-color:var(--base)]')
-              }
-              style={
-                on
-                  ? { background: tc.ink, borderColor: tc.ink }
-                  : ({ '--tint': tint(t.accent, 0.16), '--base': tc.base } as CSSProperties)
-              }
-            >
-              <span
-                className="whitespace-nowrap rounded-lg px-[9px] py-1.5 font-mono text-body-sm font-medium"
-                style={{ background: on ? '#f5f4f1' : tint(t.accent, 0.16), color: tc.ink }}
-              >
+    <div className="dc pg-relationship-explorer">
+    <div data-page="relationship-explorer" style={css("display: flex; flex-direction: column; gap: 12px; font-family: var(--font-sans); color: #1a1a1e;")}>
+      <div role="tablist" aria-label="Relationship types" style={css("display: flex; flex-wrap: wrap; gap: 12px;")}>
+        {(types).map((t: any, tIndex: number) => (
+          <Fragment key={tIndex}>
+            <button type="button" role="tab" aria-selected={t.sel} onClick={t.pick} style={css(t.style)} className={`${hoverClass(t.hover, 'hover')}`}>
+              <span style={css(t.codeStyle)}>
                 {t.code}
               </span>
-              <span className="flex flex-col items-start gap-0.5">
-                <span className="text-[14px] font-medium">{t.name}</span>
-                <span className={'font-mono text-[11px] ' + (on ? 'text-stone-50/85' : 'text-slate')}>{t.short}</span>
+              <span style={css("display: flex; flex-direction: column; align-items: flex-start; gap: 2px;")}>
+                <span style={css("font-size: 14px; font-weight: 500;")}>
+                  {t.name}
+                </span>
+                <span style={css(t.subStyle)}>
+                  {t.short}
+                </span>
               </span>
             </button>
-          );
-        })}
+          </Fragment>
+        ))}
       </div>
-
-      <div className="flex flex-wrap gap-3">
-        <div
-          data-theme="dark"
-          className="flex min-w-0 flex-[1_1_380px] flex-col gap-[18px] rounded-lg border border-graphite-hairline bg-ink p-6 text-bone"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className={`${eyebrow} text-mist`}>Synthetic example</span>
-            <span className="rounded-full px-[9px] py-[3px] font-mono text-caption text-ink" style={{ background: c.base }}>
+      <div style={css("display: flex; flex-wrap: wrap; gap: 12px;")}>
+        <div data-theme="dark" style={css("flex: 1 1 380px; min-width: 0; background: #1a1a1e; border: 1px solid #2a2a2f; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 18px; color: #e8e6e1;")}>
+          <div style={css("display: flex; justify-content: space-between; align-items: center; gap: 8px;")}>
+            <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
+              {"Synthetic example"}
+            </span>
+            <span style={css(codePill)}>
               {cur.code}
             </span>
           </div>
-          <div className="grid items-center gap-2 [grid-template-columns:minmax(0,1fr)_minmax(90px,1.2fr)_minmax(0,1fr)]">
-            {partyColumn(cur.from)}
-            <div className="flex flex-col items-center gap-1.5">
-              <span className="text-center text-caption font-medium" style={{ color: c.base }}>
+          <div style={css("display: grid; grid-template-columns: minmax(0,1fr) minmax(90px, 1.2fr) minmax(0,1fr); align-items: center; gap: 8px;")}>
+            <div style={css("display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;")}>
+              <span style={css(fromNode)}>
+                {cur.from.g}
+              </span>
+              <span style={css("font-size: 14px; font-weight: 500; color: #e8e6e1;")}>
+                {cur.from.label}
+              </span>
+              <span style={css("font-family: var(--font-mono); font-size: 11px; color: #a09f99;")}>
+                {cur.from.sub}
+              </span>
+            </div>
+            <div style={css("display: flex; flex-direction: column; align-items: center; gap: 6px;")}>
+              <span style={css(verbStyle)}>
                 {cur.verb}
               </span>
-              <span
-                aria-hidden="true"
-                className="h-0.5 w-full rounded-sm"
-                style={{ background: `linear-gradient(90deg, ${c.base} 0 88%, transparent 88%)` }}
-              />
-              <span className="font-mono text-[11px] text-mist">strength {cur.strength}</span>
+              <span style={css(lineStyle)} />
+              <span style={css("font-family: var(--font-mono); font-size: 11px; color: #a09f99;")}>
+                {"strength "}{cur.strength}
+              </span>
             </div>
-            {partyColumn(cur.to)}
+            <div style={css("display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;")}>
+              <span style={css(toNode)}>
+                {cur.to.g}
+              </span>
+              <span style={css("font-size: 14px; font-weight: 500; color: #e8e6e1;")}>
+                {cur.to.label}
+              </span>
+              <span style={css("font-family: var(--font-mono); font-size: 11px; color: #a09f99;")}>
+                {cur.to.sub}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col gap-2 border-t border-graphite-hairline pt-3.5">
-            <span className={`${eyebrow} text-mist`}>Evidence on the edge</span>
-            <div className="flex flex-wrap gap-1.5">
-              {cur.evidence.map((e) => (
-                <span key={e} className="rounded-control border border-graphite-hairline bg-graphite-base px-2 py-1 font-mono text-[11px] text-bone">
-                  {e}
-                </span>
+          <div style={css("display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid #2a2a2f;")}>
+            <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
+              {"Evidence on the edge"}
+            </span>
+            <div style={css("display: flex; flex-wrap: wrap; gap: 6px;")}>
+              {(cur.evidence).map((e: any, eIndex: number) => (
+                <Fragment key={eIndex}>
+                  <span style={css(evStyle)}>
+                    {e}
+                  </span>
+                </Fragment>
               ))}
             </div>
           </div>
         </div>
-
-        <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-2">
-          <div className="flex flex-col gap-1.5 rounded-lg border border-line bg-stone-100 p-[22px]">
-            <span className={`${eyebrow} text-slate`}>What it means</span>
-            <span className="text-[15px] leading-[1.55]">{cur.means}</span>
-          </div>
-          <div className="flex flex-col gap-1.5 rounded-lg border border-line bg-stone-50 p-[22px]">
-            <span className={`${eyebrow} text-slate`}>In the example</span>
-            <span className="text-[14px] leading-[1.6] text-[#3a3935]">{cur.example}</span>
-          </div>
-          <div
-            className="flex flex-1 flex-col gap-1.5 rounded-lg border p-[22px]"
-            style={{ background: tint(cur.accent, 0.16), borderColor: tint(cur.accent, 0.4) }}
-          >
-            <span className={eyebrow} style={{ color: c.ink }}>
-              → What comes from it
+        <div style={css("flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 8px;")}>
+          <div style={css("background: #eceae5; border: 1px solid #d8d6d0; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 6px;")}>
+            <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
+              {"What it means"}
             </span>
-            <span className="text-[15px] font-medium leading-[1.55] text-ink">{cur.value}</span>
+            <span style={css("font-size: 15px; line-height: 1.55;")}>
+              {cur.means}
+            </span>
+          </div>
+          <div style={css("background: #f5f4f1; border: 1px solid #d8d6d0; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 6px;")}>
+            <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
+              {"In the example"}
+            </span>
+            <span style={css("font-size: 14px; line-height: 1.6; color: #3a3935;")}>
+              {cur.example}
+            </span>
+          </div>
+          <div style={css(valueBox)}>
+            <span style={css(valueLabel)}>
+              {"→ What comes from it"}
+            </span>
+            <span style={css("font-size: 15px; line-height: 1.55; font-weight: 500; color: #1a1a1e;")}>
+              {cur.value}
+            </span>
           </div>
         </div>
       </div>
-
-      <div className="flex flex-col gap-2">
-        <span className={`${eyebrow} text-slate`}>Aether layers this relationship uses</span>
-        <div className="flex flex-wrap gap-3">
-          {LAYERS.map(([id, glyph, name, role]) => {
-            const on = cur.layers.includes(id);
-            return (
-              <div
-                key={id}
-                data-active={on}
-                className={
-                  'flex flex-[1_1_160px] flex-col gap-1 rounded-card px-3.5 py-3 transition-[background-color,border-color,opacity] duration-200 ease-site ' +
-                  (on ? 'border opacity-100' : 'border border-dashed border-line bg-stone-50 opacity-60')
-                }
-                style={on ? { background: tint(cur.accent, 0.16), borderColor: c.base } : undefined}
-              >
-                <span aria-hidden="true" className="font-mono text-[16px]" style={{ color: on ? c.ink : '#9c9b95' }}>
-                  {glyph}
+      <div style={css("display: flex; flex-direction: column; gap: 8px;")}>
+        <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
+          {"Aether layers this relationship uses"}
+        </span>
+        <div style={css("display: flex; flex-wrap: wrap; gap: 12px;")}>
+          {(layers).map((l: any, lIndex: number) => (
+            <Fragment key={lIndex}>
+              <div style={css(l.style)}>
+                <span style={css(l.glyphStyle)}>
+                  {l.g}
                 </span>
-                <span className="text-body-sm font-medium">{name}</span>
-                <span className="text-caption leading-[1.45] text-slate">{role}</span>
+                <span style={css("font-size: 13px; font-weight: 500;")}>
+                  {l.name}
+                </span>
+                <span style={css("font-size: 12px; line-height: 1.45; color: #6b6a65;")}>
+                  {l.role}
+                </span>
               </div>
-            );
-          })}
+            </Fragment>
+          ))}
         </div>
       </div>
+    </div>
     </div>
   );
 }

@@ -46,7 +46,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:daf030bc8e3d443ee4b43a0e2d65020d2c6bb22845491728b5a9e935b282765f"
+  ".github/workflows/amplify-status-production.yml": "sha256:179a285bb3252c8c3b9d01e189afb910348c52a4356862abf2c277465fda034d"
   ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
@@ -69,7 +69,7 @@ source_hashes:
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:13bfa71ca795f6920b6e41eb844bfd6cecb6c6d34c326d69af2a0209eb52003f"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:f69b00625931ae6892e6a7446efbce0c0ea32bd41eb9ce0b93e1cab808ae131b"
+  "scripts/release/check_amplify_app_contract.py": "sha256:dc15fe4bf6544e97ca419063de64f895b92492a51ce379235cea79884307f87b"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
@@ -509,7 +509,12 @@ SHA and verifies the public `status.olympuslabsml.com` association and its live
 CNAME target. If legacy branches or mappings remain, CI fails closed instead
 of attempting a domain mutation. Repository-backed runs never delete branches
 or call `UpdateDomainAssociation`; they verify the AVAILABLE association and
-canonical `main` mapping before release. Squarespace remains authoritative.
+its mappings (`www` to `production-olympus`, every other host to `main`)
+before release. The app has two branches built from the same SHA: `main`
+builds the Aether site and `production-olympus` the Olympus Labs site for
+`www`; the workflow mirrors the SHA to that Git branch and releases both. The
+staging preflight's production-status check covers both branches' settings
+and jobs. Squarespace remains authoritative.
 A repository-backed status app is updated in place on later runs; it is never
 treated as a staging ECS or Terraform mutation. Since Amplify can auto-start
 the branch build for the pushed SHA, the workflow reuses an active exact-SHA

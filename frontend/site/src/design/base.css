@@ -1,0 +1,102 @@
+/*
+ * Base styles the design handoff pages are built on: the semantic element
+ * styles of Design System v2.0 (design/designs/_ds colors_and_type.css) and
+ * the browser defaults its pages assume. Tailwind's preflight resets these for
+ * the rest of the site, so they are restored only inside a `.dc` page root.
+ */
+.dc {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  font-feature-settings: 'ss01', 'cv11';
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Browser defaults the designs rely on (preflight removes them). The designs
+   size boxes the browser's way (content-box) unless a style says otherwise. */
+.dc,
+.dc :where(*, ::before, ::after) {
+  box-sizing: content-box;
+}
+.dc :where(button, input, select, meter, progress) {
+  box-sizing: revert;
+}
+.dc :where(button, input, select, textarea) {
+  font: revert;
+  line-height: revert;
+  color: revert;
+  margin: revert;
+  padding: revert;
+  text-transform: revert;
+}
+.dc :where(button) {
+  background-color: revert;
+  background-image: revert;
+}
+.dc :where(img, svg, video, canvas) {
+  display: revert;
+  vertical-align: revert;
+  max-width: revert;
+  height: revert;
+}
+.dc :where(dl, dd, figure, pre, blockquote, fieldset, legend) {
+  margin: revert;
+  padding: revert;
+}
+.dc :where(ol, ul, menu) {
+  list-style: revert;
+  margin: revert;
+  padding: revert;
+}
+.dc :where(h4, h5, h6) {
+  font-size: revert;
+  font-weight: revert;
+  margin: revert;
+}
+.dc :where(table) {
+  border-collapse: revert;
+  border-color: revert;
+  text-indent: revert;
+}
+.dc :where(*, ::before, ::after) {
+  border-color: currentColor;
+}
+
+/* Design System v2.0 type roles. */
+.dc :where(h1) {
+  font: 500 40px/1.1 var(--font-sans);
+  letter-spacing: -0.8px;
+  color: var(--fg);
+  margin: 0;
+}
+.dc :where(h2) {
+  font: 500 28px/1.15 var(--font-sans);
+  letter-spacing: -0.56px;
+  color: var(--fg);
+  margin: 0;
+}
+.dc :where(h3) {
+  font: 500 22px/1.25 var(--font-sans);
+  letter-spacing: -0.33px;
+  color: var(--fg);
+  margin: 0;
+}
+.dc :where(p) {
+  font: 400 14px/1.55 var(--font-sans);
+  color: var(--fg);
+  margin: 0;
+}
+.dc :where(code, kbd, samp) {
+  font: 400 13px/1.5 var(--font-mono);
+  color: var(--fg);
+  font-feature-settings: 'zero', 'ss01';
+}
+.dc :where(hr) {
+  border: 0;
+  border-top: 1px solid #d8d6d0;
+  margin: 32px 0;
+}
