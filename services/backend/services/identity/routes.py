@@ -31,7 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, NotFoundError
+from shared.common.common import APIResponse, NotFoundError, utc_now
 from shared.cache.cache import CacheClient
 from shared.graph.graph import GraphClient
 from shared.events.events import Event, EventProducer, Topic
@@ -143,6 +143,51 @@ async def resolve_identity(
     tenant = request.state.tenant
     tenant.require_permission("write")
 
+    # Keep the direct API entry point behind the same runtime kill switch as
+    # SDK, ingestion, and worker resolution. Relying on the resolver's inner
+    # guard still permits needless consent lookups and makes this route's
+    # observable contract differ from other disabled identity surfaces.
+    from config.settings import settings
+
+    if not settings.identity_continuity.resolution_enabled:
+        return APIResponse(data=IdentityResolveResponse(
+            tenant_id=tenant.tenant_id,
+            canonical_entity_id="",
+            decision="blocked",
+            confidence=0.0,
+            confidence_tier="blocked",
+            reason_codes=["identity_resolution_disabled"],
+            blocked_reason="identity_resolution_disabled",
+        ).model_dump()).to_dict()
+
+    # ``consent_snapshot`` supplied by a caller is claim data, not proof of
+    # authorization. Bind identity resolution to the server's durable receipt
+    # for this exact anonymous subject, matching the SDK late-binding route.
+    from services.consent.authority import evaluate_identity_link_consent
+
+    try:
+        consent_allowed, consent_reason, consent_context = (
+            await evaluate_identity_link_consent(tenant.tenant_id, body.anonymous_id)
+        )
+    except Exception as exc:
+        logger.warning(
+            "identity.resolve.consent_lookup_failed",
+            extra={"tenant_id": tenant.tenant_id, "error_type": type(exc).__name__},
+        )
+        consent_allowed, consent_reason, consent_context = (
+            False, "identity_link_consent_lookup_failed", None
+        )
+    if not consent_allowed or not consent_context:
+        return APIResponse(data=IdentityResolveResponse(
+            tenant_id=tenant.tenant_id,
+            canonical_entity_id="",
+            decision="blocked",
+            confidence=0.0,
+            confidence_tier="blocked",
+            reason_codes=[consent_reason or "identity_link_consent_required"],
+            blocked_reason=consent_reason or "identity_link_consent_required",
+        ).model_dump()).to_dict()
+
     resolver = _get_resolver()
 
     # Build a synthetic event dict from the request body
@@ -154,7 +199,7 @@ async def resolve_identity(
         "session_id": body.session_id,
         "context": {
             **(body.context or {}),
-            "consent": body.consent_snapshot,
+            "consent": consent_context,
             "orgId": body.org_id,
             "actorId": body.agent_id,
             "actorKind": "agent" if body.agent_id else None,
@@ -322,8 +367,12 @@ async def merge_identities(
     Operator-approved merge of two canonical entities.
     Requires write permission.
     """
+    from config.settings import settings
+
     tenant = request.state.tenant
     tenant.require_permission("write")
+    if not settings.identity_continuity.manual_review_enabled:
+        raise NotFoundError("Manual identity merge is not enabled for this environment")
 
     resolver = _get_resolver()
     decision = await resolver.operator_merge(
@@ -344,6 +393,14 @@ async def merge_identities(
             "secondary_entity_id": body.secondary_entity_id,
             "canonical_entity_id": decision.canonical_entity_id,
             "reason": body.reason,
+            "is_merge": True,
+            "decision_id": decision.audit_id,
+            "resolution_revision_before": decision.resolution_revision_before,
+            "resolution_revision_after": decision.resolution_revision_after,
+            "restatement_job_id": decision.restatement_job_id,
+            "affected_canonical_entity_ids": [
+                body.primary_entity_id, body.secondary_entity_id
+            ],
         },
     ))
 
@@ -355,6 +412,11 @@ async def merge_identities(
         reason_codes=decision.reason_codes,
         audit_id=decision.audit_id,
         graph_edges_written=decision.graph_edges_written,
+        resolution_revision_before=decision.resolution_revision_before,
+        resolution_revision_after=decision.resolution_revision_after,
+        restatement_status=decision.restatement_status,
+        restatement_job_id=decision.restatement_job_id,
+        restatement_error=decision.restatement_error,
     ).model_dump()).to_dict()
 
 
@@ -362,13 +424,21 @@ async def merge_identities(
 async def split_identity(
     body: IdentitySplitRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> dict:
     """
     Operator-approved split / rollback of an incorrectly merged entity.
     Requires write permission.
     """
+    from config.settings import settings
+
     tenant = request.state.tenant
     tenant.require_permission("write")
+    if not (
+        settings.identity_continuity.split_enabled
+        and settings.identity_continuity.manual_split_enabled
+    ):
+        raise NotFoundError("Manual identity split is not enabled for this environment")
 
     resolver = _get_resolver()
     result = await resolver.operator_split(
@@ -379,6 +449,29 @@ async def split_identity(
         reason=body.reason,
         source_merge_event_id=body.source_merge_event_id,
     )
+
+    if result.get("allowed"):
+        await producer.publish(Event(
+            topic=Topic.IDENTITY_SPLIT,
+            tenant_id=tenant.tenant_id,
+            source_service="identity",
+            payload={
+                "original_entity_id": result.get("original_entity_id"),
+                "resulting_entity_id": result.get("new_entity_id"),
+                "decision_id": result.get("decision_id"),
+                "is_merge": False,
+                "resolution_revision_before": result.get("resolution_revision_before"),
+                "resolution_revision_after": result.get("resolution_revision_after"),
+                "resulting_resolution_revision_after": result.get(
+                    "resulting_resolution_revision_after"
+                ),
+                "restatement_job_id": result.get("restatement_job_id"),
+                "affected_canonical_entity_ids": [
+                    result.get("original_entity_id"), result.get("new_entity_id")
+                ],
+                "reason": body.reason,
+            },
+        ))
 
     return APIResponse(data=IdentitySplitResponse(**result).model_dump()).to_dict()
 
@@ -436,8 +529,15 @@ async def execute_fragment_split(
     new home — a split reassigns touchpoints between entities exactly as a
     merge does, so it must trigger the same recompute.
     """
+    from config.settings import settings
+
     tenant = request.state.tenant
     tenant.require_permission("write")
+    if not (
+        settings.identity_continuity.split_enabled
+        and settings.identity_continuity.manual_split_enabled
+    ):
+        raise NotFoundError("Manual identity split is not enabled for this environment")
 
     resolver = _get_resolver()
     result = await resolver.fragment_split(
@@ -461,6 +561,17 @@ async def execute_fragment_split(
                 "original_entity_id": body.entity_id,
                 "resulting_entity_id": result.get("resulting_entity_id"),
                 "split_event_id": result.get("split_event_id"),
+                "decision_id": result.get("decision_id"),
+                "is_merge": False,
+                "resolution_revision_before": result.get("resolution_revision_before"),
+                "resolution_revision_after": result.get("resolution_revision_after"),
+                "resulting_resolution_revision_after": result.get(
+                    "resulting_resolution_revision_after"
+                ),
+                "restatement_job_id": result.get("restatement_job_id"),
+                "affected_canonical_entity_ids": [
+                    body.entity_id, result.get("resulting_entity_id")
+                ],
                 "mode": body.mode,
                 "reason": body.reason,
             },
@@ -602,11 +713,11 @@ async def get_profile_identity_explanation(
     """Explain why a profile exists: sources, evidence, confidence, graph version.
 
     Returns the §13.2 explainability payload. Gated by
-    ``identity_explainability_enabled``.
+    ``identity_continuity.explainability_enabled``.
     """
     from config.settings import settings
 
-    if not getattr(settings, "identity_explainability_enabled", False):
+    if not settings.identity_continuity.explainability_enabled:
         raise NotFoundError("Identity explainability is not enabled for this environment")
 
     tenant = request.state.tenant
@@ -629,7 +740,7 @@ async def get_decision_details(
     """Return full decision details with evidence for a decision_id."""
     from config.settings import settings
 
-    if not getattr(settings, "identity_explainability_enabled", False):
+    if not settings.identity_continuity.explainability_enabled:
         raise NotFoundError("Identity explainability is not enabled for this environment")
 
     tenant = request.state.tenant
@@ -652,8 +763,12 @@ async def admin_manual_merge(
     admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
 ) -> dict:
     """Operator manual merge with confirmation token and stale-version rejection."""
+    from config.settings import settings
+
     tenant = request.state.tenant
     tenant.require_permission("write")
+    if not settings.identity_continuity.manual_review_enabled:
+        raise NotFoundError("Manual identity merge is not enabled for this environment")
 
     # Confirm the tenant_id in the body matches the auth context.
     if body.tenant_id != tenant.tenant_id:
@@ -680,8 +795,15 @@ async def admin_manual_split(
     admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
 ) -> dict:
     """Operator manual split with confirmation token and stale-version rejection."""
+    from config.settings import settings
+
     tenant = request.state.tenant
     tenant.require_permission("write")
+    if not (
+        settings.identity_continuity.split_enabled
+        and settings.identity_continuity.manual_split_enabled
+    ):
+        raise NotFoundError("Manual identity split is not enabled for this environment")
 
     if body.tenant_id != tenant.tenant_id:
         raise CrossTenantError(
@@ -758,7 +880,7 @@ async def admin_activation_status(
     resolution counts, conflict counts, projection restatement status."""
     from config.settings import settings
 
-    if not getattr(settings, "tenant_identity_activation_dashboard_enabled", False):
+    if not settings.identity_continuity.activation_dashboard_enabled:
         raise NotFoundError("Tenant activation dashboard is not enabled for this environment")
 
     tenant = request.state.tenant
@@ -777,11 +899,252 @@ async def admin_conflict_detail(
     """Single conflict detail for the review queue (frontend: conflictDetail)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
+    from services.identity.pending_review import PendingIdentityReviewRepository
+
+    pending_item = await PendingIdentityReviewRepository().get(
+        tenant.tenant_id, conflict_id
+    )
+    if pending_item:
+        return APIResponse(data={
+            "id": pending_item["id"],
+            "tenant_id": tenant.tenant_id,
+            "entry_type": "late_binding_candidate",
+            "identify_source_identity_id": pending_item["identify_source_identity_id"],
+            "candidate_source_identity_ids": pending_item["candidate_source_identity_ids"],
+            "reason_codes": pending_item.get("reason_codes", []),
+            "evidence": pending_item.get("evidence", []),
+            "authority": "none",
+            "status": pending_item.get("status", "open"),
+            "recommended_action": "review_identity_evidence",
+            "created_at": pending_item.get("created_at", ""),
+            "last_seen_at": pending_item.get("last_seen_at", ""),
+            "seen_count": pending_item.get("seen_count", 1),
+        }).to_dict()
     conflicts = await repo.get_conflicts(tenant.tenant_id, status=None, limit=200)
     for c in conflicts:
         if c.get("id") == conflict_id or c.get("conflict_id") == conflict_id:
             return APIResponse(data=c).to_dict()
     raise NotFoundError("IdentityConflict")
+
+
+async def _revalidate_late_binding_candidate(
+    *,
+    tenant_id: str,
+    item: dict[str, Any],
+    repo: IdentityResolutionRepository,
+    include_connectors: bool,
+) -> dict[str, Any]:
+    """Recheck the queued opaque references against current tenant evidence."""
+    from services.identity.import_candidate_adapter import (
+        ImportIdentityCandidateAdapter,
+    )
+    from services.identity.provider_evidence_anchors import (
+        ProviderIdentityEvidenceAnchorRepository,
+    )
+
+    async def blocked(code: str) -> dict[str, Any]:
+        return {"reason_codes": [code]}
+
+    sdk_id = str(item.get("identify_source_identity_id") or "")
+    sdk_source = await repo.get_source_identity(sdk_id)
+    prior_result = item.get("action_result") or {}
+    known_survivor = str(prior_result.get("canonical_entity_id") or "")
+    if (
+        not sdk_source
+        or sdk_source.get("tenant_id") != tenant_id
+        or sdk_source.get("source_kind") != "sdk"
+        or sdk_source.get("status") not in {"unresolved", "provisional", "resolved"}
+        or (
+            sdk_source.get("status") == "resolved"
+            and sdk_source.get("canonical_entity_id") != known_survivor
+        )
+        or not sdk_source.get("anonymous_id")
+    ):
+        return await blocked("identity_review_sdk_source_unavailable")
+
+    sdk_claims = await repo.get_claims_for_source(sdk_id)
+    active_sdk_claims = [
+        claim for claim in sdk_claims
+        if claim.get("tenant_id") == tenant_id
+        and claim.get("status", "active") == "active"
+        and claim.get("claim_type") in {"email", "phone"}
+        and claim.get("normalized_value")
+    ]
+    if not active_sdk_claims:
+        return await blocked("identity_review_current_claims_missing")
+
+    evidence = item.get("evidence") or []
+    candidate_ids = set(item.get("candidate_source_identity_ids") or [])
+    evidence_by_claim_id = {
+        str(row.get("claim_id")): row
+        for row in evidence
+        if isinstance(row, dict) and row.get("claim_id")
+    }
+    matched_by_type: dict[str, set[str]] = {}
+    selected_claims: dict[str, dict[str, Any]] = {}
+    lifecycle_cache: dict[tuple[str, str], bool] = {}
+    provider_anchor_repo = ProviderIdentityEvidenceAnchorRepository()
+
+    for sdk_claim in active_sdk_claims:
+        claim_type = str(sdk_claim["claim_type"])
+        digest = str(sdk_claim["normalized_value"])
+        rows = await repo.find_claims_by_value(
+            tenant_id, claim_type, digest, limit=101
+        )
+        if len(rows) > 100:
+            return await blocked("identity_review_candidate_set_too_large")
+        current_matches: dict[str, dict[str, Any]] = {}
+        for claim in rows:
+            source_id = str(claim.get("source_identity_id") or "")
+            if source_id not in candidate_ids or claim.get("tenant_id") != tenant_id:
+                continue
+            queued = evidence_by_claim_id.get(str(claim.get("id") or ""))
+            if (
+                not queued
+                or str(queued.get("source_identity_id") or "") != source_id
+                or queued.get("claim_type") != claim_type
+                or queued.get("claim_digest") != digest
+            ):
+                continue
+            source = await repo.get_source_identity(source_id)
+            if (
+                not source
+                or source.get("tenant_id") != tenant_id
+                or source.get("source_kind") not in {"csv", "connector"}
+                or source.get("status") not in {"unresolved", "provisional", "resolved"}
+                or (
+                    source.get("status") == "resolved"
+                    and source.get("canonical_entity_id") != known_survivor
+                )
+            ):
+                continue
+            if source.get("source_kind") == "csv" and source.get("source_system_id") == "csv_import":
+                valid = await ImportIdentityCandidateAdapter._is_committed_current_evidence(
+                    tenant_id=tenant_id, claim=claim, cache=lifecycle_cache
+                )
+                if not valid:
+                    continue
+            elif source.get("source_kind") == "connector":
+                if not include_connectors:
+                    return await blocked("connector_backfill_identity_resolution_disabled")
+                namespace = str(source.get("source_namespace") or "").split(":", 2)
+                if len(namespace) != 3 or not claim.get("id"):
+                    continue
+                anchor = await provider_anchor_repo.get_current_committed_anchor(
+                    tenant_id=tenant_id,
+                    claim_id=str(claim["id"]),
+                    source_identity_id=source_id,
+                    source_record_id=str(claim.get("source_record_id") or ""),
+                    provider_identity=str(source.get("source_system_id") or ""),
+                    connection_id=namespace[2],
+                    account_id=str(source.get("account_id") or ""),
+                )
+                if (
+                    not anchor
+                    or claim.get("provider_raw_checksum") != anchor.get("raw_checksum")
+                    or claim.get("provider_raw_schema_version")
+                    != anchor.get("raw_schema_version")
+                ):
+                    continue
+            else:
+                continue
+            canonical_id = str(source.get("canonical_entity_id") or "")
+            subject = await repo.get_subject_by_canonical_entity_id(tenant_id, canonical_id)
+            if (
+                not canonical_id
+                or not subject
+                or subject.get("tenant_id") != tenant_id
+                or subject.get("status") != "active"
+                or (subject.get("metadata") or {}).get("identity_state") != "provisional"
+            ):
+                continue
+            current_matches[source_id] = {"source": source, "claim": claim, "entity": canonical_id}
+
+        if len(current_matches) > 1:
+            return await blocked("ambiguous_import_identity_claim")
+        if current_matches:
+            matched_by_type.setdefault(claim_type, set()).update(current_matches)
+            selected_claims.update(current_matches)
+
+    matched_sets = [ids for ids in matched_by_type.values() if ids]
+    if not matched_sets:
+        return await blocked("identity_review_candidate_evidence_stale")
+    common = set.intersection(*matched_sets)
+    if len(common) != 1:
+        return await blocked("conflicting_import_identity_claims")
+    candidate_source_id = next(iter(common))
+    candidate = selected_claims.get(candidate_source_id)
+    if not candidate:
+        return await blocked("identity_review_candidate_evidence_stale")
+
+    # If SDK already has a canonical binding, it must be the same survivor; the
+    # approval action must never silently move an established SDK identity.
+    sdk_entity_id = str(prior_result.get("sdk_entity_id") or "")
+    if not sdk_entity_id:
+        sdk_entity_id = str(sdk_source.get("canonical_entity_id") or "")
+    if sdk_entity_id:
+        sdk_subject = await repo.get_subject_by_canonical_entity_id(tenant_id, sdk_entity_id)
+        if (
+            not sdk_subject
+            or sdk_subject.get("tenant_id") != tenant_id
+            or sdk_subject.get("status") not in {"active", "merged"}
+            or (
+                sdk_subject.get("status") == "merged"
+                and sdk_subject.get("merged_into_entity_id") != known_survivor
+            )
+        ):
+            return await blocked("identity_review_sdk_profile_unavailable")
+
+    return {
+        "reason_codes": [],
+        "sdk_source": sdk_source,
+        "candidate_source": candidate["source"],
+        "candidate_entity_id": candidate["entity"],
+        "sdk_entity_id": sdk_entity_id or None,
+    }
+
+
+async def _mark_review_source_resolved(
+    repo: IdentityResolutionRepository,
+    *,
+    tenant_id: str,
+    source_identity_id: str,
+    canonical_entity_id: str,
+) -> bool:
+    from services.identity.models import SourceIdentityRecord
+
+    source = await repo.get_source_identity(source_identity_id)
+    if not source or source.get("tenant_id") != tenant_id:
+        return False
+    current_entity_id = str(source.get("canonical_entity_id") or "")
+    if current_entity_id and current_entity_id != canonical_entity_id:
+        return False
+    now = utc_now().isoformat()
+    record = SourceIdentityRecord(
+        id=str(source["id"]),
+        tenant_id=tenant_id,
+        source_system_id=str(source.get("source_system_id") or ""),
+        source_kind=str(source.get("source_kind") or ""),
+        source_namespace=str(source.get("source_namespace") or ""),
+        external_id=source.get("external_id"),
+        anonymous_id=source.get("anonymous_id"),
+        user_id=source.get("user_id"),
+        device_id=source.get("device_id"),
+        installation_id=source.get("installation_id"),
+        session_id=source.get("session_id"),
+        account_id=source.get("account_id"),
+        agent_id=source.get("agent_id"),
+        runtime_id=source.get("runtime_id"),
+        source_record_id=source.get("source_record_id"),
+        canonical_entity_id=canonical_entity_id,
+        status="resolved",
+        first_seen_at=str(source.get("first_seen_at") or now),
+        last_seen_at=now,
+        created_at=str(source.get("created_at") or now),
+        updated_at=now,
+    )
+    await repo.update_source_identity(record)
+    return True
 
 
 @router_admin.post("/review-queue/{conflict_id}/approve")
@@ -793,6 +1156,577 @@ async def admin_approve_conflict(
     """Approve a conflict/review (frontend: approveConflict)."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+    from services.identity.pending_review import PendingIdentityReviewRepository
+    pending = PendingIdentityReviewRepository()
+    item = await pending.get(tenant.tenant_id, conflict_id)
+    if item:
+        from config.settings import settings
+
+        flags = settings.identity_continuity
+        claim_expected_status = str(item.get("status") or "open")
+        recovering_approval = claim_expected_status == "approval_recovery_required"
+        if item.get("status") == "approved":
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "approved",
+                **(item.get("action_result") or {}),
+            }).to_dict()
+        if item.get("status") == "rejected":
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "rejected",
+                "authority": "none",
+                "reason_codes": item.get("reason_codes", []),
+            }).to_dict()
+        if item.get("status") == "approving":
+            from datetime import datetime, timedelta, timezone
+
+            updated_raw = item.get("updated_at") or item.get("last_seen_at")
+            try:
+                updated = datetime.fromisoformat(str(updated_raw).replace("Z", "+00:00"))
+                if updated.tzinfo is None:
+                    updated = updated.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                updated = datetime.now(timezone.utc)
+            if datetime.now(timezone.utc) - updated > timedelta(minutes=15):
+                await pending.compare_and_set_disposition(
+                    tenant_id=tenant.tenant_id,
+                    record_id=conflict_id,
+                    expected_status="approving",
+                    status="approval_recovery_required",
+                    reason_codes=["identity_late_binding_approval_outcome_ambiguous"],
+                )
+                item = await pending.get(tenant.tenant_id, conflict_id) or item
+                claim_expected_status = "approval_recovery_required"
+                recovering_approval = True
+            else:
+                return APIResponse(data={
+                    "conflict_id": conflict_id,
+                    "tenant_id": tenant.tenant_id,
+                    "status": "approval_in_progress",
+                    "authority": "none",
+                }).to_dict()
+        if item.get("status") == "merge_committed":
+            stored = item.get("action_result") or {}
+            canonical_id = str(stored.get("canonical_entity_id") or "")
+            source_ids = [
+                stored.get("identify_source_identity_id"),
+                stored.get("candidate_source_identity_id"),
+            ]
+            linked = bool(canonical_id and all(source_ids))
+            if linked:
+                for source_id in source_ids:
+                    linked = await _mark_review_source_resolved(
+                        repo,
+                        tenant_id=tenant.tenant_id,
+                        source_identity_id=str(source_id),
+                        canonical_entity_id=canonical_id,
+                    ) and linked
+            if linked:
+                if stored.get("restatement_job_id"):
+                    await pending.compare_and_set_disposition(
+                        tenant_id=tenant.tenant_id,
+                        record_id=conflict_id,
+                        expected_status="merge_committed",
+                        status="approved",
+                        result=stored,
+                        reason_codes=["identity_late_binding_approved"],
+                    )
+                    item = await pending.get(tenant.tenant_id, conflict_id) or item
+                    return APIResponse(data={
+                        "conflict_id": conflict_id,
+                        "tenant_id": tenant.tenant_id,
+                        "status": item.get("status"),
+                        **(item.get("action_result") or {}),
+                        "reason_codes": item.get("reason_codes", []),
+                    }).to_dict()
+                # Merge is committed but its restatement enqueue failed. Retry
+                # through the same resolver idempotency key to recover the job.
+                claim_expected_status = "merge_committed"
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "approval_recovery_required",
+                "authority": "none",
+                "reason_codes": ["identity_late_binding_source_binding_failed"],
+            }).to_dict()
+        if not (
+            flags.resolution_enabled
+            and flags.sdk_late_binding_enabled
+            and flags.manual_review_enabled
+            and flags.conflict_detection_enabled
+            and flags.projection_restatement_enabled
+        ):
+            await pending.compare_and_set_disposition(
+                tenant_id=tenant.tenant_id,
+                record_id=conflict_id,
+                expected_status=claim_expected_status,
+                status="open",
+                reason_codes=["identity_late_binding_approval_disabled"],
+            )
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "review_required",
+                "authority": "none",
+                "reason_codes": ["identity_late_binding_approval_disabled"],
+            }).to_dict()
+
+        # A crash can happen after the resolver durably committed its merge and
+        # restatement job, but before this review row stored the decision. In
+        # that case the SDK subject and claims may already be inactive. Recover
+        # the durable resolver receipt first; do not mistake the completed merge
+        # for stale source evidence. This branch is only available to a review
+        # row already in its recovery state and still requires tenant-owned
+        # source rows plus a fresh durable consent receipt.
+        if recovering_approval:
+            import uuid
+
+            merge_event_id = str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"aether:operator-merge:{tenant.tenant_id}:{conflict_id}",
+            ))
+            committed = await repo.get_merge_event_by_id(
+                tenant.tenant_id, merge_event_id
+            )
+            saved = (committed or {}).get("operator_decision_result") or {}
+            if (
+                committed
+                and saved.get("restatement_status") == "queued"
+                and saved.get("restatement_job_id")
+            ):
+                sdk_source_id = str(item.get("identify_source_identity_id") or "")
+                candidate_ids = set(item.get("candidate_source_identity_ids") or [])
+                sdk_source = await repo.get_source_identity(sdk_source_id)
+                candidate_source_id = str(
+                    (item.get("action_result") or {}).get("candidate_source_identity_id") or ""
+                )
+                if not candidate_source_id:
+                    candidate_source_id = str(
+                        next(iter(candidate_ids)) if len(candidate_ids) == 1 else ""
+                    )
+                candidate_source = await repo.get_source_identity(candidate_source_id)
+                if (
+                    not sdk_source
+                    or sdk_source.get("tenant_id") != tenant.tenant_id
+                    or sdk_source.get("source_kind") != "sdk"
+                    or not sdk_source.get("anonymous_id")
+                    or not candidate_source
+                    or candidate_source.get("tenant_id") != tenant.tenant_id
+                    or candidate_source_id not in candidate_ids
+                ):
+                    return APIResponse(data={
+                        "conflict_id": conflict_id,
+                        "tenant_id": tenant.tenant_id,
+                        "status": "approval_recovery_required",
+                        "authority": "none",
+                        "reason_codes": ["identity_review_source_ownership_unavailable"],
+                    }).to_dict()
+                try:
+                    from services.consent.authority import evaluate_identity_link_consent
+
+                    allowed, consent_reason, consent_context = await evaluate_identity_link_consent(
+                        tenant.tenant_id, sdk_source.get("anonymous_id")
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "identity.review.recovery_consent_lookup_failed",
+                        extra={"tenant_id": tenant.tenant_id, "error_type": type(exc).__name__},
+                    )
+                    allowed, consent_reason, consent_context = False, "consent_unknown", None
+                if not allowed:
+                    return APIResponse(data={
+                        "conflict_id": conflict_id,
+                        "tenant_id": tenant.tenant_id,
+                        "status": "review_required",
+                        "authority": "none",
+                        "reason_codes": ["identity_link_consent_required", consent_reason or "consent_unknown"],
+                    }).to_dict()
+                claimed = await pending.compare_and_set_disposition(
+                    tenant_id=tenant.tenant_id,
+                    record_id=conflict_id,
+                    expected_status=claim_expected_status,
+                    status="approving",
+                    result=item.get("action_result"),
+                    reason_codes=["identity_late_binding_approval_in_progress"],
+                )
+                if not claimed:
+                    current = await pending.get(tenant.tenant_id, conflict_id)
+                    return APIResponse(data={
+                        "conflict_id": conflict_id,
+                        "tenant_id": tenant.tenant_id,
+                        "status": (current or {}).get("status", "approval_recovery_required"),
+                        "authority": "none",
+                    }).to_dict()
+                try:
+                    import hashlib
+
+                    actor_ref = str(getattr(tenant, "user_id", None) or "tenant_operator")
+                    actor_hash = hashlib.sha256(
+                        f"{tenant.tenant_id}:{actor_ref}".encode("utf-8")
+                    ).hexdigest()
+                    decision = await _get_resolver().operator_merge(
+                        tenant_id=tenant.tenant_id,
+                        primary_entity_id=str(committed["into_entity_id"]),
+                        secondary_entity_id=str(committed["from_entity_id"]),
+                        actor_id=f"operator:{actor_hash}",
+                        actor_type="operator",
+                        reason=f"late_binding_review:{conflict_id}",
+                        idempotency_key=conflict_id,
+                    )
+                    result = {
+                        "canonical_entity_id": decision.canonical_entity_id,
+                        "decision_id": decision.audit_id,
+                        "restatement_job_id": decision.restatement_job_id,
+                        "resolution_revision_before": decision.resolution_revision_before,
+                        "resolution_revision_after": decision.resolution_revision_after,
+                        "consent_receipt_id": str((consent_context or {}).get("receipt_id") or ""),
+                        "identify_source_identity_id": sdk_source_id,
+                        "candidate_source_identity_id": candidate_source_id,
+                        "sdk_entity_id": str(committed["from_entity_id"]),
+                    }
+                    committed_ok = await pending.compare_and_set_disposition(
+                        tenant_id=tenant.tenant_id,
+                        record_id=conflict_id,
+                        expected_status="approving",
+                        status="merge_committed",
+                        result=result,
+                        reason_codes=["identity_late_binding_merge_committed"],
+                    )
+                    if not committed_ok:
+                        raise RuntimeError("review receipt could not be recovered")
+                    bindings_ok = True
+                    for source_id in (sdk_source_id, candidate_source_id):
+                        bindings_ok = await _mark_review_source_resolved(
+                            repo,
+                            tenant_id=tenant.tenant_id,
+                            source_identity_id=source_id,
+                            canonical_entity_id=decision.canonical_entity_id,
+                        ) and bindings_ok
+                    if not bindings_ok:
+                        return APIResponse(data={
+                            "conflict_id": conflict_id,
+                            "tenant_id": tenant.tenant_id,
+                            "status": "approval_recovery_required",
+                            "authority": "none",
+                            "reason_codes": ["identity_late_binding_source_binding_failed"],
+                        }).to_dict()
+                    await pending.compare_and_set_disposition(
+                        tenant_id=tenant.tenant_id,
+                        record_id=conflict_id,
+                        expected_status="merge_committed",
+                        status="approved",
+                        result=result,
+                        reason_codes=["identity_late_binding_approved"],
+                    )
+                    return APIResponse(data={
+                        "conflict_id": conflict_id,
+                        "tenant_id": tenant.tenant_id,
+                        "status": "approved",
+                        **result,
+                        "reason_codes": ["identity_late_binding_approved"],
+                    }).to_dict()
+                except Exception as exc:
+                    logger.warning(
+                        "identity.review.approval_recovery_failed",
+                        extra={"tenant_id": tenant.tenant_id, "error_type": type(exc).__name__},
+                    )
+                    await pending.compare_and_set_disposition(
+                        tenant_id=tenant.tenant_id,
+                        record_id=conflict_id,
+                        expected_status="approving",
+                        status="approval_recovery_required",
+                        result=item.get("action_result"),
+                        reason_codes=["identity_late_binding_approval_outcome_ambiguous"],
+                    )
+                    return APIResponse(data={
+                        "conflict_id": conflict_id,
+                        "tenant_id": tenant.tenant_id,
+                        "status": "approval_recovery_required",
+                        "authority": "none",
+                        "reason_codes": ["identity_late_binding_approval_outcome_ambiguous"],
+                    }).to_dict()
+
+        evidence_result = await _revalidate_late_binding_candidate(
+            tenant_id=tenant.tenant_id,
+            item=item,
+            repo=repo,
+            include_connectors=flags.connector_backfill_enabled,
+        )
+        if evidence_result.get("reason_codes"):
+            await pending.compare_and_set_disposition(
+                tenant_id=tenant.tenant_id,
+                record_id=conflict_id,
+                expected_status=claim_expected_status,
+                status="open",
+                reason_codes=evidence_result["reason_codes"],
+            )
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "review_required",
+                "authority": "none",
+                "reason_codes": evidence_result["reason_codes"],
+            }).to_dict()
+
+        sdk_source = evidence_result["sdk_source"]
+        try:
+            from services.consent.authority import evaluate_identity_link_consent
+
+            allowed, consent_reason, consent_context = await evaluate_identity_link_consent(
+                tenant.tenant_id, sdk_source.get("anonymous_id")
+            )
+        except Exception as exc:
+            logger.warning(
+                "identity.review.approval_consent_lookup_failed",
+                extra={"tenant_id": tenant.tenant_id, "error_type": type(exc).__name__},
+            )
+            allowed, consent_reason, consent_context = False, "identity_link_consent_lookup_failed", None
+        if not allowed:
+            reasons = ["identity_link_consent_required", consent_reason or "consent_unknown"]
+            await pending.compare_and_set_disposition(
+                tenant_id=tenant.tenant_id,
+                record_id=conflict_id,
+                expected_status=claim_expected_status,
+                status="open",
+                reason_codes=reasons,
+            )
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "review_required",
+                "authority": "none",
+                "reason_codes": reasons,
+            }).to_dict()
+
+        final_evidence = await _revalidate_late_binding_candidate(
+            tenant_id=tenant.tenant_id,
+            item=item,
+            repo=repo,
+            include_connectors=flags.connector_backfill_enabled,
+        )
+        if (
+            final_evidence.get("reason_codes")
+            or final_evidence.get("candidate_entity_id") != evidence_result.get("candidate_entity_id")
+            or final_evidence.get("sdk_source", {}).get("id") != sdk_source.get("id")
+        ):
+            reasons = final_evidence.get("reason_codes") or ["identity_review_evidence_changed"]
+            await pending.compare_and_set_disposition(
+                tenant_id=tenant.tenant_id,
+                record_id=conflict_id,
+                expected_status=claim_expected_status,
+                status="open",
+                reason_codes=reasons,
+            )
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "review_required",
+                "authority": "none",
+                "reason_codes": reasons,
+            }).to_dict()
+        evidence_result = final_evidence
+        sdk_source = evidence_result["sdk_source"]
+
+        sdk_entity_id = evidence_result.get("sdk_entity_id")
+        create_sdk_subject = not sdk_entity_id
+        if create_sdk_subject:
+            import uuid
+            sdk_entity_id = str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"aether:late-binding-sdk:{tenant.tenant_id}:{sdk_source['id']}",
+            ))
+
+        # Claim the durable action before graph mutation. A repeated request sees
+        # approval_in_progress/approved and cannot issue another merge.
+        claimed = await pending.compare_and_set_disposition(
+            tenant_id=tenant.tenant_id,
+            record_id=conflict_id,
+            expected_status=claim_expected_status,
+            status="approving",
+            reason_codes=["identity_late_binding_approval_in_progress"],
+        )
+        if not claimed:
+            current = await pending.get(tenant.tenant_id, conflict_id)
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": (current or {}).get("status", "review_required"),
+                "authority": "none",
+            }).to_dict()
+        decision = None
+        try:
+            source_entity_id = str(evidence_result["candidate_entity_id"])
+            sdk_entity_id = str(sdk_entity_id)
+            allowed, consent_reason, consent_context = await evaluate_identity_link_consent(
+                tenant.tenant_id, sdk_source.get("anonymous_id")
+            )
+            if not allowed:
+                reasons = ["identity_link_consent_required", consent_reason or "consent_unknown"]
+                await pending.compare_and_set_disposition(
+                    tenant_id=tenant.tenant_id,
+                    record_id=conflict_id,
+                    expected_status="approving",
+                    status="open",
+                    reason_codes=reasons,
+                )
+                return APIResponse(data={
+                    "conflict_id": conflict_id,
+                    "tenant_id": tenant.tenant_id,
+                    "status": "review_required",
+                    "authority": "none",
+                    "reason_codes": reasons,
+                }).to_dict()
+            if create_sdk_subject:
+                import uuid
+
+                existing_subject = await repo.get_subject_by_canonical_entity_id(
+                    tenant.tenant_id, sdk_entity_id
+                )
+                if existing_subject is None:
+                    await repo.create_subject(
+                        tenant.tenant_id,
+                        sdk_entity_id,
+                        "human",
+                        metadata={
+                            "identity_state": "late_binding_pending",
+                            "source_identity_id": str(sdk_source["id"]),
+                        },
+                        subject_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{sdk_entity_id}:subject")),
+                    )
+            import hashlib
+
+            actor_ref = str(getattr(tenant, "user_id", None) or "tenant_operator")
+            actor_hash = hashlib.sha256(
+                f"{tenant.tenant_id}:{actor_ref}".encode("utf-8")
+            ).hexdigest()
+            decision = await _get_resolver().operator_merge(
+                tenant_id=tenant.tenant_id,
+                primary_entity_id=source_entity_id,
+                secondary_entity_id=sdk_entity_id,
+                actor_id=f"operator:{actor_hash}",
+                actor_type="operator",
+                reason=f"late_binding_review:{conflict_id}",
+                idempotency_key=conflict_id,
+            )
+            if getattr(decision.decision, "value", str(decision.decision)) != "merge":
+                reasons = list(decision.reason_codes or ["identity_late_binding_merge_rejected"])
+                await pending.compare_and_set_disposition(
+                    tenant_id=tenant.tenant_id,
+                    record_id=conflict_id,
+                    expected_status="approving",
+                    status="open",
+                    reason_codes=reasons,
+                )
+                return APIResponse(data={
+                    "conflict_id": conflict_id,
+                    "tenant_id": tenant.tenant_id,
+                    "status": "review_required",
+                    "authority": "none",
+                    "reason_codes": reasons,
+                }).to_dict()
+
+            result = {
+                "canonical_entity_id": decision.canonical_entity_id,
+                "decision_id": decision.audit_id,
+                "restatement_job_id": decision.restatement_job_id,
+                "resolution_revision_before": decision.resolution_revision_before,
+                "resolution_revision_after": decision.resolution_revision_after,
+                "consent_receipt_id": str((consent_context or {}).get("receipt_id") or ""),
+                "identify_source_identity_id": str(sdk_source["id"]),
+                "candidate_source_identity_id": str(evidence_result["candidate_source"]["id"]),
+                "sdk_entity_id": sdk_entity_id,
+            }
+            merge_recorded = await pending.compare_and_set_disposition(
+                tenant_id=tenant.tenant_id,
+                record_id=conflict_id,
+                expected_status="approving",
+                status="merge_committed",
+                result=result,
+                reason_codes=["identity_late_binding_merge_committed"],
+            )
+            if not merge_recorded:
+                return APIResponse(data={
+                    "conflict_id": conflict_id,
+                    "tenant_id": tenant.tenant_id,
+                    "status": "approval_recovery_required",
+                    "authority": "none",
+                    "reason_codes": ["identity_late_binding_merge_committed_unrecorded"],
+                }).to_dict()
+            bindings_ok = True
+            for source_id in (
+                result["identify_source_identity_id"],
+                result["candidate_source_identity_id"],
+            ):
+                bindings_ok = await _mark_review_source_resolved(
+                    repo,
+                    tenant_id=tenant.tenant_id,
+                    source_identity_id=source_id,
+                    canonical_entity_id=decision.canonical_entity_id,
+                ) and bindings_ok
+            if not bindings_ok:
+                return APIResponse(data={
+                    "conflict_id": conflict_id,
+                    "tenant_id": tenant.tenant_id,
+                    "status": "approval_recovery_required",
+                    "authority": "none",
+                    "reason_codes": ["identity_late_binding_source_binding_failed"],
+                }).to_dict()
+            if not decision.restatement_job_id or decision.restatement_status != "queued":
+                return APIResponse(data={
+                    "conflict_id": conflict_id,
+                    "tenant_id": tenant.tenant_id,
+                    "status": "approval_recovery_required",
+                    "authority": "none",
+                    "reason_codes": ["identity_late_binding_restatement_unavailable"],
+                }).to_dict()
+            await pending.compare_and_set_disposition(
+                tenant_id=tenant.tenant_id,
+                record_id=conflict_id,
+                expected_status="merge_committed",
+                status="approved",
+                result=result,
+                reason_codes=list(decision.reason_codes or ["identity_late_binding_approved"]),
+            )
+            # The existing operator merge publishes its merge decision through
+            # its resolver restatement path. The response exposes only opaque IDs.
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "approved",
+                **result,
+                "reason_codes": list(decision.reason_codes or []),
+            }).to_dict()
+        except Exception as exc:
+            logger.warning(
+                "identity.review.approval_failed",
+                extra={"tenant_id": tenant.tenant_id, "error_type": type(exc).__name__},
+            )
+            if decision is not None and getattr(decision.decision, "value", "") == "merge":
+                await pending.compare_and_set_disposition(
+                    tenant_id=tenant.tenant_id,
+                    record_id=conflict_id,
+                    expected_status="approving",
+                    status="approval_recovery_required",
+                    reason_codes=["identity_late_binding_approval_outcome_ambiguous"],
+                )
+            else:
+                await pending.compare_and_set_disposition(
+                    tenant_id=tenant.tenant_id,
+                    record_id=conflict_id,
+                    expected_status="approving",
+                    status="open",
+                    reason_codes=["identity_late_binding_approval_failed"],
+                )
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "review_required",
+                "authority": "none",
+                "reason_codes": ["identity_late_binding_approval_failed"],
+            }).to_dict()
     body = await request.json() if hasattr(request, "json") else {}
     # Try resolving via repository; if not found, return pending
     try:
@@ -816,6 +1750,50 @@ async def admin_reject_conflict(
     """Reject a conflict/review with a reason (frontend: rejectConflict)."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+    from services.identity.pending_review import PendingIdentityReviewRepository
+
+    pending_review = await PendingIdentityReviewRepository().get(
+        tenant.tenant_id, conflict_id
+    )
+    if pending_review:
+        pending = PendingIdentityReviewRepository()
+        if pending_review.get("status") == "rejected":
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "rejected",
+                "authority": "none",
+                "reason_codes": pending_review.get("reason_codes", []),
+            }).to_dict()
+        if pending_review.get("status") == "approved":
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": "already_approved",
+                "authority": "none",
+            }).to_dict()
+        rejected = await pending.compare_and_set_disposition(
+            tenant_id=tenant.tenant_id,
+            record_id=conflict_id,
+            expected_status="open",
+            status="rejected",
+            reason_codes=["identity_late_binding_rejected"],
+        )
+        if not rejected:
+            current = await pending.get(tenant.tenant_id, conflict_id)
+            return APIResponse(data={
+                "conflict_id": conflict_id,
+                "tenant_id": tenant.tenant_id,
+                "status": (current or {}).get("status", "review_required"),
+                "authority": "none",
+            }).to_dict()
+        return APIResponse(data={
+            "conflict_id": conflict_id,
+            "status": "rejected",
+            "tenant_id": tenant.tenant_id,
+            "authority": "none",
+            "reason_codes": ["identity_late_binding_rejected"],
+        }).to_dict()
     try:
         body = await request.json()
         reason = body.get("reason", "") if isinstance(body, dict) else ""
@@ -835,6 +1813,74 @@ async def admin_reject_conflict(
     except Exception as e:
         logger.warning("reject conflict failed: %s", e)
         return APIResponse(data={"conflict_id": conflict_id, "status": "rejected", "reason": reason, "tenant_id": tenant.tenant_id}).to_dict()
+
+
+# Tenant-facing identity continuity surfaces. The authenticated tenant context
+# is the only tenant selector; these handlers never accept a tenant_id from the
+# URL or request body. The matching /v1/admin handlers above remain available
+# for operator integrations when that router is mounted separately.
+@router.get("/review-queue", response_model=AdminIdentityReviewQueueResponse)
+async def tenant_review_queue(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
+) -> dict:
+    from config.settings import settings
+
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    if not settings.identity_continuity.manual_review_enabled:
+        raise NotFoundError("Identity review is not enabled for this environment")
+    entries = await admin_service.review_queue(tenant.tenant_id, limit=limit)
+    typed = [ReviewQueueEntry(**entry) for entry in entries]
+    return APIResponse(
+        data=AdminIdentityReviewQueueResponse(entries=typed, total=len(typed)).model_dump()
+    ).to_dict()
+
+
+@router.get("/activation-status", response_model=ActivationStatusResponse)
+async def tenant_activation_status(
+    request: Request,
+    admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
+) -> dict:
+    from config.settings import settings
+
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    if not settings.identity_continuity.activation_dashboard_enabled:
+        raise NotFoundError("Tenant activation dashboard is not enabled for this environment")
+    status = await admin_service.activation_status(tenant.tenant_id)
+    return APIResponse(data=ActivationStatusResponse(**status).model_dump()).to_dict()
+
+
+@router.post("/review-queue/{conflict_id}/approve")
+async def tenant_approve_conflict(
+    conflict_id: str,
+    request: Request,
+    repo: IdentityResolutionRepository = Depends(_get_resolution_repo),
+) -> dict:
+    from config.settings import settings
+
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.identity_continuity.manual_review_enabled:
+        raise NotFoundError("Identity review is not enabled for this environment")
+    return await admin_approve_conflict(conflict_id, request, repo)
+
+
+@router.post("/review-queue/{conflict_id}/reject")
+async def tenant_reject_conflict(
+    conflict_id: str,
+    request: Request,
+    repo: IdentityResolutionRepository = Depends(_get_resolution_repo),
+) -> dict:
+    from config.settings import settings
+
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.identity_continuity.manual_review_enabled:
+        raise NotFoundError("Identity review is not enabled for this environment")
+    return await admin_reject_conflict(conflict_id, request, repo)
 
 
 @router_admin.get("/audit")

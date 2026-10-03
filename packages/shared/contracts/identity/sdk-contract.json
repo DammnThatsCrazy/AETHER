@@ -25,7 +25,7 @@
         { "name": "sdk_name", "type": "string", "required": true, "description": "SDK name (aether-web, aether-react, aether-ios, aether-android, aether-server)." },
         { "name": "sdk_version", "type": "string", "required": true, "description": "SDK version string." },
         { "name": "event_id", "type": "string", "required": true, "description": "Unique event identifier — used for idempotency." },
-        { "name": "idempotency_key", "type": "string", "required": true, "description": "Idempotency key — prevents duplicate processing on retry." },
+        { "name": "idempotency_key", "type": "string", "required": true, "description": "Event retry key. For SDK identify events, equals the top-level event_id and is retained with the queued event across retries. V1 batch canonical resolution deduplicates by tenant + top-level event_id + schema with a 24-hour Redis claim, failing closed for identify if the claim store is unavailable; V2 uses durable tenant/event/schema uniqueness and an at-least-once outbox. This does not guarantee exactly-once resolution. The separate POST /sdk/identify request also requires this field in its request body." },
         { "name": "anonymous_id", "type": "string", "required": false, "description": "Anonymous ID — present for anonymous events." },
         { "name": "installation_id", "type": "string", "required": false, "description": "Installation ID — mobile SDKs." },
         { "name": "session_id", "type": "string", "required": false, "description": "Session ID." },
@@ -71,6 +71,16 @@
         { "name": "app_instance_id", "type": "field", "required": true, "description": "App instance ID — required for iOS/Android." },
         { "name": "offline_queue", "type": "capability", "required": true, "description": "Offline event queue — mobile SDKs." },
         { "name": "retry_idempotency", "type": "capability", "required": true, "description": "Retry with idempotency — mobile SDKs." }
+      ]
+    },
+    {
+      "name": "sdk_identify_request",
+      "kind": "object",
+      "required": true,
+      "description": "Direct POST /sdk/identify retry contract. SDK hydrateIdentity methods emit identify events through POST /v1/batch instead; their properties.idempotency_key equals the event ID and stays in the queue for retries. For direct endpoint requests the idempotency key is required and tenant-scoped; identical completed retries replay the stored outcome, concurrent requests remain in_progress, pending claims without an update for 15 minutes return stale for operator reconciliation, and key reuse with a changed payload returns HTTP 409. Candidate or blocked imported identity evidence stops before canonical resolver execution. A stale claim is not proof the worker stopped and is not automatically replayed or cleared. Route side effects do not share one transaction/outbox, so this is not an exactly-once guarantee.",
+      "fields": [
+        { "name": "idempotency_key", "type": "string", "required": true, "description": "Caller-supplied retry key, 1–255 characters, scoped to the authenticated tenant." },
+        { "name": "idempotency_status", "type": "string", "required": true, "description": "Response status: completed, replayed, in_progress, or stale." }
       ]
     },
     {

@@ -8,17 +8,10 @@ POST /v1/signals/{entity_id}/refresh     — trigger signal recomputation for en
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from repositories.repos import BehaviorProfileRepository, SignalRepository
-from services.signals.signal_translator import (
-    signals_from_asset_composition,
-    signals_from_churn_model,
-    signals_from_location_history,
-)
+from repositories.repos import SignalRepository
+from services.signals.recompute import recompute_signals_for_entity
 from shared.common.common import APIResponse
 from shared.logger.logger import get_logger
 
@@ -27,7 +20,6 @@ logger = get_logger("aether.signals.routes")
 router = APIRouter(prefix="/v1/signals", tags=["signals"])
 
 _signal_repo = SignalRepository()
-_behavior_repo = BehaviorProfileRepository()
 
 
 def _summary(items: list[dict]) -> dict:
@@ -91,56 +83,21 @@ async def refresh_signals(entity_id: str, request: Request):
     tenant_id = request.state.tenant.tenant_id
     request.state.tenant.require_permission("read")
 
-    # Load behavior profile for this entity
-    profile = await _behavior_repo.find_by_id(entity_id)
-    if profile is None or profile.get("tenant_id") != tenant_id:
-        # No profile found — return empty recompute with zero signals
-        return APIResponse(data={
-            "entity_id": entity_id,
-            "status": "completed",
-            "signals_computed": 0,
-            "message": "No behavior profile found — no signals computed.",
-            "computed_at": datetime.now(timezone.utc).isoformat(),
-        }).to_dict()
-
-    generated: list[dict] = []
-
-    # Derive signals from churn model features if available
-    churn_prob = profile.get("churn_probability", 0.0)
-    features = {
-        "days_since_last_visit": profile.get("days_since_last_visit", 0),
-        "discount_usage_rate": profile.get("discount_usage_rate", 0.0),
-        "referral_count": profile.get("referral_count", 0),
-    }
-    if churn_prob > 0:
-        generated.extend(signals_from_churn_model(entity_id, features, churn_prob))
-
-    # Derive signals from asset composition if available
-    stablecoin_pct = profile.get("stablecoin_pct", 0.0)
-    altcoin_pct = profile.get("altcoin_pct", 0.0)
-    top_symbol = profile.get("top_holding_symbol", "UNKNOWN")
-    top_holding_pct = profile.get("top_holding_pct", 0.0)
-    if stablecoin_pct > 0 or altcoin_pct > 0 or top_holding_pct > 0:
-        generated.extend(signals_from_asset_composition(entity_id, stablecoin_pct, altcoin_pct, top_symbol, top_holding_pct))
-
-    # Derive signals from location history if available
-    locations = profile.get("location_history", [])
-    if locations:
-        generated.extend(signals_from_location_history(entity_id, locations))
-
-    # Persist each generated signal
-    now = datetime.now(timezone.utc).isoformat()
-    for sig in generated:
-        sig["tenant_id"] = tenant_id
-        sig.setdefault("signal_id", f"{sig.get('signal_type', 'SIG')}:{entity_id}:{uuid.uuid4().hex[:8]}")
-        await _signal_repo.upsert_signal(sig)
-
-    logger.info(f"Signal refresh for entity {entity_id} (tenant={tenant_id}): {len(generated)} signals computed")
+    recomputed = await recompute_signals_for_entity(entity_id, tenant_id)
+    logger.info(
+        "Signal refresh for entity %s (tenant=%s): %s signals computed",
+        entity_id,
+        tenant_id,
+        recomputed["signals_computed"],
+    )
 
     return APIResponse(data={
         "entity_id": entity_id,
         "status": "completed",
-        "signals_computed": len(generated),
-        "message": f"Recomputed {len(generated)} signal(s) from latest behavior profile.",
-        "computed_at": now,
+        "signals_computed": recomputed["signals_computed"],
+        "message": (
+            f"Recomputed {recomputed['signals_computed']} signal(s) "
+            "from latest behavior profile."
+        ),
+        "computed_at": recomputed["computed_at"],
     }).to_dict()

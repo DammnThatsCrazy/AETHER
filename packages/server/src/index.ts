@@ -112,15 +112,20 @@ export class AetherServerSDK {
    *  ingestion envelope requires non-empty sessionId and anonymousId; a caller
    *  may override either per event (event.sessionId / event.anonymousId). */
   private readonly sessionId = randomUUID();
-  private readonly anonymousId = randomUUID();
+  private readonly anonymousId: string;
 
   /** Typed helpers for common server observation patterns. */
   readonly observe: ReturnType<typeof makeServerClient>;
 
   constructor(config: AetherServerConfig) {
+    if (config.anonymousId !== undefined && !config.anonymousId.trim()) {
+      throw new Error('Aether Server SDK: anonymousId must be a non-empty stable source identity');
+    }
+    this.anonymousId = config.anonymousId?.trim() ?? randomUUID();
     this.config = {
       writeKey: config.writeKey,
       endpoint: config.endpoint ?? DEFAULT_ENDPOINT,
+      anonymousId: this.anonymousId,
       consent: config.consent ?? {},
       application: config.application,
       flushAt: config.flushAt ?? 100,
@@ -206,18 +211,28 @@ export class AetherServerSDK {
       return;
     }
     const ts = event.timestamp ?? new Date().toISOString();
+    const eventId = event.id || randomUUID();
+    const properties = event.properties
+      ? { ...event.properties }
+      : (event.type === 'identify' ? {} : undefined);
+    if (event.type === 'identify' && properties) {
+      // The same queued event keeps this key when the batch is retried or
+      // replayed from the durable spool. A new track() call gets a new event id.
+      properties.idempotency_key = eventId;
+    }
     const prepared = {
       ...event,
       // Canonical BaseEvent identity the ingestion API requires (id/sessionId/
       // anonymousId, all non-empty). id is minted per event so retries dedupe;
-      // sessionId/anonymousId fall back to the per-process identity.
+      // sessionId/anonymousId fall back to per-instance identities. Hosts
+      // that need source continuity across restarts supply config.anonymousId.
       // `||` (not `??`) so an empty-string id/sessionId/anonymousId is also
       // replaced — the backend BaseEvent requires all three to be non-empty.
-      id: event.id || randomUUID(),
+      id: eventId,
       sessionId: event.sessionId || this.sessionId,
       anonymousId: event.anonymousId || this.anonymousId,
       timestamp: ts,
-      properties: event.properties ? scrubSensitiveFields(event.properties) : undefined,
+      properties: properties ? scrubSensitiveFields(properties) : undefined,
       context: {
         // Surface identifies the emitting client so the backend can attribute
         // every event to its origin plane. Stamped for all server-SDK events.

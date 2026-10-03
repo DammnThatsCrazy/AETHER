@@ -11,7 +11,9 @@
   "expected": {
     "cross_tenant_decision": "blocked",
     "cross_tenant_tier": "blocked",
-    "alias_isolation": true
+    "alias_isolation": true,
+    "tenant_b_candidate_source_ids": [],
+    "tenant_b_profile_must_not_reference_tenant_a_profile": true
   },
   "invariant": "cross_tenant_block"
 }

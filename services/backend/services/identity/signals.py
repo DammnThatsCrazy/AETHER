@@ -46,6 +46,7 @@ def extract_signals(
     source_platform = _platform(event)
     source_sdk = _sdk(event)
     consent_snapshot = _consent_snapshot(event)
+    ctx: dict[str, Any] = event.get("context", {}) or {}
 
     signals: list[IdentitySignal] = []
 
@@ -72,20 +73,26 @@ def extract_signals(
 
     user_id = event.get("user_id") or ""
     if user_id:
+        # SDK user IDs are app-local. The lifecycle route supplies this scope
+        # from the validated tenant app context, shared across its platform SDKs.
+        identity_namespace = str(ctx.get("identity_namespace") or "").strip()
+        scoped_user_id = f"{identity_namespace}:{user_id}" if identity_namespace else user_id
         signals.append(_sig(
             IdentitySignalType.USER_ID,
-            user_id,
+            scoped_user_id,
             confidence_hint=1.0,
-            normalized=normalize_user_id(user_id, tenant_id),
+            normalized=normalize_user_id(scoped_user_id, tenant_id),
         ))
 
     anon_id = event.get("anonymous_id") or ""
     if anon_id:
+        identity_namespace = str(ctx.get("identity_namespace") or "").strip()
+        scoped_anon_id = f"{identity_namespace}:{anon_id}" if identity_namespace else anon_id
         signals.append(_sig(
             IdentitySignalType.ANONYMOUS_ID,
-            anon_id,
+            scoped_anon_id,
             confidence_hint=0.7,
-            normalized=normalize_anonymous_id(anon_id, tenant_id),
+            normalized=normalize_anonymous_id(scoped_anon_id, tenant_id),
         ))
 
     session_id = event.get("session_id") or ""
@@ -98,8 +105,6 @@ def extract_signals(
         ))
 
     # ── Context-level signals ─────────────────────────────────────────────
-
-    ctx: dict[str, Any] = event.get("context", {}) or {}
 
     # Fingerprint (support-only, never hard-links alone)
     fp_ctx = ctx.get("fingerprint") or {}

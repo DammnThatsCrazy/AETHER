@@ -77,4 +77,36 @@ describe('Aether authenticated shell', () => {
 
     expect(screen.getByRole('navigation')).not.toHaveTextContent('Sources');
   });
+
+  it('adds identity activation and review entry points only for enabled tenant features', () => {
+    state.capabilities = {
+      release: { excluded_domains: [] },
+      feature_flags: {
+      tenant_identity_activation_dashboard_enabled: true,
+      identity_manual_review_enabled: true,
+      },
+    };
+    render(
+      <MemoryRouter initialEntries={['/identity/activation']}>
+        <AppShell><div>WORKSPACE</div></AppShell>
+      </MemoryRouter>,
+    );
+
+    const navigation = screen.getByRole('navigation');
+    expect(within(navigation).getByRole('link', { name: 'Identity status' })).toHaveAttribute('href', '/identity/activation');
+    expect(within(navigation).getByRole('link', { name: 'Identity reviews' })).toHaveAttribute('href', '/identity/reviews');
+  });
+
+  it('hides identity entry points when backend capabilities are off', () => {
+    state.capabilities = {
+      release: { excluded_domains: [] },
+      feature_flags: {
+        tenant_identity_activation_dashboard_enabled: false,
+        identity_manual_review_enabled: false,
+      },
+    };
+    render(<MemoryRouter initialEntries={['/explore']}><AppShell><div>WORKSPACE</div></AppShell></MemoryRouter>);
+    expect(screen.queryByRole('link', { name: 'Identity status' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Identity reviews' })).not.toBeInTheDocument();
+  });
 });

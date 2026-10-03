@@ -65,6 +65,7 @@ class JourneyCompiler:
         *,
         identity_type: str = "profile",
         trigger_reason: str = "manual",
+        identity_version: Optional[str] = None,
         session_timeout_seconds: int = _SESSION_TIMEOUT_SECONDS,
     ) -> dict[str, Any]:
         """Build the current unified journey version for a typed identity."""
@@ -91,6 +92,7 @@ class JourneyCompiler:
             activities=activities,
             conversions=conversions,
             trigger_reason=trigger_reason,
+            identity_version=identity_version,
             session_timeout_seconds=session_timeout_seconds,
         )
 
@@ -123,10 +125,18 @@ class JourneyCompiler:
         self,
         tenant_id: str,
         profile_id: str,
+        *,
+        restatement_key: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """Rebuild all journeys for a profile after an identity merge or update."""
         version = await self.compile_for_profile(
-            tenant_id, profile_id, trigger_reason="identity_change",
+            tenant_id,
+            profile_id,
+            trigger_reason=(
+                f"identity_restatement:{restatement_key}"
+                if restatement_key else "identity_change"
+            ),
+            identity_version=restatement_key,
         )
         return [version]
 
@@ -195,6 +205,7 @@ class JourneyCompiler:
         activities: list[dict[str, Any]],
         conversions: list[dict[str, Any]],
         trigger_reason: str,
+        identity_version: Optional[str],
         session_timeout_seconds: int,
     ) -> dict[str, Any]:
         if identity_type not in {"profile", "cluster", "anonymous"}:
@@ -305,6 +316,7 @@ class JourneyCompiler:
             "collapsed_lifecycle_count": collapsed_lifecycle_count,
             "excluded_source_noise_count": excluded_source_noise_count,
             "rebuild_reason": trigger_reason,
+            "identity_version": identity_version,
             "compiler_version": _COMPILER_VERSION,
             "computed_at": datetime.now(timezone.utc).isoformat(),
             "is_current": True,

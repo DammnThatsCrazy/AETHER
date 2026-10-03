@@ -64,13 +64,29 @@ async def evaluate_vetoes(
             details={"candidate_tenant": candidate_tenant_id, "current_tenant": tenant_id},
         ))
 
-    # 2. Deleted/suppressed identity
-    if candidate_is_deleted or candidate_is_suppressed:
+    # 2. Deleted/suppressed identity. Callers may provide persisted status
+    # instead of precomputed booleans; treating the status list as descriptive
+    # only would let a deleted profile through a high-confidence match.
+    normalized_statuses = {
+        str(getattr(status, "value", status)).strip().lower()
+        for status in candidate_statuses
+    }
+    status_is_deleted = "deleted" in normalized_statuses
+    status_is_suppressed = "suppressed" in normalized_statuses
+    if (
+        candidate_is_deleted
+        or candidate_is_suppressed
+        or status_is_deleted
+        or status_is_suppressed
+    ):
         vetoes.append(IdentityVeto(
             veto_type=VetoType.DELETED_SUPPRESSED_IDENTITY,
             reason="Candidate identity is deleted or suppressed",
             severity="blocked",
-            details={"deleted": candidate_is_deleted, "suppressed": candidate_is_suppressed},
+            details={
+                "deleted": candidate_is_deleted or status_is_deleted,
+                "suppressed": candidate_is_suppressed or status_is_suppressed,
+            },
         ))
 
     # 3. Revoked consent grant
@@ -131,10 +147,11 @@ async def evaluate_vetoes(
                 details={"current": current_entity_type, "candidate": cand_type},
             ))
 
-    # 7. Conflicting verified emails
+    # 7. Conflicting verified emails: equal digests corroborate the same
+    # verified identifier; only distinct verified identifiers are a veto.
     for cand_email, cand_entity_id in candidate_verified_emails:
         for curr_email in current_verified_emails:
-            if cand_email == curr_email:
+            if cand_email != curr_email:
                 vetoes.append(IdentityVeto(
                     veto_type=VetoType.CONFLICTING_VERIFIED_EMAIL,
                     reason=f"Conflicting verified email: {cand_email} on both entities",
@@ -146,10 +163,10 @@ async def evaluate_vetoes(
                     },
                 ))
 
-    # 8. Conflicting authenticated user IDs
+    # 8. Conflicting authenticated user IDs: equality is a match, not a veto.
     for cand_user_id, cand_entity_id in candidate_authenticated_user_ids:
         for curr_user_id in current_authenticated_user_ids:
-            if cand_user_id == curr_user_id:
+            if cand_user_id != curr_user_id:
                 vetoes.append(IdentityVeto(
                     veto_type=VetoType.CONFLICTING_AUTHENTICATED_USER,
                     reason=f"Conflicting authenticated user ID: {cand_user_id}",

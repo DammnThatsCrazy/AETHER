@@ -1135,6 +1135,11 @@ class AetherSDK implements AetherSDKInterface {
     // Canonical identity is owned here (SessionManager + the top-level event id);
     // the semantic collector reuses these rather than minting conflicting ids.
     const eventId = generateId();
+    // identify events are queued once and retain this key with the event across
+    // retries/restarts. A later hydrateIdentity call gets a new event and key.
+    const eventProperties = type === 'identify'
+      ? { ...properties, idempotency_key: eventId }
+      : properties;
     const sessionId = session?.id ?? '';
     const semantic = this.semanticContext?.collect(sessionId, eventId);
     const device = typeof window !== 'undefined' ? getDeviceContext() : undefined;
@@ -1146,7 +1151,7 @@ class AetherSDK implements AetherSDKInterface {
       sessionId,
       anonymousId: identity.anonymousId,
       userId: identity.userId,
-      properties,
+      properties: eventProperties,
       context: {
         library: { name: '@aether/web', version: SDK_VERSION },
         page: typeof window !== 'undefined' ? getPageContext() : undefined,

@@ -759,6 +759,37 @@
                 "enable_execute_command": false
               },
               "index": "lean-worker"
+            },
+            {
+              "address": "module.ecs.aws_appautoscaling_target.backend",
+              "mode": "managed",
+              "type": "aws_appautoscaling_target",
+              "name": "backend",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "service_namespace": "ecs",
+                "scalable_dimension": "ecs:service:DesiredCount",
+                "resource_id": "service/aether-staging/aether-staging-backend",
+                "min_capacity": 0,
+                "max_capacity": 0
+              }
+            },
+            {
+              "address": "module.ecs.aws_appautoscaling_target.runtime_service[\"lean-worker\"]",
+              "mode": "managed",
+              "type": "aws_appautoscaling_target",
+              "name": "runtime_service",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "service_namespace": "ecs",
+                "scalable_dimension": "ecs:service:DesiredCount",
+                "resource_id": "service/aether-staging/aether-staging-lean-worker",
+                "min_capacity": 0,
+                "max_capacity": 0
+              },
+              "index": "lean-worker"
             }
           ]
         },

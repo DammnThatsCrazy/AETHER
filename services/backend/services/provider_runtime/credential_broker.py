@@ -68,6 +68,15 @@ class CredentialBroker:
         """Revoke a stored credential by ref (hard-deletes on the backends)."""
         await self._service.revoke(tenant_id, ref)
 
+    async def delete(self, tenant_id: str, ref: str) -> bool:
+        """Hard-delete credential material from the configured backend.
+
+        Unlike ``revoke``, which can retain an encrypted revoked record in
+        external secret stores, this removes the provider secret object where
+        the backend supports deletion.
+        """
+        return bool(await self._service.delete(tenant_id, ref))
+
 
 # Process-wide broker singleton — every runtime component shares one.
 credential_broker = CredentialBroker()

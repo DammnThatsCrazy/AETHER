@@ -20,19 +20,8 @@ from .models import (
     DecisionType,
     IdentityConflictRecord,
     IdentityDecisionRecord,
-    ProjectionRestatementJobRecord,
-    ProjectionType,
 )
-
 logger = get_logger("aether.identity.split_service")
-
-# Identity continuity: projection restatement orchestrator wiring
-try:
-    from services.projections.projection_restatement_orchestrator import (
-        ProjectionRestatementOrchestrator,
-    )
-except Exception:  # pragma: no cover
-    ProjectionRestatementOrchestrator = None  # type: ignore
 
 
 class SplitService:
@@ -57,6 +46,10 @@ class SplitService:
         moved_source_identity_ids: Optional[list[str]] = None,
     ) -> str:
         """Create a split candidate from a detected conflict."""
+        from config.settings import settings
+
+        if not settings.identity_continuity.manual_review_enabled:
+            raise RuntimeError("identity review is disabled")
         candidate_id = str(uuid.uuid4())
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -94,6 +87,13 @@ class SplitService:
         expected_graph_version: Optional[str],
     ) -> bool:
         """Approve a split candidate for execution."""
+        from config.settings import settings
+
+        if not (
+            settings.identity_continuity.split_enabled
+            and settings.identity_continuity.manual_split_enabled
+        ):
+            raise RuntimeError("manual identity split is disabled")
         candidate = self._split_candidates.get(candidate_id)
         if not candidate:
             raise ValueError(f"Split candidate not found: {candidate_id}")
@@ -139,6 +139,13 @@ class SplitService:
         policy_version: str = "1.0.0",
     ) -> IdentityDecisionRecord:
         """Execute a split: move source identities, reverse edges, increment graph version."""
+        from config.settings import settings
+
+        if not (
+            settings.identity_continuity.split_enabled
+            and settings.identity_continuity.manual_split_enabled
+        ):
+            raise RuntimeError("manual identity split is disabled")
         candidate = self._split_candidates.get(candidate_id)
         if not candidate:
             raise ValueError(f"Split candidate not found: {candidate_id}")
@@ -166,7 +173,7 @@ class SplitService:
             tenant_id=tenant_id,
             decision_type=DecisionType.MANUAL_SPLIT,
             candidate_source_identity_ids=moved_source_identity_ids,
-            candidate_canonical_entity_ids=[candidate["source_canonical_entity_id"]],
+            candidate_canonical_entity_ids=[candidate["source_canonical_entity_id"]] + target_entity_ids,
             selected_canonical_entity_id=candidate["source_canonical_entity_id"],
             confidence=0.0,
             confidence_band=ConfidenceBand.BLOCKED,  # split is not a confidence decision
@@ -182,13 +189,7 @@ class SplitService:
         )
 
         # Queue projection restatement
-        await self._queue_restatement(
-            tenant_id=tenant_id,
-            decision_id=decision_id,
-            graph_version_before=graph_version_before,
-            graph_version_after=graph_version_after,
-            affected_entity_ids=[candidate["source_canonical_entity_id"]] + target_entity_ids,
-        )
+        await self._queue_restatement(decision)
 
         # Remove candidate
         del self._split_candidates[candidate_id]
@@ -258,85 +259,35 @@ class SplitService:
         # Production: query repository for split events
         return []
 
-    async def _queue_restatement(
-        self,
-        tenant_id: str,
-        decision_id: str,
-        graph_version_before: Optional[str],
-        graph_version_after: str,
-        affected_entity_ids: list[str],
-    ) -> None:
+    async def _queue_restatement(self, decision: IdentityDecisionRecord) -> None:
         """Queue projection restatement after a split.
 
         Wires ProjectionRestatementOrchestrator (blueprint §11) and observability traces.
         """
-        projections = [
-            ProjectionType.PROFILE_360,
-            ProjectionType.JOURNEY,
-            ProjectionType.COMMUNICATIONS_360,
-            ProjectionType.VALUE,
-            ProjectionType.SIGNALS,
-            ProjectionType.SYNDICATES,
-            ProjectionType.AGENT_360,
-            ProjectionType.EXECUTION_360,
-            ProjectionType.ACCOUNT_360,
-        ]
-
-        job = ProjectionRestatementJobRecord(
-            id=str(uuid.uuid4()),
-            tenant_id=tenant_id,
-            trigger_decision_id=decision_id,
-            graph_version_before=graph_version_before or "initial",
-            graph_version_after=graph_version_after,
-            affected_canonical_entity_ids=affected_entity_ids,
-            projections=projections,
-            status="queued",
-            created_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-        logger.info(
-            "identity.projection_restatement.queued",
-            extra={
-                "tenant_id": tenant_id,
-                "job_id": job.id,
-                "decision_id": decision_id,
-                "projection_count": len(projections),
-                "event_count": len(affected_entity_ids),
-            },
-        )
-
-        # Wire orchestrator: queue restatement via the canonical orchestrator + observability
         try:
             from services.identity.observability import IdentityTrace, identity_metrics
+            from services.projections.projection_restatement_orchestrator import (
+                ProjectionRestatementOrchestrator,
+            )
 
+            job = await ProjectionRestatementOrchestrator().queue_restatement(decision)
             identity_metrics.record_projection_restatement("queued")
-            trace = IdentityTrace(tenant_id=tenant_id, source_system_id="identity.split_service")
+            trace = IdentityTrace(
+                tenant_id=decision.tenant_id, source_system_id="identity.split_service"
+            )
             trace.projection_restatement_queue([job.id])
-
-            if ProjectionRestatementOrchestrator is not None:
-                orchestrator = ProjectionRestatementOrchestrator()
-                decision_for_orchestrator = IdentityDecisionRecord(
-                    id=decision_id,
-                    tenant_id=tenant_id,
-                    decision_type=DecisionType.MANUAL_SPLIT,
-                    candidate_source_identity_ids=[],
-                    candidate_canonical_entity_ids=list(affected_entity_ids),
-                    selected_canonical_entity_id=affected_entity_ids[0] if affected_entity_ids else None,
-                    confidence=0.0,
-                    confidence_band=ConfidenceBand.BLOCKED,
-                    positive_evidence=[],
-                    negative_evidence=[],
-                    vetoes=[],
-                    policy_version="1.0.0",
-                    graph_version_before=graph_version_before,
-                    graph_version_after=graph_version_after,
-                    explanation="split_service projection restatement",
-                    decided_by="operator",
-                    decided_at=datetime.now(timezone.utc).isoformat(),
-                )
-                try:
-                    await orchestrator.queue_restatement(decision_for_orchestrator)
-                except Exception as e:
-                    logger.warning("projection_restatement orchestrator queue failed: %s", e)
         except Exception as e:
-            logger.warning("projection_restatement wiring failed: %s", e)
+            try:
+                from services.identity.observability import identity_metrics
+
+                identity_metrics.record_projection_restatement("failed")
+            except Exception:
+                pass
+            logger.error(
+                "identity.projection_restatement.enqueue_failed",
+                extra={
+                    "tenant_id": decision.tenant_id,
+                    "decision_id": decision.id,
+                    "error_type": type(e).__name__,
+                },
+            )

@@ -544,33 +544,6 @@ async def ingest_events(
 
         schedule_install_projection(tenant_id, accepted_raw, declared_site)
 
-    # ── Identity resolution (fire-and-forget, non-blocking) ────────────────
-    # Run after Bronze durability is confirmed. Resolution errors never fail
-    # ingestion — events are already durable and recoverable via recompute.
-    if accepted_raw:
-        import asyncio as _asyncio
-        resolver = get_identity_resolver()
-        for normalized in accepted_raw:
-            task = _asyncio.create_task(
-                _resolve_identity_safe(resolver, normalized, tenant_id)
-            )
-
-            def _log_task_exc(
-                t: "_asyncio.Task",
-                _tid: str = tenant_id,
-                _eid: str = normalized.get("event_id", ""),
-            ) -> None:
-                if t.cancelled():
-                    return
-                exc = t.exception()
-                if exc:
-                    logger.error(
-                        "Identity resolution task failed event=%s tenant=%s: %s",
-                        _eid, _tid, exc,
-                    )
-
-            task.add_done_callback(_log_task_exc)
-
     # ── Atomic idempotency claim AFTER Bronze write, BEFORE bus publish ───
     # Build a lookup from event_id → index in results so we can update in-place.
     event_id_to_result_idx: dict[str, int] = {}
@@ -586,8 +559,19 @@ async def ingest_events(
         cache_key = f"aether:idempotency:{idempotency_key}"
         try:
             claimed = await registry.cache.set_nx(cache_key, "1", ttl=TTL.DAY)
-        except Exception:
-            claimed = True  # allow on cache error
+        except Exception as exc:
+            # Canonical identify resolution can mutate source-identity claims
+            # and merge decisions. Do not bypass the only V1 event-ID dedupe
+            # guard for those events when its cache is unavailable.
+            if raw.get("event_type") == "identify":
+                logger.error(
+                    "Identify idempotency claim unavailable event_id=%s tenant=%s: %s",
+                    raw.get("event_id", ""), tenant_id, exc,
+                )
+                raise ServiceUnavailableError(
+                    "Identity ingestion temporarily unavailable — please retry"
+                ) from exc
+            claimed = True  # preserve legacy fail-open behavior for other types
         if claimed:
             claimed_keys.append(cache_key)
             final_accepted_events.append(event)
@@ -627,6 +611,60 @@ async def ingest_events(
             raise ServiceUnavailableError(
                 "Ingestion temporarily unavailable — please retry"
             )
+
+    # ── Identity resolution after the idempotency claim ───────────────────
+    # The canonical resolver mutates identity evidence and may create merge
+    # decisions. Run it only for events that won the event-id claim and were
+    # successfully published. SDK retries reuse the same top-level event ID;
+    # duplicates are removed from accepted_raw above and cannot repeat these
+    # side effects. The identify properties.idempotency_key is supplementary:
+    # ingestion's canonical dedupe key remains tenant + event_id + schema.
+    # Resolution errors never fail ingestion. This path does not persist a
+    # resolver work receipt or retry state; a missing resolution requires the
+    # operational replay/recompute path rather than a repeat SDK request.
+    identity_flags = settings.identity_continuity
+    if accepted_raw and identity_flags.resolution_enabled:
+        import asyncio as _asyncio
+        try:
+            resolver = get_identity_resolver()
+            for normalized in accepted_raw:
+                if (
+                    normalized.get("event_type") == "identify"
+                    and (
+                        not identity_flags.sdk_late_binding_enabled
+                        or (
+                            normalized.get("anonymous_id")
+                            and normalized.get("user_id")
+                            and not identity_flags.anonymous_to_known_binding_enabled
+                        )
+                    )
+                ):
+                    continue
+                task = _asyncio.create_task(
+                    _resolve_identity_safe(resolver, normalized, tenant_id)
+                )
+
+                def _log_task_exc(
+                    t: "_asyncio.Task",
+                    _tid: str = tenant_id,
+                    _eid: str = normalized.get("event_id", ""),
+                ) -> None:
+                    if t.cancelled():
+                        return
+                    exc = t.exception()
+                    if exc:
+                        logger.error(
+                            "Identity resolution task failed event=%s tenant=%s: %s",
+                            _eid, _tid, exc,
+                        )
+
+                task.add_done_callback(_log_task_exc)
+        except Exception as exc:
+            logger.error(
+                "Identity resolution scheduling failed tenant=%s accepted_count=%d: %s",
+                tenant_id, len(accepted_raw), exc,
+            )
+            metrics.increment("identity_resolve_schedule_error_total")
 
     # ── Tally results ─────────────────────────────────────────────────────
     n_accepted = sum(1 for r in results if r.status == "accepted")
@@ -1146,6 +1184,21 @@ def _strip_canonical_entity_id(obj: Any) -> Any:
 async def _resolve_identity_safe(resolver, normalized: dict, tenant_id: str) -> None:
     """Run identity resolution without propagating exceptions to the ingestion path."""
     try:
+        identity_flags = settings.identity_continuity
+        if not identity_flags.resolution_enabled:
+            return
+        if (
+            normalized.get("event_type") == "identify"
+            and (
+                not identity_flags.sdk_late_binding_enabled
+                or (
+                    normalized.get("anonymous_id")
+                    and normalized.get("user_id")
+                    and not identity_flags.anonymous_to_known_binding_enabled
+                )
+            )
+        ):
+            return
         from services.identity.schemas import IdentityResolveRequest
         req = IdentityResolveRequest(
             event_id=normalized["event_id"],

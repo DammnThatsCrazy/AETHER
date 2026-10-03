@@ -25,6 +25,7 @@ from services.provider_runtime.errors import (
     ConnectionStateViolation,
     PluginIncompatible,
     ProviderNotInstalled,
+    ProviderRuntimeError,
 )
 
 
@@ -103,6 +104,60 @@ async def test_store_credential_moves_to_credentials_received(
     assert updated.state == ConnectionState.CREDENTIALS_RECEIVED
     # Ref is stored, secret is not.
     assert "sk_live_abc" not in updated.credential_ref
+
+
+@pytest.mark.asyncio
+async def test_delete_credential_hard_deletes_backend_secret_and_clears_ref(
+    orchestrator: ConnectionOrchestrator,
+    broker: CredentialBroker,
+):
+    conn = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    await orchestrator.store_credential(
+        conn, ApiKeyCredential(api_key=SecretStr("staging-secret-value"))
+    )
+    ref = conn.credential_ref
+    assert await broker.resolve("tenant-1", ref) is not None
+
+    assert await orchestrator.delete_credential(conn) is True
+    assert conn.credential_ref == ""
+    assert await broker.resolve("tenant-1", ref) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_credential_is_idempotent_when_backend_ref_is_absent(
+    orchestrator: ConnectionOrchestrator,
+):
+    conn = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    assert await orchestrator.delete_credential(conn) is False
+    assert conn.credential_ref == ""
+
+
+@pytest.mark.asyncio
+async def test_delete_credential_refuses_to_break_another_connection(
+    orchestrator: ConnectionOrchestrator,
+    connections: ProviderConnectionRepository,
+    broker: CredentialBroker,
+):
+    first = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    await orchestrator.store_credential(
+        first, ApiKeyCredential(api_key=SecretStr("shared-secret"))
+    )
+    second = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    second.credential_ref = first.credential_ref
+    await connections.upsert(second)
+
+    with pytest.raises(ProviderRuntimeError, match="shared with another connection"):
+        await orchestrator.delete_credential(first)
+    assert first.credential_ref
+    assert await broker.resolve("tenant-1", first.credential_ref) is not None
 
 
 @pytest.mark.asyncio

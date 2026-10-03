@@ -1560,6 +1560,10 @@ public final class Aether: NSObject {
     }
 
     public func hydrateIdentity(_ data: IdentityData) {
+        hydrateIdentity(data, identifyEventId: nil)
+    }
+
+    private func hydrateIdentity(_ data: IdentityData, identifyEventId: String?) {
         let priorUserId = self.userId
         let priorEmail = self.email
         if let userId = data.userId { self.userId = userId }
@@ -1580,7 +1584,7 @@ public final class Aether: NSObject {
             "walletAddress": AnyCodable(data.walletAddress ?? ""),
             "walletsCount": AnyCodable(data.wallets.count),
             "wallets": AnyCodable(data.wallets.map { ["address": $0.address, "vm": $0.vm, "walletType": $0.walletType] }),
-        ])
+        ], eventIdOverride: identifyEventId)
 
         defaults.set(userId, forKey: "userId")
 
@@ -1592,6 +1596,35 @@ public final class Aether: NSObject {
                 resolveIdentity(walletAddress: walletAddress, userId: self.userId, email: self.email)
             }
         }
+    }
+
+    /// Backward-compatible alias bind for React Native. Exact retries for one
+    /// anonymous/user pair reuse a keyed event ID across queue replay/restart.
+    @discardableResult
+    public func aliasIdentity(previousId: String, userId: String) -> Bool {
+        guard !previousId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              previousId == anonymousId else { return false }
+        let secret: String
+        if let stored = defaults.string(forKey: "alias_idempotency_secret_v1") {
+            secret = stored
+        } else {
+            secret = UUID().uuidString
+            defaults.set(secret, forKey: "alias_idempotency_secret_v1")
+        }
+        let eventId = deterministicAliasEventId(secret: secret, previousId: previousId, userId: userId)
+        hydrateIdentity(IdentityData(userId: userId), identifyEventId: eventId)
+        return true
+    }
+
+    func deterministicAliasEventId(secret: String, previousId: String, userId: String) -> String {
+        let digest = SHA256.hash(data: Data("\(secret)\u{0}\(previousId)\u{0}\(userId)".utf8))
+        var chars = Array(digest.prefix(16).map { String(format: "%02x", $0) }.joined())
+        chars[12] = "5"
+        let variant = Int(String(chars[16]), radix: 16)! & 0x03
+        chars[16] = Array("89ab")[variant]
+        let hex = String(chars)
+        return "\(hex.prefix(8))-\(hex.dropFirst(8).prefix(4))-\(hex.dropFirst(12).prefix(4))-\(hex.dropFirst(16).prefix(4))-\(hex.dropFirst(20).prefix(12))"
     }
 
     public func getAnonymousId() -> String { anonymousId }
@@ -2589,7 +2622,11 @@ public final class Aether: NSObject {
 
     // MARK: - Private
 
-    private func enqueueEvent(type: AetherEventType, properties: [String: AnyCodable]) {
+    private func enqueueEvent(
+        type: AetherEventType,
+        properties: [String: AnyCodable],
+        eventIdOverride: String? = nil
+    ) {
         guard isInitialized else { return }
         guard let purpose = Self.eventConsentPurpose[type] else {
             log("Dropping non-canonical event type: \(type.rawValue). Use track(_:properties:) for custom events.")
@@ -2619,19 +2656,26 @@ public final class Aether: NSObject {
         // Single occurrence instant shared by the timestamp and the temporal
         // provenance so zone/offset evidence matches the stamped clock reading.
         let eventDate = Date()
+        let eventId = eventIdOverride?.isEmpty == false ? eventIdOverride! : UUID().uuidString
+        let identifyProperties = withIdentifyIdempotencyKey(
+            type: type, eventId: eventId, properties: scrubbedProps
+        )
         let event = AetherEvent(
-            id: UUID().uuidString,
+            id: eventId,
             type: type,
             timestamp: ISO8601DateFormatter().string(from: eventDate),
             sessionId: sessionId,
             anonymousId: anonymousId,
             userId: userId,
-            properties: scrubbedProps,
+            properties: identifyProperties,
             context: buildContext(at: eventDate)
         )
 
         serialQueue.async { [weak self] in
             guard let self = self else { return }
+            // Alias retries share one stable event ID. Avoid queuing duplicate
+            // copies locally; backend uniqueness covers already-acked retries.
+            if eventIdOverride != nil, self.eventQueue.contains(where: { $0.id == event.id }) { return }
             // Enforce max queue size
             while self.eventQueue.count >= Aether.maxQueueSize { self.eventQueue.removeFirst() }
             self.eventQueue.append(event)
@@ -2641,6 +2685,19 @@ public final class Aether: NSObject {
                 self.sendBatch()
             }
         }
+    }
+
+    // Internal for contract tests. Transport retries reuse the queued event's
+    // eventId, while a new identify call creates another eventId.
+    func withIdentifyIdempotencyKey(
+        type: AetherEventType,
+        eventId: String,
+        properties: [String: AnyCodable]
+    ) -> [String: AnyCodable] {
+        guard type == .identify else { return properties }
+        var identified = properties
+        identified["idempotency_key"] = AnyCodable(eventId)
+        return identified
     }
 
     private func sendBatch() {
@@ -3118,8 +3175,7 @@ public final class Aether: NSObject {
                     self.userId = uid
                     self.defaults.set(uid, forKey: "userId")
                 }
-                self.enqueueEvent(type: .track, properties: [
-                    "event": AnyCodable("journey_resumed"),
+                self.enqueueEvent(type: .journey_resumed, properties: [
                     "resolvedAnonymousId": AnyCodable(resolvedAnonymousId),
                     "resolvedUserId": AnyCodable(resolvedUserId ?? "")
                 ])

@@ -70,15 +70,28 @@ class ValueSnapshotService:
         await self.valuations.insert(record["id"], record)
         return record
 
-    async def record_rollup(self, tenant_id: str, metric: str, rollup: dict) -> dict:
+    async def record_rollup(
+        self,
+        tenant_id: str,
+        metric: str,
+        rollup: dict,
+        *,
+        snapshot_id: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        restatement_key: Optional[str] = None,
+    ) -> dict:
         record = {
-            "id": f"rollup_{metric}_{utc_now().timestamp()}",
+            "id": snapshot_id or f"rollup_{metric}_{utc_now().timestamp()}",
             "tenant_id": tenant_id,
             "metric": metric,
             "total_usd": rollup.get("total_usd"),
             "rollup_status": rollup.get("rollup_status"),
             "unpriced_count": rollup.get("unpriced_count"),
             "excluded_count": rollup.get("excluded_count"),
+            "data": {
+                "entity_id": entity_id,
+                "restatement_key": restatement_key,
+            },
             "recorded_at": utc_now().isoformat(),
         }
         await self.rollups.insert(record["id"], record)

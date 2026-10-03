@@ -27,6 +27,7 @@ const { nativeMethods, platformRef } = vi.hoisted(() => ({
     entitlementRevoked:         vi.fn(),
     getCurrentJourney:          vi.fn(async () => ({ name: 'onboarding' })),
     getIdentity:                vi.fn(async () => ({ anonymousId: 'anon-1', traits: {} })),
+    alias:                      vi.fn(async () => undefined),
     accessGranted:              vi.fn(),
     accessDenied:               vi.fn(),
     agentTask:                  vi.fn(),
@@ -259,6 +260,41 @@ describe('Aether RN bridge — core API', () => {
     const data = { userId: 'u1', walletAddress: '0xabc' };
     Aether.hydrateIdentity(data);
     expect(nativeMethods.hydrateIdentity).toHaveBeenCalledWith(data);
+  });
+
+  it('identify delegates to native identity authority without accepting an anonymous ID', () => {
+    const data = { userId: 'u1', traits: { email: 'u1@example.test' } };
+    Aether.identify(data);
+    expect(nativeMethods.hydrateIdentity).toHaveBeenCalledWith(data);
+    expect(data).not.toHaveProperty('anonymousId');
+  });
+
+  it('alias preserves the current native anonymous context and delegates to native identify queue', async () => {
+    await Aether.alias('anon-1', 'user-1');
+    expect(nativeMethods.alias).toHaveBeenCalledWith('anon-1', 'user-1');
+    expect(nativeMethods.hydrateIdentity).not.toHaveBeenCalled();
+  });
+
+  it('allows a transport retry of the same alias pair to reach the native idempotency boundary', async () => {
+    await Aether.alias('anon-1', 'user-1');
+    await Aether.alias('anon-1', 'user-1');
+    expect(nativeMethods.alias).toHaveBeenNthCalledWith(1, 'anon-1', 'user-1');
+    expect(nativeMethods.alias).toHaveBeenNthCalledWith(2, 'anon-1', 'user-1');
+  });
+
+  it('alias returns native rejection when previous ID differs from native identity', async () => {
+    nativeMethods.alias.mockRejectedValueOnce(new Error('alias previousId must match the current native anonymous ID'));
+    await expect(Aether.alias('anon-other', 'user-1')).rejects.toThrow(
+      'alias previousId must match the current native anonymous ID',
+    );
+    expect(nativeMethods.alias).toHaveBeenCalledWith('anon-other', 'user-1');
+  });
+
+  it('alias rejects empty identifiers before reading or changing native identity', async () => {
+    await expect(Aether.alias(' ', 'user-1')).rejects.toThrow(
+      'alias requires non-empty previousId and userId',
+    );
+    expect(nativeMethods.alias).not.toHaveBeenCalled();
   });
 
   it('screenView delegates screen name', () => {

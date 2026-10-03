@@ -11,7 +11,6 @@ Endpoints are tenant-scoped and gated by feature flags.
 
 from __future__ import annotations
 
-import uuid
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
@@ -19,9 +18,10 @@ from shared.logger.logger import get_logger
 from .decision_evidence import DecisionType, IdentityDecisionEvidenceService
 from .exceptions import IdentityError
 from .graph_versioner import GraphVersioner as _GraphVersioner
-from .models import ConfidenceTier, MergeDecision
+from .models import ConfidenceTier, ConflictStatus, MergeDecision
 from .repository import IdentityResolutionRepository
 from .merge_ledger import MergeLedger
+from .pending_review import PendingIdentityReviewRepository
 from .resolver import IdentityResolutionService
 from .schemas import (
     AdminIdentityMergeRequest,
@@ -470,6 +470,7 @@ class AdminIdentityService:
         self._merge_ledger = merge_ledger
         self._graph_versioner = graph_versioner or _GraphVersioner()
         self._repo = repo or IdentityResolutionRepository()
+        self._pending_reviews = PendingIdentityReviewRepository()
 
     async def manual_merge(
         self,
@@ -643,9 +644,39 @@ class AdminIdentityService:
         }
 
     async def review_queue(self, tenant_id: str, limit: int = 50) -> list[dict]:
-        """Return open conflicts/reviews for the tenant."""
-        conflicts = await self._repo.get_conflicts(tenant_id, status="open", limit=limit)
+        """Return tenant-owned open conflicts and non-authoritative candidates."""
+        pending = await self._pending_reviews.list_for_review(tenant_id, limit=limit)
         queue: list[dict] = []
+        for item in pending:
+            if item.get("tenant_id") != tenant_id:
+                continue
+            source_ids = item.get("candidate_source_identity_ids") or []
+            evidence = item.get("evidence") or []
+            queue.append({
+                "conflict_id": item.get("id", ""),
+                "tenant_id": tenant_id,
+                "entry_type": "late_binding_candidate",
+                "candidate_a": {"entity_id": ""},
+                "candidate_b": {"entity_id": ""},
+                "candidate_source_identity_ids": source_ids,
+                "identify_source_identity_id": item.get("identify_source_identity_id", ""),
+                "reason_codes": item.get("reason_codes") or [],
+                "matching_evidence": evidence,
+                "conflicting_evidence": [],
+                "recommended_action": "review_identity_evidence",
+                "confidence": 0.0,
+                "risk_level": "medium",
+                "affected_projections": [],
+                "created_at": item.get("created_at", ""),
+                "status": item.get("status", "open"),
+                "authority": "none",
+                "seen_count": int(item.get("seen_count", 1)),
+            })
+        if len(queue) >= limit:
+            return queue[:limit]
+        conflicts = await self._repo.get_conflicts(
+            tenant_id, status="open", limit=max(0, limit - len(queue))
+        )
         for c in conflicts:
             candidate_ids = c.get("candidate_entity_ids") or []
             candidate_a = candidate_ids[0] if len(candidate_ids) > 0 else ""
@@ -669,24 +700,178 @@ class AdminIdentityService:
         return queue
 
     async def activation_status(self, tenant_id: str) -> dict:
-        """Tenant activation dashboard data."""
+        """Return tenant activation status from persisted, tenant-owned state.
+
+        The dashboard is an operational view, so each status is derived from
+        the repository that owns that state. In particular, profile aliases do
+        not imply an SDK is installed, and restatement is never reported active
+        merely because the feature exists.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        from config.settings import settings
+        from repositories.imports_repo import ImportsRepository
+        from repositories.sdk_heartbeat_status import get_sdk_heartbeat_status_repository
+        from services.jobs.service import get_jobs_service
+        from services.projections.projection_restatement_orchestrator import (
+            PROJECTION_RESTATEMENT_JOB_TYPE,
+        )
+        from shared.common.common import utc_now
+
         health = await self._repo.get_identity_health(tenant_id)
+        identity_sources = await self._repo._source_identities.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000
+        )
+        imports = ImportsRepository()
+        sessions = await imports.list_sessions(tenant_id, limit=1000)
+        commits = await imports.commits.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000
+        )
+        committed_statuses = {"committed", "partially_committed"}
+        committed_sessions = [
+            row for row in sessions if row.get("status") in committed_statuses
+        ]
+        historical_source_count = sum(
+            1 for row in identity_sources
+            if str(row.get("source_kind", "")).lower() in {"csv", "connector", "import"}
+            and str(row.get("status", "")).lower() not in {"suppressed", "deleted", "erased"}
+        )
+        committed_commits = [
+            row for row in commits
+            if row.get("status") in committed_statuses and not row.get("rolled_back")
+        ]
+        committed_import_ids = {
+            str(row.get("id") or row.get("import_id"))
+            for row in committed_sessions
+        }
+        committed_import_ids.update(
+            str(row.get("import_id")) for row in committed_commits if row.get("import_id")
+        )
+        historical_import_count = max(
+            len(committed_import_ids), historical_source_count
+        )
+        if historical_import_count:
+            historical_data_status = "available"
+        elif any(row.get("status") not in {
+            "committed", "partially_committed", "failed", "cancelled", "rolled_back"
+        } for row in sessions):
+            historical_data_status = "in_progress"
+        elif any(row.get("status") == "failed" for row in sessions):
+            historical_data_status = "failed"
+        else:
+            historical_data_status = "empty"
+
+        # Heartbeat state is keyed by tenant/app/SDK and contains no user,
+        # device, or installation identifiers. Identity aliases and source
+        # rows are not evidence that an SDK is currently connected.
+        heartbeat_rows = await get_sdk_heartbeat_status_repository().list_for_tenant(
+            tenant_id
+        )
+        parsed_sdk_seen: list[tuple[datetime, str]] = []
+        for row in heartbeat_rows:
+            raw_seen = row.get("last_seen_at")
+            if isinstance(raw_seen, datetime):
+                seen_at = raw_seen
+            elif raw_seen:
+                try:
+                    seen_at = datetime.fromisoformat(str(raw_seen).replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            else:
+                continue
+            if seen_at.tzinfo is None:
+                seen_at = seen_at.replace(tzinfo=timezone.utc)
+            parsed_sdk_seen.append((seen_at, seen_at.isoformat()))
+        latest_sdk_seen = max(parsed_sdk_seen, key=lambda item: item[0])[1] if parsed_sdk_seen else ""
+        sdk_status = "not_connected"
+        if parsed_sdk_seen:
+            latest_seen_at = max(parsed_sdk_seen, key=lambda item: item[0])[0]
+            age = utc_now() - latest_seen_at
+            sdk_status = "unknown" if age < timedelta(0) else (
+                "connected" if age <= timedelta(hours=24) else "stale"
+            )
+
+        pending_rows = await self._pending_reviews.list_for_review(tenant_id, limit=1000)
+        pending_review_counts: dict[str, int] = {
+            "open": 0,
+            "approving": 0,
+            "approval_recovery_required": 0,
+            "merge_committed": 0,
+        }
+        for row in pending_rows:
+            status = row.get("status")
+            if status in pending_review_counts:
+                pending_review_counts[status] += 1
+
+        resolved_conflicts = await self._repo.get_conflicts(
+            tenant_id, status=ConflictStatus.RESOLVED.value, limit=10000
+        )
+        dismissed_conflicts = await self._repo.get_conflicts(
+            tenant_id, status=ConflictStatus.DISMISSED.value, limit=10000
+        )
+
+        flags = settings.identity_continuity
+        restatement_jobs = await get_jobs_service().list_jobs(
+            tenant_id,
+            job_type=PROJECTION_RESTATEMENT_JOB_TYPE,
+            limit=200,
+        )
+        projection_restatement_counts: dict[str, int] = {}
+        for job in restatement_jobs:
+            status = str(job.get("status", "unknown"))
+            projection_restatement_counts[status] = (
+                projection_restatement_counts.get(status, 0) + 1
+            )
+        if not flags.projection_restatement_enabled:
+            projection_restatement_status = "disabled"
+        elif any(
+            projection_restatement_counts.get(status, 0)
+            for status in ("failed", "partially_succeeded", "expired")
+        ):
+            projection_restatement_status = "needs_attention"
+        elif any(
+            projection_restatement_counts.get(status, 0)
+            for status in ("accepted", "queued", "running", "retrying", "cancel_requested")
+        ):
+            projection_restatement_status = "in_progress"
+        elif projection_restatement_counts.get("succeeded", 0):
+            projection_restatement_status = "completed"
+        else:
+            projection_restatement_status = "idle"
+
+        runtime_flags = {
+            "resolution_enabled": flags.resolution_enabled,
+            "sdk_late_binding_enabled": flags.sdk_late_binding_enabled,
+            "anonymous_to_known_binding_enabled": flags.anonymous_to_known_binding_enabled,
+            "multi_sdk_stitching_enabled": flags.multi_sdk_stitching_enabled,
+            "connector_backfill_enabled": flags.connector_backfill_enabled,
+            "projection_restatement_enabled": flags.projection_restatement_enabled,
+            "campaign_restatement_enabled": flags.campaign_restatement_enabled,
+            "value_restatement_enabled": flags.value_restatement_enabled,
+        }
+
         return {
             "tenant_id": tenant_id,
-            "historical_data_status": "available" if health.get("total_subjects", 0) > 0 else "empty",
-            "sdk_status": "connected" if health.get("total_aliases", 0) > 0 else "not_connected",
+            "historical_data_status": historical_data_status,
+            "sdk_status": sdk_status,
             "resolution_counts": {
                 "total_entities": health.get("total_subjects", 0),
                 "total_aliases": health.get("total_aliases", 0),
                 "total_clusters": health.get("total_clusters", 0),
                 "recent_merges": health.get("recent_merges", 0),
                 "recent_splits": health.get("recent_splits", 0),
+                "historical_imports": historical_import_count,
+                "historical_sources": historical_source_count,
             },
             "conflict_counts": {
                 "open": health.get("open_conflicts", 0),
-                "resolved": 0,
-                "dismissed": 0,
+                "resolved": len(resolved_conflicts),
+                "dismissed": len(dismissed_conflicts),
             },
-            "projection_restatement_status": "active",
-            "computed_at": uuid.uuid4().hex,
+            "projection_restatement_status": projection_restatement_status,
+            "projection_restatement_counts": projection_restatement_counts,
+            "pending_review_counts": pending_review_counts,
+            "runtime_flags": runtime_flags,
+            "sdk_last_seen_at": latest_sdk_seen or None,
+            "computed_at": utc_now().isoformat(),
         }

@@ -158,9 +158,10 @@ locals {
   runtime_profile    = local.runtime_deployment.profiles[var.deployment_profile]
 
   # Staging can be driven to zero desired tasks without changing the topology:
-  # an asleep environment owns exactly the same services as an awake one, so
-  # waking is an input flip rather than a differently-shaped plan. Profiles that
-  # declare no `staging_state` block are always at full capacity.
+  # an asleep environment owns the same services as an awake one, but both
+  # autoscaling bounds are zero so demand policies cannot wake it. Waking
+  # restores the matrix's awake capacity envelope from the same input. Profiles
+  # without a `staging_state` block are always at full capacity.
   staging_state_multiplier = try(
     local.runtime_profile.staging_state.states[var.staging_state].desired_count_multiplier,
     1,
@@ -174,12 +175,12 @@ locals {
   #     zero never reached an applied api service at all, so an "asleep"
   #     staging environment kept running the api task 24/7 while every plan
   #     said 0. See the lifecycle comment on that resource.
-  #   autoscaling min_capacity — the other half, and the one that makes sleep
-  #     STICK rather than merely start.
-  #     Application Auto Scaling clamps a service up to its floor, so a floor of
-  #     1 against a desired count of 0 revives the task within a cooldown and
-  #     staging never sleeps at all: the saving evaporates and the "no always-on
-  #     staging compute" guarantee becomes false while looking satisfied.
+  #   autoscaling min_capacity — prevents a non-zero floor from reviving a task
+  #     after desired_count reaches 0.
+  #   autoscaling max_capacity — the hard sleep guard. With a non-zero ceiling,
+  #     queue-depth or request metrics can scale a service back out while it is
+  #     meant to be asleep. Both bounds must therefore be zero until the
+  #     reviewed wake plan restores the declared ceiling.
   #   capacity_provider base_count — only for the full lane. Pilot staging
   #     pins this strategy at base 0 for both lifecycle states. The pilot
   #     topology uses one FARGATE provider at weight 100, so desired_count is
@@ -188,12 +189,9 @@ locals {
   #     AWS provider treats as replacement-only; the former multiplier caused
   #     both ECS services to be replaced on every wake and sleep.
   #
-  # max_capacity is deliberately NOT scaled. The ceiling is a static safety
-  # bound on the shape, not a statement of current capacity; collapsing it too
-  # would make waking a two-attribute change and would erase the reviewed
-  # envelope from a sleeping plan. Floor 0 with the declared ceiling is what
-  # the staging lifecycle's sleep-plan verification reads back out of
-  # reviewed.tfplan.json and compares against this matrix × the multiplier.
+  # The declared max_capacity is the awake surge envelope. Multiplying it by
+  # the lifecycle state keeps Terraform, the scaling policies and the sleep
+  # verifier aligned: awake uses the matrix ceiling; asleep is pinned to 0..0.
   #
   # An awake environment multiplies by 1 and is therefore unchanged.
 
@@ -221,7 +219,7 @@ locals {
       }
       autoscaling = {
         min_capacity     = cfg.autoscaling.min_capacity * local.staging_state_multiplier
-        max_capacity     = cfg.autoscaling.max_capacity
+        max_capacity     = cfg.autoscaling.max_capacity * local.staging_state_multiplier
         metric           = cfg.autoscaling.metric
         cooldown_seconds = cfg.autoscaling.cooldown_seconds
         # Exactly one threshold is declared per metric (the matrix pairs
@@ -241,7 +239,7 @@ locals {
   api_service       = local.runtime_profile.services["api"]
   api_desired_count = local.api_service.desired_count * local.staging_state_multiplier
   api_min_capacity  = local.api_service.autoscaling.min_capacity * local.staging_state_multiplier
-  api_max_capacity  = local.api_service.autoscaling.max_capacity
+  api_max_capacity  = local.api_service.autoscaling.max_capacity * local.staging_state_multiplier
   api_cpu           = local.api_service.cpu
   api_memory        = local.api_service.memory
 

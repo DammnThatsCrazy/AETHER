@@ -9,7 +9,6 @@ Every merge queues projection restatement.
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any, Optional
 
 from shared.common.common import utc_now
@@ -21,19 +20,10 @@ from .models import (
     ConfidenceBand,
     DecisionType,
     IdentityDecisionRecord,
-    ProjectionRestatementJobRecord,
-    ProjectionType,
 )
 
 logger = get_logger("aether.identity.merge_ledger")
 
-# Identity continuity: projection restatement orchestrator wiring
-try:
-    from services.projections.projection_restatement_orchestrator import (
-        ProjectionRestatementOrchestrator,
-    )
-except Exception:  # pragma: no cover
-    ProjectionRestatementOrchestrator = None  # type: ignore
 
 
 class MergeLedger:
@@ -65,6 +55,10 @@ class MergeLedger:
         decided_by: str = "system",
     ) -> IdentityDecisionRecord:
         """Record an auto-merge decision."""
+        from config.settings import settings
+
+        if not settings.identity_continuity.auto_merge_enabled:
+            raise RuntimeError("automatic identity merge is disabled")
         now = utc_now()
 
         # Increment graph version
@@ -107,13 +101,7 @@ class MergeLedger:
         )
 
         # Queue projection restatement
-        await self._queue_restatement(
-            tenant_id=tenant_id,
-            decision_id=decision_id,
-            graph_version_before=graph_version_before,
-            graph_version_after=graph_version_after,
-            affected_entity_ids=[selected_canonical_entity_id],
-        )
+        await self._queue_restatement(decision)
 
         # Emit event
         if self._producer:
@@ -122,6 +110,19 @@ class MergeLedger:
                 payload={
                     "tenant_id": tenant_id,
                     "decision_id": decision_id,
+                    "is_merge": True,
+                    "primary_entity_id": selected_canonical_entity_id,
+                    "secondary_entity_id": next(
+                        (entity for entity in candidate_canonical_entity_ids
+                         if entity != selected_canonical_entity_id),
+                        None,
+                    ),
+                    "canonical_entity_id": selected_canonical_entity_id,
+                    "affected_canonical_entity_ids": list(dict.fromkeys(
+                        [selected_canonical_entity_id, *candidate_canonical_entity_ids]
+                    )),
+                    "graph_version_before": graph_version_before,
+                    "graph_version_after": graph_version_after,
                     "merged_into": selected_canonical_entity_id,
                     "graph_version": graph_version_after,
                 },
@@ -152,6 +153,10 @@ class MergeLedger:
 
         Must reject stale graph versions.
         """
+        from config.settings import settings
+
+        if not settings.identity_continuity.manual_review_enabled:
+            raise RuntimeError("manual identity merge is disabled")
         # Validate expected graph version against current
         if expected_graph_version and graph_version_before:
             if graph_version_before != expected_graph_version:
@@ -199,13 +204,7 @@ class MergeLedger:
             selected_entity=selected_canonical_entity_id,
         )
 
-        await self._queue_restatement(
-            tenant_id=tenant_id,
-            decision_id=decision_id,
-            graph_version_before=graph_version_before,
-            graph_version_after=graph_version_after,
-            affected_entity_ids=[selected_canonical_entity_id],
-        )
+        await self._queue_restatement(decision)
 
         return decision
 
@@ -265,89 +264,35 @@ class MergeLedger:
         # For now, return empty — the repository layer provides this
         return []
 
-    async def _queue_restatement(
-        self,
-        tenant_id: str,
-        decision_id: str,
-        graph_version_before: Optional[str],
-        graph_version_after: str,
-        affected_entity_ids: list[str],
-    ) -> None:
+    async def _queue_restatement(self, decision: IdentityDecisionRecord) -> None:
         """Queue projection restatement after a merge.
 
         Wires ProjectionRestatementOrchestrator (blueprint §11) and observability traces.
         """
-        # All projections that need restatement
-        projections = [
-            ProjectionType.PROFILE_360,
-            ProjectionType.JOURNEY,
-            ProjectionType.COMMUNICATIONS_360,
-            ProjectionType.VALUE,
-            ProjectionType.SIGNALS,
-            ProjectionType.SYNDICATES,
-            ProjectionType.AGENT_360,
-            ProjectionType.EXECUTION_360,
-            ProjectionType.ACCOUNT_360,
-        ]
-
-        job = ProjectionRestatementJobRecord(
-            id=str(uuid.uuid4()),
-            tenant_id=tenant_id,
-            trigger_decision_id=decision_id,
-            graph_version_before=graph_version_before or "initial",
-            graph_version_after=graph_version_after,
-            affected_canonical_entity_ids=affected_entity_ids,
-            projections=projections,
-            status="queued",
-            created_at=utc_now(),
-        )
-
-        log_event(
-            logger,
-            logging.INFO,
-            "identity.projection_restatement.queued",
-            tenant_id=tenant_id,
-            job_id=job.id,
-            decision_id=decision_id,
-            projection_count=len(projections),
-        )
-
-        # Wire orchestrator: queue restatement via the canonical orchestrator + observability
         try:
             from services.identity.observability import IdentityTrace, identity_metrics
+            from services.projections.projection_restatement_orchestrator import (
+                ProjectionRestatementOrchestrator,
+            )
 
-            # Observability: record queue + trace
+            job = await ProjectionRestatementOrchestrator().queue_restatement(decision)
             identity_metrics.record_projection_restatement("queued")
-            trace = IdentityTrace(tenant_id=tenant_id, source_system_id="identity.merge_ledger")
+            trace = IdentityTrace(
+                tenant_id=decision.tenant_id, source_system_id="identity.merge_ledger"
+            )
             trace.projection_restatement_queue([job.id])
-
-            # Orchestrator wiring: if available, queue via the orchestrator (blueprint §11)
-            if ProjectionRestatementOrchestrator is not None:
-                orchestrator = ProjectionRestatementOrchestrator()
-                # Synthesize a minimal decision for the orchestrator (which expects IdentityDecisionRecord)
-                # The decision's confidence_band drives which projections are restated; use VERY_HIGH for full coverage
-                decision_for_orchestrator = IdentityDecisionRecord(
-                    id=decision_id,
-                    tenant_id=tenant_id,
-                    decision_type=DecisionType.AUTO_MERGE,
-                    candidate_source_identity_ids=[],
-                    candidate_canonical_entity_ids=list(affected_entity_ids),
-                    selected_canonical_entity_id=affected_entity_ids[0] if affected_entity_ids else None,
-                    confidence=0.99,
-                    confidence_band=ConfidenceBand.VERY_HIGH,
-                    positive_evidence=[],
-                    negative_evidence=[],
-                    vetoes=[],
-                    policy_version="1.0.0",
-                    graph_version_before=graph_version_before,
-                    graph_version_after=graph_version_after,
-                    explanation="merge_ledger projection restatement",
-                    decided_by="system",
-                    decided_at=utc_now(),  # type: ignore
-                )
-                try:
-                    await orchestrator.queue_restatement(decision_for_orchestrator)
-                except Exception as e:
-                    logger.warning("projection_restatement orchestrator queue failed: %s", e)
         except Exception as e:
-            logger.warning("projection_restatement wiring failed: %s", e)
+            try:
+                from services.identity.observability import identity_metrics
+
+                identity_metrics.record_projection_restatement("failed")
+            except Exception:
+                pass
+            log_event(
+                logger,
+                logging.ERROR,
+                "identity.projection_restatement.enqueue_failed",
+                tenant_id=decision.tenant_id,
+                decision_id=decision.id,
+                error_type=type(e).__name__,
+            )

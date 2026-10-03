@@ -2,7 +2,7 @@
   "_fixture_version": 1,
   "scenario": "Connector reimport idempotency",
   "blueprint_ref": "\u00a716.1",
-  "description": "Repeated Shopify/CSV/SDK imports with same external_id / idempotency_key must not duplicate source identities, claims, profiles, journeys, or revenue.",
+  "description": "A repeated approved CSV import replay refreshes evidence to the active completed commit while preserving one source identity, one provisional profile, and one claim. Connector and SDK retries remain idempotent under their source identity/idempotency keys.",
   "tenant_id": "tenant_connector_reimport_idempotency",
   "reimports": [
     {
@@ -27,7 +27,9 @@
   ],
   "expected": {
     "duplicate_claims": 0,
-    "duplicate_profiles": 0
+    "duplicate_profiles": 0,
+    "active_claim_commit_matches_session": true,
+    "provisional_profile_id_stable": true
   },
   "invariant": "idempotent_reimport"
 }

@@ -105,6 +105,15 @@ val anonId = Aether.getAnonymousId()
 Aether.reset()
 ```
 
+`hydrateIdentity()` queues an `identify` event for `POST /v1/batch`. Its
+`properties.idempotency_key` matches the event's top-level `id`, and both are
+retained together when the SDK retries the queued event. The backend's V1
+canonical resolution guard is tenant-scoped Redis event-ID dedupe with a
+24-hour TTL; V2 uses durable event uniqueness and an at-least-once outbox.
+This protects ordinary retries, but V1 does not persist a resolver work receipt
+or guarantee exactly-once resolution. See [SDK/API Contracts](SDK-API-CONTRACTS.md)
+for the delivery limitations and the separate direct identify endpoint.
+
 > **Native identity → subject-hints convergence (WS-C / Invariant #4, default OFF).**
 > In legacy mode the SDK re-stamps the resolved canonical user id into its
 > persisted identity after `/sdk/identity/resolve` and emits `journey_resumed`

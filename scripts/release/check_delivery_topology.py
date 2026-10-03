@@ -142,9 +142,10 @@ def resolve_services(profile: dict[str, Any], state: str | None = None) -> dict[
 
     ``state`` selects an entry from the profile's ``staging_state.states``;
     ``None`` uses that block's ``default`` and is a no-op for profiles that
-    declare no lifecycle. A state only scales counts — ``desired_count`` and
-    the autoscaling floor — so a sleeping environment owns exactly the same
-    services, roles and capacity-provider strategy as an awake one. In
+    declare no lifecycle. A state scales ``desired_count`` and both autoscaling
+    bounds, so a sleeping environment owns exactly the same services, roles and
+    capacity-provider strategy as an awake one while its zero capacity ceiling
+    prevents scaling policies from waking it. In
     particular, changing the ECS service capacity-provider strategy is
     replacement-only in Terraform's AWS provider; pilot staging pins that
     strategy and uses desired_count as its sole task-capacity control. An
@@ -164,8 +165,10 @@ def resolve_services(profile: dict[str, Any], state: str | None = None) -> dict[
     for cfg in services.values():
         cfg["desired_count"] = cfg.get("desired_count", 0) * multiplier
         autoscaling = dict(cfg.get("autoscaling") or {})
-        if "min_capacity" in autoscaling:
-            autoscaling["min_capacity"] *= multiplier
+        for bound in ("min_capacity", "max_capacity"):
+            if bound in autoscaling:
+                autoscaling[bound] *= multiplier
+        if autoscaling:
             cfg["autoscaling"] = autoscaling
     return services
 

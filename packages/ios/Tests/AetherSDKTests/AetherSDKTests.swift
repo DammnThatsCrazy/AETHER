@@ -55,6 +55,50 @@ final class AetherSDKTests: XCTestCase {
         XCTAssertNotNil(identity.traits)
     }
 
+    func testIdentifyIdempotencyKeyIsStableForQueuedEventAndChangesForNewEvent() {
+        let properties = ["userId": AnyCodable("user-1")]
+        let first = Aether.shared.withIdentifyIdempotencyKey(
+            type: .identify, eventId: "event-1", properties: properties
+        )
+        let retry = Aether.shared.withIdentifyIdempotencyKey(
+            type: .identify, eventId: "event-1", properties: properties
+        )
+        let next = Aether.shared.withIdentifyIdempotencyKey(
+            type: .identify, eventId: "event-2", properties: properties
+        )
+
+        XCTAssertEqual(first["idempotency_key"]?.value as? String, "event-1")
+        XCTAssertEqual(retry["idempotency_key"]?.value as? String, "event-1")
+        XCTAssertEqual(next["idempotency_key"]?.value as? String, "event-2")
+        XCTAssertNotEqual(
+            first["idempotency_key"]?.value as? String,
+            next["idempotency_key"]?.value as? String
+        )
+    }
+
+    func testAliasRetriesDeriveSameOpaqueEventIdFromInstallSecretAndIdentityPair() {
+        let first = Aether.shared.deterministicAliasEventId(
+            secret: "install-secret", previousId: "anon-1", userId: "user-1"
+        )
+        let retry = Aether.shared.deterministicAliasEventId(
+            secret: "install-secret", previousId: "anon-1", userId: "user-1"
+        )
+        let anotherUser = Aether.shared.deterministicAliasEventId(
+            secret: "install-secret", previousId: "anon-1", userId: "user-2"
+        )
+        let anotherInstall = Aether.shared.deterministicAliasEventId(
+            secret: "other-secret", previousId: "anon-1", userId: "user-1"
+        )
+
+        XCTAssertEqual(first, retry)
+        // Shared Android/iOS vector: a platform drift would break alias retry
+        // deduplication when a user moves between SDKs for one installation.
+        XCTAssertEqual(first, "bc6bc9c9-9124-5e2e-ab25-fb414e667997")
+        XCTAssertNotEqual(first, anotherUser)
+        XCTAssertNotEqual(first, anotherInstall)
+        XCTAssertEqual(first.range(of: #"^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"#, options: .regularExpression) != nil, true)
+    }
+
     func testConfigDefaults() {
         let config = AetherConfig(apiKey: "test_key")
         XCTAssertEqual(config.apiKey, "test_key")

@@ -33,6 +33,7 @@
         { "name": "account_id", "type": "string", "required": false },
         { "name": "agent_id", "type": "string", "required": false },
         { "name": "runtime_id", "type": "string", "required": false },
+        { "name": "source_record_id", "type": "string", "required": false, "description": "Stable source record identifier used to preserve import or provider customer provenance." },
         { "name": "canonical_entity_id", "type": "string", "required": false, "description": "Resolved canonical entity, if any." },
         { "name": "status", "type": "enum", "required": true, "values": ["unresolved", "provisional", "resolved", "conflicted", "suppressed", "split"], "description": "Source identity resolution status." },
         { "name": "first_seen_at", "type": "iso8601", "required": true },

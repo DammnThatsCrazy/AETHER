@@ -120,7 +120,13 @@ def test_pilot_credential_preflight_matches_each_action_to_its_real_inputs():
 
     deploy_text = (WORKFLOWS / "deploy.yml").read_text(encoding="utf-8")
     assert "--purpose delivery" in deploy_text
-    assert "STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}" not in deploy_text
+    assert "STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}" in deploy_text
+    assert "staging_delivery_smoke.py" in deploy_text
+    delivery_smoke = (ROOT / "scripts" / "release" / "staging_delivery_smoke.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"--api-key",' in delivery_smoke and "tenant_key" in delivery_smoke
+    assert "remove_tenant(call, tenant_id)" in delivery_smoke
 
 
 @pytest.mark.parametrize(

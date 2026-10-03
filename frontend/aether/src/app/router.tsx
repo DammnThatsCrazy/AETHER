@@ -61,6 +61,8 @@ const DerivativesAccountPage = lazy(() => import('@aether-app/pages/derivatives'
 const AgentAccessPage = lazy(() => import('@aether-app/pages/agent-access').then(m => ({ default: m.AgentAccessPage })));
 const InteropPage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropPage })));
 const InteropMessagePage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropMessagePage })));
+const TenantActivationDashboard = lazy(() => import('@aether-app/features/identity/TenantActivationDashboard').then(m => ({ default: m.TenantActivationDashboard })));
+const IdentityReviewQueue = lazy(() => import('@aether-app/features/identity/IdentityReviewQueue').then(m => ({ default: m.IdentityReviewQueue })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -116,6 +118,8 @@ export function AppRouter() {
                     compatibility alias and redirects here. */}
                 <Route path="/activation" element={<PageSuspense><ActivatePage /></PageSuspense>} />
                 <Route path="/activate" element={<RedirectPreservingQuery to="/activation" />} />
+                <Route path="/identity/activation" element={<PageSuspense><TenantActivationDashboard /></PageSuspense>} />
+                <Route path="/identity/reviews" element={<PageSuspense><IdentityReviewQueue /></PageSuspense>} />
                 <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
                 <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
                 <Route path="/users/:profileId/journey" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />

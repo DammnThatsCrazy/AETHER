@@ -59,6 +59,34 @@ interface IdentityExplanationData {
   readonly resolution_decision_summary: string;
 }
 
+type EvidenceItem = IdentityExplanationData['positive_evidence'][number];
+
+function EvidenceSection({ title, items }: { title: string; items: EvidenceItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="mt-3 rounded border border-surface-border bg-surface-surface p-3">
+      <h3 className="text-text-primary text-xs font-semibold">{title}</h3>
+      <ul className="mt-2 space-y-2">
+        {items.map((item, index) => (
+          <li key={`${item.signal}:${index}`} className="rounded bg-surface-elevated p-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-text-primary font-medium">{item.signal.replace(/_/g, ' ')}</span>
+              <span className="text-text-secondary">{item.status.replace(/_/g, ' ')}</span>
+              {item.decision_type && <span className="text-text-muted">{item.decision_type.replace(/_/g, ' ')}</span>}
+            </div>
+            {item.reason_codes.length > 0 && (
+              <div className="mt-1 text-text-secondary">Reason: {item.reason_codes.map((code) => code.replace(/_/g, ' ')).join(', ')}</div>
+            )}
+            {item.source_connectors.length > 0 && (
+              <div className="mt-1 text-text-muted">Sources: {item.source_connectors.join(', ')}</div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 async function fetchIdentityExplanation(profileId: string): Promise<IdentityExplanationData> {
   const r = await api.identity.explanation(profileId);
   return r as IdentityExplanationData;
@@ -181,6 +209,10 @@ export const Profile360IdentityPanel: FC<{
       <div className="mb-3 rounded bg-surface-elevated p-3 text-xs text-text-secondary">
         {explanation.resolution_decision_summary}
       </div>
+
+      <EvidenceSection title="Matched Evidence" items={explanation.positive_evidence} />
+      <EvidenceSection title="Blocked Evidence" items={explanation.negative_evidence} />
+      <EvidenceSection title="Ignored Evidence" items={explanation.ignored_evidence} />
 
       {/* Source identities (top 5, collapses to "+N more") */}
       {explanation.source_identities.length > 0 && (

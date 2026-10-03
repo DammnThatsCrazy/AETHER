@@ -84,4 +84,41 @@ describe('canonical envelope fields on web events (jsdom)', () => {
     const ctx = sent.find((e) => e.type === 'track').context;
     expect(ctx.application).toEqual({ name: 'Acme Store', version: '4.0.0' });
   });
+
+  it('keeps the identify key stable across a failed batch retry and mints a new key for a new hydration', async () => {
+    const payloads: any[] = [];
+    let batchAttempt = 0;
+    (globalThis as any).fetch = vi.fn(async (url: string, init?: any) => {
+      if (url.endsWith('/v1/batch') && init?.body) {
+        payloads.push(JSON.parse(init.body));
+        batchAttempt += 1;
+        if (batchAttempt === 1) return { ok: false, status: 503, statusText: 'unavailable' } as any;
+        return {
+          ok: true, status: 200,
+          json: async () => ({ accepted: 1, duplicates: 0, rejected: 0 }),
+        } as any;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as any;
+    });
+
+    aether.init({ ...BASE_CONFIG });
+    aether.consent.grant(['analytics']);
+    aether.hydrateIdentity({ userId: 'user-1', traits: { displayName: 'User' } });
+    await flush();
+    await flush();
+
+    const identifyAttempts = payloads.flatMap((payload) => payload.batch)
+      .filter((event) => event.type === 'identify');
+    const firstAttempt = identifyAttempts[0];
+    const retryAttempt = identifyAttempts[1];
+    expect(firstAttempt.properties.idempotency_key).toBe(firstAttempt.id);
+    expect(retryAttempt.properties.idempotency_key).toBe(firstAttempt.properties.idempotency_key);
+
+    aether.hydrateIdentity({ userId: 'user-2', traits: { displayName: 'New User' } });
+    await flush();
+    const nextRequest = payloads.flatMap((payload) => payload.batch)
+      .filter((event) => event.type === 'identify')[2];
+    expect(nextRequest.properties.idempotency_key).toBe(nextRequest.id);
+    expect(nextRequest.properties.idempotency_key).not.toBe(firstAttempt.properties.idempotency_key);
+  });
 });

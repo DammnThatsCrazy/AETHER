@@ -171,6 +171,38 @@ class AccountLifecycleService:
     async def get_status(self, workflow_id: str, *, tenant_id: str) -> dict:
         return self._public_workflow(await self._get_required(workflow_id, tenant_id=tenant_id))
 
+    async def get_projection_state(self, tenant_id: str) -> dict[str, Any]:
+        """Return the tenant-scoped lifecycle facts needed by Account 360.
+
+        This is a read-only projection contract, not a second lifecycle store.
+        It exposes only current tenant status and the newest deletion workflow's
+        public state; actor and re-authentication evidence stay private.
+        """
+        if not tenant_id:
+            raise ValueError("tenant_id is required for account lifecycle projection")
+        tenant = await AdminRepository().find_by_id(tenant_id)
+        if tenant is None:
+            raise LookupError("tenant lifecycle source is unavailable")
+        workflows = await self._workflow_repo.find_by_tenant(tenant_id)
+        for workflow in workflows:
+            if workflow.get("tenant_id") != tenant_id:
+                raise RuntimeError("account lifecycle repository returned a foreign tenant row")
+        latest = max(
+            workflows,
+            key=lambda row: str(row.get("updated_at") or row.get("requested_at") or ""),
+            default=None,
+        )
+        return {
+            "tenant_id": tenant_id,
+            "tenant_status": str(tenant.get("status") or "unknown"),
+            "deletion_status": str(latest.get("status")) if latest else "none",
+            "recovery_until": latest.get("recovery_until") if latest else None,
+            "lifecycle_updated_at": (
+                latest.get("updated_at") or latest.get("requested_at")
+                if latest else tenant.get("updated_at")
+            ),
+        }
+
     async def cancel_during_window(
         self,
         workflow_id: str,

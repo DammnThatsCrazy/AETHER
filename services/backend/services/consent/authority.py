@@ -520,6 +520,84 @@ async def evaluate_consent(
     return True, None
 
 
+IDENTITY_LINKING_PURPOSE = "analytics"
+
+
+def _purpose_scope_allows_identity_linking(purpose: str) -> bool:
+    """Resolve identity-linking scope from the canonical consent registry."""
+    try:
+        registry = json.loads(_REGISTRY_PATH.read_text())
+        entry = next(
+            item for item in registry.get("purposes", [])
+            if item.get("key") == purpose
+        )
+    except (OSError, ValueError, StopIteration, TypeError):
+        return False
+    return (
+        entry.get("allowIdentityLinking") is True
+        and "identity" in entry.get("allowedFamilies", [])
+    )
+
+
+async def evaluate_identity_link_consent(
+    tenant_id: str,
+    anonymous_id: Optional[str],
+) -> tuple[bool, Optional[str], Optional[dict[str, Any]]]:
+    """Authorize SDK late binding from a server receipt bound to its anonymous ID.
+
+    The target ``user_id`` is intentionally absent from this API: SDK-provided
+    user identifiers are source claims, not authenticated subject proof. The
+    analytics receipt purpose is accepted for identity only when the canonical
+    registry explicitly permits the identity family and identity linking.
+    """
+    anonymous = (anonymous_id or "").strip()
+    if not tenant_id or not anonymous:
+        return False, CONSENT_RECEIPT_MISSING, None
+
+    purpose = IDENTITY_LINKING_PURPOSE
+    if purpose not in CONSENT_PURPOSES or not _purpose_scope_allows_identity_linking(purpose):
+        return False, PURPOSE_NOT_AUTHORIZED, None
+
+    receipt = await get_latest_consent_receipt(
+        tenant_id, purpose, anonymous_id=anonymous
+    )
+    if receipt is None:
+        return False, CONSENT_RECEIPT_MISSING, None
+    if receipt.get("tenant_id") != tenant_id:
+        return False, CONSENT_TENANT_MISMATCH, None
+    if receipt.get("purpose") != purpose:
+        return False, PURPOSE_NOT_AUTHORIZED, None
+    if receipt.get("anonymous_id") != anonymous:
+        return False, CONSENT_SUBJECT_MISMATCH, None
+
+    # If a receipt further narrows its scope, it must include identity. The
+    # registry remains the authoritative upper bound even when no narrower
+    # receipt scope was supplied.
+    metadata = receipt.get("metadata") or {}
+    receipt_scope = metadata.get("scope", metadata.get("scopes"))
+    if receipt_scope is not None:
+        scopes = {receipt_scope} if isinstance(receipt_scope, str) else set(receipt_scope)
+        if not scopes.intersection({"identity", "identity_linking"}):
+            return False, PURPOSE_NOT_AUTHORIZED, None
+
+    allowed, reason = await evaluate_consent(
+        tenant_id, subject_id=None, anonymous_id=anonymous, purpose=purpose
+    )
+    if not allowed:
+        return False, reason, None
+
+    # Only metadata needed by the resolver's policy is returned; no subject,
+    # contact value, receipt evidence, or client snapshot is copied into events.
+    consent_context = {
+        "purposes": {purpose: True},
+        "authority": "server_consent_receipt",
+        "purpose": purpose,
+        "scope": "identity",
+        "receipt_id": str(receipt.get("receipt_id") or ""),
+    }
+    return True, None, consent_context
+
+
 # ── Decision: tenant data-classification policy ─────────────────────────────
 
 # Data classes that are treated as device fingerprinting (default-deny).

@@ -29,11 +29,15 @@ def register_durable_job_handlers(settings: Optional[Any] = None) -> None:
     from services.consent.erasure_jobs import register_consent_erasure_handler
     from services.export import register_export_handlers
     from services.imports.commit import register_import_handlers
+    from services.projections.projection_restatement_orchestrator import (
+        register_projection_restatement_handler,
+    )
     from services.semantic_intelligence.jobs import register_semantic_replay_handler
     from services.traffic.repair import register_source_classification_repair_handler
 
     register_export_handlers()  # export.generate / export.expire_sweep
     register_import_handlers()  # import.commit / import.replay
+    register_projection_restatement_handler()  # identity.projection_restatement
     register_source_classification_repair_handler()
     register_consent_erasure_handler()  # consent.erasure (durable DSR erasure)
     register_semantic_replay_handler()  # semantic.replay (flag-gated inside)

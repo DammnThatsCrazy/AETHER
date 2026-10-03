@@ -48,8 +48,10 @@ canonical_source: config/runtime_deployment.yaml
 # autoscaling: min_capacity / max_capacity / metric / cooldown_seconds plus the
 # threshold that metric scales on — `queue_depth_target` (messages of backlog
 # per task) for `sqs-queue-depth`, `request_count_target` for
-# `alb-request-count-per-target`. min_capacity is the always-on floor and
-# equals desired_count; max_capacity is the surge ceiling.
+# `alb-request-count-per-target`. Awake `min_capacity` is the always-on floor
+# and equals desired_count; awake `max_capacity` is the surge ceiling. A
+# lifecycle state at zero scales both bounds to zero so an asleep service
+# cannot be revived by an attached scale-out policy.
 # ============================================================================
 profiles:
   staging:
@@ -59,9 +61,11 @@ profiles:
     # Staging is a correctness environment, not a capacity one, and it is idle
     # most of the day. `staging_state` lets an operator (or a schedule) drive
     # every service to zero desired tasks without editing the topology: the
-    # multiplier applies to desired_count and to the autoscaling floor, so an
-    # asleep environment owns exactly the same roles as an awake one and wakes
-    # up by flipping one input rather than by re-planning a different shape.
+    # multiplier applies to desired_count and both autoscaling bounds. Zeroing
+    # max_capacity as well as the floor prevents queue or request metrics from
+    # waking a service while staging is asleep. The environment owns exactly
+    # the same roles as an awake one and wakes by restoring the declared awake
+    # capacity envelope with the same input.
     staging_state:
       default: awake
       states:

@@ -360,21 +360,43 @@ MAPPING = [
 ]
 
 
-async def _drive_to_approved(tenant: str) -> str:
+async def _drive_to_approved(tenant: str, *, content: bytes = CSV, mapping: list[dict] = MAPPING) -> str:
     """create → upload → analyze → map → validate → approve (returns import_id)."""
     import services.imports.service as svc
 
     session = await svc.create_import(tenant)
     import_id = session["id"]
     await svc.store_file(
-        tenant, import_id, filename="batch.csv", content=CSV, content_type="text/csv"
+        tenant, import_id, filename="batch.csv", content=content, content_type="text/csv"
     )
     await svc.analyze_import(tenant, import_id)
-    await svc.set_mapping(tenant, import_id, MAPPING)
+    await svc.set_mapping(tenant, import_id, mapping)
     result = await svc.validate_import(tenant, import_id)
-    assert result["status"] == "validated"
+    assert result["status"] in {"validated", "review_required"}
     await svc.approve_import(tenant, import_id)
     return import_id
+
+
+IDENTITY_CSV = (
+    b"entity_id,identifier_type,value\n"
+    b"customer-1,email,Alice@example.com\n"
+    b"customer-1,phone,+14155550123\n"
+)
+IDENTITY_MAPPING = [
+    {"source_column": "entity_id", "primitive": "entity", "target_field": "external_id", "required": True},
+    {"source_column": "identifier_type", "primitive": "identifier", "target_field": "identifier_type", "required": True},
+    {"source_column": "value", "primitive": "identifier", "target_field": "value", "required": True},
+    {"source_column": "entity_id", "primitive": "identifier", "target_field": "entity_ref", "required": True},
+]
+
+
+async def _identity_rows(tenant: str) -> tuple[list[dict], list[dict]]:
+    from services.identity.repository import IdentityResolutionRepository
+
+    repo = IdentityResolutionRepository()
+    sources = await repo._source_identities.find_many(filters={"tenant_id": tenant})
+    claims = await repo._claims.find_many(filters={"tenant_id": tenant})
+    return sources, claims
 
 
 @pytest.mark.asyncio
@@ -396,6 +418,134 @@ async def test_commit_happy_path_completes_with_program_fields():
     assert session["schema_version"] == 1
     assert session["source_checksum"] is not None
     assert session.get("active_commit_id") == record["commit_id"]
+
+
+@pytest.mark.asyncio
+async def test_csv_commit_persists_source_scoped_observed_identity_claims():
+    from services.identity.claim_normalizer import normalize_email, normalize_phone
+    from services.identity.hashing import hash_value
+    from services.identity.repository import IdentityResolutionRepository
+
+    import_id = await _drive_to_approved(
+        TENANT, content=IDENTITY_CSV, mapping=IDENTITY_MAPPING
+    )
+    result = await commit_import(TENANT, import_id)
+
+    sources, claims = await _identity_rows(TENANT)
+    assert result["status"] == "committed"
+    assert len(sources) == 1
+    source = sources[0]
+    assert source["source_system_id"] == "csv_import"
+    assert source["source_kind"] == "csv"
+    assert source["source_namespace"].startswith(f"{TENANT}:{import_id}:")
+    file_id = source["source_namespace"].split(":")[-1]
+    assert source["external_id"] == "customer-1"
+    assert source["status"] == "unresolved"
+    assert source.get("canonical_entity_id")
+    identity_repo = IdentityResolutionRepository()
+    provisional = await identity_repo.get_subject_by_canonical_entity_id(
+        TENANT, source["canonical_entity_id"]
+    )
+    assert provisional["metadata"]["identity_state"] == "provisional"
+    assert provisional["metadata"]["source_identity_id"] == source["id"]
+    assert {claim["claim_type"] for claim in claims} == {"email", "phone"}
+    assert {claim["normalized_value"] for claim in claims} == {
+        hash_value(normalize_email("Alice@example.com"), scope=f"email:{TENANT}"),
+        hash_value(normalize_phone("+14155550123"), scope=f"phone:{TENANT}"),
+    }
+    assert all(claim["raw_value"] is None for claim in claims)
+    assert "Alice@example.com" not in repr(claims)
+    assert "+14155550123" not in repr(claims)
+    assert all(claim["verification_status"] == "observed" for claim in claims)
+    assert all(claim["pii_classification"] == "sensitive" for claim in claims)
+    assert {claim["source_record_id"] for claim in claims} == {
+        f"{import_id}:{file_id}:row:0",
+        f"{import_id}:{file_id}:row:1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_csv_commit_retry_is_idempotent_for_source_identities_and_claims(monkeypatch):
+    import services.imports.commit as commit_mod
+
+    import_id = await _drive_to_approved(
+        TENANT, content=IDENTITY_CSV, mapping=IDENTITY_MAPPING
+    )
+    original_stage = commit_mod._stage_and_mutate
+    attempts = 0
+
+    async def persist_then_fail_once(*args, **kwargs):
+        nonlocal attempts
+        result = await original_stage(*args, **kwargs)
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("simulated interruption after identity persistence")
+        return result
+
+    monkeypatch.setattr(commit_mod, "_stage_and_mutate", persist_then_fail_once)
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        await commit_import(TENANT, import_id)
+    await requeue_session(_repo(), TENANT, import_id, requested_by="ops")
+    result = await commit_import(TENANT, import_id)
+
+    sources, claims = await _identity_rows(TENANT)
+    assert result["status"] == "committed"
+    assert len(sources) == 1
+    assert len(claims) == 2
+
+
+@pytest.mark.asyncio
+async def test_csv_identity_persistence_failure_fails_import_commit(monkeypatch):
+    import services.imports.commit as commit_mod
+
+    import_id = await _drive_to_approved(
+        TENANT, content=IDENTITY_CSV, mapping=IDENTITY_MAPPING
+    )
+
+    async def fail_identity_persistence(*args, **kwargs):
+        raise RuntimeError("identity evidence store unavailable")
+
+    monkeypatch.setattr(
+        commit_mod, "_register_csv_identity_evidence", fail_identity_persistence
+    )
+    with pytest.raises(RuntimeError, match="identity evidence store unavailable"):
+        await commit_import(TENANT, import_id)
+
+    session = await _repo().get_session_any(import_id)
+    assert session["lifecycle_state"] == "FAILED"
+    assert await _repo().list_commits(TENANT, import_id) == []
+    sources, claims = await _identity_rows(TENANT)
+    assert sources == []
+    assert claims == []
+
+
+@pytest.mark.asyncio
+async def test_csv_same_external_id_in_different_import_namespaces_stays_isolated():
+    from services.identity.repository import IdentityResolutionRepository
+
+    for _ in range(2):
+        import_id = await _drive_to_approved(
+            TENANT, content=IDENTITY_CSV, mapping=IDENTITY_MAPPING
+        )
+        await commit_import(TENANT, import_id)
+
+    sources, claims = await _identity_rows(TENANT)
+    identity_repo = IdentityResolutionRepository()
+    subjects = await identity_repo._subjects.find_many(filters={"tenant_id": TENANT})
+    aliases = await identity_repo._aliases.find_many(filters={"tenant_id": TENANT})
+    assert len(sources) == 2
+    assert len({source["source_namespace"] for source in sources}) == 2
+    assert all(source["source_system_id"] == "csv_import" for source in sources)
+    assert all(source["status"] == "unresolved" for source in sources)
+    assert all(source.get("canonical_entity_id") for source in sources)
+    assert len({source["canonical_entity_id"] for source in sources}) == 2
+    assert len(claims) == 4
+    assert len(subjects) == 2
+    assert {subject["canonical_entity_id"] for subject in subjects} == {
+        source["canonical_entity_id"] for source in sources
+    }
+    assert all(subject["metadata"]["identity_state"] == "provisional" for subject in subjects)
+    assert aliases == []
 
 
 @pytest.mark.asyncio
@@ -632,5 +782,3 @@ async def test_commit_finalization_transient_failure_resumes(monkeypatch):
     assert session["status"] == "committed"
     assert session["reconciliation_state"] == "pending_provider_corroboration"
     assert len(await _repo().list_commits(TENANT, import_id)) == 1
-
-

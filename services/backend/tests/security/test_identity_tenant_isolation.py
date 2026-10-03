@@ -93,7 +93,7 @@ def test_same_tenant_deterministic_succeeds():
         tenant_id=TENANT_A,
         source_tenant_id=TENANT_A,
         matching_signal_types=DETERMINISTIC_SIGNALS,
-        consent_snapshot=None,
+        consent_snapshot={"purposes": {"identity": True}},
         existing_entity_ids=["entity_001"],
     )
     result = evaluate(ctx)
@@ -103,7 +103,7 @@ def test_same_tenant_deterministic_succeeds():
 def test_same_tenant_score_not_blocked():
     score, tier, codes = score_signals(
         matching_signal_types=DETERMINISTIC_SIGNALS,
-        consent_snapshot=None,
+        consent_snapshot={"purposes": {"identity": True}},
         source_tenant_id=TENANT_A,
         target_tenant_id=TENANT_A,
     )

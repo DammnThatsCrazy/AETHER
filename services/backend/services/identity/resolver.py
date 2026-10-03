@@ -24,6 +24,7 @@ graph edges, or merge records. The repository layer enforces this.
 from __future__ import annotations
 
 import os
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -36,6 +37,7 @@ from .audit import IdentityAuditWriter
 from .conflicts import IdentityConflictManager
 from .decision_evidence import (
     IdentityDecisionEvidenceService,
+    MERGE_POLICY_VERSION,
     decision_type_from_merge_decision,
 )
 from .exceptions import CrossTenantError, IdentityError
@@ -57,12 +59,16 @@ from .merge_policy import (
 from .metrics import IdentityMetrics
 from .models import (
     ConfidenceTier,
+    DecisionType,
     EdgeType,
     EntityType,
+    IdentityDecisionRecord,
     IdentityResolutionDecision,
     IdentitySignalType,
+    IdentityVeto,
     MergeDecision,
     SubjectStatus,
+    VetoType,
     REASON_CAMPAIGN_ONLY_SAMENESS_BLOCKED,
     REASON_CROSS_TENANT_FRAGMENT_BLOCKED,
     REASON_FRAGMENT_SPLIT,
@@ -77,6 +83,26 @@ from .veto_engine import evaluate_vetoes, get_confidence_band
 from .models import ConfidenceBand
 
 logger = get_logger("aether.identity.resolver")
+
+_OPERATOR_MERGE_LOCKS: dict[str, "asyncio.Lock"] = {}
+_OPERATOR_MERGE_LOCKS_GUARD: Optional["asyncio.Lock"] = None
+_OPERATOR_MERGE_LOCKS_LOOP: Optional["asyncio.AbstractEventLoop"] = None
+
+
+def _operator_merge_lock(key: str) -> "asyncio.Lock":
+    import asyncio
+
+    global _OPERATOR_MERGE_LOCKS_GUARD, _OPERATOR_MERGE_LOCKS_LOOP
+    loop = asyncio.get_running_loop()
+    if _OPERATOR_MERGE_LOCKS_LOOP is not loop:
+        _OPERATOR_MERGE_LOCKS.clear()
+        _OPERATOR_MERGE_LOCKS_GUARD = asyncio.Lock()
+        _OPERATOR_MERGE_LOCKS_LOOP = loop
+    assert _OPERATOR_MERGE_LOCKS_GUARD is not None
+    # No await is needed while the dictionary is mutated: one event loop runs
+    # this section atomically. Cross-process safety comes from deterministic
+    # records and the route's durable review-claim CAS.
+    return _OPERATOR_MERGE_LOCKS.setdefault(key, asyncio.Lock())
 
 # Environments where strong (probabilistic) auto-linking is OFF by default.
 _STRONG_AUTOLINK_DISABLED_ENVS = frozenset({"staging", "production", "prod"})
@@ -161,6 +187,67 @@ def _dedupe_preserve(items: list[str]) -> list[str]:
     return out
 
 
+class _CandidateStateUnavailable(RuntimeError):
+    """A candidate could not be proven safe from tenant-owned graph state."""
+
+
+def _candidate_veto_entity_type(value: Any) -> str:
+    """Map persisted subject entity types to the veto engine's vocabulary."""
+    raw = str(getattr(value, "value", value) or "").strip().lower()
+    aliases = {
+        "human": "person",
+        "person": "person",
+        "anonymous_visitor": "person",
+        "commerce_customer": "person",
+        "payment_customer": "person",
+        "organization": "account",
+        "org": "account",
+        "account": "account",
+        "agent": "agent",
+        "device": "device",
+        "session": "session",
+        "wallet": "wallet",
+    }
+    mapped = aliases.get(raw)
+    if not mapped:
+        raise _CandidateStateUnavailable("candidate_entity_type_unrecognized")
+    return mapped
+
+
+def _incoming_veto_entity_type(signal_types: list[IdentitySignalType]) -> str | None:
+    """Infer a narrow incoming subject class from extracted canonical signals."""
+    person_signals = {
+        IdentitySignalType.USER_ID,
+        IdentitySignalType.EMAIL_HASH,
+        IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+        IdentitySignalType.PHONE_HASH,
+        IdentitySignalType.COMMERCE_CUSTOMER_ID,
+        IdentitySignalType.PAYMENT_CUSTOMER_ID,
+    }
+    account_signals = {
+        IdentitySignalType.ACCOUNT_ID,
+        IdentitySignalType.ORG_ID,
+    }
+    agent_signals = {IdentitySignalType.AGENT_ID}
+    wallet_signals = {IdentitySignalType.WALLET_ADDRESS}
+    has_person = any(signal in person_signals for signal in signal_types)
+    has_account = any(signal in account_signals for signal in signal_types)
+    has_agent = any(signal in agent_signals for signal in signal_types)
+    has_wallet = any(signal in wallet_signals for signal in signal_types)
+    classified = sum((has_person, has_account, has_agent, has_wallet))
+    if classified > 1:
+        raise _CandidateStateUnavailable("incoming_entity_type_ambiguous")
+    if has_person:
+        return "person"
+    if has_account:
+        return "account"
+    if has_agent:
+        return "agent"
+    if has_wallet:
+        return "wallet"
+    return None
+
+
 @dataclass
 class _FragmentSplitPlan:
     """Result of analysing a fragment split (shared by preview + execute).
@@ -203,6 +290,7 @@ class IdentityResolutionService:
         metrics: IdentityMetrics,
         decision_evidence: Optional[IdentityDecisionEvidenceService] = None,
         producer: Optional[EventProducer] = None,
+        policy_evaluators: Optional[dict[str, Any]] = None,
     ) -> None:
         self._repo = repo
         self._graph = graph_writer
@@ -220,6 +308,19 @@ class IdentityResolutionService:
         # route publishes through — because routes.py builds this service without
         # one. See _resolve_producer.
         self._producer = producer
+        # Versions identify executable policy, not caller-provided labels. By
+        # default this process supports only the policy implementation present
+        # in this checkout. A rollout may register another evaluator explicitly.
+        # Keep the active policy dynamically referenced so focused test/ops
+        # overrides that replace the resolver module's evaluator remain
+        # effective; explicit historical/future versions are bound directly.
+        self._policy_evaluators = {MERGE_POLICY_VERSION: lambda ctx: evaluate(ctx)}
+        if policy_evaluators:
+            self._policy_evaluators.update(policy_evaluators)
+
+    def supports_policy_version(self, policy_version: str) -> bool:
+        """Return whether this resolver has an evaluator for the version."""
+        return bool(policy_version) and policy_version in self._policy_evaluators
 
     # ── Main entry point ──────────────────────────────────────────────────
 
@@ -227,13 +328,40 @@ class IdentityResolutionService:
         self,
         event: dict[str, Any],
         tenant_id: str,
+        *,
+        policy_version: str = MERGE_POLICY_VERSION,
     ) -> IdentityResolutionDecision:
         """
         Resolve identity for a single canonical event payload.
         Returns the resolution decision (idempotent).
         """
+        from config.settings import settings
+
+        if not self.supports_policy_version(policy_version):
+            return IdentityResolutionDecision(
+                tenant_id=tenant_id,
+                canonical_entity_id="",
+                decision=MergeDecision.BLOCKED,
+                confidence=0.0,
+                confidence_tier=ConfidenceTier.BLOCKED,
+                reason_codes=["unsupported_policy_version"],
+                blocked_reason="unsupported_policy_version",
+                policy_version=policy_version,
+            )
+
+        if not settings.identity_continuity.resolution_enabled:
+            return IdentityResolutionDecision(
+                tenant_id=tenant_id,
+                canonical_entity_id="",
+                decision=MergeDecision.BLOCKED,
+                confidence=0.0,
+                confidence_tier=ConfidenceTier.BLOCKED,
+                reason_codes=["identity_resolution_disabled"],
+                blocked_reason="identity_resolution_disabled",
+                policy_version=policy_version,
+            )
         try:
-            return await self._resolve_event_inner(event, tenant_id)
+            return await self._resolve_event_inner(event, tenant_id, policy_version)
         except CrossTenantError:
             self._metrics.record_blocked("cross_tenant")
             raise
@@ -262,7 +390,10 @@ class IdentityResolutionService:
             )
 
     async def _resolve_event_inner(
-        self, event: dict, tenant_id: str
+        self,
+        event: dict,
+        tenant_id: str,
+        policy_version: str = MERGE_POLICY_VERSION,
     ) -> IdentityResolutionDecision:
         event_id = event.get("event_id", "")
         consent_snapshot = _extract_consent(event)
@@ -377,6 +508,19 @@ class IdentityResolutionService:
         for (sig_type, sig_hash, _) in hashed_signals:
             if sig_type in _ATTRIBUTION_ONLY:
                 continue
+            lookup_types = [sig_type]
+            if sig_type == IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED:
+                # Verified-email and observed-email hashes share the same
+                # tenant-scoped digest; include both persisted aliases when
+                # checking for a revoked identifier veto.
+                lookup_types.append(IdentitySignalType.EMAIL_HASH)
+            for lookup_type in lookup_types:
+                historical_aliases = await self._repo.find_aliases_by_signal(
+                    tenant_id, lookup_type, sig_hash, include_revoked=True
+                )
+                if any(alias.get("revoked_at") for alias in historical_aliases):
+                    if sig_type not in revoked_types:
+                        revoked_types.append(sig_type)
             entity_ids = await self._repo.find_subjects_by_alias(
                 tenant_id, sig_type, sig_hash
             )
@@ -398,6 +542,19 @@ class IdentityResolutionService:
                     found_via.setdefault(eid, set()).add(sig_type)
                     if eid not in existing_entity_ids:
                         existing_entity_ids.append(eid)
+
+        # Aliases intentionally remain attached to merged fragments for
+        # provenance and reversible identity history. They must not make a
+        # later replay treat the tombstoned entity as another live candidate,
+        # which would write duplicate merge/audit/projection effects under a
+        # new policy version. Resolve every match to its tenant-local survivor
+        # before conflict detection and policy evaluation.
+        if existing_entity_ids:
+            canonical_ids = [
+                await self._repo.resolve_surviving_canonical_entity_id(tenant_id, eid)
+                for eid in existing_entity_ids
+            ]
+            existing_entity_ids = list(dict.fromkeys(canonical_ids))
 
         # ── 6. Check for conflicting strong aliases ───────────────────────
         has_conflict = len(existing_entity_ids) > 1 and _has_strong_signal(matching_types)
@@ -461,7 +618,7 @@ class IdentityResolutionService:
         policy_ctx = MergePolicyContext(
             tenant_id=tenant_id,
             source_tenant_id=tenant_id,
-            matching_signal_types=matching_types,
+            matching_signal_types=list(dict.fromkeys([*matching_types, *revoked_types])),
             consent_snapshot=consent_snapshot,
             revoked_signal_types=revoked_types,
             has_conflict=has_conflict,
@@ -474,7 +631,44 @@ class IdentityResolutionService:
             ]),
             authenticated_binding=authenticated_binding,
         )
-        policy_result = evaluate(policy_ctx)
+        policy_result = self._policy_evaluators[policy_version](policy_ctx)
+
+        # A consented deterministic app user ID on a first-seen profile is an
+        # anchor, not a match. Materialize that profile as CREATE and retain
+        # its keyed alias so subsequent platform SDKs for the same tenant app
+        # can resolve to it. Consent is required here because there is no
+        # existing alias yet for the policy scorer to evaluate.
+        from .confidence import _has_consent
+        identity_consent_valid = _has_consent(consent_snapshot)
+        initial_user_id_anchor = False
+
+        if (
+            not existing_entity_ids
+            and policy_result.decision == MergeDecision.BLOCKED
+            and "insufficient_evidence" in policy_result.reason_codes
+            and not revoked_types
+            and any(sig_type == IdentitySignalType.USER_ID for sig_type, _, _ in hashed_signals)
+            and identity_consent_valid
+        ):
+            initial_user_id_anchor = True
+            policy_result.decision = MergeDecision.CREATE
+            policy_result.reason_codes = [REASON_NEW_ENTITY, "consented_sdk_user_id_anchor"]
+
+        from config.settings import settings
+
+        continuity = settings.identity_continuity
+        if (
+            policy_result.decision == MergeDecision.MERGE
+            and not continuity.auto_merge_enabled
+        ):
+            policy_result.decision = (
+                MergeDecision.CANDIDATE
+                if continuity.manual_review_enabled
+                else MergeDecision.BLOCKED
+            )
+            policy_result.reason_codes = list(policy_result.reason_codes) + [
+                "auto_merge_disabled"
+            ]
 
         # Verified evidence may collapse ALL compatible candidates — when the
         # policy authorized a multi-candidate merge but could not pick a target,
@@ -490,20 +684,106 @@ class IdentityResolutionService:
 
         # ── 7b. Hard veto evaluation — any veto forces BLOCKED band regardless of score (blueprint §8.2/§8.3)
         # Veto engine is wired here so a high confidence score can never override a hard veto.
+        _vetoes = []
         try:
-            # Gather veto inputs: derive minimal candidate signals from the resolution context
+            # Candidate state comes only from tenant-scoped canonical subject
+            # rows and aliases. Do not infer candidate status/type from the
+            # incoming SDK payload. A lookup or integrity failure becomes a
+            # hard veto below so the policy score cannot bypass it.
+            candidate_entity_types: list[str] = []
+            candidate_statuses: list[str] = []
+            candidate_device_ids: set[str] = set()
+            candidate_verified_emails: list[tuple[str, str]] = []
+            candidate_authenticated_user_ids: list[tuple[str, str]] = []
+            candidate_has_revoked_consent = bool(revoked_types)
+            current_device_ids = {
+                signal_hash
+                for signal_type, signal_hash, _ in hashed_signals
+                if signal_type in {
+                    IdentitySignalType.DEVICE_FINGERPRINT,
+                    IdentitySignalType.BROWSER_ID,
+                    IdentitySignalType.INSTALLATION_ID,
+                    IdentitySignalType.MOBILE_INSTALL_ID,
+                }
+            }
+            current_verified_emails = [
+                signal_hash
+                for signal_type, signal_hash, _ in hashed_signals
+                if signal_type == IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED
+            ]
+            current_authenticated_user_ids = [
+                signal_hash
+                for signal_type, signal_hash, _ in hashed_signals
+                if signal_type == IdentitySignalType.USER_ID
+            ]
+            incoming_entity_type = _incoming_veto_entity_type(matching_types)
+            veto_device_signal_types = {
+                IdentitySignalType.DEVICE_FINGERPRINT.value,
+                IdentitySignalType.BROWSER_ID.value,
+                IdentitySignalType.INSTALLATION_ID.value,
+                IdentitySignalType.MOBILE_INSTALL_ID.value,
+            }
+            signal_pairs = {(sig_type.value, sig_hash) for sig_type, sig_hash, _ in hashed_signals}
+            for candidate_entity_id in existing_entity_ids:
+                subject = await self._repo.get_subject_by_canonical_entity_id(
+                    tenant_id, candidate_entity_id
+                )
+                if (
+                    not subject
+                    or subject.get("tenant_id") != tenant_id
+                    or subject.get("canonical_entity_id") != candidate_entity_id
+                ):
+                    raise _CandidateStateUnavailable("candidate_subject_unavailable")
+                status = str(subject.get("status") or "").strip().lower()
+                if status not in {
+                    SubjectStatus.ACTIVE.value,
+                    "deleted",
+                    "suppressed",
+                }:
+                    raise _CandidateStateUnavailable("candidate_subject_status_unrecognized")
+                candidate_statuses.append(status)
+                candidate_entity_types.append(
+                    _candidate_veto_entity_type(subject.get("entity_type"))
+                )
+                aliases = await self._repo.get_aliases_for_entity(
+                    tenant_id, candidate_entity_id, include_revoked=True
+                )
+                for alias in aliases:
+                    if (
+                        alias.get("tenant_id") != tenant_id
+                        or alias.get("canonical_entity_id") != candidate_entity_id
+                    ):
+                        raise _CandidateStateUnavailable("candidate_alias_scope_mismatch")
+                    alias_type = str(alias.get("alias_type") or "")
+                    alias_hash = str(alias.get("alias_value_hash") or "")
+                    if alias_type in veto_device_signal_types and alias_hash:
+                        candidate_device_ids.add(alias_hash)
+                    if alias_type == IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED.value and alias_hash:
+                        candidate_verified_emails.append((alias_hash, candidate_entity_id))
+                    if alias_type == IdentitySignalType.USER_ID.value and alias_hash:
+                        candidate_authenticated_user_ids.append((alias_hash, candidate_entity_id))
+                    if alias.get("revoked_at") and (alias_type, alias_hash) in signal_pairs:
+                        candidate_has_revoked_consent = True
+
+            # Gather veto inputs from repository-owned candidate state plus
+            # the resolver's canonicalized incoming signal types. Caller
+            # fields such as `entity_type` are deliberately ignored.
             _vetoes = await evaluate_vetoes(
                 tenant_id=tenant_id,
                 candidate_tenant_id=tenant_id,  # same-tenant path; cross-tenant already blocked above
-                candidate_entity_types=[],
-                candidate_statuses=[],
-                candidate_verified_emails=[],
-                candidate_authenticated_user_ids=[],
-                candidate_device_ids=[],
-                candidate_has_revoked_consent=bool(revoked_types),
-                candidate_is_deleted=False,
-                candidate_is_suppressed=False,
+                candidate_entity_types=candidate_entity_types,
+                candidate_statuses=candidate_statuses,
+                candidate_verified_emails=candidate_verified_emails,
+                candidate_authenticated_user_ids=candidate_authenticated_user_ids,
+                candidate_device_ids=sorted(candidate_device_ids),
+                candidate_has_revoked_consent=candidate_has_revoked_consent,
+                candidate_is_deleted="deleted" in candidate_statuses,
+                candidate_is_suppressed="suppressed" in candidate_statuses,
                 candidate_source_namespaces=[],
+                current_entity_type=incoming_entity_type,
+                current_device_ids=sorted(current_device_ids),
+                current_verified_emails=current_verified_emails,
+                current_authenticated_user_ids=current_authenticated_user_ids,
             )
             if _vetoes:
                 # Blocked band on veto — confidence tier forced to BLOCKED
@@ -528,12 +808,32 @@ class IdentityResolutionService:
                 try:
                     from services.identity.observability import IdentityTrace
 
-                    _trace = IdentityTrace(tenant_id=tenant_id, source_system_id="identity.resolver")
+                    _trace = IdentityTrace(
+                        tenant_id=tenant_id,
+                        source_system_id="identity.resolver",
+                        correlation_id=str(
+                            event.get("trace_correlation_id") or event.get("event_id") or ""
+                        ) or None,
+                    )
                     _trace.veto_evaluate(len(_vetoes))
                 except Exception:
                     pass
         except Exception as e:
-            logger.warning("veto evaluation failed: %s", e)
+            # Any uncertainty while reading candidate state blocks resolution.
+            # Keep diagnostics free of candidate identifiers and SDK claims.
+            _vetoes = [IdentityVeto(
+                veto_type=VetoType.CANDIDATE_STATE_UNAVAILABLE,
+                reason="Candidate state could not be verified for this tenant",
+                severity="blocked",
+                details={"error_type": type(e).__name__},
+            )]
+            policy_result.confidence_tier = ConfidenceTier.BLOCKED
+            policy_result.confidence = 0.0
+            policy_result.decision = MergeDecision.BLOCKED
+            policy_result.reason_codes = list(policy_result.reason_codes) + [
+                "candidate_state_unavailable"
+            ]
+            logger.warning("identity candidate state unavailable: %s", type(e).__name__)
 
         # ── 8. Create or fetch canonical entity ───────────────────────────
         canonical_entity_id: str
@@ -588,58 +888,51 @@ class IdentityResolutionService:
 
         # ── 9. Link aliases ───────────────────────────────────────────────
         linked_aliases: list[str] = []
-        # A consent-gated identifier (email/phone hash, install/browser id,
-        # fingerprint) is never linked as an alias without identity-stitching
-        # consent: scoring already ignores it, and a stored alias would let a
-        # later event match through it.
+        # First-seen deterministic identifiers can anchor a new profile even
+        # when policy has no existing candidate to match. Keep that narrow
+        # exception while preserving the consent gate for every alias write:
+        # an identifier ignored during scoring must not become a future match.
         stitching_consent = has_stitching_consent(consent_snapshot)
-        if policy_result.decision not in (MergeDecision.BLOCKED, MergeDecision.REJECT):
-            if raw_signals:
-                for sig in raw_signals:
-                    h, display = _hash_signal(sig.type, sig.value, tenant_id)
-                    if not h or sig.type in _ATTRIBUTION_ONLY:
-                        continue
-                    if sig.type in CONSENT_REQUIRED_SIGNALS and not stitching_consent:
-                        continue
-                    alias = await self._repo.upsert_alias(
-                        tenant_id=tenant_id,
-                        canonical_entity_id=canonical_entity_id,
-                        alias_type=sig.type,
-                        alias_value_hash=h,
-                        alias_display_value_redacted=display,
-                        source=sig.source,
-                        source_event_id=event_id,
-                        source_platform=sig.source_platform,
-                        confidence=policy_result.confidence,
-                        confidence_tier=policy_result.confidence_tier,
-                        consent_snapshot=consent_snapshot,
-                    )
-                    linked_aliases.append(alias["id"])
-            else:
-                # Pre-hashed path: use hashed_signals directly (observations already persisted)
-                for (sig_type, sig_hash, display) in hashed_signals:
-                    if sig_type in _ATTRIBUTION_ONLY:
-                        continue
-                    if sig_type in CONSENT_REQUIRED_SIGNALS and not stitching_consent:
-                        continue
-                    alias = await self._repo.upsert_alias(
-                        tenant_id=tenant_id,
-                        canonical_entity_id=canonical_entity_id,
-                        alias_type=sig_type,
-                        alias_value_hash=sig_hash,
-                        alias_display_value_redacted=display,
-                        source="recompute",
-                        source_event_id=event_id,
-                        source_platform=None,
-                        confidence=policy_result.confidence,
-                        confidence_tier=policy_result.confidence_tier,
-                        consent_snapshot=consent_snapshot,
-                    )
-                    linked_aliases.append(alias["id"])
+        allowed_initial_anchor = initial_user_id_anchor and is_new and not existing_entity_ids
+        can_link_aliases = (
+            policy_result.decision not in (MergeDecision.BLOCKED, MergeDecision.REJECT)
+            or allowed_initial_anchor
+        )
+        if can_link_aliases:
+            for (sig_type, sig_hash, display) in hashed_signals:
+                if sig_type in _ATTRIBUTION_ONLY:
+                    continue
+                if sig_type in CONSENT_REQUIRED_SIGNALS and not stitching_consent:
+                    continue
+                if allowed_initial_anchor and sig_type not in {
+                    IdentitySignalType.USER_ID,
+                    IdentitySignalType.EXTERNAL_ID,
+                    IdentitySignalType.ANONYMOUS_ID,
+                }:
+                    continue
+                signal = next(
+                    (item for item in raw_signals if item.type == sig_type), None
+                )
+                alias = await self._repo.upsert_alias(
+                    tenant_id=tenant_id,
+                    canonical_entity_id=canonical_entity_id,
+                    alias_type=sig_type,
+                    alias_value_hash=sig_hash,
+                    alias_display_value_redacted=display,
+                    source=signal.source if signal else "recompute",
+                    source_event_id=event_id,
+                    source_platform=signal.source_platform if signal else None,
+                    confidence=policy_result.confidence,
+                    confidence_tier=policy_result.confidence_tier,
+                    consent_snapshot=consent_snapshot,
+                )
+                linked_aliases.append(alias["id"])
 
         # ── 10. Merge entities if approved ───────────────────────────────
         merge_event_id: Optional[str] = None
         auto_merged_from_ids: list[str] = []
+        resolution_revision_before: Optional[int] = None
+        resolution_revision_after: Optional[int] = None
         if policy_result.decision == MergeDecision.MERGE and policy_result.merge_target_entity_id:
             for from_id in existing_entity_ids:
                 if from_id == canonical_entity_id:
@@ -660,30 +953,23 @@ class IdentityResolutionService:
                 self._metrics.record_merge(tenant_id=tenant_id)
                 auto_merged_from_ids.append(from_id)
 
-            # Publish IDENTITY_MERGED for every entity folded into the survivor.
-            # The operator merge route (services/identity/routes.py::merge_identities)
-            # publishes this event, but the in-line auto-merge above previously did
-            # not — so automatic deterministic auto-merges during ingestion never
-            # triggered the downstream measurement / semantic restatement consumers
-            # (Topic.IDENTITY_MERGED). Emit the same event here so restatement fires
-            # for auto-merges too.
+            # Bump the survivor's resolution revision once per auto-merge. The
+            # event is emitted only after the audit decision and durable job
+            # enqueue below, so it can carry the committed decision/version and
+            # serve as an idempotent enqueue-recovery signal.
             if auto_merged_from_ids:
-                # Bump the survivor's resolution revision once per auto-merge so
-                # downstream consumers can detect the identity was restated.
-                await self._bump_resolution_revision(tenant_id, canonical_entity_id)
-                await self._publish_identity_merged(
-                    tenant_id=tenant_id,
-                    canonical_entity_id=canonical_entity_id,
-                    merged_from_ids=auto_merged_from_ids,
-                    confidence=policy_result.confidence,
-                    confidence_tier=policy_result.confidence_tier,
-                    reason_codes=policy_result.reason_codes,
-                    event_id=event_id,
-                )
+                (
+                    resolution_revision_before,
+                    resolution_revision_after,
+                ) = await self._advance_resolution_revision(tenant_id, canonical_entity_id)
 
         # ── 11. Create conflict if ambiguous ──────────────────────────────
         conflict_id: Optional[str] = None
-        if policy_result.decision == MergeDecision.CANDIDATE and has_conflict:
+        if (
+            policy_result.decision == MergeDecision.CANDIDATE
+            and has_conflict
+            and continuity.conflict_detection_enabled
+        ):
             if binding_contradicted and not policy_result.conflict_type:
                 policy_result.conflict_type = "conflicting_user_binding"
             conflict_id = await self._conflicts.open_conflict(
@@ -698,6 +984,10 @@ class IdentityResolutionService:
                 reason_codes=policy_result.reason_codes,
             )
             self._metrics.record_conflict()
+        elif policy_result.decision == MergeDecision.CANDIDATE and has_conflict:
+            policy_result.reason_codes = list(policy_result.reason_codes) + [
+                "conflict_detection_disabled"
+            ]
 
         # ── 12. Write graph edges ─────────────────────────────────────────
         decision_obj = IdentityResolutionDecision(
@@ -719,6 +1009,7 @@ class IdentityResolutionService:
                 else None
             ),
             is_new_entity=is_new,
+            policy_version=policy_version,
         )
 
         graph_edges = await self._graph.write_decision(
@@ -734,6 +1025,16 @@ class IdentityResolutionService:
             consent_snapshot,
         )
 
+        # Resolver links can change the Profile 360 identity view too. Persist
+        # a monotonic subject revision at the same decision boundary so a later
+        # restatement job refers to a real committed version, not a fabricated
+        # graph-version placeholder.
+        if policy_result.decision == MergeDecision.LINK:
+            (
+                resolution_revision_before,
+                resolution_revision_after,
+            ) = await self._advance_resolution_revision(tenant_id, canonical_entity_id)
+
         # ── 13. Emit audit record ─────────────────────────────────────────
         audit_id = await self._audit.record_resolution(
             tenant_id=tenant_id,
@@ -746,8 +1047,12 @@ class IdentityResolutionService:
             source_event_ids=[event_id] if event_id else [],
             policy_result=policy_result.decision.value,
             consent_snapshot=consent_snapshot,
+            resolution_revision_before=resolution_revision_before,
+            resolution_revision_after=resolution_revision_after,
         )
         decision_obj.audit_id = audit_id
+        decision_obj.resolution_revision_before = resolution_revision_before
+        decision_obj.resolution_revision_after = resolution_revision_after
 
         # ── 13b. Record identity decision evidence (additive, fail-safe) ──
         # Captures the decision's provenance (§3.3): matching signal types as
@@ -767,9 +1072,37 @@ class IdentityResolutionService:
                 event_id=event_id,
                 consent_snapshot=consent_snapshot,
                 policy_decision_id=audit_id,
+                policy_version=policy_version,
             )
         except Exception as exc:  # noqa: BLE001 - evidence must never break resolution
             logger.warning("decision evidence recording failed: %s", exc)
+
+        if auto_merged_from_ids or policy_result.decision == MergeDecision.LINK:
+            await self._queue_resolver_restatement(
+                decision=decision_obj,
+                decision_id=audit_id,
+                confidence_band=get_confidence_band(
+                    policy_result.confidence,
+                    policy_result.confidence_tier,
+                    _vetoes,
+                ),
+                affected_entity_ids=[canonical_entity_id, *auto_merged_from_ids],
+                is_merge=bool(auto_merged_from_ids),
+            )
+        if auto_merged_from_ids:
+            await self._publish_identity_merged(
+                tenant_id=tenant_id,
+                canonical_entity_id=canonical_entity_id,
+                merged_from_ids=auto_merged_from_ids,
+                confidence=policy_result.confidence,
+                confidence_tier=policy_result.confidence_tier,
+                reason_codes=policy_result.reason_codes,
+                event_id=event_id,
+                decision_id=audit_id,
+                resolution_revision_before=resolution_revision_before,
+                resolution_revision_after=resolution_revision_after,
+                restatement_job_id=decision_obj.restatement_job_id,
+            )
 
         # ── 14. Emit metrics ──────────────────────────────────────────────
         if policy_result.decision == MergeDecision.BLOCKED:
@@ -821,6 +1154,10 @@ class IdentityResolutionService:
         confidence_tier: Any,
         reason_codes: list[str],
         event_id: str,
+        decision_id: str,
+        resolution_revision_before: Optional[int],
+        resolution_revision_after: Optional[int],
+        restatement_job_id: Optional[str],
     ) -> None:
         """Publish one IDENTITY_MERGED event per entity folded into the survivor.
 
@@ -842,9 +1179,6 @@ class IdentityResolutionService:
             return
         reason = reason_codes[0] if reason_codes else "auto_merge"
         tier_value = getattr(confidence_tier, "value", confidence_tier)
-        resolution_revision = await self._current_resolution_revision(
-            tenant_id, canonical_entity_id
-        )
         for from_id in merged_from_ids:
             try:
                 await producer.publish(Event(
@@ -860,7 +1194,14 @@ class IdentityResolutionService:
                         "confidence": confidence,
                         "confidence_tier": tier_value,
                         "auto_merge": True,
-                        "resolution_revision": resolution_revision,
+                        "is_merge": True,
+                        "decision_id": decision_id,
+                        "resolution_revision_before": resolution_revision_before,
+                        "resolution_revision_after": resolution_revision_after,
+                        "restatement_job_id": restatement_job_id,
+                        "affected_canonical_entity_ids": [
+                            canonical_entity_id, *merged_from_ids
+                        ],
                         "source_event_ids": [event_id] if event_id else [],
                     },
                 ))
@@ -883,6 +1224,7 @@ class IdentityResolutionService:
         event_id: str,
         consent_snapshot: Optional[dict],
         policy_decision_id: Optional[str],
+        policy_version: str,
     ) -> None:
         """Record an IdentityDecisionEvidence row for this resolution (§3.3).
 
@@ -913,6 +1255,7 @@ class IdentityResolutionService:
             policy_decision_id=policy_decision_id,
             confidence_score=policy_result.confidence,
             confidence_tier=policy_result.confidence_tier,
+            merge_policy_version=policy_version,
         )
 
     # ── Verified-ownership merge helpers ──────────────────────────────────
@@ -1057,21 +1400,39 @@ class IdentityResolutionService:
         detect an entity's identity was restated. Best-effort and fail-safe:
         a read/write failure is logged and swallowed (never breaks resolution).
         """
+        _before, after = await self._advance_resolution_revision(
+            tenant_id, canonical_entity_id
+        )
+        return after or 0
+
+    async def _advance_resolution_revision(
+        self, tenant_id: str, canonical_entity_id: str
+    ) -> tuple[Optional[int], Optional[int]]:
+        """Persist and return the exact subject revision transition.
+
+        ``None`` before means the subject had no explicit revision field yet;
+        ``None`` after means the write could not be confirmed and is not safe as
+        a restatement version.
+        """
         try:
             row = await self._repo.get_subject_by_canonical_entity_id(
                 tenant_id, canonical_entity_id
             )
             if row is None:
-                return 0
-            current = int(row.get("resolution_revision") or 0) + 1
-            row["resolution_revision"] = current
-            await self._repo._subjects.update(row["id"], row)
-            return current
-        except Exception as exc:  # noqa: BLE001 - revision bump must never break resolution
+                return None, None
+            raw_before = row.get("resolution_revision")
+            before = int(raw_before) if raw_before is not None else None
+            after = (before or 0) + 1
+            row["resolution_revision"] = after
+            stored = await self._repo._subjects.update(row["id"], row)
+            if not stored or int(stored.get("resolution_revision", -1)) != after:
+                return before, None
+            return before, after
+        except Exception as exc:  # noqa: BLE001 - revision failure must not break resolution
             logger.warning(
                 "resolution_revision bump failed for %s: %s", canonical_entity_id, exc
             )
-            return 0
+            return None, None
 
     async def _current_resolution_revision(
         self, tenant_id: str, canonical_entity_id: str
@@ -1085,6 +1446,82 @@ class IdentityResolutionService:
         except Exception:  # noqa: BLE001
             return 0
 
+    async def _queue_resolver_restatement(
+        self,
+        *,
+        decision: IdentityResolutionDecision,
+        decision_id: str,
+        confidence_band: ConfidenceBand,
+        affected_entity_ids: list[str],
+        is_merge: bool,
+        decision_type_override: Optional[DecisionType] = None,
+    ) -> None:
+        """Enqueue a resolver decision only when its committed revision is known."""
+        from config.settings import settings
+
+        if not settings.identity_continuity.projection_restatement_enabled:
+            decision.restatement_status = "disabled"
+            decision.restatement_error = "projection_restatement_disabled"
+            return
+        if not decision_id:
+            decision.restatement_status = "non_queueable"
+            decision.restatement_error = "persisted decision id is missing"
+            return
+        if decision.resolution_revision_after is None:
+            decision.restatement_status = "non_queueable"
+            decision.restatement_error = "persisted resolution revision is unavailable"
+            logger.error(
+                "identity.restatement.non_queueable",
+                extra={
+                    "tenant_id": decision.tenant_id,
+                    "decision_id": decision_id,
+                    "reason": "resolution_revision_unavailable",
+                },
+            )
+            return
+        try:
+            from services.projections.projection_restatement_orchestrator import (
+                ProjectionRestatementOrchestrator,
+            )
+
+            restatement = IdentityDecisionRecord(
+                id=decision_id,
+                tenant_id=decision.tenant_id,
+                decision_type=decision_type_override or (
+                    DecisionType.AUTO_MERGE if is_merge else DecisionType.AUTO_RESOLVE
+                ),
+                candidate_source_identity_ids=[],
+                candidate_canonical_entity_ids=list(affected_entity_ids),
+                selected_canonical_entity_id=decision.canonical_entity_id,
+                confidence=decision.confidence,
+                confidence_band=confidence_band,
+                positive_evidence=[{"reason_codes": list(decision.reason_codes)}],
+                negative_evidence=[],
+                vetoes=[],
+                policy_version=decision.policy_version,
+                graph_version_before=None,
+                graph_version_after=None,
+                explanation="persisted resolver decision",
+                decided_by="identity_resolver",
+                decided_at=utc_now().isoformat(),
+                resolution_revision_before=decision.resolution_revision_before,
+                resolution_revision_after=decision.resolution_revision_after,
+            )
+            job = await ProjectionRestatementOrchestrator().queue_restatement(restatement)
+            decision.restatement_status = "queued"
+            decision.restatement_job_id = job.id
+        except Exception as exc:  # noqa: BLE001 - decision mutation is already committed
+            decision.restatement_status = "enqueue_failed"
+            decision.restatement_error = type(exc).__name__
+            logger.error(
+                "identity.restatement.enqueue_failed",
+                extra={
+                    "tenant_id": decision.tenant_id,
+                    "decision_id": decision_id,
+                    "error_type": type(exc).__name__,
+                },
+            )
+
     # ── Operator actions ──────────────────────────────────────────────────
 
     async def operator_merge(
@@ -1095,52 +1532,162 @@ class IdentityResolutionService:
         actor_id: str,
         actor_type: str = "operator",
         reason: str = "manual_merge",
+        idempotency_key: Optional[str] = None,
     ) -> IdentityResolutionDecision:
-        """Operator-initiated merge of two canonical entities."""
-        policy = evaluate_operator_merge(
-            tenant_id=tenant_id,
-            primary_entity_id=primary_entity_id,
-            secondary_entity_id=secondary_entity_id,
-            actor_id=actor_id,
-            actor_type=actor_type,
-            reason=reason,
-        )
-        if policy.decision != MergeDecision.MERGE:
-            return IdentityResolutionDecision(
-                tenant_id=tenant_id,
-                canonical_entity_id=primary_entity_id,
-                decision=policy.decision,
-                confidence=policy.confidence,
-                confidence_tier=policy.confidence_tier,
-                reason_codes=policy.reason_codes,
+        if not idempotency_key:
+            return await self._operator_merge_impl(
+                tenant_id, primary_entity_id, secondary_entity_id, actor_id,
+                actor_type, reason, None,
             )
+        lock_key = f"{tenant_id}:{idempotency_key}"
+        async with _operator_merge_lock(lock_key):
+            return await self._operator_merge_impl(
+                tenant_id, primary_entity_id, secondary_entity_id, actor_id,
+                actor_type, reason, idempotency_key,
+            )
+
+    async def _operator_merge_impl(
+        self,
+        tenant_id: str,
+        primary_entity_id: str,
+        secondary_entity_id: str,
+        actor_id: str,
+        actor_type: str = "operator",
+        reason: str = "manual_merge",
+        idempotency_key: Optional[str] = None,
+    ) -> IdentityResolutionDecision:
+        """Operator merge with optional durable idempotency for review actions.
+
+        When ``idempotency_key`` is supplied, the merge event, revision
+        transition, resolution audit, and restatement are all keyed from the
+        tenant-scoped operation. Retrying after any intermediate write resumes
+        the same merge and returns the same decision identifiers.
+        """
+        from config.settings import settings
+        deterministic_merge_id = None
+        deterministic_audit_id = None
+        prior_merge = None
+        if idempotency_key:
+            deterministic_merge_id = str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"aether:operator-merge:{tenant_id}:{idempotency_key}",
+            ))
+            deterministic_audit_id = str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"aether:operator-merge-audit:{tenant_id}:{idempotency_key}",
+            ))
+            prior_merge = await self._repo.get_merge_event_by_id(
+                tenant_id, deterministic_merge_id
+            )
+            if prior_merge and (
+                prior_merge.get("from_entity_id") != secondary_entity_id
+                or prior_merge.get("into_entity_id") != primary_entity_id
+            ):
+                raise ValueError("operator merge idempotency key is bound to another merge")
+            saved_result = (prior_merge or {}).get("operator_decision_result")
+            if saved_result and (
+                saved_result.get("restatement_status") == "queued"
+                and saved_result.get("restatement_job_id")
+            ):
+                try:
+                    saved_decision = MergeDecision(str(saved_result["decision"]))
+                    saved_tier = ConfidenceTier(str(saved_result["confidence_tier"]))
+                except (KeyError, ValueError) as exc:
+                    raise ValueError("persisted operator merge result is invalid") from exc
+                return IdentityResolutionDecision(
+                    tenant_id=tenant_id,
+                    canonical_entity_id=str(saved_result["canonical_entity_id"]),
+                    decision=saved_decision,
+                    confidence=float(saved_result.get("confidence") or 0.0),
+                    confidence_tier=saved_tier,
+                    reason_codes=list(saved_result.get("reason_codes") or []),
+                    candidate_entity_ids=list(saved_result.get("candidate_entity_ids") or []),
+                    audit_id=saved_result.get("audit_id"),
+                    resolution_revision_before=saved_result.get("resolution_revision_before"),
+                    resolution_revision_after=saved_result.get("resolution_revision_after"),
+                    graph_edges_written=list(saved_result.get("graph_edges_written") or []),
+                    restatement_status=str(saved_result.get("restatement_status") or "not_required"),
+                    restatement_job_id=saved_result.get("restatement_job_id"),
+                    restatement_error=saved_result.get("restatement_error"),
+                )
+
+        if prior_merge:
+            try:
+                confidence_tier = ConfidenceTier(str(prior_merge["confidence_tier"]))
+            except (KeyError, ValueError):
+                confidence_tier = ConfidenceTier.DETERMINISTIC
+            confidence = float(prior_merge.get("confidence") or 1.0)
+            reason_codes = list(prior_merge.get("reason_codes") or ["manual_operator_merge"])
+        else:
+            if not settings.identity_continuity.manual_review_enabled:
+                return IdentityResolutionDecision(
+                    tenant_id=tenant_id,
+                    canonical_entity_id=primary_entity_id,
+                    decision=MergeDecision.BLOCKED,
+                    confidence=0.0,
+                    confidence_tier=ConfidenceTier.BLOCKED,
+                    reason_codes=["manual_merge_disabled"],
+                    blocked_reason="manual_merge_disabled",
+                )
+            policy = evaluate_operator_merge(
+                tenant_id=tenant_id,
+                primary_entity_id=primary_entity_id,
+                secondary_entity_id=secondary_entity_id,
+                actor_id=actor_id,
+                actor_type=actor_type,
+                reason=reason,
+            )
+            if policy.decision != MergeDecision.MERGE:
+                return IdentityResolutionDecision(
+                    tenant_id=tenant_id,
+                    canonical_entity_id=primary_entity_id,
+                    decision=policy.decision,
+                    confidence=policy.confidence,
+                    confidence_tier=policy.confidence_tier,
+                    reason_codes=policy.reason_codes,
+                )
+            confidence = policy.confidence
+            confidence_tier = policy.confidence_tier
+            reason_codes = policy.reason_codes
 
         merge_event_id = await self._audit.record_merge(
             tenant_id=tenant_id,
             from_entity_id=secondary_entity_id,
             into_entity_id=primary_entity_id,
             resulting_entity_id=primary_entity_id,
-            confidence=policy.confidence,
-            confidence_tier=policy.confidence_tier,
-            reason_codes=policy.reason_codes,
+            confidence=confidence,
+            confidence_tier=confidence_tier,
+            reason_codes=reason_codes,
             source_event_ids=[],
             actor_type=actor_type,
             actor_id=actor_id,
+            merge_event_id=deterministic_merge_id,
         )
         await self._repo.mark_subject_merged_by_canonical_id(
             tenant_id, secondary_entity_id, primary_entity_id
         )
         self._metrics.record_merge(tenant_id=tenant_id)
-        await self._bump_resolution_revision(tenant_id, primary_entity_id)
+        if deterministic_merge_id:
+            revision_before, revision_after = await self._repo.advance_resolution_revision_for_merge_once(
+                tenant_id=tenant_id,
+                canonical_entity_id=primary_entity_id,
+                merge_event_id=deterministic_merge_id,
+            )
+        else:
+            revision_before, revision_after = await self._advance_resolution_revision(
+                tenant_id, primary_entity_id
+            )
 
         decision_obj = IdentityResolutionDecision(
             tenant_id=tenant_id,
             canonical_entity_id=primary_entity_id,
             decision=MergeDecision.MERGE,
-            confidence=policy.confidence,
-            confidence_tier=policy.confidence_tier,
-            reason_codes=policy.reason_codes,
+            confidence=confidence,
+            confidence_tier=confidence_tier,
+            reason_codes=reason_codes,
             candidate_entity_ids=[secondary_entity_id],
+            resolution_revision_before=revision_before,
+            resolution_revision_after=revision_after,
         )
 
         audit_id = await self._audit.record_resolution(
@@ -1148,16 +1695,49 @@ class IdentityResolutionService:
             decision=MergeDecision.MERGE,
             canonical_entity_id=primary_entity_id,
             candidate_entity_ids=[secondary_entity_id],
-            confidence=policy.confidence,
-            confidence_tier=policy.confidence_tier,
-            reason_codes=policy.reason_codes,
+            confidence=confidence,
+            confidence_tier=confidence_tier,
+            reason_codes=reason_codes,
             source_event_ids=[],
             policy_result="operator_merge",
+            resolution_revision_before=revision_before,
+            resolution_revision_after=revision_after,
+            audit_id=deterministic_audit_id,
         )
         decision_obj.audit_id = audit_id
 
         graph_edges = await self._graph.write_decision(decision_obj, [], None)
         decision_obj.graph_edges_written = graph_edges
+
+        await self._queue_resolver_restatement(
+            decision=decision_obj,
+            decision_id=audit_id,
+            confidence_band=ConfidenceBand.VERY_HIGH,
+            affected_entity_ids=[primary_entity_id, secondary_entity_id],
+            is_merge=True,
+            decision_type_override=DecisionType.MANUAL_MERGE,
+        )
+
+        if deterministic_merge_id:
+            await self._repo.persist_operator_merge_result(
+                tenant_id=tenant_id,
+                merge_event_id=deterministic_merge_id,
+                decision={
+                    "canonical_entity_id": decision_obj.canonical_entity_id,
+                    "decision": decision_obj.decision.value,
+                    "confidence": decision_obj.confidence,
+                    "confidence_tier": decision_obj.confidence_tier.value,
+                    "reason_codes": decision_obj.reason_codes,
+                    "candidate_entity_ids": decision_obj.candidate_entity_ids,
+                    "audit_id": decision_obj.audit_id,
+                    "resolution_revision_before": decision_obj.resolution_revision_before,
+                    "resolution_revision_after": decision_obj.resolution_revision_after,
+                    "graph_edges_written": decision_obj.graph_edges_written,
+                    "restatement_status": decision_obj.restatement_status,
+                    "restatement_job_id": decision_obj.restatement_job_id,
+                    "restatement_error": decision_obj.restatement_error,
+                },
+            )
 
         return decision_obj
 
@@ -1171,6 +1751,15 @@ class IdentityResolutionService:
         source_merge_event_id: Optional[str] = None,
     ) -> dict:
         """Operator-initiated split of an incorrectly merged entity."""
+        from config.settings import settings
+
+        continuity = settings.identity_continuity
+        if not continuity.split_enabled or not continuity.manual_split_enabled:
+            return {
+                "allowed": False,
+                "error": "manual_split_disabled",
+                "reason_codes": ["manual_split_disabled"],
+            }
         split_ctx = SplitPolicyContext(
             tenant_id=tenant_id,
             original_entity_id=original_entity_id,
@@ -1204,8 +1793,32 @@ class IdentityResolutionService:
             tenant_id, original_entity_id
         )
         self._metrics.record_split(tenant_id=tenant_id)
-        await self._bump_resolution_revision(tenant_id, original_entity_id)
-        await self._bump_resolution_revision(tenant_id, new_entity_id)
+        revision_before, revision_after = await self._advance_resolution_revision(
+            tenant_id, original_entity_id
+        )
+        _new_revision_before, new_revision_after = await self._advance_resolution_revision(
+            tenant_id, new_entity_id
+        )
+        decision_obj = IdentityResolutionDecision(
+            tenant_id=tenant_id,
+            canonical_entity_id=original_entity_id,
+            decision=MergeDecision.LINK,
+            confidence=0.0,
+            confidence_tier=ConfidenceTier.BLOCKED,
+            reason_codes=split_policy.reason_codes,
+            candidate_entity_ids=[new_entity_id],
+            resolution_revision_before=revision_before,
+            resolution_revision_after=revision_after,
+        )
+        decision_obj.audit_id = split_event_id
+        await self._queue_resolver_restatement(
+            decision=decision_obj,
+            decision_id=split_event_id,
+            confidence_band=ConfidenceBand.BLOCKED,
+            affected_entity_ids=[original_entity_id, new_entity_id],
+            is_merge=False,
+            decision_type_override=DecisionType.MANUAL_SPLIT,
+        )
 
         return {
             "allowed": True,
@@ -1214,6 +1827,13 @@ class IdentityResolutionService:
             "new_entity_id": new_entity_id,
             "revoked_edge_ids": revoked_edges,
             "reason_codes": split_policy.reason_codes,
+            "decision_id": split_event_id,
+            "resolution_revision_before": revision_before,
+            "resolution_revision_after": revision_after,
+            "resulting_resolution_revision_after": new_revision_after,
+            "restatement_status": decision_obj.restatement_status,
+            "restatement_job_id": decision_obj.restatement_job_id,
+            "restatement_error": decision_obj.restatement_error,
         }
 
     # ── Fragment-aware identity repair (PR5 slice) ────────────────────────
@@ -1552,6 +2172,16 @@ class IdentityResolutionService:
         fragment and the original. Returns a structured result; failures surface
         as ``allowed=False`` with a typed ``rejection_reason``.
         """
+        from config.settings import settings
+
+        continuity = settings.identity_continuity
+        if not continuity.split_enabled or not continuity.manual_split_enabled:
+            return {
+                "allowed": False,
+                "error": "manual_split_disabled",
+                "reason_codes": ["manual_split_disabled"],
+                "rejection_reason": "manual_split_disabled",
+            }
         alias_ids = list((fragments or {}).get("alias_ids") or [])
         observation_ids = list((fragments or {}).get("observation_ids") or [])
 
@@ -1597,6 +2227,7 @@ class IdentityResolutionService:
 
         # ── Reassign aliases (lineage-preserving) ─────────────────────────
         moved_alias_ids: list[str] = []
+        moved_alias_map: list[dict[str, str]] = []
         for alias in plan.alias_rows:
             new_alias = await self._repo.upsert_alias(
                 tenant_id=tenant_id,
@@ -1614,6 +2245,10 @@ class IdentityResolutionService:
             # Revoke the original on the source so no duplicate active alias exists.
             await self._repo.revoke_alias(alias["id"])
             moved_alias_ids.append(new_alias["id"])
+            moved_alias_map.append({
+                "source_alias_id": str(alias["id"]),
+                "resulting_alias_id": str(new_alias["id"]),
+            })
 
         # ── Relink the named observations ─────────────────────────────────
         moved_observation_ids = await self._repo.relink_observations_to_entity(
@@ -1643,13 +2278,38 @@ class IdentityResolutionService:
                 "alias_ids": alias_ids,
                 "observation_ids": observation_ids,
                 "moved_alias_ids": moved_alias_ids,
+                "moved_alias_map": moved_alias_map,
                 "moved_observation_ids": moved_observation_ids,
             },
             mode=mode,
         )
         self._metrics.record_split(tenant_id=tenant_id)
-        await self._bump_resolution_revision(tenant_id, entity_id)
-        await self._bump_resolution_revision(tenant_id, resulting_entity_id)
+        revision_before, revision_after = await self._advance_resolution_revision(
+            tenant_id, entity_id
+        )
+        _result_revision_before, result_revision_after = await self._advance_resolution_revision(
+            tenant_id, resulting_entity_id
+        )
+        split_decision = IdentityResolutionDecision(
+            tenant_id=tenant_id,
+            canonical_entity_id=entity_id,
+            decision=MergeDecision.LINK,
+            confidence=0.0,
+            confidence_tier=ConfidenceTier.BLOCKED,
+            reason_codes=plan.reason_codes,
+            candidate_entity_ids=[resulting_entity_id],
+            resolution_revision_before=revision_before,
+            resolution_revision_after=revision_after,
+        )
+        split_decision.audit_id = split_event["id"]
+        await self._queue_resolver_restatement(
+            decision=split_decision,
+            decision_id=split_event["id"],
+            confidence_band=ConfidenceBand.BLOCKED,
+            affected_entity_ids=[entity_id, resulting_entity_id],
+            is_merge=False,
+            decision_type_override=DecisionType.MANUAL_SPLIT,
+        )
 
         return {
             "allowed": True,
@@ -1663,6 +2323,13 @@ class IdentityResolutionService:
             "reason_codes": plan.reason_codes,
             "rejection_reason": None,
             "error": None,
+            "decision_id": split_event["id"],
+            "resolution_revision_before": revision_before,
+            "resolution_revision_after": revision_after,
+            "resulting_resolution_revision_after": result_revision_after,
+            "restatement_status": split_decision.restatement_status,
+            "restatement_job_id": split_decision.restatement_job_id,
+            "restatement_error": split_decision.restatement_error,
         }
 
     async def suppress_identifier(
@@ -1915,6 +2582,10 @@ def _hash_signal(
     if sig_type == IdentitySignalType.EXTERNAL_ID:
         h = hash_external_id(value, tenant_id)
         return h, redact_display(value, "external_id")
+
+    if sig_type == IdentitySignalType.USER_ID:
+        from .hashing import hash_value
+        return hash_value(value, scope=f"user:{tenant_id}"), "[REDACTED:user_id]"
 
     # Non-sensitive: return as-is
     return value, value[:16] if len(value) > 16 else value

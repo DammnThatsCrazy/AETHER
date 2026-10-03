@@ -125,7 +125,7 @@ async def test_split_candidate_queues_restatement(orchestrator):
     assert ProjectionType.PROFILE_360 in job.projections
     assert ProjectionType.JOURNEY in job.projections
 
-    # running restatement must complete (even in-memory no-op)
-    completed = await orchestrator.run_restatement(job.id)
-    assert completed.status in ("completed", "partially_completed")
-    assert completed.completed_at is not None
+    # Queue inspection does not execute the durable worker; no completion is
+    # claimed until a registered jobs-platform handler actually runs.
+    queued = await orchestrator.run_restatement(job.id)
+    assert queued.status == "queued"

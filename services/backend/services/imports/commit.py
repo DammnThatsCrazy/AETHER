@@ -311,6 +311,16 @@ async def _stage_and_mutate(
     # T-class data-policy gate before any durable write (no partial Bronze).
     await _enforce_imports_consent_policy(tenant_id, fields, staged_rows)
 
+    # The identity evidence write is part of commit success. If its persistence
+    # fails, fail the commit before reporting success; retry keys are stable.
+    for staged in staged_rows:
+        file_records = [
+            record for record in all_records if record.get("file_id") == staged["file_id"]
+        ]
+        await _register_csv_identity_evidence(
+            tenant_id, import_id, commit_id, staged["file_id"], file_records
+        )
+
     # Scrub is the MANDATORY T-class minimization layer and runs UNCONDITIONALLY
     # (redaction never rejects). It is applied to the Bronze payload copy ONLY:
     # secret-key columns are redacted in what is persisted under tenant_import,
@@ -455,6 +465,66 @@ async def _project_silver(
     except Exception as exc:  # pragma: no cover — Silver hiccup must not fail a commit
         logger.debug("import silver projection skipped: %s", exc)
         return 0
+
+
+async def _register_csv_identity_evidence(
+    tenant_id: str, import_id: str, commit_id: str, file_id: str, records: list[dict]
+) -> int:
+    """Persist mapped email/phone observations and isolated provisional profiles.
+
+    Import approval is a tenant data-processing decision. It does not establish
+    an individual's identity-link consent, so this adapter intentionally does
+    not invoke the resolver or create canonical aliases. Each imported source
+    identity receives its own provisional profile; shared claims never merge
+    those profiles here.
+    """
+    from services.identity.repository import IdentityResolutionRepository
+    from services.identity.source_identity_registry import SourceIdentityRegistry
+
+    repo = IdentityResolutionRepository()
+    registry = SourceIdentityRegistry(repo)
+    namespace = f"{tenant_id}:{import_id}:{file_id}"
+    evidence_count = 0
+    for record in records:
+        if record.get("primitive") != "identifier":
+            continue
+        fields = record.get("fields") or {}
+        claim_type = str(fields.get("identifier_type") or "").strip().lower()
+        raw_value = fields.get("value")
+        entity_ref = fields.get("entity_ref")
+        row = record.get("row")
+        if claim_type not in {"email", "phone"} or not isinstance(raw_value, str) or not raw_value.strip():
+            continue
+        if entity_ref is None or not str(entity_ref).strip() or row is None:
+            continue
+
+        source_record_id = f"{import_id}:{file_id}:row:{row}"
+        source_identity = await registry.register_source_identity(
+            tenant_id=tenant_id,
+            source_system_id="csv_import",
+            source_kind="csv",
+            source_namespace=namespace,
+            external_id=str(entity_ref),
+            source_record_id=source_record_id,
+        )
+        await registry.upsert_identity_claim(
+            tenant_id=tenant_id,
+            source_identity_id=source_identity.id,
+            claim_type=claim_type,
+            raw_value=raw_value,
+            verification_status="observed",
+            pii_classification="sensitive",
+            source_record_id=source_record_id,
+            import_id=import_id,
+            import_commit_id=commit_id,
+            hash_sensitive_value=True,
+        )
+        await registry.ensure_provisional_profile(
+            tenant_id=tenant_id,
+            source_identity_id=source_identity.id,
+        )
+        evidence_count += 1
+    return evidence_count
 
 
 # ── public API ───────────────────────────────────────────────────────────────
@@ -733,6 +803,7 @@ async def _finalize_commit(
             "schema_version": record.get("mapping_version"),
             "source_checksum": source_checksum,
             "completed_at": _now_iso(),
+            "replay_in_progress": False,
         },
     )
     metrics.increment("import_committed_total", labels={"status": record["status"]})
@@ -846,25 +917,85 @@ async def _garbage_collect_vertices(tenant_id: str, commit: dict) -> dict:
 
 async def replay_import(tenant_id: str, import_id: str) -> dict:
     """Re-stage from the approved mapping under a fresh commit. Revokes the prior
-    live commit's edges first, so the graph never accumulates duplicates."""
+    live commit's edges first, so the graph never accumulates duplicates. Once a
+    replay anchor is written, failures transition the session to FAILED and a
+    retry resumes the same replay commit ID."""
     repo = get_imports_repository()
     session = await repo.get_session(tenant_id, import_id)
-    if session.get("status") not in {"committed", "partially_committed", "rolled_back"}:
-        raise ConflictError(
-            f"only a committed import can be replayed (current: {session.get('status')!r})"
-        )
-    prior = await repo.latest_commit(tenant_id, import_id)
-    if prior is not None and not prior.get("rolled_back"):
-        await _revoke_commit_edges(tenant_id, prior, "superseded by replay")
-        await _garbage_collect_vertices(tenant_id, prior)
-        await repo.update_commit(tenant_id, prior["commit_id"], rolled_back=True)
+    replaying = bool(session.get("replay_in_progress"))
+    state = lifecycle_state_of(session)
 
-    await repo.set_status(tenant_id, import_id, "committing")
-    commit_id = f"impc_{uuid.uuid4().hex}"
-    record = await _stage_and_mutate(tenant_id, import_id, session, commit_id)
-    record["replayed"] = True
-    await repo.create_commit(tenant_id, import_id, record)
-    await repo.set_status(tenant_id, import_id, record["status"])
+    if replaying and state in {ImportSessionState.FAILED, ImportSessionState.COMMITTING}:
+        commit_id = session.get("active_commit_id")
+        if not commit_id:
+            raise ConflictError("replay session has no active commit ID to resume")
+        if state is ImportSessionState.FAILED:
+            if int(session.get("retry_count", 0) or 0) >= MAX_SESSION_RETRIES:
+                raise ConflictError("replay retry budget exhausted")
+            from services.imports.session_persistence import transition_session
+
+            await transition_session(
+                repo,
+                tenant_id,
+                import_id,
+                ImportSessionState.COMMITTING,
+                patch={"commit_started_at": _now_iso()},
+            )
+        else:
+            await repo.update_session(
+                tenant_id, import_id, commit_started_at=_now_iso()
+            )
+    else:
+        if session.get("status") not in {"committed", "partially_committed", "rolled_back"}:
+            raise ConflictError(
+                f"only a committed import can be replayed (current: {session.get('status')!r})"
+            )
+        prior = await repo.latest_commit(tenant_id, import_id)
+        if prior is not None and not prior.get("rolled_back"):
+            await _revoke_commit_edges(tenant_id, prior, "superseded by replay")
+            await _garbage_collect_vertices(tenant_id, prior)
+            await repo.update_commit(tenant_id, prior["commit_id"], rolled_back=True)
+
+        commit_id = f"impc_{uuid.uuid4().hex}"
+        # A replay supersedes the prior claim provenance. Publish the new commit
+        # anchor before staging so candidate lookup rejects both the rolled-back
+        # prior evidence and the new, not-yet-durable evidence.
+        await repo.update_session(
+            tenant_id,
+            import_id,
+            status="committing",
+            lifecycle_state="COMMITTING",
+            active_commit_id=commit_id,
+            replay_in_progress=True,
+            commit_started_at=_now_iso(),
+        )
+
+    try:
+        record = await _stage_and_mutate(tenant_id, import_id, session, commit_id)
+        record["replayed"] = True
+        await repo.create_commit(tenant_id, import_id, record)
+        await repo.update_session(
+            tenant_id,
+            import_id,
+            status=record["status"],
+            lifecycle_state="COMPLETED",
+            active_commit_id=commit_id,
+            projection_state="completed",
+            replay_in_progress=False,
+        )
+    except Exception as exc:
+        from services.imports.session_persistence import mark_failed
+
+        current = await repo.get_session(tenant_id, import_id)
+        if lifecycle_state_of(current) is ImportSessionState.COMMITTING:
+            await mark_failed(
+                repo,
+                tenant_id,
+                import_id,
+                failure_reason="import replay failed",
+                exc=exc,
+            )
+        raise
     metrics.increment("import_replayed_total")
     await _emit("IMPORT_REPLAYED", tenant_id, {"import_id": import_id, "commit_id": commit_id})
     return record

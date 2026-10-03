@@ -33,7 +33,7 @@ export function useIdentityExplanation(profileId: string) {
 export function useIdentityReviewQueue(tenantId: string, limit?: number) {
   return useQuery({
     key: `identity-review-queue:${tenantId}:${limit ?? 50}`,
-    fetcher: () => api.identity.reviewQueue(tenantId, limit ?? 50),
+    fetcher: () => api.identity.reviewQueue(limit ?? 50),
     staleTime: STALE,
     enabled: !!tenantId,
   });
@@ -51,7 +51,7 @@ export function useSdkHealth(tenantId: string) {
 export function useActivationStatus(tenantId: string) {
   return useQuery({
     key: `activation-status:${tenantId}`,
-    fetcher: () => api.identity.activationStatus(tenantId),
+    fetcher: () => api.identity.activationStatus(),
     staleTime: STALE,
     enabled: !!tenantId,
   });

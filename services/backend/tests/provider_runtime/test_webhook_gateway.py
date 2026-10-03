@@ -264,6 +264,167 @@ async def test_ingest_success_signature_verified():
     assert rows[0]["verified"] is True
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider", "identity", "adapter", "payload", "expected_namespace"),
+    [
+        (
+            "shopify", "shopify.admin.orders_read",
+            "services.providers.shopify.webhook.ShopifyWebhookAdapter",
+            {"id": 81, "customer": {"id": 7001, "email": "buyer@example.com", "phone": "+14155550101"}},
+            "shopify:acc_1:conn_1",
+        ),
+        (
+            "woocommerce", "woocommerce.admin.orders_read",
+            "services.providers.woocommerce.webhook.WooCommerceWebhookAdapter",
+            {"id": 82, "customer_id": 7002, "billing": {"email": "buyer@example.com", "phone": "+14155550101"}},
+            "woocommerce:acc_1:conn_1",
+        ),
+    ],
+)
+async def test_real_provider_webhook_parse_captures_only_durable_hashed_identity_evidence(
+    provider, identity, adapter, payload, expected_namespace,
+):
+    import base64
+    import hashlib
+    import hmac
+    import json
+    from importlib import import_module
+
+    from services.identity.hashing import hash_value
+    from services.identity.repository import IdentityResolutionRepository
+    from services.identity.source_identity_registry import SourceIdentityRegistry
+
+    adapter_cls = getattr(import_module(adapter.rsplit(".", 1)[0]), adapter.rsplit(".", 1)[1])
+    webhook = adapter_cls(provider_identity=identity)
+
+    class DedupeRawStore(FakeRawStore):
+        """Mirror Bronze: duplicate keys return the retained raw payload."""
+
+        def __init__(self):
+            super().__init__()
+            self._by_key = {}
+
+        async def ingest(self, records, *, tenant_id=None):
+            outcomes = []
+            for record in records:
+                key = (tenant_id or record.tenant_id, record.provider_identity,
+                       record.provider_record_id, record.schema_version)
+                if key in self._by_key:
+                    outcomes.append((self._by_key[key], False))
+                else:
+                    self._by_key[key] = record
+                    self.records.append(record)
+                    outcomes.append((record, True))
+            return outcomes
+
+    raw_store = DedupeRawStore()
+    connections = ProviderConnectionRepository()
+    connection = ProviderConnection(
+        connection_id="conn_1", tenant_id="tenant-1", provider_identity=identity,
+        state=ConnectionState.CONNECTED, credential_ref="provider:tenant-1:test",
+        selected_accounts=["acc_1"], created_at="2026-01-01T00:00:00+00:00",
+        updated_at="2026-01-01T00:00:00+00:00",
+    )
+    await connections.upsert(connection)
+    body = json.dumps(payload).encode()
+    secret = "webhook-secret"
+    if provider == "shopify":
+        signature = base64.b64encode(hmac.new(secret.encode(), body, hashlib.sha256).digest()).decode()
+        headers = {"X-Shopify-Hmac-SHA256": signature}
+    else:
+        signature = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        headers = {"X-WC-Webhook-Signature": signature}
+    plugin = FakePlugin(
+        manifest=make_manifest(verification_scheme="signature"),
+        webhook=webhook,
+        normalizer=FakeNormalizer(),
+    )
+    gateway = _gateway(
+        plugin=plugin, raw_store=raw_store,
+        broker=FakeBroker(credential={"webhook_secret": SecretStr(secret)}),
+        connections=connections, registry=FakeRegistry({identity: plugin}),
+    )
+
+    result = await gateway.ingest(
+        identity, raw_body=body, headers=headers, signature=signature, tenant_id="tenant-1",
+    )
+    assert result["accepted"] is True
+    assert len(raw_store.records) == 1
+    stored_raw = raw_store.records[0]
+    assert (stored_raw.tenant_id, stored_raw.connection_id, stored_raw.account_id) == (
+        "tenant-1", "conn_1", "acc_1",
+    )
+
+    source = await SourceIdentityRegistry(IdentityResolutionRepository()).find_existing_source_identity(
+        "tenant-1", expected_namespace, external_id="7001" if provider == "shopify" else "7002",
+    )
+    assert source is not None
+    assert source.external_id in {"7001", "7002"}
+    assert source.status == "unresolved"
+    claims = await IdentityResolutionRepository().get_claims_for_source(source.id)
+    by_type = {claim["claim_type"]: claim for claim in claims}
+    assert by_type["email"]["normalized_value"] == hash_value(
+        "buyer@example.com", scope="email:tenant-1",
+    )
+    assert by_type["phone"]["normalized_value"] == hash_value(
+        "+14155550101", scope="phone:tenant-1",
+    )
+    assert all(claim["raw_value"] is None for claim in claims)
+    assert "buyer@example.com" not in repr(claims)
+    assert "+14155550101" not in repr(claims)
+    from services.identity.import_candidate_adapter import ImportIdentityCandidateAdapter
+
+    candidate = await ImportIdentityCandidateAdapter(IdentityResolutionRepository()).evaluate(
+        tenant_id="tenant-1", claims={"email": "buyer@example.com", "phone": "+14155550101"},
+    )
+    assert candidate.outcome == "candidate"
+    assert candidate.candidate_source_identity_ids == [source.id]
+
+    # A duplicate key with a conflicting payload is ignored by Bronze. The
+    # incoming data must not alter claims when it was not the persisted row.
+    conflicting_payload = json.loads(json.dumps(payload))
+    if provider == "shopify":
+        conflicting_payload["customer"]["email"] = "changed@example.com"
+    else:
+        conflicting_payload["billing"]["email"] = "changed@example.com"
+    conflicting_body = json.dumps(conflicting_payload).encode()
+    if provider == "shopify":
+        conflicting_signature = base64.b64encode(
+            hmac.new(secret.encode(), conflicting_body, hashlib.sha256).digest()
+        ).decode()
+    else:
+        conflicting_signature = "sha256=" + hmac.new(
+            secret.encode(), conflicting_body, hashlib.sha256,
+        ).hexdigest()
+    await gateway.ingest(
+        identity, raw_body=conflicting_body,
+        headers={"X-Shopify-Hmac-SHA256": conflicting_signature}
+        if provider == "shopify" else {"X-WC-Webhook-Signature": conflicting_signature},
+        signature=conflicting_signature, tenant_id="tenant-1",
+    )
+    replay_claims = await IdentityResolutionRepository().get_claims_for_source(source.id)
+    assert len(replay_claims) == 2
+    assert by_type["email"]["normalized_value"] == hash_value(
+        "buyer@example.com", scope="email:tenant-1",
+    )
+    assert "changed@example.com" not in repr(replay_claims)
+    assert len(raw_store.records) == 1
+
+    # An unaccepted/failed raw-store result is not evidence of durable receipt.
+    from services.identity.provider_evidence import capture_durable_provider_customer_evidence
+    from shared.integration_contracts.events import make_raw_record
+
+    unaccepted = make_raw_record(
+        provider_identity=identity, provider_record_id="unaccepted-order",
+        provider_record_type="order", payload=payload, tenant_id="tenant-1",
+    )
+    assert await capture_durable_provider_customer_evidence(
+        [unaccepted], [], tenant_id="tenant-1", connection_id="conn_1", account_id="acc_1",
+        lifecycle_type="provider_webhook_inbox", lifecycle_id="inbox-unaccepted",
+    ) == 0
+
+
 # ── Verification failure → auditable metadata-only denial ──────────────────
 
 

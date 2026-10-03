@@ -622,6 +622,19 @@ async def store_credential(connection_id: str, body: dict[str, Any], request: Re
     return APIResponse(data=_as_dict(stored)).to_dict()
 
 
+@router.delete("/{connection_id}/credentials")
+async def delete_credential(connection_id: str, request: Request):
+    """Hard-delete this connection's broker credential for explicit cleanup."""
+    tenant_id = _tenant_id(request, "write")
+    orchestrator = _get_orchestrator()
+    connection = await _load_connection(orchestrator, connection_id, tenant_id)
+    await _await_or_error(orchestrator.delete_credential(connection))
+    # A successful response means the ref is absent. The underlying backend's
+    # boolean distinguishes newly deleted from already absent; both are safe
+    # idempotent cleanup outcomes.
+    return APIResponse(data={"connection_id": connection_id, "credential_deleted": True}).to_dict()
+
+
 @router.post("/{connection_id}/test")
 async def test_connection(connection_id: str, request: Request):
     tenant_id = _tenant_id(request, "write")
