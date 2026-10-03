@@ -51,6 +51,18 @@ runtime-created JSONB store.
 
 The graph writer's graph mirror routes through the canonical **Graph Mutation Gateway** (`shared/graph/mutation_gateway.py`): merge edges are expressed as `identity_merged` mutations (other identity edges as `edge_created`, split revokes as `identity_split`), each carrying the decision's reason codes, source-event evidence, and confidence as ledger metadata. At `AETHER_MUTATION_GATEWAY_MODE=off` the gateway delegates straight to the GraphClient (pre-gateway behavior); in `shadow`/`enforce` modes every mirror write is also recorded in the append-only `graph_mutation_ledger`. Repo-backed identity edges remain the source of truth — mirror failures stay non-fatal.
 
+### Source identities and late binding
+
+`SourceIdentityRegistry` records external identifiers before they are resolved
+to canonical entities. Registration is tenant- and `source_namespace`-scoped:
+repeated IDs within one namespace are idempotent, while equal raw IDs from a
+CSV upload, connector, or SDK in different namespaces remain distinct source
+identities. Shared claims can still be compared by the resolver, which owns
+the eventual link or merge decision. This lets historical imports precede SDK
+installation without making a CSV row ID or provider ID canonical identity.
+SDK `identify` observations add evidence and are resolved by the backend; SDKs
+do not assign canonical entities.
+
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
 
 ```

@@ -429,12 +429,14 @@ async def _erase_tenant_scoped_rehearsal_data(tenant_id: str) -> dict[str, int]:
     the admin DELETE used by a short-lived rehearsal needs an immediate,
     idempotent path.  Keep its surface list explicit so a new rehearsal write
     cannot silently become an orphan: it must be added here (and covered by a
-    test) before the cleanup endpoint can report success.  Immutable billing
-    and security-audit evidence is retained by policy and is not included in
-    this operational-data erasure set.
+    test) before the cleanup endpoint can report success. Scenario proof rows
+    are immutable during their retention window but erased with their owning
+    tenant. Billing and security-audit evidence is retained by policy and is
+    not included in this operational-data erasure set.
     """
     from repositories.lake import BronzeRepository, GoldRepository, SilverRepository
     from repositories.repos import BaseRepository, ConsentRepository
+    from services.identity.scenario_evidence import IdentityScenarioEvidenceRepository
 
     stores = (
         ("consent_records", ConsentRepository()),
@@ -458,6 +460,12 @@ async def _erase_tenant_scoped_rehearsal_data(tenant_id: str) -> dict[str, int]:
             counts[name] = await repository.delete_by_entity("tenant_id", tenant_id)
         except Exception as exc:
             failures.append(f"{name}: {exc}")
+    try:
+        counts["identity_scenario_execution_evidence"] = (
+            await IdentityScenarioEvidenceRepository().delete_for_tenant(tenant_id)
+        )
+    except Exception as exc:
+        failures.append(f"identity_scenario_execution_evidence: {exc}")
     if failures:
         raise RuntimeError(
             "tenant-scoped rehearsal erasure failed before tenant deletion: "

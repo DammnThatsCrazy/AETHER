@@ -2143,6 +2143,8 @@ class IdentityContinuityConfig:
     conflict_detection_enabled: bool = _env_bool("IDENTITY_CONFLICT_DETECTION_ENABLED", False)
     split_enabled: bool = _env_bool("IDENTITY_SPLIT_ENABLED", False)
     manual_split_enabled: bool = _env_bool("IDENTITY_MANUAL_SPLIT_ENABLED", False)
+    # Reserved fail-closed flag. No automatic split-candidate generator is
+    # registered yet; manual split review remains a separate operator path.
     auto_split_candidates_enabled: bool = _env_bool("IDENTITY_AUTO_SPLIT_CANDIDATES_ENABLED", False)
     sdk_late_binding_enabled: bool = _env_bool("SDK_LATE_BINDING_ENABLED", False)
     anonymous_to_known_binding_enabled: bool = _env_bool("ANONYMOUS_TO_KNOWN_BINDING_ENABLED", False)

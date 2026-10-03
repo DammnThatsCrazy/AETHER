@@ -200,7 +200,9 @@ Aether.init({
 | `track` | `(event: string, properties?: Record<string, unknown>) => void` | Track a custom event with optional properties. |
 | `screenView` | `(screenName: string, properties?: Record<string, unknown>) => void` | Record a screen view event. |
 | `conversion` | `(event: string, value?: number, properties?: Record<string, unknown>) => void` | Track a conversion event with optional monetary value. |
-| `hydrateIdentity` | `(data: IdentityData) => void` | Merge anonymous identity with known user data. Accepts `userId`, wallet addresses across all supported VMs, and `traits`. |
+| `identify` | `(data: IdentityData) => void` | Submit a native queued identify observation. Native retains the current anonymous ID and uses the queued event ID as the retry idempotency key. Accepts `userId`, wallet addresses, and `traits`; client consent fields are not accepted as link authority. |
+| `alias` | `(previousId: string, userId: string) => Promise<void>` | Backward-compatible identify spelling. Requires `previousId` to match the current native anonymous ID, then submits through the native identify queue. This records evidence; it does not promise an automatic canonical merge. |
+| `hydrateIdentity` | `(data: IdentityData) => void` | Legacy alias for submitting an identify observation through the native SDK. Accepts `userId`, wallet addresses across supported VMs, and `traits`. |
 | `getIdentity` | `() => Promise<Identity>` | Return the current identity object asynchronously from the native layer. |
 | `reset` | `() => void` | Clear identity, session, and experiment data. Creates a fresh anonymous identity. |
 | `flush` | `() => void` | Send all queued events to the server immediately. |
@@ -282,13 +284,13 @@ aether.track('item_added', { sku: 'ABC-123' });
 
 ### `useIdentity()`
 
-Reactive hook that subscribes to identity changes via the native event emitter. Returns the current identity, a `hydrate` function, and a `reset` function.
+Reactive hook that subscribes to identity changes via the native event emitter. Returns the current identity plus `hydrate`, `identify`, `alias`, and `reset` functions.
 
 ```tsx
-const { identity, hydrate, reset } = useIdentity();
+const { identity, identify, alias, reset } = useIdentity();
 
 // identity.anonymousId -- always present
-// identity.userId      -- set after hydration
+// identity.userId      -- set after native identify
 // identity.traits      -- user traits dictionary
 ```
 
@@ -314,6 +316,20 @@ function ProfileScreen() {
   useScreenTracking('ProfileScreen');
   return <Profile />;
 }
+```
+
+### `useJourneyResumed()`
+
+Returns `null` until the native identity resolver binds a previously anonymous
+identity, then returns the resolved `{ anonymousId, userId }` tuple. Android
+and iOS emit this event after late identity resolution; it is separate from an
+application calling `resumeJourney()`.
+
+```tsx
+const resolved = useJourneyResumed();
+useEffect(() => {
+  if (resolved) refreshIdentityBoundViews(resolved.userId);
+}, [resolved]);
 ```
 
 ### `useAetherContext()`

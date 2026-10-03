@@ -228,6 +228,7 @@ class PullScheduler:
                 tenant_id=tenant_id,
                 connector_instance_id=connection_id,
                 provider=provider_identity,
+                provider_account_id=_connection_account_id(connection),
                 mode="incremental" if since else "backfill",
                 requested_window=since,
                 cursor_before=(prev_cursor or {}).get("cursor_value"),
@@ -287,17 +288,48 @@ class PullScheduler:
                     break
                 batch = self._batch_of(result)
                 records = list(batch.records or [])
+                account_id = _connection_account_id(connection)
+                # Adapter records are provider-shaped and intentionally do not
+                # own runtime tenancy. Bind the verified connection context
+                # before durable storage, dedupe, normalization, and identity
+                # evidence capture.
+                records = [record.model_copy(update={
+                    "tenant_id": tenant_id,
+                    "connection_id": connection_id,
+                    "account_id": account_id,
+                }) for record in records]
                 records_received += len(records)
 
                 # raw store → normalize → bridge (each best-effort, never
                 # breaks the sync — mirroring bronze_connectors.ingest).
                 try:
-                    await self._raw_store().ingest(records)
+                    raw_outcomes = await self._raw_store().ingest(records, tenant_id=tenant_id)
                 except Exception as exc:  # pragma: no cover - best-effort
+                    raw_outcomes = []
                     self._warn(
                         f"provider raw ingest failed tenant={tenant_id} "
                         f"provider={provider_identity}: {exc}"
                     )
+                if raw_outcomes and sync_run is not None:
+                    try:
+                        from services.identity.provider_evidence import (
+                            capture_durable_provider_customer_evidence,
+                        )
+
+                        await capture_durable_provider_customer_evidence(
+                            records,
+                            raw_outcomes,
+                            tenant_id=tenant_id,
+                            connection_id=connection_id,
+                            account_id=account_id,
+                            lifecycle_type="provider_sync_run",
+                            lifecycle_id=sync_run.sync_run_id,
+                        )
+                    except Exception as exc:  # evidence failure is observable, never candidate-visible
+                        self._warn(
+                            f"provider identity evidence capture failed tenant={tenant_id} "
+                            f"provider={provider_identity}: {type(exc).__name__}"
+                        )
                 events = await self._normalize_records(normalization, records)
                 if events:
                     try:
@@ -389,6 +421,27 @@ class PullScheduler:
             except Exception as exc:  # pragma: no cover - best-effort
                 self._warn(
                     f"provider sync-run close(completed) failed tenant={tenant_id}: {exc}"
+                )
+        if (
+            sync_run is not None
+            and completed is not None
+            and getattr(completed, "status", None) == "completed"
+        ):
+            try:
+                from services.identity.provider_evidence_anchors import (
+                    ProviderIdentityEvidenceAnchorRepository,
+                )
+
+                await ProviderIdentityEvidenceAnchorRepository().finish_lifecycle(
+                    tenant_id=tenant_id,
+                    lifecycle_type="provider_sync_run",
+                    lifecycle_id=sync_run.sync_run_id,
+                    status="completed",
+                )
+            except Exception as exc:
+                self._warn(
+                    f"provider evidence lifecycle completion failed tenant={tenant_id}: "
+                    f"{type(exc).__name__}"
                 )
         await self._record_connection_success(connection, last_sync_at=now_iso())
         await self.meter(
@@ -551,6 +604,23 @@ class PullScheduler:
                     f"provider sync-run close(failed) failed "
                     f"tenant={connection.tenant_id}: {exc}"
                 )
+            else:
+                try:
+                    from services.identity.provider_evidence_anchors import (
+                        ProviderIdentityEvidenceAnchorRepository,
+                    )
+
+                    await ProviderIdentityEvidenceAnchorRepository().finish_lifecycle(
+                        tenant_id=connection.tenant_id,
+                        lifecycle_type="provider_sync_run",
+                        lifecycle_id=sync_run.sync_run_id,
+                        status="failed",
+                    )
+                except Exception as exc:
+                    self._warn(
+                        f"provider evidence failure transition failed "
+                        f"tenant={connection.tenant_id}: {type(exc).__name__}"
+                    )
         await self._record_connection_error(
             connection, error_code=error_code, detail=detail,
         )

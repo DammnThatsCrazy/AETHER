@@ -35,6 +35,23 @@ commit stages every row to Bronze (`BronzeRepository("tenant_import")`, tagged b
 commit id) and to the graph (entity/identifier/resource vertices + relationship
 edges, each carrying `import_commit_id`).
 
+Mapped email and phone identifiers are additionally persisted as observed claims
+under tenant- and upload-scoped CSV source identities. Claims retain stable
+import/file/row provenance and stay unresolved until the identity resolver has
+independent person-level link authorization. The candidate adapter requires the
+claim's exact commit to be the import's current, completed commit and excludes
+rolled-back, failed, and in-progress commits. Tenant import approval alone does
+not authorize identity stitching. Email and phone claim values are stored as
+tenant/type-scoped HMAC digests only; their raw values are not persisted in
+identity-claim rows. Failure to persist this evidence fails the commit, and
+retry uses the same source namespace and row keys to avoid duplicates.
+
+An interrupted replay preserves its replacement `active_commit_id` and marks
+the session `FAILED`. Requeue resumes that replay under the same commit ID.
+The superseded commit is already marked rolled back, and candidate lookup keeps
+both the prior evidence and the incomplete replacement hidden until the resumed
+commit row is durable and the session returns to `COMPLETED`.
+
 If a staging rehearsal is being torn down after an import-related probe, do
 not use the import rollback path as a substitute for tenant deletion. The
 admin cleanup operation removes only graph projection vertices and edges owned

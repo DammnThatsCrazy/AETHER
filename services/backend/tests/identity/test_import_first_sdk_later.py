@@ -158,6 +158,117 @@ async def test_import_first_sdk_later_no_duplicate_profile(source_registry):
 
 
 @pytest.mark.asyncio
+async def test_source_identity_ids_are_deduplicated_only_inside_namespace(source_registry):
+    """Provider and import IDs can collide without representing the same identity."""
+    csv_identity = await source_registry.register_source_identity(
+        tenant_id=TENANT,
+        source_system_id="csv:contacts",
+        source_kind="csv",
+        source_namespace="csv:contacts:upload-1",
+        external_id="customer-42",
+    )
+    shopify_identity = await source_registry.register_source_identity(
+        tenant_id=TENANT,
+        source_system_id="shopify:store-1",
+        source_kind="connector",
+        source_namespace="shopify:store-1",
+        external_id="customer-42",
+    )
+
+    assert csv_identity.id != shopify_identity.id
+    assert csv_identity.source_namespace != shopify_identity.source_namespace
+
+    csv_retry = await source_registry.register_source_identity(
+        tenant_id=TENANT,
+        source_system_id="csv:contacts",
+        source_kind="csv",
+        source_namespace="csv:contacts:upload-1",
+        external_id="customer-42",
+    )
+    assert csv_retry.id == csv_identity.id
+
+
+@pytest.mark.asyncio
+async def test_import_sources_get_idempotent_isolated_provisional_profiles(source_registry):
+    """A shared claim records candidates but never merges imported profiles."""
+    email = "shared@example.com"
+    csv_identity = await _import_csv(
+        source_registry, TENANT, email, external_id="csv_customer_7"
+    )
+    shopify_identity = await _import_shopify(
+        source_registry, TENANT, email, shopify_id="shopify_customer_7"
+    )
+
+    csv_profile = await source_registry.ensure_provisional_profile(
+        tenant_id=TENANT, source_identity_id=csv_identity.id
+    )
+    shopify_profile = await source_registry.ensure_provisional_profile(
+        tenant_id=TENANT, source_identity_id=shopify_identity.id
+    )
+    csv_retry = await source_registry.ensure_provisional_profile(
+        tenant_id=TENANT, source_identity_id=csv_identity.id
+    )
+
+    assert csv_profile == csv_retry
+    assert csv_profile != shopify_profile
+    repo_source = await source_registry._repo.get_source_identity(csv_identity.id)
+    assert repo_source["canonical_entity_id"] == csv_profile
+    subject = await source_registry._repo.get_subject_by_canonical_entity_id(
+        TENANT, csv_profile
+    )
+    assert subject["metadata"]["identity_state"] == "provisional"
+    assert subject["metadata"]["source_identity_id"] == csv_identity.id
+
+
+@pytest.mark.asyncio
+async def test_csv_import_capture_creates_profile_per_entity_ref():
+    from services.imports.commit import _register_csv_identity_evidence
+    from services.identity.repository import IdentityResolutionRepository
+
+    records = [
+        {
+            "primitive": "identifier",
+            "row": 1,
+            "fields": {
+                "identifier_type": "email",
+                "value": "one@example.com",
+                "entity_ref": "customer-one",
+            },
+        },
+        {
+            "primitive": "identifier",
+            "row": 2,
+            "fields": {
+                "identifier_type": "email",
+                "value": "two@example.com",
+                "entity_ref": "customer-two",
+            },
+        },
+    ]
+    count = await _register_csv_identity_evidence(
+        TENANT, "import-profile-test", "commit-profile-test", "file-profile-test", records
+    )
+    assert count == 2
+    repo = IdentityResolutionRepository()
+    first = await repo.find_source_identity_by_identifier(
+        TENANT,
+        "external_id",
+        "customer-one",
+        source_namespace=f"{TENANT}:import-profile-test:file-profile-test",
+    )
+    second = await repo.find_source_identity_by_identifier(
+        TENANT,
+        "external_id",
+        "customer-two",
+        source_namespace=f"{TENANT}:import-profile-test:file-profile-test",
+    )
+    assert first["canonical_entity_id"] != second["canonical_entity_id"]
+    assert await repo.get_subject_by_canonical_entity_id(
+        TENANT, first["canonical_entity_id"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_import_first_sdk_later_restatement_queued(source_registry, projection_orchestrator):
     """Late binding should be explainable as a graph decision that queues restatement."""
     email = "jordan2@example.com"

@@ -22,6 +22,7 @@ _ALWAYS_REGISTERED = {
     "export.expire_sweep",
     "import.commit",
     "import.replay",
+    "identity.projection_restatement",
 }
 
 

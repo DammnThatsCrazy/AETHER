@@ -308,6 +308,160 @@ async def test_sync_success_advances_cursor_closes_run_and_meters():
 
 
 @pytest.mark.asyncio
+async def test_shopify_backfill_entrypoint_captures_hashed_unresolved_customer_evidence():
+    from services.comms.sync_runs import SyncRunRepository, SyncRunService
+    from services.identity.hashing import hash_value
+    from services.identity.import_candidate_adapter import ImportIdentityCandidateAdapter
+    from services.identity.repository import IdentityResolutionRepository
+    from services.identity.source_identity_registry import SourceIdentityRegistry
+    from services.identity.provider_evidence_anchors import ProviderIdentityEvidenceAnchorRepository
+
+    record = make_raw_record(
+        provider_identity=IDENTITY,
+        provider_record_id="order-771",
+        provider_record_type="order",
+        payload={
+            "id": "order-771",
+            "customer": {"id": 771, "email": "backfill@example.com", "phone": "+14155550771"},
+        },
+        acquisition_mode="poll",
+    )
+    raw_store = FakeRawStore()
+    sync_runs = SyncRunService()
+    scheduler = build_scheduler(
+        plugin=FakePlugin(
+            pull=FakePull([AdapterResult.ok(ReadBatch(records=[record]))]),
+            normalizer=FakeNormalizer(),
+        ),
+        raw_store=raw_store,
+        sync_runs=sync_runs,
+    )
+
+    await scheduler.run_sync(make_connection(selected_accounts=("shop-77",)))
+
+    assert raw_store.records[0].tenant_id == "tenant-1"
+    assert raw_store.records[0].connection_id == "conn_1"
+    assert raw_store.records[0].account_id == "shop-77"
+    source = await SourceIdentityRegistry(IdentityResolutionRepository()).find_existing_source_identity(
+        "tenant-1", "shopify:shop-77:conn_1", external_id="771",
+    )
+    assert source is not None and source.status == "unresolved"
+    assert source.canonical_entity_id
+    provisional_subject = await IdentityResolutionRepository().get_subject_by_canonical_entity_id(
+        "tenant-1", source.canonical_entity_id
+    )
+    assert provisional_subject["metadata"]["identity_state"] == "provisional"
+    assert provisional_subject["metadata"]["source_identity_id"] == source.id
+    claims = await IdentityResolutionRepository().get_claims_for_source(source.id)
+    by_type = {claim["claim_type"]: claim for claim in claims}
+    assert by_type["email"]["normalized_value"] == hash_value(
+        "backfill@example.com", scope="email:tenant-1",
+    )
+    assert by_type["phone"]["normalized_value"] == hash_value(
+        "+14155550771", scope="phone:tenant-1",
+    )
+    assert all(claim["raw_value"] is None for claim in claims)
+    assert all(claim["source_record_id"] == "order-771" for claim in claims)
+    candidate_adapter = ImportIdentityCandidateAdapter(IdentityResolutionRepository())
+    candidate = await candidate_adapter.evaluate(
+        tenant_id="tenant-1", claims={"email": "backfill@example.com"},
+    )
+    assert candidate.outcome == "candidate"
+    assert candidate.candidate_source_identity_ids == [source.id]
+    email_claim = by_type["email"]
+    assert email_claim["provider_raw_checksum"] == record.checksum
+    assert email_claim["provider_raw_schema_version"] == record.schema_version
+    # Candidate evaluation verifies that claim provenance still agrees with
+    # the durable lifecycle anchor; mismatched checksum/version fails closed.
+    await IdentityResolutionRepository().update_claim_provider_provenance(
+        "tenant-1", email_claim["id"], raw_checksum="mismatch",
+        raw_schema_version=record.schema_version,
+    )
+    tampered_candidate = await candidate_adapter.evaluate(
+        tenant_id="tenant-1", claims={"email": "backfill@example.com"},
+    )
+    assert tampered_candidate.outcome == "no_match"
+    await IdentityResolutionRepository().update_claim_provider_provenance(
+        "tenant-1", email_claim["id"], raw_checksum=record.checksum,
+        raw_schema_version=record.schema_version,
+    )
+    completed_runs = await SyncRunRepository().list_for_connector(
+        "tenant-1", "conn_1", limit=10,
+    )
+    assert len(completed_runs) == 1 and completed_runs[0]["status"] == "completed"
+
+    # A retry of the same raw row is a dedupe hit, so the existing completed
+    # anchor remains current and the source evidence stays idempotent.
+    replay_scheduler = build_scheduler(
+        plugin=FakePlugin(
+            pull=FakePull([AdapterResult.ok(ReadBatch(records=[record]))]),
+            normalizer=FakeNormalizer(),
+        ),
+        raw_store=raw_store,
+        sync_runs=SyncRunService(),
+    )
+    await replay_scheduler.run_sync(make_connection(selected_accounts=("shop-77",)))
+    replay_candidate = await candidate_adapter.evaluate(
+        tenant_id="tenant-1", claims={"email": "backfill@example.com"},
+    )
+    assert replay_candidate.outcome == "candidate"
+    assert len(await IdentityResolutionRepository().get_claims_for_source(source.id)) == 2
+
+    # Tenant scope is part of the claim hash and anchor lookup.
+    cross_tenant = await candidate_adapter.evaluate(
+        tenant_id="tenant-other", claims={"email": "backfill@example.com"},
+    )
+    assert cross_tenant.outcome == "no_match"
+
+    current_anchor = await ProviderIdentityEvidenceAnchorRepository().find_by_id(
+        ProviderIdentityEvidenceAnchorRepository._id("tenant-1", claims[0]["id"]),
+    )
+    assert current_anchor is not None
+    await SyncRunService().rollback_run(
+        tenant_id="tenant-1", sync_run_id=current_anchor["lifecycle_id"],
+    )
+    rolled_back = await candidate_adapter.evaluate(
+        tenant_id="tenant-1", claims={"email": "backfill@example.com"},
+    )
+    assert rolled_back.outcome == "no_match"
+
+
+@pytest.mark.asyncio
+async def test_failed_provider_sync_never_exposes_pending_identity_evidence():
+    from services.comms.sync_runs import SyncRunService
+    from services.identity.import_candidate_adapter import ImportIdentityCandidateAdapter
+    from services.identity.repository import IdentityResolutionRepository
+    from shared.integration_contracts.results import AdapterStatus
+
+    record = make_raw_record(
+        provider_identity=IDENTITY,
+        provider_record_id="order-fail-1",
+        provider_record_type="order",
+        payload={"id": "order-fail-1", "customer": {"id": 772, "email": "failed@example.com"}},
+        acquisition_mode="poll",
+    )
+    pull = FakePull([
+        AdapterResult.ok(ReadBatch(records=[record], next_cursor="next", has_more=True)),
+        AdapterResult(
+            success=False, status=AdapterStatus.PERMANENT_ERROR,
+            error_code="provider_test_failure", retryable=False,
+        ),
+    ])
+    scheduler = build_scheduler(
+        plugin=FakePlugin(pull=pull, normalizer=FakeNormalizer()),
+        raw_store=FakeRawStore(),
+        sync_runs=SyncRunService(),
+    )
+    with pytest.raises(ProviderPullFailed):
+        await scheduler.run_sync(make_connection())
+
+    decision = await ImportIdentityCandidateAdapter(IdentityResolutionRepository()).evaluate(
+        tenant_id="tenant-1", claims={"email": "failed@example.com"},
+    )
+    assert decision.outcome == "no_match"
+
+
+@pytest.mark.asyncio
 async def test_run_alias_is_d_ee_compatible():
     """Team D's ConnectionOrchestrator calls PullScheduler().run(connection=..., since=...)."""
     pull = FakePull([AdapterResult.ok(ReadBatch(

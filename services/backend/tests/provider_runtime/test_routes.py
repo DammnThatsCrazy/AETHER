@@ -100,6 +100,10 @@ class FakeOrchestrator:
         connection.credential_ref = "ref_1"
         return connection
 
+    async def delete_credential(self, connection):
+        connection.credential_ref = ""
+        return True
+
     async def test_connection(self, connection, *, plugin=None):
         if plugin is None:
             raise ProviderNotInstalled(
@@ -365,6 +369,35 @@ def test_store_credential_never_echoes_secrets(client, orchestrator):
     assert response.json()["data"]["credential_ref"] == "ref_1"
     # No secret material ever appears in the response.
     assert "sk_live_TOP_SECRET" not in response.text
+
+
+def test_delete_credential_clears_broker_reference(client, orchestrator):
+    await_create_connection(orchestrator)
+    stored = client.post(
+        "/v1/provider-connections/conn_test/credentials",
+        json={"type": "api_key", "api_key": "sk_live_TOP_SECRET"},
+    )
+    assert stored.status_code == 200
+    response = client.delete("/v1/provider-connections/conn_test/credentials")
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "connection_id": "conn_test",
+        "credential_deleted": True,
+    }
+    assert "sk_live_TOP_SECRET" not in response.text
+    assert orchestrator.connections._store["conn_test"].credential_ref == ""
+
+
+def test_delete_credential_enforces_connection_tenant_ownership(client, orchestrator):
+    await_create_connection(orchestrator)
+    client.post(
+        "/v1/provider-connections/conn_test/credentials",
+        json={"type": "api_key", "api_key": "sk_live_TOP_SECRET"},
+    )
+    cross = TestClient(_make_app(tenant_id="tenant_other"))
+    response = cross.delete("/v1/provider-connections/conn_test/credentials")
+    assert response.status_code == 404
+    assert orchestrator.connections._store["conn_test"].credential_ref == "ref_1"
 
 
 def test_store_credential_rejects_invalid_payload(client, orchestrator):

@@ -6,6 +6,14 @@
  * validates the mapping, and — only after that — a commit stages the rows into
  * Bronze → Silver → the graph with full lineage. Every step is durable,
  * tenant-scoped, and auditable: nothing is reported imported until it is.
+ * Mapped email and phone identifiers are also retained as source-scoped,
+ * observed identity claims with import-row provenance. They remain unresolved:
+ * they become candidate evidence only after their exact import commit is
+ * completed and remains current. Email and phone claim values are stored only
+ * as tenant/type-scoped HMAC digests, with no raw-value copy. Tenant import
+ * approval does not grant per-person identity-link consent. An interrupted
+ * replay retains its replacement commit ID and resumes under that ID; its
+ * claims stay unavailable to candidate lookup until the replay completes.
  *
  * The Python mirror lives at `services/imports/contracts.py`; the two const
  * arrays (`importStatuses`, `importPrimitives`, `importTransforms`,

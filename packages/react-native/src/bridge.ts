@@ -188,6 +188,32 @@ const Aether = {
     AetherNative?.hydrateIdentity(data);
   },
 
+  /**
+   * Identify through the native SDK's durable event queue. Native owns the
+   * anonymous ID and stamps the identify event's ID as its idempotency key;
+   * retries of that queued event therefore retain the same key. The JS layer
+   * never supplies consent as link authority.
+   */
+  identify(data: IdentityData): void {
+    AetherNative?.hydrateIdentity(data);
+  },
+
+  /**
+   * Backward-compatible alias spelling. The previous ID must be the current
+   * native anonymous ID; otherwise the call is rejected instead of rewriting
+   * native identity history. The actual identity observation still travels
+   * through the native queue and retains its anonymous context.
+   */
+  async alias(previousId: string, userId: string): Promise<void> {
+    if (!previousId.trim() || !userId.trim()) {
+      throw new Error('alias requires non-empty previousId and userId');
+    }
+    if (!AetherNative?.alias) {
+      throw new Error('Native alias support is unavailable; rebuild the React Native SDK');
+    }
+    await AetherNative.alias(previousId, userId);
+  },
+
   startJourney(nameOrType: string, properties?: Record<string, unknown>): void {
     AetherNative?.startJourney(nameOrType, properties ?? {});
   },
@@ -550,7 +576,17 @@ export function useIdentity() {
     Aether.getIdentity().then(setIdentity);
   }, []);
 
-  return { identity, hydrate, reset: Aether.reset };
+  const identify = useCallback((data: IdentityData) => {
+    Aether.identify(data);
+    Aether.getIdentity().then(setIdentity);
+  }, []);
+
+  const alias = useCallback(async (previousId: string, userId: string) => {
+    await Aether.alias(previousId, userId);
+    setIdentity(await Aether.getIdentity());
+  }, []);
+
+  return { identity, hydrate, identify, alias, reset: Aether.reset };
 }
 
 export function useExperiment(id: string, variants: string[]) {

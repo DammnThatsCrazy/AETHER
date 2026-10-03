@@ -14,13 +14,13 @@ source_hashes:
   "config/aws_price_book.yaml": "sha256:b449237c5d4b11622f0f35278b3f5a22a17b39b1cea74a53596b6af94ba2d3dc"
   "config/cost_exceptions.yaml": "sha256:029e003d3340de68c683a2f212edd3ceb13b6de01e5f6e70ddd44bdecda78ce2"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
-  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
+  "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "scripts/release/check_cost_model.py": "sha256:389df39c07cf6a679c6802a8926c1759f2c42e645cd53be681c70b52ca724941"
   "scripts/release/check_cost_policy.py": "sha256:2e547cdb3ce200a9f067b2a930a54ca622f29952fe4138693d942ddc1ec54e12"
   "scripts/release/check_cost_policy_terraform.py": "sha256:a5f13e165442fecaef55109efbffe2d73897f589235f254a47f8b3185c806594"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:760e99cc3192e70f508f75fd2e85d4a0825a895bc1f8e92f0f1f425c05d85ea6"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:3a86d14efdd35e170d6c389761f087a1f4739b39103cc81e202f38208f8ba52e"
 ---
 
 # Cost Optimization
@@ -42,9 +42,11 @@ A plan can satisfy the shape policy and still blow the budget (an oversized
 instance class inside an allowed resource type), so both gates are required.
 For the pilot staging lane, the plan checker also rejects ECS-service
 replacement or capacity-provider-strategy drift, autoscaling-target
-replacement or identity/role/maximum-capacity drift, workflow-managed tag
-drift, and Auth0 mutations outside the preserved Aether path before an apply
-is dispatched. It also requires one canonical owner for the retained staging
+replacement or identity/role drift, workflow-managed tag drift, and Auth0
+mutations outside the preserved Aether path before an apply is dispatched.
+Staging desired counts and both autoscaling bounds must match exactly one
+declared awake/asleep state; asleep bounds are `0..0`. It also requires one
+canonical owner for the retained staging
 Aurora cluster and restricts it to the 0–2 ACU / 300-second auto-pause change
 or a no-op; the provider's `0` pause sentinel is accepted only as a
 before-state representation, and existing non-scaling settings are preserved.
@@ -136,7 +138,8 @@ sums to 24.03.
 The release cost model prices ECS Fargate from task CPU, memory and
 `desired_count`. A capacity-provider strategy's `base` is reported for review
 but is not an additional running task or a second billable count; staging pilot
-keeps it at zero across wake/sleep and scales only desired tasks.
+keeps it at zero across wake/sleep. The asleep plan also clamps the autoscaling
+ceiling to zero so policy-driven task growth cannot invalidate that cost model.
 
 ### Usage-variable band
 

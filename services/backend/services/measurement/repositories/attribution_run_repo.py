@@ -187,6 +187,9 @@ class AttributionRunRepository:
 
         pool = await self._pool()
         if pool is None:
+            existing = _local_runs.get(run["attribution_run_id"])
+            if existing is not None:
+                return existing
             _local_runs[run["attribution_run_id"]] = run
             return run
 
@@ -208,7 +211,7 @@ class AttributionRunRepository:
                     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                     $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
                     $21,$22,$23,$24,$25,$26,$27,$28,$29,$30
-                )
+                ) ON CONFLICT (tenant_id, attribution_run_id) DO NOTHING
                 """,
                 _uuid_or_none(run.get("attribution_run_id")), run.get("tenant_id"),
                 _uuid_or_none(run.get("conversion_id")), run.get("conversion_version"),
@@ -231,7 +234,11 @@ class AttributionRunRepository:
                 _parse_ts(run.get("started_at")), _parse_ts(run.get("completed_at")),
                 _parse_ts(run.get("created_at")),
             )
-        return run
+            persisted = await conn.fetchrow(
+                "SELECT * FROM attribution_runs WHERE tenant_id=$1 AND attribution_run_id=$2",
+                run.get("tenant_id"), _uuid_or_none(run.get("attribution_run_id")),
+            )
+            return dict(persisted) if persisted else run
 
     async def update_run(
         self,
@@ -301,6 +308,8 @@ class AttributionRunRepository:
                 or str(run.get("conversion_id")) != str(conversion_id)
             ):
                 return None
+            if run.get("status") == "complete":
+                return run
 
             # All validation/preparation happens before mutating either store,
             # giving local mode the same observable all-or-nothing behavior.
@@ -319,7 +328,7 @@ class AttributionRunRepository:
             async with conn.transaction():
                 target = await conn.fetchrow(
                     """
-                    SELECT attribution_run_id FROM attribution_runs
+                    SELECT attribution_run_id, status FROM attribution_runs
                     WHERE tenant_id=$1 AND attribution_run_id=$2
                       AND conversion_id=$3
                     FOR UPDATE
@@ -328,6 +337,12 @@ class AttributionRunRepository:
                 )
                 if target is None:
                     return None
+                if target["status"] == "complete":
+                    completed = await conn.fetchrow(
+                        "SELECT * FROM attribution_runs WHERE tenant_id=$1 AND attribution_run_id=$2",
+                        tenant_id, _uuid_or_none(attribution_run_id),
+                    )
+                    return dict(completed) if completed else None
 
                 # Serialize against the current active run before switching.
                 await conn.fetch(

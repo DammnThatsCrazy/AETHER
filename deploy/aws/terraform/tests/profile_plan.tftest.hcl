@@ -542,7 +542,9 @@ run "staging_pilot_asleep_profile_plan" {
       module.ecs.backend_service_desired_count == 0,
       module.ecs.runtime_service_desired_counts["lean-worker"] == 0,
       module.ecs.backend_autoscaling_bounds.min == 0,
+      module.ecs.backend_autoscaling_bounds.max == 0,
       local.runtime_service_settings["lean-worker"].autoscaling.min_capacity == 0,
+      local.runtime_service_settings["lean-worker"].autoscaling.max_capacity == 0,
       local.api_capacity_provider.base_count == 0,
       local.runtime_service_settings["lean-worker"].capacity_provider.base_count == 0,
     ])
@@ -946,12 +948,10 @@ run "staging_asleep_profile_plan" {
     error_message = "An asleep staging plan still runs tasks."
   }
 
-  # The floor is what makes sleep stick. Application Auto Scaling clamps a
-  # service UP to min_capacity, so a floor left at 1 revives the task within a
-  # cooldown and the environment never sleeps — while a plan that only zeroed
-  # desired_count would look entirely correct. It matters most for the api
-  # service, whose desired_count is ignore_changes'd and therefore reaches an
-  # applied workspace through nothing but this envelope.
+  # The floor prevents Application Auto Scaling from forcing capacity back up;
+  # the ceiling prevents target-tracking policies from scaling out on residual
+  # queue/request metrics. Both must be zero or a plan that only zeroes
+  # desired_count can still leave staging able to wake itself.
   assert {
     condition = alltrue([
       module.ecs.backend_autoscaling_bounds.min == 0,
@@ -960,16 +960,15 @@ run "staging_asleep_profile_plan" {
     error_message = "An asleep staging plan leaves an autoscaling floor above zero, so Application Auto Scaling revives the service and staging never sleeps."
   }
 
-  # Only the floor collapses. max_capacity is a static bound on the shape, not
-  # a statement of current capacity, so it must survive sleeping untouched —
-  # otherwise waking becomes a two-attribute change and a sleeping plan no
-  # longer records the reviewed envelope. Both ceilings are the awake values.
+  # The asleep envelope is 0..0. The reviewed wake plan restores the matrix's
+  # declared min/max values, so target-tracking policies cannot revive this
+  # environment during the sleep interval.
   assert {
     condition = alltrue([
-      module.ecs.backend_autoscaling_bounds.max == 2,
-      local.runtime_service_settings["lean-worker"].autoscaling.max_capacity == 2,
+      module.ecs.backend_autoscaling_bounds.max == 0,
+      local.runtime_service_settings["lean-worker"].autoscaling.max_capacity == 0,
     ])
-    error_message = "An asleep staging plan also collapsed the autoscaling ceiling; only the floor should."
+    error_message = "An asleep staging plan must clamp both autoscaling bounds to zero."
   }
 
   # Sleeping must not change the topology, only its capacity: the same one
@@ -1630,15 +1629,16 @@ run "staging_sleep_plan_against_applied" {
   }
 
   # Sleeping is a capacity change, not a shape change: the applied topology is
-  # untouched and the reviewed ceiling still records the envelope to wake into.
+  # untouched, while the autoscaling target is pinned to zero until wake.
   assert {
     condition = alltrue([
       join(",", keys(local.runtime_service_settings)) == "lean-worker",
-      module.ecs.backend_autoscaling_bounds.max == 2,
+      module.ecs.backend_autoscaling_bounds.max == 0,
+      local.runtime_service_settings["lean-worker"].autoscaling.max_capacity == 0,
       join(",", module.ecs.task_subnet_keys) ==
       "public/us-east-1a,public/us-east-1b,public/us-east-1c",
     ])
-    error_message = "Sleeping staging changed its topology instead of only its capacity."
+    error_message = "Sleeping staging changed its topology or left a non-zero autoscaling ceiling."
   }
 }
 

@@ -50,6 +50,25 @@ class ResolutionEventConsumer:
         AetherEvent ``subject_id`` becomes reachable; when OFF (default) the
         legacy ``payload.user_id`` gate is unchanged.
         """
+        from config.settings import settings
+
+        identity_flags = settings.identity_continuity
+        if not identity_flags.resolution_enabled:
+            return
+        event_kind = event.payload.get("event_type") or event.payload.get("type")
+        if (
+            event_kind == "identify"
+            and (
+                not identity_flags.sdk_late_binding_enabled
+                or (
+                    event.payload.get("anonymous_id")
+                    and event.payload.get("user_id")
+                    and not identity_flags.anonymous_to_known_binding_enabled
+                )
+            )
+        ):
+            return
+
         tenant_id = event.tenant_id
         payload = event.payload
 

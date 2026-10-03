@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from repositories.repos import BaseRepository
 
 SyncMode = str  # "initial" | "backfill" | "incremental"
-SyncRunStatus = str  # "queued" | "running" | "completed" | "failed" | "partial"
+SyncRunStatus = str  # queued | running | completed | failed | partial | rolled_back
 
 
 def _now_iso() -> str:
@@ -168,6 +168,31 @@ class SyncRunService:
         return await self.repo.list_for_connector(
             tenant_id, connector_instance_id, limit=limit
         )
+
+    async def rollback_run(self, *, tenant_id: str, sync_run_id: str) -> Optional[SyncRun]:
+        """Invalidate completed provider identity evidence from one sync run.
+
+        The durable run status changes first. Candidate lookup independently
+        re-reads this ledger, so an anchor update failure still fails closed.
+        """
+        row = await self.repo.get(sync_run_id)
+        if row is None or row.get("tenant_id") != tenant_id:
+            return None
+        run = SyncRun.model_validate(row)
+        if run.status != "completed":
+            raise ValueError("only a completed sync run can be rolled back")
+        rolled_back = await self.complete_run(run, status="rolled_back")
+        from services.identity.provider_evidence_anchors import (
+            ProviderIdentityEvidenceAnchorRepository,
+        )
+
+        await ProviderIdentityEvidenceAnchorRepository().finish_lifecycle(
+            tenant_id=tenant_id,
+            lifecycle_type="provider_sync_run",
+            lifecycle_id=sync_run_id,
+            status="rolled_back",
+        )
+        return rolled_back
 
     async def list_for_tenant(
         self, tenant_id: str, *, limit: int = 100

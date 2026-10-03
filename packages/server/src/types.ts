@@ -81,6 +81,13 @@ export interface ServerEvent {
 export interface AetherServerConfig {
   writeKey: string;
   endpoint?: string;
+  /**
+   * Stable source anonymous identity for this emitting installation/service.
+   * Supply the same opaque value after process restarts when server events
+   * should continue the same source identity. If omitted, an ephemeral ID is
+   * generated for this SDK instance.
+   */
+  anonymousId?: string;
   /** Consent state for server-side events. */
   consent?: Partial<ServerConsentState>;
   /**

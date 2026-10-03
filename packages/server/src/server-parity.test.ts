@@ -16,7 +16,7 @@ function captureFetch(): { bodies: any[] } {
 }
 
 describe('server SDK — canonical event-type enforcement', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
   it('queues a canonical event type', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => { /* silence */ });
@@ -87,6 +87,35 @@ describe('server SDK — surface stamping', () => {
     expect(events[1].context.sequence.event).toBe(1);
   });
 
+  it('reuses a configured source anonymous identity across SDK restarts', async () => {
+    const { bodies } = captureFetch();
+    const first = new AetherServerSDK({
+      writeKey: 'sk', endpoint: 'https://api.test/v1/batch', anonymousId: 'service-install-opaque-1',
+    });
+    first.track({ type: 'identify', properties: { userId: 'customer-1' } });
+    await first.flush();
+    await first.shutdown();
+
+    const restarted = new AetherServerSDK({
+      writeKey: 'sk', endpoint: 'https://api.test/v1/batch', anonymousId: 'service-install-opaque-1',
+    });
+    restarted.track({ type: 'identify', properties: { userId: 'customer-1' } });
+    await restarted.flush();
+    await restarted.shutdown();
+
+    const [beforeRestart, afterRestart] = bodies.map((body) => body.batch[0]);
+    expect(beforeRestart.anonymousId).toBe('service-install-opaque-1');
+    expect(afterRestart.anonymousId).toBe(beforeRestart.anonymousId);
+    expect(beforeRestart.id).not.toBe(afterRestart.id);
+    expect(beforeRestart.properties.idempotency_key).toBe(beforeRestart.id);
+    expect(afterRestart.properties.idempotency_key).toBe(afterRestart.id);
+  });
+
+  it('rejects a blank configured source anonymous identity', () => {
+    expect(() => new AetherServerSDK({ writeKey: 'sk', anonymousId: '  ' }))
+      .toThrow('anonymousId must be a non-empty stable source identity');
+  });
+
   it('stamps schemaVersion from the shared contract and a real host OS identity', async () => {
     const { bodies } = captureFetch();
     const sdk = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
@@ -123,7 +152,7 @@ describe('server SDK — surface stamping', () => {
 });
 
 describe('server SDK — canonical envelope identity (id/sessionId/anonymousId)', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
   it('mints non-empty id/sessionId/anonymousId the ingestion API requires', async () => {
     const { bodies } = captureFetch();
@@ -158,6 +187,39 @@ describe('server SDK — canonical envelope identity (id/sessionId/anonymousId)'
     expect(e.id).toBe('evt-fixed-1');
     expect(e.sessionId).toBe('s-1');
     expect(e.anonymousId).toBe('a-1');
+  });
+
+  it('keeps identify idempotency_key stable when a failed batch is retried', async () => {
+    vi.useFakeTimers();
+    const baseTime = Date.now();
+    const bodies: any[] = [];
+    let attempts = 0;
+    (globalThis as unknown as { fetch: unknown }).fetch = vi.fn(async (_url: string, init?: any) => {
+      if (init?.body) bodies.push(JSON.parse(init.body));
+      attempts += 1;
+      if (attempts === 1) return { ok: false, status: 503, headers: { get: () => null } };
+      return {
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => ({ accepted: 1, duplicates: 0, rejected: 0 }),
+      };
+    });
+    const sdk = new AetherServerSDK({ writeKey: 'sk', endpoint: 'https://api.test/v1/batch' });
+    sdk.track({ type: 'identify', properties: { userId: 'user-1', traits: { displayName: 'User' } } });
+    await sdk.flush();
+    vi.setSystemTime(baseTime + 10_000);
+    await sdk.flush();
+    const first = bodies[0].batch[0];
+    const retry = bodies[1].batch[0];
+    expect(first.properties.idempotency_key).toBe(first.id);
+    expect(retry.properties.idempotency_key).toBe(first.properties.idempotency_key);
+
+    sdk.track({ type: 'identify', properties: { userId: 'user-2' } });
+    await sdk.flush();
+    const next = bodies[2].batch[0];
+    expect(next.properties.idempotency_key).toBe(next.id);
+    expect(next.properties.idempotency_key).not.toBe(first.properties.idempotency_key);
+    await sdk.shutdown();
+    vi.useRealTimers();
   });
 });
 

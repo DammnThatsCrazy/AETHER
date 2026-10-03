@@ -1016,6 +1016,157 @@ def check_service_cardinality(
             execution_mode=mode, addresses=addresses)
 
 
+def staging_autoscaling_capacity_violations(
+    plan: dict[str, Any], runtime: dict[str, Any],
+) -> list[str]:
+    """Require the staging ECS services and scaling bounds to match one state.
+
+    A desired count of zero is not an asleep state while an attached target
+    tracking policy can still scale the service back up. The canonical runtime
+    matrix therefore defines both the service desired count and the exact
+    min/max envelope for each declared lifecycle state.
+    """
+    profile_cfg = (runtime.get("profiles") or {}).get("staging")
+    if not isinstance(profile_cfg, dict):
+        return [f"{RUNTIME_YAML} has no staging profile mapping"]
+    service_cfg = profile_cfg.get("services")
+    if not isinstance(service_cfg, dict) or not service_cfg:
+        return [f"{RUNTIME_YAML} staging profile has no services mapping"]
+    states = (profile_cfg.get("staging_state") or {}).get("states")
+    if not isinstance(states, dict) or not states:
+        return [f"{RUNTIME_YAML} staging profile has no lifecycle states"]
+
+    environment = ((plan.get("variables") or {}).get("environment") or {}).get("value")
+    violations: list[str] = []
+    if environment != "staging":
+        violations.append(
+            f"staging plan must set var.environment='staging', observed {environment!r}"
+        )
+
+    planned = _walk_planned_values(
+        (plan.get("planned_values") or {}).get("root_module") or {}
+    )
+    clusters = [
+        row["values"].get("name") for row in planned.values()
+        if row["type"] == "aws_ecs_cluster"
+    ]
+    if len(clusters) != 1 or not isinstance(clusters[0], str) or not clusters[0]:
+        return violations + [
+            f"staging plan must contain exactly one named ECS cluster; observed {clusters!r}"
+        ]
+    cluster_name = clusters[0]
+
+    expected_service_names = {
+        f"{cluster_name}-{'backend' if key == 'api' else key}": key
+        for key in service_cfg
+    }
+    actual_services: dict[str, Any] = {}
+    for row in planned.values():
+        if row["type"] != "aws_ecs_service":
+            continue
+        values = row["values"]
+        name = values.get("name")
+        if not isinstance(name, str) or not name:
+            violations.append(f"planned ECS service {row['name']} has no known name")
+            continue
+        if name in actual_services:
+            violations.append(f"planned ECS service name {name!r} is duplicated")
+        actual_services[name] = values.get("desired_count")
+
+    if set(actual_services) != set(expected_service_names):
+        violations.append(
+            "planned staging ECS services do not match the runtime matrix: "
+            f"observed={sorted(actual_services)!r}, expected={sorted(expected_service_names)!r}"
+        )
+
+    expected_counts_by_state: dict[str, dict[str, Any]] = {}
+    for state_name, state_cfg in states.items():
+        multiplier = state_cfg.get("desired_count_multiplier") if isinstance(state_cfg, dict) else None
+        if not isinstance(multiplier, (int, float)) or isinstance(multiplier, bool):
+            violations.append(f"staging state {state_name!r} has no numeric desired-count multiplier")
+            continue
+        expected_counts_by_state[state_name] = {
+            name: int(service_cfg[key].get("desired_count", 0)) * multiplier
+            for name, key in expected_service_names.items()
+        }
+
+    matched_states = [
+        state_name for state_name, expected in expected_counts_by_state.items()
+        if actual_services == expected
+    ]
+    if len(matched_states) != 1:
+        violations.append(
+            "planned staging ECS desired counts must match exactly one declared lifecycle "
+            f"state; observed={actual_services!r}, candidates={expected_counts_by_state!r}"
+        )
+        return violations
+    state_name = matched_states[0]
+    multiplier = states[state_name]["desired_count_multiplier"]
+
+    expected_bounds: dict[str, tuple[Any, Any]] = {}
+    for name, key in expected_service_names.items():
+        scaling = service_cfg[key].get("autoscaling")
+        if not isinstance(scaling, dict) or "min_capacity" not in scaling or "max_capacity" not in scaling:
+            violations.append(f"runtime service {key!r} has no complete autoscaling bounds")
+            continue
+        expected_bounds[f"service/{cluster_name}/{name}"] = (
+            scaling["min_capacity"] * multiplier,
+            scaling["max_capacity"] * multiplier,
+        )
+
+    actual_targets: dict[str, tuple[Any, Any]] = {}
+    for row in planned.values():
+        if row["type"] != "aws_appautoscaling_target":
+            continue
+        values = row["values"]
+        if (values.get("service_namespace") != "ecs"
+                or values.get("scalable_dimension") != "ecs:service:DesiredCount"):
+            continue
+        resource_id = values.get("resource_id")
+        if not isinstance(resource_id, str) or not resource_id:
+            violations.append(f"planned ECS autoscaling target {row['name']} has no known resource_id")
+            continue
+        if resource_id in actual_targets:
+            violations.append(f"planned ECS autoscaling target {resource_id!r} is duplicated")
+        actual_targets[resource_id] = (
+            values.get("min_capacity"), values.get("max_capacity"),
+        )
+
+    if set(actual_targets) != set(expected_bounds):
+        violations.append(
+            "planned staging ECS autoscaling targets do not match the runtime services: "
+            f"observed={sorted(actual_targets)!r}, expected={sorted(expected_bounds)!r}"
+        )
+    for target, expected in expected_bounds.items():
+        if target not in actual_targets:
+            continue
+        observed = actual_targets[target]
+        if observed != expected:
+            violations.append(
+                f"staging state {state_name!r} requires autoscaling bounds "
+                f"{expected!r} on {target}; observed {observed!r}"
+            )
+    return violations
+
+
+def check_staging_autoscaling_capacity_state(
+    r: Reporter, results: list[dict[str, Any]], profile: str,
+    runtime: dict[str, Any], plan: dict[str, Any],
+) -> None:
+    """Record the state-aware desired-count and hard autoscaling-bound check."""
+    if profile != "staging":
+        return
+    violations = staging_autoscaling_capacity_violations(plan, runtime)
+    if violations:
+        message = "staging autoscaling capacity state: " + "; ".join(violations)
+        r.fail(message)
+        _record(results, "staging.autoscaling_capacity_state", False, message,
+                findings=violations)
+    else:
+        _record(results, "staging.autoscaling_capacity_state", True,
+                "staging ECS desired counts and autoscaling bounds match one declared state")
+
+
 def check_network_egress(
     r: Reporter, results: list[dict[str, Any]], profile: str,
     contracts: dict[str, Any], plan: dict[str, Any],
@@ -1678,7 +1829,8 @@ def check_staging_legacy_aurora_safety(
 def pilot_plan_safety_violations(plan: dict[str, Any]) -> dict[str, list[str]]:
     """Return fail-closed pilot findings before any staging apply is dispatched.
 
-    Pilot wake/sleep may change ECS desired counts and autoscaling floors, but
+    Pilot wake/sleep may change ECS desired counts and state-derived scaling
+    bounds, but
     it must not replace services or scaling targets, strip workflow-managed
     ownership tags, or delete/mutate Auth0 surfaces outside Aether's required
     path. The only Auth0 state exceptions are removed-block migrations for the
@@ -1720,7 +1872,7 @@ def pilot_plan_safety_violations(plan: dict[str, Any]) -> dict[str, list[str]]:
                 changed_shape = [
                     attribute for attribute in (
                         "resource_id", "scalable_dimension", "service_namespace",
-                        "role_arn", "max_capacity",
+                        "role_arn",
                     )
                     if before.get(attribute) != after.get(attribute)
                 ]
@@ -1774,7 +1926,7 @@ def check_pilot_staging_plan_safety(
         "pilot.autoscaling_target_replacement":
             "pilot lifecycle plan must preserve existing Application Auto Scaling target identity",
         "pilot.autoscaling_target_shape_drift":
-            "pilot lifecycle plan must preserve autoscaling target identity, role, and maximum capacity",
+            "pilot lifecycle plan must preserve autoscaling target identity and role; state-derived bounds are checked separately",
         "pilot.autoscaling_tag_drift":
             "pilot lifecycle plan must preserve workflow-managed Application Auto Scaling ownership tags",
         "pilot.auth0_scope":
@@ -1902,6 +2054,7 @@ def check(argv: list[str] | None = None) -> int:
     check_required(r, results, policy, contracts, rule_summary)
     check_alarm_names(r, results, policy, contracts, resources)
     check_service_cardinality(r, results, profile, runtime, resources)
+    check_staging_autoscaling_capacity_state(r, results, profile, runtime, plan)
     check_network_egress(r, results, profile, contracts, plan, resources)
     check_static_frontends(r, results, profile, runtime, contracts, summary)
     check_lean_exclusions(r, results, profile, profile_cfg, policy, summary)

@@ -73,6 +73,69 @@ allowed by consent and are support signals, not sole proof. Cross-device linking
 always tenant-scoped and requires valid consent plus stronger identity evidence when the
 link is sensitive.
 
+### SDK identify endpoint contract
+
+`POST /sdk/identify` records the caller's `user_id` and supplied traits as
+source identity evidence, then invokes the canonical resolver using the
+authenticated tenant, anonymous ID, and email/phone traits. The SDK's `user_id`
+is not passed as resolver proof and cannot authorize a merge. The endpoint
+does not treat `consent_state` from the request as an authoritative grant; until
+server-side consent is loaded and validated, sensitive email/phone linking is
+resolved without a consent snapshot and must fail closed under resolver policy.
+
+The response's `identified` flag means the identify request was accepted for
+processing; `resolution_outcome` carries the identity decision. It includes
+`canonical_entity_id` only for a `create`, `link`, or `merge` decision with a
+non-empty canonical ID and successful source-identity/claim registration.
+Candidate, blocked, rejected, pending, and failed outcomes carry no canonical
+ID. `reason_codes` carries the resolver's policy reasons without exposing
+candidate canonical IDs. `confidence` is the resolver's evidence-weighted
+identity match score; it is not a calibrated probability.
+`requires_restatement` remains false because this endpoint has no durable
+acknowledgement that a projection restatement was accepted.
+`resolution_event_publish_succeeded` reports only whether the producer's
+publish call returned; it is not a durable delivery receipt. A publish failure
+does not undo the identity decision or fail the identify request.
+
+The endpoint emits `IDENTITY_RESOLVED` only when it has a canonical ID; other
+outcomes emit `RESOLUTION_EVALUATED`. These events omit user IDs, anonymous IDs,
+and email/phone traits; they refer to the SDK identity through its backend
+source identity record. Direct calls to `POST /sdk/identify` require a
+caller-supplied `idempotency_key`, scoped to the authenticated tenant and bound
+to a fingerprint of the complete request. Identical completed retries replay
+the stored outcome; concurrent retries return `in_progress`; reuse with changed
+payload returns HTTP 409. Claims older than 15 minutes without an update report
+`stale` and require operator reconciliation. Claims are not automatically
+replayed or cleared. Resolver writes, restatement enqueue, response persistence,
+and broker publication are not in one transaction/outbox, so this prevents
+duplicate execution for the same key but is not an exactly-once guarantee.
+
+The SDK Web, Server, iOS, and Android hydration methods emit an `identify` event
+through `POST /v1/batch`, not the direct endpoint. The event's
+`properties.idempotency_key` matches its top-level event `id`, so transport
+retries and durable queue replay retain the same key; a new hydration event
+gets a new key. React Native delegates to native iOS/Android. Server SDK callers
+can emit the same event with `track({ type: 'identify', ... })`. This event
+property does not substitute for the required request-body key on direct
+`POST /sdk/identify` calls.
+
+For V1 `/v1/batch`, the server uses tenant + top-level event ID + schema as
+the idempotency key for canonical identify resolution. Redis `SET NX` bounds
+that guard to 24 hours, and identify events fail closed if the claim store is
+unavailable. Resolution starts only after the claim succeeds and batch publish
+returns successfully. V1 has no durable resolver work receipt, so a crash after
+publish but before task scheduling, or a resolver error, can leave accepted
+ingestion without confirmed canonical resolution. V2 uses the durable unique
+tenant/event/schema key and transactional outbox, whose delivery is at-least-once.
+SDK event keys therefore preserve retries, but do not claim exactly-once
+resolution or durable resolver retry.
+
+Before canonical resolution, the direct endpoint evaluates imported identity
+candidates. Candidate or blocked evidence returns that outcome without running
+the resolver create path, preventing a duplicate canonical profile while the
+import evidence requires safer resolution. Source identity and claim
+registration remain distinct from canonical resolution.
+
 ## Observation-Only Constraint
 
 AETHER observes. AETHER does not execute.

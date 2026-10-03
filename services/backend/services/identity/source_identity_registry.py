@@ -22,6 +22,7 @@ from shared.common.common import utc_now
 from shared.logger.logger import get_logger
 
 from .claim_normalizer import normalize_email, normalize_phone, normalize_provider_id
+from .hashing import hash_value
 from .models import (
     ConfidenceBand,
     IdentityClaimRecord,
@@ -71,6 +72,8 @@ class SourceIdentityRegistry:
         existing = await self._find_existing(
             tenant_id,
             source_system_id,
+            source_namespace=source_namespace,
+            source_record_id=source_record_id,
             external_id=external_id,
             anonymous_id=anonymous_id,
             user_id=user_id,
@@ -119,6 +122,7 @@ class SourceIdentityRegistry:
             account_id=account_id,
             agent_id=agent_id,
             runtime_id=runtime_id,
+            source_record_id=source_record_id,
             status="unresolved",
             first_seen_at=now,
             last_seen_at=now,
@@ -127,11 +131,24 @@ class SourceIdentityRegistry:
         )
         await self._repo.create_source_identity(record)
         # Repo generates its own id (in-memory path ignores record.id); fetch stored row
-        stored = await self._repo.find_source_identity_by_identifier(tenant_id, "external_id", external_id) if external_id else None
+        stored = await self._repo.find_source_identity_by_identifier(
+            tenant_id, "external_id", external_id, source_namespace=source_namespace
+        ) if external_id else None
         if not stored and anonymous_id:
-            stored = await self._repo.find_source_identity_by_identifier(tenant_id, "anonymous_id", anonymous_id)
+            stored = await self._repo.find_source_identity_by_identifier(
+                tenant_id, "anonymous_id", anonymous_id, source_namespace=source_namespace
+            )
         if not stored and user_id:
-            stored = await self._repo.find_source_identity_by_identifier(tenant_id, "user_id", user_id)
+            stored = await self._repo.find_source_identity_by_identifier(
+                tenant_id, "user_id", user_id, source_namespace=source_namespace
+            )
+        if not stored and source_record_id:
+            stored = await self._repo.find_source_identity_by_identifier(
+                tenant_id,
+                "source_record_id",
+                source_record_id,
+                source_namespace=source_namespace,
+            )
         if stored:
             # Return the canonical stored record so id matches repo's id
             record = self._dict_to_record(stored)
@@ -145,10 +162,49 @@ class SourceIdentityRegistry:
         )
         return record
 
+    async def ensure_provisional_profile(
+        self, *, tenant_id: str, source_identity_id: str
+    ) -> str:
+        """Attach imported source evidence to its own provisional profile.
+
+        This is intentionally source-local. It does not inspect shared email or
+        phone claims, create aliases, or merge profiles. Only committed import
+        evidence callers and lifecycle-captured provider callers should invoke
+        it; SDK observations use the canonical resolver path instead.
+        """
+        row = await self._repo.get_source_identity(source_identity_id)
+        if not row or row.get("tenant_id") != tenant_id:
+            raise ValueError("source identity is unavailable in this tenant")
+        if row.get("source_kind") not in {"csv", "connector"}:
+            raise ValueError("only imported source identities may be provisionalized")
+        if row.get("status") not in {"unresolved", "provisional"}:
+            raise ValueError("source identity is not eligible for provisionalization")
+
+        canonical_entity_id = row.get("canonical_entity_id")
+        if canonical_entity_id:
+            existing_subject = await self._repo.get_subject_by_canonical_entity_id(
+                tenant_id, str(canonical_entity_id)
+            )
+            if not existing_subject:
+                raise ValueError("source identity points to a missing profile")
+            return str(canonical_entity_id)
+
+        subject = await self._repo.ensure_provisional_source_subject(
+            tenant_id=tenant_id,
+            source_identity_id=source_identity_id,
+            source_kind=str(row.get("source_kind") or ""),
+            source_namespace=str(row.get("source_namespace") or ""),
+        )
+        record = self._dict_to_record(row)
+        record.canonical_entity_id = str(subject["canonical_entity_id"])
+        await self._repo.update_source_identity(record)
+        return record.canonical_entity_id
+
     async def _find_existing(
         self,
         tenant_id: str,
         source_system_id: str,
+        source_namespace: Optional[str] = None,
         external_id: Optional[str] = None,
         anonymous_id: Optional[str] = None,
         user_id: Optional[str] = None,
@@ -158,6 +214,7 @@ class SourceIdentityRegistry:
         account_id: Optional[str] = None,
         agent_id: Optional[str] = None,
         runtime_id: Optional[str] = None,
+        source_record_id: Optional[str] = None,
     ) -> Optional[SourceIdentityRecord]:
         """Find an existing source identity by any matching identifier."""
         # Check by each identifier type — prefer user_id/auth-id over anonymous_id
@@ -172,11 +229,15 @@ class SourceIdentityRegistry:
             ("account_id", account_id),
             ("agent_id", agent_id),
             ("runtime_id", runtime_id),
+            ("source_record_id", source_record_id),
         ]:
             if not identifier_value:
                 continue
             result = await self._repo.find_source_identity_by_identifier(
-                tenant_id, identifier_type, identifier_value
+                tenant_id,
+                identifier_type,
+                identifier_value,
+                source_namespace=source_namespace,
             )
             if result:
                 return self._dict_to_record(result)
@@ -200,6 +261,7 @@ class SourceIdentityRegistry:
             account_id=d.get("account_id"),
             agent_id=d.get("agent_id"),
             runtime_id=d.get("runtime_id"),
+            source_record_id=d.get("source_record_id"),
             canonical_entity_id=d.get("canonical_entity_id"),
             status=d.get("status", "unresolved"),
             first_seen_at=d.get("first_seen_at", ""),
@@ -220,6 +282,10 @@ class SourceIdentityRegistry:
         expires_at: Optional[str] = None,
         pii_classification: str = "none",
         idempotency_key: Optional[str] = None,
+        source_record_id: Optional[str] = None,
+        import_id: Optional[str] = None,
+        import_commit_id: Optional[str] = None,
+        hash_sensitive_value: bool = False,
     ) -> IdentityClaimRecord:
         """Normalize and store an identity claim.
 
@@ -228,40 +294,91 @@ class SourceIdentityRegistry:
         - phone: E.164 format
         - provider IDs: preserve as-is but normalize whitespace
         """
-        normalized_value = self._normalize_claim_value(claim_type, raw_value)
+        normalized_claim_value = self._normalize_claim_value(claim_type, raw_value)
+        if hash_sensitive_value and claim_type in {"email", "phone"}:
+            normalized_value = hash_value(
+                normalized_claim_value,
+                scope=f"{claim_type}:{tenant_id}",
+            )
+        else:
+            normalized_value = normalized_claim_value
+        if not normalized_value:
+            raise ValueError("identity claim value is invalid")
+        stored_raw_value = (
+            None
+            if hash_sensitive_value and claim_type in {"email", "phone"}
+            else raw_value
+        )
+
+        source_identity = await self._repo.get_source_identity(source_identity_id)
+        if (
+            source_identity is None
+            or source_identity.get("tenant_id") != tenant_id
+        ):
+            raise ValueError("source identity is unavailable in this tenant")
+        source_suppressed = source_identity.get("status") == "suppressed"
 
         # Check for duplicate claim (same source_identity + claim_type + normalized_value)
         existing = await self._repo.find_claim(
-            tenant_id, source_identity_id, claim_type, normalized_value
+            tenant_id, source_identity_id, claim_type, normalized_value,
+            source_record_id=source_record_id,
         )
         if existing and existing.get("status") == "active":
-            return existing
+            if import_id is not None or import_commit_id is not None:
+                existing_record = self._dict_to_claim_record(existing)
+                existing_record.import_id = import_id or existing_record.import_id
+                existing_record.import_commit_id = (
+                    import_commit_id or existing_record.import_commit_id
+                )
+                existing_record.updated_at = utc_now()
+                await self._repo.update_claim(existing_record)
+            return self._dict_to_claim_record(existing)
 
         if existing:
-            # Reactivate suppressed/expired claim
+            # Expired evidence may be renewed by a fresh import. Suppression
+            # is a durable non-resurrection boundary: neither a replay nor a
+            # claim refresh may reactivate the claim or its source identity.
+            if existing.get("status") == "suppressed" or source_suppressed:
+                return self._dict_to_claim_record(existing)
             existing["status"] = "active"
             existing["verification_status"] = verification_status
             existing["confidence_hint"] = confidence_hint
             existing["expires_at"] = expires_at
+            if import_id is not None:
+                existing["import_id"] = import_id
+            if import_commit_id is not None:
+                existing["import_commit_id"] = import_commit_id
             existing["updated_at"] = utc_now().isoformat()
             await self._repo.update_claim(self._dict_to_record(existing))
             return self._dict_to_record(existing)
+
+        if source_suppressed:
+            await self._persist_identifier_suppression(
+                tenant_id=tenant_id,
+                claim_type=claim_type,
+                normalized_value=normalized_claim_value,
+                digest_is_hashed=False,
+                reason="source_identity_suppressed",
+            )
 
         now = utc_now()
         record = IdentityClaimRecord(
             id=str(uuid.uuid4()),
             tenant_id=tenant_id,
             source_identity_id=source_identity_id,
+            source_record_id=source_record_id,
+            import_id=import_id,
+            import_commit_id=import_commit_id,
             claim_type=claim_type,
             normalized_value=normalized_value,
-            raw_value=raw_value,
+            raw_value=stored_raw_value,
             verification_status=verification_status,
             confidence_hint=confidence_hint,
             occurred_at=occurred_at,
             ingested_at=now,
             expires_at=expires_at,
             pii_classification=self._classify_pii(claim_type, normalized_value),
-            status="active",
+            status="suppressed" if source_suppressed else "active",
             created_at=now,
         )
         await self._repo.create_claim(record)
@@ -291,6 +408,31 @@ class SourceIdentityRegistry:
         else:
             return raw_value.strip()
 
+    async def _persist_identifier_suppression(
+        self,
+        *,
+        tenant_id: str,
+        claim_type: str,
+        normalized_value: str,
+        digest_is_hashed: bool,
+        reason: str,
+    ) -> None:
+        signal_type = {"email": "email_hash", "phone": "phone_hash"}.get(claim_type)
+        if not signal_type or not normalized_value:
+            return
+        identifier_hash = (
+            normalized_value
+            if digest_is_hashed
+            else hash_value(normalized_value, scope=f"{claim_type}:{tenant_id}")
+        )
+        await self._repo.create_suppression_rule(
+            tenant_id=tenant_id,
+            identifier_hash=identifier_hash,
+            identifier_type=signal_type,
+            reason=reason,
+            created_by="source_identity_suppression",
+        )
+
     def _classify_pii(self, claim_type: str, normalized_value: str) -> str:
         """Classify PII level for a claim."""
         sensitive_types = {"email", "phone", "wallet_address", "auth_subject"}
@@ -307,10 +449,13 @@ class SourceIdentityRegistry:
     async def find_existing_source_identity(
         self,
         tenant_id: str,
+        source_namespace: Optional[str] = None,
         **identifiers: Optional[str],
     ) -> Optional[SourceIdentityRecord]:
-        """Public lookup by any identifier."""
-        return await self._find_existing(tenant_id, "", **identifiers)
+        """Public lookup by identifier, optionally within a source namespace."""
+        return await self._find_existing(
+            tenant_id, "", source_namespace=source_namespace, **identifiers
+        )
 
     async def get_claims_for_source_identity(
         self, source_identity_id: str
@@ -325,6 +470,9 @@ class SourceIdentityRegistry:
             id=d.get("id", ""),
             tenant_id=d.get("tenant_id", ""),
             source_identity_id=d.get("source_identity_id", ""),
+            source_record_id=d.get("source_record_id"),
+            import_id=d.get("import_id"),
+            import_commit_id=d.get("import_commit_id"),
             claim_type=d.get("claim_type", ""),
             normalized_value=d.get("normalized_value", ""),
             raw_value=d.get("raw_value"),
@@ -336,12 +484,19 @@ class SourceIdentityRegistry:
             pii_classification=d.get("pii_classification", "none"),
             status=d.get("status", "active"),
             created_at=d.get("created_at", ""),
+            updated_at=d.get("updated_at", d.get("created_at", "")),
         )
 
     async def mark_suppressed(
         self, source_identity_id: str, reason: str = "manual"
     ) -> None:
-        """Mark a source identity and its claims as suppressed."""
+        """Suppress a source identity, claims, and their linkable identifiers.
+
+        A source/claim tombstone alone is insufficient: later live SDK evidence
+        can arrive without consulting the source registry. Persist tenant-scoped
+        suppression rules for email and phone digests so the resolver also
+        refuses to recreate aliases from those identifiers.
+        """
         now = utc_now().isoformat()
         identity = await self._repo.get_source_identity(source_identity_id)
         if identity:
@@ -355,6 +510,22 @@ class SourceIdentityRegistry:
         # Suppress all active claims
         claims = await self._repo.get_claims_for_source(source_identity_id)
         for claim_dict in claims:
+            claim_type = str(claim_dict.get("claim_type") or "")
+            normalized_value = str(claim_dict.get("normalized_value") or "")
+            if identity and normalized_value:
+                raw_value_retained = claim_dict.get("raw_value") is not None
+                digest_is_hashed = (
+                    not raw_value_retained
+                    and len(normalized_value) == 64
+                    and all(char in "0123456789abcdef" for char in normalized_value.lower())
+                )
+                await self._persist_identifier_suppression(
+                    tenant_id=identity["tenant_id"],
+                    claim_type=claim_type,
+                    normalized_value=normalized_value,
+                    digest_is_hashed=digest_is_hashed,
+                    reason=reason,
+                )
             if claim_dict.get("status") == "active":
                 claim_dict["status"] = "suppressed"
                 claim_dict["updated_at"] = now

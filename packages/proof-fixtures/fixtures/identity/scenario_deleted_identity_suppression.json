@@ -2,13 +2,21 @@
   "_fixture_version": 1,
   "scenario": "Deleted / suppressed identity suppression",
   "blueprint_ref": "\u00a78.3 DELETED_SUPPRESSED_IDENTITY, \u00a715, \u00a741",
-  "description": "Suppressed email identifier blocks verified merge; deleted candidate emits DELETED_SUPPRESSED_IDENTITY veto; source_identity mark_suppressed propagates to claims.",
+  "description": "A suppressed imported source and its claims remain suppressed across source-registration and claim-ingestion retries; late SDK observations cannot bind to or resurrect the deleted profile or restore its revoked identifier alias.",
   "tenant_id": "tenant_deleted_suppression",
   "email": "suppress@example.com",
+  "steps": [
+    {"order": 1, "action": "register_import_source_and_capture_claim"},
+    {"order": 2, "action": "suppress_source_and_claims"},
+    {"order": 3, "action": "retry_source_registration_and_claim_capture"},
+    {"order": 4, "action": "evaluate_sdk_identifier_after_deletion"}
+  ],
   "expected": {
-    "suppression_blocks_merge": true,
-    "deleted_veto": "deleted_suppressed_identity",
-    "claims_suppressed": true
+    "source_stays_suppressed": true,
+    "claims_stay_suppressed": true,
+    "candidate_lookup_outcome": "no_match",
+    "sdk_cannot_bind_deleted_profile": true,
+    "suppression_blocks_alias_resurrection": true
   },
   "invariant": "deleted_suppressed_blocks_resolution"
 }

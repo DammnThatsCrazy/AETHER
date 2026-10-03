@@ -2,7 +2,7 @@
   "_fixture_version": 1,
   "scenario": "A \u2014 CSV+Shopify import then SDK late binding",
   "blueprint_ref": "\u00a77.2, \u00a714.3, \u00a718.3",
-  "description": "Two pre-existing source identities (CSV row + Shopify customer) share email jordan@example.com. Later SDK heartbeat+identify with same email must resolve to existing canonical without duplicating profile, journey restated, Profile 360 explains merge.",
+  "description": "A CSV row and a Shopify customer import before SDK installation and carry the same observed email. The SDK submits an identify only after a durable server consent receipt. Because the independent imports have not proved they belong to one person, the runtime must preserve their separate provisional profiles and return an ambiguous candidate for tenant review without creating an SDK profile or restating projections.",
   "tenant_id": "tenant_import_first_sdk_later",
   "steps": [
     {
@@ -31,6 +31,14 @@
     },
     {
       "order": 5,
+      "action": "record_server_consent_receipt",
+      "anonymous_id": "anon_001",
+      "purpose": "analytics",
+      "scope": "identity",
+      "state": "granted"
+    },
+    {
+      "order": 6,
       "action": "sdk_identify",
       "anonymous_id": "anon_001",
       "user_id": "app_user_99",
@@ -40,14 +48,13 @@
     }
   ],
   "expected": {
-    "duplicate_profiles": 0,
-    "resolved_canonical": "person_abc123",
-    "confidence": 0.98,
-    "decision": "auto_merge",
-    "restated_projections": [
-      "profile_360",
-      "journey"
-    ]
+    "imported_provisional_profiles": 2,
+    "sdk_created_profiles": 0,
+    "automatic_link": false,
+    "resolution_outcome": "blocked",
+    "reason_codes": ["ambiguous_import_identity_claim"],
+    "review_required": true,
+    "restated_projections": []
   },
-  "invariant": "no_duplicate_profile_on_late_binding"
+  "invariant": "unverified_shared_claims_never_merge_imported_profiles"
 }

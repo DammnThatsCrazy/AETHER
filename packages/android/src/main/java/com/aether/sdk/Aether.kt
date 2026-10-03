@@ -912,7 +912,9 @@ object Aether : DefaultLifecycleObserver {
         enqueueEvent("conversion", props)
     }
 
-    fun hydrateIdentity(data: IdentityData) {
+    fun hydrateIdentity(data: IdentityData) = hydrateIdentity(data, identifyEventId = null)
+
+    private fun hydrateIdentity(data: IdentityData, identifyEventId: String?) {
         val priorUserId = userId
         val priorEmail = email
         data.userId?.let { userId = it }
@@ -942,7 +944,7 @@ object Aether : DefaultLifecycleObserver {
             "walletsCount" to data.wallets.size,
             "wallets" to walletsJson.toString(),
         )
-        enqueueEvent("identify", props)
+        enqueueEvent("identify", props, eventIdOverride = identifyEventId)
         prefs?.edit()?.putString("userId", userId)?.apply()
 
         // Cross-device: fire resolve when userId or email just became known
@@ -953,6 +955,30 @@ object Aether : DefaultLifecycleObserver {
                 scope.launch { resolveIdentity(walletAddress = walletAddress, userId = userId, email = email) }
             }
         }
+    }
+
+    /**
+     * Backward-compatible alias bind for React Native. Repeated calls for the
+     * same anonymous/user pair produce the same identify event ID, so a JS
+     * retry is deduplicated by the batch event id after queue replay or restart.
+     */
+    fun aliasIdentity(previousId: String, userId: String): Boolean {
+        if (previousId.isBlank() || userId.isBlank() || previousId != anonymousId) return false
+        val secret = prefs?.getString("alias_idempotency_secret_v1", null) ?: UUID.randomUUID().toString().also {
+            prefs?.edit()?.putString("alias_idempotency_secret_v1", it)?.apply()
+        }
+        val eventId = deterministicAliasEventId(secret, previousId, userId)
+        hydrateIdentity(IdentityData(userId = userId), identifyEventId = eventId)
+        return true
+    }
+
+    internal fun deterministicAliasEventId(secret: String, previousId: String, userId: String): String {
+        val digest = sha256Canonical("$secret\u0000$previousId\u0000$userId")
+        val uuidChars = digest.take(32).toCharArray()
+        uuidChars[12] = '5'
+        uuidChars[16] = "89ab"[Character.digit(uuidChars[16], 16) and 0x03]
+        val hex = String(uuidChars)
+        return "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}"
     }
 
     fun getAnonymousId(): String = anonymousId
@@ -1871,7 +1897,7 @@ object Aether : DefaultLifecycleObserver {
     // PRIVATE
     // =========================================================================
 
-    private fun enqueueEvent(type: String, properties: Map<String, Any?>) {
+    private fun enqueueEvent(type: String, properties: Map<String, Any?>, eventIdOverride: String? = null) {
         if (!isInitialized) return
         if (!CANONICAL_EVENT_TYPES.contains(type)) {
             log("Dropping non-canonical event type: $type. Use track(eventName, properties) for custom events.")
@@ -1902,16 +1928,23 @@ object Aether : DefaultLifecycleObserver {
         // Single occurrence instant shared by the timestamp and the temporal
         // provenance so zone/offset evidence matches the stamped clock reading.
         val eventDate = Date()
+        val eventId = eventIdOverride?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
+        val eventProperties = withIdentifyIdempotencyKey(type, eventId, scrubbed)
         val event = JSONObject().apply {
-            put("id", UUID.randomUUID().toString())
+            put("id", eventId)
             put("type", type)
             put("timestamp", dateFormat.format(eventDate))
             put("sessionId", sessionId)
             put("anonymousId", anonymousId)
             put("userId", userId ?: JSONObject.NULL)
-            put("properties", JSONObject(scrubbed.mapValues { it.value ?: JSONObject.NULL }))
+            put("properties", JSONObject(eventProperties.mapValues { it.value ?: JSONObject.NULL }))
             put("context", buildContext(eventDate))
         }
+
+        // Alias retries may arrive while the original identify is still
+        // queued. Keep one copy locally; backend event-ID uniqueness covers a
+        // retry after the first copy has already been acknowledged.
+        if (eventIdOverride != null && eventQueue.any { it.optString("id") == eventId }) return
 
         // Enforce max queue size to prevent OOM under prolonged offline
         while (eventQueue.size >= MAX_QUEUE_SIZE) { eventQueue.poll() }
@@ -1923,6 +1956,17 @@ object Aether : DefaultLifecycleObserver {
         if (eventQueue.size >= (config?.batchSize ?: 10)) {
             scope.launch { sendBatch() }
         }
+    }
+
+    // Internal for contract tests. The event ID and key are persisted together,
+    // so batch retries and durable queue replay preserve the same value.
+    internal fun withIdentifyIdempotencyKey(
+        type: String,
+        eventId: String,
+        properties: Map<String, Any?>,
+    ): Map<String, Any?> {
+        if (type != "identify") return properties
+        return properties + ("idempotency_key" to eventId)
     }
 
     private suspend fun sendBatch() = withContext(Dispatchers.IO) {

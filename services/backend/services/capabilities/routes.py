@@ -69,6 +69,8 @@ def _feature_flags(settings) -> dict[str, bool]:
         "interoperability_intelligence_enabled": settings.interop.api_enabled,
         "interoperability_profile360_enabled": settings.interop.profile360_enabled,
         "data_exchange_enabled": settings.data_exchange.enabled,
+        "identity_manual_review_enabled": settings.identity_continuity.manual_review_enabled,
+        "tenant_identity_activation_dashboard_enabled": settings.identity_continuity.activation_dashboard_enabled,
     }
 
 # Profile360 sub-resources that Aether can surface per tenant.

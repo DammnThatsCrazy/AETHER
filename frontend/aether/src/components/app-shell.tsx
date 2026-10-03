@@ -36,6 +36,8 @@ interface NavEntry {
 
 const NAV_ITEMS: readonly NavEntry[] = [
   { to: '/explore', label: 'Explore', destination: 'aether-graph' },
+  { to: '/identity/activation', label: 'Identity status', icon: 'fingerprint', requirement: { flag: 'tenant_identity_activation_dashboard_enabled' } },
+  { to: '/identity/reviews', label: 'Identity reviews', icon: 'list-checks', requirement: { flag: 'identity_manual_review_enabled' } },
   { label: 'Findings', icon: 'search-check', notReady: true },
   { label: 'Investigations', icon: 'search', notReady: true },
   { label: 'Outcomes', icon: 'chart-no-axes-combined', notReady: true },
@@ -44,7 +46,7 @@ const NAV_ITEMS: readonly NavEntry[] = [
   { to: '/settings', label: 'Settings', destination: 'aether-settings' },
 ];
 
-function NavItem({ to, label, destination }: Required<Pick<NavEntry, 'to' | 'label' | 'destination'>>) {
+function NavItem({ to, label, destination, icon }: Required<Pick<NavEntry, 'to' | 'label'>> & Pick<NavEntry, 'destination' | 'icon'>) {
   return (
     <NavLink
       to={to}
@@ -57,7 +59,11 @@ function NavItem({ to, label, destination }: Required<Pick<NavEntry, 'to' | 'lab
         )
       }
     >
-      <NavigationIcon destination={destination} decorative size="md" className="text-current" />
+      {destination ? (
+        <NavigationIcon destination={destination} decorative size="md" className="text-current" />
+      ) : icon ? (
+        <Icon name={icon} decorative size="md" className="text-current" />
+      ) : null}
       <span>{label}</span>
     </NavLink>
   );
@@ -161,12 +167,20 @@ export function AppShell({ children }: AppShellProps) {
             }
             if (
               !item.to ||
-              !item.destination ||
+              (!item.destination && !item.icon) ||
               resolveDestinationAvailability(capabilities, item.requirement) !== 'available'
             ) {
               return null;
             }
-            return <NavItem key={item.to} to={item.to} label={item.label} destination={item.destination} />;
+            return (
+              <NavItem
+                key={item.to}
+                to={item.to}
+                label={item.label}
+                {...(item.destination ? { destination: item.destination } : {})}
+                {...(item.icon ? { icon: item.icon } : {})}
+              />
+            );
           })}
         </nav>
 

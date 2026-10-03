@@ -57,9 +57,12 @@ class ShopifyWebhookAdapter:
         if not order_dict:
             # No nested body: project the envelope's own fields as the order,
             # keyed by the envelope's order_id (the actual order) when present.
+            # Preserve provider fields outside the narrow envelope model too:
+            # Shopify's actual webhook body is a bare order object and includes
+            # customer evidence not represented by the envelope schema.
             order_dict = {
                 key: value
-                for key, value in envelope.model_dump().items()
+                for key, value in payload.items()
                 if key not in {"topic", "domain", "body", "order_id", "id"}
             }
             order_dict["id"] = envelope.order_id if envelope.order_id is not None else envelope.id

@@ -29,6 +29,7 @@ from services.provider_runtime.errors import (
     ConnectionStateViolation,
     PluginIncompatible,
     ProviderNotInstalled,
+    ProviderRuntimeError,
 )
 from services.provider_runtime.credential_broker import credential_broker
 
@@ -150,6 +151,34 @@ class ConnectionOrchestrator:
             connection = self.transition(connection, ConnectionState.CREDENTIALS_RECEIVED)
         await self.connections.upsert(connection)
         return connection
+
+    async def delete_credential(self, connection: ProviderConnection) -> bool:
+        """Hard-delete the tenant/provider broker secret and clear its ref.
+
+        Provider refs are tenant + identity scoped and may be shared by multiple
+        connection rows. Refuse deletion while another row still points at the
+        same secret. If the current row lost its ref during a failed store
+        upsert, derive the deterministic broker ref so cleanup can still remove
+        the partially-created secret.
+        """
+        ref = str(connection.credential_ref or self.broker.provider_ref(
+            connection.tenant_id, connection.provider_identity
+        ))
+        rows = await self.connections.list_for_tenant(connection.tenant_id)
+        if any(
+            other.connection_id != connection.connection_id
+            and str(other.credential_ref or "") == ref
+            for other in rows
+        ):
+            raise ProviderRuntimeError("provider credential is shared with another connection")
+        deleted = await self.broker.delete(connection.tenant_id, ref)
+        # CredentialBackend.delete is idempotent: true means removed and false
+        # means the tenant-scoped ref was already absent. Exceptions preserve
+        # the row's ref so failed external deletion remains retryable.
+        connection.credential_ref = ""
+        connection.updated_at = _now_iso()
+        await self.connections.upsert(connection)
+        return deleted
 
     async def test_connection(
         self,

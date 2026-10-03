@@ -2,18 +2,22 @@
   "_fixture_version": 1,
   "scenario": "Multi-SDK same user",
   "blueprint_ref": "\u00a714.3",
-  "description": "Web SDK, iOS SDK, Android SDK each identify as same user_id; all must map to one canonical entity.",
+  "description": "Web SDK, iOS SDK, and Android SDK identify the same app-scoped user with durable server identity-link consent.",
   "tenant_id": "tenant_multi_sdk_same_user",
   "platforms": [
     "aether-web:marketing_site",
     "aether-ios:consumer_app",
     "aether-android:consumer_app"
   ],
+  "tenant_app_key": "shared-customer-app",
   "user_id": "user_multi_sdk",
-  "email": "multi_sdk@example.com",
+  "consent": {"authority": "durable_server_receipt", "purpose": "analytics", "identity_link": true},
   "expected": {
     "canonical_count": 1,
-    "source_identities": 3
+    "source_identities": 3,
+    "sdk_resolution_outcomes": ["create", "merge", "merge"],
+    "user_id_alias_persisted_as": "tenant_and_app_scoped_hmac",
+    "client_asserted_consent_authority": false
   },
   "invariant": "single_canonical_for_same_user_across_sdks"
 }

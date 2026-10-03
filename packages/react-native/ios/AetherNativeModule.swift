@@ -30,6 +30,14 @@ class AetherNativeModule: RCTEventEmitter {
 
         aetherConfig.debug = config["debug"] as? Bool ?? false
         aetherConfig.endpoint = resolveEndpoint
+        aetherConfig.onJourneyResumed = { [weak self] anonymousId, userId in
+            DispatchQueue.main.async {
+                self?.sendEvent(withName: "AetherJourneyResumed", body: [
+                    "anonymousId": anonymousId,
+                    "userId": userId.map { $0 as Any } ?? NSNull(),
+                ])
+            }
+        }
 
         if let modules = config["modules"] as? NSDictionary {
             aetherConfig.modules.screenTracking = modules["screenTracking"] as? Bool ?? true
@@ -79,6 +87,30 @@ class AetherNativeModule: RCTEventEmitter {
             "anonymousId": Aether.shared.getAnonymousId(),
             "userId": Aether.shared.getUserId() as Any
         ])
+    }
+
+    @objc
+    func alias(_ previousId: String, userId: String,
+               resolver resolve: @escaping RCTPromiseResolveBlock,
+               rejecter reject: RCTPromiseRejectBlock) {
+        guard !previousId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            reject("aether_alias_invalid", "alias requires non-empty previousId and userId", nil)
+            return
+        }
+        guard Aether.shared.getAnonymousId() == previousId else {
+            reject("aether_alias_identity_mismatch", "alias previousId must match the current native anonymous ID", nil)
+            return
+        }
+        guard Aether.shared.aliasIdentity(previousId: previousId, userId: userId) else {
+            reject("aether_alias_identity_mismatch", "alias previousId must match the current native anonymous ID", nil)
+            return
+        }
+        sendEvent(withName: "AetherIdentityChanged", body: [
+            "anonymousId": Aether.shared.getAnonymousId(),
+            "userId": Aether.shared.getUserId() as Any
+        ])
+        resolve(nil)
     }
 
 

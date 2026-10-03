@@ -52,6 +52,21 @@ class JourneyRepository:
         pool = await self._pool()
         if pool is None:
             tenant_id = journey.get("tenant_id")
+            identity_version = journey.get("identity_version")
+            rebuild_reason = journey.get("rebuild_reason")
+            if identity_version is not None:
+                existing = next(
+                    (
+                        version for version in _local_store.values()
+                        if version.get("tenant_id") == tenant_id
+                        and version.get("journey_id") == journey_id
+                        and version.get("identity_version") == identity_version
+                        and version.get("rebuild_reason") == rebuild_reason
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    return existing
             # Flip prior current
             prior_current: list[dict[str, Any]] = []
             for v in _local_store.values():
@@ -85,6 +100,25 @@ class JourneyRepository:
                     "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
                     f"journey:{journey.get('tenant_id')}:{journey_id}",
                 )
+                # A worker may complete the journey write and crash before its
+                # projection checkpoint. The retry uses the same restatement
+                # key in identity_version; return that persisted version rather
+                # than creating another lineage node.
+                if journey.get("identity_version") is not None:
+                    existing = await conn.fetchrow(
+                        """
+                        SELECT * FROM journey_versions
+                        WHERE tenant_id=$1 AND journey_id=$2
+                          AND identity_version=$3 AND rebuild_reason=$4
+                        ORDER BY computed_at DESC LIMIT 1
+                        """,
+                        journey.get("tenant_id"),
+                        _uuid_or_none(journey_id),
+                        journey.get("identity_version"),
+                        journey.get("rebuild_reason"),
+                    )
+                    if existing is not None:
+                        return dict(existing)
                 await conn.execute(
                     """
                     UPDATE journey_versions

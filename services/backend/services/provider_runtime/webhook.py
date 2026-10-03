@@ -278,20 +278,53 @@ class WebhookGateway:
                     "detail": str(exc)[:200], "inbox_id": inbox_id,
                     "record_count": 0, "event_count": 0}
 
+        account_id = _connection_account_id(connection)
+        records = [record.model_copy(update={
+            "tenant_id": tenant_id,
+            "connection_id": connection.connection_id,
+            "account_id": account_id,
+        }) for record in records]
+
+        processing_ok = True
+        raw_outcomes = []
         if records:
             try:
-                await self._raw_store().ingest(records)
+                raw_outcomes = await self._raw_store().ingest(records, tenant_id=tenant_id)
             except Exception as exc:  # pragma: no cover - best-effort
+                processing_ok = False
+                raw_outcomes = []
                 logger.warning(
                     f"provider webhook raw ingest failed tenant={tenant_id} "
                     f"provider={identity_key}: {exc}"
                 )
+            if raw_outcomes and inbox_id:
+                try:
+                    from services.identity.provider_evidence import (
+                        capture_durable_provider_customer_evidence,
+                    )
+
+                    await capture_durable_provider_customer_evidence(
+                        records,
+                        raw_outcomes,
+                        tenant_id=tenant_id,
+                        connection_id=connection.connection_id,
+                        account_id=account_id,
+                        lifecycle_type="provider_webhook_inbox",
+                        lifecycle_id=inbox_id,
+                    )
+                except Exception as exc:  # evidence failure stays out of resolver candidates
+                    logger.warning(
+                        "provider webhook identity evidence capture failed tenant=%s "
+                        "provider=%s error=%s",
+                        tenant_id, identity_key, type(exc).__name__,
+                    )
         engine = self._normalization_engine(plugin)
         events = await self._normalize_records(engine, records)
         if events:
             try:
                 await self._bridge().ingest_events(tenant_id, events)
             except Exception as exc:  # pragma: no cover - best-effort
+                processing_ok = False
                 logger.warning(
                     f"provider webhook bridge failed tenant={tenant_id} "
                     f"provider={identity_key}: {exc}"
@@ -300,8 +333,26 @@ class WebhookGateway:
             try:
                 await self._mark_inbox_processed(inbox_id)
             except Exception as exc:  # pragma: no cover - best-effort
+                processing_ok = False
                 logger.warning(
                     f"provider webhook inbox close failed tenant={tenant_id}: {exc}"
+                )
+        if inbox_id:
+            try:
+                from services.identity.provider_evidence_anchors import (
+                    ProviderIdentityEvidenceAnchorRepository,
+                )
+
+                await ProviderIdentityEvidenceAnchorRepository().finish_lifecycle(
+                    tenant_id=tenant_id,
+                    lifecycle_type="provider_webhook_inbox",
+                    lifecycle_id=inbox_id,
+                    status="completed" if processing_ok else "failed",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "provider webhook evidence lifecycle close failed tenant=%s error=%s",
+                    tenant_id, type(exc).__name__,
                 )
         return {
             "accepted": True,

@@ -27,8 +27,8 @@ export class MarkdownReportGenerator {
 
     lines.push("## Steps");
     lines.push("");
-    lines.push("| Step | Status | Duration | Reason |");
-    lines.push("|------|--------|----------|--------|");
+    lines.push("| Result | Step | Status | Duration | Reason |");
+    lines.push("|--------|------|--------|----------|--------|");
 
     for (const step of result.steps) {
       const statusIcon =
@@ -39,11 +39,11 @@ export class MarkdownReportGenerator {
           : step.status === "skipped"
           ? "⏭️"
           : "⚠️";
+      const escapeCell = (value: string): string =>
+        value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 
       lines.push(
-        `${statusIcon} | \`${step.stepId}\` | ${step.status} | ${step.durationMs ?? "—"}ms | ${
-          step.reason ?? "—"
-        } |`
+        `| ${statusIcon} | \`${escapeCell(step.stepId)}\` | ${step.status} | ${step.durationMs ?? "—"}ms | ${escapeCell(step.reason ?? "—")} |`
       );
     }
 

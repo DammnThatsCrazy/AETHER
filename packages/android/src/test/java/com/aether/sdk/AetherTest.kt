@@ -51,6 +51,35 @@ class AetherTest {
     }
 
     @Test
+    fun `identify idempotency key follows queued event id`() {
+        val properties = mapOf<String, Any?>("userId" to "user-1")
+        val first = Aether.withIdentifyIdempotencyKey("identify", "event-1", properties)
+        val retry = Aether.withIdentifyIdempotencyKey("identify", "event-1", properties)
+        val next = Aether.withIdentifyIdempotencyKey("identify", "event-2", properties)
+
+        assertEquals("event-1", first["idempotency_key"])
+        assertEquals(first["idempotency_key"], retry["idempotency_key"])
+        assertEquals("event-2", next["idempotency_key"])
+        assertNotEquals(first["idempotency_key"], next["idempotency_key"])
+    }
+
+    @Test
+    fun `alias retries derive the same opaque event id from install secret and identity pair`() {
+        val first = Aether.deterministicAliasEventId("install-secret", "anon-1", "user-1")
+        val retry = Aether.deterministicAliasEventId("install-secret", "anon-1", "user-1")
+        val anotherUser = Aether.deterministicAliasEventId("install-secret", "anon-1", "user-2")
+        val anotherInstall = Aether.deterministicAliasEventId("other-secret", "anon-1", "user-1")
+
+        assertEquals(first, retry)
+        // Shared Android/iOS vector: a platform drift would break alias retry
+        // deduplication when a user moves between SDKs for one installation.
+        assertEquals("bc6bc9c9-9124-5e2e-ab25-fb414e667997", first)
+        assertNotEquals(first, anotherUser)
+        assertNotEquals(first, anotherInstall)
+        assertTrue(first.matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")))
+    }
+
+    @Test
     fun `sensitive keys covers 20 keys`() {
         // scrubSensitiveFields is a top-level internal function in this package
         val sensitiveInput = mapOf(
