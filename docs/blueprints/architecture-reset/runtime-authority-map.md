@@ -39,13 +39,12 @@ Target **object processing state** is accepted/recorded → normalized → resol
 
 Replay/backfill must use original L0 evidence, preserve original event/source-revision identity and occurred time, stamp a new delivery/run time, recheck current rights/consent/suppression, then recompute with explicit schema/normalizer/policy versions. Existing `services/backend/services/ingestion/replay.py` is a synchronous, operator-scoped SDK Bronze replay with an in-memory run journal, not a durable resumable job. `services/backend/services/identity/resolution_replay.py` reuses the resolver with a tenant/trigger/policy key; `services/backend/services/projections/projection_restatement_orchestrator.py` has durable tenant-scoped restatement jobs; `services/backend/services/semantic_intelligence/replay.py` is a separate semantic replay. PR #733 adds bounded provider raw replay through the jobs platform, but it is not merged, its `actor_ref`/`decision_ref` are audit references rather than an operator authorization check, and it does not by itself certify a provider-backed graph projection. Backfill must carry a checkpoint, dry-run comparison, failed-row disposition and rollback plan rather than assuming an outbox can serve as a historical log.
 
-**Reset branch safety correction:** `replay_events` now refuses live publishing
-unless `AETHER_ENV=local`, `DATABASE_URL` is absent, and no database pool is
-initialized. Within that local process, the run journal is tenant/run scoped,
-rejects a reused run ID with different filters, and rejects overlapping calls.
-This closes hosted use of the non-durable replay path; it does not add a durable
-checkpoint, current-rights re-admission, or exactly-once publish. The proof
-ledger records the focused test result and the remaining recovery gap.
+The architecture-frame PR does not change `replay_events` or any other
+runtime behavior. The existing SDK replay is synchronous and has a process-local
+run journal; that does not establish durable recovery, current-rights
+re-admission, or exactly-once publishing. Hosted replay safety is not certified
+by this inventory. Any restriction or enablement change belongs in a dedicated
+runtime slice with focused failure tests and an explicit rollback.
 
 Schema evolution should extend `packages/shared/contracts/event-registry.json`, `observation-envelope-registry.json`, graph mutation taxonomy, identity policies, and the projection/lens registries that already own the corresponding vocabularies. A new source schema or normalizer version must not silently rewrite a source revision or change its logical fact key; preserve both source-native version and Aether interpretation version, with explicit compatibility/upcast or quarantine. Generated twins are integration inputs, not hand-edited source. PR #733's revision-aware provider envelopes and source-object references must be assessed against these authorities after merge.
 

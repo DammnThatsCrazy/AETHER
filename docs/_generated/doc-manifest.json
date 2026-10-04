@@ -4597,6 +4597,20 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/blueprints/architecture-reset/cutover-inventory.md",
+      "title": "Aether Architecture Reset Cutover Inventory",
+      "slug": "blueprints/architecture-reset/cutover-inventory",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/blueprints/architecture-reset/delivery-authority-map.md",
       "title": "Architecture Reset Delivery Authority Map",
       "slug": "blueprints/architecture-reset/delivery-authority-map",

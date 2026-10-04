@@ -55,13 +55,34 @@ cross-slice gaps, and revises the remaining work orders. The branch remains
 draft during implementation; an agent's focused checks never imply PR or
 release readiness.
 
+## PR boundaries and merge order
+
+PR #734 is the architecture authority frame: target architecture, current-to-target
+inventories, cutover and proof ledgers, route-state evidence, delivery ownership,
+and focused tests for existing route states. It does not change application
+routes, service behavior, package boundaries, public SDKs, APIs, schemas,
+migrations, graph/event behavior, runtime configuration, or deployment behavior.
+Keep the PR draft until its documentation and frame-level evidence are reviewed.
+
+After #734 lands on `Development`, rebase and review the existing universal
+connector runtime PR #733 against the accepted source/intake, evidence, identity,
+and graph authorities. Preserve its explicit durable-rights, certification,
+and provider-backed proof gaps. Follow with separately bounded identity, graph
+mutation, replay/data-rights, product-surface, repository, and delivery slices;
+order them by the dependency each slice actually has and do not stack blindly.
+Each implementation PR should target `Development` once its prerequisite is
+merged, carry its own compatibility and rollback evidence, and link back to this
+frame. PR #732 is a `Development` to `main` release promotion: hold it until the
+architecture/runtime cutovers are reconciled on `Development` and required
+staging evidence is recorded or explicitly dispositioned.
+
 ## Baseline inventories and authority decisions
 
 | Inventory | Question it must answer | Status |
 | --- | --- | --- |
-| [Runtime authority](runtime-authority-map.md) | Which current code owns intake, evidence, normalization, identity, graph mutation, replay, intelligence, actions, and recovery? | Mapped; local-only replay safety correction passed focused checks; durable recovery and provider cutovers pending |
-| [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state, target sidebar, and activation evidence distinction passed focused local checks |
-| [Delivery controls](delivery-authority-map.md) | Which commands, docs ownership rules, CI paths, profiles, and deployment controls are truly authoritative? | Mapped; delivery cutovers pending |
+| [Runtime authority](runtime-authority-map.md) | Which current code owns intake, evidence, normalization, identity, graph mutation, replay, intelligence, actions, and recovery? | Mapped; runtime behavior is unchanged in this frame; replay durability and provider cutovers remain pending |
+| [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state assertions are in this frame; target navigation and activation-state changes remain follow-up work |
+| [Delivery controls](delivery-authority-map.md) | Which commands, docs ownership rules, CI paths, profiles, and deployment controls are truly authoritative? | Mapped; this frame changes no verification or deployment behavior; delivery cutovers pending |
 
 The [cutover inventory](cutover-inventory.md) gives the first `keep`, `merge`,
 `simplify`, and `defer` decisions for overlapping paths. It names consumers,
