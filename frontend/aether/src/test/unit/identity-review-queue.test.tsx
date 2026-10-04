@@ -9,6 +9,7 @@ const runtime = vi.hoisted(() => ({
   reject: vi.fn(),
   manualReviewEnabled: true,
   queryEnabled: false,
+  queryMode: 'ready' as 'ready' | 'loading' | 'error',
   fetcher: vi.fn(),
 }));
 
@@ -41,13 +42,13 @@ vi.mock('@aether/ui', () => ({
     runtime.fetcher = vi.fn(fetcher);
     runtime.queryEnabled = enabled;
     return {
-      data: {
+      data: runtime.queryMode === 'ready' ? {
         entries: runtime.entry ? [runtime.entry] : [],
         total: runtime.entry ? 1 : 0,
         status: 'ok',
-      },
-      isLoading: false,
-      error: null,
+      } : null,
+      isLoading: runtime.queryMode === 'loading',
+      error: runtime.queryMode === 'error' ? new Error('review queue unavailable') : null,
       refetch: fetcher,
     };
   },
@@ -83,6 +84,8 @@ describe('Identity review queue recovery states', () => {
   beforeEach(() => {
     runtime.manualReviewEnabled = true;
     runtime.queryEnabled = false;
+    runtime.queryMode = 'ready';
+    runtime.entry = null;
     runtime.fetcher = vi.fn();
     runtime.approve.mockReset().mockResolvedValue({ status: 'approval_in_progress' });
     runtime.reject.mockReset().mockResolvedValue({ status: 'rejected' });
@@ -119,5 +122,31 @@ describe('Identity review queue recovery states', () => {
     expect(screen.getByText(/identity review is not enabled/i)).toBeInTheDocument();
     expect(runtime.queryEnabled).toBe(false);
     expect(runtime.fetcher).not.toHaveBeenCalled();
+  });
+
+  it('shows loading without presenting a successful empty queue', () => {
+    runtime.queryMode = 'loading';
+    render(<IdentityReviewQueue />);
+
+    expect(screen.getByText('Loading review queue...')).toBeInTheDocument();
+    expect(screen.queryByText('No open identity reviews')).not.toBeInTheDocument();
+  });
+
+  it('shows a successful empty review queue without action controls', () => {
+    render(<IdentityReviewQueue />);
+
+    expect(screen.getByText('No open identity reviews')).toBeInTheDocument();
+    expect(screen.getByText(/no conflicts or late-binding candidates awaiting review/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /approve|reject/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Unable to load review queue.')).not.toBeInTheDocument();
+  });
+
+  it('shows failure and retry rather than a successful empty queue', () => {
+    runtime.queryMode = 'error';
+    render(<IdentityReviewQueue />);
+
+    expect(screen.getByText('Unable to load review queue.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByText('No open identity reviews')).not.toBeInTheDocument();
   });
 });

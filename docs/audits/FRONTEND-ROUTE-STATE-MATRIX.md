@@ -46,6 +46,8 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/onboarding` | readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
 | `/activation` | canonical guided activation: intent-driven connect plan + classic first-value finish | yes | A | A | A | A | I | `activate-page-route-state.test.tsx`, `activation-landing.test.tsx` (classic fold) |
 | `/activate` | compatibility alias → `/activation` (query-preserving redirect; served by canonical ActivatePage) | yes | I | A | A | A | I | `activate-page-route-state.test.tsx` (target page) |
+| `/identity/activation` | tenant-scoped identity activation status, SDK heartbeat, restatement and review counts | yes | A | A | A | A | A | `identity-activation-dashboard.test.tsx` (no historical data/heartbeat, failure, loading, capability gate, populated), `identity-continuity-routes.test.tsx` (mounted route) |
+| `/identity/reviews` | tenant-scoped conflict and late-binding review queue | yes | A | A | A | A | A | `identity-review-queue.test.tsx` (successful empty, failure, loading, capability gate, populated/recovery), `identity-continuity-routes.test.tsx` (mounted route) |
 | `/billing` | account, subscription, invoices | yes | I | A | A | — | I | parameterized route-state family |
 | `/usage-plan` | measured usage and plan | yes | I | A | A | — | I | parameterized route-state family |
 | `/me` | tenant profile and measured usage | no | A | A | A | A | I | `me-data-truth.test.tsx` |
