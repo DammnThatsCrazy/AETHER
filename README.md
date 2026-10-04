@@ -9,20 +9,25 @@ Aether is a tenant-facing intelligence graph runtime. It brings together observa
 - **Aether** is the customer-facing product for tenant data, graph views, and intelligence.
 - **Kyber** is the internal operator console for diagnosis, review, recovery, and release operations. It is not a customer product or a separate authority for graph and identity decisions.
 
-## Runtime spine
+## Intake paths and target runtime spine
 
-Current intake has several paths: SDK batches, external feeds, imports, provider sync and webhooks, and legacy connectors. They do not all pass through `/v1/batch`. The reset is aligning these paths around shared contracts, tenant policy, retained evidence, backend-owned identity, and governed graph mutations.
+Current intake includes SDK batches, external feeds, imports, provider sync and webhooks, and legacy connectors. The reset is aligning these paths around shared contracts, tenant policy, retained evidence, backend-owned identity, and governed graph mutations.
+
+The target runtime spine is:
 
 ```text
-SDK batches | feeds | imports | provider runtime | legacy connectors
-  → tenant admission and canonical contracts
-  → evidence and normalization
-  → identity and entity resolution
-  → governed graph mutation and projections
-  → tenant views, explanation, permitted action, and outcome
+tenant/access
+  → source/intake
+  → evidence/event log
+  → normalization
+  → identity/resolution
+  → graph
+  → intelligence/views
+  → explanation
+  → action/outcome
 ```
 
-The target adds consistent replay, correction, evaluation, and recovery across this flow. The [architecture reset plan](docs/blueprints/architecture-reset/README.md) tracks current authorities, cutovers, and required proof. A local fixture or passing focused check does not establish design-partner or production readiness.
+The architecture reset is in progress, so this target describes the intended shared authorities rather than a claim that every stage is already centralized. The [architecture reset plan](docs/blueprints/architecture-reset/README.md) tracks current authorities, cutovers, and required proof, including consistent replay, correction, evaluation, and recovery. A local fixture or passing focused check does not establish design-partner or production readiness.
 
 ## Repository map
 
