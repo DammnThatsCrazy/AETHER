@@ -148,9 +148,10 @@ async def test_lake_audit_source_tag_exact_truncation():
     (its own default limit=100), so audit_source_tag()'s completeness is
     exact, not a guess."""
     tag = _unique("audit-over")
-    await bronze_market.ingest_batch(records=[{} for _ in range(51)], source="test", source_tag=tag)
+    tenant_id = _unique("tenant")
+    await bronze_market.ingest_batch(records=[{} for _ in range(51)], source="test", source_tag=tag, tenant_id=tenant_id)
 
-    resp = await lake_routes.audit_source_tag("market", tag, _req(_unique("tenant")))
+    resp = await lake_routes.audit_source_tag("market", tag, _req(tenant_id))
     meta = resp["meta"]
     assert meta["limit"] == 50
     assert meta["returned"] == 50
@@ -159,13 +160,33 @@ async def test_lake_audit_source_tag_exact_truncation():
     assert len(resp["data"]["records"]) == 50  # data shape/size unchanged
 
     tag = _unique("audit-under")
-    await bronze_market.ingest_batch(records=[{} for _ in range(10)], source="test", source_tag=tag)
+    tenant_id = _unique("tenant")
+    await bronze_market.ingest_batch(records=[{} for _ in range(10)], source="test", source_tag=tag, tenant_id=tenant_id)
 
-    resp = await lake_routes.audit_source_tag("market", tag, _req(_unique("tenant")))
+    resp = await lake_routes.audit_source_tag("market", tag, _req(tenant_id))
     meta = resp["meta"]
     assert meta["returned"] == 10
     assert meta["truncated"] is False
     assert meta["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_lake_audit_and_rollback_source_tag_are_tenant_scoped():
+    from services.lake.routes import RollbackRequest
+
+    tag = _unique("shared-tag")
+    await bronze_market.ingest_batch(records=[{"owner": "a"}], source="test", source_tag=tag, tenant_id="tenant-a")
+    await bronze_market.ingest_batch(records=[{"owner": "b"}], source="test", source_tag=tag, tenant_id="tenant-b")
+
+    audited = await lake_routes.audit_source_tag("market", tag, _req("tenant-a"))
+    assert [row["tenant_id"] for row in audited["data"]["records"]] == ["tenant-a"]
+
+    request = _req("tenant-a")
+    result = await lake_routes.rollback_by_source_tag(
+        RollbackRequest(domain="market", source_tag=tag, tiers=["bronze"]), request
+    )
+    assert result["data"]["deleted"]["bronze"] == 1
+    assert [row["tenant_id"] for row in await bronze_market.query_by_source_tag(tag, tenant_id="tenant-b")] == ["tenant-b"]
 
 
 @pytest.mark.asyncio
