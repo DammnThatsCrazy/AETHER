@@ -439,6 +439,19 @@ class SilverRepository(BaseRepository):
 
     async def rollback_by_source_tag(self, source_tag: str, *, tenant_id: str) -> int:
         """Delete this tenant's Silver records for a source tag."""
+        records = await self.preflight_source_tag_rollback(source_tag, tenant_id=tenant_id)
+        count = 0
+        for rec in records:
+            if await self.delete(rec["id"]):
+                count += 1
+        if count > 0:
+            logger.warning(f"Silver rollback: source_tag={source_tag} deleted={count}")
+        return count
+
+    async def preflight_source_tag_rollback(
+        self, source_tag: str, *, tenant_id: str
+    ) -> list[dict]:
+        """Fetch and validate this tenant's complete Silver deletion set."""
         if not tenant_id:
             raise ValueError("tenant_id is required for source-tag rollback")
         records = await self.find_many(
@@ -449,13 +462,7 @@ class SilverRepository(BaseRepository):
             raise ValueError(
                 f"source-tag rollback exceeds safety cap of {SOURCE_TAG_ROLLBACK_CAP} rows"
             )
-        count = 0
-        for rec in records:
-            if await self.delete(rec["id"]):
-                count += 1
-        if count > 0:
-            logger.warning(f"Silver rollback: source_tag={source_tag} deleted={count}")
-        return count
+        return records
 
 
 # ═══════════════════════════════════════════════════════════════════════════
