@@ -59,9 +59,14 @@ release readiness.
 
 | Inventory | Question it must answer | Status |
 | --- | --- | --- |
-| [Runtime authority](runtime-authority-map.md) | Which current code owns intake, evidence, normalization, identity, graph mutation, replay, intelligence, actions, and recovery? | Mapped; runtime cutovers pending |
-| [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state repair passed focused local checks |
+| [Runtime authority](runtime-authority-map.md) | Which current code owns intake, evidence, normalization, identity, graph mutation, replay, intelligence, actions, and recovery? | Mapped; local-only replay safety correction passed focused checks; durable recovery and provider cutovers pending |
+| [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state, target sidebar, and activation evidence distinction passed focused local checks |
 | [Delivery controls](delivery-authority-map.md) | Which commands, docs ownership rules, CI paths, profiles, and deployment controls are truly authoritative? | Mapped; delivery cutovers pending |
+
+The [cutover inventory](cutover-inventory.md) gives the first `keep`, `merge`,
+`simplify`, and `defer` decisions for overlapping paths. It names consumers,
+compatibility and rollback obligations, and remaining proof before any old
+authority or physical directory can retire.
 
 For each candidate removal or move, the inventory must identify all consumers,
 runtime calls, API/route names, schemas and migrations, generated artifacts,

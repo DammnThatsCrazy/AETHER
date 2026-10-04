@@ -39,6 +39,14 @@ Target **object processing state** is accepted/recorded → normalized → resol
 
 Replay/backfill must use original L0 evidence, preserve original event/source-revision identity and occurred time, stamp a new delivery/run time, recheck current rights/consent/suppression, then recompute with explicit schema/normalizer/policy versions. Existing `services/backend/services/ingestion/replay.py` is a synchronous, operator-scoped SDK Bronze replay with an in-memory run journal, not a durable resumable job. `services/backend/services/identity/resolution_replay.py` reuses the resolver with a tenant/trigger/policy key; `services/backend/services/projections/projection_restatement_orchestrator.py` has durable tenant-scoped restatement jobs; `services/backend/services/semantic_intelligence/replay.py` is a separate semantic replay. PR #733 adds bounded provider raw replay through the jobs platform, but it is not merged, its `actor_ref`/`decision_ref` are audit references rather than an operator authorization check, and it does not by itself certify a provider-backed graph projection. Backfill must carry a checkpoint, dry-run comparison, failed-row disposition and rollback plan rather than assuming an outbox can serve as a historical log.
 
+**Reset branch safety correction:** `replay_events` now refuses live publishing
+unless `AETHER_ENV=local`, `DATABASE_URL` is absent, and no database pool is
+initialized. Within that local process, the run journal is tenant/run scoped,
+rejects a reused run ID with different filters, and rejects overlapping calls.
+This closes hosted use of the non-durable replay path; it does not add a durable
+checkpoint, current-rights re-admission, or exactly-once publish. The proof
+ledger records the focused test result and the remaining recovery gap.
+
 Schema evolution should extend `packages/shared/contracts/event-registry.json`, `observation-envelope-registry.json`, graph mutation taxonomy, identity policies, and the projection/lens registries that already own the corresponding vocabularies. A new source schema or normalizer version must not silently rewrite a source revision or change its logical fact key; preserve both source-native version and Aether interpretation version, with explicit compatibility/upcast or quarantine. Generated twins are integration inputs, not hand-edited source. PR #733's revision-aware provider envelopes and source-object references must be assessed against these authorities after merge.
 
 Operator diagnostics should compose the existing Kyber-only `services/backend/services/ingestion/{replay_routes,observability_routes}.py`, identity explanation/review, graph ledger/checkpoints, projection degradation, delivery receipts/dead letters and provider connection/job evidence into one tenant-filtered trace. `services/backend/main.py` mounts the SDK replay and ingestion observability routes. The trace must answer **which source evidence, policy decision and version led to this claim/action; where did it fail; what may be replayed**. A dashboard count or structural connector certification is insufficient to declare a source, projection or action ready.
@@ -46,6 +54,14 @@ Operator diagnostics should compose the existing Kyber-only `services/backend/se
 ## PR #733 integration boundary
 
 At this snapshot, `origin/feat/universal-connector-runtime-blueprint-20261002` is not an ancestor of this worktree. Its diff extends `services/backend/services/provider_runtime/`, `services/backend/shared/integration_contracts/`, `services/backend/repositories/lake.py`, ingestion workers/spine and `main.py`; the architecture reset should rebase/reinspect those exact seams after merge rather than copy a second provider runtime. The PR adds source-revision keys, object-reference and tenant-route primitives, raw-rights admission, canonical Bronze/outbox bridge, provider replay, provider-consumer defer guards and outbox startup checks. Those are **pending code**, not current authority here.
+
+The 2026-10-04 diff also overlaps this reset in generated `docs/REPO-INDEX.md`
+and `docs/_generated/doc-manifest.json`, the Aether route-state matrix, and the
+two identity route-state tests. The PR tests add query/auth and no-heartbeat
+assertions while this reset adds additional explicit empty/loading/error states.
+When the connector work lands, regenerate generated docs centrally and merge
+the test assertions and route counts; do not take one side's generated or test
+files wholesale.
 
 The PR's own rollout notes identify open integration limits: its raw grant lookup is process-memory-backed and fail-closed in staging/production until durable; historical quarantined provider rows lack a re-admission path; `commerce.order.*` has no Silver projector in that slice; the shared bus has no cryptographic producer attestation; graph/Silver parity, provider-backed proof and per-stream certification remain separate. Keep PR #733's source-object ID, source-revision ID and tenant route generation distinct from canonical identity/entity ID and graph mutation ID. Integrate its `EventBridge` with L0/L1 and its connector graph writer only through admitted domain facts and `MutationIntent` under an effective gateway mode. Do not call gateway `off` or connector migration shadow an enforced graph boundary.
 

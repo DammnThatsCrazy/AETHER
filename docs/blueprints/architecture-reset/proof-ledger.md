@@ -38,6 +38,24 @@ or unavailable result stays visible.
 | Normal PR authority | Not run during accumulation | `verification / disposition` terminal result after `ready_for_review` | Pending |
 | Release claim | Not requested or run | Canonical release gate and `scripts/production_status.py` scorecard plus live operational evidence | Pending |
 
+## Recorded local baseline evidence
+
+| Date | Revision and environment | Command | Result | What it establishes | What remains unproved |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-04 | `Development` `17503aef9fa3a9515a029471796f1ee3510a5b2c`, detached local baseline checkout, project virtual environment | `PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest tests/unit/observation/test_golden_cross_path_fixture.py -q` | 1 passed in 2.84s | The existing fixture observes one SDK batch event, its Bronze replay, and the legacy event-alias path on the canonical bus with original event time and no second Bronze row on replay. | This uses local in-memory stores and a fake producer. It does not exercise a real provider, Silver/identity/graph, persistent retry, tenant authorization, staging, or a deployed UI. |
+| 2026-10-04 | Same detached baseline and interpreter | `PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest services/backend/tests/identity/test_late_binding_end_to_end_proof.py services/backend/tests/ingestion/test_bronze_hash_chain.py -q` | 7 passed in 14.69s | Focused identity continuity and Bronze chain behavior pass at the baseline commit. | The tests do not join a real provider delivery to a customer-visible graph view. |
+| 2026-10-04 | Same detached baseline and interpreter | `PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest tests/unit/graph_gateway/test_mutation_gateway.py -q` | 18 passed in 14.47s | Focused gateway mode, mutation, and ledger behavior passes at the baseline commit. | This does not establish that every live writer uses enforced mode or that a durable ledger/projector transaction survived failure. |
+| 2026-10-04 | Reset worktree at `dee0edcb3` plus replay changes in working tree; project virtual environment | `AETHER_ENV=local PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest tests/unit/observation/test_ingest_replay.py -q` | 14 passed in 2.95s | Original-time replay behavior still passes; the local-only guard refuses hosted live replay, scopes process-local run IDs by tenant and request, and rejects overlapping calls. | Test doubles use in-memory Bronze and a fake producer. No durable checkpoint, current-rights re-admission, crash retry, multi-process idempotency, or hosted publish was tested. |
+
+This baseline test supplies a comparison point for a later path cutover. A
+single local fixture is not an old/new equivalence decision. Record the target
+revision and repeat the same fixture plus durable and adverse-path evidence
+before retiring any intake or replay authority.
+The backend and root `tests/` trees have conflicting `tests.conftest` import
+names when collected in one invocation in this checkout, so the latter two
+baseline commands were run separately. The combined invocation failed during
+collection and is not counted as a test result.
+
 ## Cutover decision record
 
 Before retiring an old path, fill in a dated row with the old owner, new owner,
