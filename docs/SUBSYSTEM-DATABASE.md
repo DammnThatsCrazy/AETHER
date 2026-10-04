@@ -241,6 +241,12 @@ table and caches it. Writes and filters are then bound to the migrated types:
 
 `SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions. `SilverRepository.check_promotion_eligibility(bronze_record)` enforces the promotion gate: quarantined Bronze records cannot be promoted to Silver (returns `(False, reason)` with the blocking reason).
 
+Source-tag audit and rollback require a non-empty tenant ID and filter records
+by both `tenant_id` and `source_tag`. The lake API supplies the authenticated
+tenant. Bronze and Silver rollback refuse more than 10,000 matching rows before
+deletion instead of silently truncating the selection. Rollback remains a hard
+delete; it does not create a durable correction or erasure receipt.
+
 Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)` with optional `lineage_id`, `source_manifest_ids`, and `model_training_eligible` parameters that attach enrichment lineage to Gold artifacts.
 The `IntelligenceAggregator` queries via `get_metrics(entity_id)` and applies
 `?window=30d|60d|90d|lifetime` filtering on the `materialized_at` timestamp.

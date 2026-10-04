@@ -32,7 +32,7 @@ or unavailable result stays visible.
 | Profile, Journey, Graph, Lens, and Value views | Not replayed | Populated, empty, loading, error, partial/stale, denied, and explanation states | Pending |
 | Governed action and measured outcome | Not replayed | Eligibility, confirmation/approval, audit, receipt, outcome and failure recovery | Pending |
 | Quarantine, dead letter, replay, and backfill | Not replayed | Authorized tenant-scoped repair from retained evidence with before/after diff | Pending |
-| Bronze/Silver rollback, source-tag audit, and evidence lifecycle | Not replayed; code review found hard-delete-by-tag paths without tenant predicates and a 10,000-row query cap | Same-tag cross-tenant isolation, exact affected-row accounting, actor/reason/correlation record, authorized audit scoping, and explicit erasure behavior | High-priority gap; correction and focused adversarial tests pending |
+| Bronze/Silver rollback, source-tag audit, and evidence lifecycle | Not replayed; code review found hard-delete-by-tag paths without tenant predicates and a 10,000-row query cap | Same-tag cross-tenant isolation, exact affected-row accounting, actor/reason/correlation record, authorized audit scoping, and explicit erasure behavior | Tenant predicates, tenant-authenticated audit/import propagation, and fail-before-delete cap behavior are implemented and focused locally tested on a follow-up branch; durable correction/erasure lifecycle and audit receipts remain pending |
 | Operator diagnosis and runbook | Not replayed | Kyber source/event/identity/graph/billing/readiness inspection without alternate write authority | Pending |
 | Staging deploy, wake, smoke, and sleep | No verified snapshot recorded for this reset | Immutable release, plan/policy review, awake lease, smoke, rollback, and sleep evidence | Pending |
 | Design-partner source proof | None recorded for this reset | One permitted real source and tenant traverses the proof path with recoverable failures | Pending |
@@ -61,6 +61,13 @@ The backend and root `tests/` trees have conflicting `tests.conftest` import
 names when collected in one invocation in this checkout, so the latter two
 baseline commands were run separately. The combined invocation failed during
 collection and is not counted as a test result.
+
+## Recorded local follow-up evidence
+
+| Date | Revision and environment | Command | Result | What it establishes | What remains unproved |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-04 | Tenant-scoped rollback follow-up at `08dca6cf5`; project Python | `PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest services/backend/tests/unit/test_lake_tenant_isolation.py services/backend/tests/integration/test_read_completeness.py services/backend/tests/identity/test_sdk_import_identity_candidates.py services/backend/tests/data_exchange/test_import_envelope.py -q -n0` | 65 passed in 4.19s | Focused lake, route/read, identity-candidate, and import-envelope behavior passes, including tenant scope propagation and same-tag cross-tenant isolation. | Local test fixtures do not prove production database concurrency, durable correction/erasure receipts, governed erasure behavior, or hosted/staging operation. |
+| 2026-10-04 | Same follow-up revision and environment | `PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest tests/unit/test_import_commit.py tests/unit/test_dune_promotion.py -q -n0` | 22 passed in 6.72s | Import rollback preflight refuses an over-cap source tag before graph revocation or vertex cleanup; the existing Dune promotion tests pass. | No cross-tier database transaction/locking proof, durable lifecycle receipt, provider-backed test, hosted PR authority, or staging evidence. |
 
 ## Cutover decision record
 
