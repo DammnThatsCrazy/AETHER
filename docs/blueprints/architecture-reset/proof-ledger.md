@@ -47,6 +47,12 @@ or unavailable result stays visible.
 | 2026-10-04 | Same detached baseline and interpreter | `PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest services/backend/tests/identity/test_late_binding_end_to_end_proof.py services/backend/tests/ingestion/test_bronze_hash_chain.py -q` | 7 passed in 14.69s | Focused identity continuity and Bronze chain behavior pass at the baseline commit. | The tests do not join a real provider delivery to a customer-visible graph view. |
 | 2026-10-04 | Same detached baseline and interpreter | `PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest tests/unit/graph_gateway/test_mutation_gateway.py -q` | 18 passed in 14.47s | Focused gateway mode, mutation, and ledger behavior passes at the baseline commit. | This does not establish that every live writer uses enforced mode or that a durable ledger/projector transaction survived failure. |
 
+## Recorded local follow-up evidence
+
+| Date | Revision and environment | Command | Result | What it establishes | What remains unproved |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-04 | SDK replay safety follow-up at `df13f8c60bb5558de305361e4089ee114304bf13`; explicit local environment and project virtual environment | `AETHER_ENV=local PYTHONPATH=services/backend /Users/osazehunt/AETHER/.venv/bin/python -m pytest tests/unit/observation/test_ingest_replay.py -q` | 14 passed in 7.32s | Hosted live publish is refused unless explicitly local and in-memory; process-local run IDs are tenant/request scoped and scope collisions or overlapping calls are rejected. | In-memory Bronze and fake producer only. No durable checkpoint, current-rights re-admission, crash recovery, multi-process idempotency, hosted publish, provider-backed path, or staging proof. |
+
 This baseline test supplies a comparison point for a later path cutover. A
 single local fixture is not an old/new equivalence decision. Record the target
 revision and repeat the same fixture plus durable and adverse-path evidence
