@@ -1094,13 +1094,13 @@ class DeprecatedIngestAliasesConfig:
 # Ingestion-level replay (WS-B4): the OPERATOR-triggered, scan-run re-delivery
 # of durable Bronze SDK events through the universal ingestion gateway with
 # original-time preservation (Invariant #15). Default OFF: an operator may
-# always dry-run a replay (counts only, zero publishes); a REAL run
-# (services/ingestion/replay_routes.py POST /events with dry_run=false) is
-# refused with 403 until this flag is ON. Replay reads Bronze only and
-# publishes to Topic.SDK_EVENTS_VALIDATED with source_service
-# "ingestion.replay" (the Bronze writer consumer skips those — the durable row
-# already exists). Service runner + minimal operator route; NOT a durable-jobs
-# control plane in this slice.
+# always dry-run a replay (counts only, zero publishes). A real run requires
+# this flag and is additionally restricted by replay.py to an explicit local,
+# in-memory backend. Hosted live replay remains unavailable until durable
+# replay-delivery identity and consumer idempotency are implemented. Replay
+# reads Bronze only and publishes to Topic.SDK_EVENTS_VALIDATED with
+# source_service "ingestion.replay" (the Bronze writer consumer skips those —
+# the durable row already exists). This is NOT a durable-jobs control plane.
 @dataclass(frozen=True)
 class IngestReplayConfig:
     enabled: bool = _env_bool("AETHER_INGESTION_REPLAY_ENABLED", False)

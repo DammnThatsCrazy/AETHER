@@ -120,8 +120,8 @@ discovery sees them; bodies are flag-gated (report `enabled: false` while OFF)
 | Pipeline health | `GET /v1/health/pipeline` | source health, ingestion lag | Funnel summary; `healthy` / `degraded` / `disabled`; NOT operator-gated (liveness + operator hook both read it) |
 | SDK capability manifest | `GET /v1/config/sdk/versions` | schema health | Static tier table + `enabled`/`mode`; NOT operator-gated (SDKs read it) |
 | SDK signed manifest | `GET /v1/config/sdk/manifest` | schema health | Existing signed manifest surface |
-| Replay service status | `GET /v1/kyber/ingest/replay/status` | replay | Durable Bronze replay service status |
-| Replay run/preview | `POST /v1/kyber/ingest/replay/events` | replay, rejection | Operator-triggered replay / dry-run of durable Bronze rows |
+| Replay service status | `GET /v1/kyber/ingest/replay/status` | replay | Reports the feature switch; it does not certify that a durable replay run is available |
+| Replay run/preview | `POST /v1/kyber/ingest/replay/events` | replay, rejection | Dry-run previews durable Bronze rows. Live publish is limited to an explicit local, in-memory backend; hosted live replay returns unavailable until delivery identity and consumer idempotency are durable. |
 
 `GET /v1/health/pipeline` (in `services/backend/services/gateway/routes.py`) fixes the
 previously-**phantom** pipeline health endpoint the Kyber operator hook called:

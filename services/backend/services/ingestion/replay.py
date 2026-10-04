@@ -1,61 +1,32 @@
-"""Ingestion-level replay runner (WS-B4).
+"""Local ingestion replay of Bronze SDK evidence with original-time preservation.
 
-An OPERATOR-triggered, scan-run re-delivery of durable Bronze SDK events
-through the universal ingestion gateway with **original-time preservation**
-(Invariant #15). Reading ONLY the durable Bronze rows
-(``_IN_MEMORY_STORES["bronze_sdk_events"]`` locally / the ``bronze_sdk_events``
-table) and publishing validated events back onto ``Topic.SDK_EVENTS_VALIDATED``,
-it drives the exact same downstream pipeline as a live ingest (Silver
-normalization, fact projection, identity signals) — but each re-delivered event
-keeps its ORIGINAL occurrence timestamp and event_id, so every idempotent
-consumer recomputes the same downstream fact instead of minting a duplicate
-observation.
+The operator route defaults to a publish-free preview. A live run is restricted
+to an explicitly local, in-memory backend. ``replay_run_id`` suppresses a
+repeated local run only while this process lives; it is not a durable delivery
+key, checkpoint, or guarantee about downstream side effects. JobsRepository
+offers tenant-scoped jobs and leases, but its checkpoint cannot be committed
+atomically with EventProducer.publish. Hosted live replay must stay closed until
+a durable replay delivery/outbox identity and consumer idempotency boundary exist.
 
-Why is this the ingestion replay and NOT a job on the event-outbox relay /
-durable control plane?
-
-- **Outbox is forward-only.** The ``event_outbox`` relay drains *pending
-  publishes* of events that were already written in the current V2 ingest
-  transaction. Its rows are claims with a lease + attempt lifecycle, not a
-  re-runnable log; nothing in it survives as a durable re-process source, and a
-  replayed event is NOT a new Bronze row (the original already exists) — the
-  outbox would have nothing to enqueue.
-- **Bronze is the durable replay source.** The same invariant the semantic
-  replay runner (``services/semantic_intelligence/replay.py``) relies on holds
-  here: Bronze is the append-only record of every accepted event (Invariant
-  #14), so a reprocessing pass must scan Bronze, not an ephemeral queue.
-- **Scope honesty (this slice).** WS-B4 ships a *service runner + minimal
-  OPERATOR route*, deliberately NOT a durable-jobs control plane (no persisted
-  job table / cursor / lease). The run is synchronous and its idempotency unit
-  is the caller-supplied ``replay_run_id`` (auto-generated when omitted): the
-  in-memory ``_RUN_JOURNAL`` records each completed run so repeating a run id
-  is a no-op, and downstream consumers are already idempotent on the original
-  event identity. Durable job persistence / resumability is a later slice and
-  is NOT claimed here.
-
-Replay stamps (Invariant #15): the runner computes ONE fresh run instant
-(``replay_received_at == replay_ingested_at``) and hands it to the replay
-adapter per row. The adapter rewrites the envelope's ``received_at`` /
-``ingested_at`` (and the runner mirrors it on the flat payload) while
-``occurred_at`` / ``timestamp`` / ``event_id`` stay ORIGINAL. This is the
-observed-vs-received split: a replay is a new *delivery*, not a new *event*.
-
-Published events carry ``source_service == REPLAY_SOURCE_SERVICE`` so
-downstream consumers can tell a replay delivery from a live one — in
-particular the ``sdk_bronze_writer`` consumer SKIPS them (services/ingestion/
-workers.py): replaying must never mint a second Bronze row for an event that is
-already durable. This mirrors the existing outbox-relay skip
-(``ingestion.outbox_relay``).
+Bronze remains the replay source. The replay adapter keeps the original
+``event_id`` and occurrence time, adds a fresh delivery time, and marks
+``source_service == REPLAY_SOURCE_SERVICE``. The Bronze writer skips this source,
+so replay does not create a second Bronze row.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Optional, Sequence
 
-from shared.common.common import utc_now
+from shared.common.common import (
+    ConflictError,
+    ServiceUnavailableError,
+    utc_now,
+)
 from shared.events.events import Event, Topic
 from shared.logger.logger import get_logger, metrics
 
@@ -75,15 +46,50 @@ REPLAY_SOURCE_SERVICE = "ingestion.replay"
 
 _BRONZE_TABLE = "bronze_sdk_events"
 
-# In-memory run journal (local/test only; production runs are synchronous and
-# the operator route carries the summary back directly). Keyed by replay_run_id
-# so a repeated run id is a no-op — the idempotency unit of this slice.
-_RUN_JOURNAL: dict[str, dict[str, Any]] = {}
+# Process-local duplicate suppression only. Tenant and immutable request scope
+# are part of the key/record; this is deliberately never used for hosted runs.
+_RUN_JOURNAL: dict[tuple[str, str], dict[str, Any]] = {}
+_RUN_IN_FLIGHT: set[tuple[str, str]] = set()
 
 
 def reset_run_journal() -> None:
     """Test helper: clear the in-memory replay run journal."""
     _RUN_JOURNAL.clear()
+    _RUN_IN_FLIGHT.clear()
+
+
+async def _require_local_live_replay() -> None:
+    """Refuse publishing if process configuration or repository is hosted.
+
+    Require the environment to be set explicitly. A missing ``AETHER_ENV``
+    otherwise defaults to local in repository helpers and could silently turn
+    a misconfigured hosted process into an in-memory publisher.
+    """
+    if os.environ.get("AETHER_ENV", "").strip().lower() != "local":
+        raise ServiceUnavailableError("durable ingestion replay")
+    if os.environ.get("DATABASE_URL"):
+        raise ServiceUnavailableError("durable ingestion replay")
+    from repositories.repos import get_pool
+
+    if await get_pool() is not None:
+        raise ServiceUnavailableError("durable ingestion replay")
+
+
+def _request_scope(
+    *,
+    event_types: Optional[Sequence[str]],
+    families: Optional[Sequence[str]],
+    occurred_from: Optional[str],
+    occurred_to: Optional[str],
+    limit: Optional[int],
+) -> tuple[Any, ...]:
+    return (
+        tuple(sorted(set(event_types or ()))),
+        tuple(sorted(set(families or ()))),
+        _norm_iso(occurred_from),
+        _norm_iso(occurred_to),
+        limit,
+    )
 
 
 # ── Bronze scan / canonical projection ──────────────────────────────────────
@@ -259,15 +265,61 @@ async def replay_events(
         status ("completed" | "dry_run"), dry_run, replay_run_id,
         replayed_event_ids, rejected_event_ids, errors
 
-    Idempotency: a caller-supplied ``replay_run_id`` is the unit — repeating a
-    completed run id is a no-op that returns the recorded summary. Runs with an
-    auto-generated id are journaled the same way (in-memory, this slice).
+    A repeated local run id with the same tenant and immutable filters is a
+    process-local no-op. Reusing it with a different scope is a conflict.
     """
     run_id = replay_run_id or uuid.uuid4().hex
-    prior = _RUN_JOURNAL.get(run_id)
+    scope = _request_scope(
+        event_types=event_types,
+        families=families,
+        occurred_from=occurred_from,
+        occurred_to=occurred_to,
+        limit=limit,
+    )
+    key = (str(tenant_id), run_id)
+    if not dry_run:
+        await _require_local_live_replay()
+    prior = _RUN_JOURNAL.get(key)
     if prior is not None:
+        if prior["scope"] != scope or prior["dry_run"] != dry_run:
+            raise ConflictError("replay_run_id already used with a different request scope")
         logger.info("replay run %s already recorded — no-op", run_id)
-        return dict(prior)
+        return dict(prior["summary"])
+    if key in _RUN_IN_FLIGHT:
+        raise ConflictError("replay_run_id is already in flight")
+    _RUN_IN_FLIGHT.add(key)
+
+    try:
+        return await _run_replay(
+            tenant_id,
+            run_id=run_id,
+            scope=scope,
+            event_types=event_types,
+            families=families,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+            limit=limit,
+            dry_run=dry_run,
+            producer=producer,
+        )
+    finally:
+        _RUN_IN_FLIGHT.discard(key)
+
+
+async def _run_replay(
+    tenant_id: str,
+    *,
+    run_id: str,
+    scope: tuple[Any, ...],
+    event_types: Optional[Sequence[str]],
+    families: Optional[Sequence[str]],
+    occurred_from: Optional[str],
+    occurred_to: Optional[str],
+    limit: Optional[int],
+    dry_run: bool,
+    producer: Any,
+) -> dict[str, Any]:
+    key = (str(tenant_id), run_id)
 
     rows = await iter_bronze_observations(
         tenant_id,
@@ -378,5 +430,5 @@ async def replay_events(
             value=summary["published"],
             labels={"tenant_id": tenant_id},
         )
-    _RUN_JOURNAL[run_id] = summary
+    _RUN_JOURNAL[key] = {"scope": scope, "dry_run": dry_run, "summary": summary}
     return dict(summary)

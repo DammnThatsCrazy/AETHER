@@ -607,6 +607,17 @@ preserved.
 - **Suites:** `test_replay_adapter.py` + `test_ingest_replay.py` + route-mount
   regressions (`d1c95a39`) — 4.
 
+**Architecture reset safety correction (2026-10-04; branch `codex/aether-architecture-reset`):**
+the process-local run journal is not a durable idempotency boundary. Live
+publishing is now refused unless `AETHER_ENV=local`, `DATABASE_URL` is absent,
+and no database pool is initialized. Local duplicate suppression is keyed by
+tenant, run id, request filters, and dry-run mode; it remains process-local and
+does not prevent a repeat publish after a crash. The reset branch does not
+claim hosted replay, durable checkpointing, or exactly-once delivery. A durable
+replay delivery/outbox identity and consumer idempotency boundary remain open
+before hosted replay can be enabled. See the architecture reset proof ledger
+for focused local evidence and limitations.
+
 ## WS-B5 — single normalization-spine convergence (consumption side, flag-gated)
 
 Merged onto `feat/sdk-universal-ingestion` at `7a1b73f5` (commits `0ffd30d0`→
