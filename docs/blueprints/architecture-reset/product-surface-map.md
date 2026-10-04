@@ -100,6 +100,8 @@ Route-state infrastructure is in `docs/audits/FRONTEND-ROUTE-STATE-MATRIX.md` an
 
 **Visible work overlap:** this baseline is `origin/Development` after identity continuity changes; `frontend/aether/src/features/identity/*` and its two routes are active integration seams. A local/remote `feat/universal-connector-runtime-blueprint-20261002` branch is visible, while this checkout's Kyber `/provider-connections` and Aether connector routes already exist. Coordinate changes to connector vocabulary, provider state, and identity/360 evidence with those owners; branch presence does not establish a completed or certified runtime. The graph exploration, mobile, and marketing handoff work also has existing tests/contracts to preserve.
 
+The initial shell cutover maps Graph to `/explore`, Profiles to `/users`, Connectors to `/settings/integrations`, and Settings to `/settings`. Snapshot, Journeys, Signals, Lenses, and Value remain disabled until their route/readiness contracts exist. Existing capability-gated identity links remain additional navigation when enabled; hiding a link is not route authorization. The activation label “Credential saved; first sync pending” infers credential state from `initial_sync_pending` because the connect-plan contract has no separate credential-present field; provider event arrival and graph readiness remain unproved.
+
 ## Prioritized implementation work
 
 | Priority | Specific change after architecture review | Acceptance evidence |

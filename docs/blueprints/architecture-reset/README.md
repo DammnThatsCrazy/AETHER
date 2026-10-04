@@ -81,7 +81,7 @@ staging evidence is recorded or explicitly dispositioned.
 | Inventory | Question it must answer | Status |
 | --- | --- | --- |
 | [Runtime authority](runtime-authority-map.md) | Which current code owns intake, evidence, normalization, identity, graph mutation, replay, intelligence, actions, and recovery? | Mapped; runtime behavior is unchanged in this frame; replay durability and provider cutovers remain pending |
-| [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state assertions are in this frame; target navigation and activation-state changes remain follow-up work |
+| [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state assertions are in the frame; a follow-up cutover maps supported navigation and separates activation setup from observed evidence; end-to-end proof remains pending |
 | [Delivery controls](delivery-authority-map.md) | Which commands, docs ownership rules, CI paths, profiles, and deployment controls are truly authoritative? | Mapped; this frame changes no verification or deployment behavior; delivery cutovers pending |
 
 The [cutover inventory](cutover-inventory.md) gives the first `keep`, `merge`,
