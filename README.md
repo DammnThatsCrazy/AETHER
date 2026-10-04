@@ -1,198 +1,62 @@
 # Aether
 
-Aether is the intelligence graph and runtime layer for understanding humans, agents, journeys, value flows, campaigns, communications, and system activity across applications, providers, and autonomous workflows.
+Aether is a tenant-facing intelligence graph runtime. It brings together observations from applications and external systems, resolves them into a tenant-scoped graph, and presents evidence-backed profiles, journeys, and intelligence to each tenant.
 
-## Current Status
+**Status:** private pre-production alpha. The architecture reset is in progress. The target architecture below describes the direction of that work; it does not mean every target capability is implemented or production-ready.
 
-Aether is currently a pre-production private alpha.
+## Product boundaries
 
-The repository is being aligned around the first canonical pre-production baseline:
+- **Aether** is the customer-facing product for tenant data, graph views, and intelligence.
+- **Kyber** is the internal operator console for diagnosis, review, recovery, and release operations. It is not a customer product or a separate authority for graph and identity decisions.
 
-`0.1.0-alpha.0`
+## Runtime spine
 
-> **Source of truth** for SDK behavior lives in [`docs/source-of-truth/`](docs/source-of-truth/).
-> Canonical SDK contracts live in [`packages/shared/`](packages/shared/).
-> Anything outside those locations that contradicts them is wrong.
+Current intake has several paths: SDK batches, external feeds, imports, provider sync and webhooks, and legacy connectors. They do not all pass through `/v1/batch`. The reset is aligning these paths around shared contracts, tenant policy, retained evidence, backend-owned identity, and governed graph mutations.
 
-## What Aether Does
-
-Aether captures observations from SDKs, providers, and connectors; normalizes them into canonical contracts; projects them into a tenant-scoped intelligence graph; and surfaces that graph through product, operator, developer, and intelligence interfaces.
-
-Core surfaces include:
-
-- Aether Console
-- Kyber Operator Console
-- Noesis intelligence surfaces
-- Developer portal
-- SDKs
-- Provider and connector workflows
-- API, MCP, and future CLI access surfaces
-
-## Repository Map
-
-| Area | Path |
-|---|---|
-| Applications | `apps/`, `frontend/` |
-| Backend services | `services/backend/` |
-| Shared packages and SDKs | `packages/` |
-| Provider connectors | `services/backend/services/integrations/connectors/`, `docs/CONNECTORS.md` |
-| Canonical contracts | `contracts/`, `packages/shared/contracts/` |
-| Documentation | `docs/` |
-| Scripts and validators | `scripts/` |
-| Tests | `tests/` |
-| Deployment | `deploy/` |
-| ML service (training + serving) | `services/ml/` |
-| Agent service (internal workers) | `services/agents/` |
-| Compliance service | `services/compliance/` |
-| AWS/Terraform deployment | `deploy/aws/` |
-| Smart-contract project | `contracts/smart-contracts/` |
-| Historical architecture archive | `docs/archive/legacy-architecture/` |
-
-## Core Architecture
-
-```txt
-SDKs / Providers / Connectors
-→ canonical observation envelopes
-→ /v1/batch ingestion
-→ Bronze/Silver normalization
-→ identity, campaign, journey, communication, agent, and value resolution
-→ graph outbox
-→ tenant-scoped graph projections
-→ lenses and 360s
-→ Aether, Kyber, Noesis, developer APIs, MCP, and CLI surfaces
+```text
+SDK batches | feeds | imports | provider runtime | legacy connectors
+  → tenant admission and canonical contracts
+  → evidence and normalization
+  → identity and entity resolution
+  → governed graph mutation and projections
+  → tenant views, explanation, permitted action, and outcome
 ```
 
-Start here:
+The target adds consistent replay, correction, evaluation, and recovery across this flow. The [architecture reset plan](docs/blueprints/architecture-reset/README.md) tracks current authorities, cutovers, and required proof. A local fixture or passing focused check does not establish design-partner or production readiness.
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md)
-- [`docs/START_HERE.md`](docs/START_HERE.md)
-- [`docs/source-of-truth/repo-truth.md`](docs/source-of-truth/repo-truth.md)
-- [`docs/source-of-truth/repo-migration.md`](docs/source-of-truth/repo-migration.md)
-- [`docs/source-of-truth/architecture-truth.md`](docs/source-of-truth/architecture-truth.md)
+## Repository map
 
-## Quick Links
-
-- [`docs/source-of-truth/SDK_SCOPE.md`](docs/source-of-truth/SDK_SCOPE.md) — what the SDK is and is not
-- [`docs/source-of-truth/EVENT_REGISTRY.md`](docs/source-of-truth/EVENT_REGISTRY.md) — every event the SDK emits
-- [`docs/source-of-truth/CONSENT_MODEL.md`](docs/source-of-truth/CONSENT_MODEL.md) — canonical consent purposes
-- [`docs/source-of-truth/INGESTION_CONTRACT.md`](docs/source-of-truth/INGESTION_CONTRACT.md) — `POST /v1/batch`
-- [`docs/responsiveness-spine/README.md`](docs/responsiveness-spine/README.md) — Responsiveness & Time-to-Value spine
-- [`docs/source-of-truth/ENTITY_MODEL.md`](docs/source-of-truth/ENTITY_MODEL.md) — entities shared across Web2 + Web3
-- [`docs/source-of-truth/PLATFORM_PARITY.md`](docs/source-of-truth/PLATFORM_PARITY.md) — tiers A/B/C
-- [`docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md`](docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md) — backend intelligence architecture
-
-## SDKs
-
-The Aether SDKs are thin observation clients.
-
-They collect local observations from the host app or site, attach canonical metadata, batch events, retry safely, and emit to `/v1/batch`.
-
-They do not own provider sync, global identity resolution, attribution, financial normalization, or graph writes.
-
-| Platform | Package | Entry |
-|---|---|---|
-| **Web** | `@aether/web` | `packages/web/src/index.ts` |
-| **iOS** | `AetherSDK` (Swift SPM) | `packages/ios/Sources/AetherSDK/Aether.swift` |
-| **Android** | `io.aether:sdk-android` (Kotlin) | `packages/android/src/main/java/com/aether/sdk/Aether.kt` |
-| **React Native** | `@aether/react-native` | `packages/react-native/src/index.tsx` |
-| **Shared contracts** | `packages/shared/` | Canonical TypeScript contracts |
-
-SDK docs:
-
-- [`docs/sdks/overview.md`](docs/sdks/overview.md)
-- [`docs/sdks/parity-matrix.md`](docs/sdks/parity-matrix.md)
-- [`docs/source-of-truth/sdk-truth.md`](docs/source-of-truth/sdk-truth.md)
-
-## Provider and Connector Runtime
-
-Providers are external systems.
-
-Connectors are Aether-managed integrations that handle provider authorization, webhook ingestion, sync lifecycle, cursor state, normalization, and graph projection.
-
-Connector docs:
-
-- [`docs/connectors/overview.md`](docs/connectors/overview.md)
-- [`docs/connectors/provider-vs-connector.md`](docs/connectors/provider-vs-connector.md)
-- [`docs/connectors/connector-lifecycle.md`](docs/connectors/connector-lifecycle.md)
-- [`docs/source-of-truth/connector-truth.md`](docs/source-of-truth/connector-truth.md)
-
-## Apps and Productization
-
-Three frontends (all run locally in `local-mocked` mode with no backend):
-**Aether** (tenant, `frontend/aether`, :5175), **Kyber** (operator, `frontend/kyber`, :5174),
-and the **Demo App** (`frontend/demo`, :5177).
-
-- Local dev and deployment: [`docs/LOCAL-DEVELOPMENT.md`](docs/LOCAL-DEVELOPMENT.md), [`docs/PRODUCTION-DEPLOYMENT.md`](docs/PRODUCTION-DEPLOYMENT.md), [`docs/ENVIRONMENT-VARIABLES.md`](docs/ENVIRONMENT-VARIABLES.md)
-- Connectors and ingestion: [`docs/CONNECTORS.md`](docs/CONNECTORS.md), [`docs/DATA-INGESTION-PATHS.md`](docs/DATA-INGESTION-PATHS.md)
-- Demo: [`docs/DEMO-APP.md`](docs/DEMO-APP.md)
-- API: [`docs/API-REFERENCE.md`](docs/API-REFERENCE.md)
-- SDKs: [`docs/SDKS.md`](docs/SDKS.md)
-- Readiness: [`docs/PRODUCTIZATION-CHECKLIST.md`](docs/PRODUCTIZATION-CHECKLIST.md), [`docs/SECURITY-READINESS.md`](docs/SECURITY-READINESS.md), [`docs/PREPRODUCTION-READINESS.md`](docs/PREPRODUCTION-READINESS.md)
-
-## Releases
-
-Aether has not reached public production release.
-
-Pre-production versions use SemVer pre-release identifiers:
-
-- `alpha`
-- `beta`
-- `rc`
-
-See:
-
-- [`VERSION`](VERSION)
-- [`CHANGELOG.md`](CHANGELOG.md)
-- [`RELEASES.md`](RELEASES.md)
-- [`docs/releases/release-policy.md`](docs/releases/release-policy.md)
-- [`docs/releases/retrospective-milestones.md`](docs/releases/retrospective-milestones.md)
-
-## Development
-
-```bash
-make verification-disposition BASE=origin/main EXECUTE=1  # normal PR authority
-make ci-check              # broad consistency and repository evidence
-npm run test:all           # alias for make ci-check
-npm run security:audit     # secret scan + dependency audit
-```
-
-See:
-
-- [`DEVELOPMENT.md`](DEVELOPMENT.md)
-- [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- [`docs/LOCAL-DEVELOPMENT.md`](docs/LOCAL-DEVELOPMENT.md)
-
-> Repository consistency is owned by `scripts/repo_doctor.py` + the root `Makefile`.
-> `pyproject.toml` is the canonical platform version source;
-> [`docs/source-of-truth/`](docs/source-of-truth/) owns canonical behavior;
-> [`packages/shared/contracts/`](packages/shared/contracts/) owns canonical
-> SDK / event / consent contracts. Generated docs must be regenerated
-> (`make docs-fix`) and committed; source-linked docs must be reviewed before
-> stamping. No PR is merge-ready unless the verification disposition passes;
-> `make ci-check` remains broad repository evidence.
-
-## Security
-
-See:
-
-- [`SECURITY.md`](SECURITY.md)
-- [`docs/security/privacy.md`](docs/security/privacy.md)
-- [`docs/security/tenant-isolation.md`](docs/security/tenant-isolation.md)
-
-## Documentation
-
-| Document | Description |
+| Path | Purpose |
 |---|---|
-| [Architecture](docs/ARCHITECTURE.md) | System design, hybrid architecture, data flow |
-| [Backend API](docs/BACKEND-API.md) | All API endpoints with request/response examples |
-| [Intelligence Graph](docs/INTELLIGENCE-GRAPH.md) | Graph layers, edge types, scoring |
-| [Identity Resolution](docs/IDENTITY-RESOLUTION.md) | Cross-device matching algorithms |
-| [ML Training Guide](docs/ML-TRAINING-GUIDE.md) | Model training, artifacts, ingestion readiness |
-| [Production Readiness](docs/PRODUCTION-READINESS.md) | Infrastructure status, deployment prerequisites |
-| [Operations Runbook](docs/OPERATIONS-RUNBOOK.md) | Failure modes, recovery, operational procedures |
-| [Connectors](docs/CONNECTORS.md) | Inbound connector framework |
-| [Changelog](docs/CHANGELOG.md) | Version history |
-| [Contributing](CONTRIBUTING.md) | Development setup, standards, PR process |
+| `frontend/aether/`, `frontend/kyber/` | Aether customer app and Kyber operator console |
+| `services/backend/` | Backend API, ingestion, identity, graph, and intelligence runtime |
+| `services/ml/`, `services/agents/`, `services/compliance/` | ML, internal workers, and compliance services |
+| `packages/` | Shared packages, clients, SDKs, and contracts |
+| `packages/shared/contracts/` | Canonical event, consent, observation, and other shared contracts |
+| `docs/` | Architecture, operating guidance, and source-of-truth documentation |
+| `scripts/`, `tests/`, `deploy/` | Repository tooling, tests, and deployment configuration |
+
+## Start here
+
+**Understand the system**
+
+- [Current architecture and target direction](ARCHITECTURE.md)
+- [Aether root architecture target](docs/architecture/AETHER_ROOT_ARCHITECTURE.md)
+- [Architecture reset plan and proof requirements](docs/blueprints/architecture-reset/README.md)
+- [Repository truth](docs/source-of-truth/repo-truth.md) and [architecture truth](docs/source-of-truth/architecture-truth.md)
+
+**Work with contracts and intake**
+
+- Canonical contracts: [`packages/shared/contracts/`](packages/shared/contracts/)
+- Supported [ingestion paths](docs/DATA-INGESTION-PATHS.md)
+- Canonical behavior and ownership: [`docs/source-of-truth/`](docs/source-of-truth/)
+
+**Develop**
+
+- [Local development setup](docs/LOCAL-DEVELOPMENT.md)
+- [Contribution guide](CONTRIBUTING.md)
+
+The repository's consistency system is `scripts/repo_doctor.py` and the root `Makefile`. Follow the relevant guidance above when changing code or documentation; a single focused check is not proof of PR merge-readiness.
 
 ## License
 
