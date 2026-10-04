@@ -300,13 +300,24 @@ class BronzeRepository(BaseRepository):
                 count += 1
         return count
 
-    async def query_by_source_tag(self, source_tag: str, limit: int = 100) -> list[dict]:
-        """Query raw records by source_tag for audit/rollback."""
-        return await self.find_many(filters={"source_tag": source_tag}, limit=limit)
+    async def query_by_source_tag(
+        self, source_tag: str, *, tenant_id: str, limit: int = 100
+    ) -> list[dict]:
+        """Query source-tag records owned by one tenant, never global rows."""
+        if not tenant_id:
+            raise ValueError("tenant_id is required for source-tag queries")
+        return await self.find_many(
+            filters={"source_tag": source_tag, "tenant_id": tenant_id}, limit=limit
+        )
 
-    async def rollback_by_source_tag(self, source_tag: str) -> int:
-        """Delete all records matching a source_tag. Returns count deleted."""
-        records = await self.query_by_source_tag(source_tag, limit=10000)
+    async def rollback_by_source_tag(self, source_tag: str, *, tenant_id: str) -> int:
+        """Delete this tenant's records for a source tag; fail closed above cap."""
+        if not tenant_id:
+            raise ValueError("tenant_id is required for source-tag rollback")
+        cap = 10000
+        records = await self.query_by_source_tag(source_tag, tenant_id=tenant_id, limit=cap + 1)
+        if len(records) > cap:
+            raise ValueError(f"source-tag rollback exceeds safety cap of {cap} rows")
         count = 0
         for rec in records:
             if await self.delete(rec["id"]):
@@ -415,9 +426,16 @@ class SilverRepository(BaseRepository):
             tenant_id, limit=100,
         )
 
-    async def rollback_by_source_tag(self, source_tag: str) -> int:
-        """Delete all Silver records matching a source_tag."""
-        records = await self.find_many(filters={"source_tag": source_tag}, limit=10000)
+    async def rollback_by_source_tag(self, source_tag: str, *, tenant_id: str) -> int:
+        """Delete this tenant's Silver records for a source tag."""
+        if not tenant_id:
+            raise ValueError("tenant_id is required for source-tag rollback")
+        cap = 10000
+        records = await self.find_many(
+            filters={"source_tag": source_tag, "tenant_id": tenant_id}, limit=cap + 1
+        )
+        if len(records) > cap:
+            raise ValueError(f"source-tag rollback exceeds safety cap of {cap} rows")
         count = 0
         for rec in records:
             if await self.delete(rec["id"]):

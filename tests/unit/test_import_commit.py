@@ -203,7 +203,9 @@ async def test_rollback_revokes_edges_and_deletes_bronze(clean):
     assert live == []  # all revoked
     assert await gc.get_vertex(f"entity:{TENANT}:alice") is None
     # Bronze rows for the commit are gone.
-    remaining = await BronzeRepository(cm.BRONZE_DOMAIN).query_by_source_tag(record["commit_id"])
+    remaining = await BronzeRepository(cm.BRONZE_DOMAIN).query_by_source_tag(
+        record["commit_id"], tenant_id=TENANT
+    )
     assert remaining == []
 
     detail = await svc.get_import(TENANT, import_id)

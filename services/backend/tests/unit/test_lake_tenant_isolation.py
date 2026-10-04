@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from repositories.lake import GoldRepository, SilverRepository
+from repositories.lake import BronzeRepository, GoldRepository, SilverRepository
 from repositories.repos import reset_in_memory_stores
 
 
@@ -124,3 +124,35 @@ async def test_silver_get_entity_scopes_to_tenant_plus_global():
     # Explicit cross-tenant read sees every row.
     allrows = await silver.get_entity("wallet1", "wallet", tenant_id=None)
     assert sorted(r.get("who") for r in allrows) == ["a", "b", "global"]
+
+
+@pytest.mark.asyncio
+async def test_source_tag_audit_and_rollback_require_tenant_scope():
+    reset_in_memory_stores()
+    bronze = BronzeRepository("source_tag_scope")
+    for tenant in ("tenant-a", "tenant-b"):
+        await bronze.ingest(
+            source="test", source_tag="shared", provider_record_id=tenant,
+            payload={"owner": tenant}, entity_id="", entity_type="", tenant_id=tenant,
+        )
+
+    assert [r["tenant_id"] for r in await bronze.query_by_source_tag("shared", tenant_id="tenant-a")] == ["tenant-a"]
+    with pytest.raises(ValueError, match="tenant_id is required"):
+        await bronze.query_by_source_tag("shared", tenant_id="")
+    assert await bronze.rollback_by_source_tag("shared", tenant_id="tenant-a") == 1
+    assert [r["tenant_id"] for r in await bronze.query_by_source_tag("shared", tenant_id="tenant-b")] == ["tenant-b"]
+
+
+@pytest.mark.asyncio
+async def test_source_tag_rollback_refuses_over_cap_before_deleting():
+    reset_in_memory_stores()
+    bronze = BronzeRepository("source_tag_cap")
+    for i in range(10001):
+        raw = {
+            "id": f"row-{i}", "source_tag": "large", "tenant_id": "tenant-a",
+        }
+        await bronze.insert(raw["id"], raw)
+
+    with pytest.raises(ValueError, match="exceeds safety cap"):
+        await bronze.rollback_by_source_tag("large", tenant_id="tenant-a")
+    assert len(await bronze.query_by_source_tag("large", tenant_id="tenant-a", limit=10001)) == 10001

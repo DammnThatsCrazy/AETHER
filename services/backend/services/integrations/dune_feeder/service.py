@@ -141,7 +141,9 @@ class PromotionService:
 
         Returns a summary: promoted_count, rejected_count, rejection_reasons.
         """
-        bronze_rows = await bronze_repo.query_by_source_tag(source_tag, limit=10000)
+        bronze_rows = await bronze_repo.query_by_source_tag(
+            source_tag, tenant_id=tenant_id, limit=10000
+        )
         promoted = 0
         rejected = 0
         rejection_reasons: list[dict] = []

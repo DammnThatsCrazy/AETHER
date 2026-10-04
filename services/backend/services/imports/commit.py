@@ -844,7 +844,7 @@ async def rollback_import(
     from repositories.lake import BronzeRepository
 
     bronze_deleted = await BronzeRepository(BRONZE_DOMAIN).rollback_by_source_tag(
-        commit.get("bronze_source_tag", commit_id)
+        commit.get("bronze_source_tag", commit_id), tenant_id=tenant_id
     )
     manifest = {
         "edges_revoked": revoked,
