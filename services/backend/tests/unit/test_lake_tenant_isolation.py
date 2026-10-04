@@ -144,6 +144,49 @@ async def test_source_tag_audit_and_rollback_require_tenant_scope():
 
 
 @pytest.mark.asyncio
+async def test_silver_source_tag_rollback_is_tenant_scoped_and_requires_tenant():
+    reset_in_memory_stores()
+    silver = SilverRepository("silver_source_tag_scope")
+    for tenant in ("tenant-a", "tenant-b"):
+        row_id = f"{tenant}-row"
+        await silver.insert(row_id, {
+            "id": row_id, "source_tag": "shared", "tenant_id": tenant,
+        })
+
+    with pytest.raises(ValueError, match="tenant_id is required"):
+        await silver.rollback_by_source_tag("shared", tenant_id="")
+    with pytest.raises(ValueError, match="tenant_id is required"):
+        await silver.rollback_by_source_tag("shared", tenant_id=None)
+
+    assert await silver.rollback_by_source_tag("shared", tenant_id="tenant-a") == 1
+    assert await silver.find_many(
+        filters={"source_tag": "shared", "tenant_id": "tenant-a"}, limit=10
+    ) == []
+    remaining_b = await silver.find_many(
+        filters={"source_tag": "shared", "tenant_id": "tenant-b"}, limit=10
+    )
+    assert [row["tenant_id"] for row in remaining_b] == ["tenant-b"]
+
+
+@pytest.mark.asyncio
+async def test_silver_source_tag_rollback_refuses_over_cap_before_deleting():
+    reset_in_memory_stores()
+    silver = SilverRepository("silver_source_tag_cap")
+    for i in range(10001):
+        row_id = f"silver-row-{i}"
+        await silver.insert(row_id, {
+            "id": row_id, "source_tag": "large", "tenant_id": "tenant-a",
+        })
+
+    with pytest.raises(ValueError, match="exceeds safety cap"):
+        await silver.rollback_by_source_tag("large", tenant_id="tenant-a")
+    remaining = await silver.find_many(
+        filters={"source_tag": "large", "tenant_id": "tenant-a"}, limit=10001
+    )
+    assert len(remaining) == 10001
+
+
+@pytest.mark.asyncio
 async def test_source_tag_rollback_refuses_over_cap_before_deleting():
     reset_in_memory_stores()
     bronze = BronzeRepository("source_tag_cap")
