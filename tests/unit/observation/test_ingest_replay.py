@@ -30,8 +30,9 @@ TENANT = "tenant_replay"
 class FakeProducer:
     """In-memory producer capturing every published Event."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, mode: str = "in-memory") -> None:
         self.events = []
+        self.mode = mode
 
     async def publish(self, event) -> None:  # noqa: ANN001
         self.events.append(event)
@@ -295,6 +296,17 @@ async def test_hosted_live_replay_fails_closed(monkeypatch) -> None:  # noqa: AN
     producer = FakeProducer()
     with pytest.raises(ServiceUnavailableError):
         await replay_events(TENANT, producer=producer, replay_run_id="hosted")
+    assert producer.events == []
+
+
+@pytest.mark.parametrize("mode", ["kafka", "sqs", "uninitialized"])
+async def test_local_live_replay_fails_closed_for_external_or_unknown_bus(mode: str) -> None:
+    from shared.common.common import ServiceUnavailableError
+
+    _seed("e0")
+    producer = FakeProducer(mode=mode)
+    with pytest.raises(ServiceUnavailableError):
+        await replay_events(TENANT, producer=producer, replay_run_id=f"external-{mode}")
     assert producer.events == []
 
 

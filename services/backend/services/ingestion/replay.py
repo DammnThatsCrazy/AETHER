@@ -58,16 +58,20 @@ def reset_run_journal() -> None:
     _RUN_IN_FLIGHT.clear()
 
 
-async def _require_local_live_replay() -> None:
-    """Refuse publishing if process configuration or repository is hosted.
+async def _require_local_live_replay(producer: Any) -> None:
+    """Refuse publishing unless both storage and the actual bus are local.
 
     Require the environment to be set explicitly. A missing ``AETHER_ENV``
     otherwise defaults to local in repository helpers and could silently turn
-    a misconfigured hosted process into an in-memory publisher.
+    a misconfigured hosted process into an in-memory publisher. The producer's
+    resolved backend is authoritative here: a local app can still be connected
+    to SQS/SNS or Kafka.
     """
     if os.environ.get("AETHER_ENV", "").strip().lower() != "local":
         raise ServiceUnavailableError("durable ingestion replay")
     if os.environ.get("DATABASE_URL"):
+        raise ServiceUnavailableError("durable ingestion replay")
+    if getattr(producer, "mode", None) != "in-memory":
         raise ServiceUnavailableError("durable ingestion replay")
     from repositories.repos import get_pool
 
@@ -278,7 +282,11 @@ async def replay_events(
     )
     key = (str(tenant_id), run_id)
     if not dry_run:
-        await _require_local_live_replay()
+        if producer is None:
+            from dependencies.providers import get_producer
+
+            producer = get_producer()
+        await _require_local_live_replay(producer)
     prior = _RUN_JOURNAL.get(key)
     if prior is not None:
         if prior["scope"] != scope or prior["dry_run"] != dry_run:
