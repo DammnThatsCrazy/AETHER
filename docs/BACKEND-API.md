@@ -1538,8 +1538,8 @@ credential slot must be ACTIVE, entitlement must approve).
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/lake/ingest` | Ingest provider data into Bronze tier (batch, source-tagged) |
-| POST | `/v1/lake/rollback` | Rollback records by source_tag across specified tiers |
-| GET | `/v1/lake/audit/{domain}/{source_tag}` | Query audit trail for a source_tag |
+| POST | `/v1/lake/rollback` | Roll back the authenticated tenant's records by source_tag across specified tiers; refuses over 10,000 matching rows before deleting |
+| GET | `/v1/lake/audit/{domain}/{source_tag}` | Query the authenticated tenant's Bronze records for a source_tag |
 | POST | `/v1/lake/materialize` | Write Gold metric/feature/highlight |
 | GET | `/v1/lake/gold/{domain}/{entity_id}` | Query Gold metrics for an entity |
 | GET | `/v1/lake/quality/{domain}` | Run data quality checks on a domain's Bronze tier |
@@ -1550,7 +1550,7 @@ credential slot must be ACTIVE, entitlement must approve).
 
 **Required fields for ingest:** `domain`, `source`, `source_tag`, `records[]`
 
-**Permissions:** `write` for ingest/materialize, `read` for queries, `admin` for rollback/quality
+**Permissions:** `write` for ingest/materialize, tenant-scoped `read` for queries/audit, tenant-scoped `admin` for rollback/quality
 
 ---
 

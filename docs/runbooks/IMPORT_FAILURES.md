@@ -158,8 +158,11 @@ tenant-side) which revokes the prior commit's edges and re-stages.
 
 ### Tenant reports wrong/duplicated data after an import
 **Roll it back:** `POST /v1/imports/{id}/rollback` (tenant admin) revokes exactly
-the commit's graph edges and deletes its Bronze rows — the uploaded file bytes are
-never touched, so the import can be corrected and re-committed via **replay**.
+the commit's graph edges and deletes its Bronze rows for the authenticated
+tenant — the uploaded file bytes are never touched, so the import can be
+corrected and re-committed via **replay**. A commit with more than 10,000
+matching Bronze rows is refused before graph or Bronze mutation; escalate the
+case for an approved recovery plan rather than deleting rows directly.
 Upserted vertices are never force-deleted: rollback garbage-collects only vertices
 the backend proves orphaned and owned by this commit (see below) — shared or
 historically foreign vertices persist, and revoking the edges disconnects the
