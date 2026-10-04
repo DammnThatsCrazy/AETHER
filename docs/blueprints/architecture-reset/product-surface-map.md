@@ -12,6 +12,10 @@ since_version: "0.1.0"
 
 **Baseline inspected:** `codex/aether-architecture-reset` at `17503aef9` on 2026-10-04. This is a code-derived map and a proposed migration for the agreed customer navigation: **Snapshot, Graph, Profiles, Journeys, Signals, Lenses, Value, Connectors, Settings**. Aether is the tenant-facing product. Kyber is the private operator control plane. Route presence and a component test do not establish production readiness or an L0–L7 maturity level.
 
+The current-state rows below describe that baseline. This reset branch has
+since implemented the P0 Aether sidebar mapping described in the prioritized
+work table; the route and backend contracts remain as mapped here.
+
 ## Actual application topology and ownership
 
 | Surface | Actual implementation and entry | Current boundary | Proposed disposition and owner |
@@ -101,7 +105,7 @@ Route-state infrastructure is in `docs/audits/FRONTEND-ROUTE-STATE-MATRIX.md` an
 | Priority | Specific change after architecture review | Acceptance evidence |
 |---|---|---|
 | P0 (done in this slice) | Repair the route-state inventory for `/identity/activation` and `/identity/reviews`; add real empty/error/capability-off assertions for each, then run `make frontend-route-state`. | Matrix matches router; enforcement passes with named tests and no weakened threshold. |
-| P0 | In `frontend/aether/src/components/app-shell.tsx`, introduce a single target-navigation descriptor that maps **Graph → `/explore`**, **Profiles → `/users`**, **Connectors → `/settings/integrations`**, **Settings → `/settings`**, and links other target destinations only after their route/readiness contract is implemented. Preserve capability gating and **Not ready** semantics. | Authenticated navigation tests cover available, unavailable, and no-access cases; all prior direct routes still resolve. |
+| P0 (implemented in this slice) | In `frontend/aether/src/components/app-shell.tsx`, one typed target-navigation descriptor maps **Graph → `/explore`**, **Profiles → `/users`**, **Connectors → `/settings/integrations`**, **Settings → `/settings`**. Snapshot, Journeys, Signals, Lenses, and Value are disabled non-links until their route/readiness contracts exist. Existing identity entry points and the connector capability gate remain. | Focused shell and identity route tests passed (8 tests across 2 files); Aether typecheck passed. Router paths and backend authorization were not changed. |
 | P0 | Preserve the activation-to-arrival handoff: surface the specific connector/sync/import/SDK evidence from existing owners, distinguish credential connected from data arrived, and link to first profile/graph only when observed. Extend `ActivatePage`, integrations section, and appropriate first-value/readiness hooks rather than adding a parallel status store. | Focused route-state and data-truth tests cover no data, connecting, credential waiting, receiving, failed, partial, and ready transitions. |
 | P0 | Keep Aether and Kyber auth/data/action boundaries in the proposed nav and 360 contracts. Kyber tenant mirror, scoped graph, commands, and provider runtime stay internal; Aether tenant actions use tenant authorization and receipts. | Tests show cross-tenant/denied states remain explicit and route arrival never grants access. |
 | P1 | Add a tenant Snapshot page and route from canonical read models, with activation-aware `/` resolver intact. Add target Journeys, Signals, Lenses, and Value indexes only as each scoped query and truth-state contract becomes available. | Direct/back/forward URL tests, matrix rows, and populated/empty/error/permission assertions for every new route. |
