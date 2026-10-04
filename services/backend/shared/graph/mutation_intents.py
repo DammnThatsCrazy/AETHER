@@ -106,6 +106,7 @@ def vertex_intent(
     subject_kind: Optional[str] = None,
     subject_id: Optional[str] = None,
     source_event_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
     causality_class: str = "observed_sequence",
     reason_code: Optional[str] = None,
     rights_decision_ref: Optional[str] = None,
@@ -117,6 +118,9 @@ def vertex_intent(
     ``node_created`` projects via ``add_vertex`` (matching a direct
     ``add_vertex`` call); every other node operation (e.g. ``node_versioned``)
     projects via ``upsert_vertex`` (matching a direct ``upsert_vertex`` call).
+    ``idempotency_key`` may be supplied when the producer has a stable source
+    identity and needs to exclude intentionally volatile projection metadata
+    from the replay key.
 
     ``rights_decision_ref`` is the same opt-in passthrough as in
     :func:`edge_intent`; ``None`` (the default) leaves the write unchanged.
@@ -131,6 +135,7 @@ def vertex_intent(
         subject_kind=subject_kind if subject_kind is not None else vertex.vertex_type,
         subject_id=subject_id if subject_id is not None else vertex.vertex_id,
         source_event_id=source_event_id,
+        idempotency_key=idempotency_key,
         causality_class=causality_class,
         reason_code=reason_code,
         rights_decision_ref=rights_decision_ref,

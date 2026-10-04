@@ -355,6 +355,7 @@ async def classify_observation_endpoint(request: Request) -> dict:
         graph = GraphClient()
         graph_result = await build_graph_from_observation(
             body, graph, contract_instance_reg, protocol_reg, domain_reg, app_reg,
+            tenant_id=request.state.tenant_id,
         )
         result["graph"] = graph_result
 
@@ -414,6 +415,7 @@ async def ingest_observations_batch(request: Request) -> dict:
         if graph:
             await build_graph_from_observation(
                 obs, graph, contract_instance_reg, protocol_reg, domain_reg, app_reg,
+                tenant_id=request.state.tenant_id,
             )
             graphed += 1
 
@@ -464,6 +466,7 @@ async def detect_migration_endpoint(request: Request) -> dict:
     result = await detect_migration(
         protocol_id, address, chain_id,
         contract_instance_reg, protocol_reg, graph,
+        tenant_id=request.state.tenant_id,
     )
     if result:
         await migration_reg.record_migration(result, request.state.tenant_id)
