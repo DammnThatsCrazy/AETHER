@@ -46,6 +46,14 @@ re-admission, or exactly-once publishing. Hosted replay safety is not certified
 by this inventory. Any restriction or enablement change belongs in a dedicated
 runtime slice with focused failure tests and an explicit rollback.
 
+The separate SDK replay guard now fails closed for live publishing unless the
+backend is explicitly local, has no `DATABASE_URL`, and has no initialized DB
+pool. Its process-local journal scopes run IDs to tenant and request filters,
+rejects filter-scope reuse, and rejects overlapping calls. This prevents hosted
+use of the non-durable path; it does not provide a durable checkpoint, current
+rights re-admission, crash recovery, multi-process idempotency, or exactly-once
+external publishing. Keep hosted replay disabled until those controls are built.
+
 Schema evolution should extend `packages/shared/contracts/event-registry.json`, `observation-envelope-registry.json`, graph mutation taxonomy, identity policies, and the projection/lens registries that already own the corresponding vocabularies. A new source schema or normalizer version must not silently rewrite a source revision or change its logical fact key; preserve both source-native version and Aether interpretation version, with explicit compatibility/upcast or quarantine. Generated twins are integration inputs, not hand-edited source. PR #733's revision-aware provider envelopes and source-object references must be assessed against these authorities after merge.
 
 Operator diagnostics should compose the existing Kyber-only `services/backend/services/ingestion/{replay_routes,observability_routes}.py`, identity explanation/review, graph ledger/checkpoints, projection degradation, delivery receipts/dead letters and provider connection/job evidence into one tenant-filtered trace. `services/backend/main.py` mounts the SDK replay and ingestion observability routes. The trace must answer **which source evidence, policy decision and version led to this claim/action; where did it fail; what may be replayed**. A dashboard count or structural connector certification is insufficient to declare a source, projection or action ready.
