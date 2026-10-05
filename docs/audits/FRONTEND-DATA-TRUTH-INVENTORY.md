@@ -16,7 +16,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the Aether frontend route/history context fixes, explicit shared ESM imports, and Data Exchange E2E graph-scope fixture. Runtime data-truth counts and the test-only fixture classification remain unchanged, so no body update was required."
 source_hashes:
-  "frontend/aether/": "sha256:8ec38b6d4352226c1c7ccd9a9041da77bd126cdf4a9e1275e3840d22cb48fef4"
+  "frontend/aether/": "sha256:7a30f14310ea465e0f37076a110c0f75c45a633c2c94cf7d373c57f5c7245c4f"
   "frontend/demo/": "sha256:3221e3fe4bac2b31ec70ad8d3d4ba11e7a4dd24912ff18f6af560b71cb12a621"
   "frontend/kyber/": "sha256:e5e7f1486fe3555d031156f2d0a338f6f6b766c4cc9bfb59c3f26031f3c08930"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:d32fbf2cfaccccb7420cf6ba0ef4e25030a27dc43fc03d50a04e168db8c0cc92"

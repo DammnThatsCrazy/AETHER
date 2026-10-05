@@ -90,6 +90,24 @@ function activationStatus(tenantId: string) {
   };
 }
 
+function capabilityFixture(tenantId: string) {
+  return {
+    tenant_id: tenantId,
+    release: {
+      deployment_profile: 'test', environment: 'test', release_class: null,
+      enforcement: { policy_enforcement: true, route_registry_enforced: true, kyber_operator_gate: true },
+      enabled_route_prefixes: ['/v1/identity', '/v1/admin/identity'], excluded_domains: [],
+    },
+    profile_sub_resources: [], providers: [], consent_purposes_granted: [], consent_purposes_all: [],
+    feature_flags: {
+      tenant_identity_activation_dashboard_enabled: true,
+      identity_explainability_enabled: true,
+      identity_manual_review_enabled: true,
+    },
+    evaluated_at: '2026-09-27T12:00:00.000Z',
+  };
+}
+
 function reviewEntry(tenantId: string, status = 'open') {
   return {
     conflict_id: `review-${tenantId}-1234`,
@@ -178,25 +196,23 @@ async function stubIdentityApi(page: Page, options: ApiFixtureOptions): Promise<
         },
       });
     }
-    if (request.method() === 'GET' && url.pathname === '/v1/admin/identity/activation-status') {
-      const requestedTenant = url.searchParams.get('tenant_id');
-      if (requestedTenant !== options.tenantId) {
-        return fulfill({ detail: 'Tenant scope mismatch' }, 403);
-      }
+    if (request.method() === 'GET' && url.pathname === '/v1/capabilities') {
+      return fulfill(capabilityFixture(options.tenantId));
+    }
+    if (request.method() === 'GET' && url.pathname === '/v1/identity/activation-status') {
+      if (url.searchParams.has('tenant_id')) return fulfill({ detail: 'Tenant must come from auth' }, 403);
       return fulfill(activationStatus(options.tenantId));
     }
-    if (request.method() === 'GET' && url.pathname === '/v1/admin/identity/review-queue') {
+    if (request.method() === 'GET' && url.pathname === '/v1/identity/review-queue') {
       return fulfill({
         entries: queueIsEmpty ? [] : [currentReview],
         total: queueIsEmpty ? 0 : 1,
         status: 'ok',
       });
     }
-    const approvePath = new RegExp(`^/v1/admin/identity/review-queue/${currentReview.conflict_id}/approve$`);
+    const approvePath = new RegExp(`^/v1/identity/review-queue/${currentReview.conflict_id}/approve$`);
     if (request.method() === 'POST' && approvePath.test(url.pathname)) {
-      if ((body as { tenant_id?: string } | null)?.tenant_id !== options.tenantId) {
-        return fulfill({ detail: 'Tenant scope mismatch' }, 403);
-      }
+      if ((body as { tenant_id?: string } | null)?.tenant_id) return fulfill({ detail: 'Tenant must come from auth' }, 403);
       currentReview = { ...currentReview, status: 'approved' };
       queueIsEmpty = true;
       return fulfill({ status: 'approved', reason_codes: [] });
@@ -229,10 +245,10 @@ test('activation status renders tenant-backed fixture states, counts, and runtim
   await expect(page.getByText('projection restatement enabled')).toBeVisible();
   await expect(page.getByText('disabled', { exact: true })).toBeVisible();
 
-  const statusRequest = requests.find((request) => request.path.startsWith('/v1/admin/identity/activation-status'));
+  const statusRequest = requests.find((request) => request.path.startsWith('/v1/identity/activation-status'));
   expect(statusRequest).toMatchObject({
     method: 'GET',
-    path: `/v1/admin/identity/activation-status?tenant_id=${TENANT_A}`,
+    path: '/v1/identity/activation-status',
     authorization: `Bearer session-${TENANT_A}`,
   });
   await captureUiEvidence(page, testInfo, {
@@ -260,8 +276,8 @@ test('review queue shows pending candidate, evidence reasons, and an approved se
 
   const approveRequest = requests.find((request) => request.method === 'POST' && request.path.endsWith('/approve'));
   expect(approveRequest).toMatchObject({
-    path: `/v1/admin/identity/review-queue/review-${TENANT_A}-1234/approve`,
-    body: { tenant_id: TENANT_A },
+    path: `/v1/identity/review-queue/review-${TENANT_A}-1234/approve`,
+    body: {},
     authorization: `Bearer session-${TENANT_A}`,
   });
   await captureUiEvidence(page, testInfo, {
@@ -311,7 +327,9 @@ test('Profile 360 explains source evidence, ignored evidence, and current graph 
     const request = route.request();
     const path = new URL(request.url()).pathname;
     requests.push({ method: request.method(), path, authorization: request.headers()['authorization'] ?? null });
-    const data = path === '/v1/me'
+    const data = path === '/v1/capabilities'
+      ? capabilityFixture(tenantId)
+      : path === '/v1/me'
       ? {
           tenant_id: tenantId,
           name: 'Profile identity E2E',

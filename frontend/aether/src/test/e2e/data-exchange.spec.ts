@@ -178,7 +178,7 @@ async function mockAuthenticatedBackend(page: Page, dataExchangeEnabled: boolean
 
 test('Data Exchange settings: capability summary + artifact history render when enabled', async ({
   page,
-}) => {
+}, testInfo) => {
   await mockAuthenticatedBackend(page, true);
   await page.goto('/settings/data-exchange');
 
@@ -199,6 +199,18 @@ test('Data Exchange settings: capability summary + artifact history render when 
   // Creation affordances are present when the surface is enabled.
   await expect(section.getByRole('button', { name: 'New export' })).toBeEnabled();
   await expect(section.getByRole('button', { name: 'New report' })).toBeEnabled();
+
+  const navigation = page.locator('aside nav');
+  for (const label of ['Graph', 'Profiles', 'Connectors', 'Settings']) {
+    await expect(navigation.getByRole('link', { name: label })).toBeVisible();
+  }
+  for (const label of ['Snapshot', 'Journeys', 'Signals', 'Lenses', 'Value']) {
+    await expect(navigation.getByLabel(`${label} (not ready)`)).toHaveAttribute('aria-disabled', 'true');
+    await expect(navigation.getByRole('link', { name: label })).toHaveCount(0);
+  }
+  const screenshotPath = testInfo.outputPath('aether-navigation-fixture.png');
+  await page.locator('aside').screenshot({ path: screenshotPath, animations: 'disabled' });
+  await testInfo.attach('aether-navigation-fixture', { path: screenshotPath, contentType: 'image/png' });
 });
 
 test('Data Exchange settings: not-enabled EmptyState renders when the capability is off', async ({
