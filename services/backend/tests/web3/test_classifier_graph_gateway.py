@@ -10,6 +10,8 @@ from repositories.graph_mutation_ledger import (
     GraphMutationLedgerRepository,
     reset_graph_ledger_memory,
 )
+from shared.auth.auth import Role, TenantContext
+from shared.common.common import ForbiddenError
 from shared.graph.mutation_gateway import GraphMutationGateway
 from services.web3 import classifier, routes
 
@@ -253,9 +255,16 @@ async def test_migration_detector_awaits_tenant_scoped_gateway(monkeypatch):
 
 
 class FakeRequest:
-    def __init__(self, body, tenant_id=TENANT):
+    def __init__(self, body, tenant_id=TENANT, permissions=("write",)):
         self._body = body
-        self.state = SimpleNamespace(tenant_id=tenant_id)
+        self.state = SimpleNamespace(
+            tenant_id=tenant_id,
+            tenant=TenantContext(
+                tenant_id=tenant_id,
+                role=Role.EDITOR,
+                permissions=list(permissions),
+            ),
+        )
 
     async def json(self):
         return self._body
@@ -289,10 +298,27 @@ async def test_observation_routes_forward_authenticated_tenant(monkeypatch):
 
     await routes.classify_observation_endpoint(FakeRequest({"build_graph": True}))
 
-    monkeypatch.setattr(routes, "require_permission", lambda *_args: None)
     await routes.ingest_observations_batch(FakeRequest({"build_graph": True, "observations": [{}]}))
     await routes.detect_migration_endpoint(FakeRequest({
         "protocol_id": "proto-1", "address": "0xnew", "chain_id": "1",
     }))
     assert seen_tenants == [TENANT, TENANT]
     assert seen_migration_tenants == [TENANT]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("route_name", "body"),
+    [
+        ("classify_observation_endpoint", {"build_graph": True}),
+        ("ingest_observations_batch", {"build_graph": True, "observations": [{}]}),
+        (
+            "detect_migration_endpoint",
+            {"protocol_id": "proto-1", "address": "0xnew", "chain_id": "1"},
+        ),
+    ],
+)
+async def test_web3_graph_routes_reject_read_only_tenant_before_writing(route_name, body):
+    request = FakeRequest(body, permissions=("read",))
+    with pytest.raises(ForbiddenError, match="Missing permission: write"):
+        await getattr(routes, route_name)(request)

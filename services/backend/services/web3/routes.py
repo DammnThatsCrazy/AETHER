@@ -22,7 +22,6 @@ from fastapi import APIRouter, Request, Query
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
-from shared.decorators import require_permission
 
 from services.web3.registries import (
     ChainRegistry,
@@ -73,7 +72,7 @@ observation_repo = Web3ObservationRepository()
 
 @router.post("/chains")
 async def register_chain(request: Request) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     result = await chain_reg.register(body, request.state.tenant_id)
     return {"status": "registered", "chain_id": body.get("chain_id"), "data": result}
@@ -107,7 +106,7 @@ async def get_chain(request: Request, chain_id: str) -> dict:
 
 @router.post("/protocols")
 async def register_protocol(request: Request) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     result = await protocol_reg.register(body, request.state.tenant_id)
     return {"status": "registered", "protocol_id": body.get("protocol_id"), "data": result}
@@ -147,7 +146,7 @@ async def get_protocol(request: Request, protocol_id: str) -> dict:
 
 @router.post("/contracts")
 async def register_contract(request: Request) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     result = await contract_instance_reg.register(body, request.state.tenant_id)
     return {"status": "registered", "data": result}
@@ -173,7 +172,7 @@ async def list_unclassified_contracts(
 
 @router.post("/contracts/{chain_id}/{address}/reclassify")
 async def reclassify_contract(request: Request, chain_id: str, address: str) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     instance_id = f"{chain_id}:{address.lower()}"
     result = await contract_instance_reg.reclassify(
@@ -194,7 +193,7 @@ async def reclassify_contract(request: Request, chain_id: str, address: str) -> 
 
 @router.post("/tokens")
 async def register_token(request: Request) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     result = await token_reg.register(body, request.state.tenant_id)
     return {"status": "registered", "token_id": body.get("token_id"), "data": result}
@@ -223,7 +222,7 @@ async def list_tokens(
 
 @router.post("/apps")
 async def register_app(request: Request) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     result = await app_reg.register(body, request.state.tenant_id)
     return {"status": "registered", "app_id": body.get("app_id"), "data": result}
@@ -240,7 +239,7 @@ async def list_apps(
 
 @router.post("/domains")
 async def register_domain(request: Request) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     result = await domain_reg.register(body, request.state.tenant_id)
     return {"status": "registered", "data": result}
@@ -261,7 +260,7 @@ async def get_domain(request: Request, domain: str) -> dict:
 
 @router.post("/governance/spaces")
 async def register_governance_space(request: Request) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     result = await governance_reg.register(body, request.state.tenant_id)
     return {"status": "registered", "space_id": body.get("space_id"), "data": result}
@@ -319,6 +318,7 @@ async def classify_domain_endpoint(request: Request) -> dict:
 @router.post("/classify/observation")
 async def classify_observation_endpoint(request: Request) -> dict:
     """Classify a single Web3 observation and optionally build graph objects."""
+    request.state.tenant.require_permission("write")
     body = await request.json()
     build_graph = body.pop("build_graph", False)
 
@@ -374,7 +374,7 @@ async def ingest_observations_batch(request: Request) -> dict:
     Accepts up to 500 observations per batch.
     Each observation is classified, stored, and optionally graphed.
     """
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     observations = body.get("observations", [])
     build_graph = body.get("build_graph", False)
@@ -436,7 +436,7 @@ async def ingest_observations_batch(request: Request) -> dict:
 
 @router.post("/migrations")
 async def record_migration(request: Request) -> dict:
-    require_permission(request, "write")
+    request.state.tenant.require_permission("write")
     body = await request.json()
     result = await migration_reg.record_migration(body, request.state.tenant_id)
     return {"status": "recorded", "data": result}
@@ -454,6 +454,7 @@ async def list_migrations(
 
 @router.post("/migrations/detect")
 async def detect_migration_endpoint(request: Request) -> dict:
+    request.state.tenant.require_permission("write")
     body = await request.json()
     protocol_id = body.get("protocol_id", "")
     address = body.get("address", "")
@@ -542,7 +543,7 @@ async def coverage_health(request: Request) -> dict:
 @router.post("/seed")
 async def seed_registries_endpoint(request: Request) -> dict:
     """Seed all registries with initial data. Idempotent."""
-    require_permission(request, "admin")
+    request.state.tenant.require_permission("admin")
     from services.web3.seed import seed_registries
     counts = await seed_registries(
         chain_reg, protocol_reg, app_reg, token_reg, venue_reg, governance_reg,

@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:d72649962c0bf6c89d0d86eaf6fdec3c0e0b7d7f3d6455b0b655b050da26c018"
+  "services/backend/services/": "sha256:5a6e93dc81b7718ae357471e503a9e26f75ad6c4000a323e899ab45837777cfa"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1639,7 +1639,7 @@ Core identity resolution and entity management endpoints.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. A first sighting returns `create`; a `user_id` sent with a matching `anonymous_id` merges deterministically (`authenticated_user_binding`) unless a candidate holds a different user_id (conflict) |
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. The route is disabled by default (`IDENTITY_RESOLUTION_ENABLED=false`) and is blocked unless the server finds an identity-link consent receipt for the authenticated tenant and request `anonymous_id`; a caller-supplied consent snapshot is not authorization. A `user_id` sent with a matching `anonymous_id` may merge deterministically (`authenticated_user_binding`) when auto-merge is enabled; otherwise it is a review candidate when manual review is enabled, or blocked |
 | GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
@@ -1988,13 +1988,21 @@ Registry-first Web3 intelligence system with canonical chain/protocol/app/domain
 | `POST` | `/v1/web3/classify/contract` | Classify a contract address |
 | `POST` | `/v1/web3/classify/method` | Map method selector to canonical action |
 | `POST` | `/v1/web3/classify/domain` | Attribute a frontend domain |
-| `POST` | `/v1/web3/classify/observation` | Classify a full Web3 observation |
+| `POST` | `/v1/web3/classify/observation` | Classify a full Web3 observation; optional graph writes use the authenticated tenant scope |
 
 **Observation Ingestion**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/web3/observations/batch` | Bulk ingest Web3 observations (up to 500/batch) |
+| `POST` | `/v1/web3/observations/batch` | Bulk ingest Web3 observations (up to 500/batch); graph writes use the authenticated tenant scope |
+
+When graph construction is requested for an observation, the service requires
+the authenticated tenant's `write` permission and sends vertex and edge
+mutations through the canonical Graph Mutation Gateway. The single-observation,
+batch-ingestion, and migration-detection routes enforce `write` before they
+write observations or graph state; registry mutation routes enforce `write`,
+and registry seeding requires `admin`. Web3 graph object IDs are
+tenant-qualified; transaction hashes provide source-event identity when present.
 
 **Migration Tracking**
 
@@ -2202,7 +2210,7 @@ the tenant-facing `/v1/events/replay` service above. The router is mounted in
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`. |
+| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`; even with the flag on, publishing is limited to an explicitly local, in-memory backend and fails closed as unavailable on hosted or durable backends. The run-ID journal is process-local, not a durable delivery identity. |
 | GET | `/v1/kyber/ingest/replay/status` | Gate state: `enabled` (the `AETHER_INGESTION_REPLAY_ENABLED` kill switch), the `source_service` label replayed events carry (`ingestion.replay`), and `dry_run_default`. |
 
 ### Operator ingestion observability & SDK version tiers (WS-E, v8.12.0)
@@ -3505,6 +3513,12 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
 - `POST /v1/provider-connections/{connection_id}/credentials` — store a structured
   credential. Only a `credential_ref` is ever returned or stored on the connection;
   secrets are never echoed.
+- `DELETE /v1/provider-connections/{connection_id}/credentials` — hard-delete
+  the connection's broker credential and clear its credential ref. Requires the
+  tenant `write` permission, accepts no request body, and returns the standard
+  success envelope with `data: {"connection_id": "...", "credential_deleted": true}`;
+  cross-tenant connection IDs resolve to 404. Deletion is refused while another
+  connection in the tenant still references the same credential.
 - `POST /v1/provider-connections/{connection_id}/test` — live connectivity test
   through the provider's auth adapter.
 - `GET /v1/provider-connections/{connection_id}/accounts` — account discovery.
