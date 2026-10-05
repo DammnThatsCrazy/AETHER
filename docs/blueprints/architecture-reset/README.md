@@ -67,9 +67,10 @@ and cross-cutting migration artifacts are integrated centrally.
 
 Each agent reports what changed, why, focused results, and unresolved risks.
 The orchestrator reviews code and evidence before accepting a slice, closes
-cross-slice gaps, and revises the remaining work orders. The branch remains
-draft during implementation; an agent's focused checks never imply PR or
-release readiness.
+cross-slice gaps, and revises the remaining work orders. The usual accumulation
+cadence keeps the PR in draft; the user marked #734 ready for review while work
+was still being added on 2026-10-05. That state does not turn focused checks
+into PR or release readiness.
 
 ## PR boundaries and merge order
 
@@ -80,8 +81,9 @@ and delivery ownership. The dependent fixes already identified in PRs #735,
 #736, and #737 are commits on this same branch, and the remaining reset slices
 that stack into this architecture continue here as coherent commits. Do not
 create another PR for a dependent slice merely to preserve an artificial PR
-sequence. Keep #734 draft during accumulation and run the repository's one
-normal PR authority only during finalization.
+sequence. Continue this same PR for the remaining slices and use the
+repository's one normal PR authority at finalization; the current ready-for-
+review state was set by the user during accumulation.
 
 PR #733 remains a separate universal connector runtime PR, per the user's
 explicit direction. The selected landing order is **#734 first, then #733 and
