@@ -214,9 +214,8 @@ curl -s -X POST http://localhost:8000/v1/analytics/events/query \
   -H "Authorization: Bearer ${API_KEY}" \
   -d '{"timeRange": "last_1h"}'
 
-# Verify identity graph
-curl -s http://localhost:8000/v1/resolution/cluster/${TEST_USER_ID} \
-  -H "Authorization: Bearer ${API_KEY}"
+# The legacy identity graph read is disabled (HTTP 503) pending tenant-safe cutover.
+# Do not use this endpoint as a post-migration continuity check.
 ```
 
 ### 4.3 Monitor for 30 Minutes

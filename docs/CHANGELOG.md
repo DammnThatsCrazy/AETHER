@@ -29,6 +29,7 @@ source_hashes:
 
 ### Changed
 
+- Graph writer inventory reflects the removal of the unused lake graph mutation module and the on-chain action recorder cutover to `GraphMutationGateway`; the legacy identity-resolution repository remains the only allowlisted direct writer, with its cluster, merge-approval, and batch routes disabled pending tenant-safe replacement.
 - Loader URL and API origin are canonicalized (`https://cdn.aether.network/v1.js`, `https://api.aether.io`) and enforced by a domain gate. The two origins remain deliberately separate.
 - A failed site install observes as `degraded`, never `missing`: the record exists and says the install is broken, which is evidence.
 - `loader_version` is the version the control plane reconciles against, the same field the distribution layer derives `drift_status` from.

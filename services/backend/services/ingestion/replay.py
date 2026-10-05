@@ -19,10 +19,11 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
 
 from shared.common.common import (
+    BadRequestError,
     ConflictError,
     ServiceUnavailableError,
     utc_now,
@@ -87,11 +88,12 @@ def _request_scope(
     occurred_to: Optional[str],
     limit: Optional[int],
 ) -> tuple[Any, ...]:
+    start, end = _window_bounds(occurred_from, occurred_to)
     return (
         tuple(sorted(set(event_types or ()))),
         tuple(sorted(set(families or ()))),
-        _norm_iso(occurred_from),
-        _norm_iso(occurred_to),
+        start,
+        end,
         limit,
     )
 
@@ -112,15 +114,47 @@ def _payload_of(row: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _norm_iso(value: Any) -> Optional[str]:
-    """Normalize an ISO-8601 instant to a comparable UTC string (or None)."""
+def _parse_instant(value: Any) -> Optional[datetime]:
+    """Parse an ISO occurrence instant without inventing one for bad Bronze rows."""
     if isinstance(value, datetime):
-        text = value.isoformat()
-    else:
-        text = str(value or "")
-    if not text:
+        return value
+    if not isinstance(value, str) or "T" not in value:
         return None
-    return text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _norm_iso(value: Any) -> Optional[str]:
+    """Normalize a Bronze instant to UTC; malformed legacy values stay unknown."""
+    instant = _parse_instant(value)
+    if instant is None:
+        return None
+    # Older Bronze rows can contain naive timestamps. Treat them as UTC for
+    # replay filtering while preserving the original bytes in the payload.
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    return instant.astimezone(timezone.utc).isoformat(timespec="microseconds")
+
+
+def _window_bounds(
+    occurred_from: Optional[str], occurred_to: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """Validate requested instants before selecting or publishing any row."""
+    bounds: list[Optional[str]] = []
+    for name, value in (("occurred_from", occurred_from), ("occurred_to", occurred_to)):
+        if value is None:
+            bounds.append(None)
+            continue
+        instant = _parse_instant(value)
+        if instant is None or instant.tzinfo is None or instant.utcoffset() is None:
+            raise BadRequestError(f"{name} must be an ISO-8601 instant with a timezone")
+        bounds.append(instant.astimezone(timezone.utc).isoformat(timespec="microseconds"))
+    start, end = bounds
+    if start is not None and end is not None and start > end:
+        raise BadRequestError("occurred_from must be at or before occurred_to")
+    return start, end
 
 
 def _project_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -168,10 +202,12 @@ def _matches(
     # Occurrence-window filters compare the ORIGINAL occurrence instant
     # (Invariant #15) — never the replay receipt stamp.
     occurred = proj.get("occurred_at")
-    if occurred is not None:
-        if occurred_from and occurred < _norm_iso(occurred_from):
+    if occurred_from or occurred_to:
+        if occurred is None:
             return False
-        if occurred_to and occurred > _norm_iso(occurred_to):
+        if occurred_from and occurred < occurred_from:
+            return False
+        if occurred_to and occurred > occurred_to:
             return False
     return True
 
@@ -200,11 +236,12 @@ async def iter_bronze_observations(
     """
     from repositories.repos import _IN_MEMORY_STORES, get_pool
 
+    start, end = _window_bounds(occurred_from, occurred_to)
     filters = {
         "event_types": event_types,
         "families": families,
-        "occurred_from": occurred_from,
-        "occurred_to": occurred_to,
+        "occurred_from": start,
+        "occurred_to": end,
     }
     pool = await get_pool()
     if pool is None:

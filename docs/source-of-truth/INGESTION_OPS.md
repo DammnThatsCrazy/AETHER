@@ -105,8 +105,8 @@ outcome results persist) when the flag is ON.
 
 ## 3. Kyber ingestion control plane surfaces (Gate G)
 
-All Kyber-scoped operator surfaces are **read-only** and **Kyber-operator-only**
-(router-level `require_kyber_operator`, which the default-deny route-policy
+The observability surfaces are **read-only**. Observability and replay routes
+are **Kyber-operator-only** (router-level `require_kyber_operator`, which the default-deny route-policy
 registry also classifies as audited + high-risk). Routers stay mounted so gateway
 discovery sees them; bodies are flag-gated (report `enabled: false` while OFF)
 — the same adoption posture as the replay kill switch.
@@ -122,6 +122,13 @@ discovery sees them; bodies are flag-gated (report `enabled: false` while OFF)
 | SDK signed manifest | `GET /v1/config/sdk/manifest` | schema health | Existing signed manifest surface |
 | Replay service status | `GET /v1/kyber/ingest/replay/status` | replay | Reports the feature switch; it does not certify that a durable replay run is available |
 | Replay run/preview | `POST /v1/kyber/ingest/replay/events` | replay, rejection | Dry-run previews durable Bronze rows. Live publish is limited to an explicit local, in-memory backend; hosted live replay returns unavailable until delivery identity and consumer idempotency are durable. |
+
+Replay occurrence bounds are inclusive, timezone-qualified ISO-8601 instants.
+The runner compares them in UTC against each Bronze row's original occurrence
+time, excludes rows whose occurrence time is missing or invalid when a window
+is requested, and rejects malformed or reversed bounds before publishing.
+Rows without an occurrence window remain eligible for preview; replay still
+cannot establish current rights or consent re-admission on its own.
 
 `GET /v1/health/pipeline` (in `services/backend/services/gateway/routes.py`) fixes the
 previously-**phantom** pipeline health endpoint the Kyber operator hook called:

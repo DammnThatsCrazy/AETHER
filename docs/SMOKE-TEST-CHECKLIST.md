@@ -173,14 +173,21 @@ curl -sf ${BASE_URL}/v1/lake/bronze?source=smoke_test \
 
 ### 9. Identity Resolution
 
+The legacy graph-backed cluster read is intentionally unavailable (HTTP 503)
+until a tenant-safe cutover is complete. Do not treat that response as a smoke
+test failure. Tenant-scoped pending, audit, and reject routes remain available;
+the legacy approve and batch routes also return HTTP 503 (after `write`
+permission checks).
+
 ```bash
-# Check identity cluster (if test user exists)
-curl -sf ${BASE_URL}/v1/resolution/cluster/smoke-test-user \
-  -H "Authorization: Bearer ${API_KEY}" | jq .
+# Confirm the legacy cluster route fails closed while tenant-safe cutover is pending.
+status=$(curl -s -o /dev/null -w '%{http_code}' \
+  ${BASE_URL}/v1/resolution/cluster/smoke-test-user \
+  -H "Authorization: Bearer ${API_KEY}")
+test "$status" = "503"
 ```
 
-- [ ] Identity resolution endpoint responds
-- [ ] Cluster data is consistent (no orphaned nodes)
+- [ ] Legacy cluster route returns HTTP 503 pending tenant-safe cutover
 
 ### 10. Agent Layer
 

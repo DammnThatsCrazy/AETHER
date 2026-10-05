@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:5a6e93dc81b7718ae357471e503a9e26f75ad6c4000a323e899ab45837777cfa"
+  "services/backend/services/": "sha256:f95c0cc9477a476f73c98d04a705aef0c5e5838a747096cbbc3b3a46027e9246"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1254,37 +1254,7 @@ requests are rejected). All are GET-only and never mutate reward state:
 
 ### GET /v1/resolution/cluster/{user_id}
 
-Get the full identity cluster for a user — all merged profiles, linked devices, IPs, wallets, and emails.
-
-**Response:**
-```json
-{
-  "cluster_id": "clust-abc",
-  "canonical_user_id": "user-123",
-  "confidence": 1.0,
-  "member_count": 3,
-  "resolution_status": "auto_merged",
-  "members": [
-    { "user_id": "user-123", "role": "primary", "joined_at": "2026-01-15T..." },
-    { "user_id": "anon-456", "role": "merged", "joined_at": "2026-02-01T..." },
-    { "user_id": "anon-789", "role": "merged", "joined_at": "2026-03-01T..." }
-  ],
-  "linked_devices": [
-    { "fingerprint_id": "a1b2c3...", "first_seen": "2026-01-15T...", "observations": 47 },
-    { "fingerprint_id": "d4e5f6...", "first_seen": "2026-02-01T...", "observations": 23 }
-  ],
-  "linked_ips": [
-    { "ip_hash": "abc123...", "ip_range": "192.168.1.0/24", "observations": 120 }
-  ],
-  "linked_wallets": [
-    { "address": "0x1234...abcd", "vm": "evm", "ens": "user.eth" },
-    { "address": "7nY4...Kx3p", "vm": "svm" }
-  ],
-  "linked_emails": [
-    { "email_hash": "def456...", "domain": "gmail.com" }
-  ]
-}
-```
+**Unavailable (HTTP 503)** while the legacy graph read path lacks tenant isolation. The route returns `Legacy identity graph resolution is unavailable`; identity-cluster data is not served through this endpoint pending a tenant-safe cutover.
 
 ### GET /v1/resolution/pending
 
@@ -1311,7 +1281,7 @@ List pending resolution decisions awaiting admin review.
 
 ### POST /v1/resolution/pending/{id}/approve
 
-Admin approves a pending identity merge.
+Unavailable (HTTP 503) pending a tenant-safe cutover for the legacy graph writer. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not approve or apply a merge.
 
 ### POST /v1/resolution/pending/{id}/reject
 
@@ -1352,7 +1322,7 @@ Update resolution engine configuration thresholds.
 
 ### POST /v1/resolution/batch
 
-Trigger a batch probabilistic matching job for the tenant.
+Unavailable (HTTP 503) pending a tenant-safe cutover for the legacy graph writer. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not start a batch matching job.
 
 ---
 
@@ -1380,11 +1350,17 @@ Three service groups are available when Intelligence Graph feature flags are ena
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/onchain/actions` | Record an on-chain action |
-| GET | `/v1/onchain/actions/{agent_id}` | List agent's on-chain actions |
-| GET | `/v1/onchain/contracts/{address}` | Contract details + call graph |
+| POST | `/v1/onchain/actions` | Record a tenant-scoped on-chain action through the graph gateway; provide a stable `action_id` or `tx_hash` |
+| GET | `/v1/onchain/actions/{agent_id}` | List the authenticated tenant's agent actions; returns unavailable rather than a truncated result above the current read cap |
+| GET | `/v1/onchain/contracts/{address}` | Contract metadata and call count in the authenticated tenant; optional `chain_id` disambiguates an address on multiple chains, which otherwise returns a conflict |
 | POST | `/v1/onchain/listener/configure` | Configure chain event listener |
 | GET | `/v1/onchain/rpc/health` | RPC gateway health check |
+
+The recorder derives an action ID from tenant, chain, and transaction hash when
+`action_id` is omitted. Its schema has no log index, so multiple actions in one
+transaction need distinct stable caller-supplied IDs. A rejected gateway intent
+stops publication and returns an error; earlier intents may already have been
+applied because the action's graph mutations do not share a transaction.
 
 ### x402 Service (L3b)
 
@@ -2210,7 +2186,7 @@ the tenant-facing `/v1/events/replay` service above. The router is mounted in
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`; even with the flag on, publishing is limited to an explicitly local, in-memory backend and fails closed as unavailable on hosted or durable backends. The run-ID journal is process-local, not a durable delivery identity. |
+| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). Occurrence bounds require timezone offsets and are compared in UTC; malformed or reversed bounds fail validation, and bounded runs exclude events with unknown original times. `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`; even with the flag on, publishing is limited to an explicitly local, in-memory backend and fails closed as unavailable on hosted or durable backends. The run-ID journal is process-local, not a durable delivery identity. |
 | GET | `/v1/kyber/ingest/replay/status` | Gate state: `enabled` (the `AETHER_INGESTION_REPLAY_ENABLED` kill switch), the `source_service` label replayed events carry (`ingestion.replay`), and `dry_run_default`. |
 
 ### Operator ingestion observability & SDK version tiers (WS-E, v8.12.0)

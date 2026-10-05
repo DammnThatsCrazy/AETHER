@@ -618,6 +618,13 @@ replay delivery/outbox identity and consumer idempotency boundary remain open
 before hosted replay can be enabled. See the architecture reset proof ledger
 for focused local evidence and limitations.
 
+An occurrence-window follow-up normalizes both requested bounds and Bronze
+occurrence timestamps to UTC instants before filtering. Requested bounds must
+include a timezone and be ordered; a bounded replay excludes rows with an
+unknown or malformed original occurrence time. This changes selection only:
+the published event retains the original occurrence value and still receives a
+fresh replay delivery time.
+
 ## WS-B5 — single normalization-spine convergence (consumption side, flag-gated)
 
 Merged onto `feat/sdk-universal-ingestion` at `7a1b73f5` (commits `0ffd30d0`→

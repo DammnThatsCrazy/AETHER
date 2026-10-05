@@ -637,6 +637,10 @@ universal ingestion gateway with **original occurrence times preserved**
   backend with no database URL or initialized database pool; hosted and durable
   backends fail closed as unavailable. The process-local `replay_run_id`
   journal is not durable delivery identity or a downstream idempotency guarantee.
+  Optional `occurred_from` and `occurred_to` are inclusive original-occurrence
+  bounds with required timezones. Malformed or reversed bounds fail before
+  publishing; rows with no valid original occurrence are excluded from a
+  bounded run. Preview the same bounds before a local live run.
 - `GET /v1/kyber/ingest/replay/status` — kill-switch state and the
   `source_service` replayed events carry.
 

@@ -10,6 +10,11 @@ since_version: 0.1.0
 # Aether Execution Tracker
 
 All remaining work tracked in one file. No workstream exists outside this tracker.
+The checked boxes and phase gates below are the historical execution record at
+the time this audit was written; they do not assert that the lake graph writer
+still exists. That module was later removed. Current graph write paths are
+tracked in `scripts/allowlists/graph_write_paths.json` and documented in
+`docs/INTELLIGENCE-GRAPH.md`.
 
 ## Phase 0 — Baseline Lock
 - [x] P0.1 Freeze baseline — tests pass, compile clean, docs valid

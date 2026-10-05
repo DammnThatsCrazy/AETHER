@@ -267,3 +267,7 @@ v7.0 SDKs require the following backend endpoints (deploy before upgrading):
 | `POST /v1/rewards/{id}/claim` | Web SDK | Claim submission |
 | `GET /v1/resolution/cluster/{user_id}` | Admin dashboard | Identity clusters |
 | `GET /v1/resolution/pending` | Admin dashboard | Pending merges |
+
+The cluster endpoint was listed as a v7 backend requirement when this migration
+guide was written. It currently returns HTTP 503 while the legacy graph read
+path awaits tenant-safe cutover; do not treat it as an available v7 endpoint.

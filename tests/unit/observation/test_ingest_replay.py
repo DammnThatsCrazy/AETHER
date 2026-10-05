@@ -121,6 +121,48 @@ async def test_iter_bronze_observations_filters() -> None:
     assert len(limited) == 2
 
 
+async def test_occurrence_window_compares_utc_instants_and_excludes_unknown_times() -> None:
+    _seed("before", occurred="2026-09-05T01:30:00+02:00")
+    _seed("inside", occurred="2026-09-04T20:30:00-04:00")
+    _seed("after", occurred="2026-09-05T03:00:00+00:00")
+    _seed("invalid", occurred="not-an-instant")
+    _seed("missing", occurred="")
+
+    rows = await iter_bronze_observations(
+        TENANT,
+        occurred_from="2026-09-05T00:00:00Z",
+        occurred_to="2026-09-05T02:00:00+00:00",
+    )
+    assert [row["event_id"] for row in rows] == ["inside"]
+
+
+@pytest.mark.parametrize(
+    ("occurred_from", "occurred_to"),
+    [
+        ("2026-09-05", None),
+        ("2026-09-05T00:00:00", None),
+        (None, "not-an-instant"),
+        ("2026-09-05T02:00:00Z", "2026-09-05T01:00:00Z"),
+    ],
+)
+async def test_invalid_occurrence_window_is_rejected_before_publish(
+    occurred_from: str | None, occurred_to: str | None,
+) -> None:
+    from shared.common.common import BadRequestError
+
+    _seed("e0")
+    producer = FakeProducer()
+    with pytest.raises(BadRequestError):
+        await replay_events(
+            TENANT,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+            producer=producer,
+            replay_run_id="invalid-window",
+        )
+    assert producer.events == []
+
+
 # ── Dry run ───────────────────────────────────────────────────────────────────
 
 async def test_dry_run_counts_without_publishing() -> None:
@@ -274,6 +316,25 @@ async def test_repeated_replay_run_id_is_a_no_op() -> None:
     second = await replay_events(TENANT, dry_run=False, producer=producer, replay_run_id="same")
     assert second == first
     assert len(producer.events) == 1  # published once only
+
+
+async def test_equivalent_timezone_bounds_share_the_same_run_scope() -> None:
+    _seed("e0")
+    producer = FakeProducer()
+    first = await replay_events(
+        TENANT,
+        occurred_from="2026-09-05T00:00:00Z",
+        producer=producer,
+        replay_run_id="same-window",
+    )
+    second = await replay_events(
+        TENANT,
+        occurred_from="2026-09-04T20:00:00-04:00",
+        producer=producer,
+        replay_run_id="same-window",
+    )
+    assert second == first
+    assert len(producer.events) == 1
 
 
 async def test_run_id_scope_and_tenant_are_isolated() -> None:

@@ -6,24 +6,36 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/backend/shared/graph/graph.py, services/backend/shared/graph/relationship_layers.py, services/backend/shared/graph/write_validator.py, services/backend/shared/graph/edge_properties.py, services/backend/services/lake/graph_mutations.py]
+source_files:
+  - services/backend/shared/graph/graph.py
+  - services/backend/shared/graph/relationship_layers.py
+  - services/backend/shared/graph/write_validator.py
+  - services/backend/shared/graph/edge_properties.py
+  - services/backend/shared/graph/mutation_gateway.py
+  - services/backend/services/onchain/action_recorder.py
+  - services/backend/services/resolution/repository.py
+  - services/backend/services/resolution/routes.py
 canonical_owner: graph@aether
 last_synced_commit: 401f9bd
 ---
 
 # Graph Alignment
 
-Which SDK events feed which Intelligence Graph layer. Vertex/edge definitions
-live in `services/backend/shared/graph/graph.py`. Event→
-mutation wiring lives in `services/backend/services/lake/graph_mutations.py`.
+This map records graph-layer event relationships and current write-path
+availability. Vertex/edge definitions live in
+`services/backend/shared/graph/graph.py`. The lake mutation module formerly
+used for Silver/Gold projections has been removed. On-chain action writes now
+use `GraphMutationGateway`; the legacy identity-resolution repository still
+writes directly, and its cluster, merge-approval, and batch routes fail closed
+with 503 until replaced with tenant-safe gateway-backed behavior.
 
 ## Layer L0 — on-chain (`IG_ONCHAIN_LAYER`)
 
 | SDK event | Creates / updates | Notes |
 |---|---|---|
-| `wallet` | `Wallet`, `IDENTIFIED_BY` edge to User | connect/disconnect |
-| `transaction` | `ActionRecord`, `Contract`, `CALLED` edge | confirmed txs |
-| `contract_action` | `Contract`, `CALLED` edge | optional explicit form |
+| `wallet` | No active mapping documented here | connect/disconnect event; no lake projection builder is present |
+| `transaction` | No automatic SDK-to-graph mapping established here | The separate on-chain action route writes `ActionRecord` and, for deploy/call actions, `Contract` or `DEPLOYED`/`CALLED` facts through the gateway |
+| `contract_action` | No automatic SDK-to-graph mapping established here | An explicit on-chain action request uses the gateway; this SDK event alone is not a graph-write guarantee |
 
 ## Layer L2 — agent behavioral (`IG_AGENT_LAYER`)
 
@@ -57,9 +69,12 @@ The `rail` field on payment events selects the downstream processing path
 
 ## H2H / H2A / A2H / A2A
 
-- **H2H** edges (identity similarity, household clustering) are created by
-  the backend identity resolver from SDK signals (`anonymous_id`, `device_id`,
-  fingerprint, wallet, email, phone). The SDK does not emit H2H events.
+- **H2H** edges (identity similarity, household clustering) are implemented in
+  the legacy backend identity resolver from SDK signals (`anonymous_id`,
+  `device_id`, fingerprint, wallet, email, phone). Its repository still writes
+  directly to the graph; the cluster and batch API routes are disabled with
+  503 until a tenant-safe replacement is available. The SDK does not emit H2H
+  events.
 - **H2A** edges (user → agent) are derived from `agent_task` events that
   reference the originating user.
 - **A2H** edges are directly emitted by `a2h_interaction`.
@@ -96,7 +111,7 @@ local/test, raised in Neptune mode). Helper: `build_edge_properties()` in
 | `actor_kind` | `human` \| `agent` \| `system` | Who originated this write |
 | `actor_id` | string | Identity of the actor (user ID, agent ID, or system name) |
 | `schema_version` | string | Currently `"1"` |
-| `provenance` | string | Source system or service (e.g., `"lake_graph_mutations"`) |
+| `provenance` | string | Source system or service (e.g., `"onchain:action_recorder"`) |
 | `valid_from` | ISO-8601 | Timestamp from which this edge is valid |
 | `confidence` | float 0–1 (as string) | Write certainty; use `"1.0"` for deterministic writes |
 
@@ -108,8 +123,9 @@ H2A and A2H edges additionally require:
 
 ## Activation flags
 
-Event emission is always allowed client-side. Backend processing into the
-graph is gated by `IG_AGENT_LAYER`, `IG_COMMERCE_LAYER`, `IG_X402_LAYER`,
-`IG_ONCHAIN_LAYER` environment variables (see
-`services/backend/config/settings.py`). When a layer is
-off, the event is still stored in the lake but does not mutate the graph.
+Event emission is allowed client-side. Backend graph writes depend on the
+individual service and route behavior as well as feature flags; the on-chain
+action route requires `onchain:write` and records through the gateway. The
+legacy identity-resolution cluster, merge-approval, and batch routes return
+503. The removed lake projection module no longer rebuilds graph state from
+stored events.

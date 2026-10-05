@@ -19,8 +19,8 @@ toc_depth: 3
 reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
-  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:fb84c894efabe18943ceb0689d16729a2ce19ddca77a84c96fa4a626d82304d2"
-  "scripts/allowlists/graph_write_paths.json": "sha256:9f356055e12b3c7b4425b1997866cc479180ccf55ead52bf00c6bc64da4a9a9a"
+  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:b721e81d75dc265eb5d951f70816e8152d695864546c99db1c4862c58aa483dd"
+  "scripts/allowlists/graph_write_paths.json": "sha256:970e4f623e3f246f47d77bfedb01688e1bd9ce30f016ca62a93233ebd65bf3b2"
   "scripts/validate_graph_write_paths.py": "sha256:1a4fae607b1eccdee38ec5bac42ebbcd57d28cb9ef0dfabe3d7a70bdbfcae91d"
   "services/backend/services/web3/classifier.py": "sha256:ab4186e37c2e058401d4303559ca66db49659f93d60389729933777c6fca6061"
   "services/backend/services/web3/routes.py": "sha256:818ec858dbbd737e96377ecb110ed3564e1f55b52b934c666b368a2135ffc9d9"
@@ -36,7 +36,7 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 - **Feature-flagged** — every layer activates independently via environment variables (all default to `false`)
 - **Privacy-aware** — consent-aware identity and tenant-scoped graph erasure are implemented; this page does not assert formal compliance or certification
 - **Graph-native** — 6 new node types, 19 new edge types layered onto the existing Identity Graph
-- **Lake-fueled** — graph mutations include deterministic Silver/Gold projections, alongside other explicit graph-building paths
+- **Governed writes** — on-chain action graph writes use `GraphMutationGateway`; legacy identity resolution writes remain direct and are not exposed by the disabled cluster, approval, and batch routes
 
 > **Infrastructure:** `GraphClient` auto-selects a backend at `connect()`: Neptune (via gremlinpython) when `NEPTUNE_ENDPOINT` is set; in-memory in `AETHER_ENV=local`; otherwise, in a non-local environment with no Neptune endpoint and `GRAPH_BACKEND=postgres` (the staging / production-lean default), the Postgres backend — `_PostgresGraphBackend` over the `graph_vertices` / `graph_edges` tables, whose observable semantics match the in-memory backend. A non-local environment with no usable backend (no Neptune, and no database pool for the declared Postgres backend) still fails closed with `RuntimeError`.
 
@@ -73,25 +73,21 @@ NEPTUNE_ENDPOINT=your-neptune-cluster.region.neptune.amazonaws.com
 
 ## Graph Mutation Path
 
-Graph edges are created from lake data via deterministic mutation jobs:
+The active paths enter the canonical mutation gateway before graph projection:
 
-```
-Silver/Gold lake tiers
-    ↓
-graph_mutations.py
-    ├── build_wallet_protocol_edges()   → INTERACTS_WITH
-    ├── build_wallet_social_edges()     → RESOLVED_AS
-    └── build_governance_edges()        → INTERACTS_WITH (governance)
-    ↓
-Neptune graph store
-    ↓
-Intelligence API
-    ├── /v1/intelligence/wallet/{addr}/risk
-    ├── /v1/intelligence/entity/{id}/cluster
-    └── Trust/bytecode scoring
+```text
+on-chain action route ──> ActionRecorder ─────────┐
+Web3 observation route ──> classifier ────────────┼──> MutationIntent
+semantic Gold state ────> semantic graph projector ┘         ↓
+                                                   GraphMutationGateway
+                                                            ↓
+                                                        GraphClient
 ```
 
-Graph can be rebuilt from lake state or incrementally updated.
+The former `services/backend/services/lake/graph_mutations.py` job was unused
+and has been removed. Its wallet/protocol, social, and governance edges cannot
+currently be rebuilt from lake state through that old module. The separate
+semantic graph projector remains an active Gold-to-graph path.
 
 Web3 observations provide another graph-building path: `POST
 /v1/web3/classify/observation` can request graph construction with
@@ -109,10 +105,12 @@ Gateway use does not mean all graph writes are currently enforced or ledgered.
 In `off` mode the gateway delegates directly to `GraphClient`; `shadow` applies
 the projection and attempts a ledger append; `enforce` runs gateway validation
 and the ledger-backed write path. The graph write-path validator currently
-freezes three remaining direct writers in its allowlist:
-`services/backend/services/lake/graph_mutations.py`,
-`services/backend/services/onchain/action_recorder.py`, and
-`services/backend/services/resolution/repository.py`.
+freezes one remaining direct writer in its allowlist:
+`services/backend/services/resolution/repository.py`. The on-chain action
+recorder now uses the gateway. Identity resolution still contains direct
+legacy graph writes, but the cluster, merge-approval, and batch routes return
+503 while that tenant-unsafe graph surface awaits replacement; the allowlist
+tracks the code-level writer even while these routes are disabled.
 
 A second, governed mutation path closes the "Gold is computed but never reaches
 the graph" gap for semantic intelligence: the **semantic graph projector**
@@ -336,7 +334,7 @@ New columns: `agent_task_frequency`, `avg_confidence_delta`, `hiring_depth`, `x4
 |--------|------|-------------|
 | `POST` | `/v1/onchain/actions` | Submit an `ActionRecord` for chain activity |
 | `GET` | `/v1/onchain/actions/{agent_id}` | Retrieve all action records for an agent |
-| `GET` | `/v1/onchain/contracts/{address}` | Contract metadata + bytecode risk score |
+| `GET` | `/v1/onchain/contracts/{address}` | Tenant-scoped contract metadata + bytecode risk score; optional `chain_id` resolves cross-chain address ambiguity |
 | `POST` | `/v1/onchain/listener/configure` | Configure chain listener filters per project |
 
 ### x402 Service (L3b)
@@ -482,7 +480,7 @@ Complete flow for an agent executing a task with chain interaction:
    Graph: CONSUMES edge to SERVICE, PAYMENT node for micropayment
 
 4. Agent deploys contract
-   API: POST /v1/onchain/actions { type: "deploy", bytecode }
+   API: POST /v1/onchain/actions { agent_id, action_type: "DEPLOY", chain_id, tx_hash, contract_address, bytecode_hash }
    Graph: ACTION_RECORD node + DEPLOYED edge to new CONTRACT node
    ML: Bytecode Risk Scorer runs -> riskScore written to CONTRACT
 
@@ -535,7 +533,7 @@ All in-memory stores are tenant-scoped:
 ### Error Handling
 
 - x402 capture persists transactions before event publishing; publish failures are logged but don't block capture
-- On-chain action recorder wraps graph operations in try/except; failures logged but actions still recorded locally
+- Historical v8.1 behavior: the on-chain action recorder caught graph failures and retained local action records. The current recorder submits tenant-scoped mutation intents through `GraphMutationGateway`; this historical note does not describe current failure handling.
 - `EventConsumer` retry uses bounded loop instead of recursive calls to prevent stack overflow
 - SDK 429 retry respects `maxRetries` bound instead of infinite recursion
 
