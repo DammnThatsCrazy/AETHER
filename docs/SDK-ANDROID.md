@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:e9909e3ee112e2651dd4c808bf34e63452ac90ea8fab57aa28e8fb703dc7cd8b"
+  "packages/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:09513301edf6ede4d54474b21af499021dc6f2975c5ab962587adc6ed42c1bb7"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
 ---
@@ -25,7 +25,7 @@ source_hashes:
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.aether:sdk-android:8.3.1")
+    implementation("io.aether:sdk-android:0.1.0-alpha.0")
 }
 ```
 
@@ -33,7 +33,7 @@ dependencies {
 
 ```groovy
 // build.gradle
-implementation 'io.aether:sdk-android:8.3.1'
+implementation 'io.aether:sdk-android:0.1.0-alpha.0'
 ```
 
 ## Quick Start

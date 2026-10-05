@@ -14,7 +14,7 @@ source_hashes:
   "services/backend/services/identity/graph_reconciliation.py": "sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a"
   "services/backend/services/identity/reconciliation_routes.py": "sha256:3ec51df67337edbc420bc50a6d9f8fccbe61b42164ec966ca45ff2c9ceabca76"
   "services/backend/services/identity/redirects.py": "sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0"
-  "services/backend/services/identity/resolver.py": "sha256:e56aab87c1ad25008bfbd2b7cbea65d4366d5290c30851873c7e32c327118d0e"
+  "services/backend/services/identity/resolver.py": "sha256:7d58f239d550565b81f10723cd34b51346fd98a3d8f6052667fb298d4ef9a4f3"
 ---
 
 # Runbook — Identity Repair
@@ -61,8 +61,13 @@ guard, not a bug — the split is refused because the merge should not have been
 identity-linked on that basis; fix the upstream signal, don't force the split.
 
 ### Identified users never merge with their anonymous profile
-Check the resolution audit for the identify event. The expected decision is
-`merge` / `deterministic` with `authenticated_user_binding`. If instead:
+Check the resolution audit for the identify event. When identity resolution,
+auto-merge, and server-authoritative identity-link consent are enabled, the
+expected decision is `merge` / `deterministic` with
+`authenticated_user_binding`. These rollout flags default off; when auto-merge
+is off, manual review must also be enabled for a review candidate to be
+recorded. Otherwise the route returns a blocked decision. If enabled and the
+event still does not merge:
 
 - `conflict` of type `conflicting_user_binding` — the anonymous id already
   belongs to a profile with a **different** `user_id` (shared device, account

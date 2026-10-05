@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/react-native/src/bridge.ts": "sha256:0beb3a5ee8f7158a6a4cee5016735b96b6a8f9269721bd772a51d41d6ed34246"
+  "packages/react-native/src/bridge.ts": "sha256:ad3e3d5e9bba01a0bcd1ff8cccd48b7d55a5b97e71f7579c50a741f10c9b6593"
   "packages/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
@@ -170,7 +170,7 @@ rendering consent UI without manually wiring `onUpdate` callbacks.
 import { useConsentState } from '@aether/react-native-sdk';
 
 function PrivacyBanner() {
-  const consent = useConsentState();
+  const { consent } = useConsentState();
   if (consent?.analytics) return null;
   return <ConsentPrompt />;
 }
@@ -178,9 +178,10 @@ function PrivacyBanner() {
 
 ### useJourneyResumed
 
-Fires when the backend resumes a cross-device journey (returns the
-`ResolvedIdentity` once, then `null`). Use it to greet a returning user or
-restore session state without polling.
+Returns the latest `ResolvedIdentity` emitted by the native
+`AetherJourneyResumed` event, or `null` before the first event. The value stays
+set until another event replaces it or the component unmounts. Use it to greet
+a returning user or restore session state without polling.
 
 ```tsx
 import { useJourneyResumed, type ResolvedIdentity } from '@aether/react-native-sdk';

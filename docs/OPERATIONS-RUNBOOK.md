@@ -16,9 +16,9 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
-  "services/backend/config/settings.py": "sha256:2fd39d4ff1bb287b3ea68d6b86281c7b8c0e2de0278784fa8bdde15163c995e8"
+  "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
   "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
-  "services/backend/services/provider_runtime/": "sha256:b2a3e39e1032cbb1b93e8e546f6ce97541c978d183f96460afcc08aead164154"
+  "services/backend/services/provider_runtime/": "sha256:1b1b84e48440b16be3f0bc23c5cc41751f98423c25b39b8da908e32af363e52b"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -632,7 +632,11 @@ universal ingestion gateway with **original occurrence times preserved**
 
 - `POST /v1/kyber/ingest/replay/events` — Kyber-operator run/preview.
   `dry_run` defaults to **true** (counts only, zero publishes). A real run
-  (`dry_run=false`) is refused with HTTP 403 until the flag is ON.
+  (`dry_run=false`) is refused with HTTP 403 until the flag is ON. When enabled,
+  live publishing is still restricted to an explicitly local, in-memory
+  backend with no database URL or initialized database pool; hosted and durable
+  backends fail closed as unavailable. The process-local `replay_run_id`
+  journal is not durable delivery identity or a downstream idempotency guarantee.
 - `GET /v1/kyber/ingest/replay/status` — kill-switch state and the
   `source_service` replayed events carry.
 

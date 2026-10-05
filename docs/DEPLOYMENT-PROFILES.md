@@ -6,21 +6,22 @@ visibility: I
 audience: [ops, architect]
 status: stable
 since_version: 0.1.0
-source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, deploy/aws/terraform/profiles.tf, deploy/aws/terraform/main.tf, deploy/aws/terraform/modules/alb/main.tf, deploy/aws/terraform/modules/aurora/main.tf, deploy/aws/terraform/modules/ecr/main.tf, deploy/aws/terraform/modules/secrets/main.tf, deploy/aws/terraform/modules/secrets/rotation.tf, deploy/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py]
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, deploy/aws/terraform/profiles.tf, deploy/aws/terraform/main.tf, deploy/aws/terraform/modules/alb/main.tf, deploy/aws/terraform/modules/aurora/main.tf, deploy/aws/terraform/modules/ecr/main.tf, deploy/aws/terraform/modules/secrets/main.tf, deploy/aws/terraform/modules/secrets/rotation.tf, deploy/aws/terraform/modules/kms_credentials/main.tf, deploy/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
-  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/main.tf": "sha256:b587c84f2f9c697401aa41a71178866931fe593c19c121c5a1e4a4b5f330a66e"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:fcc3e84f90f6fb49d57f6e81bb31b5d5bb0c0febe1195c61512d45b40f23cb1c"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:ddc4bacad8ec5aa6047433d330c95afbcda39924c71f3d2c3a2f810ee6437eda"
-  "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
+  "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
   "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
   "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
@@ -30,8 +31,10 @@ source_hashes:
 # Deployment Profiles
 
 Staging uses inline ML and therefore does not require an ML image digest;
-remote-ML profiles do. Its apply role is scoped to staging and is the only
-profile-specific administrator named in staging KMS key policies.
+remote-ML profiles do. Its apply role is scoped to staging. The provider-
+credential KMS key policy retains account-root administration by default;
+profile-specific key administrators are added only through the explicit
+`kms_key_admin_role_arns` input.
 Aurora and the pay-per-use DynamoDB cache are present in every cloud Terraform
 profile, so their alarms and dashboard widgets are selected by static root
 profile flags. They never use resource-derived cluster or table IDs to decide

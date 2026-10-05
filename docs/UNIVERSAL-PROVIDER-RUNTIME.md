@@ -19,11 +19,11 @@ canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:2fd39d4ff1bb287b3ea68d6b86281c7b8c0e2de0278784fa8bdde15163c995e8"
+  "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
   "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
-  "services/backend/services/provider_runtime/": "sha256:b2a3e39e1032cbb1b93e8e546f6ce97541c978d183f96460afcc08aead164154"
-  "services/backend/services/providers/": "sha256:e4a113fc52d5bf6e6feac5a599fdaf2c9ddc2e08a84187d32e0c616efef09826"
-  "services/backend/services/providers/shopify/": "sha256:45f4980bfcd718f18a7e17806771102c20431d356244325b58ad1a0a6ba430ca"
+  "services/backend/services/provider_runtime/": "sha256:1b1b84e48440b16be3f0bc23c5cc41751f98423c25b39b8da908e32af363e52b"
+  "services/backend/services/providers/": "sha256:6d1ba9157c4e120bdf799b6d717252fafbb3369d47ceabed255ca8933c06be82"
+  "services/backend/services/providers/shopify/": "sha256:b06727a9e1f397fdb52babcf270f1c2198d8b84e23f183855bece2dcb22e4a22"
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
   "services/backend/shared/integration_contracts/": "sha256:ef4cb78f58482052f180f54b494bcc90a4dcea3777dfbb0e901a1f214fb1e683"
   "services/backend/shared/rate_limit/feature_gate.py": "sha256:a93ea91270a1d0ca3d8664ddea29b75cbfca8c2180a239cb78a3a61d8facda96"

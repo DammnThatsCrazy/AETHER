@@ -12,8 +12,8 @@ toc_depth: 2
 source_files: [services/backend/services/campaign/exploration.py, services/backend/services/measurement/repositories/attribution_run_repo.py, services/backend/services/measurement/engine/attribution_engine.py, services/backend/services/traffic/repair.py]
 source_hashes:
   "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/backend/services/measurement/engine/attribution_engine.py": "sha256:4313b0cf1b53ece978b4fcbb1ec2efa833602e415b3a26e60072021b950051d2"
-  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:b18112dc8b209e1b8630654c7891c0408f4f24bc702980cb03d45b5fc606a800"
+  "services/backend/services/measurement/engine/attribution_engine.py": "sha256:974d3414b4d7985ae578b89a4fbd1f886c7feac569838bee9c11b763425c285a"
+  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:0a1ec25f6d8bb3ff911ac0e966df64775438ccbcfd7e2cc7e5d73715c4c8482c"
   "services/backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
 ---
 
@@ -21,9 +21,12 @@ source_hashes:
 
 ## Alert condition
 
-The Campaign 360 overview shows `data_quality.attribution_run_freshness: "stale"`
-or `"error"`. The Attribution tab in Campaign 360 shows no credit breakdown.
-The Attribution Studio page shows a run in `failed` status for this campaign.
+The Campaign 360 overview shows
+`data_quality.attribution_run_freshness: "missing"`, the Attribution tab has no
+credit breakdown, and Attribution Studio shows a run in `failed` status for
+this campaign. The current explorer reports this field as `fresh` when its
+credit summary contains credits and `missing` otherwise; it does not emit
+`stale` or `error` for this field.
 
 ## What it means
 
@@ -56,30 +59,42 @@ counts). Those credits are excluded from revenue totals and reported as
 
    | Error message | Root cause |
    |--------------|------------|
-   | `credit_sum_tolerance_exceeded` | Total credit weights deviate > 0.1% from 1.0 per conversion. Data integrity issue. |
-   | `no_eligible_conversions` | No conversions in the attribution window for this campaign. |
-   | `touchpoint_join_failed` | Touchpoints for the campaign are missing or have null `occurred_at`. |
-   | `model_config_not_found` | The requested model config was missing before the run could capture an immutable snapshot. Recomputes of an existing run reuse its snapshot unless explicitly overridden. |
-   | `timeout` | The attribution engine exceeded its processing budget (> 300s for the campaign's conversion set). |
-   | `database_error` | Transient PostgreSQL error. |
+   | `invalid_conversion_timestamp` | The conversion's `occurred_at` is missing or cannot be parsed, so the engine cannot anchor the lookback window. |
+   | `touchpoint_missing` in `exclusion_reasons` | A journey referenced a touchpoint row that could not be loaded. The touchpoint is excluded; this is not by itself a failed-run reason. |
+   | `Attribution run <id> disappeared before completion` | The repository could not complete the run row created by the engine. Inspect repository and database logs for the same run ID. |
+   | Any other `failure_reason` | The engine stores the caught exception text, truncated to 500 characters; it does not normalize these into a fixed error-code set. Correlate the text with backend logs. |
+
+   Some request errors happen before a run row is created: a conversion that is
+   missing for the tenant, not attribution-eligible, or an explicitly requested
+   model configuration that cannot be found. A missing requested model config
+   fails before a first run; a recompute without an override reuses the prior
+   run's model snapshot.
 
 4. **Check conversion and touchpoint counts**:
    ```bash
    curl "$API_BASE/v1/campaigns/$CAMPAIGN_ID/overview" \
      | jq '{touchpoints: .touchpoint_count, conversions: .converted_count}'
    ```
-   A campaign with 0 touchpoints or 0 conversions will always fail attribution.
+   The engine runs attribution for one existing, eligible conversion at a time.
+   Zero conversions means there is no conversion run to trigger. Zero usable
+   touchpoints alone is not a defined failure: the engine passes the available
+   (possibly empty) candidate list to the resolver and records exclusions when
+   rows are missing or ineligible.
+
+   The engine does not raise the documented `credit_sum_tolerance_exceeded`
+   error. If credit weight plus unattributed weight exceeds the internal
+   tolerance, it logs a reconciliation error and continues to persist the run.
 
 ## Remediation
 
 | Root cause | Fix |
 |------------|-----|
-| Transient database error | Re-trigger: `POST /v1/attribution/runs` |
-| `no_eligible_conversions` | Verify conversions are being ingested; if intentional, no action needed |
-| `credit_sum_tolerance_exceeded` | Inspect model config; report to measurement engineering |
-| `timeout` | Reduce the date range and run a targeted backfill in smaller windows |
-| Model config unavailable before first run | Restore the config or explicitly choose a different model; recomputes should reuse the prior run's immutable snapshot |
-| `touchpoint_join_failed` | Fix the touchpoint records (null `occurred_at`); re-ingest; re-trigger |
+| Conversion missing or not eligible | Confirm the conversion ID, tenant, and `attribution_eligible` state before retrying. These errors occur before a run row is created. |
+| `invalid_conversion_timestamp` | Correct the conversion's `occurred_at` through the supported ingestion/correction path, then re-trigger. |
+| Missing touchpoint rows | Inspect `excluded_touchpoint_ids` and `exclusion_reasons`; repair source data as appropriate. Missing touchpoints are excluded and do not alone fail the run. |
+| Explicit model config unavailable | Restore the config or choose a valid model config. Recomputes without an override reuse the prior run's immutable snapshot. |
+| Transient dependency/database exception | Resolve the exception shown in `failure_reason` and correlated logs, then re-trigger the conversion. |
+| Credit-weight reconciliation log | Inspect measurement logs and model behavior; the current engine logs this condition but does not mark the run failed for it. |
 | Old/missing source classifier version | Run tenant-scoped source-classification repair in Kyber, then verify the linked recomputed run and reconciliation |
 
 ## Triggering a manual re-run
@@ -114,11 +129,12 @@ curl "$API_BASE/v1/campaigns/$CAMPAIGN_ID/overview" \
   | jq '.data_quality.reconciliation_status'
 ```
 
-Expected: `"ok"`. If `"warn"` or `"error"`, check the reconciliation invariants
-in the `CampaignPopulationExplorer` service log.
+The current explorer reports `"unknown"` when its implemented count clamps do
+not change a value and `"inconsistent"` when one does; it does not emit
+`"ok"`, `"warn"`, or `"error"` for this check. For `"inconsistent"`, inspect
+the raw campaign population summaries in the `CampaignPopulationExplorer` log.
 
 ## Escalation
 
-If three consecutive re-runs fail with `credit_sum_tolerance_exceeded`, escalate
-to the measurement engineering team — this indicates a data integrity issue in
-the `attribution_credits` table that requires manual inspection.
+If repeated runs produce credit-weight reconciliation log entries, escalate
+to the measurement engineering team with the run IDs and logs for inspection.

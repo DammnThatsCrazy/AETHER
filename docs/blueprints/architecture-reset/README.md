@@ -31,6 +31,22 @@ must obtain that evidence before a destructive cutover. The existing
 `packages/ios/.build/` artifact in the original checkout is untracked and is
 not part of the reset.
 
+## Protected design-partner lane
+
+The reset is the primary engineering objective, but it does not suspend
+design-partner conversations, commercial preparation, demos, or product
+feedback. Keep any live partner exercise to one deliberately narrow golden
+path: provisioned tenant and access, one supported SDK or connector, retained
+evidence, normalization, backend identity resolution, governed graph
+population, an evidence-backed profile or journey, explanation, and a
+permitted action or measured outcome. Preserve the existing staging
+wake/sleep and deployment path as the comparison baseline. Do not add partner-
+specific infrastructure or new architectural patterns to this lane; capture
+new needs and route them through the same canonical contracts and authorities.
+This plan does not assert that a partner tenant has been onboarded or that the
+golden path is ready; those claims require the proof ledger and separate live
+evidence.
+
 At the initial baseline, draft PR #732 proposes `Development` into `main` and
 PR #733 proposes the universal connector runtime into `Development`. The
 connector PR is an integration dependency, not an alternate provider runtime
@@ -57,24 +73,31 @@ release readiness.
 
 ## PR boundaries and merge order
 
-PR #734 is the architecture authority frame: target architecture, current-to-target
-inventories, cutover and proof ledgers, route-state evidence, delivery ownership,
-and focused tests for existing route states. It does not change application
-routes, service behavior, package boundaries, public SDKs, APIs, schemas,
-migrations, graph/event behavior, runtime configuration, or deployment behavior.
-Keep the PR draft until its documentation and frame-level evidence are reviewed.
+PR #734 is the single consolidated architecture-reset implementation PR. It
+starts with the architecture authority frame: target architecture,
+current-to-target inventories, cutover and proof ledgers, route-state evidence,
+and delivery ownership. The dependent fixes already identified in PRs #735,
+#736, and #737 are commits on this same branch, and the remaining reset slices
+that stack into this architecture continue here as coherent commits. Do not
+create another PR for a dependent slice merely to preserve an artificial PR
+sequence. Keep #734 draft during accumulation and run the repository's one
+normal PR authority only during finalization.
 
-After #734 lands on `Development`, rebase and review the existing universal
-connector runtime PR #733 against the accepted source/intake, evidence, identity,
-and graph authorities. Preserve its explicit durable-rights, certification,
-and provider-backed proof gaps. Follow with separately bounded identity, graph
-mutation, replay/data-rights, product-surface, repository, and delivery slices;
-order them by the dependency each slice actually has and do not stack blindly.
-Each implementation PR should target `Development` once its prerequisite is
-merged, carry its own compatibility and rollback evidence, and link back to this
-frame. PR #732 is a `Development` to `main` release promotion: hold it until the
-architecture/runtime cutovers are reconciled on `Development` and required
-staging evidence is recorded or explicitly dispositioned.
+PR #733 remains a separate universal connector runtime PR, per the user's
+explicit direction. The selected landing order is **#734 first, then #733 and
+#732**. After #734 lands on `Development`, rebase #733 onto the updated branch,
+review its source/intake, evidence, identity, graph, and durable-rights
+behavior against the accepted reset authorities. Before #733 is finalized or
+lands, close the reviewed P1 race between provider-rights admission/revocation
+and raw-record Bronze persistence with a shared transaction/lock boundary and
+PostgreSQL concurrency evidence; the current repositories do not yet provide
+that boundary. Preserve provider certification and staging proof gaps as
+explicit limits. Do not fold #733 into #734 or create intermediate PRs for
+work that belongs in the consolidated reset stack. PR #732 remains the
+`Development` to `main` release promotion. After #734 and #733 land on
+`Development`, rebase/update the #732 release diff against the current `main`
+and hold its merge until the architecture/runtime cutovers and required
+staging evidence are complete or explicitly dispositioned.
 
 ## Baseline inventories and authority decisions
 
@@ -82,7 +105,7 @@ staging evidence is recorded or explicitly dispositioned.
 | --- | --- | --- |
 | [Runtime authority](runtime-authority-map.md) | Which current code owns intake, evidence, normalization, identity, graph mutation, replay, intelligence, actions, and recovery? | Mapped; runtime behavior is unchanged in this frame; replay durability and provider cutovers remain pending |
 | [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state assertions are in the frame; a follow-up cutover maps supported navigation and separates activation setup from observed evidence; end-to-end proof remains pending |
-| [Delivery controls](delivery-authority-map.md) | Which commands, docs ownership rules, CI paths, profiles, and deployment controls are truly authoritative? | Mapped; this frame changes no verification or deployment behavior; delivery cutovers pending |
+| [Delivery controls](delivery-authority-map.md) | Which commands, docs ownership rules, CI paths, profiles, and deployment controls are truly authoritative? | Mapped; a focused workflow-overlap audit found no safe gate removal yet; contract-suite path selection needs proof before reconsidering the apparent Hardhat duplicate; delivery cutovers remain pending |
 
 The [cutover inventory](cutover-inventory.md) gives the first `keep`, `merge`,
 `simplify`, and `defer` decisions for overlapping paths. It names consumers,
