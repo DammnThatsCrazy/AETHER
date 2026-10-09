@@ -24,7 +24,8 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@aether/shared": "*",
-    "@aether/proof-contracts": "*"
+    "@aether/proof-contracts": "*",
+    "@aether/proof-fixtures": "*"
   },
   "devDependencies": {
     "@aether/shared": "*",

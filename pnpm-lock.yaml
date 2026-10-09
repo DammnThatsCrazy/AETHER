@@ -907,6 +907,9 @@ importers:
       '@aether/proof-contracts':
         specifier: '*'
         version: link:../proof-contracts
+      '@aether/proof-fixtures':
+        specifier: '*'
+        version: link:../proof-fixtures
       '@aether/shared':
         specifier: '*'
         version: link:../shared

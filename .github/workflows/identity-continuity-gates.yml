@@ -397,7 +397,6 @@ jobs:
         run: |
           set -o pipefail
           pnpm --filter @aether/proof-contracts build 2>&1 | tee artifacts/identity-continuity-proof/logs/proof-contracts-build.log
-          pnpm --filter @aether/proof-runner build 2>&1 | tee artifacts/identity-continuity-proof/logs/proof-runner-build.log
 
       - name: Build proof fixtures package
         id: proof-fixtures
@@ -406,6 +405,14 @@ jobs:
         run: |
           set -o pipefail
           pnpm --filter @aether/proof-fixtures build 2>&1 | tee artifacts/identity-continuity-proof/logs/proof-fixtures-build.log
+
+      - name: Build proof runner package
+        id: proof-runner
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm --filter @aether/proof-runner build 2>&1 | tee artifacts/identity-continuity-proof/logs/proof-runner-build.log
 
       - name: Build and test proof reporting package
         id: proof-reporting
@@ -433,6 +440,7 @@ jobs:
           CONTRACT_CHECK: ${{ steps.contract-check.outcome }}
           PROOF_DEPENDENCIES: ${{ steps.proof-dependencies.outcome }}
           PROOF_FIXTURES: ${{ steps.proof-fixtures.outcome }}
+          PROOF_RUNNER: ${{ steps.proof-runner.outcome }}
           PROOF_REPORTING: ${{ steps.proof-reporting.outcome }}
           IDENTITY_SUITE: ${{ steps.identity-suite.outcome }}
           GITHUB_SHA: ${{ github.sha }}
@@ -449,8 +457,9 @@ jobs:
               ("Python bootstrap", os.environ["PYTHON_BOOTSTRAP"]),
               ("pnpm dependency install", os.environ["DEPENDENCY_INSTALL"]),
               ("Generated contract twins", os.environ["CONTRACT_CHECK"]),
-              ("Proof package dependencies", os.environ["PROOF_DEPENDENCIES"]),
+              ("Proof contracts package build", os.environ["PROOF_DEPENDENCIES"]),
               ("Proof fixtures package build", os.environ["PROOF_FIXTURES"]),
+              ("Proof runner package build", os.environ["PROOF_RUNNER"]),
               ("Proof reporting package build and tests", os.environ["PROOF_REPORTING"]),
               ("Identity and restatement suite", os.environ["IDENTITY_SUITE"]),
           ]
@@ -501,11 +510,12 @@ jobs:
           CONTRACT_CHECK: ${{ steps.contract-check.outcome }}
           PROOF_DEPENDENCIES: ${{ steps.proof-dependencies.outcome }}
           PROOF_FIXTURES: ${{ steps.proof-fixtures.outcome }}
+          PROOF_RUNNER: ${{ steps.proof-runner.outcome }}
           PROOF_REPORTING: ${{ steps.proof-reporting.outcome }}
           IDENTITY_SUITE: ${{ steps.identity-suite.outcome }}
         run: |
           failed=0
-          for outcome in "$PYTHON_BOOTSTRAP" "$DEPENDENCY_INSTALL" "$CONTRACT_CHECK" "$PROOF_DEPENDENCIES" "$PROOF_FIXTURES" "$PROOF_REPORTING" "$IDENTITY_SUITE"; do
+          for outcome in "$PYTHON_BOOTSTRAP" "$DEPENDENCY_INSTALL" "$CONTRACT_CHECK" "$PROOF_DEPENDENCIES" "$PROOF_FIXTURES" "$PROOF_RUNNER" "$PROOF_REPORTING" "$IDENTITY_SUITE"; do
             if [ "$outcome" != "success" ]; then failed=1; fi
           done
           if [ "$failed" -ne 0 ]; then
