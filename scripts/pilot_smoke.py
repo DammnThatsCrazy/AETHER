@@ -86,8 +86,8 @@ def cap_ingestion(surface, controls, roles_text) -> CheckResult:
 
 def cap_identity(surface, roles_text) -> CheckResult:
     ok = (_has_route(surface, "/v1/identity") and _has_role(surface, "identity-worker")
-          and _has_consumer(surface, "identity-signal-emission") and 'role="identity-worker"' in roles_text)
-    return (passed("cap:identity", "identity route + worker + signal consumer")
+          and _has_consumer(surface, "identity-resolution") and 'role="identity-worker"' in roles_text)
+    return (passed("cap:identity", "identity route + durable resolution consumer")
             if ok else failed("cap:identity", "identity wiring missing"))
 
 

@@ -14,7 +14,7 @@ source_hashes:
   "services/backend/services/identity/graph_reconciliation.py": "sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a"
   "services/backend/services/identity/reconciliation_routes.py": "sha256:3ec51df67337edbc420bc50a6d9f8fccbe61b42164ec966ca45ff2c9ceabca76"
   "services/backend/services/identity/redirects.py": "sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0"
-  "services/backend/services/identity/resolver.py": "sha256:ae0c604354fa5b756877cfda28e383f54f48a42ebbc15124b32b786c4b8f1218"
+  "services/backend/services/identity/resolver.py": "sha256:b63bc7c516a5b374d5aa3814689349bd02b5dd212b3982a02eb36eafd8e0db9f"
 ---
 
 # Runbook — Identity Repair
@@ -35,7 +35,24 @@ survivor canonical entity and tombstones the merged subject
 guard). A split unwinds an incorrect merge, revoking the specific `SAME_AS`
 edges rather than deleting vertices (a vertex may be shared).
 
+SDK observations are processed by the durable `identity-worker` after the
+validated event is published (V1) or relayed from the transactional outbox
+(V2). It registers a source identity before resolution. Event signal rows and
+first-seen provisional IDs are stable across retries, and ambiguous events stay
+assigned to a source-local provisional profile until policy authorizes a link.
+Profile timelines resolve activity through identity observations and merge
+lineage; Bronze source events are not rewritten.
+
 ## Symptoms → actions
+
+### An accepted SDK event is absent from a profile timeline
+Check the `identity-worker` readiness and queue/DLQ status, then verify that
+the event reached `SDK_EVENTS_VALIDATED`. For V2, also check the
+`event_outbox` row and relay status. Confirm identity continuity is enabled and
+inspect the tenant-scoped source identity plus signal observation for the event
+ID. A retry with the same tenant/event ID should not create another provisional
+entity. A candidate or blocked decision should remain on its source-local
+profile until review or stronger evidence changes the ownership assignment.
 
 ### Two people were merged into one entity
 Use the **fragment-aware split**. Always preview first — it is non-mutating:

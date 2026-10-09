@@ -481,7 +481,14 @@ class IdentityResolutionRepository:
         context: Optional[dict] = None,
         canonical_entity_id: Optional[str] = None,
     ) -> dict:
-        obs_id = str(uuid.uuid4())
+        # SDK/outbox delivery is at-least-once. A stable observation id makes
+        # resolver retries a replacement of the same event evidence rather
+        # than an additional signal row.
+        obs_id = str(uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"aether:identity-observation:{tenant_id}:{source_event_id}:"
+            f"{signal_type.value}:{signal_value_hash}",
+        ))
         now = utc_now().isoformat()
         return await self._observations.insert(obs_id, {
             "id": obs_id,
@@ -1074,6 +1081,46 @@ class IdentityResolutionRepository:
             filters={"tenant_id": tenant_id, "canonical_entity_id": canonical_entity_id},
             limit=limit,
         )
+
+    async def get_event_ids_for_canonical_entity(
+        self, tenant_id: str, canonical_entity_id: str, limit: int = 10000
+    ) -> list[str]:
+        """Return source event IDs currently owned by an entity or its fragments.
+
+        Merge tombstones retain observations on their original fragment. Walk
+        reverse merge edges from the requested survivor so activity reads keep
+        the complete history; a split moves only the selected observations back
+        to the restored fragment and is reflected on the next query.
+        """
+        merges = await self._merges.find_many(
+            filters={"tenant_id": tenant_id}, limit=limit
+        )
+        owned = {canonical_entity_id}
+        changed = True
+        while changed:
+            changed = False
+            for merge in merges:
+                if merge.get("into_entity_id") in owned:
+                    source = str(merge.get("from_entity_id") or "")
+                    if source and source not in owned:
+                        owned.add(source)
+                        changed = True
+
+        event_ids: set[str] = set()
+        for entity_id in owned:
+            rows = await self._observations.find_many(
+                filters={
+                    "tenant_id": tenant_id,
+                    "canonical_entity_id": entity_id,
+                },
+                limit=limit,
+            )
+            event_ids.update(
+                str(row.get("source_event_id"))
+                for row in rows
+                if row.get("source_event_id")
+            )
+        return sorted(event_ids)[:limit]
 
     async def get_observations_for_events(
         self, tenant_id: str, event_ids: list[str], limit: int = 500

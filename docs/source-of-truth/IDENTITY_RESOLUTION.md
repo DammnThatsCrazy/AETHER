@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
-source_files: [services/backend/services/identity/models.py, services/backend/services/identity/routes.py, services/backend/services/identity/resolver.py, services/backend/services/identity/repository.py]
+source_files: [services/backend/services/identity/models.py, services/backend/services/identity/routes.py, services/backend/services/identity/resolver.py, services/backend/services/identity/repository.py, services/backend/services/identity/ingestion_worker.py, services/backend/services/identity/source_identity_registry.py, services/backend/services/ingestion/batch.py, services/backend/services/runtime/consumer_specs.py, services/backend/repositories/repos.py, services/backend/services/analytics/routes.py, services/backend/services/profile/composer.py, services/backend/services/profile/aggregator.py]
 canonical_owner: identity@aether
 last_synced_commit: 4764707
 ---
@@ -21,8 +21,10 @@ operator workflows.
 
 ## What is `canonical_entity_id`?
 
-Every entity that Aether observes is assigned a stable UUID called
-`canonical_entity_id`. It is:
+Every identity-bearing entity Aether can resolve is assigned a stable UUID
+called `canonical_entity_id`. An event with no usable identity fields remains
+an observation and does not create a person. An identity-bearing anonymous
+event can create a provisional entity without requiring a conversion. The ID is:
 
 - **Backend-owned** — the SDK never assigns or emits it; it is stamped by
   `services/backend/services/identity/resolver.py` after Bronze ingestion.
@@ -34,6 +36,29 @@ Every entity that Aether observes is assigned a stable UUID called
 - **Recoverable via split** — operator-initiated splits create a new
   `canonical_entity_id` for the separated fragment and record the lineage in
   the audit log.
+
+## SDK observation path
+
+Accepted SDK observations reach the canonical `identity-worker` on
+`SDK_EVENTS_VALIDATED`. The worker first registers a tenant- and
+authenticated-app-scoped `SourceIdentity`, records observed email/phone claims
+as tenant-keyed hashes, and then calls `IdentityResolutionService`. V1 writes
+Bronze before publishing; V2 commits Bronze and the event outbox together and
+the relay publishes the same event. Resolution is asynchronous for both paths.
+
+The batch handler stamps `context.identity_namespace` from the authenticated
+site binding. It does not accept a namespace from SDK context. A tenant-wide
+credential receives a tenant-local namespace. This prevents equal user IDs
+from distinct authenticated app sites from being treated as the same app user.
+
+The event ID is the retry identity. Source registration records it as
+`source_record_id`; signal observations and first-seen provisional subject IDs
+are deterministic from tenant, event, and policy. A replay therefore reuses
+event evidence and does not create a second provisional entity. Once the
+resolver returns a canonical entity, the source identity records that owner.
+`IDENTITY_RESOLVED` is published only after this decision exists. Events with
+no stable identity-bearing fields remain stored observations without an
+invented person.
 
 ---
 

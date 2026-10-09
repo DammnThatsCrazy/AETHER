@@ -430,7 +430,7 @@ class Profile360Aggregator:
         events: list[dict] = []
         if self._analytics is not None:
             events = (await _safe("sessions.analytics", self._analytics.query_events(
-                tenant_id, {"user_id": entity_id}, limit=limit,
+                tenant_id, {"canonical_entity_id": entity_id}, limit=limit,
             ))).value_or([])
 
         session_props: dict[str, dict] = {}
@@ -525,7 +525,7 @@ class Profile360Aggregator:
         observed_counts: dict[str, int] = defaultdict(int)
         if self._analytics is not None:
             events = (await _safe("devices.analytics", self._analytics.query_events(
-                tenant_id, {"user_id": entity_id}, limit=limit * 5,
+                tenant_id, {"canonical_entity_id": entity_id}, limit=limit * 5,
             ))).value_or([])
             for e in events:
                 # Canonical SDK events normalized by services/ingestion store
@@ -628,7 +628,7 @@ class Profile360Aggregator:
             events = (await _safe(
                 f"{kind}.analytics",
                 self._analytics.query_events(
-                    tenant_id, {"user_id": entity_id}, limit=500,
+                    tenant_id, {"canonical_entity_id": entity_id}, limit=500,
                 ),
             )).value_or([])
         counter: Counter[str] = Counter()
@@ -950,7 +950,7 @@ class Profile360Aggregator:
         events: list[dict] = []
         if self._analytics is not None:
             events = (await _safe("rewards.analytics", self._analytics.query_events(
-                tenant_id, {"user_id": entity_id}, limit=limit * 3,
+                tenant_id, {"canonical_entity_id": entity_id}, limit=limit * 3,
             ))).value_or([])
         items = []
         total_value = 0.0

@@ -8,13 +8,25 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/backend/services/identity/
+  - services/backend/services/ingestion/batch.py
+  - services/backend/services/runtime/consumer_specs.py
+  - services/backend/repositories/repos.py
+  - services/backend/services/analytics/routes.py
+  - services/backend/services/profile/composer.py
+  - services/backend/services/profile/aggregator.py
   - packages/shared/identity.ts
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
-  "services/backend/services/identity/": "sha256:43a3558f62dc357d93dc4416668ea5fe2a0d5a7b42c6e5b9f4afde1362953288"
+  "services/backend/repositories/repos.py": "sha256:17d4283f64dd84fdc4f26b1e73b7e1d8d7678a77b7fc3f1a318139c94c068235"
+  "services/backend/services/analytics/routes.py": "sha256:58d556a9dcc74c50a5dd2bec6c779b61c87a01dda11c57471f9ca45539accb2d"
+  "services/backend/services/identity/": "sha256:09d090cc38fd925af512493619921a10c8ba581c4b17c8d6bea43788b9c88900"
+  "services/backend/services/ingestion/batch.py": "sha256:4ca4a80836accbaf8458bb792ac8f4a9feac809234ecc4caf7fd54e0c5dc99e2"
+  "services/backend/services/profile/aggregator.py": "sha256:1a8495842ba83117735baddfbe24ec265dd93a0baec1d91307fb62f210a2ea0c"
+  "services/backend/services/profile/composer.py": "sha256:672ed8a1653a7ebe76e4ee38742c7079b36f0ed7c9a291509b62a9cee8083220"
+  "services/backend/services/runtime/consumer_specs.py": "sha256:0bd54fe2c7dd031759f31f312b068428e11958169066764b3bb00792f4e82dac"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
@@ -50,6 +62,19 @@ Reads return the same flat record shape. Signal observations are written before 
 runtime-created JSONB store.
 
 The graph writer's graph mirror routes through the canonical **Graph Mutation Gateway** (`shared/graph/mutation_gateway.py`): merge edges are expressed as `identity_merged` mutations (other identity edges as `edge_created`, split revokes as `identity_split`), each carrying the decision's reason codes, source-event evidence, and confidence as ledger metadata. At `AETHER_MUTATION_GATEWAY_MODE=off` the gateway delegates straight to the GraphClient (pre-gateway behavior); in `shadow`/`enforce` modes every mirror write is also recorded in the append-only `graph_mutation_ledger`. Repo-backed identity edges remain the source of truth — mirror failures stay non-fatal.
+
+SDK identity resolution is owned by the `identity-worker` consumer on
+`SDK_EVENTS_VALIDATED`. The V1 batch path writes Bronze and publishes the
+validated event; V2 writes Bronze plus its outbox row transactionally and the
+relay publishes it. The worker registers a source identity before invoking the
+resolver, and retries use stable tenant/event/policy identities. It publishes
+`IDENTITY_RESOLVED` only after an accepted canonical decision.
+
+The batch backend stamps `context.identity_namespace` from the authenticated
+site binding. The SDK cannot select its own namespace. This lets profile and
+analytics reads ask for a canonical entity and resolve its event IDs through
+signal observations and merge lineage, so anonymous activity remains visible
+after a later identity bind.
 
 ### Source identities and late binding
 
@@ -87,50 +112,40 @@ the evidence and requires server-verified identity-link consent.
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
 
 ```
-SDK Event (with fingerprint + identifiers)
+SDK event
     |
     v
-Ingestion Service
-    |-- IP Enrichment (MaxMind GeoLite2)
-    |-- Normalize & validate
-    |-- Publish SDK_EVENTS_VALIDATED
+POST /v1/batch
+    |-- validate, consent and privacy gates
+    |-- V1: persist Bronze, then publish SDK_EVENTS_VALIDATED
+    |-- V2: commit Bronze + event_outbox together; relay publishes later
     |
     v
-Resolution Consumer (real-time)
+identity-worker consumes SDK_EVENTS_VALIDATED
+    |-- stamp/consume the server-authenticated app namespace
+    |-- register source identity and observed claims
+    |-- run IdentityResolutionService
+    |-- record canonical ownership on the source identity
+    |-- publish IDENTITY_RESOLVED only after an actual decision
     |
-    +-- 1. Extract identifiers from event:
-    |      anonymousId, userId, email, phone,
-    |      wallets[], fingerprintId, ip_hash
-    |
-    +-- 2. Upsert graph vertices:
-    |      DeviceFingerprint, IPAddress, Location,
-    |      Email, Phone, Wallet
-    |
-    +-- 3. Create/update edges:
-    |      HAS_FINGERPRINT, SEEN_FROM_IP,
-    |      LOCATED_IN, HAS_EMAIL, HAS_PHONE,
-    |      OWNS_WALLET
-    |
-    +-- 4. Find candidate profiles
-    |      (other Users linked to same vertices)
-    |
-    +-- 5. Run deterministic signals
-    |      |
-    |      +-- Match found? --> AUTO MERGE (publishes IDENTITY_MERGED)
-    |      |
-    |      +-- No match --> Queue for batch
-    |
-    v
-Batch Resolution Job (hourly)
-    |
-    +-- Run probabilistic signals on candidates
-    +-- Compute weighted composite score
-    +-- Apply rules engine:
-        |
-        +-- >= 0.95 confidence --> auto_merge (if configured)
-        +-- >= 0.70 confidence --> flag_for_review
-        +-- < 0.70 confidence  --> reject
+    +-- CREATE / LINK / MERGE → canonical entity and graph policy
+    +-- ambiguous evidence → candidate/conflict review
+    +-- insufficient evidence → source-scoped provisional identity
 ```
+
+V1 and V2 now share the same asynchronous consumer. V1 no longer starts a
+process-local resolver task from the request handler. At-least-once delivery
+uses the source event ID for idempotent source registration, signal observations,
+and provisional entity IDs. The raw Bronze event remains unchanged. An
+identity-bearing anonymous page or heartbeat can create a provisional entity;
+conversion is not required. Later evidence can resolve that same source history
+to a known canonical entity.
+
+The SDK batch path stamps `context.identity_namespace` from the authenticated
+`X-Aether-Site` binding. Caller-provided identity namespace values are ignored.
+Tenant-wide secret credentials use a tenant-local namespace. This keeps equal
+SDK user IDs from separately bound sites from being treated as the same app
+identity by default.
 
 ## Identity Graph Schema
 

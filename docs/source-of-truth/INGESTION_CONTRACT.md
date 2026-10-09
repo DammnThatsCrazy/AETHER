@@ -6,6 +6,14 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
+source_files:
+  - services/backend/services/ingestion/batch.py
+  - services/backend/services/identity/ingestion_worker.py
+  - services/backend/services/identity/resolver.py
+  - services/backend/services/runtime/consumer_specs.py
+  - services/backend/services/ingestion/outbox_relay.py
+  - services/backend/services/analytics/routes.py
+  - services/backend/repositories/repos.py
 ---
 # Ingestion Contract
 
@@ -148,37 +156,41 @@ Fingerprint alone must never promote a sensitive identity link to high confidenc
 
 ## Post-ingestion identity resolution
 
-After an event batch is written to Bronze (`bronze_sdk_events`) and published to
-Kafka, `services/backend/services/identity/resolver.py` processes each event asynchronously to
-assign or update `canonical_entity_id`. This step is **not** part of the
-synchronous `POST /v1/batch` response — ingestion and resolution are decoupled.
+After an accepted event is durably recorded, the `identity-worker` consumes its
+`SDK_EVENTS_VALIDATED` delivery and invokes the canonical resolver. V1 persists
+Bronze before publishing; V2 commits typed Bronze and an event-outbox row in
+one transaction, then the outbox relay publishes it. Both versions use the same
+identity consumer, outside the synchronous `POST /v1/batch` response.
 
 ### Resolution pipeline
 
 ```
 POST /v1/batch
   │
-  ├─ validate → idempotency check → write Bronze → publish Kafka
-  │                                                       │
-  │   (synchronous; response returned here)              │
-  │                                                       ▼
-  │                                          identity resolver consumes
-  │                                          aether.sdk.events.validated
-  │                                                       │
-  │                                          extract signals from event
-  │                                                       │
-  │                                          score signals → MergeDecision
-  │                                                       │
-  │                                          ┌────────────┴───────────────┐
-  │                                          │                            │
-  │                                       create /                  candidate →
-  │                                       link /                    conflict queue
-  │                                       merge
-  │                                          │
-  │                                   stamp canonical_entity_id
-  │                                   on identity_subjects row
-  └──────────────────────────────────────────┘
+  ├─ validate → consent/privacy → Bronze + validated event
+  │                                  │
+  │                        V1 publish / V2 outbox relay
+  │                                  │
+  │                                  ▼
+  │                    identity-worker (at-least-once)
+  │                                  │
+  │                    register SourceIdentity + claims
+  │                                  │
+  │                    IdentityResolutionService
+  │                                  │
+  │                    create / link / merge / review
+  │                                  │
+  │                    save source → canonical ownership
+  │                    publish IDENTITY_RESOLVED after decision
+  └──────────────────────────────────┘
 ```
+
+The backend stamps `context.identity_namespace` from the authenticated site
+binding (`X-Aether-Site`), never from caller-provided event context. Tenant-wide
+credentials use a tenant-local namespace. Stable source-event keys make worker
+retries idempotent, including first-seen anonymous events that create a
+provisional canonical entity. Events without usable identity evidence remain
+Bronze observations and do not invent a person.
 
 ### What the ingestion layer stamps vs. what the resolver stamps
 
@@ -190,6 +202,7 @@ POST /v1/batch
 | `batch_id` | Yes | — |
 | `anonymous_id` | Yes (from event) | — |
 | `user_id` | Yes (from event, if present) | — |
+| `context.identity_namespace` | Yes (authenticated site binding) | — |
 | `canonical_entity_id` | **Never** | Yes, after resolution |
 | `confidence_tier` | — | Yes, on `identity_aliases` row |
 | `merge_decision` | — | Yes, in audit log |

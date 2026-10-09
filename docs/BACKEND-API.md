@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:d5204fe0b716fff4b7580bcf3cd21734ed5bc239d4d2baac509359ecee13f64c"
+  "services/backend/services/": "sha256:7d9e7cf90fc541b2874fb6ff29178c60ec6fec127158b39861e0c39e9e5b4233"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1498,7 +1498,7 @@ authenticated tenant.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). `limit` 1–200 (default 50). Non-empty results are cached for up to 5 minutes, but every newly recorded event in the tenant retires the tenant's cached results, so a new event is visible on the next read; an empty result is never cached. |
+| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `canonical_entity_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). A canonical entity filter follows identity-observation assignments and merge lineage, including anonymous events resolved after capture. `limit` 1–200 (default 50). Non-empty results are cached for up to 5 minutes, but new event or identity ownership writes retire the tenant's cached results. |
 | GET | `/v1/analytics/events/{event_id}` | One processed event by its SDK event id |
 | GET | `/v1/analytics/dashboard/summary` | Last 24h, computed from the store: `total_events`, `total_sessions`, `unique_users` (distinct `user_id`, else `anonymous_id`), `top_event_types` (up to 10 `{event_type, count}`) |
 | POST | `/v1/analytics/graphql` | Field-selected reads (introspection disabled; up to 50 rows). `events` reads the event store (variables `event_type`, `session_id`, `user_id`). `sessions` reads the per-session rollups the projector maintains, most recently active first (variables `session_id`, `user_id`, `anonymous_id`; fields `session_id`, `user_id`, `anonymous_id`, `first_seen_at`, `last_seen_at`, `duration` in seconds, `event_count`, `page_views` (`page` and `screen` events), `last_event_type`). Device attributes are not offered because SDK `context` is never stored. `campaigns` reads the tenant's campaigns. |

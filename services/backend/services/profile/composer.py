@@ -278,7 +278,7 @@ class ProfileComposer:
     ) -> list[dict]:
         """Assemble time-ordered events from analytics."""
         events = await self._analytics.query_events(
-            tenant_id, {"user_id": user_id}, limit=limit
+            tenant_id, {"canonical_entity_id": user_id}, limit=limit
         )
         return [
             {
@@ -511,7 +511,7 @@ class ProfileComposer:
         event_type: Optional[str] = None,
     ) -> list[dict]:
         """Get paginated timeline for a user."""
-        filters: dict = {"user_id": user_id}
+        filters: dict = {"canonical_entity_id": user_id}
         if event_type:
             filters["event_type"] = event_type
         return await self._analytics.query_events(tenant_id, filters, limit=limit)

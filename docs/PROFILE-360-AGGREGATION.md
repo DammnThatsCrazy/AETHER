@@ -12,7 +12,7 @@ estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
   "services/backend/services/card_linked_payments/profile_summary.py": "sha256:4d72d0bb14569a0a77b4cd75113cf96831204fbbadf831eaf153eb380f029a7f"
-  "services/backend/services/profile/aggregator.py": "sha256:cb9e6fad68f0827cd037458b7306d4c13b0b26fbfc7b8708c926d11784503e83"
+  "services/backend/services/profile/aggregator.py": "sha256:1a8495842ba83117735baddfbe24ec265dd93a0baec1d91307fb62f210a2ea0c"
   "services/backend/services/profile/intelligence.py": "sha256:c11ffbb5a409e612e7aa40958526b9e9f22c41b5ec9d03c9576c4328646b6d14"
   "services/backend/services/profile/read_result.py": "sha256:be38b15f1b60afa0743471e48ac1e9dfddfddd42880b4f78e6e848761b72d056"
   "services/backend/services/profile/routes.py": "sha256:4113de6d0b849835183bfad6de4bbaafe18fc9828c412d4767835b7bde01d718"
@@ -86,6 +86,12 @@ the canonical state.
 ---
 
 ## Endpoints
+
+Profile timelines and activity-backed dimensions query analytics through the
+canonical entity assignment. SDK events retain their original source IDs; the
+identity worker maps each resolved event to its canonical entity, and reads
+follow merge lineage. A later anonymous-to-known bind therefore makes prior
+sessions and page views visible on the known profile without rewriting Bronze.
 
 All routes mount under `/v1/profile/{user_id}` and require the `read`
 permission on the active tenant. Every response is wrapped in the

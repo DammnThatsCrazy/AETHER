@@ -25,7 +25,7 @@ These are processing stages, not one shared durable route for every source:
 
 1. Source-specific authentication or webhook verification, contract checks, consent, privacy, and applicable data-rights decisions.
 2. Accepted evidence is persisted through the source's Bronze path. SDK batch V1 uses `BronzeRepository("sdk_events")`; flag-enabled SDK V2 uses a typed Bronze and outbox transaction. Feeds, imports, and providers have distinct persistence mechanics.
-3. Supported events are normalized into Silver facts and passed to backend identity resolution. A source family without a projector does not acquire fact, entity, or graph authority merely by being ingested.
+3. Accepted SDK observations publish `SDK_EVENTS_VALIDATED`; the dedicated `identity-worker` registers a tenant/app-scoped source identity before invoking the canonical resolver. V1 and V2 use this same consumer (V1 Bronze + publish; V2 transactional Bronze/outbox + relay). Other adapters retain their source-specific identity admission and resolution behavior. A source family without a projector does not acquire fact, entity, or graph authority merely by being ingested.
 4. Supported graph writers express governed mutations through `MutationIntent` and `GraphMutationGateway.apply`; outbox delivery and gateway enforcement depend on the specific path and rollout mode.
 
 ## Sources
@@ -39,5 +39,12 @@ These are processing stages, not one shared durable route for every source:
 ## Current State
 
 SDK, feed, import, and provider ingestion paths exist, with contract validation, Bronze persistence, Silver normalization, and identity resolution implemented for supported event families. `services/backend/services/ingestion/gateway.py` currently validates and stamps the universal observation envelope, but its consent, idempotency, sequencing, and durable-write gates are still adopted per path; SDK use of that envelope is flag-gated. There is not yet one canonical durable ingress path for every source.
+
+SDK identity resolution no longer runs as request-local background work. The
+`identity-worker` consumes the durable validated-event stream, registers
+`SourceIdentity` before resolution, and uses the authenticated site binding as
+the app namespace. Provider, import, and webhook adapters continue to use their
+own verified evidence and rights workflows before they can contribute identity
+claims.
 
 [PR #733](https://github.com/DammnThatsCrazy/AETHER/pull/733), currently separate from this checkout, proposes provider raw-rights admission, source-revision handling, a canonical Bronze/outbox bridge, and provider replay. Those pending changes must be integrated and verified before this page can describe them as current behavior.

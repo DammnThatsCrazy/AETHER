@@ -1,7 +1,7 @@
 """
 Aether Service — Ingestion Workers
 
-Kafka consumers that drive the Bronze → Silver → identity signal pipeline
+Kafka consumers that drive the Bronze → Silver → identity pipeline
 for SDK events.  Workers are attached to the shared EventConsumer during
 app startup via attach_ingestion_workers().
 
@@ -12,10 +12,11 @@ Worker topology:
                          silver fact tables (+ canonical activity, graph queue)
                        → analytics_event_recorder → events + sessions (the
                          tenant analytics store AnalyticsRepository reads)
-                       → identity_signal_emitter → publishes IDENTITY_RESOLVED
+                       → identity resolver → registers source identity and
+                         publishes IDENTITY_RESOLVED after a real decision
 
-These workers never mutate graph/profile directly; they emit signals that
-the Profile360 and identity-resolution services consume.
+Projection workers do not mutate graph/profile directly; the identity worker
+owns source registration and invokes the canonical resolver.
 """
 
 from __future__ import annotations
@@ -669,75 +670,39 @@ def _comms_ingestion_enabled() -> bool:
 
 
 async def identity_signal_emitter(event: Event, producer: EventProducer) -> None:
-    """
-    Emit an identity resolution signal for identify/user events.
+    """Deprecated signal-only helper retained for compatibility tests.
 
-    Only emits for event types that carry strong identity signals:
-    - identify: user_id + anonymous_id → IDENTITY_RESOLVED
-    - wallet: wallet address → IDENTITY_RESOLVED
-
-    Fingerprint-only signals are never used as high-confidence identity anchors.
-
-    WS-B5: when the normalization-spine flag is ON the identity reads go
-    through :func:`to_observation_view`, so an AetherEvent ``subject_id`` (or an
-    additive envelope user subject) becomes reachable; when OFF every read is
-    the legacy flat-key read.
+    It is not registered by the production consumer topology. Production
+    identity resolution is owned by ``services.identity.ingestion_worker``.
     """
     if _defer_provider_canonical(event, "identity_signal_emitter"):
         return
     payload = event.payload
-    tenant_id = event.tenant_id or payload.get("tenant_id", "")
-    event_type = payload.get("event_type", "")
-
-    if event_type not in {"identify", "wallet"}:
+    if payload.get("event_type") != "identify":
         return
-
     view = to_observation_view(payload) if normalization_spine_enabled() else None
     user_id = payload.get("user_id")
     anonymous_id = payload.get("anonymous_id", "")
     session_id = payload.get("session_id", "")
     if view is not None:
-        if view.user_id is not None:
-            user_id = view.user_id
-        if view.anonymous_id is not None:
-            anonymous_id = view.anonymous_id
-        if view.session_id is not None:
-            session_id = view.session_id
-
-    signal: dict = {
-        "tenant_id": tenant_id,
-        "anonymous_id": anonymous_id,
-        "session_id": session_id,
-        "source": "sdk",
-        "confidence": 0.0,
-    }
-
-    if event_type == "identify" and user_id:
-        signal["user_id"] = user_id
-        signal["confidence"] = 0.95  # strong signal: explicit identification
-
-    if event_type == "wallet":
-        props = dict(payload.get("properties") or {})
-        if not props and view is not None and view.payload_dict:
-            props = dict(view.payload_dict)
-        wallet_addr = props.get("address") or props.get("wallet_address", "")
-        if wallet_addr:
-            signal["wallet_address"] = wallet_addr
-            signal["confidence"] = 0.85
-
-    if signal["confidence"] == 0.0:
+        user_id = view.user_id or user_id
+        anonymous_id = view.anonymous_id or anonymous_id
+        session_id = view.session_id or session_id
+    if not user_id:
         return
-
-    try:
-        await producer.publish(Event(
-            topic=Topic.IDENTITY_RESOLVED,
-            tenant_id=tenant_id,
-            source_service="ingestion.workers",
-            payload=signal,
-        ))
-    except Exception as exc:
-        logger.warning("identity_signal_emitter publish failed: %s", exc)
-        # Not a critical failure — identity resolution will catch up on replay
+    await producer.publish(Event(
+        topic=Topic.IDENTITY_RESOLVED,
+        tenant_id=event.tenant_id or payload.get("tenant_id", ""),
+        source_service="ingestion.workers.compatibility",
+        payload={
+            "tenant_id": event.tenant_id or payload.get("tenant_id", ""),
+            "anonymous_id": anonymous_id,
+            "session_id": session_id,
+            "user_id": user_id,
+            "source": "sdk",
+            "confidence": 0.95,
+        },
+    ))
 
 
 def attach_ingestion_workers(consumer: EventConsumer, producer: EventProducer) -> None:
@@ -763,7 +728,10 @@ def attach_ingestion_workers(consumer: EventConsumer, producer: EventProducer) -
     consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, analytics_event_recorder)
     logger.info("Ingestion worker attached: analytics_event_recorder → SDK_EVENTS_VALIDATED")
 
-    # Identity signal emitter (needs producer reference via partial)
-    identity_handler = functools.partial(identity_signal_emitter, producer=producer)
+    # Legacy local wiring follows the same durable handler as the production
+    # role registry. The old signal-only helper remains unregistered.
+    from services.identity.ingestion_worker import resolve_sdk_observation
+
+    identity_handler = functools.partial(resolve_sdk_observation, producer=producer)
     consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, identity_handler)
-    logger.info("Ingestion worker attached: identity_signal_emitter → SDK_EVENTS_VALIDATED")
+    logger.info("Ingestion worker attached: identity resolver → SDK_EVENTS_VALIDATED")

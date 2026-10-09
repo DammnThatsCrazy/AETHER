@@ -233,7 +233,7 @@ class ExpectationEngine:
 
         # Get events for the entity
         events = await self._analytics.query_events(
-            tenant_id, {"user_id": entity_id}, limit=200
+            tenant_id, {"canonical_entity_id": entity_id}, limit=200
         )
         if not events:
             return signals

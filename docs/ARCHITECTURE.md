@@ -280,8 +280,8 @@ and batch routes return HTTP 503 until their graph access is tenant safe.
 ### Resolution Flow
 
 ```text
-SDK event → validated ingestion event → identity_signal_emitter
-                                       → tenant-scoped identity evidence
+SDK event → durable validated-event consumer → source identity registry
+                                             → canonical identity resolver
 Tenant identity API → IdentityResolver → identity decision/review
                                    → IdentityGraphWriter → GraphMutationGateway
 ```

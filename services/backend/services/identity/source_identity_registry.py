@@ -84,6 +84,18 @@ class SourceIdentityRegistry:
             agent_id=agent_id,
             runtime_id=runtime_id,
         )
+        # An anonymous/device identifier can be shared over time. If an
+        # existing source record already carries a different authenticated
+        # app user, preserve a separate source record for this binding instead
+        # of overwriting provenance. The canonical resolver independently
+        # decides whether the two observations may be linked.
+        if (
+            existing
+            and existing.user_id
+            and user_id
+            and existing.user_id != user_id
+        ):
+            existing = None
         if existing:
             # Merge new identifiers into existing record (idempotent upsert)
             if not existing.user_id and user_id:
@@ -168,15 +180,16 @@ class SourceIdentityRegistry:
         """Attach imported source evidence to its own provisional profile.
 
         This is intentionally source-local. It does not inspect shared email or
-        phone claims, create aliases, or merge profiles. Only committed import
-        evidence callers and lifecycle-captured provider callers should invoke
-        it; SDK observations use the canonical resolver path instead.
+        phone claims, create aliases, or merge profiles. Import, connector and
+        SDK callers use it only when the canonical resolver has not authorized
+        an ownership link, so ambiguous evidence remains an addressable
+        provisional profile instead of being attached to a candidate.
         """
         row = await self._repo.get_source_identity(source_identity_id)
         if not row or row.get("tenant_id") != tenant_id:
             raise ValueError("source identity is unavailable in this tenant")
-        if row.get("source_kind") not in {"csv", "connector"}:
-            raise ValueError("only imported source identities may be provisionalized")
+        if row.get("source_kind") not in {"csv", "connector", "sdk"}:
+            raise ValueError("source kind is not eligible for provisionalization")
         if row.get("status") not in {"unresolved", "provisional"}:
             raise ValueError("source identity is not eligible for provisionalization")
 

@@ -82,6 +82,17 @@ from .split_policy import SplitPolicyContext, evaluate_split
 from .veto_engine import evaluate_vetoes, get_confidence_band
 from .models import ConfidenceBand
 
+
+def _event_entity_ids(
+    tenant_id: str, event_id: str, policy_version: str
+) -> tuple[str, str]:
+    """Stable provisional entity/subject ids for at-least-once event delivery."""
+    material = f"aether:identity-event:{tenant_id}:{event_id}:{policy_version}"
+    return (
+        str(uuid.uuid5(uuid.NAMESPACE_URL, material)),
+        str(uuid.uuid5(uuid.NAMESPACE_URL, f"{material}:subject")),
+    )
+
 logger = get_logger("aether.identity.resolver")
 
 _OPERATOR_MERGE_LOCKS: dict[str, "asyncio.Lock"] = {}
@@ -568,6 +579,39 @@ class IdentityResolutionService:
             ]
             existing_entity_ids = list(dict.fromkeys(canonical_ids))
 
+        # The durable SDK worker supplies the current owner of this
+        # source-scoped identity. It is internal evidence loaded from the
+        # tenant's SourceIdentity record, never a caller-selected canonical ID.
+        source_entity_id = event.get("_source_canonical_entity_id")
+        if isinstance(source_entity_id, str) and source_entity_id.strip():
+            source_entity_id = source_entity_id.strip()
+            source_subject = await self._repo.get_subject_by_canonical_entity_id(
+                tenant_id, source_entity_id
+            )
+            if source_subject and source_subject.get("tenant_id") == tenant_id:
+                source_entity_id = await self._repo.resolve_surviving_canonical_entity_id(
+                    tenant_id, source_entity_id
+                )
+                if source_entity_id not in existing_entity_ids:
+                    existing_entity_ids.append(source_entity_id)
+                    source_signal_types = {
+                        signal_type
+                        for signal_type, _, _ in hashed_signals
+                        if signal_type not in _ATTRIBUTION_ONLY
+                    }
+                    found_via.setdefault(source_entity_id, set()).update(
+                        source_signal_types
+                    )
+                    matching_types.extend(
+                        signal_type
+                        for signal_type in source_signal_types
+                        if signal_type not in matching_types
+                    )
+            else:
+                source_entity_id = None
+        else:
+            source_entity_id = None
+
         # ── 6. Check for conflicting strong aliases ───────────────────────
         has_conflict = len(existing_entity_ids) > 1 and _has_strong_signal(matching_types)
         verified_present = any(
@@ -898,7 +942,22 @@ class IdentityResolutionService:
             if raw_signals
             else [t for (t, _, _) in hashed_signals]
         )
+        event_entity_id, event_subject_id = (
+            _event_entity_ids(tenant_id, str(event_id), policy_version)
+            if event_id
+            else (str(uuid.uuid4()), str(uuid.uuid4()))
+        )
         if (
+            source_entity_id
+            and policy_result.decision
+            in (MergeDecision.CANDIDATE, MergeDecision.REJECT, MergeDecision.BLOCKED)
+            and not binding_contradicted
+            and not separate_user_profile
+        ):
+            # Keep unresolved evidence on its established source profile while
+            # the competing canonical identity remains in the review record.
+            canonical_entity_id = source_entity_id
+        elif (
             policy_result.decision == MergeDecision.CREATE
             or not existing_entity_ids
             or (binding_contradicted and policy_result.decision != MergeDecision.BLOCKED)
@@ -908,12 +967,13 @@ class IdentityResolutionService:
             # id already belongs to a DIFFERENT scoped user) resolves to the event's
             # own entity; the candidates go to a conflict record for review
             # instead of absorbing another person's aliases.
-            canonical_entity_id = str(uuid.uuid4())
+            canonical_entity_id = event_entity_id
             entity_type = _infer_entity_type_from_types(_signal_types_for_type_infer)
             await self._repo.create_subject(
                 tenant_id=tenant_id,
                 canonical_entity_id=canonical_entity_id,
                 entity_type=entity_type,
+                subject_id=event_subject_id,
             )
             is_new = True
         elif policy_result.decision in (MergeDecision.MERGE, MergeDecision.LINK):
@@ -922,7 +982,7 @@ class IdentityResolutionService:
             )
         else:
             # CANDIDATE, REJECT, BLOCKED → use first existing or create anonymous
-            canonical_entity_id = existing_entity_ids[0] if existing_entity_ids else str(uuid.uuid4())
+            canonical_entity_id = existing_entity_ids[0] if existing_entity_ids else event_entity_id
             if not existing_entity_ids:
                 is_new = True
                 entity_type = _infer_entity_type_from_types(_signal_types_for_type_infer)
@@ -930,6 +990,7 @@ class IdentityResolutionService:
                     tenant_id=tenant_id,
                     canonical_entity_id=canonical_entity_id,
                     entity_type=entity_type,
+                    subject_id=event_subject_id,
                 )
 
         # ── 8b. Link this event's observations to the resolved entity ─────

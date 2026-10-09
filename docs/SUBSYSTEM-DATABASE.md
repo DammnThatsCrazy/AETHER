@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
   "services/backend/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
-  "services/backend/repositories/repos.py": "sha256:2555cbee6fe1d8a93c02e2b8c0b4d5cc8a0e041b248f7aa02f915bb112af4e20"
+  "services/backend/repositories/repos.py": "sha256:17d4283f64dd84fdc4f26b1e73b7e1d8d7678a77b7fc3f1a318139c94c068235"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -152,13 +152,17 @@ table and caches it. Writes and filters are then bound to the migrated types:
 - **Queries:** `query_events(tenant_id, params, limit)` always binds the
   request tenant (a `tenant_id` in `params` is ignored; an empty tenant returns
   nothing), matches `event_type` / `user_id` / `session_id` / ... by equality,
-  and bounds `occurred_at` with `start_date` / `end_date` (inclusive; a
+  and accepts `canonical_entity_id` to resolve event IDs through identity
+  observations and reverse merge lineage. This exposes anonymous history on
+  the current canonical profile without rewriting the event row. It bounds
+  `occurred_at` with `start_date` / `end_date` (inclusive; a
   date-only bound covers the whole day). `limit` is never a row predicate.
   Non-empty results are cached for up to 5 minutes under the tenant's query
   generation (`CacheKey.analytics_query_generation`), a token folded into every
   cached key. Each newly recorded event (and `record_event`) replaces the
-  token after its write commits, so the next read of any query misses and sees
-  the event; old entries age out under their TTL. The replacement is
+  token after its write commits; the identity worker also retires the token
+  after assigning event ownership. The next read misses and sees the event or
+  updated identity mapping; old entries age out under their TTL. The replacement is
   best-effort (a cache outage never fails a committed write; staleness is then
   TTL-bounded), and a missing token reads as `"0"`, never as a token a write
   issued. Concurrent identical misses in one process share a single store read.

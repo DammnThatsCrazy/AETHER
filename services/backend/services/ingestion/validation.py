@@ -68,7 +68,7 @@ ENVELOPE_REQUIRED_FIELDS = ("sequence", "schemaVersion", "surface")
 
 # Event families the founding release train actually projects — the families
 # consumed by config/founding_tenant_release.yaml's release_surface.consumers
-# (stream-ingestion-projection, identity-signal-emission,
+# (stream-ingestion-projection, identity-resolution,
 # graph-profile-projection, measurement-identity-restatement,
 # semantic-classification). Families in the release's excluded domains
 # (payments/derivatives/stablecoin/rewards/agent-execution/...) keep today's

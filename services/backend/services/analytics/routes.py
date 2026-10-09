@@ -50,6 +50,7 @@ class EventQuery(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     user_id: Optional[str] = None
+    canonical_entity_id: Optional[str] = None
     session_id: Optional[str] = None
     limit: int = Field(default=50, ge=1, le=200)
 
