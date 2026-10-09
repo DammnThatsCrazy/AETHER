@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import pytest
 
 from config.settings import settings
-from services.resolution.consumer import ResolutionEventConsumer
 from shared.events.events import Event, Topic
 
 
@@ -25,104 +24,6 @@ def _request_with_tenant():
 
     request.state.tenant = Tenant()
     return request
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "resolution_enabled,late_binding_enabled",
-    [(False, True), (True, False)],
-)
-async def test_resolution_consumer_obeys_identity_and_sdk_late_binding_off(
-    monkeypatch, resolution_enabled, late_binding_enabled,
-):
-    monkeypatch.setattr(settings, "identity_continuity", replace(
-        settings.identity_continuity,
-        resolution_enabled=resolution_enabled,
-        sdk_late_binding_enabled=late_binding_enabled,
-    ))
-    engine_calls = []
-    publish_calls = []
-
-    async def resolve_event(tenant_id, payload):
-        engine_calls.append((tenant_id, payload))
-        return None
-
-    async def publish(event):
-        publish_calls.append(event)
-
-    consumer = ResolutionEventConsumer(
-        engine=SimpleNamespace(resolve_event=resolve_event),
-        producer=SimpleNamespace(publish=publish),
-    )
-    await consumer.on_event_validated(Event(
-        topic=Topic.SDK_EVENTS_VALIDATED,
-        tenant_id="tenant-a",
-        payload={"event_type": "identify", "user_id": "user-a"},
-    ))
-
-    assert engine_calls == []
-    assert publish_calls == []
-
-
-@pytest.mark.asyncio
-async def test_connector_backfill_flag_does_not_disable_sdk_event_resolution(monkeypatch):
-    monkeypatch.setattr(settings, "identity_continuity", replace(
-        settings.identity_continuity,
-        resolution_enabled=True,
-        sdk_late_binding_enabled=True,
-        connector_backfill_enabled=False,
-        anonymous_to_known_binding_enabled=True,
-    ))
-    engine_calls = []
-
-    async def resolve_event(tenant_id, payload):
-        engine_calls.append((tenant_id, payload))
-        return None
-
-    async def publish(_event):
-        return None
-
-    consumer = ResolutionEventConsumer(
-        engine=SimpleNamespace(resolve_event=resolve_event),
-        producer=SimpleNamespace(publish=publish),
-    )
-    await consumer.on_event_validated(Event(
-        topic=Topic.SDK_EVENTS_VALIDATED,
-        tenant_id="tenant-a",
-        payload={"event_type": "identify", "user_id": "user-a"},
-    ))
-
-    assert len(engine_calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_anonymous_binding_flag_blocks_anonymous_to_known_sdk_event(monkeypatch):
-    monkeypatch.setattr(settings, "identity_continuity", replace(
-        settings.identity_continuity,
-        resolution_enabled=True,
-        sdk_late_binding_enabled=True,
-        anonymous_to_known_binding_enabled=False,
-    ))
-    engine_calls = []
-
-    async def resolve_event(tenant_id, payload):
-        engine_calls.append((tenant_id, payload))
-        return None
-
-    async def publish(_event):
-        return None
-
-    consumer = ResolutionEventConsumer(
-        engine=SimpleNamespace(resolve_event=resolve_event),
-        producer=SimpleNamespace(publish=publish),
-    )
-    await consumer.on_event_validated(Event(
-        topic=Topic.SDK_EVENTS_VALIDATED,
-        tenant_id="tenant-a",
-        payload={"event_type": "identify", "user_id": "user-a", "anonymous_id": "anon-a"},
-    ))
-
-    assert engine_calls == []
 
 
 @pytest.mark.asyncio

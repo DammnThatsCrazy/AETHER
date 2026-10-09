@@ -916,33 +916,6 @@ export const api = {
       restClient.get(`/v1/identity/profiles/${userId}/graph`, wrap(z.object({ user_id: z.string(), connections: z.array(z.unknown()) }).passthrough())).then(r => r.data),
   },
 
-  // ── Resolution ─────────────────────────────────────────────────────────────
-  resolution: {
-    cluster: (userId: string) =>
-      restClient.get(`/v1/resolution/cluster/${userId}`, wrap(unknownSchema)).then(r => r.data),
-
-    pending: (limit = 50) =>
-      restClient.get(`/v1/resolution/pending?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
-
-    approve: (decisionId: string) =>
-      restClient.post(`/v1/resolution/pending/${decisionId}/approve`, wrap(unknownSchema)),
-
-    reject: (decisionId: string) =>
-      restClient.post(`/v1/resolution/pending/${decisionId}/reject`, wrap(unknownSchema)),
-
-    audit: (decisionId: string) =>
-      restClient.get(`/v1/resolution/audit/${decisionId}`, wrap(unknownSchema)).then(r => r.data),
-
-    getConfig: () =>
-      restClient.get('/v1/resolution/config', wrap(unknownSchema)).then(r => r.data),
-
-    updateConfig: (config: Record<string, unknown>) =>
-      restClient.put('/v1/resolution/config', wrap(unknownSchema), config).then(r => r.data),
-
-    runBatch: () =>
-      restClient.post('/v1/resolution/batch', wrap(unknownSchema)),
-  },
-
   // ── Entities ───────────────────────────────────────────────────────────────
   entities: {
     list: (params?: { type?: string; limit?: number; offset?: number }) =>
@@ -2238,10 +2211,6 @@ export const api = {
      */
     cluster: (entityId: string) =>
       restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data),
-
-    /** Resolution cluster — admin view with merge confidence and pending decisions. */
-    resolutionCluster: (userId: string) =>
-      restClient.get(`/v1/resolution/cluster/${userId}`, wrap(unknownSchema)).then(r => r.data),
 
     /**
      * Cross-domain fusion profile — unified view of an entity spanning Web2,

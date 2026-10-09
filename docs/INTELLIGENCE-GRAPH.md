@@ -19,7 +19,7 @@ toc_depth: 3
 reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
-  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:7a663009335564c981e68db1425980f053a6ee76dd63e0d5a6f0b92b9174d070"
+  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:428718d8303f7ca60fe4c93519f068d3f8e4a22ee27b2ce6091ffb3f4c5585a0"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:1a4fae607b1eccdee38ec5bac42ebbcd57d28cb9ef0dfabe3d7a70bdbfcae91d"
   "services/backend/services/web3/classifier.py": "sha256:ab4186e37c2e058401d4303559ca66db49659f93d60389729933777c6fca6061"
@@ -106,10 +106,10 @@ In `off` mode the gateway delegates directly to `GraphClient`; `shadow` applies
 the projection and attempts a ledger append; `enforce` runs gateway validation
 and the ledger-backed write path. The graph write-path validator now reports
 zero direct writers outside its sanctioned gateway internals. The on-chain
-action recorder uses the gateway, and the legacy resolution repository's
-tenantless mutation methods have been retired. Its cluster, merge-approval,
-and batch routes and engine mutation entry points remain unavailable while a
-tenant-safe compatibility path is designed. Zero direct writers does not prove
+action recorder uses the gateway, and the legacy resolution repository and
+engine, with their tenantless mutation methods, have been deleted. Only the
+cluster, merge-approval, and batch routes remain, as fail-closed tombstones,
+while a tenant-safe compatibility path is designed. Zero direct writers does not prove
 that every gateway caller runs in `enforce` mode or that ledger and projection
 writes are atomic.
 

@@ -11,7 +11,6 @@ from shared.events.events import Event, Topic
 from shared.integration_contracts.events import make_aether_event
 from services.ingestion import workers
 from services.ingestion.spine import is_provider_canonical_event, is_provider_delivery
-from services.resolution.consumer import ResolutionEventConsumer
 
 
 def _provider_bus_event(*, legacy: bool = False, event_type: str = "order_completed") -> Event:
@@ -83,28 +82,16 @@ async def test_sdk_only_workers_defer_provider_payload_and_emit_metric(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_provider_identity_signal_and_resolution_are_deferred():
+async def test_provider_identity_signal_is_deferred():
     event = _provider_bus_event(event_type="identify")
     producer = SimpleNamespace(publish=mock.AsyncMock(side_effect=AssertionError("identity signal published")))
-    engine = SimpleNamespace(resolve_event=mock.AsyncMock(side_effect=AssertionError("provider ID resolved as SDK user")))
 
     await workers.identity_signal_emitter(event, producer)
-    await ResolutionEventConsumer(engine, producer).on_event_validated(event)
     producer.publish.assert_not_called()
-    engine.resolve_event.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_flat_sdk_event_retains_normalizer_and_resolution_path(monkeypatch):
-    from dataclasses import replace
-
-    from config.settings import settings
-
-    monkeypatch.setattr(
-        settings,
-        "identity_continuity",
-        replace(settings.identity_continuity, resolution_enabled=True),
-    )
+async def test_flat_sdk_event_retains_normalizer_path(monkeypatch):
     captured = []
 
     class RecordingSilver:
@@ -129,9 +116,3 @@ async def test_flat_sdk_event_retains_normalizer_and_resolution_path(monkeypatch
     assert len(captured) == 1
     assert captured[0]["source"] == "sdk"
     assert captured[0]["entity_id"] == "user-1"
-
-    engine = SimpleNamespace(resolve_event=mock.AsyncMock(return_value=None))
-    producer = SimpleNamespace(publish=mock.AsyncMock())
-    await ResolutionEventConsumer(engine, producer).on_event_validated(sdk)
-    engine.resolve_event.assert_awaited_once()
-    producer.publish.assert_awaited_once()

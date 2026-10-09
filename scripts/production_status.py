@@ -127,11 +127,10 @@ AREAS: list[Area] = [
         4,
         "Four-anchor resolution (wallet > anonymous+fingerprint > email hash > user id) "
         "with confidence scoring, merge endpoint with reason + Kafka audit event, and a "
-        "pending-review queue with approve/reject for low-confidence decisions.",
+        "admin identity review queue with approve/reject for low-confidence decisions.",
         [
             "services/backend/services/sdk/routes.py",
             "services/backend/services/identity/routes.py",
-            "services/backend/services/resolution/routes.py",
         ],
     ),
     Area(

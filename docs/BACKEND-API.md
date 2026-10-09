@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:3f60a6b2ee038f3bb6de8137bf9be123b086ec01102ace65317dc9e607ce3aa8"
+  "services/backend/services/": "sha256:ed17c7ce61cf45fcd87ca4ed2c4fcafe71f7fd4587f3c971fc5b33408a5dd4f7"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1252,77 +1252,21 @@ requests are rejected). All are GET-only and never mutate reward state:
 
 ## Identity Resolution
 
+Identity resolution is served by `/v1/identity/*` (`services/backend/services/identity/routes.py`). The legacy `/v1/resolution/*` surface is retired; three fail-closed routes remain until the last caller is removed.
+
 ### GET /v1/resolution/cluster/{user_id}
 
 **Unavailable (HTTP 503).** The legacy graph read route was retired because it lacks tenant isolation. It returns `Legacy identity graph resolution is unavailable`; no tenant-scoped compatibility path currently serves identity-cluster data through this endpoint.
 
-### GET /v1/resolution/pending
-
-List pending resolution decisions awaiting admin review.
-
-**Query Parameters:** `limit` (optional, default: 50)
-
-**Response:**
-```json
-{
-  "data": [
-    {
-      "decision_id": "dec-123",
-      "profile_a_id": "user-123",
-      "profile_b_id": "anon-456",
-      "composite_confidence": 0.82,
-      "deterministic_match": false,
-      "signals": { "fingerprint": 0.85, "ip_cluster": 0.78, "location": 0.6 },
-      "created_at": "2026-03-05T12:00:00Z"
-    }
-  ]
-}
-```
-
 ### POST /v1/resolution/pending/{id}/approve
 
-Unavailable (HTTP 503). The legacy graph mutation route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not approve or apply a merge, and no replacement compatibility path is implemented.
-
-### POST /v1/resolution/pending/{id}/reject
-
-Admin rejects a pending identity merge.
-
-### GET /v1/resolution/audit/{decision_id}
-
-Get the full audit trail for a resolution decision — includes all signal snapshots at decision time.
-
-### GET /v1/resolution/config
-
-Get the current resolution engine configuration.
-
-**Response:**
-```json
-{
-  "auto_merge_threshold": 0.95,
-  "review_threshold": 0.70,
-  "max_cluster_size": 50,
-  "cooldown_hours": 24,
-  "require_deterministic_for_auto": true,
-  "allow_probabilistic_auto_merge": false
-}
-```
-
-### PUT /v1/resolution/config
-
-Update resolution engine configuration thresholds.
-
-**Request:**
-```json
-{
-  "auto_merge_threshold": 0.90,
-  "review_threshold": 0.65,
-  "max_cluster_size": 100
-}
-```
+Unavailable (HTTP 503). The legacy graph mutation route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not approve or apply a merge, and no replacement compatibility path is implemented. Pending merge review is `/v1/admin/identity/review-queue`.
 
 ### POST /v1/resolution/batch
 
 Unavailable (HTTP 503). The legacy graph batch route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not start a batch matching job, and no replacement compatibility path is implemented.
+
+**Removed:** `GET /v1/resolution/pending`, `POST /v1/resolution/pending/{id}/reject`, `GET /v1/resolution/audit/{decision_id}` and `GET`/`PUT /v1/resolution/config`. They were backed by an engine and event consumer that were never registered, so they never returned data, and they now answer 404.
 
 ---
 

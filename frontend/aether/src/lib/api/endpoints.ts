@@ -713,12 +713,6 @@ export const api = {
       restClient.get(`/v1/admin/identity/review-queue/${conflictId}?tenant_id=${tenantId}`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Resolution (identity cluster — read-only for tenants) ─────────────────
-  resolution: {
-    cluster: (userId: string) =>
-      restClient.get(`/v1/resolution/cluster/${userId}`, wrap(unknownSchema)).then(r => r.data),
-  },
-
   // ── Graph & Relationships (H2H / H2A / A2H / A2A) ─────────────────────────
   graph: {
     /**

@@ -266,7 +266,7 @@ v7.0 SDKs require the following backend endpoints (deploy before upgrading):
 | `GET /v1/rewards/{id}/payload` | Web SDK | Claim payloads |
 | `POST /v1/rewards/{id}/claim` | Web SDK | Claim submission |
 | `GET /v1/resolution/cluster/{user_id}` | Admin dashboard | Identity clusters |
-| `GET /v1/resolution/pending` | Admin dashboard | Pending merges |
+| `GET /v1/resolution/pending` | Admin dashboard | Pending merges (route since removed; see `/v1/admin/identity/review-queue`) |
 
 The cluster endpoint was listed as a v7 backend requirement when this migration
 guide was written. It currently returns HTTP 503 while the legacy graph read

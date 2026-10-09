@@ -1,6 +1,7 @@
-"""Aether Identity Resolution Service — deterministic + probabilistic identity matching."""
-from .engine import IdentityResolutionEngine
-from .rules import ResolutionRulesEngine, ResolutionConfig
-from .signals import ResolutionSignal
+"""Retired legacy identity-resolution routes.
 
-__all__ = ["IdentityResolutionEngine", "ResolutionRulesEngine", "ResolutionConfig", "ResolutionSignal"]
+The engine, consumer, rules and signals were never registered in production and
+their graph entry points already failed closed; they are deleted. Identity
+resolution lives in ``services.identity``. Only fail-closed route tombstones
+remain, until the Aether profile page stops requesting the cluster read.
+"""

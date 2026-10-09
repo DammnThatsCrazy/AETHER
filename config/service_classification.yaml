@@ -136,7 +136,7 @@ services:
   relationship_promotion: {class: experimental, stage: graph, reason: "Social360 independent-evidence promotion gate"}
   reliability: {class: internal, stage: control-plane, reason: "reliability, SRE and incident response command center"}
   reports: {class: beta, stage: product, reason: "data exchange PDF report artifacts"}
-  resolution: {class: deprecated, stage: resolution, reason: "legacy resolution engine; superseded by services/identity"}
+  resolution: {class: deprecated, stage: resolution, reason: "retired legacy resolution; only fail-closed tombstone routes remain, superseded by services/identity"}
   responsiveness: {class: core, stage: control-plane, reason: "time-to-value spine: ingestion ACK path and connection health"}
   rewards: {class: experimental, stage: action, reason: "reward eligibility engine and queue processor"}
   rights_authority: {class: core, stage: control-plane, reason: "canonical rights decision runtime"}

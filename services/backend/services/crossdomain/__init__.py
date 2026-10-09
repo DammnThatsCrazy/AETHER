@@ -11,6 +11,6 @@ Reuses existing patterns:
   - BaseRepository (asyncpg) for all registries
   - CompletenessStatus/Provenance from Web3 coverage
   - Graph vertex/edge types from shared/graph/graph.py
-  - Identity resolution from services/resolution/
+  - Identity resolution from services/identity/
   - Profile 360 composition from services/profile/
 """

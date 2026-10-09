@@ -309,7 +309,7 @@ Delegates to native module: `NativeModules.AetherNative.getFingerprint()`.
 }
 ```
 
-Update via `PUT /v1/resolution/config`.
+The legacy `PUT /v1/resolution/config` route was removed with the unregistered resolution engine; these thresholds are not tenant-configurable through the API.
 
 ## API Endpoints
 
@@ -397,7 +397,7 @@ Every resolution decision is recorded in TimescaleDB with:
 - Full signal snapshot (all signal results at decision time)
 - Timestamp and who decided (system or admin)
 
-Query via: `GET /v1/resolution/audit/{decision_id}`
+Query via: `GET /v1/identity/entities/{entity_id}/audit` (the legacy `GET /v1/resolution/audit/{decision_id}` route was removed).
 
 ## Event Topics
 
