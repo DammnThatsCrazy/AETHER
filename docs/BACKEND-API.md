@@ -3102,7 +3102,7 @@ All permission fields default to false, including tenant-lake, tenant-graph, and
 
 ### Tenant — BYOK Key Rotate / Revoke / Verify (`/v1/providers/keys/*`)
 
-Feature-flagged (`AETHER_CONNECTOR_BYOK_ENABLED`). Tenant API key required.
+Tenant API key required.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -3154,7 +3154,7 @@ Feature-flagged (`KYBER_PROVIDER_SOURCE_CATALOG_ENABLED`). Operator permission r
 
 ### Kyber Admin — Anti-Distillation (`/v1/admin/kyber/intelligence/*`)
 
-Feature-flagged (`KYBER_ANTI_DISTILLATION_ENABLED`). Operator permission required.
+Operator permission required.
 
 Anti-distillation enforcement on intelligence query endpoints is activated by `AETHER_ANTI_DISTILLATION_ENABLED=true`. When enabled, wallet risk and profile endpoints run pattern detection (rapid diverse-query, honeypot wallet, sequential enumeration) on every request and emit audit events on suspicious activity. Honeypot wallet queries return `403 Forbidden`. Score precision is binned by plan tier (`ALPHA=0.1`, `BETA=0.05`, `GAMMA=0.01`, `DELTA/EPSILON/OMICRON/OMEGA=0.001`).
 

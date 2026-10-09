@@ -134,6 +134,23 @@ These are measurements, each tied to a ledger row.
   deleted; three fail-closed tombstone routes remain until the Aether
   user-profile page stops requesting the cluster read. Rows
   `identity-legacy-resolution-engine` and `identity-legacy-resolution-module`.
+- **Settings flags that gate nothing.** 80 fields in
+  `services/backend/config/settings.py` read an environment variable that no
+  production Python consults, so setting them changed nothing while env examples,
+  release flag lists, runbooks and capability overlays presented them as
+  controls. They included reserved partner and marketplace flags, per-engine
+  extraction-mesh switches, comms campaign and journey switches, suggestion
+  adapter switches, Dune access modes, a Jira credential block, a password-policy
+  block, and four thresholds the code hardcodes. One looked like a safety
+  control (`COMMERCE_APPROVAL_REQUIRED_ALL`, `AETHER_LOCATION_IDENTITY_MERGE_BLOCKED`);
+  the guarantee holds structurally and is now pinned by a test instead of a
+  flag. One documented staleness window (`KYBER_DIRECTORY_MAX_STALE_HOURS`) was
+  never read: the real control is `KYBER_DIRECTORY_MAX_AGE_HOURS`, and the runbook
+  now names it. All 80 are deleted, and `scripts/validate_settings_flags.py` fails
+  any PR that adds a settings field nothing reads. `ML_MODE` is the one remaining
+  unread field; the release profiles pin it, so it goes with that profile
+  dimension. Rows `delivery-unread-settings-flags` and
+  `delivery-unread-settings-flags-pending`.
 - **Eleven workflows start on `ready_for_review`** beside the canonical
   disposition. #734's R5 audit found no safe removal yet: similar commands do
   not prove equal selection or evidence. Row `delivery-pr-workflows-into-one-plan`.
@@ -153,7 +170,7 @@ A row moves `retain`, `converge`, `deprecated`, `deletion-ready`, `removed`.
 | Package, script, config, doc | usage evidence (search of workflows, Makefile, package scripts, registries, imports) | regenerate indexes; review source-linked docs; refresh only reviewed hashes |
 | Test | its invariant is covered by a cheaper authoritative test, or the code it tested is gone | cite the covering test and any failure history; never delete to turn a run green |
 | Compatibility adapter or alias | deadline in the ledger | delete at the deadline, or re-decide with a new date |
-| Feature flag | every environment has the same value | remove the flag and both branches |
+| Feature flag | every environment has the same value, or no production code reads it (`scripts/validate_settings_flags.py` fails a settings field nothing reads) | remove the flag and both branches |
 
 **Tests.** Classify by unique invariant, not file count. For each invariant keep
 the cheapest authoritative test, one boundary or contract test where a boundary

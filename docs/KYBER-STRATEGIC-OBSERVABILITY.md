@@ -7,7 +7,7 @@ audience: [buyer, ops, architect]
 status: beta
 since_version: 0.1.0
 source_files: [services/backend/services/intelligence/routes.py, services/backend/services/intelligence/outcome_ledger.py]
-flags: [KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED]
+flags: []
 related: [ai/outcome-ledger]
 canonical_owner: platform@aether
 estimated_read_minutes: 5

@@ -263,7 +263,7 @@ session", which callers treat as **deny**.
 | `bootstrap_founder_email` | `KYBER_BOOTSTRAP_FOUNDER_EMAIL` | — |
 | `bootstrap_founder_google_subject` | `KYBER_BOOTSTRAP_FOUNDER_GOOGLE_SUBJECT` | — |
 | `directory_sync_enabled` | `KYBER_DIRECTORY_SYNC_ENABLED` | false |
-| `directory_max_stale_hours` | `KYBER_DIRECTORY_MAX_STALE_HOURS` | 24 |
+| — (read by `DirectorySyncService`, not a settings field) | `KYBER_DIRECTORY_MAX_AGE_HOURS` | 24 |
 | `session_cookie_secure` | `KYBER_SESSION_COOKIE_SECURE` | true (non-local) |
 
 ### Rollback

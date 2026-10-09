@@ -76,7 +76,7 @@ it is the glossary that later docs must reuse, never fork.
 | Consent / Privacy / Deletion | `consent-registry.json`, `services/backend/services/policy` (`ConsentPolicyDecision`), DSR propagation / deletion | EXISTS |
 | Kyber | Kyber operator control surface (desired state, observed state, remediation, control workflows) | EXISTS |
 | Noesis | Noesis product surface (Interaction and Product plane) | EXISTS |
-| Graph-of-Graphs rights filtering | Data-use doctrine only (`GRAPH_OF_GRAPHS_DATA_USE.md`, `AETHER_GRAPH_OF_GRAPHS_POLICY_ENABLED`); no rights-filtered intelligence-layer enforcement yet | PARTIAL |
+| Graph-of-Graphs rights filtering | Data-use doctrine only (`GRAPH_OF_GRAPHS_DATA_USE.md`); no rights-filtered intelligence-layer enforcement yet | PARTIAL |
 | 14-item conformance contract | In-registry conformance contract: every non-program spine row carries its 14 checks (all `open`), structurally enforced by `validate_spine_registry.py`; `SPINE_P0_CONFORMANCE_CHECKLIST.md` maps the 14 items to evidence | PARTIAL — contract + gate shipped (Phase 6); no row verified |
 | Tenant Activation & Readiness | Readiness vocabulary (presentation-only join, never emits certification/`production_ready`), activation machinery, capability manifest | EXISTS |
 

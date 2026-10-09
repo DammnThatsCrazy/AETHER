@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
-  "config/capability_overlays.yaml": "sha256:daec3fb21a745e928ae42989f9704b69580283316afee0872851df8e5ee52520"
+  "config/capability_overlays.yaml": "sha256:ed8cc330580d10cd01dcaf2d2ed1f3d9221819f131caa99f396deef1253cd597"
   "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
@@ -141,10 +141,13 @@ realized by existing runtime flags from `services/backend/config/settings.py`
 (`scripts/validate_capability_overlays.py`, run by `make repo-doctor` and as a
 router check in every PR plan). A bound flag must be an environment variable the
 settings file actually reads, matched by whole name, and an overlay must never
-equal a profile name, with or without its `enable-` prefix. Five overlays are bound today
-(communications, campaigns, agent beta, Kyber internal, advanced value); three
-names are reserved and unbound because no runtime flag exists yet
-(`enable-x402-experimental`, `enable-gcp-oauth`, `enable-sovereign-controls`).
+equal a profile name, with or without its `enable-` prefix. A settings field that
+nothing reads cannot exist (`scripts/validate_settings_flags.py`), so a bound flag
+is always one the runtime consults. Four overlays are bound today (communications,
+agent beta, Kyber internal, advanced value); four names are reserved and unbound
+because no runtime flag exists yet (`enable-campaigns`, whose two flags were never
+read and are retired, `enable-x402-experimental`, `enable-gcp-oauth`,
+`enable-sovereign-controls`).
 
 ## Profile summary
 

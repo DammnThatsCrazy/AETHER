@@ -8,7 +8,7 @@ status: experimental
 since_version: 0.1.0
 source_files: [services/backend/config/settings.py, tests/integration/test_comms_golden_scenario.py]
 source_hashes:
-  "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
+  "services/backend/config/settings.py": "sha256:d3881a0d0effefeda41e8af8c66e04bef34344d780a076d6ba31bf33ded8793b"
   "tests/integration/test_comms_golden_scenario.py": "sha256:a26db2d8632f089933adf8df5d15d2a20756b33e6f4f3e082d384e8d5dd831ff"
 ---
 
@@ -19,14 +19,12 @@ source_hashes:
 | Flag | Default | Gates |
 |---|---|---|
 | `AETHER_COMMS_INGESTION_ENABLED` | true | Silver projection of comm events (Bronze always accepts) |
-| `AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED` | true | Touchpoint fan-out for comm events |
-| `AETHER_COMMS_JOURNEYS_ENABLED` | true | Journey inclusion of comm activities |
 | `AETHER_COMMS_GRAPH_ENABLED` | true | Aggregated relationship emission |
 | `AETHER_COMMS_PROFILE360_ENABLED` | true | Profile360 comms surfaces |
-| `AETHER_COMMS_CAMPAIGN360_ENABLED` | true | Campaign 360 Messages surfaces |
 | `AETHER_COMMS_NOESIS_ENABLED` | true | `communications_insight` intent |
 | `AETHER_COMMS_OPENS_VIEW_THROUGH` | false | Reported opens as low-confidence view-through |
-| `AETHER_COMMS_REPLIES_ELIGIBLE` | true | Replies as attribution-eligible touchpoints |
+
+Campaign projection, journey inclusion, Campaign 360 and reply attribution are not separately flag-gated. Flags for them (`AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED`, `AETHER_COMMS_JOURNEYS_ENABLED`, `AETHER_COMMS_CAMPAIGN360_ENABLED`, `AETHER_COMMS_REPLIES_ELIGIBLE`) were documented here but no code read them, so they were retired.
 
 ## Rollout sequence
 
@@ -58,7 +56,7 @@ source_hashes:
 | Graph pressure | `AETHER_COMMS_GRAPH_ENABLED=false` (facts unaffected) |
 | Provider flood | Disable connector; webhook inbox retains raw payloads |
 | Schema issue | `alembic downgrade 20260702_fraud_decisions` (additive-only drop) |
-| Attribution dispute | Toggle `AETHER_COMMS_REPLIES_ELIGIBLE` / `AETHER_COMMS_OPENS_VIEW_THROUGH`; rerun attribution |
+| Attribution dispute | Toggle `AETHER_COMMS_OPENS_VIEW_THROUGH`; rerun attribution |
 
 ## Operator remediation surface
 

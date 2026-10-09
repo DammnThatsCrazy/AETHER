@@ -16,7 +16,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
-  "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
+  "services/backend/config/settings.py": "sha256:d3881a0d0effefeda41e8af8c66e04bef34344d780a076d6ba31bf33ded8793b"
   "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
   "services/backend/services/provider_runtime/": "sha256:615f58049dcfd5f699f2070f51c06f2367711420996f67f9305d6900f20a1117"
 ---
@@ -134,7 +134,6 @@ All extraction mesh keys use prefix `aether:exbudget:`:
 | `KAFKA_BROKERS` | `localhost:9092` | Event bus |
 | `ENABLE_EXTRACTION_DEFENSE` | `false` | ML Serving |
 | `PRICING_OPTION` | `B` | Backend (A/B/C — Market Entry / Ideal / Premium) |
-| `QUOTA_REDIS_TTL_DAYS` | `35` | Backend (retention for `rl:quota:*` and `rl:overage:*`) |
 | `QUOTA_FLUSH_INTERVAL_S` | `60` | Backend (Redis → `tenant_usage` flush cadence) |
 
 ---
@@ -428,7 +427,7 @@ Services **unaffected** (Neptune is not in the hot path):
 
 | State | Action |
 |-------|--------|
-| Circuit breaker `"open"` | Self-heals after `PROVIDER_CB_TIMEOUT_S` (default 30s) recovery check — no action required |
+| Circuit breaker `"open"` | Self-heals after the breaker's fixed 30s recovery window — no action required |
 | Neptune cluster stopped | Start cluster via AWS Console; graph client reconnects automatically on next request |
 | Neptune cluster unreachable (VPC issue) | Check security group rules — port 8182 must be open from ECS task SG to Neptune SG |
 | Half-open, single request fails | Breaker re-opens; wait another 30s cycle |

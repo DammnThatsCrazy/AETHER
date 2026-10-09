@@ -32,8 +32,12 @@ presence.
 - `AETHER_RAW_IP_PERSISTENCE_BLOCKED=true` — raw IPs exist transiently in
   the enricher only; export/consent-audit routes persist the HMAC token;
   guarded by `tests/security/test_no_raw_ip_persistence.py`.
-- `AETHER_LOCATION_IDENTITY_MERGE_BLOCKED=true` — context never merges
-  identities alone and never solely causes adverse action.
+- Context never merges identities alone and never solely causes adverse action.
+  This is structural, not a flag: context enrichment has no path into identity
+  resolution (guarded by
+  `tests/unit/test_context_has_no_identity_merge_path.py`). An
+  `AETHER_LOCATION_IDENTITY_MERGE_BLOCKED` setting used to claim this; nothing read
+  it, so it was retired.
 - Enrichment (`AETHER_CONTEXT_ENRICHMENT_ENABLED`, default off) never
   rejects a valid event; failures yield explicit states
   (`not_provisioned` / `private_address` / `provider_error` / …).

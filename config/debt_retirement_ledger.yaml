@@ -689,6 +689,77 @@ entries:
     deadline: 2027-03-31
 
   # ── Verification ───────────────────────────────────────────────────────────
+  - id: delivery-unread-settings-flags
+    domain: delivery
+    classification: removed
+    state: removed
+    authority: >-
+      services/backend/config/settings.py: a settings field exists only if
+      production Python reads it (scripts/validate_settings_flags.py)
+    current:
+      - scripts/validate_settings_flags.py
+      - config/unread_settings_flags.yaml
+    duplicates: []
+    retire: >-
+      80 backend settings fields (and the PasswordAuthConfig and
+      PartnerEcosystemConfig classes) that read an environment variable nothing
+      consults: reserved partner, marketplace and developer-platform flags,
+      per-engine extraction-mesh switches, comms campaign, journey and reply
+      switches, suggestion adapter and auto-delivery switches, stablecoin,
+      provider-corpus and Dune access-mode flags, pool sizes and ports, Jira
+      credentials, and four tuning thresholds the code hardcodes. Their lines are
+      removed from .env.example, .env.local.example, .env.staging.example,
+      .env.production.example and the production-lean and staging release flag
+      lists, and the capability overlays no longer bind them.
+    consumers: []
+    compatibility: >-
+      none at runtime: no production code read any of these variables, so setting
+      one changed nothing. An operator who set one now sees it ignored, as before.
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: a field nothing reads has no behavior to preserve; the
+      guarantees two of them claimed hold structurally (mandatory commerce
+      approval is DEFAULT_APPROVAL_REQUIRED_ALL in services/x402/policies.py;
+      context never merges identities, pinned by
+      tests/unit/test_context_has_no_identity_merge_path.py)
+    usage_evidence: >-
+      token search of every production Python file (tests, docs and docs/archive
+      excluded) found neither the attribute name nor the variable name for any
+      removed field; no Terraform, Helm, compose, shell or TypeScript source mentions
+      them either; the two dynamic getattr readers (scripts/ops_readiness.py and
+      the provider sync worker) read other config classes (2026-10-09)
+    rollback: restore the field from git history; nothing depended on it
+    removal_pr: "#749"
+    deadline: null
+
+  - id: delivery-unread-settings-flags-pending
+    domain: delivery
+    classification: deprecated
+    state: converge
+    authority: >-
+      the deployment profile contract (config/deployment_profiles.yaml): either a
+      runtime reads ML_MODE or the profile dimension goes
+    current:
+      - config/unread_settings_flags.yaml
+      - tests/unit/test_release_profile_enforcement.py
+    duplicates: []
+    retire: >-
+      RuntimeConfig.ml_mode (ML_MODE). No production code reads it, but each
+      release profile pins it in its environment file and the profile enforcement
+      test checks the pin, so deleting it is a change to the profile contract and
+      is kept out of the settings cleanup.
+    consumers:
+      - tests/unit/test_release_profile_enforcement.py
+    compatibility: .env.production.example and .env.staging.example keep ML_MODE until the profile dimension is retired
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      scripts/validate_settings_flags.py --report lists it as the only unread
+      settings field (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2027-03-31
+
   - id: verification-unrun-typescript-test-estate
     domain: verification
     classification: internal

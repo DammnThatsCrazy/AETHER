@@ -91,7 +91,6 @@ class RedisConfig:
     port: int = _env_int("REDIS_PORT", 6379)
     db: int = _env_int("REDIS_DB", 0)
     password: str = _env("REDIS_PASSWORD", "")
-    pool_size: int = _env_int("REDIS_POOL_SIZE", 10)
 
     @property
     def url(self) -> str:
@@ -103,7 +102,6 @@ class RedisConfig:
 class DynamoDBConfig:
     region: str = _env("AWS_REGION", "us-east-1")
     endpoint: Optional[str] = _env("DYNAMODB_ENDPOINT", "") or None
-    table_prefix: str = _env("DYNAMODB_TABLE_PREFIX", "aether_")
 
 
 @dataclass(frozen=True)
@@ -140,7 +138,6 @@ class RateLimitConfig:
     callers migrate to PlanTier.
     """
     pricing_option: str = _env("PRICING_OPTION", "B")
-    quota_redis_ttl_days: int = _env_int("QUOTA_REDIS_TTL_DAYS", 35)
     quota_flush_interval_s: int = _env_int("QUOTA_FLUSH_INTERVAL_S", 60)
     # Deprecated: legacy 3-tier RPM limits. Removed in step 03.
     free_rpm: int = 60
@@ -189,17 +186,10 @@ class IntelligenceGraphConfig:
     enable_x402_layer: bool = _env_bool("IG_X402_LAYER", False)             # L3b
     enable_onchain_layer: bool = _env_bool("IG_ONCHAIN_LAYER", False)       # L0
     enable_trust_scoring: bool = _env_bool("IG_TRUST_SCORING", False)       # Composite
-    enable_bytecode_risk: bool = _env_bool("IG_BYTECODE_RISK", False)       # Rule-based
-    enable_rpc_gateway: bool = _env_bool("IG_RPC_GATEWAY", False)           # L6
     # Agentic Commerce (L3b+) — extends x402 capture into full control plane.
     enable_commerce_control_plane: bool = _env_bool("COMMERCE_CONTROL_PLANE_ENABLED", True)
-    commerce_approval_required_all: bool = _env_bool("COMMERCE_APPROVAL_REQUIRED_ALL", True)
-    commerce_v2_protocol: bool = _env_bool("COMMERCE_V2_PROTOCOL", True)
-    commerce_default_facilitator: str = _env("COMMERCE_DEFAULT_FACILITATOR", "aether-local")
     commerce_base_rpc: str = _env("COMMERCE_BASE_RPC", "https://mainnet.base.org")
     commerce_solana_rpc: str = _env("COMMERCE_SOLANA_RPC", "https://api.mainnet-beta.solana.com")
-    commerce_enable_v2: bool = _env_bool("COMMERCE_ENABLE_V2", True)
-    commerce_feature_flag: str = _env("COMMERCE_FEATURE_FLAG", "ga")
 
 
 # ---------------------------------------------------------------------------
@@ -215,15 +205,11 @@ class CommsConfig:
     (docs/comms/COMMS_RELEASE_READINESS.md).
     """
     ingestion_enabled: bool = _env_bool("AETHER_COMMS_INGESTION_ENABLED", True)
-    campaign_projection_enabled: bool = _env_bool("AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED", True)
-    journeys_enabled: bool = _env_bool("AETHER_COMMS_JOURNEYS_ENABLED", True)
     graph_enabled: bool = _env_bool("AETHER_COMMS_GRAPH_ENABLED", True)
     profile360_enabled: bool = _env_bool("AETHER_COMMS_PROFILE360_ENABLED", True)
-    campaign360_enabled: bool = _env_bool("AETHER_COMMS_CAMPAIGN360_ENABLED", True)
     noesis_enabled: bool = _env_bool("AETHER_COMMS_NOESIS_ENABLED", True)
     # Attribution policy switches (ADR-C8)
     reported_opens_as_view_through: bool = _env_bool("AETHER_COMMS_OPENS_VIEW_THROUGH", False)
-    replies_attribution_eligible: bool = _env_bool("AETHER_COMMS_REPLIES_ELIGIBLE", True)
     # Provider suppression write-back is a separately-authorized capability
     # (read permission never implies suppression-write); OFF by default,
     # observe-only per ADR-C1.
@@ -305,8 +291,6 @@ class ProviderGatewayConfig:
     moralis_api_key: str = _env("MORALIS_API_KEY", "")
     # Failover tunables
     max_retries: int = _env_int("PROVIDER_MAX_RETRIES", 2)
-    circuit_breaker_threshold: int = _env_int("PROVIDER_CB_THRESHOLD", 5)
-    circuit_breaker_timeout_s: int = _env_int("PROVIDER_CB_TIMEOUT_S", 30)
     # Metering
     meter_flush_interval_s: int = _env_int("PROVIDER_METER_FLUSH_S", 60)
     # ── Durable credential authority ───────────────────────────────────────
@@ -321,7 +305,6 @@ class ProviderGatewayConfig:
     # Bounded caches for decrypted values / metadata (Redis is never the sole
     # authority — the durable table is). TTLs in seconds; overlap window in hours.
     credential_decrypt_cache_ttl_s: int = _env_int("CREDENTIAL_DECRYPT_CACHE_TTL_S", 60)
-    credential_metadata_cache_ttl_s: int = _env_int("CREDENTIAL_METADATA_CACHE_TTL_S", 30)
     credential_rotation_overlap_hours: int = _env_int("CREDENTIAL_ROTATION_OVERLAP_HOURS", 24)
 
 
@@ -360,17 +343,8 @@ class ModelExtractionDefenseConfig:
 class ExtractionMeshConfig:
     """Extraction Defense Mesh — distributed multi-identity defense layer."""
     enabled: bool = _env_bool("ENABLE_EXTRACTION_MESH", False)
-    # Budget engine
-    budget_engine_enabled: bool = _env_bool("EXTRACTION_BUDGET_ENABLED", True)
-    # Expectation engine
-    expectation_engine_enabled: bool = _env_bool("EXTRACTION_EXPECTATION_ENABLED", True)
-    # Policy engine
-    policy_engine_enabled: bool = _env_bool("EXTRACTION_POLICY_ENABLED", True)
     # Attribution / canary
-    attribution_enabled: bool = _env_bool("EXTRACTION_ATTRIBUTION_ENABLED", True)
     canary_secret_seed: str = _env("EXTRACTION_CANARY_SEED", "aether-mesh-canary-seed")
-    # Telemetry
-    telemetry_enabled: bool = _env_bool("EXTRACTION_TELEMETRY_ENABLED", True)
     # Privileged callers (comma-separated tenant IDs)
     privileged_tenants: list[str] = field(default_factory=lambda: _env_list(
         "EXTRACTION_PRIVILEGED_TENANTS", ""
@@ -382,9 +356,6 @@ class ExtractionMeshConfig:
     batch_internal_only: bool = _env_bool("EXTRACTION_BATCH_INTERNAL_ONLY", True)
     # Disclosure defaults
     default_output_precision: int = _env_int("EXTRACTION_OUTPUT_PRECISION", 2)
-    # Alerting thresholds
-    alert_on_orange: bool = _env_bool("EXTRACTION_ALERT_ON_ORANGE", True)
-    alert_on_red: bool = _env_bool("EXTRACTION_ALERT_ON_RED", True)
 
 
 # ---------------------------------------------------------------------------
@@ -424,18 +395,6 @@ class Auth0Config:
     domain: str = _env("AUTH0_DOMAIN", "")
     api_audience: str = _env("AUTH0_API_AUDIENCE", "")
     client_id: str = _env("AUTH0_CLIENT_ID", "")
-
-
-# ---------------------------------------------------------------------------
-# Password / Email Auth
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class PasswordAuthConfig:
-    """Configuration for the native email+password sign-up flow."""
-    otp_ttl_seconds: int = _env_int("OTP_TTL_SECONDS", 600)      # 10 minutes
-    min_password_length: int = _env_int("MIN_PASSWORD_LENGTH", 8)
-    max_login_attempts: int = _env_int("MAX_LOGIN_ATTEMPTS", 10)  # per IP per minute
 
 
 # ---------------------------------------------------------------------------
@@ -501,11 +460,9 @@ class StripeBillingConfig:
 class ClickHouseConfig:
     host: str = _env("CLICKHOUSE_HOST", "localhost")
     port: int = _env_int("CLICKHOUSE_PORT", 9000)
-    http_port: int = _env_int("CLICKHOUSE_HTTP_PORT", 8123)
     database: str = _env("CLICKHOUSE_DB", "aether_cis")
     user: str = _env("CLICKHOUSE_USER", "default")
     password: str = _env("CLICKHOUSE_PASSWORD", "")
-    pool_size: int = _env_int("CLICKHOUSE_POOL_SIZE", 5)
 
 
 # ---------------------------------------------------------------------------
@@ -515,11 +472,8 @@ class ClickHouseConfig:
 @dataclass(frozen=True)
 class CISConfig:
     enabled: bool = _env_bool("CIS_ENABLED", False)
-    mutation_gateway_enabled: bool = _env_bool("CIS_MUTATION_GATEWAY", True)
     drift_threshold: float = float(_env("CIS_DRIFT_THRESHOLD", "0.25"))
-    contamination_threshold: float = float(_env("CIS_CONTAMINATION_THRESHOLD", "0.60"))
     quarantine_on_high_risk: bool = _env_bool("CIS_QUARANTINE_HIGH_RISK", True)
-    health_compute_interval_s: int = _env_int("CIS_HEALTH_INTERVAL_S", 300)
     # Scoring weights (must sum to 1.0; validated at runtime)
     health_weight_structural: float = float(_env("CIS_WEIGHT_STRUCTURAL", "0.20"))
     health_weight_semantic: float = float(_env("CIS_WEIGHT_SEMANTIC", "0.20"))
@@ -539,7 +493,6 @@ class DecisionOutcomeIntelligenceConfig:
     decision_records_enabled: bool = _env_bool("AETHER_DECISION_RECORDS_ENABLED", False)
     outcome_feedback_enabled: bool = _env_bool("AETHER_OUTCOME_FEEDBACK_ENABLED", False)
     playbooks_enabled: bool = _env_bool("AETHER_PLAYBOOKS_ENABLED", False)
-    kyber_observability_enabled: bool = _env_bool("KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED", False)
     confidence_threshold: float = float(_env("AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD", "0.35"))
 
 
@@ -725,7 +678,6 @@ class KyberWorkforceConfig:
 
     # ── Directory sync ────────────────────────────────────────────────────────
     directory_sync_enabled: bool = _env_bool("KYBER_DIRECTORY_SYNC_ENABLED", False)
-    directory_max_stale_hours: int = _env_int("KYBER_DIRECTORY_MAX_STALE_HOURS", 24)
 
     # ── Session cookie ────────────────────────────────────────────────────────
     session_cookie_secure: bool = _env_bool("KYBER_SESSION_COOKIE_SECURE", _KYBER_DEFAULT_ON)
@@ -1306,8 +1258,6 @@ class DataQualityConfig:
     center. Both default OFF; routes mount only when enabled."""
     enabled: bool = _env_bool("AETHER_DATA_QUALITY_ENABLED", False)
     kyber_intelligence_quality_enabled: bool = _env_bool("KYBER_INTELLIGENCE_QUALITY_ENABLED", False)
-    watch_threshold: float = float(_env("AETHER_DATA_QUALITY_WATCH_THRESHOLD", "0.8"))
-    critical_threshold: float = float(_env("AETHER_DATA_QUALITY_CRITICAL_THRESHOLD", "0.6"))
 
 
 # ---------------------------------------------------------------------------
@@ -1397,21 +1347,6 @@ class ExternalBillingConfig:
 
 
 # ---------------------------------------------------------------------------
-# Partner ecosystem / marketplace / developer platform — FUTURE-FLAGGED ONLY
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class PartnerEcosystemConfig:
-    """Partner ecosystem, marketplace, and developer platform are intentionally
-    NOT implemented in this pass. These flags default OFF and gate nothing yet;
-    they exist so the work can be shipped later without a config migration."""
-    partner_ecosystem_enabled: bool = _env_bool("AETHER_PARTNER_ECOSYSTEM_ENABLED", False)
-    marketplace_enabled: bool = _env_bool("AETHER_MARKETPLACE_ENABLED", False)
-    developer_platform_enabled: bool = _env_bool("AETHER_DEVELOPER_PLATFORM_ENABLED", False)
-    kyber_partner_ecosystem_enabled: bool = _env_bool("KYBER_PARTNER_ECOSYSTEM_ENABLED", False)
-
-
-# ---------------------------------------------------------------------------
 # Inbound data-provider / connector ingestion
 # ---------------------------------------------------------------------------
 
@@ -1481,34 +1416,13 @@ class ProviderCorpusConfig:
     """
     # Connector taxonomy
     connector_data_rights_enabled: bool = _env_bool("AETHER_CONNECTOR_DATA_RIGHTS_ENABLED", False)
-    connector_byok_enabled: bool = _env_bool("AETHER_CONNECTOR_BYOK_ENABLED", True)
-    connector_actions_enabled: bool = _env_bool("AETHER_CONNECTOR_ACTIONS_ENABLED", False)
-    connector_olympus_providers_enabled: bool = _env_bool("AETHER_CONNECTOR_OLYMPUS_PROVIDERS_ENABLED", False)
 
     # Provider source catalog
-    provider_source_catalog_enabled: bool = _env_bool("AETHER_PROVIDER_SOURCE_CATALOG_ENABLED", False)
     kyber_provider_source_catalog_enabled: bool = _env_bool("KYBER_PROVIDER_SOURCE_CATALOG_ENABLED", False)
     provider_sync_enabled: bool = _env_bool("AETHER_PROVIDER_SYNC_ENABLED", False)
 
-    # Dune access modes
-    dune_datashare_enabled: bool = _env_bool("AETHER_DUNE_DATASHARE_ENABLED", False)
-    dune_api_enabled: bool = _env_bool("AETHER_DUNE_API_ENABLED", False)
-    dune_sim_enabled: bool = _env_bool("AETHER_DUNE_SIM_ENABLED", False)
-
-    # Cost and rate-limit tracking
-    provider_cost_profiles_enabled: bool = _env_bool("AETHER_PROVIDER_COST_PROFILES_ENABLED", False)
-    provider_rate_limit_profiles_enabled: bool = _env_bool("AETHER_PROVIDER_RATE_LIMIT_PROFILES_ENABLED", False)
-
-    # Lake provenance and lineage
-    enrichment_lineage_enabled: bool = _env_bool("AETHER_ENRICHMENT_LINEAGE_ENABLED", False)
-    graph_of_graphs_policy_enabled: bool = _env_bool("AETHER_GRAPH_OF_GRAPHS_POLICY_ENABLED", False)
-
-    # Unique signal features
-    unique_signal_features_enabled: bool = _env_bool("AETHER_UNIQUE_SIGNAL_FEATURES_ENABLED", False)
-
     # Anti-distillation controls
     anti_distillation_enabled: bool = _env_bool("AETHER_ANTI_DISTILLATION_ENABLED", False)
-    kyber_anti_distillation_enabled: bool = _env_bool("KYBER_ANTI_DISTILLATION_ENABLED", False)
 
 
 # ---------------------------------------------------------------------------
@@ -1523,14 +1437,8 @@ class SuggestionsConfig:
     automated execution. Noesis read-only suggestion queries are independent
     of the main `enabled` flag but respect `noesis_enabled`."""
     enabled: bool = _env_bool("AETHER_SUGGESTIONS_ENABLED", False)
-    auto_delivery_enabled: bool = _env_bool("AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED", False)
     execution_enabled: bool = _env_bool("AETHER_SUGGESTIONS_EXECUTION_ENABLED", False)
     noesis_enabled: bool = _env_bool("AETHER_SUGGESTIONS_NOESIS_ENABLED", True)
-    recommendation_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_RECOMMENDATION_ADAPTER_ENABLED", True)
-    notification_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_NOTIFICATION_ADAPTER_ENABLED", True)
-    data_quality_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DATA_QUALITY_ADAPTER_ENABLED", True)
-    sdk_health_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_SDK_HEALTH_ADAPTER_ENABLED", True)
-    graph_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_GRAPH_ADAPTER_ENABLED", True)
     # Economic/interoperability adapters default OFF (fail-closed with their domains)
     stablecoin_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_STABLECOIN_ADAPTER_ENABLED", False)
     derivatives_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DERIVATIVES_ADAPTER_ENABLED", False)
@@ -1548,9 +1456,6 @@ class FraudIntelligenceConfig:
     fraud_networks_enabled: bool = _env_bool("FEATURE_FRAUD_NETWORKS", False)
     flow_trace_enabled: bool = _env_bool("FEATURE_FLOW_TRACE", False)
     risk_overlays_enabled: bool = _env_bool("FEATURE_RISK_OVERLAYS", False)
-    kyber_fraud_workspace_enabled: bool = _env_bool("FEATURE_KYBER_FRAUD_WORKSPACE", False)
-    tenant_fraud_intelligence_enabled: bool = _env_bool("FEATURE_TENANT_FRAUD_INTELLIGENCE", False)
-    alert_risk_threshold: float = float(_env("FRAUD_ALERT_RISK_THRESHOLD", "70.0"))
     max_network_depth: int = _env_int("FRAUD_NETWORK_MAX_DEPTH", 4)
     max_flow_trace_hops: int = _env_int("FLOW_TRACE_MAX_HOPS", 10)
 
@@ -1575,7 +1480,6 @@ class DeliveryConfig:
 
     # Slack provider config (system-level default; per-tenant configured in UserNotificationChannel)
     slack_bot_token: str = _env("DELIVERY_SLACK_BOT_TOKEN", "")
-    slack_default_channel: str = _env("DELIVERY_SLACK_DEFAULT_CHANNEL", "#aether-notifications")
 
     # Webhook signing secret (for outbound X-Aether-Signature)
     webhook_signing_secret: str = _env("DELIVERY_WEBHOOK_SIGNING_SECRET", "")
@@ -1586,10 +1490,6 @@ class DeliveryConfig:
     # processor resolves per-row secrets first, then falls back to this).
     linear_webhook_secret: str = _env("DELIVERY_LINEAR_WEBHOOK_SECRET", "")
 
-    # Jira (system-level default; per-tenant configured in connector config)
-    jira_base_url: str = _env("DELIVERY_JIRA_BASE_URL", "")
-    jira_email: str = _env("DELIVERY_JIRA_EMAIL", "")
-    jira_api_token: str = _env("DELIVERY_JIRA_API_TOKEN", "")
     # Inbound Jira webhook HMAC secret (same resolution order as Linear).
     jira_webhook_secret: str = _env("DELIVERY_JIRA_WEBHOOK_SECRET", "")
 
@@ -1636,13 +1536,6 @@ class StablecoinIntelligenceConfig:
     """
     enabled: bool = _env_bool("AETHER_STABLECOIN_INTELLIGENCE_ENABLED", False)
     profile360_enabled: bool = _env_bool("AETHER_STABLECOIN_PROFILE360_ENABLED", False)
-    attribution_enabled: bool = _env_bool("AETHER_STABLECOIN_ATTRIBUTION_ENABLED", False)
-    support_enabled: bool = _env_bool("AETHER_STABLECOIN_SUPPORT_ENABLED", False)
-    market_enabled: bool = _env_bool("AETHER_STABLECOIN_MARKET_ENABLED", False)
-    alerts_enabled: bool = _env_bool("AETHER_STABLECOIN_ALERTS_ENABLED", False)
-    realtime_enabled: bool = _env_bool("AETHER_STABLECOIN_REALTIME_ENABLED", False)
-    kyber_operations_enabled: bool = _env_bool("KYBER_STABLECOIN_OPERATIONS_ENABLED", False)
-    olympus_benchmarks_enabled: bool = _env_bool("OLYMPUS_STABLECOIN_BENCHMARKS_ENABLED", False)
     kill_switch: bool = _env_bool("AETHER_STABLECOIN_KILL_SWITCH", False)
     shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
     # Usage metering on the stablecoin observation path (default OFF, opt-in).
@@ -1665,7 +1558,6 @@ class ExternalAgentTelemetryConfig:
     enabled: bool = _env_bool("AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED", False)
     registry_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED", False)
-    sdk_enabled: bool = _env_bool("AETHER_AGENT_TELEMETRY_SDK_ENABLED", False)
     graph_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED", False)
     profile360_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED", False)
 
@@ -1891,7 +1783,6 @@ class AIEconomicsConfig:
     """
     enabled: bool = _env_bool("AETHER_AI_OUTCOME_EFFICIENCY_ENABLED", False)
     execution_facts_enabled: bool = _env_bool("AETHER_AI_EXECUTION_FACTS_ENABLED", False)
-    economics_enabled: bool = _env_bool("AETHER_AI_ECONOMICS_ENABLED", False)
     recommendations_enabled: bool = _env_bool("AETHER_AI_EFFICIENCY_RECOMMENDATIONS_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_AI_EFFICIENCY_HEALTH_ENABLED", False)
 
@@ -1948,7 +1839,6 @@ class DerivativesIntelligenceConfig:
     no execution capability exists behind any flag. All default False."""
     runtime_enabled: bool = _env_bool("AETHER_DERIVATIVES_RUNTIME_ENABLED", False)
     adapters_enabled: bool = _env_bool("AETHER_DERIVATIVES_ADAPTERS_ENABLED", False)
-    streams_enabled: bool = _env_bool("AETHER_DERIVATIVES_STREAMS_ENABLED", False)
     reconciliation_enabled: bool = _env_bool("AETHER_DERIVATIVES_RECONCILIATION_ENABLED", False)
     pnl_enabled: bool = _env_bool("AETHER_DERIVATIVES_PNL_ENABLED", False)
     graph_enabled: bool = _env_bool("AETHER_DERIVATIVES_GRAPH_ENABLED", False)
@@ -1963,7 +1853,6 @@ class InteropIntelligenceConfig:
     """Interoperability Intelligence rollout flags. Observation-only domain —
     Aether never relays, routes, or recovers messages. All default False."""
     ingestion_enabled: bool = _env_bool("AETHER_INTEROP_INGESTION_ENABLED", False)
-    lifecycle_enabled: bool = _env_bool("AETHER_INTEROP_LIFECYCLE_ENABLED", False)
     adapters_enabled: bool = _env_bool("AETHER_INTEROP_ADAPTERS_ENABLED", False)
     layerzero_enabled: bool = _env_bool("AETHER_INTEROP_LAYERZERO_ENABLED", False)
     graph_enabled: bool = _env_bool("AETHER_INTEROP_GRAPH_ENABLED", False)
@@ -2049,13 +1938,9 @@ class ProductIntelligenceConfig:
 @dataclass(frozen=True)
 class ContextIntelligenceConfig:
     enrichment_enabled: bool = _env_bool("AETHER_CONTEXT_ENRICHMENT_ENABLED", False)
-    capsule_enabled: bool = _env_bool("AETHER_CONTEXT_CAPSULES_ENABLED", False)
     # Safety defaults — ON. Raw IP must never persist; context/behavior alone
     # must never merge identities or cause adverse action.
     block_raw_ip: bool = _env_bool("AETHER_RAW_IP_PERSISTENCE_BLOCKED", True)
-    location_identity_merge_blocked: bool = _env_bool(
-        "AETHER_LOCATION_IDENTITY_MERGE_BLOCKED", True
-    )
     trusted_proxy_cidrs: list[str] = field(
         default_factory=lambda: _env_list("AETHER_TRUSTED_PROXY_CIDRS", "")
     )
@@ -2120,8 +2005,6 @@ class Social360Config:
     """
     # Master switch: any Social360 product surface is inert until true.
     social360_enabled: bool = _env_bool("AETHER_SOCIAL360_ENABLED", False)
-    # Universal Provider Runtime social provider convergence (M2).
-    social_upr_enabled: bool = _env_bool("AETHER_SOCIAL_UPR_ENABLED", False)
     # Relationship-motif detection (registry-driven higher-order structure).
     relationship_motifs_enabled: bool = _env_bool("AETHER_RELATIONSHIP_MOTIFS_ENABLED", False)
     # Relationship-fidelity enforcement mode: off | shadow | warn | enforce.
@@ -2252,9 +2135,6 @@ class Settings:
     # Auth0 / SSO
     auth0: Auth0Config = field(default_factory=Auth0Config)
 
-    # Password / Email auth
-    password_auth: PasswordAuthConfig = field(default_factory=PasswordAuthConfig)
-
     # Stripe Billing
     stripe_billing: StripeBillingConfig = field(default_factory=StripeBillingConfig)
 
@@ -2284,9 +2164,6 @@ class Settings:
 
     # External billing / payment provider readiness (behind flags)
     external_billing: ExternalBillingConfig = field(default_factory=ExternalBillingConfig)
-
-    # Partner ecosystem / marketplace / developer platform (future-flagged only)
-    partner_ecosystem: PartnerEcosystemConfig = field(default_factory=PartnerEcosystemConfig)
 
     # Inbound connector ingestion (master switch; per-tenant config gates each)
     connectors: ConnectorsConfig = field(default_factory=ConnectorsConfig)

@@ -80,10 +80,12 @@ consults these caps when evaluating a payment authorization; an over-cap
 spend is denied at policy time, *before* the approval queue, so operators
 don't see requests they couldn't ever approve.
 
-## Self-service opt-down
+## No self-service opt-down
 
-`commerce_approval_required_all` config flag can only be disabled by tenant admin
-with audit record. Day-1 default and GA lock: always `true`.
+Mandatory approval is not configurable. `PolicyEngine` enforces it for every spend
+class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in `services/x402/policies.py`). A
+`commerce_approval_required_all` setting used to be documented here; no code read it,
+so it was retired.
 
 ## Evidence bundle contents
 

@@ -40,10 +40,9 @@ feature-flagged and default OFF.
   tenant-private data and tenant existence are not exposed.
 - **No marketplace.** The External Agent Telemetry Plane observes tenant-owned
   agents on external surfaces. `custom_marketplace` is an external-platform
-  enum value for tenant/third-party marketplaces only. The future flags
-  `AETHER_PARTNER_ECOSYSTEM_ENABLED`, `AETHER_MARKETPLACE_ENABLED`,
-  `AETHER_DEVELOPER_PLATFORM_ENABLED`, and `KYBER_PARTNER_ECOSYSTEM_ENABLED`
-  are untouched and gate nothing in this release.
+  enum value for tenant/third-party marketplaces only. There are no partner,
+  marketplace or developer-platform flags: the reserved ones gated nothing and
+  were retired.
 - **No generic payment webhook fallback.** Named providers only: Privy,
   Stripe crypto onramp, Coinbase, MoonPay, Bridge.
 - **Staged mutation review.** Agents/workers/automation stage and recommend;
@@ -112,9 +111,9 @@ All default OFF. Backend settings sections in
 
 | Settings section | Flags |
 |---|---|
-| `external_agent_telemetry` | `AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED`, `KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED`, `AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED`, `AETHER_AGENT_TELEMETRY_SDK_ENABLED`, `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED`, `AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED` |
+| `external_agent_telemetry` | `AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED`, `KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED`, `AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED`, `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED`, `AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED` |
 | `payment_rails` | `AETHER_PAYMENT_RAILS_ENABLED`, `AETHER_PROVIDER_PRIVY_ENABLED`, `AETHER_PROVIDER_STRIPE_ENABLED`, `AETHER_PROVIDER_COINBASE_ENABLED`, `AETHER_PROVIDER_MOONPAY_ENABLED`, `AETHER_PROVIDER_BRIDGE_ENABLED`, `KYBER_PAYMENT_RAILS_ENABLED` |
-| `ai_economics` | `AETHER_AI_OUTCOME_EFFICIENCY_ENABLED`, `AETHER_AI_EXECUTION_FACTS_ENABLED`, `AETHER_AI_ECONOMICS_ENABLED`, `AETHER_AI_EFFICIENCY_RECOMMENDATIONS_ENABLED`, `KYBER_AI_EFFICIENCY_HEALTH_ENABLED` |
+| `ai_economics` | `AETHER_AI_OUTCOME_EFFICIENCY_ENABLED`, `AETHER_AI_EXECUTION_FACTS_ENABLED`, `AETHER_AI_EFFICIENCY_RECOMMENDATIONS_ENABLED`, `KYBER_AI_EFFICIENCY_HEALTH_ENABLED` |
 | `targeting_intelligence` | `AETHER_CLUSTER_TARGETING_INTELLIGENCE_ENABLED`, `AETHER_TARGETING_EXPORTS_ENABLED`, `AETHER_TARGETING_OODA_SUGGESTIONS_ENABLED`, `KYBER_TARGETING_INTELLIGENCE_ENABLED` |
 | `one_person_ops` | `AETHER_AGENT_RUNTIME_DURABLE_ENABLED`, `AETHER_AGENT_WORKER_BRIDGE_ENABLED`, `AETHER_STAGED_GRAPH_MUTATION_REVIEW_ENABLED`, `AETHER_CATALYST_CYCLE_AUTOMATION_ENABLED`, `KYBER_AGENT_COMMAND_CENTER_ENABLED`, `KYBER_ONE_PERSON_OPS_ENABLED` |
 

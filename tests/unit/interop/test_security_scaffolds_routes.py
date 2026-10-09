@@ -16,12 +16,12 @@ TENANT = "t-interop-a"
 OTHER_TENANT = "t-interop-b"
 
 _FLAGS_ON = SimpleNamespace(
-    ingestion_enabled=True, lifecycle_enabled=True, adapters_enabled=True,
+    ingestion_enabled=True, adapters_enabled=True,
     layerzero_enabled=True, graph_enabled=True, profile360_enabled=True,
     api_enabled=True, noesis_enabled=True, kyber_enabled=True,
 )
 _FLAGS_OFF = SimpleNamespace(
-    ingestion_enabled=False, lifecycle_enabled=False, adapters_enabled=False,
+    ingestion_enabled=False, adapters_enabled=False,
     layerzero_enabled=False, graph_enabled=False, profile360_enabled=False,
     api_enabled=False, noesis_enabled=False, kyber_enabled=False,
 )

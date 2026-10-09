@@ -66,8 +66,7 @@ production reject `AETHER_ROLE=all` and, in production, in-memory `CACHE_BACKEND
 Data quality (`AETHER_DATA_QUALITY_ENABLED`, `KYBER_INTELLIGENCE_QUALITY_ENABLED`),
 external billing (`AETHER_EXTERNAL_BILLING_ENABLED`, `AETHER_STRIPE_BILLING_ENABLED`,
 `KYBER_BILLING_PROVIDER_SYNC_ENABLED`, `BILLING_PROVIDER_MODE`), intelligence-graph
-layers (`IG_*`), CIS (`CIS_ENABLED`), partner future flags
-(`AETHER_PARTNER_ECOSYSTEM_ENABLED`, …), and (upcoming) connector flags
+layers (`IG_*`), CIS (`CIS_ENABLED`), and (upcoming) connector flags
 (`AETHER_CONNECTOR_*_ENABLED`). Demo records are controlled by the explicit
 backend seed policy and commands, not by a frontend runtime mode.
 Their provider env vars (Stripe keys, connector credentials) are required **only

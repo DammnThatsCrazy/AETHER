@@ -1,0 +1,18 @@
+# Backend settings fields that nothing reads and cannot be deleted yet.
+#
+# scripts/validate_settings_flags.py fails when a field in
+# services/backend/config/settings.py reads an environment variable that no
+# production Python consults: setting it changes nothing, yet env examples,
+# release flag lists and runbooks present it as a control. This list is
+# shrink-only. Each entry names the debt-ledger row that owns its removal and is
+# an error once the field is read, gone, or its ledger row disappears.
+
+schema_version: 1
+allow:
+  - env: ML_MODE
+    ledger: delivery-unread-settings-flags-pending
+    reason: >-
+      each release profile pins ml_mode in its environment file and
+      tests/unit/test_release_profile_enforcement.py checks the pin, so retiring
+      it is a change to the deployment profile contract; retire it together with
+      that profile dimension

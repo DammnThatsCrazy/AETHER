@@ -394,8 +394,4 @@ def test_provider_corpus_config_defaults(monkeypatch):
         settings_mod = importlib.import_module("config.settings")
         s = settings_mod.settings
         # All corpus flags default False (fail-closed)
-        assert s.provider_corpus.dune_api_enabled is False
-        assert s.provider_corpus.dune_datashare_enabled is False
         assert s.provider_corpus.anti_distillation_enabled is False
-        assert s.provider_corpus.enrichment_lineage_enabled is False
-        assert s.provider_corpus.unique_signal_features_enabled is False

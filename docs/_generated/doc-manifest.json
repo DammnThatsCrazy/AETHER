@@ -873,7 +873,6 @@
         "AETHER_DECISION_RECORDS_ENABLED",
         "AETHER_OUTCOME_FEEDBACK_ENABLED",
         "AETHER_PLAYBOOKS_ENABLED",
-        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED",
         "AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD"
       ]
     },
@@ -1823,9 +1822,7 @@
       ],
       "status": "beta",
       "since_version": "0.1.0",
-      "flags": [
-        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED"
-      ]
+      "flags": []
     },
     {
       "path": "docs/KYBER-STRATEGIC-OBSERVABILITY.md",
@@ -1843,9 +1840,7 @@
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
-      "flags": [
-        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED"
-      ]
+      "flags": []
     },
     {
       "path": "docs/Kyber-OPERATOR-GUIDE.md",

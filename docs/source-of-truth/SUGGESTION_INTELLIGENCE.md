@@ -236,16 +236,12 @@ All responses are redacted via `redact_for_tenant()`.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AETHER_SUGGESTIONS_ENABLED` | `false` | Master switch |
-| `AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED` | `false` | Auto-deliver approved suggestions |
 | `AETHER_SUGGESTIONS_EXECUTION_ENABLED` | `false` | Allow execution (explicit opt-in required) |
 | `AETHER_SUGGESTIONS_NOESIS_ENABLED` | `true` | Noesis suggestion intent handling |
-| `AETHER_SUGGESTIONS_RECOMMENDATION_ADAPTER_ENABLED` | `true` | Recommendation adapter |
-| `AETHER_SUGGESTIONS_NOTIFICATION_ADAPTER_ENABLED` | `true` | Notification adapter |
-| `AETHER_SUGGESTIONS_DATA_QUALITY_ADAPTER_ENABLED` | `true` | Data quality adapter |
-| `AETHER_SUGGESTIONS_SDK_HEALTH_ADAPTER_ENABLED` | `true` | SDK health adapter |
-| `AETHER_SUGGESTIONS_GRAPH_ADAPTER_ENABLED` | `true` | Graph adapter |
 | `KYBER_SUGGESTIONS_ENABLED` | `true` | Kyber operator routes |
 | `AETHER_TENANT_SUGGESTIONS_ENABLED` | `true` | Tenant-safe routes |
+
+The recommendation, notification, data-quality, SDK-health and graph adapters are always registered, and nothing auto-delivers an approved suggestion; flags for them (`AETHER_SUGGESTIONS_*_ADAPTER_ENABLED`, `AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED`) were documented here but never read, so they were retired.
 
 **Execution is disabled by default.** `AETHER_SUGGESTIONS_EXECUTION_ENABLED=false` must be explicitly set to `true` before any automated execution can occur.
 
