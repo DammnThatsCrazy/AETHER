@@ -12,12 +12,13 @@ estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
   "services/backend/services/commerce/": "sha256:0fc4a8ace5ad1402e43d9a6be46c0798e1c15f13c2121a4ad5e6727cffd991ec"
-  "services/backend/services/x402/": "sha256:2c0d22c36af95a3f6e2bc5da01fb55a68f0be36bfac9a1bf0e87df2bc95dd87c"
+  "services/backend/services/x402/": "sha256:f0116634f9a42ebd3db6d0257a379bccdedbd048fb6a9d2543297fa83ee8353d"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
 **Document:** Production build spec for extending Aether's x402/commerce/graph foundation into a fully productized Aether-native Agentic Commerce control plane.
 **Scope:** Extension of existing monorepo. Not a rewrite. Not a refactor.
+**Status note:** two parts of this spec were not built and were removed as dead code: the typed event layer (`shared/events/economic_topics.py`, `economic_schemas.py`; the commerce lifecycle publishes plain payloads on the existing `EventTopic.COMMERCE_*` topics) and the separate approvals router (`x402/approvals_routes.py`; approvals are served by `approvals_router` in `x402/commerce_routes.py` under `/v1/approvals`). References below to those files describe the original design only.
 **Day-1 GA anchor:** All Aether-native protected resource classes, mandatory approval on all spend classes, USDC on Base + Solana.
 **External providers:** Designed-in, shipped second-wave.
 
@@ -356,7 +357,7 @@ All routes require `request.state.tenant` (JWT or API key) and explicit `require
 | GET | `/v1/x402/assets` | `x402:read` | Approved stablecoin assets + networks |
 | POST | `/v1/x402/assets` | `commerce:admin` | Register asset |
 
-### 5.5 Approvals (`services/backend/services/x402/approvals_routes.py`)
+### 5.5 Approvals (design; served by `approvals_router` in `services/backend/services/x402/commerce_routes.py`)
 
 | Method | Path | Scope | Purpose |
 |---|---|---|---|
