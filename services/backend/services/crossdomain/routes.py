@@ -77,6 +77,7 @@ async def list_institutions(
     q: str = Query("", description="Search query"),
     limit: int = Query(100, ge=1, le=500),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if q:
         institutions = await institution_reg.for_tenant(request.state.tenant_id).search(q, limit)
     elif institution_type:
@@ -87,6 +88,7 @@ async def list_institutions(
 
 @router.get("/institutions/{institution_id}")
 async def get_institution(request: Request, institution_id: str) -> dict:
+    request.state.tenant.require_permission("read")
     inst = await institution_reg.for_tenant(request.state.tenant_id).find_by_id(institution_id)
     if not inst:
         return {"error": "Institution not found", "institution_id": institution_id}
@@ -112,6 +114,7 @@ async def list_accounts(
     account_type: str = Query(""),
     limit: int = Query(100, ge=1, le=500),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if owner:
         accounts = await account_reg.for_tenant(request.state.tenant_id).list_by_owner(owner, limit)
     elif institution:
@@ -124,6 +127,7 @@ async def list_accounts(
 
 @router.get("/accounts/{account_id}")
 async def get_account(request: Request, account_id: str) -> dict:
+    request.state.tenant.require_permission("read")
     account = await account_reg.for_tenant(request.state.tenant_id).find_by_id(account_id)
     if not account:
         return {"error": "Account not found", "account_id": account_id}
@@ -131,6 +135,7 @@ async def get_account(request: Request, account_id: str) -> dict:
 
 @router.get("/accounts/{account_id}/positions")
 async def list_account_positions(request: Request, account_id: str, limit: int = Query(200)) -> dict:
+    request.state.tenant.require_permission("read")
     positions = await position_repo.for_tenant(request.state.tenant_id).list_by_account(account_id, limit)
     return {"account_id": account_id, "positions": positions, "count": len(positions)}
 
@@ -154,6 +159,7 @@ async def list_instruments(
     q: str = Query(""),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if q:
         instruments = await instrument_reg.for_tenant(request.state.tenant_id).search(q, limit)
     elif instrument_type:
@@ -166,6 +172,7 @@ async def list_instruments(
 
 @router.get("/instruments/{instrument_id}")
 async def get_instrument(request: Request, instrument_id: str) -> dict:
+    request.state.tenant.require_permission("read")
     instrument = await instrument_reg.for_tenant(request.state.tenant_id).find_by_id(instrument_id)
     if not instrument:
         return {"error": "Instrument not found", "instrument_id": instrument_id}
@@ -173,6 +180,7 @@ async def get_instrument(request: Request, instrument_id: str) -> dict:
 
 @router.get("/instruments/symbol/{symbol}")
 async def get_instrument_by_symbol(request: Request, symbol: str) -> dict:
+    request.state.tenant.require_permission("read")
     instrument = await instrument_reg.for_tenant(request.state.tenant_id).get_by_symbol(symbol)
     if not instrument:
         return {"error": "Instrument not found", "symbol": symbol}
@@ -192,6 +200,7 @@ async def record_position(request: Request) -> dict:
 
 @router.get("/positions/instrument/{instrument_id}")
 async def list_positions_by_instrument(request: Request, instrument_id: str, limit: int = Query(200)) -> dict:
+    request.state.tenant.require_permission("read")
     positions = await position_repo.for_tenant(request.state.tenant_id).list_by_instrument(instrument_id, limit)
     return {"instrument_id": instrument_id, "positions": positions, "count": len(positions)}
 
@@ -204,6 +213,7 @@ async def record_order(request: Request) -> dict:
 
 @router.get("/orders/{account_id}")
 async def list_orders_by_account(request: Request, account_id: str, limit: int = Query(200)) -> dict:
+    request.state.tenant.require_permission("read")
     orders = await order_repo.for_tenant(request.state.tenant_id).list_by_account(account_id, limit)
     return {"account_id": account_id, "orders": orders, "count": len(orders)}
 
@@ -216,11 +226,13 @@ async def record_execution(request: Request) -> dict:
 
 @router.get("/executions/order/{order_id}")
 async def list_executions_by_order(request: Request, order_id: str, limit: int = Query(50)) -> dict:
+    request.state.tenant.require_permission("read")
     executions = await execution_repo.for_tenant(request.state.tenant_id).list_by_order(order_id, limit)
     return {"order_id": order_id, "executions": executions, "count": len(executions)}
 
 @router.get("/executions/account/{account_id}")
 async def list_executions_by_account(request: Request, account_id: str, limit: int = Query(200)) -> dict:
+    request.state.tenant.require_permission("read")
     executions = await execution_repo.for_tenant(request.state.tenant_id).list_by_account(account_id, limit)
     return {"account_id": account_id, "executions": executions, "count": len(executions)}
 
@@ -233,6 +245,7 @@ async def record_balance(request: Request) -> dict:
 
 @router.get("/balances/{account_id}/latest")
 async def get_latest_balance(request: Request, account_id: str) -> dict:
+    request.state.tenant.require_permission("read")
     balance = await balance_repo.for_tenant(request.state.tenant_id).latest_for_account(account_id)
     if not balance:
         return {"error": "No balance found", "account_id": account_id}
@@ -247,6 +260,7 @@ async def record_cash_movement(request: Request) -> dict:
 
 @router.get("/cash-movements/{account_id}")
 async def list_cash_movements(request: Request, account_id: str, limit: int = Query(200)) -> dict:
+    request.state.tenant.require_permission("read")
     movements = await cash_movement_repo.for_tenant(request.state.tenant_id).list_by_account(account_id, limit)
     return {"account_id": account_id, "movements": movements, "count": len(movements)}
 
@@ -264,6 +278,7 @@ async def record_compliance_action(request: Request) -> dict:
 
 @router.get("/compliance/actions/{entity_id}")
 async def list_compliance_actions(request: Request, entity_id: str, limit: int = Query(100)) -> dict:
+    request.state.tenant.require_permission("read")
     actions = await compliance_repo.for_tenant(request.state.tenant_id).list_by_entity(entity_id, limit)
     return {"entity_id": entity_id, "actions": actions, "count": len(actions)}
 
@@ -275,11 +290,13 @@ async def record_business_event(request: Request) -> dict:
 
 @router.get("/events/entity/{entity_id}")
 async def list_events_by_entity(request: Request, entity_id: str, limit: int = Query(200)) -> dict:
+    request.state.tenant.require_permission("read")
     events = await business_event_repo.for_tenant(request.state.tenant_id).list_by_entity(entity_id, limit)
     return {"entity_id": entity_id, "events": events, "count": len(events)}
 
 @router.get("/events/instrument/{instrument_id}")
 async def list_events_by_instrument(request: Request, instrument_id: str, limit: int = Query(200)) -> dict:
+    request.state.tenant.require_permission("read")
     events = await business_event_repo.for_tenant(request.state.tenant_id).list_by_instrument(instrument_id, limit)
     return {"instrument_id": instrument_id, "events": events, "count": len(events)}
 
@@ -301,11 +318,13 @@ async def list_high_confidence_links(
     min_confidence: float = Query(0.7, ge=0.0, le=1.0),
     limit: int = Query(200),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     links = await link_repo.for_tenant(request.state.tenant_id).list_high_confidence(min_confidence, limit)
     return {"links": links, "count": len(links), "min_confidence": min_confidence}
 
 @router.get("/links/{entity_id}")
 async def list_entity_links(request: Request, entity_id: str, limit: int = Query(100)) -> dict:
+    request.state.tenant.require_permission("read")
     links = await link_repo.for_tenant(request.state.tenant_id).list_for_entity(entity_id, limit)
     return {"entity_id": entity_id, "links": links, "count": len(links)}
 
@@ -320,6 +339,7 @@ async def get_entity_exposure(request: Request, entity_id: str) -> dict:
     Cross-domain exposure for an entity: accounts, instruments, wallets,
     protocols, apps, and domains they're connected to.
     """
+    request.state.tenant.require_permission("read")
     accounts = await account_reg.for_tenant(request.state.tenant_id).list_by_owner(entity_id, 100)
     links = await link_repo.for_tenant(request.state.tenant_id).list_for_entity(entity_id, 100)
     compliance_actions = await compliance_repo.for_tenant(request.state.tenant_id).list_by_entity(entity_id, 50)
@@ -352,6 +372,7 @@ async def get_cross_domain_profile(request: Request, entity_id: str) -> dict:
     Unified cross-domain profile: identity links, accounts, positions,
     recent activity, compliance status, and behavioral events.
     """
+    request.state.tenant.require_permission("read")
     accounts = await account_reg.for_tenant(request.state.tenant_id).list_by_owner(entity_id, 50)
     links = await link_repo.for_tenant(request.state.tenant_id).list_for_entity(entity_id, 50)
     events = await business_event_repo.for_tenant(request.state.tenant_id).list_by_entity(entity_id, 50)
@@ -393,6 +414,7 @@ async def get_cross_domain_profile(request: Request, entity_id: str) -> dict:
 
 @router.get("/coverage/status")
 async def get_coverage_status(request: Request) -> dict:
+    request.state.tenant.require_permission("read")
     institutions = await institution_reg.for_tenant(request.state.tenant_id).find_many(limit=5000)
     accounts = await account_reg.for_tenant(request.state.tenant_id).find_many(limit=10000)
     instruments = await instrument_reg.for_tenant(request.state.tenant_id).find_many(limit=10000)
@@ -409,6 +431,7 @@ async def get_coverage_status(request: Request) -> dict:
 
 @router.get("/coverage/health")
 async def coverage_health(request: Request) -> dict:
+    request.state.tenant.require_permission("read")
     inst_count = len(await institution_reg.for_tenant(request.state.tenant_id).find_many(limit=100))
     return {
         "status": "healthy" if inst_count > 0 else "unseeded",

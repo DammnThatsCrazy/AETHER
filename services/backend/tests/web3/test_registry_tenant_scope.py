@@ -238,3 +238,42 @@ def test_no_crossdomain_read_returns_another_tenants_data(path):
     resp = other.get(path)
     assert resp.status_code == 200, path
     assert _SECRET not in resp.text, path
+
+
+# ── Reads need the read permission ─────────────────────────────────────────
+
+
+def _client_with(permissions: list[str]) -> TestClient:
+    app = FastAPI()
+    register_error_handlers(app)
+    app.include_router(web3_routes.router)
+    app.include_router(cd_routes.router)
+
+    @app.middleware("http")
+    async def tenant(request, call_next):
+        request.state.tenant = TenantContext(tenant_id="t1", role=Role.VIEWER, permissions=permissions)
+        request.state.tenant_id = "t1"
+        return await call_next(request)
+
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def _get_paths() -> list[str]:
+    paths = []
+    for router in (web3_routes.router, cd_routes.router):
+        for route in router.routes:
+            if "GET" in getattr(route, "methods", set()):
+                paths.append(route.path)
+    return paths
+
+
+def test_every_get_route_in_both_routers_is_permission_checked():
+    # A credential with write but not read is refused on every GET; with read it is not.
+    writer, reader = _client_with(["write"]), _client_with(["read"])
+    for template in _get_paths():
+        path = template
+        for part in ("{chain_id}", "{address}", "{protocol_id}", "{account_id}", "{institution_id}",
+                     "{instrument_id}", "{symbol}", "{order_id}", "{entity_id}", "{domain:path}", "{domain}"):
+            path = path.replace(part, "x")
+        assert writer.get(path).status_code == 403, template
+        assert reader.get(path).status_code != 403, template

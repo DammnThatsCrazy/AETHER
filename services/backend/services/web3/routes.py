@@ -84,6 +84,7 @@ async def list_chains(
     vm_family: str = Query("", description="Filter by VM family"),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if vm_family:
         chains = await chain_reg.for_tenant(request.state.tenant_id).list_by_vm_family(vm_family, limit)
     else:
@@ -93,6 +94,7 @@ async def list_chains(
 
 @router.get("/chains/{chain_id}")
 async def get_chain(request: Request, chain_id: str) -> dict:
+    request.state.tenant.require_permission("read")
     chain = await chain_reg.for_tenant(request.state.tenant_id).get_by_chain_id(chain_id)
     if not chain:
         return {"error": "Chain not found", "chain_id": chain_id}
@@ -120,6 +122,7 @@ async def list_protocols(
     q: str = Query("", description="Search query"),
     limit: int = Query(100, ge=1, le=1000),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if q:
         protocols = await protocol_reg.for_tenant(request.state.tenant_id).search(q, limit)
     elif family:
@@ -133,6 +136,7 @@ async def list_protocols(
 
 @router.get("/protocols/{protocol_id}")
 async def get_protocol(request: Request, protocol_id: str) -> dict:
+    request.state.tenant.require_permission("read")
     protocol = await protocol_reg.for_tenant(request.state.tenant_id).get_by_protocol_id(protocol_id)
     if not protocol:
         return {"error": "Protocol not found", "protocol_id": protocol_id}
@@ -154,6 +158,7 @@ async def register_contract(request: Request) -> dict:
 
 @router.get("/contracts/{chain_id}/{address}")
 async def get_contract(request: Request, chain_id: str, address: str) -> dict:
+    request.state.tenant.require_permission("read")
     contract = await contract_instance_reg.for_tenant(request.state.tenant_id).get_by_address(chain_id, address)
     if not contract:
         return {"error": "Contract not found", "chain_id": chain_id, "address": address}
@@ -166,6 +171,7 @@ async def list_unclassified_contracts(
     chain_id: str = Query(""),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     contracts = await contract_instance_reg.for_tenant(request.state.tenant_id).list_unclassified(chain_id, limit)
     return {"contracts": contracts, "count": len(contracts)}
 
@@ -206,6 +212,7 @@ async def list_tokens(
     stablecoins: bool = Query(False),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if stablecoins:
         tokens = await token_reg.for_tenant(request.state.tenant_id).list_stablecoins(limit)
     elif chain_id:
@@ -233,6 +240,7 @@ async def list_apps(
     request: Request,
     limit: int = Query(100, ge=1, le=500),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     apps = await app_reg.for_tenant(request.state.tenant_id).find_many(limit=limit)
     return {"apps": apps, "count": len(apps)}
 
@@ -247,6 +255,7 @@ async def register_domain(request: Request) -> dict:
 
 @router.get("/domains/{domain}")
 async def get_domain(request: Request, domain: str) -> dict:
+    request.state.tenant.require_permission("read")
     result = await domain_reg.for_tenant(request.state.tenant_id).get_by_domain(domain)
     if not result:
         return {"error": "Domain not found", "domain": domain}
@@ -272,6 +281,7 @@ async def list_governance_spaces(
     protocol_id: str = Query(""),
     limit: int = Query(50, ge=1, le=200),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if protocol_id:
         spaces = await governance_reg.for_tenant(request.state.tenant_id).list_by_protocol(protocol_id, limit)
     else:
@@ -453,6 +463,7 @@ async def list_migrations(
     protocol_id: str,
     limit: int = Query(50, ge=1, le=200),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     migrations = await migration_reg.for_tenant(request.state.tenant_id).list_by_protocol(protocol_id, limit)
     return {"protocol_id": protocol_id, "migrations": migrations, "count": len(migrations)}
 
@@ -488,6 +499,7 @@ async def detect_migration_endpoint(request: Request) -> dict:
 @router.get("/coverage/status")
 async def get_coverage_status(request: Request) -> dict:
     """Aggregated coverage status across all registries."""
+    request.state.tenant.require_permission("read")
     chains = await chain_reg.for_tenant(request.state.tenant_id).list_active(1000)
     protocols = await protocol_reg.for_tenant(request.state.tenant_id).find_many(limit=5000)
     systems = await contract_system_reg.for_tenant(request.state.tenant_id).find_many(limit=5000)
@@ -530,6 +542,7 @@ async def get_coverage_status(request: Request) -> dict:
 @router.get("/coverage/health")
 async def coverage_health(request: Request) -> dict:
     """Quick health check for the web3 coverage system."""
+    request.state.tenant.require_permission("read")
     chain_count = len(await chain_reg.for_tenant(request.state.tenant_id).list_active(1000))
     protocol_count = len(await protocol_reg.for_tenant(request.state.tenant_id).find_many(limit=5000))
     return {
