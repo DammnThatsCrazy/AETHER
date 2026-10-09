@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { ThemeProvider } from "@aether/ui";
 import { AuthProvider } from "@aether-app/features/auth";
+import { api } from "@aether-app/lib/api/endpoints";
 import { LoginPage, resolvePostAuthRedirect } from "./login-page";
 
 vi.mock("@aether-app/lib/api/endpoints", () => ({
@@ -95,6 +96,47 @@ describe("LoginPage marketing→signup redirect continuity", () => {
 
     const probe = await screen.findByTestId("signup-probe");
     expect(probe.textContent).toBe("/signup");
+  });
+});
+
+describe("LoginPage failed sign-in messages", () => {
+  async function submit(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText("Email address"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "not-the-password");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.mocked(api.auth.login).mockReset();
+  });
+
+  it("says the credentials are wrong for an ordinary failure", async () => {
+    vi.mocked(api.auth.login).mockRejectedValue(Object.assign(new Error("bad"), { status: 400 }));
+    const user = userEvent.setup();
+    renderLogin("/login");
+
+    await submit(user);
+
+    expect(await screen.findByText("Incorrect email or password")).toBeInTheDocument();
+  });
+
+  it("tells a rate-limited caller how long to wait instead of blaming the password", async () => {
+    vi.mocked(api.auth.login).mockRejectedValue(
+      Object.assign(new Error("Rate limit exceeded"), {
+        status: 429,
+        problem: { errors: [{ retry_after_seconds: 600 }] },
+      }),
+    );
+    const user = userEvent.setup();
+    renderLogin("/login");
+
+    await submit(user);
+
+    expect(
+      await screen.findByText("Too many attempts. Try again in about 10 minutes."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Incorrect email or password")).not.toBeInTheDocument();
   });
 });
 

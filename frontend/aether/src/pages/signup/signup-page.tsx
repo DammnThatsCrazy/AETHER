@@ -13,7 +13,7 @@ import {
   useToast,
 } from "@aether/ui";
 import type { SocialProvider } from "@aether/ui";
-import { useAuth, resolveAuthGrant } from "@aether-app/features/auth";
+import { useAuth, resolveAuthGrant, describeAuthRateLimit, rateLimiter } from "@aether-app/features/auth";
 import { useAuth0 } from "@auth0/auth0-react";
 import {
   parseBillingInterval,
@@ -39,6 +39,8 @@ const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
 ];
 
 const RESEND_COOLDOWN = 30;
+/** The limiter that locks code checks for an address for 15 minutes, longer than a code lives. */
+const VERIFICATION_LOCKOUT = "verify-failures";
 const SDK_VERSIONS = {
   web: "8.9.0",
   ios: "8.3.1",
@@ -212,7 +214,14 @@ export function EmailSignupPage() {
       });
       setStep(2);
       setResendCooldown(RESEND_COOLDOWN);
-    } catch {
+    } catch (err) {
+      // A rate-limited request was not processed (no code was sent), so say so
+      // rather than advancing to a code step nothing will fill.
+      const limited = describeAuthRateLimit(err);
+      if (limited) {
+        setRegisterError(limited);
+        return;
+      }
       // Anti-enumeration: always advance to OTP step even if email already registered
       setStep(2);
       setResendCooldown(RESEND_COOLDOWN);
@@ -240,7 +249,24 @@ export function EmailSignupPage() {
         setStep(2 as Step);
         // Keep on step 2 to show key reveal; advance to 3 after user saves key
       }
-    } catch {
+    } catch (err) {
+      const limited = describeAuthRateLimit(err);
+      if (limited) {
+        const limiter = rateLimiter(err);
+        if (limiter === null || limiter === VERIFICATION_LOCKOUT) {
+          // The per-address lockout outlasts the code (codes expire after 10
+          // minutes, the lockout after 15), so this code cannot be retried later.
+          // An unnamed limit is treated the same, the safe way round.
+          setOtpError(`${limited} Request a new code once the wait is over.`);
+          setResendHighlighted(true);
+          setOtp("");
+        } else {
+          // A one-minute per-client request throttle (many people behind one
+          // address): the code is still good, so keep it for the retry.
+          setOtpError(limited);
+        }
+        return;
+      }
       setOtpError("Invalid or expired code — try again or request a new one");
       setResendHighlighted(true);
       setOtp("");
@@ -261,8 +287,10 @@ export function EmailSignupPage() {
         password: password || "resend",
         plan_tier: planTier,
       });
-    } catch {
-      /* silent — anti-enumeration */
+    } catch (err) {
+      const limited = describeAuthRateLimit(err);
+      if (limited) setOtpError(limited);
+      // Anything else stays silent — anti-enumeration.
     }
   }
 

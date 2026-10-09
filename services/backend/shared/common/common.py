@@ -189,11 +189,16 @@ class ConflictError(AetherError):
 
 
 class RateLimitedError(AetherError):
-    def __init__(self, retry_after: int = 60, **kwargs: Any):
+    def __init__(self, retry_after: int = 60, limiter: Optional[str] = None, **kwargs: Any):
+        details: dict[str, Any] = {"retry_after_seconds": retry_after}
+        if limiter:
+            # Which limit refused the request, for clients that must react to the
+            # kind of limit and not only to how long is left on it.
+            details["limiter"] = limiter
         super().__init__(
             ErrorCode.RATE_LIMITED,
             "Rate limit exceeded",
-            details={"retry_after_seconds": retry_after},
+            details=details,
             **kwargs,
         )
 

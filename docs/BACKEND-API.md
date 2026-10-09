@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:1ec6e2a2f79ff44f7193f5165c19985169450fb7e6b008e529b29f3b42aa545f"
+  "services/backend/services/": "sha256:fb61f0091e8f0b6f5911c8d201f19f0f2065585b0bd468f49a2f3a76ba2b26b4"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -207,7 +207,7 @@ signature-verification failures.
 | `/v1/auth/register` | POST | Email sign-up step 1 — send OTP to the supplied email (20 requests per minute per client IP; 5 codes per address per 15 minutes) |
 | `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key (20 requests per minute per client IP; 5 wrong codes per address per 15 minutes, then `429` even for the right code) |
 | `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost (same IP and per-address limits as `register`) |
-| `/v1/auth/login` | POST | Email + password → API key (creates a new key per login). Throttled: 10 attempts per minute per client IP, and 5 failed attempts per 15 minutes per address (cleared by a successful login); over either limit answers `429` |
+| `/v1/auth/login` | POST | Email + password → API key (creates a new key per login). Throttled: 10 attempts per minute per client IP; 5 failed attempts per 15 minutes per address from one client IP (so one caller cannot lock the account holder out); and 25 failed attempts per 15 minutes per address from anywhere. A successful login clears both failure counts; over any limit answers `429`, and `errors[0].limiter` names which limit refused the request |
 | `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off). An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; staging never self-provisions a tenant. A rejected token returns 400 and logs the reason (see [Access Control](ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
@@ -1548,11 +1548,11 @@ Core identity resolution and entity management endpoints.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. The route is disabled by default (`IDENTITY_RESOLUTION_ENABLED=false`) and is blocked unless the server finds an identity-link consent receipt for the authenticated tenant and request `anonymous_id`; a caller-supplied consent snapshot is not authorization. A `user_id` sent with a matching `anonymous_id` may merge deterministically (`authenticated_user_binding`) when auto-merge is enabled; otherwise it is a review candidate when manual review is enabled, or blocked |
-| GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
+| GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers. The entity, alias, graph and audit reads, `/conflicts` and the legacy `/profiles/{user_id}` reads require the `read` permission |
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
 | GET | `/v1/identity/entities/{entity_id}/audit` | Full audit trail for this entity — merges, splits, signal additions |
-| GET | `/v1/identity/conflicts` | List entities with unresolved identity conflicts (`admin`) |
+| GET | `/v1/identity/conflicts` | List entities with unresolved identity conflicts (`read`) |
 | POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
 | POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
 | POST | `/v1/identity/recompute` | Trigger a full confidence recomputation for one or all entities (`admin`) |

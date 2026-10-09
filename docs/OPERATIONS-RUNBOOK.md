@@ -322,10 +322,12 @@ All 135 Kafka topics are provisioned by `deploy/legacy-staging/kafka_topics.sh`,
 These endpoints intentionally bypass API-key auth — operators should monitor them
 for abuse. The email/password endpoints under `/v1/auth` carry their own small
 limits (`shared/rate_limit/auth_throttle.py`: per client IP per minute, and per
-address for failed logins, wrong verification codes and codes mailed), keyed on the
-load-balancer-appended `X-Forwarded-For` hop and held in Redis, or per process
-when Redis is down. A user locked out by repeated failures waits out the window
-(15 minutes); there is no operator reset. Other public endpoints still depend on an
+address (and address-from-one-client) for failed logins, wrong verification codes and
+codes mailed), keyed on the load-balancer-appended `X-Forwarded-For` hop and held in
+Redis, or per process when Redis is down. Five failed logins from one client lock only
+that client out of that address for 15 minutes; the account holder on another network
+is not affected until 25 failures have arrived from anywhere. A wrong-code lockout on
+verification waits out the same window; there is no operator reset. Other public endpoints still depend on an
 edge or IP rate limit:
 
 | Endpoint | Purpose |
@@ -334,7 +336,7 @@ edge or IP rate limit:
 | `POST /v1/auth/register` | Email sign-up step 1 (send OTP) |
 | `POST /v1/auth/verify-email` | Email sign-up step 2 (verify OTP, create tenant) |
 | `POST /v1/auth/resend-verification` | Resend OTP |
-| `POST /v1/auth/login` | Email + password → API key (429 after 10 attempts/min per IP or 5 failures/15 min per address) |
+| `POST /v1/auth/login` | Email + password → API key (429 after 10 attempts/min per IP, 5 failures/15 min per address and client, or 25 failures/15 min per address) |
 | `POST /v1/auth/sso/callback` | SSO via Auth0 JWT → API key |
 | `GET  /v1/auth/sso/providers` | List configured SSO providers |
 | `POST /v1/auth/recover` | Recover lost API key via email |

@@ -245,6 +245,7 @@ async def get_entity(entity_id: str, request: Request) -> dict:
     additive ``resolved_entity_id`` + ``redirected``.
     """
     tenant = request.state.tenant
+    tenant.require_permission("read")
     repo = _get_resolution_repo()
     from services.identity.redirects import resolve_entity_redirect
 
@@ -261,6 +262,7 @@ async def get_entity(entity_id: str, request: Request) -> dict:
 async def get_entity_aliases(entity_id: str, request: Request) -> dict:
     """Get aliases for a canonical entity. Sensitive values are redacted."""
     tenant = request.state.tenant
+    tenant.require_permission("read")
     repo = _get_resolution_repo()
 
     subject = await repo.get_subject_by_canonical_entity_id(tenant.tenant_id, entity_id)
@@ -290,6 +292,7 @@ async def get_entity_aliases(entity_id: str, request: Request) -> dict:
 async def get_entity_graph(entity_id: str, request: Request) -> dict:
     """Get identity graph neighborhood for an entity (tenant-scoped)."""
     tenant = request.state.tenant
+    tenant.require_permission("read")
     repo = _get_resolution_repo()
 
     subject = await repo.get_subject_by_canonical_entity_id(tenant.tenant_id, entity_id)
@@ -327,6 +330,7 @@ async def get_entity_audit(
 ) -> dict:
     """Get merge/link/split audit history for a canonical entity."""
     tenant = request.state.tenant
+    tenant.require_permission("read")
     repo = _get_resolution_repo()
 
     subject = await repo.get_subject_by_canonical_entity_id(tenant.tenant_id, entity_id)
@@ -353,6 +357,7 @@ async def list_conflicts(
 ) -> dict:
     """List identity conflict/candidate queue for this tenant."""
     tenant = request.state.tenant
+    tenant.require_permission("read")
     repo = _get_resolution_repo()
     conflicts = await repo.get_conflicts(tenant.tenant_id, status=status, limit=limit)
     return APIResponse(data={"conflicts": conflicts, "total": len(conflicts)}).to_dict()
@@ -1954,6 +1959,7 @@ async def get_profile(
 ) -> dict:
     """Get a user profile by ID (legacy endpoint)."""
     tenant = request.state.tenant
+    tenant.require_permission("read")
     profile = await repo.get_profile(tenant.tenant_id, user_id)
     if not profile:
         raise NotFoundError("Profile")
@@ -1991,6 +1997,7 @@ async def get_profile_graph(
 ) -> dict:
     """Get graph neighborhood for a user (legacy endpoint, tenant-scoped)."""
     tenant = request.state.tenant
+    tenant.require_permission("read")
     profile = await repo.get_profile(tenant.tenant_id, user_id)
     if not profile:
         raise NotFoundError("Profile")

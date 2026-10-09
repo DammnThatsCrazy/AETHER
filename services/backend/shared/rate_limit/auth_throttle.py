@@ -6,12 +6,17 @@ a caller can guess passwords, brute-force the 6-digit verification code, or use
 the endpoints to mail codes to arbitrary addresses. These limits are deliberately
 small and are constants, not settings: nothing about them needs an operator lever.
 
-Two kinds of counter, both keyed without storing the email address (a digest):
+Counters are keyed without storing the email address (a digest) and count an attempt
+*before* the credential is checked (``enforce_rate``). The count is one atomic increment,
+so parallel guesses cannot all slip under the cap, and a successful login or
+verification clears it (``AttemptCounter.clear``). Each limit is therefore a cap on
+consecutive attempts: the first N get through, the next is refused.
 
-* a **rate** per client IP, counted on every request (``enforce_rate``);
-* a **failure budget** per email, counted only when a credential or code is
-  wrong, checked *before* the credential is verified, and cleared on success
-  (``enforce_budget`` / ``AttemptCounter.hit`` / ``AttemptCounter.clear``).
+Password attempts are budgeted twice. A small budget per (address, client IP) means
+one caller who fails five times locks only themselves out, never the account holder
+on another network; a larger ceiling per address bounds guessing spread across many
+addresses. Verification codes keep a single small per-address budget: a 6-digit code
+is only safe with a hard cap on guesses, whoever makes them.
 
 Counters live in Redis when it is reachable and in bounded process memory
 otherwise (the in-memory fallback is per process, so it is a floor, not a
@@ -27,7 +32,8 @@ from typing import Any, Callable, Mapping, Optional
 from shared.common.common import RateLimitedError
 
 LOGIN_ATTEMPTS_PER_IP_PER_MINUTE = 10
-LOGIN_FAILURES_PER_EMAIL = 5
+LOGIN_FAILURES_PER_EMAIL_AND_IP = 5
+LOGIN_FAILURES_PER_EMAIL = 25
 VERIFY_FAILURES_PER_EMAIL = 5
 OTP_SENDS_PER_EMAIL = 5
 PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE = 20
@@ -54,6 +60,18 @@ def email_digest(email: str) -> str:
     return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:32]
 
 
+def email_ip_digest(email: str, ip: str) -> str:
+    """A stable key for one address as seen from one client, without either in Redis."""
+    return hashlib.sha256(f"{email.strip().lower()}|{ip}".encode("utf-8")).hexdigest()[:32]
+
+
+_REFUND_SCRIPT = (
+    "local v = redis.call('GET', KEYS[1]) "
+    "if v and tonumber(v) > 0 then return redis.call('DECR', KEYS[1]) end "
+    "return 0"
+)
+
+
 class AttemptCounter:
     """Counts events per key in a window that opens at the first event."""
 
@@ -64,6 +82,10 @@ class AttemptCounter:
         self._window = window_seconds
         self._clock = clock
         self._memory: dict[str, list[float]] = {}  # key -> [count, window closes at]
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     def _redis_key(self, key: str) -> str:
         return f"auththrottle:{self._name}:{key}"
@@ -100,22 +122,18 @@ class AttemptCounter:
         entry[0] += 1
         return int(entry[0]), max(1, int(entry[1] - now))
 
-    async def peek(self, key: str, redis: Any = None) -> tuple[int, int]:
-        """Events so far in the window, without counting one."""
+    async def refund(self, key: str, redis: Any = None) -> None:
+        """Give back one counted event, for a request refused by a different limit."""
         if redis is not None:
             try:
-                rkey = self._redis_key(key)
-                raw = await redis.get(rkey)
-                if raw is None:
-                    return 0, 0
-                return int(raw), await self._ttl(redis, rkey)
+                # Only ever decrement an existing positive count: a plain DECR on a key that a
+                # concurrent success just cleared would create -1 and admit one extra attempt.
+                await redis.eval(_REFUND_SCRIPT, 1, self._redis_key(key))
             except Exception:  # noqa: BLE001
                 pass
-        now = self._clock()
-        entry = self._live(key, now)
-        if entry is None:
-            return 0, 0
-        return int(entry[0]), max(1, int(entry[1] - now))
+        entry = self._memory.get(key)
+        if entry is not None and entry[0] > 0:
+            entry[0] -= 1
 
     async def clear(self, key: str, redis: Any = None) -> None:
         if redis is not None:
@@ -141,20 +159,15 @@ async def enforce_rate(counter: AttemptCounter, key: str, limit: int, redis: Any
     """Count one request and refuse it once ``key`` is over ``limit`` in the window."""
     count, retry_after = await counter.hit(key, redis)
     if count > limit:
-        raise RateLimitedError(retry_after=retry_after)
-
-
-async def enforce_budget(counter: AttemptCounter, key: str, limit: int, redis: Any = None) -> None:
-    """Refuse the request when ``key`` has already used up ``limit`` failures (nothing is counted)."""
-    count, retry_after = await counter.peek(key, redis)
-    if count >= limit:
-        raise RateLimitedError(retry_after=retry_after)
+        raise RateLimitedError(retry_after=retry_after, limiter=counter.name)
 
 
 login_ip = AttemptCounter("login-ip", MINUTE_SECONDS)
+# The next four count attempts since the last success, i.e. a run of failures.
 login_failures = AttemptCounter("login-failures", FAILURE_WINDOW_SECONDS)
+login_failures_by_ip = AttemptCounter("login-failures-ip", FAILURE_WINDOW_SECONDS)
 verify_failures = AttemptCounter("verify-failures", FAILURE_WINDOW_SECONDS)
 otp_sends = AttemptCounter("otp-sends", FAILURE_WINDOW_SECONDS)
 public_auth_ip = AttemptCounter("public-auth-ip", MINUTE_SECONDS)
 
-ALL_COUNTERS = (login_ip, login_failures, verify_failures, otp_sends, public_auth_ip)
+ALL_COUNTERS = (login_ip, login_failures, login_failures_by_ip, verify_failures, otp_sends, public_auth_ip)

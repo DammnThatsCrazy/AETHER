@@ -40,6 +40,7 @@ from shared.common.common import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
+    RateLimitedError,
     UnauthorizedError,
     utc_now,
 )
@@ -131,12 +132,19 @@ def _get_redis():
         return None
 
 
+def _caller_ip(request: Optional[Request]) -> Optional[str]:
+    """The caller's address as the load balancer saw it; None for a direct call without a request."""
+    if request is None:
+        return None
+    peer = request.client.host if request.client else None
+    return throttle.client_ip(request.headers, peer)
+
+
 async def _throttle_ip(request: Optional[Request], counter, limit: int, redis) -> None:
     """Per-IP request cap. A direct call without a request (tests) has no caller to count."""
-    if request is None:
-        return
-    peer = request.client.host if request.client else None
-    await throttle.enforce_rate(counter, throttle.client_ip(request.headers, peer), limit, redis)
+    ip = _caller_ip(request)
+    if ip is not None:
+        await throttle.enforce_rate(counter, ip, limit, redis)
 
 
 async def _issue_api_key(tenant_id: str, plan_tier_value: str, label: str) -> str:
@@ -658,10 +666,11 @@ async def verify_email(body: VerifyEmailRequest, response: Response = None, requ
     # A 6-digit code is only safe with a cap on wrong guesses: per IP, and per address.
     await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
     email_key = throttle.email_digest(email)
-    await throttle.enforce_budget(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
+    # Counted before the code is checked (one atomic increment), so parallel
+    # guesses cannot all pass a check-then-record gap; success clears it below.
+    await throttle.enforce_rate(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
 
     if not await verify_otp(email, body.code, redis):
-        await throttle.verify_failures.hit(email_key, redis)
         raise BadRequestError("Invalid or expired verification code.")
     await throttle.verify_failures.clear(email_key, redis)
 
@@ -823,8 +832,11 @@ _LOGIN_ERROR = "Invalid email or password."
 async def login(body: LoginRequest, response: Response = None, request: Request = None):
     """Authenticate with email + password.
 
-    Throttled: 10 attempts per minute per client IP, and 5 failed attempts per
-    15 minutes per address (cleared by a successful login). Both answer 429.
+    Throttled (all answer 429): 10 attempts per minute per client IP; 5 failed
+    attempts per 15 minutes per address from one client IP, so one caller cannot
+    lock the account holder out; and 25 failed attempts per 15 minutes per address
+    from anywhere, which bounds guessing spread over many networks. A successful
+    login clears both failure counts.
 
     Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this issues a
     durable, revocable session — never a reusable API key. When the flag is off
@@ -836,7 +848,20 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
     redis = _get_redis()
     await _throttle_ip(request, throttle.login_ip, throttle.LOGIN_ATTEMPTS_PER_IP_PER_MINUTE, redis)
     email_key = throttle.email_digest(email)
-    await throttle.enforce_budget(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
+    pair_key = throttle.email_ip_digest(email, _caller_ip(request) or "direct")
+    # Each attempt is counted before the password is checked, in one atomic
+    # increment, so parallel guesses cannot all pass a check-then-record gap. A
+    # successful login clears both counts, so only a run of failures reaches a limit.
+    await throttle.enforce_rate(
+        throttle.login_failures_by_ip, pair_key, throttle.LOGIN_FAILURES_PER_EMAIL_AND_IP, redis,
+    )
+    try:
+        await throttle.enforce_rate(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
+    except RateLimitedError:
+        # Refused by the address-wide ceiling: do not also spend this client's own
+        # budget, or retrying during the lockout would extend it for that client.
+        await throttle.login_failures_by_ip.refund(pair_key, redis)
+        raise
 
     user_rec: dict = {}
     try:
@@ -852,13 +877,12 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
     # Always run verify_password to avoid timing-based user enumeration
     stored_hash = user_rec.get("password_hash", "")
     if not stored_hash or not verify_password(body.password, stored_hash):
-        await throttle.login_failures.hit(email_key, redis)
         raise BadRequestError(_LOGIN_ERROR)
 
     tenant_id = user_rec.get("tenant_id", "")
     if not tenant_id:
-        await throttle.login_failures.hit(email_key, redis)
         raise BadRequestError(_LOGIN_ERROR)
+    await throttle.login_failures_by_ip.clear(pair_key, redis)
     await throttle.login_failures.clear(email_key, redis)
 
     # Confirm tenant is active

@@ -28,7 +28,7 @@ source_hashes:
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/backend/repositories/repos.py": "sha256:17d4283f64dd84fdc4f26b1e73b7e1d8d7678a77b7fc3f1a318139c94c068235"
-  "services/backend/services/auth/routes.py": "sha256:3d4580d380352ffb91d086bd333c1ee7465256838fc7355775c542a4f109ec7d"
+  "services/backend/services/auth/routes.py": "sha256:8559fb54da03dc9a6ca14bed490a5bc01d0da25e62073648ef17ece676bb2934"
 ---
 
 # AETHER first-admin bootstrap
