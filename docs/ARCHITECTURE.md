@@ -23,7 +23,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/": "sha256:f08901231d004c8af78a82ab9dcc7b23070d5f799ff431c3b8589afbdc929ac1"
   "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
-  "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
+  "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
   "services/backend/services/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
   "services/backend/services/ingestion/replay_routes.py": "sha256:44e6e89117a8cbbebe2cd45bac315e616e87b2cf823e82c5af3f503de44eea56"

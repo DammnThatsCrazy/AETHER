@@ -237,7 +237,7 @@ All responses are redacted via `redact_for_tenant()`.
 | `KYBER_SUGGESTIONS_ENABLED` | `true` | Kyber operator routes |
 | `AETHER_TENANT_SUGGESTIONS_ENABLED` | `true` | Tenant-safe routes |
 
-Nothing auto-delivers an approved suggestion, and no consumer registers the event-driven adapters (`ai_efficiency`, `derivatives`, `interop`, `sdk_drift`, `sdk_health`, `stablecoin`): they are tested factories with no caller yet, so the only live producers are the notification and recommendation paths. Flags for them (`AETHER_SUGGESTIONS_*_ADAPTER_ENABLED`, `AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED`) were documented here but never read, so they were retired.
+Approving a delivery-eligible suggestion from a notification source hands it to the delivery pipeline (a `DeliveryIntent` and one `DeliveryJob` per active channel; it stays `approved` until the delivery worker confirms a provider receipt), and `POST /{id}/execute` runs a recommendation-sourced suggestion through the dispatcher instead of parking it in `executing`. Recording an outcome runs the outcome loop to `closed`; the learning delta it computes (±0.05 per source and class) is stored but the scorer does not read it yet. No consumer registers the event-driven adapters (`ai_efficiency`, `derivatives`, `interop`, `sdk_drift`, `sdk_health`, `stablecoin`): they are tested factories with no caller yet, so the only live producers are the notification and recommendation paths. Flags for them (`AETHER_SUGGESTIONS_*_ADAPTER_ENABLED`, `AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED`) were documented here but never read, so they were retired.
 
 **Execution is disabled by default.** `AETHER_SUGGESTIONS_EXECUTION_ENABLED=false` must be explicitly set to `true` before any automated execution can occur.
 
