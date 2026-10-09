@@ -43,7 +43,7 @@ Successor to `UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md`. Phases 1–19 are
 | G12 | No `POST /v1/graph/snapshots/{id}/compare` | P2 | ✅ | 2A | `services/backend/services/operational_intelligence/routes.py` |
 | G13 | `TraversalSnapshotRepository` and `DeepTraversalJobRepository` missing from repos.py | P1 | ✅ | 2B | `repositories/repos.py` |
 | G14 | OODA `Recommendation` lacks `path_refs: list[str]` and `snapshot_ref: str` | P2 | ✅ | 3A | `services/backend/services/intelligence/decision_models.py` |
-| G15 | Suggestion adapters don't populate `graphRefs` with canonical path_ids | P2 | ✅ | 3B | `services/backend/services/suggestions/adapters/graph_adapter.py`, `services/backend/services/suggestions/lifecycle.py` |
+| G15 | Suggestion adapters don't populate `graphRefs` with canonical path_ids | P2 | ✅ | 3B | `services/backend/services/suggestions/lifecycle.py` (`_hydrate_graph_refs`) |
 | G16 | No persistent `Investigation` with `snapshot_id` + `path_ids` linkage | P2 | ✅ | 3C | `services/backend/services/operational_intelligence/models.py`, `services/backend/services/investigation/routes.py` |
 | G17 | No Silver projection reconciliation worker | P2 | ✅ | 3D | `services/backend/services/silver/reconciliation.py` |
 | G18 | No `PathInspector` component + TS canonical path types | P3 | ✅ | 4A/4B | `packages/shared/operational-intelligence.ts`, `frontend/kyber/src/components/graph/path-inspector.tsx`, `frontend/aether/src/components/graph/path-inspector.tsx` |

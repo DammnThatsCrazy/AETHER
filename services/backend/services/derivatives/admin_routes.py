@@ -18,6 +18,7 @@ from shared.common.common import ForbiddenError
 from services.derivatives.adapters import all_adapters, get_adapter
 from services.derivatives.adapters.conformance import run_conformance
 from services.derivatives.foundation import require_flag
+from services.derivatives.topic_contract import validate_all_topic_contracts
 
 admin_router = APIRouter(prefix="/v1/admin/kyber/derivatives/runtime", tags=["kyber-derivatives"])
 
@@ -74,6 +75,17 @@ async def list_variances(
     filters = {"status": status} if status else None
     rows = await ReconciliationVarianceRepo().find_many(filters, limit=limit)
     return {"items": rows, "count": len(rows)}
+
+
+@admin_router.get("/topic-contract")
+async def topic_contract_report(request: Request):
+    """Validation report for the declared derivatives stream-topic contract.
+
+    Broker-free: checks naming, sizing, DLQ references and consumer ownership of
+    the declarative registry, so a drifted contract is visible before deploy.
+    """
+    _gate(request)
+    return validate_all_topic_contracts()
 
 
 @admin_router.post("/conformance/{adapter_id}", status_code=201)

@@ -74,7 +74,7 @@ observation_repo = Web3ObservationRepository()
 async def register_chain(request: Request) -> dict:
     request.state.tenant.require_permission("write")
     body = await request.json()
-    result = await chain_reg.register(body, request.state.tenant_id)
+    result = await chain_reg.for_tenant(request.state.tenant_id).register(body, request.state.tenant_id)
     return {"status": "registered", "chain_id": body.get("chain_id"), "data": result}
 
 
@@ -84,16 +84,18 @@ async def list_chains(
     vm_family: str = Query("", description="Filter by VM family"),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if vm_family:
-        chains = await chain_reg.list_by_vm_family(vm_family, limit)
+        chains = await chain_reg.for_tenant(request.state.tenant_id).list_by_vm_family(vm_family, limit)
     else:
-        chains = await chain_reg.list_active(limit)
+        chains = await chain_reg.for_tenant(request.state.tenant_id).list_active(limit)
     return {"chains": chains, "count": len(chains)}
 
 
 @router.get("/chains/{chain_id}")
 async def get_chain(request: Request, chain_id: str) -> dict:
-    chain = await chain_reg.get_by_chain_id(chain_id)
+    request.state.tenant.require_permission("read")
+    chain = await chain_reg.for_tenant(request.state.tenant_id).get_by_chain_id(chain_id)
     if not chain:
         return {"error": "Chain not found", "chain_id": chain_id}
     return {"chain": chain}
@@ -108,7 +110,7 @@ async def get_chain(request: Request, chain_id: str) -> dict:
 async def register_protocol(request: Request) -> dict:
     request.state.tenant.require_permission("write")
     body = await request.json()
-    result = await protocol_reg.register(body, request.state.tenant_id)
+    result = await protocol_reg.for_tenant(request.state.tenant_id).register(body, request.state.tenant_id)
     return {"status": "registered", "protocol_id": body.get("protocol_id"), "data": result}
 
 
@@ -120,20 +122,22 @@ async def list_protocols(
     q: str = Query("", description="Search query"),
     limit: int = Query(100, ge=1, le=1000),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if q:
-        protocols = await protocol_reg.search(q, limit)
+        protocols = await protocol_reg.for_tenant(request.state.tenant_id).search(q, limit)
     elif family:
-        protocols = await protocol_reg.list_by_family(family, limit)
+        protocols = await protocol_reg.for_tenant(request.state.tenant_id).list_by_family(family, limit)
     elif chain:
-        protocols = await protocol_reg.list_by_chain(chain, limit)
+        protocols = await protocol_reg.for_tenant(request.state.tenant_id).list_by_chain(chain, limit)
     else:
-        protocols = await protocol_reg.find_many(limit=limit)
+        protocols = await protocol_reg.for_tenant(request.state.tenant_id).find_many(limit=limit)
     return {"protocols": protocols, "count": len(protocols)}
 
 
 @router.get("/protocols/{protocol_id}")
 async def get_protocol(request: Request, protocol_id: str) -> dict:
-    protocol = await protocol_reg.get_by_protocol_id(protocol_id)
+    request.state.tenant.require_permission("read")
+    protocol = await protocol_reg.for_tenant(request.state.tenant_id).get_by_protocol_id(protocol_id)
     if not protocol:
         return {"error": "Protocol not found", "protocol_id": protocol_id}
     return {"protocol": protocol}
@@ -148,13 +152,14 @@ async def get_protocol(request: Request, protocol_id: str) -> dict:
 async def register_contract(request: Request) -> dict:
     request.state.tenant.require_permission("write")
     body = await request.json()
-    result = await contract_instance_reg.register(body, request.state.tenant_id)
+    result = await contract_instance_reg.for_tenant(request.state.tenant_id).register(body, request.state.tenant_id)
     return {"status": "registered", "data": result}
 
 
 @router.get("/contracts/{chain_id}/{address}")
 async def get_contract(request: Request, chain_id: str, address: str) -> dict:
-    contract = await contract_instance_reg.get_by_address(chain_id, address)
+    request.state.tenant.require_permission("read")
+    contract = await contract_instance_reg.for_tenant(request.state.tenant_id).get_by_address(chain_id, address)
     if not contract:
         return {"error": "Contract not found", "chain_id": chain_id, "address": address}
     return {"contract": contract}
@@ -166,7 +171,8 @@ async def list_unclassified_contracts(
     chain_id: str = Query(""),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
-    contracts = await contract_instance_reg.list_unclassified(chain_id, limit)
+    request.state.tenant.require_permission("read")
+    contracts = await contract_instance_reg.for_tenant(request.state.tenant_id).list_unclassified(chain_id, limit)
     return {"contracts": contracts, "count": len(contracts)}
 
 
@@ -175,7 +181,7 @@ async def reclassify_contract(request: Request, chain_id: str, address: str) -> 
     request.state.tenant.require_permission("write")
     body = await request.json()
     instance_id = f"{chain_id}:{address.lower()}"
-    result = await contract_instance_reg.reclassify(
+    result = await contract_instance_reg.for_tenant(request.state.tenant_id).reclassify(
         instance_id=instance_id,
         protocol_id=body.get("protocol_id", ""),
         system_id=body.get("system_id", ""),
@@ -195,7 +201,7 @@ async def reclassify_contract(request: Request, chain_id: str, address: str) -> 
 async def register_token(request: Request) -> dict:
     request.state.tenant.require_permission("write")
     body = await request.json()
-    result = await token_reg.register(body, request.state.tenant_id)
+    result = await token_reg.for_tenant(request.state.tenant_id).register(body, request.state.tenant_id)
     return {"status": "registered", "token_id": body.get("token_id"), "data": result}
 
 
@@ -206,12 +212,13 @@ async def list_tokens(
     stablecoins: bool = Query(False),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if stablecoins:
-        tokens = await token_reg.list_stablecoins(limit)
+        tokens = await token_reg.for_tenant(request.state.tenant_id).list_stablecoins(limit)
     elif chain_id:
-        tokens = await token_reg.list_by_chain(chain_id, limit)
+        tokens = await token_reg.for_tenant(request.state.tenant_id).list_by_chain(chain_id, limit)
     else:
-        tokens = await token_reg.find_many(limit=limit)
+        tokens = await token_reg.for_tenant(request.state.tenant_id).find_many(limit=limit)
     return {"tokens": tokens, "count": len(tokens)}
 
 
@@ -224,7 +231,7 @@ async def list_tokens(
 async def register_app(request: Request) -> dict:
     request.state.tenant.require_permission("write")
     body = await request.json()
-    result = await app_reg.register(body, request.state.tenant_id)
+    result = await app_reg.for_tenant(request.state.tenant_id).register(body, request.state.tenant_id)
     return {"status": "registered", "app_id": body.get("app_id"), "data": result}
 
 
@@ -233,7 +240,8 @@ async def list_apps(
     request: Request,
     limit: int = Query(100, ge=1, le=500),
 ) -> dict:
-    apps = await app_reg.find_many(limit=limit)
+    request.state.tenant.require_permission("read")
+    apps = await app_reg.for_tenant(request.state.tenant_id).find_many(limit=limit)
     return {"apps": apps, "count": len(apps)}
 
 
@@ -241,13 +249,14 @@ async def list_apps(
 async def register_domain(request: Request) -> dict:
     request.state.tenant.require_permission("write")
     body = await request.json()
-    result = await domain_reg.register(body, request.state.tenant_id)
+    result = await domain_reg.for_tenant(request.state.tenant_id).register(body, request.state.tenant_id)
     return {"status": "registered", "data": result}
 
 
 @router.get("/domains/{domain}")
 async def get_domain(request: Request, domain: str) -> dict:
-    result = await domain_reg.get_by_domain(domain)
+    request.state.tenant.require_permission("read")
+    result = await domain_reg.for_tenant(request.state.tenant_id).get_by_domain(domain)
     if not result:
         return {"error": "Domain not found", "domain": domain}
     return {"domain": result}
@@ -262,7 +271,7 @@ async def get_domain(request: Request, domain: str) -> dict:
 async def register_governance_space(request: Request) -> dict:
     request.state.tenant.require_permission("write")
     body = await request.json()
-    result = await governance_reg.register(body, request.state.tenant_id)
+    result = await governance_reg.for_tenant(request.state.tenant_id).register(body, request.state.tenant_id)
     return {"status": "registered", "space_id": body.get("space_id"), "data": result}
 
 
@@ -272,10 +281,11 @@ async def list_governance_spaces(
     protocol_id: str = Query(""),
     limit: int = Query(50, ge=1, le=200),
 ) -> dict:
+    request.state.tenant.require_permission("read")
     if protocol_id:
-        spaces = await governance_reg.list_by_protocol(protocol_id, limit)
+        spaces = await governance_reg.for_tenant(request.state.tenant_id).list_by_protocol(protocol_id, limit)
     else:
-        spaces = await governance_reg.find_many(limit=limit)
+        spaces = await governance_reg.for_tenant(request.state.tenant_id).find_many(limit=limit)
     return {"spaces": spaces, "count": len(spaces)}
 
 
@@ -291,7 +301,7 @@ async def classify_contract_endpoint(request: Request) -> dict:
     address = body.get("address", "")
     if not chain_id or not address:
         return {"error": "chain_id and address required"}
-    result = await classify_contract(chain_id, address, contract_instance_reg, protocol_reg)
+    result = await classify_contract(chain_id, address, contract_instance_reg.for_tenant(request.state.tenant_id), protocol_reg.for_tenant(request.state.tenant_id))
     return {"classification": result}
 
 
@@ -311,7 +321,7 @@ async def classify_domain_endpoint(request: Request) -> dict:
     domain = body.get("domain", "")
     if not domain:
         return {"error": "domain required"}
-    result = await attribute_domain(domain, domain_reg, app_reg)
+    result = await attribute_domain(domain, domain_reg.for_tenant(request.state.tenant_id), app_reg.for_tenant(request.state.tenant_id))
     return {"attribution": result}
 
 
@@ -332,7 +342,8 @@ async def classify_observation_endpoint(request: Request) -> dict:
     chain_id = body.get("chain_id", "")
     if contract_address and chain_id:
         classification = await classify_contract(
-            chain_id, contract_address, contract_instance_reg, protocol_reg,
+            chain_id, contract_address,
+            contract_instance_reg.for_tenant(request.state.tenant_id), protocol_reg.for_tenant(request.state.tenant_id),
         )
         if not body.get("protocol_id"):
             body["protocol_id"] = classification.get("protocol_id", "")
@@ -340,12 +351,12 @@ async def classify_observation_endpoint(request: Request) -> dict:
     # Classify domain if present
     domain = body.get("domain", "")
     if domain:
-        attribution = await attribute_domain(domain, domain_reg, app_reg)
+        attribution = await attribute_domain(domain, domain_reg.for_tenant(request.state.tenant_id), app_reg.for_tenant(request.state.tenant_id))
         if not body.get("app_id"):
             body["app_id"] = attribution.get("app_id", "")
 
     # Store observation
-    await observation_repo.record(body, request.state.tenant_id)
+    await observation_repo.for_tenant(request.state.tenant_id).record(body, request.state.tenant_id)
 
     result: dict[str, Any] = {"observation": body, "classified": True}
 
@@ -354,7 +365,9 @@ async def classify_observation_endpoint(request: Request) -> dict:
         from shared.graph.graph import GraphClient
         graph = GraphClient()
         graph_result = await build_graph_from_observation(
-            body, graph, contract_instance_reg, protocol_reg, domain_reg, app_reg,
+            body, graph,
+            contract_instance_reg.for_tenant(request.state.tenant_id), protocol_reg.for_tenant(request.state.tenant_id),
+            domain_reg.for_tenant(request.state.tenant_id), app_reg.for_tenant(request.state.tenant_id),
             tenant_id=request.state.tenant_id,
         )
         result["graph"] = graph_result
@@ -405,16 +418,18 @@ async def ingest_observations_batch(request: Request) -> dict:
         contract_addr = obs.get("contract_address", "") or obs.get("to_address", "")
         cid = obs.get("chain_id", "")
         if contract_addr and cid:
-            c = await classify_contract(cid, contract_addr, contract_instance_reg, protocol_reg)
+            c = await classify_contract(cid, contract_addr, contract_instance_reg.for_tenant(request.state.tenant_id), protocol_reg.for_tenant(request.state.tenant_id))
             if not obs.get("protocol_id"):
                 obs["protocol_id"] = c.get("protocol_id", "")
 
-        await observation_repo.record(obs, request.state.tenant_id)
+        await observation_repo.for_tenant(request.state.tenant_id).record(obs, request.state.tenant_id)
         classified += 1
 
         if graph:
             await build_graph_from_observation(
-                obs, graph, contract_instance_reg, protocol_reg, domain_reg, app_reg,
+                obs, graph,
+                contract_instance_reg.for_tenant(request.state.tenant_id), protocol_reg.for_tenant(request.state.tenant_id),
+                domain_reg.for_tenant(request.state.tenant_id), app_reg.for_tenant(request.state.tenant_id),
                 tenant_id=request.state.tenant_id,
             )
             graphed += 1
@@ -438,7 +453,7 @@ async def ingest_observations_batch(request: Request) -> dict:
 async def record_migration(request: Request) -> dict:
     request.state.tenant.require_permission("write")
     body = await request.json()
-    result = await migration_reg.record_migration(body, request.state.tenant_id)
+    result = await migration_reg.for_tenant(request.state.tenant_id).record_migration(body, request.state.tenant_id)
     return {"status": "recorded", "data": result}
 
 
@@ -448,7 +463,8 @@ async def list_migrations(
     protocol_id: str,
     limit: int = Query(50, ge=1, le=200),
 ) -> dict:
-    migrations = await migration_reg.list_by_protocol(protocol_id, limit)
+    request.state.tenant.require_permission("read")
+    migrations = await migration_reg.for_tenant(request.state.tenant_id).list_by_protocol(protocol_id, limit)
     return {"protocol_id": protocol_id, "migrations": migrations, "count": len(migrations)}
 
 
@@ -466,11 +482,11 @@ async def detect_migration_endpoint(request: Request) -> dict:
     graph = GraphClient()
     result = await detect_migration(
         protocol_id, address, chain_id,
-        contract_instance_reg, protocol_reg, graph,
+        contract_instance_reg.for_tenant(request.state.tenant_id), protocol_reg.for_tenant(request.state.tenant_id), graph,
         tenant_id=request.state.tenant_id,
     )
     if result:
-        await migration_reg.record_migration(result, request.state.tenant_id)
+        await migration_reg.for_tenant(request.state.tenant_id).record_migration(result, request.state.tenant_id)
         return {"migration_detected": True, "migration": result}
     return {"migration_detected": False}
 
@@ -483,18 +499,19 @@ async def detect_migration_endpoint(request: Request) -> dict:
 @router.get("/coverage/status")
 async def get_coverage_status(request: Request) -> dict:
     """Aggregated coverage status across all registries."""
-    chains = await chain_reg.list_active(1000)
-    protocols = await protocol_reg.find_many(limit=5000)
-    systems = await contract_system_reg.find_many(limit=5000)
-    instances = await contract_instance_reg.find_many(limit=10000)
-    tokens = await token_reg.find_many(limit=5000)
-    apps = await app_reg.find_many(limit=2000)
-    domains = await domain_reg.find_many(limit=5000)
-    gov_spaces = await governance_reg.find_many(limit=1000)
-    venues = await venue_reg.find_many(limit=500)
-    bridges = await bridge_reg.find_many(limit=500)
-    deployers = await deployer_reg.find_many(limit=2000)
-    migrations = await migration_reg.find_many(limit=1000)
+    request.state.tenant.require_permission("read")
+    chains = await chain_reg.for_tenant(request.state.tenant_id).list_active(1000)
+    protocols = await protocol_reg.for_tenant(request.state.tenant_id).find_many(limit=5000)
+    systems = await contract_system_reg.for_tenant(request.state.tenant_id).find_many(limit=5000)
+    instances = await contract_instance_reg.for_tenant(request.state.tenant_id).find_many(limit=10000)
+    tokens = await token_reg.for_tenant(request.state.tenant_id).find_many(limit=5000)
+    apps = await app_reg.for_tenant(request.state.tenant_id).find_many(limit=2000)
+    domains = await domain_reg.for_tenant(request.state.tenant_id).find_many(limit=5000)
+    gov_spaces = await governance_reg.for_tenant(request.state.tenant_id).find_many(limit=1000)
+    venues = await venue_reg.for_tenant(request.state.tenant_id).find_many(limit=500)
+    bridges = await bridge_reg.for_tenant(request.state.tenant_id).find_many(limit=500)
+    deployers = await deployer_reg.for_tenant(request.state.tenant_id).find_many(limit=2000)
+    migrations = await migration_reg.for_tenant(request.state.tenant_id).find_many(limit=1000)
 
     # Compute completeness distribution
     completeness_dist: dict[str, int] = {}
@@ -525,8 +542,9 @@ async def get_coverage_status(request: Request) -> dict:
 @router.get("/coverage/health")
 async def coverage_health(request: Request) -> dict:
     """Quick health check for the web3 coverage system."""
-    chain_count = len(await chain_reg.list_active(1000))
-    protocol_count = len(await protocol_reg.find_many(limit=5000))
+    request.state.tenant.require_permission("read")
+    chain_count = len(await chain_reg.for_tenant(request.state.tenant_id).list_active(1000))
+    protocol_count = len(await protocol_reg.for_tenant(request.state.tenant_id).find_many(limit=5000))
     return {
         "status": "healthy" if chain_count > 0 else "unseeded",
         "chains": chain_count,

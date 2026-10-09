@@ -31,7 +31,6 @@ Three substantial modules in this subsystem were already written, already tested
 | Module | Size | Only importer before this work |
 |---|---|---|
 | `services/backend/services/agentic_observability/provider_framework.py` | 386 lines | `tests/unit/test_agentic_provider_framework.py` |
-| `services/backend/services/agentic_observability/governance.py` | — | nothing |
 | `services/backend/services/noesis/adapters/agentic_intelligence_adapter.py` | — | `tests/unit/test_agentic_noesis_adapter.py` |
 
 This is PR 1's original sin — a fully-built pipeline whose entry point is never called —

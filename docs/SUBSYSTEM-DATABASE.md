@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
   "services/backend/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
-  "services/backend/repositories/repos.py": "sha256:17d4283f64dd84fdc4f26b1e73b7e1d8d7678a77b7fc3f1a318139c94c068235"
+  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -204,6 +204,16 @@ table and caches it. Writes and filters are then bound to the migrated types:
   `consent.erasure` completeness planes use it for the identity, Profile 360,
   Gold feature, connector and replay stores
   (`docs/privacy/dsr-erasure-coverage.md`).
+
+- **Tenant-owned repositories:** `TenantOwnedRepository` (a `BaseRepository`
+  subclass) is for registries whose ids come from the caller, such as the Web3
+  and cross-domain registries. `upsert(record_id, data, tenant_id)` stamps the
+  row with the tenant, merges into that tenant's own row (keeping `created_at`),
+  and raises `ConflictError` rather than overwrite a row another tenant owns.
+  Reads only work on a view bound with `for_tenant(tenant_id)`; an unbound
+  instance raises. A repository may list `_shared_tenants` (the platform `system`
+  tenant for seeded reference data such as chains and protocols), whose rows
+  every tenant can read but none can overwrite.
 
 ## Data Lake Repositories
 

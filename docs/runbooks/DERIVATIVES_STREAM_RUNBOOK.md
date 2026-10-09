@@ -11,7 +11,7 @@ source_files:
   - services/backend/services/derivatives/admin_routes.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/derivatives/admin_routes.py": "sha256:ed8ee4ff62c31207a1313cbf7c3ad9381a0377d28d1200ee3377302dac6b495e"
+  "services/backend/services/derivatives/admin_routes.py": "sha256:cf4e6c5ff4cb8dc919c7b323cf5c00cf20dc8b03bb6238529d3efc9fe15a1239"
   "services/backend/services/derivatives/connectors/stream.py": "sha256:52d32498c813fa09a0758ee4a7ecdc5dbd46a66593b68a808f76aa225aa59846"
 ---
 
@@ -26,7 +26,9 @@ detection/recovery, reconnect). For projection-vs-snapshot variance triage see
 
 The four venue adapters (Hyperliquid, dYdX, GMX, Drift) are `CREDENTIAL_WAITING`
 and the stream currently runs on the local transport — Kafka topics are not
-provisioned, so there are zero `PARTNER_LIVE` venues.
+provisioned, so there are zero `PARTNER_LIVE` venues. Before provisioning,
+`GET /v1/admin/kyber/derivatives/runtime/topic-contract` validates the declared
+topic contract (naming, sizing, DLQ, consumer ownership) without a broker.
 
 ## Stream gap detected (`derivatives_stream_gap_detected`)
 

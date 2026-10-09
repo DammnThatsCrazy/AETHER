@@ -365,3 +365,87 @@ def test_query_suggestions_returns_list_and_count():
     results, total = _run(svc.query_suggestions(query, tenant))
     assert len(results) == 2
     assert total == 2
+
+
+# ---------------------------------------------------------------------------
+# approve → delivery hand-off, execute → dispatcher, outcome → closed loop
+# ---------------------------------------------------------------------------
+
+def _notification_record(**over) -> dict:
+    record = _make_suggestion_record(status="review_required", delivery_eligible=True)
+    record["source"] = SuggestionSource.NOTIFICATION_INTELLIGENCE.value
+    record.update(over)
+    return record
+
+
+def test_approving_a_notification_suggestion_hands_it_to_the_delivery_pipeline():
+    record = _notification_record()
+    approved = {**record, "status": "approved"}
+    repo = MagicMock()
+    repo.get_or_fail = AsyncMock(return_value=record)
+    svc = _make_service(repo=repo)
+
+    dispatch = AsyncMock(return_value=approved)
+    with patch("services.suggestions.service.apply_transition", AsyncMock(return_value=approved)):
+        with patch("services.suggestions.service.emit_suggestion_event", AsyncMock()):
+            with patch("services.suggestions.service.dispatch", dispatch):
+                _run(svc.approve_suggestion(record["id"], SuggestionActionRequest(), _make_tenant()))
+
+    dispatch.assert_awaited_once()
+    assert dispatch.await_args.kwargs["execution_enabled"] is False  # approval never executes
+
+
+def test_a_failed_delivery_hand_off_does_not_undo_the_approval():
+    record = _notification_record()
+    approved = {**record, "status": "approved"}
+    repo = MagicMock()
+    repo.get_or_fail = AsyncMock(return_value=record)
+    svc = _make_service(repo=repo)
+
+    with patch("services.suggestions.service.apply_transition", AsyncMock(return_value=approved)):
+        with patch("services.suggestions.service.emit_suggestion_event", AsyncMock()):
+            with patch("services.suggestions.service.dispatch", AsyncMock(side_effect=RuntimeError("queue down"))):
+                result = _run(svc.approve_suggestion(record["id"], SuggestionActionRequest(), _make_tenant()))
+    assert result["status"] == "approved"
+
+
+def test_approving_a_non_notification_suggestion_does_not_dispatch():
+    record = _make_suggestion_record(status="review_required")  # RULE source, no delivery mode
+    approved = {**record, "status": "approved"}
+    repo = MagicMock()
+    repo.get_or_fail = AsyncMock(return_value=record)
+    svc = _make_service(repo=repo)
+
+    dispatch = AsyncMock()
+    with patch("services.suggestions.service.apply_transition", AsyncMock(return_value=approved)):
+        with patch("services.suggestions.service.emit_suggestion_event", AsyncMock()):
+            with patch("services.suggestions.service.dispatch", dispatch):
+                _run(svc.approve_suggestion(record["id"], SuggestionActionRequest(), _make_tenant()))
+    dispatch.assert_not_awaited()
+
+
+def test_executing_a_recommendation_suggestion_goes_through_the_dispatcher():
+    record = _make_suggestion_record(status="approved", execution_eligible=True)
+    record["source"] = SuggestionSource.RECOMMENDATION_ENGINE.value
+    executed = {**record, "status": "executed"}
+    repo = MagicMock()
+    repo.get_or_fail = AsyncMock(return_value=record)
+    svc = _make_service(repo=repo)
+
+    dispatch = AsyncMock(return_value=executed)
+    with patch("services.suggestions.service.dispatch", dispatch):
+        result = _run(svc.execute_suggestion(record["id"], SuggestionActionRequest(), _make_tenant(), execution_enabled=True))
+    assert result["status"] == "executed"
+    assert dispatch.await_args.kwargs["execution_enabled"] is True
+
+
+def test_record_outcome_runs_the_outcome_loop():
+    svc = _make_service()
+    closed = {"id": "s1", "status": "closed"}
+    loop = AsyncMock(return_value=closed)
+    with patch("services.suggestions.service.record_and_close", loop):
+        from services.suggestions.models import SuggestionOutcomeRequest
+        body = SuggestionOutcomeRequest(status="helpful", measured_impact={"x": 1})
+        result = _run(svc.record_outcome("s1", body, _make_tenant()))
+    assert result is closed
+    loop.assert_awaited_once()

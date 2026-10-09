@@ -24,17 +24,19 @@
       },
       "repository_ceiling": {
         "type": "VERIFIED",
-        "achieved": true,
+        "achieved": false,
         "remaining_after_ceiling": [
-          "None \u2014 repository-controlled work complete"
+          "Wire the x402 and agent lifecycle mappers to an event consumer (a graph-writer ConsumerSpec on the validated SDK event topic) and decide its overlap with the AgentExecutionProjector Silver path."
         ],
-        "remaining_is_repository_controlled": false
+        "remaining_is_repository_controlled": true
       },
       "implementation": {
-        "state": "VERIFIED",
-        "completion_percent": 100.0,
+        "state": "IMPLEMENTED",
+        "completion_percent": 80.0,
         "denominator": "in-scope repository controls (migration-derived)",
-        "remaining_work": []
+        "remaining_work": [
+          "wire the x402 and agent lifecycle mappers to an event consumer"
+        ]
       },
       "productionization": {
         "completion_percent": 100.0,
@@ -103,23 +105,31 @@
       "release_profiles": {
         "local": {
           "participation": "required",
-          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
-          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
           "implementation_floor": "VERIFIED",
           "environment_gate": "local",
           "environment_state": "VERIFIED",
-          "hard_blockers": [],
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: wire the x402 and agent lifecycle mappers to an event consumer"
+          ],
           "external_blockers": [],
           "warnings": []
         },
         "staging": {
           "participation": "experimental",
-          "disposition": "READY_TO_VALIDATE",
-          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
           "implementation_floor": "VERIFIED",
           "environment_gate": "staging",
           "environment_state": "NOT_ATTEMPTED",
-          "hard_blockers": [],
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: wire the x402 and agent lifecycle mappers to an event consumer"
+          ],
           "external_blockers": [],
           "warnings": []
         },
@@ -131,7 +141,9 @@
           "environment_gate": "pilot",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "implementation state VERIFIED is below the TURNKEY floor"
+            "implementation state IMPLEMENTED is below the TURNKEY floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: wire the x402 and agent lifecycle mappers to an event consumer"
           ],
           "external_blockers": [],
           "warnings": []

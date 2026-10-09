@@ -139,6 +139,10 @@ def aggregate_data_quality_from_rows(
     for row in variances:
         vtype = str(row.get("variance_type", ""))
         counter = VARIANCE_TYPE_TO_COUNTER.get(vtype)
+        if counter is None and vtype.endswith("_mismatch"):
+            # Per-field venue-position disagreements written by the materializer
+            # (size_mismatch, realized_pnl_mismatch, ...).
+            counter = "snapshot_delta_mismatches"
         if counter is not None:
             by_type[counter] = by_type.get(counter, 0) + 1
 

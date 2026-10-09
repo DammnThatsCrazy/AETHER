@@ -137,3 +137,53 @@ async def test_kyber_routes_require_platform_admin_and_record_operator_action():
     non_operator = FakeTenant("operator", permissions={"derivatives:connector:admin"})
     with pytest.raises(ForbiddenError):
         await kyber_derivatives_operator_action(body, request(non_operator))
+
+
+@pytest.mark.anyio
+async def test_kyber_quality_routes_report_counters_computed_from_durable_state():
+    from repositories.derivatives_repos import ReconciliationVarianceRepo, TradingAccountRepo
+    from services.derivatives.routes import (
+        kyber_derivatives_data_quality,
+        kyber_derivatives_fleet,
+        kyber_derivatives_graph_quality,
+    )
+
+    await TradingAccountRepo().insert({
+        "tenant_id": "tenant-q", "trading_account_id": "acct-q", "venue_id": "hyperliquid",
+        "venue_deployment_id": "mainnet", "idempotency_key": "tenant-q|acct-q",
+        "execution_by_aether": False,
+    })
+    await ReconciliationVarianceRepo().insert({
+        "tenant_id": "tenant-q", "variance_id": "v-q", "trading_account_id": "acct-q",
+        "variance_type": "size_mismatch", "idempotency_key": "tenant-q|v-q",
+        "execution_by_aether": False,
+    })
+    operator = FakeTenant("operator", permissions={"kyber:operator", "derivatives:connector:admin"})
+
+    fleet = (await kyber_derivatives_fleet(request(operator)))["data"]
+    assert fleet["account_count"] >= 1 and "sources" in fleet
+
+    quality = (await kyber_derivatives_data_quality(request(operator)))["data"]
+    assert quality["snapshot_delta_mismatches"] >= 1  # a materializer size_mismatch counts
+    assert "snapshot_delta_mismatches" in quality["sources"]
+
+    graph = (await kyber_derivatives_graph_quality(request(operator)))["data"]
+    assert "sources" in graph or "projection_lag_seconds" in graph
+
+    with pytest.raises(ForbiddenError):
+        await kyber_derivatives_fleet(request(FakeTenant("operator", permissions={"derivatives:connector:admin"})))
+
+
+@pytest.mark.anyio
+async def test_topic_contract_report_is_operator_gated_and_valid(monkeypatch):
+    from types import SimpleNamespace
+
+    from config.settings import settings
+    from services.derivatives.admin_routes import topic_contract_report
+
+    monkeypatch.setattr(settings, "derivatives", SimpleNamespace(kyber_enabled=True))
+    operator = FakeTenant("operator", permissions={"kyber:operator", "derivatives:operator"})
+    report = await topic_contract_report(request(operator))
+    assert report["passed"] is True and report["broker_required"] is False
+    with pytest.raises(ForbiddenError):
+        await topic_contract_report(request(FakeTenant("tenant-a", permissions={"derivatives:operator"})))

@@ -23,7 +23,7 @@ source_hashes:
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:1a4fae607b1eccdee38ec5bac42ebbcd57d28cb9ef0dfabe3d7a70bdbfcae91d"
   "services/backend/services/web3/classifier.py": "sha256:ab4186e37c2e058401d4303559ca66db49659f93d60389729933777c6fca6061"
-  "services/backend/services/web3/routes.py": "sha256:818ec858dbbd737e96377ecb110ed3564e1f55b52b934c666b368a2135ffc9d9"
+  "services/backend/services/web3/routes.py": "sha256:49be15a983fe82d9c65b4bd3b471d0a0a9e15a012dc8abfc1d8f2a521830df2e"
   "services/backend/shared/graph/": "sha256:22bbcaa36938dcdd34a7a33159d312ca4d21aaf4752e799238089f34092a0cd3"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
@@ -93,6 +93,10 @@ Web3 observations provide another graph-building path: `POST
 and the route requires the authenticated tenant's `write` permission before
 recording the observation or building graph state. The batch observation and
 migration detection write routes enforce the same permission.
+The Web3 and cross-domain registries are tenant-owned: a registration or
+classification is stored for the calling tenant, reads return that tenant's rows
+(plus the platform-seeded chain, protocol, app, token, venue and governance
+reference data), and a second tenant cannot overwrite an id the first one owns.
 `services/backend/services/web3/classifier.py` sends its vertex and edge
 intents through `GraphMutationGateway.apply`. When `tx_hash` is present, its
 source event key is chain ID plus transaction hash. `Web3Observation` has no

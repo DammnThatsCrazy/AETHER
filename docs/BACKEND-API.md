@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:cf93bf4a5c3abbd01c9cf35f105cacf25f2b19c6bcad7f92102034d270aa5658"
+  "services/backend/services/": "sha256:b9b914b9ded361808e3c9d1db427cf5b15ac7a2334f58975fa2528aff6957c1f"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1345,6 +1345,7 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | GET | `/v1/diagnostics/commerce/approval-expirations` | Approval requests expired without a decision (`commerce:read`) |
 | GET | `/v1/diagnostics/commerce/duplicate-payments` | Potential duplicate payment attempts within a time window (`commerce:read`) |
 | GET | `/v1/diagnostics/commerce/reconciliation-drift` | Payment intents with no corresponding settlement event (`commerce:read`) |
+| GET | `/v1/diagnostics/commerce/reconciliation` | Read-only reconciliation of the tenant's commerce state against Silver and the graph: rebuild counts, graph consistency and drift (`x402:read`) |
 
 All general diagnostics endpoints require `admin` permission. Commerce diagnostics require `commerce:read`.
 
@@ -2984,7 +2985,7 @@ Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery w
 
 ### Feature flags and tenant boundary
 
-Agentic observability routers are mounted only when `AGENTIC_OBSERVABILITY_ENABLED=true` (default true for local compatibility). Subsystems are separately controlled by `AGENTIC_MCP_OBSERVABILITY_ENABLED`, `AGENTIC_EXTERNAL_ACCOUNTS_ENABLED`, `AGENTIC_PROVIDER_VERIFICATION_ENABLED`, `AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED`, `AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED`, and `KYBER_AGENTIC_OBSERVABILITY_ENABLED`. Authenticated tenant context is authoritative: request-body `tenant_id`/`tenantId` may not override it, and mismatches return HTTP 403.
+Agentic observability routers are mounted only when `AGENTIC_OBSERVABILITY_ENABLED=true` (default true for local compatibility). Subsystems are separately controlled by `AGENTIC_MCP_OBSERVABILITY_ENABLED`, `AGENTIC_EXTERNAL_ACCOUNTS_ENABLED`, `AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED`, and `AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED`. Authenticated tenant context is authoritative: request-body `tenant_id`/`tenantId` may not override it, and mismatches return HTTP 403.
 
 Graph projection is currently best-effort until the durable outbox ships. Responses distinguish mutations built from mutations actually persisted; `graph_mutations_queued` is retained for compatibility and equals the persisted count, not a fake queued count.
 
@@ -3857,8 +3858,11 @@ request/response content; trace summaries carry routing-decision fields only.
 
 **Backing stores.** The registry is the generated model catalog
 (`shared/model_governance/generated_model_registry.py`). Health is probed by
-`RuntimeHealthProbe` over a deterministic seed provider set — all
-network-backed registry providers report unconfigured (fail-closed). Usage and
+`RuntimeHealthProbe` over the real provider set (anthropic, openai, kimi,
+deepseek, qwen, openai_compatible, plus the local deterministic provider). A
+provider without credentials reports `waiting on credentials: set <variables>`
+(fail-closed; it never serves) and turns on when the variables are supplied.
+Usage and
 traces are deterministic, clearly-marked seed data (all-zero usage); a real
 metering/trace store plugs in later. The tenant default model is a
 non-durable in-memory seed.
@@ -4261,3 +4265,16 @@ enforcement is on.
 | GET | `/v1/admin/kyber/managed-integrations/change-sets/{changeset_id}` | One ChangeSet detail | Status history, risk, approvals evidence |
 | GET | `/v1/admin/kyber/managed-integrations/approvals` | Approval records | §21 role-gated review queue |
 | GET | `/v1/admin/kyber/managed-integrations/action-required` | ActionRequired items | §12.14 exceptions awaiting an operator decision |
+
+## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
+
+| Method | Path | Permission | Summary |
+|---|---|---|---|
+| GET | `/v1/recommendations/{entity_id}` | `read` | Retarget recommendations for an entity, highest score first |
+| GET | `/v1/recommendations/{id}/status` | `read` | Review and execution status of one recommendation |
+| POST | `/v1/recommendations/{id}/approve` | `write` | Approve and push the audience to the recommended ad platform. The reviewer recorded is the authenticated caller; a `reviewed_by` in the body is ignored. A failed push returns `502` and puts the recommendation back in `pending_review` |
+| POST | `/v1/recommendations/{id}/reject` | `write` | Reject with a reason (final); reviewer is the authenticated caller |
+| POST | `/v1/stablecoins/reconciliation` | `stablecoins:investigate` | Compare independently sourced amounts (`tenant_reported`, `onchain`, `provider`…) for one of the tenant's observations. Appends a record to the reconciliation trail (`matched`, `partial`, `mismatched`, `missing_onchain`, `unresolved`) and never changes the observation. `404` for an observation the tenant does not own |
+| GET | `/v1/kyber/aggregate/fleet` | Kyber operator | Cross-tenant operator snapshot: worker fleet health, credential slot states (no secrets), provider cursor and reconciliation roll-up, activation and readiness roll-ups, credential-audit count. Each roll-up reports `truncated` when it hit its row limit; a source with no signal reports `null`, never a fabricated zero |
+
+Approving a delivery-eligible suggestion from a notification source hands it to the delivery pipeline; recording a suggestion outcome runs the outcome loop to `closed` (see the suggestion intelligence source of truth).

@@ -25,7 +25,7 @@ generator would still pass individually.
 `scripts/validate_contracts.py` reads the generated artifacts under
 `docs/_generated/` (`events.json`, `consent.json` — produced by
 `scripts/docs_extract/run_all.py`, which CI runs immediately before this
-validator) and runs seven checks:
+validator) and runs eight checks:
 
 1. **`check_event_consent_purposes`** — every event's `consent_purpose` must
    exist in the canonical `ConsentPurpose` set.
@@ -46,6 +46,12 @@ validator) and runs seven checks:
    `scripts/validate_identity_security.py` for suppress-endpoint, mutating
    -endpoint-write-scope, raw-hash-in-alias-response, and tenant-scoping
    checks.
+8. **`check_graph_contracts`** — the relationship-layer contract
+   (`shared.graph.graph_contract.validate_contract`: every canonical layer has
+   edges and vertex types, every `EdgeType` is mapped to a layer) and the
+   economic vertex/edge schemas (`shared.graph.economic_schema`: every declared
+   vertex is a `VertexType`, every edge an `EdgeType`, every edge endpoint a
+   `VertexType` or the documented `Tenant` scope root).
 
 Exit code `0` means all checks pass; `1` means either an inconsistency was
 found or a required generated artifact (`events.json`/`consent.json`) is

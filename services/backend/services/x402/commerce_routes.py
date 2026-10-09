@@ -672,3 +672,13 @@ async def stuck_approvals(request: Request):
     count = await service.sweep_expired(tid)
     expired = await service.list_queue(tid, status=ApprovalStatus.EXPIRED)
     return APIResponse(data={"swept": count, "expired": [a.model_dump() for a in expired]}).to_dict()
+
+
+@diagnostics_router.get("/reconciliation")
+async def commerce_reconciliation(request: Request):
+    """Read-only reconciliation of the tenant's commerce state against Silver and the graph."""
+    _require_perm(request, "x402:read")
+    from services.commerce.reconciliation import get_commerce_reconciler
+
+    report = await get_commerce_reconciler().reconcile_commerce(_tenant_id(request))
+    return APIResponse(data=report).to_dict()

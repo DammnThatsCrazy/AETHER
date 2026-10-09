@@ -36,7 +36,16 @@ class DerivativesReconciliation:
         trading_account_id: str,
         venue_snapshot: dict[str, Any],
         projected: dict[str, Any],
+        *,
+        scope: Optional[str] = None,
     ) -> dict[str, Any]:
+        """Compare a venue snapshot with the projection for one account.
+
+        ``scope`` narrows the comparison (e.g. one market). When given, the variance
+        identity is derived from the compared values instead of the run time, so a
+        variance that persists across passes is recorded once and a changed one is
+        recorded again; without it each run records its own variances.
+        """
         emitted: list[dict] = []
         variances: list[dict] = []
         run_at = utc_now_iso()
@@ -54,19 +63,26 @@ class DerivativesReconciliation:
                 if abs(difference) <= TOLERANCE:
                     continue
                 severity = "high" if abs(difference) > abs(expected or Decimal(1)) * Decimal("0.01") else "low"
+                if field == "size" and expected == 0:
+                    # The projection says flat but the venue still reports a position.
+                    severity = "critical"
 
-            basis = f"{trading_account_id}|{field}|{run_at}"
+            if scope is None:
+                basis = f"{trading_account_id}|{field}|{run_at}"
+            else:
+                basis = f"{trading_account_id}|{scope}|{field}|{expected}|{observed}"
             record = {
                 "tenant_id": tenant_id,
                 "reconciliation_variance_id": deterministic_id("dvvar_", basis),
-                "variance_type": f"account_{field}",
+                "variance_type": f"account_{field}" if scope is None else f"{field}_mismatch",
                 "expected_value": expected,
                 "observed_value": observed,
                 "difference": difference,
                 "severity": severity,
                 "status": "variance_detected",
-                "idempotency_key": deterministic_idempotency_key(basis),
+                "idempotency_key": deterministic_idempotency_key(f"{tenant_id}|{basis}"),
                 "execution_by_aether": False,
+                "source_refs": [ref for ref in (trading_account_id, scope) if ref],
             }
             await self.variances.insert(record)
             variances.append(record)
@@ -74,6 +90,7 @@ class DerivativesReconciliation:
                 "derivatives_reconciliation_variance_detected", tenant_id, {
                     "reconciliation_variance_id": record["reconciliation_variance_id"],
                     "trading_account_id": trading_account_id,
+                    "scope": scope,
                     "variance_type": record["variance_type"],
                     "difference": str(difference) if difference is not None else None,
                     "severity": severity,
@@ -83,6 +100,7 @@ class DerivativesReconciliation:
         emitted.insert(0, make_event(
             "derivatives_reconciliation_run_completed", tenant_id, {
                 "trading_account_id": trading_account_id,
+                "scope": scope,
                 "fields_compared": list(_COMPARED_FIELDS),
                 "variance_count": len(variances),
             },

@@ -8,11 +8,11 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/backend/services/derivatives/admin_routes.py
-  - services/backend/services/derivatives/reconciliation.py
+  - services/backend/services/derivatives/materializer.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/derivatives/admin_routes.py": "sha256:ed8ee4ff62c31207a1313cbf7c3ad9381a0377d28d1200ee3377302dac6b495e"
-  "services/backend/services/derivatives/reconciliation.py": "sha256:0d45163a8bb7eb7c2bc62d35740648dc54216bfb25d888b1314de7d824a75daa"
+  "services/backend/services/derivatives/admin_routes.py": "sha256:cf4e6c5ff4cb8dc919c7b323cf5c00cf20dc8b03bb6238529d3efc9fe15a1239"
+  "services/backend/services/derivatives/materializer.py": "sha256:0d0b8557750c66fefc45e40c068bc99ca5868bd4349ec1e17d3483b53e086532"
 ---
 
 # Derivatives Reconciliation Runbook
@@ -28,12 +28,20 @@ The fleet and conformance endpoints surface the real read-only venue adapters
 
 ## Variance alert (`aether.derivatives.reconciliation.variance`, P2)
 
-1. Open the variances list; note `variance_type` (account_size,
-   account_realized_pnl, …), expected vs observed, severity.
+1. Open the variances list; note `variance_type` (`size_mismatch`,
+   `realized_pnl_mismatch`, … from the position materializer, or `account_*`
+   from account-level snapshots), expected vs observed, severity.
 2. Check stream gaps first — an open gap on the account's markets is
    the most common cause (missed fills → stale projection).
 3. If a gap explains it: trigger backfill for the gap window, wait for
-   recovery, re-run reconciliation; the variance should not reappear.
+   recovery, then confirm the variance list. The
+   `derivatives_position_materializer` worker (needs
+   `AETHER_DERIVATIVES_RUNTIME_ENABLED` plus the reconciliation flag) re-derives
+   each position from stored fills every minute and compares it with the venue's
+   latest reported position; an unchanged disagreement is stored once, so a
+   variance that persists across passes is still open, and one that stops being
+   re-detected has converged. Verify a cleared variance against the venue
+   statement before closing it.
 4. If no gap: run adapter conformance (`POST /conformance/{adapter_id}`).
    A conformance failure is an adapter bug — file it, don't touch data.
 5. Venue-side restatements arrive as corrections (new rows); confirm

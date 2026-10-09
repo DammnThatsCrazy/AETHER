@@ -49,7 +49,7 @@ _NOTIFICATION_SOURCES: frozenset[str] = frozenset({
 })
 
 
-def _resolve_dispatch_mode(suggestion: dict) -> str:
+def resolve_dispatch_mode(suggestion: dict) -> str:
     source = suggestion.get("source", "")
     if source in _RECOMMENDATION_SOURCES and suggestion.get("execution_eligible"):
         return "legacy_recommendation_execute"
@@ -84,7 +84,7 @@ async def dispatch(
             f"Dispatch requires APPROVED status, got {current_status!r}"
         )
 
-    mode = _resolve_dispatch_mode(suggestion)
+    mode = resolve_dispatch_mode(suggestion)
     logger.info(f"Dispatching suggestion {suggestion_id!r} mode={mode!r}")
 
     try:

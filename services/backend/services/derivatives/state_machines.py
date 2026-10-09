@@ -100,6 +100,11 @@ class _BaseStateMachine:
     _RANK: dict[str, int] = {}
 
     @classmethod
+    def rank(cls, status: str) -> int:
+        """Progression rank of ``status`` (unknown statuses rank lowest)."""
+        return cls._RANK.get(status, 0)
+
+    @classmethod
     def is_legal(cls, from_status: str, to_status: str) -> bool:
         return to_status in cls.LEGAL_TRANSITIONS.get(from_status, ())
 

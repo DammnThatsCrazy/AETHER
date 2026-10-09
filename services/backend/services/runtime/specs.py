@@ -313,6 +313,21 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_x402_settlement_reconciliation_worker()
 
+    def _commerce_approval_sweeper() -> Coroutine[Any, Any, None]:
+        from services.commerce.workers import build_approval_sweeper
+
+        return build_approval_sweeper()()
+
+    def _commerce_entitlement_sweeper() -> Coroutine[Any, Any, None]:
+        from services.commerce.workers import build_stale_entitlement_sweeper
+
+        return build_stale_entitlement_sweeper()()
+
+    def _commerce_reconciliation() -> Coroutine[Any, Any, None]:
+        from services.commerce.workers import build_reconciliation_loop
+
+        return build_reconciliation_loop()()
+
     def _reward_reservation_release() -> Coroutine[Any, Any, None]:
         from services.rewards.workers import (
             build_reward_reservation_release_worker,
@@ -357,6 +372,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         from services.derivatives.multi_venue import build_venue_sweep_coro
 
         return build_venue_sweep_coro()
+
+    def _derivatives_position_materializer() -> Coroutine[Any, Any, None]:
+        from services.derivatives.materializer import build_materializer_coro
+
+        return build_materializer_coro()
 
     def _readiness_revalidation() -> Coroutine[Any, Any, None]:
         from services.readiness_graph.revalidation_worker import (
@@ -661,6 +681,32 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
                 settings.intelligence_graph.enable_commerce_control_plane
             ),
         ),
+        # Commerce control-plane sweeps. Approval expiry and stale-entitlement
+        # revocation were only run when someone called the stuck-approvals
+        # diagnostics route; these keep them convergent. The reconciliation loop is
+        # read-only (it logs drift). Gated on the commerce control plane, like the
+        # x402 settlement reconciliation above.
+        WorkerSpec(
+            name="commerce_approval_sweeper",
+            factory=_commerce_approval_sweeper,
+            enabled=lambda: bool(
+                settings.intelligence_graph.enable_commerce_control_plane
+            ),
+        ),
+        WorkerSpec(
+            name="commerce_entitlement_sweeper",
+            factory=_commerce_entitlement_sweeper,
+            enabled=lambda: bool(
+                settings.intelligence_graph.enable_commerce_control_plane
+            ),
+        ),
+        WorkerSpec(
+            name="commerce_reconciliation",
+            factory=_commerce_reconciliation,
+            enabled=lambda: bool(
+                settings.intelligence_graph.enable_commerce_control_plane
+            ),
+        ),
         # Reward budget reservation release: returns stale, never-committed budget
         # reservations to the tenant's available balance so a crashed delivery
         # cannot permanently strand a tenant's reward budget.
@@ -738,6 +784,17 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="derivatives_venue_sweep",
             factory=_derivatives_venue_sweep,
             enabled=lambda: bool(settings.derivatives.reconciliation_enabled),
+        ),
+        # Replays raw fills into closed position epochs, P&L snapshots and
+        # venue-position variances. Observation only; each output is gated by
+        # its own flag inside the pass, the worker runs if either is on.
+        WorkerSpec(
+            name="derivatives_position_materializer",
+            factory=_derivatives_position_materializer,
+            enabled=lambda: bool(
+                settings.derivatives.runtime_enabled
+                and (settings.derivatives.pnl_enabled or settings.derivatives.reconciliation_enabled)
+            ),
         ),
         # Capability-readiness revalidation: re-walks the readiness graph and
         # re-checks capability credentials on a cadence. Gated off by default

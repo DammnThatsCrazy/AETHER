@@ -81,8 +81,7 @@ Rollup inclusion additionally honors `services/backend/services/value/ownership_
 liabilities are never counted as assets; testnet and spam/untrusted assets are
 excluded from trusted production rollups; counterparty/external/observed
 relationships are excluded from an owned portfolio. Cross-source agreement is
-tracked by `services/backend/services/value/reconciliation.py` (`matched` / `conflict` /
-`sdk_only` / `provider_only` / `stale`).
+classified by `reconcile` in `services/backend/shared/computation/reconciliation.py`.
 
 Higher-level rules libraries build on this: `tvl_rules` (gross/net TVL,
 wrapped/LP double-count prevention), `ltv_rules` (historical/predicted/net LTV),

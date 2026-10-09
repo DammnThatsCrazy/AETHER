@@ -357,6 +357,7 @@ from services.data_quality import (
 )
 
 from services.kyber_operator.routes import router as kyber_operator_router
+from services.kyber.aggregate import router as kyber_aggregate_router
 
 # Kyber workforce plane — Olympus operator identity, BYOD device trust, durable
 # sessions and purpose-bound tenant access scopes. Each router carries its own
@@ -883,6 +884,7 @@ def create_app() -> FastAPI:
     app.include_router(intelligence_router)
     app.include_router(kyber_admin_router)
     app.include_router(kyber_operator_router)
+    app.include_router(kyber_aggregate_router)               # /v1/kyber/aggregate/fleet (operator)
     # Kyber workforce plane. Mounted before the remaining operator surfaces so a
     # Kyber session can be established and inspected even when a downstream
     # operator router is disabled by its own feature flag.

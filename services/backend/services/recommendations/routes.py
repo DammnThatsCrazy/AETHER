@@ -2,9 +2,13 @@
 Aether — Retarget Recommendation API Routes
 
 GET  /v1/recommendations/{entity_id}          — list recommendations for entity
-POST /v1/recommendations/{id}/approve         — analyst approval
-POST /v1/recommendations/{id}/reject          — reject with reason
+POST /v1/recommendations/{id}/approve         — analyst approval (write; runs the ad-platform executor)
+POST /v1/recommendations/{id}/reject          — reject with reason (write)
 GET  /v1/recommendations/{id}/status          — execution status
+
+Reads need ``read``; approve and reject change state (approve also pushes an
+audience to an ad platform), so they need ``write``. The reviewer recorded on the
+row is the authenticated caller, never a value the client supplies.
 """
 
 from __future__ import annotations
@@ -33,13 +37,20 @@ def _summary(items: list[dict]) -> dict:
     return {"total": len(items), **counts}
 
 
+def _reviewer(request: Request) -> str:
+    """Who is approving or rejecting: the authenticated principal, not the request body."""
+    tenant = request.state.tenant
+    return tenant.user_id or f"{tenant.credential_class}:{tenant.tenant_id}"
+
+
 class ApproveRequest(BaseModel):
-    reviewed_by: str
+    # Accepted for older clients and ignored: the reviewer is the authenticated caller.
+    reviewed_by: str | None = None
     review_notes: str | None = None
 
 
 class RejectRequest(BaseModel):
-    reviewed_by: str
+    reviewed_by: str | None = None  # ignored, see ApproveRequest
     reason: str
 
 
@@ -51,6 +62,7 @@ async def list_recommendations(
     limit: int = Query(default=20, ge=1, le=100),
 ):
     """List retargeting recommendations for an entity sorted by retarget_score descending."""
+    request.state.tenant.require_permission("read")
     tenant_id = request.state.tenant.tenant_id
     items = await _rec_repo.list_for_entity(entity_id, tenant_id, status=status, limit=limit)
     items.sort(key=lambda r: (r.get("retarget_score", 0), r.get("created_at", "")), reverse=True)
@@ -72,8 +84,9 @@ async def approve_recommendation(
     provider_gateway=Depends(get_provider_gateway),
 ):
     """Analyst approval — triggers ad platform audience sync via RecommendationExecutor."""
+    request.state.tenant.require_permission("write")
     tenant_id = request.state.tenant.tenant_id
-    request.state.tenant.require_permission("read")
+    reviewer = _reviewer(request)
 
     rec = await _rec_repo.get(recommendation_id, tenant_id)
     if rec is None:
@@ -87,7 +100,7 @@ async def approve_recommendation(
     # Mark approved before execution so executor sees correct state
     await _rec_repo.update_status(
         recommendation_id, tenant_id, "approved",
-        reviewed_by=body.reviewed_by,
+        reviewed_by=reviewer,
         review_notes=body.review_notes,
     )
 
@@ -103,7 +116,7 @@ async def approve_recommendation(
         updated = await executor.execute(
             recommendation_id,
             tenant_id,
-            reviewed_by=body.reviewed_by,
+            reviewed_by=reviewer,
             review_notes=body.review_notes,
         )
     except Exception as exc:
@@ -120,8 +133,8 @@ async def reject_recommendation(
     request: Request,
 ):
     """Reject a retargeting recommendation with a reason (final)."""
+    request.state.tenant.require_permission("write")
     tenant_id = request.state.tenant.tenant_id
-    request.state.tenant.require_permission("read")
 
     rec = await _rec_repo.get(recommendation_id, tenant_id)
     if rec is None:
@@ -131,7 +144,7 @@ async def reject_recommendation(
 
     updated = await _rec_repo.update_status(
         recommendation_id, tenant_id, "rejected",
-        reviewed_by=body.reviewed_by,
+        reviewed_by=_reviewer(request),
         review_notes=body.reason,
     )
     return APIResponse(data=updated).to_dict()
@@ -143,6 +156,7 @@ async def get_recommendation_status(
     request: Request,
 ):
     """Get the current execution status of a recommendation."""
+    request.state.tenant.require_permission("read")
     tenant_id = request.state.tenant.tenant_id
     rec = await _rec_repo.get(recommendation_id, tenant_id)
     if rec is None:
