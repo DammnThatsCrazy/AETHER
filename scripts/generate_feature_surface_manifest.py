@@ -49,6 +49,16 @@ NON_SURFACE: dict[str, str] = {
     "/onboarding": "tenant self-setup wizard; no operator equivalent",
     "/activation": "tenant self-serve activation wizard; no operator mirror (same class as /onboarding)",
     "/activate": "tenant self-serve guided activation wizard (WS-3 intent-driven goals-to-plan); same class as /activation and /onboarding",
+    "/identity/activation": (
+        "tenant identity-activation dashboard (setup status for the tenant's own "
+        "identity features); same class as /activation and /onboarding, so no "
+        "operator mirror"
+    ),
+    "/identity/reviews": (
+        "tenant identity review queue: its actions approve or reject merge "
+        "decisions, and operators must not mutate those from a read-only mirror; "
+        "operator review runs through the admin identity review-queue API"
+    ),
     "/me": "the caller's own account; an operator's own account is /v1/kyber/me",
     "/settings": "tenant self-configuration; operators must not mutate it from a mirror",
     "/settings/notifications": "tenant self-configuration",
