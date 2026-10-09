@@ -21,9 +21,9 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:551baf0d25c934b2cdabd521b903791b8843683078c9d469069c1c8f3b974893"
+  "packages/shared/": "sha256:f08901231d004c8af78a82ab9dcc7b23070d5f799ff431c3b8589afbdc929ac1"
   "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
-  "services/backend/main.py": "sha256:24d7fe17de44c99f70ff72b6460176b731b272e050e3fd49b088a81c4d15601b"
+  "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
   "services/backend/services/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
   "services/backend/services/ingestion/replay_routes.py": "sha256:44e6e89117a8cbbebe2cd45bac315e616e87b2cf823e82c5af3f503de44eea56"
