@@ -19,8 +19,8 @@ toc_depth: 3
 reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
-  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:b721e81d75dc265eb5d951f70816e8152d695864546c99db1c4862c58aa483dd"
-  "scripts/allowlists/graph_write_paths.json": "sha256:970e4f623e3f246f47d77bfedb01688e1bd9ce30f016ca62a93233ebd65bf3b2"
+  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:7a663009335564c981e68db1425980f053a6ee76dd63e0d5a6f0b92b9174d070"
+  "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:1a4fae607b1eccdee38ec5bac42ebbcd57d28cb9ef0dfabe3d7a70bdbfcae91d"
   "services/backend/services/web3/classifier.py": "sha256:ab4186e37c2e058401d4303559ca66db49659f93d60389729933777c6fca6061"
   "services/backend/services/web3/routes.py": "sha256:818ec858dbbd737e96377ecb110ed3564e1f55b52b934c666b368a2135ffc9d9"
@@ -36,7 +36,7 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 - **Feature-flagged** — every layer activates independently via environment variables (all default to `false`)
 - **Privacy-aware** — consent-aware identity and tenant-scoped graph erasure are implemented; this page does not assert formal compliance or certification
 - **Graph-native** — 6 new node types, 19 new edge types layered onto the existing Identity Graph
-- **Governed writes** — on-chain action graph writes use `GraphMutationGateway`; legacy identity resolution writes remain direct and are not exposed by the disabled cluster, approval, and batch routes
+- **Governed writes** — active on-chain action graph writes use `GraphMutationGateway`; legacy identity resolution graph mutations are retired and its cluster, approval, and batch routes fail closed
 
 > **Infrastructure:** `GraphClient` auto-selects a backend at `connect()`: Neptune (via gremlinpython) when `NEPTUNE_ENDPOINT` is set; in-memory in `AETHER_ENV=local`; otherwise, in a non-local environment with no Neptune endpoint and `GRAPH_BACKEND=postgres` (the staging / production-lean default), the Postgres backend — `_PostgresGraphBackend` over the `graph_vertices` / `graph_edges` tables, whose observable semantics match the in-memory backend. A non-local environment with no usable backend (no Neptune, and no database pool for the declared Postgres backend) still fails closed with `RuntimeError`.
 
@@ -104,13 +104,14 @@ distinct log within that transaction.
 Gateway use does not mean all graph writes are currently enforced or ledgered.
 In `off` mode the gateway delegates directly to `GraphClient`; `shadow` applies
 the projection and attempts a ledger append; `enforce` runs gateway validation
-and the ledger-backed write path. The graph write-path validator currently
-freezes one remaining direct writer in its allowlist:
-`services/backend/services/resolution/repository.py`. The on-chain action
-recorder now uses the gateway. Identity resolution still contains direct
-legacy graph writes, but the cluster, merge-approval, and batch routes return
-503 while that tenant-unsafe graph surface awaits replacement; the allowlist
-tracks the code-level writer even while these routes are disabled.
+and the ledger-backed write path. The graph write-path validator now reports
+zero direct writers outside its sanctioned gateway internals. The on-chain
+action recorder uses the gateway, and the legacy resolution repository's
+tenantless mutation methods have been retired. Its cluster, merge-approval,
+and batch routes and engine mutation entry points remain unavailable while a
+tenant-safe compatibility path is designed. Zero direct writers does not prove
+that every gateway caller runs in `enforce` mode or that ledger and projection
+writes are atomic.
 
 A second, governed mutation path closes the "Gold is computed but never reaches
 the graph" gap for semantic intelligence: the **semantic graph projector**

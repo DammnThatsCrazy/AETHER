@@ -611,8 +611,11 @@ preserved.
 the process-local run journal is not a durable idempotency boundary. Live
 publishing is now refused unless `AETHER_ENV=local`, `DATABASE_URL` is absent,
 and no database pool is initialized. Local duplicate suppression is keyed by
-tenant, run id, request filters, and dry-run mode; it remains process-local and
-does not prevent a repeat publish after a crash. The reset branch does not
+tenant, run id, request filters, and dry-run mode. A publish error after earlier
+rows were delivered marks the run `partial`; repeating that run ID in the same
+process returns the cached partial result and does not automatically republish
+those rows. The journal remains process-local and does not prevent a repeat
+publish after a crash or process restart. The reset branch does not
 claim hosted replay, durable checkpointing, or exactly-once delivery. A durable
 replay delivery/outbox identity and consumer idempotency boundary remain open
 before hosted replay can be enabled. See the architecture reset proof ledger

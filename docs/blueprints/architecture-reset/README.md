@@ -105,7 +105,7 @@ staging evidence are complete or explicitly dispositioned.
 
 | Inventory | Question it must answer | Status |
 | --- | --- | --- |
-| [Runtime authority](runtime-authority-map.md) | Which current code owns intake, evidence, normalization, identity, graph mutation, replay, intelligence, actions, and recovery? | Mapped; runtime behavior is unchanged in this frame; replay durability and provider cutovers remain pending |
+| [Runtime authority](runtime-authority-map.md) | Which current code owns intake, evidence, normalization, identity, graph mutation, replay, intelligence, actions, and recovery? | Mapped; #734 has scoped lake rollback/audit, guarded local replay, migrated Web3 and on-chain graph writes, and retired the legacy resolution graph writer behind fail-closed entry points. Durable hosted replay, gateway enforcement proof, and provider cutovers remain pending. |
 | [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state assertions are in the frame; a follow-up cutover maps supported navigation and separates activation setup from observed evidence; end-to-end proof remains pending |
 | [Delivery controls](delivery-authority-map.md) | Which commands, docs ownership rules, CI paths, profiles, and deployment controls are truly authoritative? | Mapped; a focused workflow-overlap audit found no safe gate removal yet; contract-suite path selection needs proof before reconsidering the apparent Hardhat duplicate; delivery cutovers remain pending |
 
@@ -188,10 +188,12 @@ repair does not prove the full tenant journey.
 
 The initial `make docs-generate` run regenerated and proved idempotence for
 derived docs, and the frontmatter checks passed. Its final strict drift report
-failed on **35 source-linked pages**. A separate run against the unmodified
-`Development` baseline reported the same 35 stale pages and zero missing
-source paths. They remain a review backlog for finalization; this program
-will not globally restamp their hashes to make a draft slice appear complete.
+failed on **35 source-linked pages**; the unmodified `Development` baseline had
+the same 35 stale pages and zero missing source paths. Later integration
+reviewed the affected pages and refreshed their scoped hashes. The 2026-10-05
+docs-only check reported 687 clean source-linked pages. Each subsequent source
+change still requires its own review and scoped hash refresh; a clean drift
+count is not runtime or merge-readiness evidence.
 
 ## Integration and finalization rule
 
@@ -208,9 +210,13 @@ generation, and targeted validators. Do not run `make
 verification-disposition`, `make ci-check`, `make release-gate`, or hosted PR CI
 per slice or push. At finalization, perform architecture and clarification
 review, complete required code/docs changes, regenerate derived docs, prove
-idempotency, run focused checks, and make the draft PR ready for review. The
-`ready_for_review` event launches `.github/workflows/repo-consistency.yml` and
-its terminal `verification / disposition` authority. A material fix may
+idempotency, and run focused checks. The user already marked #734 ready for
+review during accumulation, so that UI state alone is not finalization. The
+normal `ready_for_review` event launches `.github/workflows/repo-consistency.yml`
+and its terminal `verification / disposition` authority. An earlier #734 run
+failed at `d568c83a`; as of 2026-10-08, the newer head has no reported checks.
+Finalization must obtain a passing exact-head authority result.
+A material fix may
 justify rerunning a failed authority. Broad `make ci-check` and
 `make release-gate` retain their trusted-main/nightly/release roles or run
 when explicitly requested; they are not a second ordinary PR blocker.

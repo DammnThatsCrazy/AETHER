@@ -71,6 +71,11 @@ class FakeRawStore:
             outcomes.append((record, was_new))
         return outcomes
 
+    async def ingest_with_admission(self, records, *, tenant_id=None):
+        """The scheduler fake explicitly models a Bronze-admitted fixture."""
+        outcomes = await self.ingest(records, tenant_id=tenant_id)
+        return [(*outcome, True, "test_verified_admission") for outcome in outcomes]
+
     async def count(self, *, tenant_id, provider_identity, provider_record_type=None) -> int:
         return sum(
             1
@@ -360,7 +365,9 @@ async def test_shopify_backfill_entrypoint_captures_hashed_unresolved_customer_e
     assert by_type["phone"]["normalized_value"] == hash_value(
         "+14155550771", scope="phone:tenant-1",
     )
-    assert all(claim["raw_value"] is None for claim in claims)
+    assert by_type["email"]["raw_value"] is None
+    assert by_type["phone"]["raw_value"] is None
+    assert by_type["external_customer_id"]["raw_value"] == "771"
     assert all(claim["source_record_id"] == "order-771" for claim in claims)
     candidate_adapter = ImportIdentityCandidateAdapter(IdentityResolutionRepository())
     candidate = await candidate_adapter.evaluate(
@@ -405,7 +412,7 @@ async def test_shopify_backfill_entrypoint_captures_hashed_unresolved_customer_e
         tenant_id="tenant-1", claims={"email": "backfill@example.com"},
     )
     assert replay_candidate.outcome == "candidate"
-    assert len(await IdentityResolutionRepository().get_claims_for_source(source.id)) == 2
+    assert len(await IdentityResolutionRepository().get_claims_for_source(source.id)) == 3
 
     # Tenant scope is part of the claim hash and anchor lookup.
     cross_tenant = await candidate_adapter.evaluate(

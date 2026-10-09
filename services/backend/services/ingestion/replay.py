@@ -303,11 +303,13 @@ async def replay_events(
     collected in ``errors``):
 
         scanned / replayed / rejected / skipped / published,
-        status ("completed" | "dry_run"), dry_run, replay_run_id,
+        status ("completed" | "partial" | "dry_run"), dry_run, replay_run_id,
         replayed_event_ids, rejected_event_ids, errors
 
     A repeated local run id with the same tenant and immutable filters is a
-    process-local no-op. Reusing it with a different scope is a conflict.
+    process-local no-op, including after a partial publish failure. Reusing it
+    with a different scope is a conflict. The journal is not durable across
+    process restarts.
     """
     run_id = replay_run_id or uuid.uuid4().hex
     scope = _request_scope(
@@ -381,6 +383,10 @@ async def _run_replay(
         "rejected": 0,
         "skipped": 0,
         "published": 0,
+        # A publish failure can occur after earlier rows were delivered. Do
+        # not describe that outcome as complete; the process-local journal
+        # will return this partial result for a repeated run id rather than
+        # silently replaying already-published rows.
         "status": "dry_run" if dry_run else "completed",
         "dry_run": dry_run,
         "replay_run_id": run_id,
@@ -475,5 +481,7 @@ async def _run_replay(
             value=summary["published"],
             labels={"tenant_id": tenant_id},
         )
+    if not dry_run and summary["errors"]:
+        summary["status"] = "partial"
     _RUN_JOURNAL[key] = {"scope": scope, "dry_run": dry_run, "summary": summary}
     return dict(summary)

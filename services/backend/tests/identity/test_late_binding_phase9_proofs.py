@@ -277,6 +277,57 @@ async def test_shared_device_and_shared_email_keep_people_unmerged(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_distinct_scoped_user_does_not_join_legacy_shared_device_profile():
+    """Old device aliases cannot fuse a second app user into the first profile."""
+    from services.identity.hashing import hash_fingerprint, hash_value
+
+    repo = IdentityResolutionRepository()
+    resolver = _resolver()
+    prior_entity_id = str(uuid.uuid4())
+    await repo.create_subject(TENANT, prior_entity_id)
+    await repo.upsert_alias(
+        tenant_id=TENANT,
+        canonical_entity_id=prior_entity_id,
+        alias_type="user_id",
+        alias_value_hash=hash_value("person-a", scope=f"user:{TENANT}"),
+        source="sdk",
+    )
+    await repo.upsert_alias(
+        tenant_id=TENANT,
+        canonical_entity_id=prior_entity_id,
+        alias_type="device_fingerprint",
+        alias_value_hash=hash_fingerprint("family-tablet-fingerprint"),
+        source="sdk",
+    )
+
+    decision = await resolver.resolve_event({
+        "event_id": f"legacy-shared-device-{uuid.uuid4().hex}",
+        "user_id": "person-b",
+        "context": {
+            "fingerprint": {"id": "family-tablet-fingerprint"},
+            "consent": {"purposes": {"identity": True}},
+        },
+    }, TENANT)
+
+    assert decision.decision.value == "create"
+    assert decision.canonical_entity_id != prior_entity_id
+    assert "distinct_scoped_user_on_shared_signal" in decision.reason_codes
+    aliases = await repo._aliases.find_many(filters={"tenant_id": TENANT})
+    fingerprint_aliases = [
+        alias for alias in aliases if alias["alias_type"] == "device_fingerprint"
+    ]
+    assert len(fingerprint_aliases) == 1
+    assert fingerprint_aliases[0]["canonical_entity_id"] == prior_entity_id
+    user_aliases = [
+        alias for alias in aliases
+        if alias["alias_type"] == "user_id"
+        and alias["canonical_entity_id"] == decision.canonical_entity_id
+    ]
+    assert len(user_aliases) == 1
+    assert await repo._merges.find_many(filters={"tenant_id": TENANT}) == []
+
+
+@pytest.mark.asyncio
 async def test_cross_tenant_import_candidate_is_invisible_to_sdk_identify(monkeypatch):
     """An email imported by tenant A is not a candidate for tenant B."""
     await _commit_csv("tenant_phase9_a", [("customer-a", "email", "cross@example.com")])

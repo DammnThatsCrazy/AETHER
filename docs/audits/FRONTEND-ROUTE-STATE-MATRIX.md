@@ -177,16 +177,16 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 146 data-bearing route patterns above: 59 Aether and
+The denominator is the 148 data-bearing route patterns above: 61 Aether and
 87 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 19 / 146 (13.0%) | tracked for every route |
-| Empty-state assertions | 133 / 146 (91.1%) | at least 90% overall |
-| Error/unavailable assertions | 113 / 146 (77.4%) | 100% of critical routes |
-| Populated-state assertions | 41 / 146 (28.1%) | tracked for every route |
-| Critical routes with both empty and error assertions | 66 / 66 (100%) | 66 / 66 (100%) |
+| Explicit loading-state assertions | 21 / 148 (14.2%) | tracked for every route |
+| Empty-state assertions | 135 / 148 (91.2%) | at least 90% overall |
+| Error/unavailable assertions | 115 / 148 (77.7%) | 100% of critical routes |
+| Populated-state assertions | 43 / 148 (29.1%) | tracked for every route |
+| Critical routes with both empty and error assertions | 68 / 68 (100%) | 68 / 68 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

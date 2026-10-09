@@ -25,9 +25,11 @@ This map records graph-layer event relationships and current write-path
 availability. Vertex/edge definitions live in
 `services/backend/shared/graph/graph.py`. The lake mutation module formerly
 used for Silver/Gold projections has been removed. On-chain action writes now
-use `GraphMutationGateway`; the legacy identity-resolution repository still
-writes directly, and its cluster, merge-approval, and batch routes fail closed
-with 503 until replaced with tenant-safe gateway-backed behavior.
+use `GraphMutationGateway`. The legacy identity-resolution graph mutation
+methods have been retired; cluster, merge-approval, and batch routes and the
+legacy engine's mutation entry points fail closed until a tenant-safe
+compatibility path is implemented. The graph write-path validator reports no
+remaining direct service/repository writers.
 
 ## Layer L0 — on-chain (`IG_ONCHAIN_LAYER`)
 
@@ -69,12 +71,11 @@ The `rail` field on payment events selects the downstream processing path
 
 ## H2H / H2A / A2H / A2A
 
-- **H2H** edges (identity similarity, household clustering) are implemented in
-  the legacy backend identity resolver from SDK signals (`anonymous_id`,
-  `device_id`, fingerprint, wallet, email, phone). Its repository still writes
-  directly to the graph; the cluster and batch API routes are disabled with
-  503 until a tenant-safe replacement is available. The SDK does not emit H2H
-  events.
+- **H2H** legacy similarity and household graph construction from SDK signals
+  is unavailable. The old repository's unscoped mutation methods were removed;
+  its cluster and batch API routes return 503. Canonical identity decisions
+  and their governed graph projection live under `services/backend/services/identity/`.
+  The SDK does not emit H2H graph events.
 - **H2A** edges (user → agent) are derived from `agent_task` events that
   reference the originating user.
 - **A2H** edges are directly emitted by `a2h_interaction`.

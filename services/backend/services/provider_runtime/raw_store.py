@@ -34,6 +34,39 @@ from shared.integration_contracts.events import RawProviderRecord
 from repositories.lake import BronzeRepository
 
 
+_ALLOWED_LICENSE_STATUSES = {"valid", "public_api", "open_license", "enterprise_contract"}
+_ALLOWED_TERMS_STATUSES = {
+    "approved", "public_api", "open_license", "enterprise_contract", "valid",
+}
+_ALLOWED_COMMERCIAL_USE_STATUSES = {"approved"}
+_DENIED_RIGHTS_STATUSES = {"denied", "revoked", "blocked", "rejected", "disallowed"}
+
+
+def _bronze_admission(record: dict) -> tuple[bool, str]:
+    """Return whether this durable Bronze row may enter provider processing.
+
+    Bronze is the authority for provenance and quarantine. The explicit checks
+    also defend against inconsistent rows (for example, a manually supplied
+    ``valid`` provenance paired with a revoked license or denied rights).
+    Missing values never imply permission.
+    """
+    if record.get("quarantine_status") != "not_quarantined":
+        return False, "bronze_quarantined"
+    if record.get("provenance_status") != "valid":
+        return False, "provenance_not_valid"
+    if record.get("license_status") not in _ALLOWED_LICENSE_STATUSES:
+        return False, "license_not_verified"
+    if record.get("terms_status") not in _ALLOWED_TERMS_STATUSES:
+        return False, "terms_not_approved"
+    if record.get("commercial_use_status") not in _ALLOWED_COMMERCIAL_USE_STATUSES:
+        return False, "commercial_use_not_approved"
+    for field in ("license_status", "terms_status", "commercial_use_status"):
+        value = str(record.get(field, "unknown")).strip().lower()
+        if value in _DENIED_RIGHTS_STATUSES:
+            return False, "rights_denied"
+    return True, "admitted"
+
+
 class RawProviderRecordStore:
     """Persists RawProviderRecord to Bronze before any normalization."""
 
@@ -53,11 +86,26 @@ class RawProviderRecordStore:
         Bronze dedup key return ``(record, False)``. ``tenant_id`` overrides the
         record's own ``tenant_id`` when supplied.
         """
-        outcomes: list[tuple[RawProviderRecord, bool]] = []
+        outcomes = await self.ingest_with_admission(records, tenant_id=tenant_id)
+        return [(record, was_new) for record, was_new, _admitted, _reason in outcomes]
+
+    async def ingest_with_admission(
+        self,
+        records: Iterable[RawProviderRecord],
+        *,
+        tenant_id: str | None = None,
+    ) -> list[tuple[RawProviderRecord, bool, bool, str]]:
+        """Persist records and return the actual Bronze admission decision.
+
+        The first two fields retain ``ingest``'s outcome semantics. ``admitted``
+        is derived from the persisted row returned by Bronze, including on
+        dedupe, so callers must not infer permission from provider metadata.
+        """
+        outcomes: list[tuple[RawProviderRecord, bool, bool, str]] = []
         for record in records:
             effective_tenant = tenant_id if tenant_id is not None else record.tenant_id
             source = record.provider_identity
-            _, was_new = await self._repository.ingest(
+            bronze_record, was_new = await self._repository.ingest(
                 source=source,
                 source_tag=f"provider:{source}:{effective_tenant}",
                 provider_record_id=record.provider_record_id,
@@ -67,7 +115,8 @@ class RawProviderRecordStore:
                 entity_type=record.provider_record_type or "",
                 tenant_id=effective_tenant,
             )
-            outcomes.append((record, was_new))
+            admitted, reason = _bronze_admission(bronze_record)
+            outcomes.append((record, was_new, admitted, reason))
         return outcomes
 
     async def count(

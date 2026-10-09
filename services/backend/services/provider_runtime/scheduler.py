@@ -256,6 +256,7 @@ class PullScheduler:
         retry_count = 0
         rate_limit_events = 0
         records_received = 0
+        records_rejected = 0
         events_published = 0
         last_cursor: Optional[str] = cursor
         terminal: Optional[ProviderPullFailed] = None
@@ -300,25 +301,54 @@ class PullScheduler:
                 }) for record in records]
                 records_received += len(records)
 
-                # raw store → normalize → bridge (each best-effort, never
-                # breaks the sync — mirroring bronze_connectors.ingest).
+                # Raw evidence is always retained first. Only rows admitted by
+                # their persisted Bronze provenance may reach identity evidence,
+                # normalization, or the event bridge.
+                admitted_records: list[Any] = []
+                admitted_outcomes: list[tuple[Any, bool]] = []
                 try:
-                    raw_outcomes = await self._raw_store().ingest(records, tenant_id=tenant_id)
+                    raw_store = self._raw_store()
+                    ingest_with_admission = getattr(raw_store, "ingest_with_admission", None)
+                    if ingest_with_admission is None:
+                        # Keep raw evidence durable when an older store seam is
+                        # injected, but absence of the Bronze admission contract
+                        # is never treated as permission to promote it.
+                        await raw_store.ingest(records, tenant_id=tenant_id)
+                        admission_outcomes = []
+                    else:
+                        admission_outcomes = await ingest_with_admission(
+                            records, tenant_id=tenant_id,
+                        )
+                    for outcome in admission_outcomes:
+                        if len(outcome) != 4:
+                            continue
+                        record, was_new, admitted, reason = outcome
+                        if admitted is True:
+                            admitted_records.append(record)
+                            admitted_outcomes.append((record, was_new))
+                        else:
+                            self._warn(
+                                f"provider raw record blocked tenant={tenant_id} "
+                                f"provider={provider_identity} reason={reason}"
+                            )
                 except Exception as exc:  # pragma: no cover - best-effort
-                    raw_outcomes = []
+                    admission_outcomes = []
+                    admitted_records = []
+                    admitted_outcomes = []
                     self._warn(
                         f"provider raw ingest failed tenant={tenant_id} "
                         f"provider={provider_identity}: {exc}"
                     )
-                if raw_outcomes and sync_run is not None:
+                records_rejected += len(records) - len(admitted_records)
+                if admitted_outcomes and sync_run is not None:
                     try:
                         from services.identity.provider_evidence import (
                             capture_durable_provider_customer_evidence,
                         )
 
                         await capture_durable_provider_customer_evidence(
-                            records,
-                            raw_outcomes,
+                            admitted_records,
+                            admitted_outcomes,
                             tenant_id=tenant_id,
                             connection_id=connection_id,
                             account_id=account_id,
@@ -330,7 +360,7 @@ class PullScheduler:
                             f"provider identity evidence capture failed tenant={tenant_id} "
                             f"provider={provider_identity}: {type(exc).__name__}"
                         )
-                events = await self._normalize_records(normalization, records)
+                events = await self._normalize_records(normalization, admitted_records)
                 if events:
                     try:
                         await self._bridge().ingest_events(tenant_id, events)
@@ -392,31 +422,39 @@ class PullScheduler:
                 pages=page,
             )
 
-        # Success: advance cursor, close the ledger with honest counts, record
-        # the connection's last_successful_sync_at, and meter.
-        try:
-            await self.cursors.set_cursor(
-                tenant_id, connection_id, provider_identity,
-                cursor_value=last_cursor or "",
-                event_count=records_received,
-            )
-        except Exception as exc:  # pragma: no cover - best-effort, never break sync
-            self._warn(f"provider cursor upsert failed tenant={tenant_id}: {exc}")
+        # Do not advance beyond quarantined rows. A later rights decision must
+        # be able to retry them from the same provider cursor.
+        partial = records_rejected > 0
+        if not partial:
+            try:
+                await self.cursors.set_cursor(
+                    tenant_id, connection_id, provider_identity,
+                    cursor_value=last_cursor or "",
+                    event_count=records_received,
+                )
+            except Exception as exc:  # pragma: no cover - best-effort, never break sync
+                self._warn(f"provider cursor upsert failed tenant={tenant_id}: {exc}")
 
         completed = sync_run
         if sync_run is not None and run_service is not None:
             try:
                 completed = await run_service.complete_run(
                     sync_run,
-                    status="completed",
-                    cursor_after=last_cursor,
+                    status="partial" if partial else "completed",
+                    cursor_after=last_cursor if not partial else None,
                     counts={
                         "records_received": records_received,
+                        "records_rejected": records_rejected,
                         "pages_requested": page,
                         "retry_count": retry_count,
                         "rate_limit_events": rate_limit_events,
                         "facts_written": events_published,
                     },
+                    safe_error_code="source_rights_rejected" if partial else None,
+                    safe_error_detail=(
+                        "One or more provider records were retained in quarantine."
+                        if partial else None
+                    ),
                 )
             except Exception as exc:  # pragma: no cover - best-effort
                 self._warn(
@@ -443,19 +481,24 @@ class PullScheduler:
                     f"provider evidence lifecycle completion failed tenant={tenant_id}: "
                     f"{type(exc).__name__}"
                 )
-        await self._record_connection_success(connection, last_sync_at=now_iso())
+        if not partial:
+            await self._record_connection_success(connection, last_sync_at=now_iso())
         await self.meter(
-            tenant_id, "provider.sync.completed", connection_id, "provider_runtime",
+            tenant_id,
+            "provider.sync.partial" if partial else "provider.sync.completed",
+            connection_id,
+            "provider_runtime",
         )
         if completed is not None:
             return completed
         return {
             "provider_identity": provider_identity,
             "connection_id": connection_id,
-            "status": "completed",
+            "status": "partial" if partial else "completed",
             "records_received": records_received,
+            "records_rejected": records_rejected,
             "events_published": events_published,
-            "cursor_after": last_cursor,
+            "cursor_after": None if partial else last_cursor,
         }
 
     # ── Internals ───────────────────────────────────────────────────────────

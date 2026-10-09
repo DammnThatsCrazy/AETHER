@@ -15,7 +15,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/backend/services/provider_runtime/": "sha256:1b1b84e48440b16be3f0bc23c5cc41751f98423c25b39b8da908e32af363e52b"
+  "services/backend/services/provider_runtime/": "sha256:24f5445f73434daf958f26f6548f51f4ed22ed196812088898a8e2195eb094a1"
   "services/backend/services/providers/routes.py": "sha256:604d8af79653b6472262c42da610787ca6328aadef8c356d6635f56092c6ec39"
   "services/backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
   "services/backend/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
@@ -67,6 +67,10 @@ Certification **verifies, it does not promote.** The report reflects the
 declared `ManifestReadiness`; it never raises a plugin's level on its own.
 Promotion is an operator decision made after certification passes at the
 current level and the evidence (replay → sandbox → production) is supplied.
+Certification checks technical capability and fixture behavior; it does not
+grant a source license or commercial-use right. Pull sync separately checks
+the persisted Bronze provenance, license, terms, commercial-use, and quarantine
+fields before identity evidence, normalization, or event publication.
 
 ## 4. How a dishonest plugin fails
 

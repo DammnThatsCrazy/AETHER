@@ -21,7 +21,7 @@ toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
   "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
-  "services/backend/services/provider_runtime/": "sha256:1b1b84e48440b16be3f0bc23c5cc41751f98423c25b39b8da908e32af363e52b"
+  "services/backend/services/provider_runtime/": "sha256:24f5445f73434daf958f26f6548f51f4ed22ed196812088898a8e2195eb094a1"
   "services/backend/services/providers/": "sha256:6d1ba9157c4e120bdf799b6d717252fafbb3369d47ceabed255ca8933c06be82"
   "services/backend/services/providers/shopify/": "sha256:b06727a9e1f397fdb52babcf270f1c2198d8b84e23f183855bece2dcb22e4a22"
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
@@ -168,6 +168,10 @@ Provider adapter
 BronzeRepository("provider_records")      ← idempotent (raw idempotency key)
         │  durable, re-playable
         ▼
+Persisted Bronze rights admission
+  ├─ missing / denied / quarantined → retain raw row; no identity, normalize, or bridge
+  └─ valid provenance + license + terms + commercial use
+        ▼
 Normalization engine (EventNormalizer.normalize)
         │  deterministic, network-free; NormalizationResult
         ▼
@@ -188,6 +192,15 @@ The pipeline honors three invariants:
 - **Deterministic normalization.** A normalizer never depends on wall-clock,
   randomness, or provider I/O; anything it cannot translate is surfaced via
   `dropped`, never silently skipped.
+- **Source-rights admission for pulls.** After Bronze retention, the pull
+  scheduler reads the persisted row's provenance, license, terms,
+  commercial-use, and quarantine state. Missing or denied rights keep the raw
+  record in Bronze but block provider identity evidence, normalization, and
+  event bridging. The sync ledger reports `partial` with
+  `source_rights_rejected`; the provider cursor and last-success timestamp do
+  not advance. The current provider pull integration does not populate an
+  authoritative rights grant, so unknown rows remain quarantined until that
+  separate intake is connected. Provider certification is not a rights grant.
 - **Ingress consent gate (WS-B3).** The event bridge scrubs sensitive values
   from each `AetherEvent`'s `data`/`context` in place before the durable dump
   (mandatory and unconditional — Bronze and the publish carry only scrubbed

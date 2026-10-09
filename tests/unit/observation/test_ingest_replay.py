@@ -318,6 +318,37 @@ async def test_repeated_replay_run_id_is_a_no_op() -> None:
     assert len(producer.events) == 1  # published once only
 
 
+async def test_partial_publish_run_id_does_not_retry_published_rows() -> None:
+    _seed("e0", received="2026-09-05T00:00:00.100Z")
+    _seed("e1", received="2026-09-05T00:00:00.200Z")
+
+    class FailsOnSecondEvent(FakeProducer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.attempted: list[str] = []
+
+        async def publish(self, event) -> None:  # noqa: ANN001
+            self.attempted.append(event.event_id)
+            if event.event_id == "e1":
+                raise RuntimeError("injected publish failure")
+            await super().publish(event)
+
+    producer = FailsOnSecondEvent()
+    first = await replay_events(
+        TENANT, producer=producer, replay_run_id="partial-run",
+    )
+    assert first["status"] == "partial"
+    assert first["published"] == 1
+    assert producer.attempted == ["e0", "e1"]
+
+    retry = await replay_events(
+        TENANT, producer=producer, replay_run_id="partial-run",
+    )
+    assert retry == first
+    assert producer.attempted == ["e0", "e1"]
+    assert [event.event_id for event in producer.events] == ["e0"]
+
+
 async def test_equivalent_timezone_bounds_share_the_same_run_scope() -> None:
     _seed("e0")
     producer = FakeProducer()

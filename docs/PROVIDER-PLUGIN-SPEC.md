@@ -19,7 +19,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/backend/services/provider_runtime/": "sha256:1b1b84e48440b16be3f0bc23c5cc41751f98423c25b39b8da908e32af363e52b"
+  "services/backend/services/provider_runtime/": "sha256:24f5445f73434daf958f26f6548f51f4ed22ed196812088898a8e2195eb094a1"
   "services/backend/services/providers/shopify/": "sha256:b06727a9e1f397fdb52babcf270f1c2198d8b84e23f183855bece2dcb22e4a22"
   "services/backend/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
@@ -176,6 +176,16 @@ consent-denied event is skipped — no Bronze row, no publish, a metric and a
 warning — so individual events inside a verified delivery can be dropped by
 tenant data-policy or consent independently of `verify()`; the delivery itself
 is never silently failed wholesale.
+
+Pull sync adds a separate source-rights admission after raw Bronze persistence.
+The scheduler promotes only records whose persisted Bronze row has valid
+provenance, an allowed license, approved terms and commercial use, and no
+quarantine or denied-rights status. A row that fails this check stays in Bronze
+but does not create identity evidence, normalized events, or bridge output;
+the sync is marked `partial` and its cursor does not advance. Technical plugin
+certification and provider payload fields cannot supply or infer these rights.
+The current pull integration leaves missing rights evidence quarantined, so
+sync remains partial until an authoritative rights intake is wired in.
 
 ## 5. Normalization contract
 

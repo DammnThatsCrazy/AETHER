@@ -14,7 +14,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
-  "services/backend/services/identity/": "sha256:ba1aca03532bc2c72a52c8c6d9a8da421e8a2ef9804005353f602ba23a605530"
+  "services/backend/services/identity/": "sha256:c419c4b1509d9de2d0e8ba9751a0ad8f96d3411f8f0a0e35c243600c123f18e2"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
@@ -181,21 +181,25 @@ applies only when:
 - no candidate — including fragments already merged into it — holds a
   **different** `userId`, `external_id`, or verified wallet.
 
-A contradiction (a shared device whose anonymous id already belongs to another
-user) never merges: the event resolves to its own profile and a
-`conflicting_user_binding` conflict is opened for review. A plain returning
+When a different tenant/app-scoped `userId` is presented with only a shared
+device, browser, installation, session, or anonymous signal, the resolver
+creates a separate profile and does not attach the shared signal as an alias.
+This prevents a fingerprint or shared device from joining the people. If the
+event binds an `anonymousId` already associated with a different `userId`, it
+never merges: it resolves to its own profile and opens a
+`conflicting_user_binding` conflict for review. A plain returning
 anonymous visitor (same `anonymousId`, no `userId`) stays `PROBABLE` →
 `CANDIDATE`, and a session-only match stays `WEAK` → `REJECT`
 (`insufficient_evidence`): probabilistic evidence still needs corroboration.
 Matches follow merge tombstones, so an alias left on a merged fragment resolves
 to the surviving profile.
 
-**First sighting.** An event whose identifiers match nothing yet creates a new
-profile (`CREATE`, scored on the event's own signals) and links its aliases, so
-the next event can match. It is `BLOCKED` only when its own signals are
-unusable (fingerprint-only, or only consent-gated signals without consent).
-Previously the empty match set was scored as `insufficient_evidence`, no alias
-was ever written, and no profile could ever merge.
+**First sighting.** A consented, tenant/app-scoped `userId` can anchor a new
+profile when there are no existing candidates. That narrow fallback links
+deterministic user, external, and anonymous identifiers; it does not turn a
+device fingerprint, observed email/phone, or wallet into a profile alias just
+because the profile was created. Other first sightings follow the regular
+policy and consent checks.
 
 **Consent.** Identity-stitching consent (`analytics`, `identity`, or
 `marketing`) is read from both snapshot shapes: the nested

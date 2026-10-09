@@ -8,6 +8,8 @@ import pytest
 from fastapi import HTTPException
 
 from services.resolution import routes
+from services.resolution.engine import IdentityResolutionEngine
+from shared.common.common import ServiceUnavailableError
 
 
 class _Tenant:
@@ -52,3 +54,20 @@ async def test_approval_route_preserves_write_auth_without_mutating_decision() -
 
     assert tenant.permissions == ["write"]
     assert exc.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_legacy_engine_graph_entry_points_fail_closed() -> None:
+    engine = IdentityResolutionEngine(None, None, None, None, None, None)
+
+    with pytest.raises(ServiceUnavailableError):
+        await engine.resolve_event("tenant-a", {"user_id": "user-1"})
+
+    with pytest.raises(ServiceUnavailableError):
+        await engine.batch_resolve("tenant-a")
+
+    with pytest.raises(ServiceUnavailableError):
+        await engine._handle_decision("tenant-a", None)
+
+    with pytest.raises(ServiceUnavailableError):
+        await engine.execute_merge("tenant-a", "user-1", "user-2", None)

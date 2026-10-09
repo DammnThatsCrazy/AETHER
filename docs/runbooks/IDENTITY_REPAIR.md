@@ -14,7 +14,7 @@ source_hashes:
   "services/backend/services/identity/graph_reconciliation.py": "sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a"
   "services/backend/services/identity/reconciliation_routes.py": "sha256:3ec51df67337edbc420bc50a6d9f8fccbe61b42164ec966ca45ff2c9ceabca76"
   "services/backend/services/identity/redirects.py": "sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0"
-  "services/backend/services/identity/resolver.py": "sha256:7d58f239d550565b81f10723cd34b51346fd98a3d8f6052667fb298d4ef9a4f3"
+  "services/backend/services/identity/resolver.py": "sha256:ae0c604354fa5b756877cfda28e383f54f48a42ebbc15124b32b786c4b8f1218"
 ---
 
 # Runbook — Identity Repair
@@ -72,6 +72,10 @@ event still does not merge:
 - `conflict` of type `conflicting_user_binding` — the anonymous id already
   belongs to a profile with a **different** `user_id` (shared device, account
   switch). This is a guard: review the conflict; do not force a merge.
+- If distinct tenant/app-scoped `user_id` values arrive through a shared
+  fingerprint, device, browser, session, or anonymous signal, the resolver
+  creates a separate profile and leaves that weak shared signal unlinked. Do
+  not manually attach the shared device or fingerprint to either profile.
 - `candidate` without the binding code — the event carried no `user_id`, or a
   candidate was reached only through a session/email/device match; that
   evidence is probabilistic and needs review by design.
