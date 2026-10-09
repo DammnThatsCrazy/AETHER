@@ -145,7 +145,8 @@ PI_CONTROLS: list[PIControl] = [
             "(features stale if > configured TTL). Quality score attached to every feature batch."
         ),
         evidence_sources=[
-            "services/backend/services/lake/drift_monitor.py",
+            "services/backend/services/lake/routes.py — GET /quality/{domain} (Bronze quality checks)",
+            "services/ml/monitoring/monitor.py",
             "services/ml/ — feature validation pipeline",
             "CloudWatch metric: DataQualityScore (target > 95%)",
         ],

@@ -160,7 +160,6 @@ services:
   temporal_preferences: {class: beta, stage: product, reason: "viewer and tenant temporal preferences"}
   tenant_readiness: {class: core, stage: control-plane, reason: "tenant launch readiness, trust states and quota policy"}
   traffic: {class: beta, stage: intake, reason: "traffic source tracking and attribution"}
-  unique_signals: {class: experimental, stage: intelligence, reason: "stub signal computations, not yet implemented"}
   valuation: {class: beta, stage: intelligence, reason: "event-time valuation, versioned, multi-reporting-asset"}
   value: {class: core, stage: intelligence, reason: "canonical USD-first value semantics"}
   web3: {class: experimental, stage: graph, reason: "registry-first Web3 coverage and classification"}

@@ -14,7 +14,7 @@ generated_globs:
   - '(^|/)generated_[^/]*\.py$'
 allow_unreachable:
   - package: services
-    modules: [communication360, unique_signals]
+    modules: [communication360]
     ledger: product-backend-unmounted-code-pending
     reason: no test or document uses it and no route, worker or import path reaches it; it sits in a package with live code, so removing it is an owner decision
   - package: services.agentic_observability
@@ -89,10 +89,6 @@ allow_unreachable:
     modules: [metrics]
     ledger: product-backend-unmounted-code-pending
     reason: no route, worker or import path reaches it; owner decides whether to mount or delete
-  - package: services.lake
-    modules: [drift_monitor, model_registry]
-    ledger: product-backend-unmounted-code-pending
-    reason: only a compliance evidence list names drift_monitor; no route, worker or import path reaches either
   - package: services.product_catalog
     modules: [mapping]
     ledger: product-backend-unmounted-code-pending
@@ -118,17 +114,13 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.suggestions
-    modules: [adapters.ai_efficiency_adapter, adapters.data_quality_adapter, adapters.derivatives_adapter, adapters.governance_adapter, adapters.graph_adapter, adapters.interop_adapter, adapters.profile360_adapter, adapters.reliability_adapter, adapters.sdk_drift_adapter, adapters.sdk_health_adapter, adapters.stablecoin_adapter, dispatcher, outcome]
+    modules: [adapters.ai_efficiency_adapter, adapters.derivatives_adapter, adapters.interop_adapter, adapters.sdk_drift_adapter, adapters.sdk_health_adapter, adapters.stablecoin_adapter, dispatcher, outcome]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: services.targeting_intelligence
-    modules: [journey_delta, noesis_adapter, suggestion_adapter]
+    modules: [journey_delta, suggestion_adapter]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
-  - package: services.unique_signals
-    modules: [models, service]
-    ledger: product-backend-unmounted-code-pending
-    reason: documented, but no route, worker or import path reaches it
   - package: services.value
     modules: [account_rules, ltv_rules, portfolio_rules, reconciliation, tvl_rules]
     ledger: product-backend-unmounted-code-pending

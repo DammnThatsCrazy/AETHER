@@ -145,16 +145,13 @@ Noesis handles 5 suggestion-specific read-only intents:
 |---------|--------|-------------|
 | `notification_adapter.py` | Notification Intelligence | Maps delivery events → suggestions; idempotent via source_ref |
 | `recommendation_adapter.py` | Recommendation engine | Maps retarget recs → suggestions; idempotent via rec_id |
-| `data_quality_adapter.py` | Data Quality drift events | P0/P1 for critical drift; suppresses low-severity noise |
 | `sdk_health_adapter.py` | SDK Health monitoring | SDK silence (P1) and ingestion failure (P0/P1) |
 | `sdk_drift_adapter.py` | SDK Drift incidents | REPLAY_STORM (P1/P2), SCHEMA_DRIFT (P2), STALENESS (P3) |
-| `graph_adapter.py` | Graph events | identity_merge_candidate requires approval; GRAPH_HEALTH class |
-| `profile360_adapter.py` | Profile 360 | stale profile (P3), churn risk (P2), LTV opportunity (P2/P3) |
-| `governance_adapter.py` | Governance decisions | ≥3 policy denials → P1/P2 security suggestion; requires approval |
-| `reliability_adapter.py` | SLO breaches | SLO breach → P0/P1 reliability suggestion |
 | `noesis_adapter.py` | Noesis NL queries | Read-only query delegation; no mutation |
 
 All adapters implement idempotency via `find_by_source_ref(tenant_id, source, source_id)` before creating.
+
+> The `ai_efficiency`, `derivatives`, `interop` and `stablecoin` adapters also exist as factories but are not yet called from any consumer. The data-quality, graph, profile360, governance and reliability adapters were removed: they had no tests, callers or producing topic.
 
 ---
 
@@ -240,7 +237,7 @@ All responses are redacted via `redact_for_tenant()`.
 | `KYBER_SUGGESTIONS_ENABLED` | `true` | Kyber operator routes |
 | `AETHER_TENANT_SUGGESTIONS_ENABLED` | `true` | Tenant-safe routes |
 
-The recommendation, notification, data-quality, SDK-health and graph adapters are always registered, and nothing auto-delivers an approved suggestion; flags for them (`AETHER_SUGGESTIONS_*_ADAPTER_ENABLED`, `AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED`) were documented here but never read, so they were retired.
+Nothing auto-delivers an approved suggestion, and no consumer registers the event-driven adapters (`ai_efficiency`, `derivatives`, `interop`, `sdk_drift`, `sdk_health`, `stablecoin`): they are tested factories with no caller yet, so the only live producers are the notification and recommendation paths. Flags for them (`AETHER_SUGGESTIONS_*_ADAPTER_ENABLED`, `AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED`) were documented here but never read, so they were retired.
 
 **Execution is disabled by default.** `AETHER_SUGGESTIONS_EXECUTION_ENABLED=false` must be explicitly set to `true` before any automated execution can occur.
 

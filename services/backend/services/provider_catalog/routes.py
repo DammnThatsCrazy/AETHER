@@ -469,7 +469,7 @@ async def get_source_model_matrix(request: Request):
     }).to_dict()
 
 
-# 5 unique signal features (stubs — see services/unique_signals/)
+# 5 unique signal features (roadmap only; spec in docs/source-of-truth/UNIQUE_SIGNAL_FEATURES.md)
 _UNIQUE_SIGNAL_BACKLOG = [
     {
         "signal_id": "prediction_market_onchain_correlation",
@@ -576,7 +576,7 @@ async def get_unique_signal_backlog(request: Request):
         "items": _UNIQUE_SIGNAL_BACKLOG,
         "count": len(_UNIQUE_SIGNAL_BACKLOG),
         "not_yet_implemented": len(not_started),
-        "note": "See services/unique_signals/ for implementation stubs",
+        "note": "Roadmap only; see docs/source-of-truth/UNIQUE_SIGNAL_FEATURES.md",
     }).to_dict()
 
 
