@@ -74,10 +74,12 @@ def test_deprecated_requires_a_debt_ledger_row(tmp_path):
     ) == []
 
 
-def test_every_deprecated_service_in_the_committed_registry_is_in_the_ledger():
+def test_the_committed_registry_is_valid_and_its_deprecated_services_are_in_the_ledger():
+    # No service is deprecated today (the last one, resolution, is deleted); the
+    # ledger rule itself is pinned by test_deprecated_requires_a_debt_ledger_row,
+    # and validate() applies it to whatever the committed registry holds.
     raw = yaml.safe_load(registry.REGISTRY.read_text(encoding="utf-8"))
-    deprecated = [n for n, e in raw["services"].items() if e["class"] == "deprecated"]
-    assert deprecated  # the rule is exercised by real data
+    assert all(e["class"] in registry.CLASSES for e in raw["services"].values())
     assert registry.validate() == []
 
 
