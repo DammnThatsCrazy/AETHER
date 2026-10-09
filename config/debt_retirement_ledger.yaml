@@ -215,6 +215,31 @@ entries:
     removal_pr: null
     deadline: 2027-02-28
 
+  - id: product-legacy-social-route
+    domain: product
+    classification: deprecated
+    state: deprecated
+    authority: Profile360 IntelligenceAggregator.social_intelligence (services/backend/services/profile)
+    current:
+      - services/backend/services/profile
+    duplicates:
+      - services/backend/services/social
+    retire: >-
+      the legacy compatibility route /v1/profile/{entity_id}/social-intelligence,
+      once Aether and Kyber call the canonical Profile360 path
+    consumers:
+      - services/backend/main.py
+      - services/backend/tests/social/test_legacy_social_honesty.py
+      - frontend/kyber/src/lib/api/endpoints.ts
+      - frontend/aether/src/lib/api/endpoints.ts
+    compatibility: the route stays mounted until both frontends migrate
+    mechanism: alias
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep the compatibility wrapper mounted
+    removal_pr: null
+    deadline: 2027-02-28
+
   # ── Graph ──────────────────────────────────────────────────────────────────
   - id: graph-single-mutation-gateway
     domain: graph

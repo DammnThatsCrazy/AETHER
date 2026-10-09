@@ -194,9 +194,20 @@ explanation, action, outcome.
 | Experimental | advanced Agent 360 lifecycle and lineage, X402 observations, Gnosis and plugin marketplace, Harness automation, sovereign and Omega assumptions, multi-cloud paths, advanced agent-commerce modeling, financial rail and card observability |
 | Archive or remove | dead routes, duplicate pages, old terminology, unused feature flags and deployment profiles, old docs manifests, stale fixtures, duplicate graph mocks, duplicate 360 components, obsolete naming layers, legacy Audience and Campaign terminology, abandoned proofs of concept, implementation-detail tests, docs checks unrelated to changed code |
 
-The ledger classifies authorities today. Binding a class to each of the 142
-backend service directories, so that a new directory cannot appear unclassified,
-is the next registry step and needs the maintainer's review of the mapping.
+[`config/service_classification.yaml`](../../../config/service_classification.yaml)
+binds one class and one runtime-spine stage to each of the 142 backend service
+directories, and `scripts/validate_service_classification.py` (run by
+`make repo-doctor` and as the `service_classification` router check in every
+PR-lane plan) fails when a directory that holds Python source has no entry, an
+entry has no directory, a class or stage is outside the vocabulary, a reason is
+blank, or a `deprecated` service has no row in the ledger. A directory holding
+only `__pycache__` is not a service. `--report` prints counts per class.
+
+The first pass is **proposed**, derived from each package's own docstring and the
+lists above, and is not a readiness claim: 51 core, 47 beta, 33 experimental, 9
+internal, 2 deprecated (`resolution`, `social`). The maintainer reviews and edits
+it like any other change; a reclassification is a one-line diff. The same binding
+for frontend apps and shared packages is the next registry step.
 
 ## Shared 360 composition
 
@@ -263,5 +274,5 @@ Each step is its own PR on `Development` and states what it makes deletable.
    `config/deployment_profiles.yaml`.
 7. SDK convergence matrix (Web, Server, React Native, Android, iOS; V1 and V2)
    and a shared semantic core.
-8. Bind a class to every backend service directory, then re-measure with
-   `--report`.
+8. Bind a class to frontend apps and shared packages, then re-measure with
+   `--report` on both validators.

@@ -1214,6 +1214,7 @@ suites:
       "tests/unit/test_runtime_readiness_gate.py",
       "tests/unit/test_runtime_roles.py",
       "tests/unit/test_runtime_topology.py",
+      "tests/unit/test_service_classification.py",
       "tests/unit/test_stablecoin_intelligence_foundation.py",
       "tests/unit/test_stablecoin_intelligence_polling_scheduler.py",
       "tests/unit/test_stablecoin_intelligence_pr2_pipeline.py",

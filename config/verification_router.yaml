@@ -1,8 +1,8 @@
 schema_version: 1
 default_lane: pr
 lanes:
-  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger, profile_config, capability_overlays]
-  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger, profile_config, capability_overlays]
+  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger, profile_config, capability_overlays, service_classification]
+  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger, profile_config, capability_overlays, service_classification]
   integration: [toolchain, repository_metadata, contracts, integration]
   regression: [toolchain, repository_metadata, contracts, integration, regression]
   release: [toolchain, repository_metadata, contracts, integration, regression, release]
@@ -82,6 +82,13 @@ checks:
     owner: release
     risk: high
     command: [python, scripts/validate_capability_overlays.py]
+    runtime_budget_seconds: 10
+  # Adding or removing a directory under services/backend/services changes what
+  # this registry must say, so it also runs in every PR-lane plan.
+  service_classification:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_service_classification.py]
     runtime_budget_seconds: 10
   docs:
     owner: docs
