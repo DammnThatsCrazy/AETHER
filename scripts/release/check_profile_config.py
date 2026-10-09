@@ -58,6 +58,12 @@ def _check_canonical_environments(r, data: dict, profiles: dict) -> None:
         f"profiles mapped to more than one environment: "
         f"{sorted({p for p in mapped if mapped.count(p) > 1})}",
     )
+    both = sorted(set(mapped) & set(unmapped))
+    r.require(
+        not both,
+        "no profile is both mapped to an environment and listed as unmapped",
+        f"profiles both mapped and unmapped: {both}",
+    )
     covered = set(mapped) | set(unmapped)
     r.require(
         covered == set(profiles),

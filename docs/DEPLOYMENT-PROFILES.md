@@ -6,11 +6,12 @@ visibility: I
 audience: [ops, architect]
 status: stable
 since_version: 0.1.0
-source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, deploy/aws/terraform/profiles.tf, deploy/aws/terraform/main.tf, deploy/aws/terraform/modules/alb/main.tf, deploy/aws/terraform/modules/aurora/main.tf, deploy/aws/terraform/modules/ecr/main.tf, deploy/aws/terraform/modules/secrets/main.tf, deploy/aws/terraform/modules/secrets/rotation.tf, deploy/aws/terraform/modules/kms_credentials/main.tf, deploy/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py]
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, deploy/aws/terraform/profiles.tf, deploy/aws/terraform/main.tf, deploy/aws/terraform/modules/alb/main.tf, deploy/aws/terraform/modules/aurora/main.tf, deploy/aws/terraform/modules/ecr/main.tf, deploy/aws/terraform/modules/secrets/main.tf, deploy/aws/terraform/modules/secrets/rotation.tf, deploy/aws/terraform/modules/kms_credentials/main.tf, deploy/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py, config/capability_overlays.yaml, scripts/validate_capability_overlays.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
+  "config/capability_overlays.yaml": "sha256:daec3fb21a745e928ae42989f9704b69580283316afee0872851df8e5ee52520"
   "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
@@ -23,9 +24,10 @@ source_hashes:
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:ddc4bacad8ec5aa6047433d330c95afbcda39924c71f3d2c3a2f810ee6437eda"
   "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
-  "scripts/release/check_profile_config.py": "sha256:6a905a22d126317dd3c0fee77858c4abfa7d9e79dc50846e589146f490a75cb1"
+  "scripts/release/check_profile_config.py": "sha256:c1a16a2c7342d7be2d16306f1a15915cf4d37ffc4f1c6ea0466e3fe2df71782b"
   "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
   "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
+  "scripts/validate_capability_overlays.py": "sha256:b0f1a77dd11bb41da226b33a46a2ce439b62c1c3fcd4c0ccbbcf3398f4812d9e"
 ---
 
 # Deployment Profiles
@@ -131,13 +133,15 @@ staging `pilot` lane is customer-pilot **staging** and must not be renamed into
 production; the profile check refuses a defined `pilot-prod` that lacks
 `approvals` and `rollback_source`, or that reuses a staging or production profile.
 `scripts/release/check_profile_config.py` also checks that every profile is mapped
-exactly once (or unmapped), that staging lanes equal the profile's
+exactly once or unmapped (never both), that staging lanes equal the profile's
 `deployment_lanes`, and that the production postures match its three profiles.
 
 Capabilities are `enable-*` overlays in `config/capability_overlays.yaml`, each
 realized by existing runtime flags from `services/backend/config/settings.py`
-(`scripts/validate_capability_overlays.py`, run by `make repo-doctor`). An overlay
-name must never equal a profile name. Five overlays are bound today
+(`scripts/validate_capability_overlays.py`, run by `make repo-doctor` and as a
+router check in every PR plan). A bound flag must be an environment variable the
+settings file actually reads, matched by whole name, and an overlay must never
+equal a profile name, with or without its `enable-` prefix. Five overlays are bound today
 (communications, campaigns, agent beta, Kyber internal, advanced value); three
 names are reserved and unbound because no runtime flag exists yet
 (`enable-x402-experimental`, `enable-gcp-oauth`, `enable-sovereign-controls`).

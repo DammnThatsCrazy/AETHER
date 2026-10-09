@@ -3,12 +3,15 @@
 
 Profiles describe environments; flags describe capabilities. This keeps a
 capability from becoming a deployment profile: overlay names must start with
-``enable-``, must not equal a deployment profile name, and every bound flag must
-exist in the backend settings.
+``enable-``, must not equal a deployment profile name (with or without the
+prefix, so ``enable-communications`` cannot coexist with a ``communications``
+profile), and every bound flag must be an environment variable the backend
+settings actually read.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -19,6 +22,14 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "config/capability_overlays.yaml"
 PROFILES = ROOT / "config/deployment_profiles.yaml"
 CLASSES = {"core", "beta", "experimental", "internal"}
+# The runtime authority for flags. The registry may name it, but it cannot
+# redirect validation at a file the registry itself controls.
+FLAGS_SOURCE = "services/backend/config/settings.py"
+PREFIX = "enable-"
+# Environment variable names appear as quoted string literals in the settings
+# helpers (``_env_bool("AETHER_..._ENABLED", ...)``). Matching whole quoted names
+# means a truncated or extended name does not pass on a substring.
+_QUOTED_ENV_NAME = re.compile(r"""["']([A-Z][A-Z0-9_]*)["']""")
 
 
 def validate(
@@ -35,15 +46,19 @@ def validate(
     overlays = raw.get("overlays")
     if not isinstance(overlays, dict) or not overlays:
         return ["overlays must be a non-empty mapping"]
+    if raw.get("flags_source") != FLAGS_SOURCE:
+        return [f"flags_source must be {FLAGS_SOURCE!r}, got {raw.get('flags_source')!r}"]
     try:
-        settings_text = (root / str(raw.get("flags_source", ""))).read_text(encoding="utf-8")
+        settings_text = (root / FLAGS_SOURCE).read_text(encoding="utf-8")
     except OSError:
-        return [f"flags_source {raw.get('flags_source')!r} is not readable"]
+        return [f"flags_source {FLAGS_SOURCE!r} is not readable"]
+    settings_flags = set(_QUOTED_ENV_NAME.findall(settings_text))
 
     for name, spec in overlays.items():
-        if not str(name).startswith("enable-"):
-            errors.append(f"{name}: overlay names must start with enable-")
-        if name in profile_names:
+        if not str(name).startswith(PREFIX):
+            errors.append(f"{name}: overlay names must start with {PREFIX}")
+        capability = str(name).removeprefix(PREFIX)
+        if name in profile_names or capability in profile_names:
             errors.append(f"{name}: a capability overlay must not be a deployment profile")
         if not isinstance(spec, dict):
             errors.append(f"{name}: entry must be a mapping")
@@ -65,8 +80,8 @@ def validate(
         elif status not in {"bound", "unbound"}:
             errors.append(f"{name}: status must be bound or unbound")
         for flag in flags:
-            if flag not in settings_text:
-                errors.append(f"{name}: flag {flag} does not exist in {raw['flags_source']}")
+            if flag not in settings_flags:
+                errors.append(f"{name}: flag {flag} is not an environment variable read by {FLAGS_SOURCE}")
     return errors
 
 

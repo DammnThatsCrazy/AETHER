@@ -65,6 +65,14 @@ def test_a_profile_in_two_environments_is_caught():
     assert any("more than one environment" in f for f in _failures(dup))
 
 
+def test_a_profile_cannot_be_both_mapped_and_unmapped():
+    # The union of the two lists still equals the profile set, so only an explicit
+    # disjointness check catches this.
+    def both(d):
+        d["unmapped_profiles"] = list(d["unmapped_profiles"]) + ["staging"]
+    assert any("both mapped and unmapped" in f for f in _failures(both))
+
+
 def test_pilot_prod_cannot_silently_alias_the_staging_pilot_lane():
     def alias(d):
         d["canonical_environments"]["pilot-prod"] = {"profiles": ["staging"]}
@@ -110,7 +118,49 @@ def test_a_capability_cannot_be_a_deployment_profile(tmp_path):
 
 def test_a_bound_flag_must_exist_in_settings(tmp_path):
     errors = _overlay_errors(tmp_path, {"class": "beta", "status": "bound", "flags": ["AETHER_NO_SUCH_FLAG"]})
-    assert any("does not exist" in e for e in errors)
+    assert any("not an environment variable read by" in e for e in errors)
+
+
+def test_a_bound_flag_must_match_a_whole_setting_name(tmp_path):
+    # AETHER_COMMS_GRAPH is a prefix of AETHER_COMMS_GRAPH_ENABLED, which exists;
+    # a substring test would accept both of these.
+    for flag in ("AETHER_COMMS_GRAPH", "AETHER_COMMS_GRAPH_ENABLED_EXTRA", "COMMS_GRAPH_ENABLED"):
+        errors = _overlay_errors(tmp_path, {"class": "beta", "status": "bound", "flags": [flag]})
+        assert any("not an environment variable read by" in e for e in errors), flag
+    ok = _overlay_errors(tmp_path, {"class": "beta", "status": "bound", "flags": ["AETHER_COMMS_GRAPH_ENABLED"]})
+    assert ok == []
+
+
+def test_flags_source_cannot_be_redirected_at_a_file_the_registry_controls(tmp_path):
+    reg = tmp_path / "overlays.yaml"
+    reg.write_text(
+        yaml.safe_dump({
+            "schema_version": 1,
+            "flags_source": "config/capability_overlays.yaml",
+            "overlays": {"enable-thing": {"class": "beta", "status": "bound", "flags": ["AETHER_NOT_A_REAL_FLAG"]}},
+        }),
+        encoding="utf-8",
+    )
+    errors = overlays.validate(reg, ROOT / "config/deployment_profiles.yaml", ROOT)
+    assert any("flags_source must be" in e for e in errors)
+
+
+def test_a_capability_cannot_hide_behind_the_enable_prefix(tmp_path):
+    profiles = tmp_path / "profiles.yaml"
+    profiles.write_text(yaml.safe_dump({"profiles": {"communications": {}, "staging": {}}}), encoding="utf-8")
+    reg = tmp_path / "overlays.yaml"
+    reg.write_text(
+        yaml.safe_dump({
+            "schema_version": 1,
+            "flags_source": "services/backend/config/settings.py",
+            "overlays": {
+                "enable-communications": {"class": "beta", "status": "bound", "flags": ["AETHER_COMMS_GRAPH_ENABLED"]}
+            },
+        }),
+        encoding="utf-8",
+    )
+    errors = overlays.validate(reg, profiles, ROOT)
+    assert any("enable-communications" in e and "must not be a deployment profile" in e for e in errors)
 
 
 def test_an_unbound_overlay_cannot_list_flags_and_needs_a_note(tmp_path):
