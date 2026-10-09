@@ -59,6 +59,22 @@
       "minimum_disclosure": "D0"
     },
     {
+      "feature_id": "identity-activation",
+      "aether_route": "/identity/activation",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant identity-activation dashboard (setup status for the tenant's own identity features); same class as /activation and /onboarding, so no operator mirror",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "identity-reviews",
+      "aether_route": "/identity/reviews",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant identity review queue: its actions approve or reject merge decisions, and operators must not mutate those from a read-only mirror; operator review runs through the admin identity review-queue API",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
       "feature_id": "users",
       "aether_route": "/users",
       "tenant_parity_required": true,
