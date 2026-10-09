@@ -6,7 +6,7 @@ Each feature is measured across independent dimensions. Implementation completio
 
 | Feature | Scope | Impl % | Prod % | Ceiling | Achieved | Activation | Confidence |
 |---|---|--:|--:|---|:--:|---|---|
-| Agentic x402 | agentic-x402-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
+| Agentic x402 | agentic-x402-v1 v1 | 80% | 100% | VERIFIED | — | NO_EXTERNAL_BLOCKER | MODERATE |
 | Backend API | backend-api-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Campaign Intelligence | campaign-intelligence-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
 | Card-Linked Payment Rails | card-linked-payments-v1 v1 | 60% | 25% | CODE_COMPLETE | ✅ | CREDENTIAL_WAITING | LOW |
@@ -43,14 +43,14 @@ Each feature is measured across independent dimensions. Implementation completio
 ## Agentic x402 (`agentic-x402`)
 
 - **Scope:** agentic-x402-v1 v1 — observation-pilot
-- **Implementation:** VERIFIED · 100% of in-scope repository controls (migration-derived)
+- **Implementation:** IMPLEMENTED · 80% of in-scope repository controls (migration-derived)
 - **Productionization:** 100% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** VERIFIED (achieved: yes)
+- **Repository ceiling:** VERIFIED (achieved: no)
 - **Activation:** NO_EXTERNAL_BLOCKER
-- **Remaining repository work:** None
+- **Remaining repository work:** wire the x402 and agent lifecycle mappers to an event consumer
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Backend API (`backend-api`)
 

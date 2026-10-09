@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_by": "scripts/migrate_readiness_data.py",
-  "legacy_overall_maturity_index": 3.77,
+  "legacy_overall_maturity_index": 3.73,
   "legacy_overall_maturity_index_authoritative": false,
   "note": "The legacy 0-5 average is retained as historical_maturity_index and is non-authoritative for release eligibility. The authoritative signal is the per-profile hard-gate disposition in the multidimensional model.",
   "counts": {
@@ -312,15 +312,16 @@
     },
     {
       "legacy_area": "agentic_x402_productization",
-      "historical_maturity_index": 4,
+      "historical_maturity_index": 3,
       "historical_maturity_index_scale": "0-5",
       "historical_maturity_index_authoritative": false,
       "mapped_feature": "agentic-x402",
-      "hypothesized_implementation_state": "VERIFIED",
+      "hypothesized_implementation_state": "RUNTIME_INTEGRATED",
       "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
+        "Legacy score suggested RUNTIME_INTEGRATED; the migrated record measures IMPLEMENTED because external activation was separated out of implementation."
       ],
-      "new_implementation_state": "VERIFIED",
+      "new_implementation_state": "IMPLEMENTED",
       "new_productionization_percent": 100.0,
       "new_activation_state": "NO_EXTERNAL_BLOCKER",
       "new_environment_evidence": {

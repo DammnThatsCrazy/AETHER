@@ -4,8 +4,9 @@
 feature_id: agentic-x402
 title: Agentic x402
 owning_system: aether
-summary: 'Full x402 lifecycle (14 events + legacy normalization) and agent lifecycle (19 events + legacy
-  normalization) implemented end-to-end: SDK emitters, shared contracts, backend lifecycle mappers.'
+summary: 'x402 lifecycle (14 events + legacy normalization) and agent lifecycle (19 events + legacy normalization):
+  SDK emitters, shared contracts, tenant-scoped repositories and backend lifecycle mappers are implemented and
+  tested, but no event consumer calls the mappers yet.'
 scope:
   id: agentic-x402-v1
   version: 1
@@ -21,16 +22,16 @@ scope:
   deferred: []
 repository_ceiling:
   type: VERIFIED
-  achieved: true
+  achieved: false
   remaining_after_ceiling:
-  - None — repository-controlled work complete
-  remaining_is_repository_controlled: false
+  - Wire the x402 and agent lifecycle mappers to an event consumer (a graph-writer ConsumerSpec on the validated SDK event topic) and decide its overlap with the AgentExecutionProjector Silver path.
+  remaining_is_repository_controlled: true
   evidence:
   - packages/shared/events.ts
   - packages/shared/agent.ts
   - packages/shared/x402-lifecycle.ts
 implementation:
-  state: VERIFIED
+  state: IMPLEMENTED
   denominator: in-scope repository controls (migration-derived)
   controls:
   - id: contracts-and-schemas
@@ -44,7 +45,7 @@ implementation:
   - id: runtime-wiring
     description: runtime wiring
     weight: 20
-    satisfied: true
+    satisfied: false
   - id: persistence-and-migrations
     description: persistence and migrations
     weight: 20
@@ -53,7 +54,8 @@ implementation:
     description: authorization and tenant isolation
     weight: 20
     satisfied: true
-  remaining_work: []
+  remaining_work:
+  - wire the x402 and agent lifecycle mappers to an event consumer
 productionization:
   denominator: in-scope productionization controls (migration-derived)
   controls:

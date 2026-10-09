@@ -6,7 +6,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 | Profile | Disposition | Required | Impl | Prod | Activation | Env evidence | Deps | Ownership |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Local development | BLOCKED_BY_CODE | 32 | 78.1% | n/a | 50% | 100% | 100% | 100% |
+| Local development | BLOCKED_BY_CODE | 32 | 75% | n/a | 50% | 100% | 100% | 100% |
 | Staging | BLOCKED_BY_CODE | 24 | 91.7% | 91.7% | 62.5% | 0% | 100% | 100% |
 | Pilot | READY_TO_ACTIVATE | 3 | 100% | 100% | 33.3% | 0% | 100% | 100% |
 | Production (lean) | BLOCKED_BY_CODE | 23 | 43.5% | 91.3% | 65.2% | 0% | 100% | 100% |
@@ -14,7 +14,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 ## Local development (`local`) — BLOCKED_BY_CODE
 
-- `agentic-x402`: TECHNICALLY_RELEASE_ELIGIBLE
+- `agentic-x402`: BLOCKED_BY_CODE
 - `backend-api`: TECHNICALLY_RELEASE_ELIGIBLE
 - `campaign-intelligence`: TECHNICALLY_RELEASE_ELIGIBLE
 - `card-linked-payments`: BLOCKED_BY_CODE
@@ -48,6 +48,9 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `tenant-import-engine`: TECHNICALLY_RELEASE_ELIGIBLE
 
 **Hard blockers:**
+- agentic-x402: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
+- agentic-x402: implementation state IMPLEMENTED is below the VERIFIED floor
+- agentic-x402: open repository work: wire the x402 and agent lifecycle mappers to an event consumer
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor
 - card-linked-payments: open repository work: complete runtime integration; complete repository-controlled verification
@@ -98,6 +101,9 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `tenant-import-engine`: READY_TO_VALIDATE
 
 **Hard blockers:**
+- agentic-x402: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
+- agentic-x402: implementation state IMPLEMENTED is below the VERIFIED floor
+- agentic-x402: open repository work: wire the x402 and agent lifecycle mappers to an event consumer
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the VERIFIED floor
 - card-linked-payments: open repository work: complete runtime integration; complete repository-controlled verification
@@ -149,7 +155,9 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `identity-resolution`: READY_TO_VALIDATE
 
 **Hard blockers:**
-- agentic-x402: implementation state VERIFIED is below the TURNKEY floor
+- agentic-x402: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
+- agentic-x402: implementation state IMPLEMENTED is below the TURNKEY floor
+- agentic-x402: open repository work: wire the x402 and agent lifecycle mappers to an event consumer
 - backend-api: implementation state VERIFIED is below the TURNKEY floor
 - card-linked-payments: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - card-linked-payments: implementation state IMPLEMENTED is below the TURNKEY floor
