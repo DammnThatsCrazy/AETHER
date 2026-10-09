@@ -615,6 +615,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_service_classification.py"],
+        name="Backend service classification",
+        results=results,
+        stop_on_failure=stop,
+        remediation="classify every backend service directory in config/service_classification.yaml; deprecated services also need a debt retirement ledger row",
+    )
+
+    run(
         [sys.executable, "scripts/validate_debt_retirement_ledger.py"],
         name="Technical-debt retirement ledger",
         results=results,

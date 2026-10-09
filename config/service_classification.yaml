@@ -1,0 +1,170 @@
+# Service classification registry — every backend service directory has exactly
+# one lifecycle class, so a new directory cannot appear unclassified.
+#
+# Class (whether it directly supports the proof path
+# tenant -> source -> evidence -> normalization -> resolution -> graph ->
+# intelligence -> explanation -> action -> outcome):
+#   core          supports the proof path or the tenant-facing core product
+#   beta          shipped product surface that is not yet core
+#   experimental  flag-gated, observation-only or unproven; may change or go
+#   internal      Olympus/operator plane, not a tenant surface
+#   deprecated    superseded; must have a row in config/debt_retirement_ledger.yaml
+#   archived      kept for history, outside the runtime authority graph
+#   removed       tombstone for a deleted directory (kept out of the tree)
+#
+# stage is the primary runtime-spine stage, or control-plane / product / tenant.
+#
+# STATUS: proposed. The classes below are a first pass derived from each
+# package's own docstring and the maintainer's core / beta / experimental lists.
+# They are not a readiness claim. The maintainer reviews and changes them in a
+# normal PR; `scripts/validate_service_classification.py` enforces coverage,
+# vocabulary and the deprecated-needs-a-ledger-row rule.
+
+schema_version: 1
+authority: service-classification
+status: proposed
+root: services/backend/services
+
+services:
+  account_lifecycle: {class: core, stage: control-plane, reason: "account suspension, recovery and erasure orchestration (data lifecycle)"}
+  account_organization: {class: core, stage: tenant, reason: "tenant-scoped organization and account membership"}
+  activation: {class: core, stage: tenant, reason: "self-serve tenant activation API"}
+  admin: {class: core, stage: tenant, reason: "tenant management, billing and API key administration"}
+  agent: {class: experimental, stage: intelligence, reason: "agent orchestration, task management and worker coordination"}
+  agent_access_intelligence: {class: experimental, stage: intelligence, reason: "agent capability catalog, authority and governance"}
+  agent_comm_observability: {class: experimental, stage: intake, reason: "observation-only agent communication routes"}
+  agentic_observability: {class: experimental, stage: intake, reason: "observation-only agent activity routes"}
+  analytics: {class: beta, stage: product, reason: "dashboard, report and export query engine"}
+  analytics_automation: {class: beta, stage: intelligence, reason: "automated campaign performance monitoring pipeline"}
+  assets: {class: experimental, stage: graph, reason: "universal asset registry (chain deployments)"}
+  attribution: {class: beta, stage: intelligence, reason: "multi-touch attribution for reward eligibility"}
+  auth: {class: core, stage: tenant, reason: "sign-up, OTP and SSO authentication"}
+  behavior: {class: beta, stage: intelligence, reason: "Profile 360 behavior snapshots read layer"}
+  behavioral: {class: beta, stage: intelligence, reason: "behavioral continuity and friction signals"}
+  billing: {class: core, stage: tenant, reason: "pilot billing and access (Stripe checkout wrapper)"}
+  campaign: {class: beta, stage: product, reason: "campaign management and reporting"}
+  capabilities: {class: core, stage: control-plane, reason: "capability discovery for Profile 360 sub-resources and integrations"}
+  card_linked_payments: {class: experimental, stage: intake, reason: "card-linked payment rail observability, observation-first"}
+  cis: {class: internal, stage: control-plane, reason: "operator API for graph health, mutation stream and contamination forensics"}
+  client_sync: {class: beta, stage: product, reason: "durable client catch-up feed and emitter"}
+  cluster: {class: beta, stage: product, reason: "Cluster360 intelligence surface"}
+  command_center: {class: beta, stage: product, reason: "tenant Command Center API"}
+  commerce: {class: experimental, stage: action, reason: "payment tracking and agent hiring (L3a)"}
+  comms: {class: beta, stage: intake, reason: "communications intelligence over external providers"}
+  communication360: {class: beta, stage: product, reason: "Communication360 canonical facts and provider"}
+  computation: {class: core, stage: intelligence, reason: "computation substrate orchestration"}
+  consent: {class: core, stage: control-plane, reason: "consent records, data subject requests and audit logs"}
+  contact: {class: beta, stage: product, reason: "enterprise inquiry and lead capture endpoints"}
+  continuation: {class: beta, stage: product, reason: "cross-device continuation plane"}
+  crossdomain: {class: experimental, stage: graph, reason: "cross-domain business, TradFi and web intelligence graph"}
+  data_exchange: {class: core, stage: intake, reason: "governed tenant import and export control plane"}
+  data_quality: {class: beta, stage: explanation, reason: "data quality and drift views"}
+  delegation: {class: experimental, stage: control-plane, reason: "scoped, time-bound, revocable entity delegations"}
+  delivery: {class: core, stage: action, reason: "durable provider dispatch and outcome tracking"}
+  demo_seed: {class: internal, stage: product, reason: "explicit backend-owned synthetic demonstration data"}
+  derivatives: {class: experimental, stage: intake, reason: "observation-only derivatives intelligence"}
+  diagnostics: {class: internal, stage: control-plane, reason: "diagnostics and error monitoring"}
+  dsr_propagation: {class: core, stage: control-plane, reason: "data subject request propagation records"}
+  dune_feeder: {class: beta, stage: intake, reason: "governed Dune analytics feeder (admin-only)"}
+  economic: {class: beta, stage: product, reason: "unified economic value read aggregation"}
+  entities: {class: core, stage: resolution, reason: "multi-entity identity service (humans, agents, organizations)"}
+  entity_intelligence: {class: core, stage: graph, reason: "profile dimensions, timeline and relationship queries"}
+  events: {class: core, stage: evidence, reason: "event replay submission, status and ingest routes"}
+  expectations: {class: beta, stage: intelligence, reason: "expectation and negative-space intelligence"}
+  exploration: {class: experimental, stage: product, reason: "flag-gated unified exploration fabric, default off"}
+  export: {class: core, stage: control-plane, reason: "tenant artifact export jobs (data lifecycle)"}
+  external_account_observability: {class: experimental, stage: intake, reason: "observation-only external account routes"}
+  flow_trace: {class: experimental, stage: graph, reason: "flow-of-funds trace"}
+  flows: {class: experimental, stage: graph, reason: "financial flow tracking between entities"}
+  fraud: {class: beta, stage: intelligence, reason: "composable weighted fraud scoring"}
+  fraud360: {class: beta, stage: product, reason: "Fraud360 domain-synthesis projection"}
+  fraud_networks: {class: beta, stage: intelligence, reason: "fraud network cluster detection and scoring"}
+  gateway: {class: core, stage: control-plane, reason: "health checks, root endpoint, metrics and status history"}
+  geo: {class: experimental, stage: graph, reason: "geographic intelligence pipeline (returns null until provisioned)"}
+  geographic360: {class: beta, stage: product, reason: "Geographic360 intelligence projection provider"}
+  governance: {class: internal, stage: control-plane, reason: "governance decision evaluation and audit routes"}
+  identity: {class: core, stage: resolution, reason: "backend-owned identity resolution authority"}
+  imports: {class: core, stage: intake, reason: "tenant file import engine"}
+  incentive_context: {class: beta, stage: intelligence, reason: "Social360 incentive context resolution"}
+  infrastructure: {class: beta, stage: product, reason: "Infrastructure360 intelligence projection"}
+  ingestion: {class: core, stage: intake, reason: "SDK and feed event validation, normalization and queuing"}
+  integrations: {class: core, stage: intake, reason: "provider and connector ingestion and the data-rights ledger"}
+  integrity: {class: core, stage: evidence, reason: "Bronze truth-chain ledger integrity"}
+  intelligence: {class: core, stage: intelligence, reason: "decisions, recommendations and intelligence API"}
+  interop: {class: experimental, stage: intake, reason: "protocol-neutral interoperability observation"}
+  investigation: {class: beta, stage: action, reason: "investigation case CRUD and status transitions"}
+  jobs: {class: core, stage: control-plane, reason: "durable Postgres job control plane"}
+  journeys: {class: core, stage: intelligence, reason: "journey stitching and routes"}
+  kyber: {class: internal, stage: control-plane, reason: "Kyber internal operating plane"}
+  kyber_operator: {class: internal, stage: control-plane, reason: "privileged tenant access and fleet envelope for Kyber"}
+  lake: {class: core, stage: evidence, reason: "Bronze, Silver and Gold data lake"}
+  managed_integrations: {class: beta, stage: control-plane, reason: "reconciled control plane managed-integration abstraction"}
+  me: {class: core, stage: tenant, reason: "customer self-service profile and API keys"}
+  measurement: {class: core, stage: intelligence, reason: "canonical measurement domain: touchpoints, journeys, attribution, outcomes"}
+  metering_evidence: {class: internal, stage: control-plane, reason: "metering evidence for cost tracking"}
+  ml_serving: {class: beta, stage: intelligence, reason: "model inference, feature serving and prediction cache"}
+  mobile: {class: beta, stage: product, reason: "mobile gateway: installations and push subscriptions"}
+  model_governance: {class: beta, stage: control-plane, reason: "consent-scoped training-data admission and inference gates"}
+  model_runtime: {class: experimental, stage: intelligence, reason: "provider-neutral multi-model intelligence harness"}
+  noesis: {class: experimental, stage: intelligence, reason: "graph-native natural-language intelligence"}
+  notification: {class: beta, stage: action, reason: "webhooks, email alerts and Slack integrations"}
+  notification_intelligence: {class: beta, stage: action, reason: "event-driven multi-channel notification pipeline"}
+  onboarding: {class: beta, stage: tenant, reason: "customer onboarding lifecycle"}
+  onchain: {class: experimental, stage: action, reason: "on-chain action recording, chain listening and RPC gateway"}
+  operational_intelligence: {class: beta, stage: intelligence, reason: "operational intelligence contracts and graph routes"}
+  oracle: {class: experimental, stage: action, reason: "oracle bridge proofs for on-chain reward claims"}
+  payment_catalog: {class: experimental, stage: intake, reason: "card-linked payment catalog seed"}
+  pnl: {class: experimental, stage: intelligence, reason: "realized and unrealized PNL and TVL delta"}
+  policy: {class: core, stage: control-plane, reason: "consent policy decision evidence"}
+  population: {class: beta, stage: intelligence, reason: "population segmentation and macro-to-micro intelligence"}
+  population360: {class: beta, stage: product, reason: "Population360 projection provider and demographic lens"}
+  product_catalog: {class: beta, stage: product, reason: "product catalog and instrumentation registry"}
+  profile: {class: core, stage: product, reason: "Profile 360 entity omniview composition"}
+  profile360_workers: {class: core, stage: intelligence, reason: "Profile 360 derived-data workers"}
+  projections: {class: core, stage: graph, reason: "projection restatement after identity changes"}
+  protocol_observability: {class: experimental, stage: intake, reason: "observation-only x402 protocol routes"}
+  provider_catalog: {class: core, stage: intake, reason: "operator provider source catalog"}
+  provider_runtime: {class: core, stage: intake, reason: "universal provider runtime"}
+  providers: {class: core, stage: intake, reason: "provider gateway and native provider modules"}
+  readiness_graph: {class: core, stage: control-plane, reason: "dependency-aware capability readiness graph"}
+  realtime: {class: beta, stage: product, reason: "Profile 360 real-time fan-out over SSE and WebSocket"}
+  recommendations: {class: beta, stage: action, reason: "retarget recommendation engine and executor"}
+  reconciliation: {class: core, stage: control-plane, reason: "data-availability and dimension-state reconciliation"}
+  registration: {class: core, stage: tenant, reason: "public tenant registration and key recovery"}
+  relationship_fidelity: {class: experimental, stage: graph, reason: "Social360 relationship fidelity orchestration"}
+  relationship_intelligence: {class: experimental, stage: graph, reason: "Social360 relationship intelligence read surfaces"}
+  relationship_promotion: {class: experimental, stage: graph, reason: "Social360 independent-evidence promotion gate"}
+  reliability: {class: internal, stage: control-plane, reason: "reliability, SRE and incident response command center"}
+  reports: {class: beta, stage: product, reason: "data exchange PDF report artifacts"}
+  resolution: {class: deprecated, stage: resolution, reason: "legacy resolution engine; superseded by services/identity"}
+  responsiveness: {class: core, stage: control-plane, reason: "time-to-value spine: ingestion ACK path and connection health"}
+  rewards: {class: experimental, stage: action, reason: "reward eligibility engine and queue processor"}
+  rights_authority: {class: core, stage: control-plane, reason: "canonical rights decision runtime"}
+  risk360: {class: beta, stage: product, reason: "Risk360 contextual risk projection"}
+  risk_overlay: {class: beta, stage: product, reason: "Cytoscape-ready risk graph overlays"}
+  runtime: {class: core, stage: control-plane, reason: "supervised background worker orchestration"}
+  rwa: {class: experimental, stage: graph, reason: "tokenized real-world asset intelligence graph"}
+  sdk: {class: core, stage: intake, reason: "SDK identity utilities and compatibility endpoint"}
+  sdk_config: {class: core, stage: intake, reason: "signed SDK remote config manifest"}
+  sdk_distribution: {class: core, stage: intake, reason: "SDK sites, install snippets and first-heartbeat verification"}
+  sdk_drift: {class: core, stage: control-plane, reason: "SDK drift detection"}
+  sdk_health: {class: core, stage: control-plane, reason: "SDK heartbeat ingest and health"}
+  security: {class: internal, stage: control-plane, reason: "security, compliance and governance control plane"}
+  semantic_intelligence: {class: beta, stage: intelligence, reason: "semantic and sentiment classification engine"}
+  signals: {class: core, stage: intelligence, reason: "signal translation from model features to human-readable signals"}
+  silver: {class: core, stage: normalization, reason: "Bronze to typed Silver fact normalization"}
+  social: {class: deprecated, stage: product, reason: "legacy Social360 compatibility route"}
+  stablecoin: {class: experimental, stage: intake, reason: "bounded stablecoin observation domain"}
+  stablecoins: {class: experimental, stage: intake, reason: "canonical stablecoin intelligence domain"}
+  storage_lifecycle: {class: core, stage: control-plane, reason: "object-backed Bronze storage lifecycle workers"}
+  suggestions: {class: beta, stage: action, reason: "OODA suggestion intelligence"}
+  targeting_intelligence: {class: beta, stage: intelligence, reason: "cluster targeting observation"}
+  temporal360: {class: beta, stage: product, reason: "Temporal360 contextual time projection"}
+  temporal_preferences: {class: beta, stage: product, reason: "viewer and tenant temporal preferences"}
+  tenant_readiness: {class: core, stage: control-plane, reason: "tenant launch readiness, trust states and quota policy"}
+  traffic: {class: beta, stage: intake, reason: "traffic source tracking and attribution"}
+  unique_signals: {class: experimental, stage: intelligence, reason: "stub signal computations, not yet implemented"}
+  valuation: {class: beta, stage: intelligence, reason: "event-time valuation, versioned, multi-reporting-asset"}
+  value: {class: core, stage: intelligence, reason: "canonical USD-first value semantics"}
+  web3: {class: experimental, stage: graph, reason: "registry-first Web3 coverage and classification"}
+  x402: {class: experimental, stage: intake, reason: "x402 HTTP payment header capture and economic graph"}
