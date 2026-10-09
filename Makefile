@@ -1237,7 +1237,7 @@ derivatives-ops-check:
 derivatives-pr4-release-check: derivatives-product-check derivatives-ops-check derivatives-intelligence-release-check
 	python -m pytest tests/unit/test_derivatives_ingestion.py tests/unit/test_derivatives_intelligence.py tests/unit/test_derivatives_product.py -v
 
-.PHONY: derivatives-contracts-check derivatives-migration-check derivatives-accounting-test derivatives-security-check derivatives-privacy-check derivatives-load-test derivatives-docs-check derivatives-release-check derivatives-release-check-strict
+.PHONY: derivatives-contracts-check derivatives-migration-check derivatives-accounting-test derivatives-security-check derivatives-privacy-check derivatives-load-test derivatives-docs-check derivatives-check derivatives-check-strict
 
 derivatives-contracts-check:
 	python -m pytest tests/unit/test_derivatives_release.py -v
@@ -1260,7 +1260,11 @@ derivatives-docs-check:
 	python scripts/validate_frontmatter.py
 	python scripts/docs_drift.py --strict
 
-derivatives-release-check: derivatives-pr4-release-check derivatives-contracts-check derivatives-security-check derivatives-privacy-check derivatives-docs-check
+# These run the derivatives test suites and docs drift. They are NOT release
+# evidence: the strict release gate (staging ingestion, SLOs, licensing controls,
+# model governance, entitlement enforcement) has no evaluator in the repository,
+# so a pass here says nothing about those conditions.
+derivatives-check: derivatives-pr4-release-check derivatives-contracts-check derivatives-security-check derivatives-privacy-check derivatives-docs-check
 
-derivatives-release-check-strict: derivatives-release-check derivatives-load-test
+derivatives-check-strict: derivatives-check derivatives-load-test
 	python -m pytest tests/unit/test_derivatives_ingestion.py tests/unit/test_derivatives_intelligence.py tests/unit/test_derivatives_product.py tests/unit/test_derivatives_release.py -v
