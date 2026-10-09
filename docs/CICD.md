@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:39f83c4fb25429bb395d77cb8f2dde13fc5604ff4a89e984b3c73361b0c33393"
+  ".github/workflows/": "sha256:5b02568cce1521a11fbf5c2eaa688c3b98550e753592bf5f891b5f032056c043"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -514,7 +514,7 @@ and release preflights.
 | `repo-consistency.yml` | PR finalization (`ready_for_review`) / push to `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, binds the selected workspace archive and any selected backend image into one immutable candidate, verifies and materializes that candidate in the consumer job (the backend image archive is kept for one day, because only that in-run consumer reads it), executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. Draft pushes do not start this workflow. The broad `make ci-check` job is intentionally absent from the PR path after the completed selection observation window. | no |
 | `identity-continuity-gates.yml` | PR finalization (`ready_for_review`); `workflow_dispatch` | Runs supplementary identity contract, routing, merge-safety, split, projection, UX, and proof-pack checks. It installs the Python test environment for pytest gates and builds proof contracts, fixtures, runner, and reporting packages in dependency order. Gate 7 uploads its proof report. These results inform promotion and release review but are not required merge checks and do not replace `verification / disposition`. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
-| `production-equivalent-ci.yml` | PR finalization (`ready_for_review`) / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every triggered event. On finalized PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
+| `production-equivalent-ci.yml` | PR finalization (`ready_for_review`) / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every triggered event. On finalized PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Its real-stack steps include the ingestion smoke and concurrency tests, the measurement/attribution repository tests, and the provider rights revocation fence tests. Pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
 
 Staging delivery and lifecycle workflows carry the same explicit
 `deployment_lane` token (`full` or `pilot`) through the immutable release,

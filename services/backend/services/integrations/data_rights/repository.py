@@ -6,13 +6,45 @@ Local mode uses a per-service in-memory store, matching the repository pattern.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
-from typing import Any, Optional
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from services.integrations.data_rights.models import DataRightsGrant, GrantStatus
 from repositories.repos import get_pool
+
+# Shared holders (raw-record writers) each pin one pooled connection for the
+# session-level advisory lock and then need a second connection for the write.
+# Capping holders at under half the pool keeps them from starving each other.
+_HOLD_SLOTS: dict[int, asyncio.Semaphore] = {}
+
+
+def _hold_slot(pool: Any) -> asyncio.Semaphore:
+    key = id(pool)
+    slot = _HOLD_SLOTS.get(key)
+    if slot is None:
+        try:
+            size = int(pool.get_max_size())
+        except Exception:
+            size = 8
+        slot = _HOLD_SLOTS[key] = asyncio.Semaphore(max(1, size // 2 - 1))
+    return slot
+
+
+def _as_datetime(value: str | datetime) -> datetime:
+    """asyncpg binds ``timestamptz`` parameters from datetimes, not ISO strings."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(value)
+
+
+def grant_lock_name(tenant_id: str, grant_id: str) -> str:
+    """Advisory-lock name shared by raw-record writers and revocation."""
+    return f"aether.data_rights.grant:{tenant_id}:{grant_id}"
 
 
 class DataRightsGrantRepository:
@@ -23,11 +55,66 @@ class DataRightsGrantRepository:
         *,
         local_grants: Optional[dict[str, DataRightsGrant]] = None,
         local_events: Optional[list[dict[str, Any]]] = None,
+        pool_provider: Optional[Callable[[], Awaitable[Any]]] = None,
     ) -> None:
         self._local_grants = local_grants if local_grants is not None else {}
         self._local_events = local_events if local_events is not None else []
+        # Tests that exercise the PostgreSQL path from a local-mode process supply
+        # the pool explicitly; production leaves this unset.
+        self._pool_provider = pool_provider
+        self._local_locks: dict[tuple[int, str], asyncio.Lock] = {}
+
+    def _local_lock(self, tenant_id: str, grant_id: str) -> asyncio.Lock:
+        # One lock per event loop and grant: an asyncio.Lock must not be shared
+        # across loops once it has been contended.
+        key = (id(asyncio.get_running_loop()), grant_lock_name(tenant_id, grant_id))
+        lock = self._local_locks.get(key)
+        if lock is None:
+            lock = self._local_locks[key] = asyncio.Lock()
+        return lock
+
+    @asynccontextmanager
+    async def hold_unrevoked(
+        self, grant_id: str, *, tenant_id: str,
+    ) -> AsyncIterator[None]:
+        """Keep a revocation of this grant from committing while the caller writes.
+
+        Raw-record writers re-read the grant, write, and only then release;
+        ``revoke`` takes the same lock exclusively, so a revocation either
+        committed before the writer re-read the grant (and the write is
+        refused) or waits until the write has committed (and so sees the row).
+        PostgreSQL uses a session-level shared advisory lock; local mode uses a
+        per-grant asyncio lock.
+        """
+        pool = await self._pool()
+        if pool is None:
+            async with self._local_lock(tenant_id, grant_id):
+                yield
+            return
+        name = grant_lock_name(tenant_id, grant_id)
+        async with _hold_slot(pool):
+            conn = await pool.acquire()
+            try:
+                await conn.execute(
+                    "SELECT pg_advisory_lock_shared(hashtextextended($1, 0))", name,
+                )
+                try:
+                    yield
+                finally:
+                    try:
+                        await conn.execute(
+                            "SELECT pg_advisory_unlock_shared(hashtextextended($1, 0))",
+                            name,
+                        )
+                    except Exception:
+                        # Never return a connection that may still hold the lock.
+                        conn.terminate()
+            finally:
+                await pool.release(conn)
 
     async def _pool(self) -> Any:
+        if self._pool_provider is not None:
+            return await self._pool_provider()
         if os.getenv("AETHER_ENV", "local").lower() == "local":
             return None
         return await get_pool()
@@ -106,7 +193,7 @@ class DataRightsGrantRepository:
                        (id, data, tenant_id, created_at, updated_at)
                        VALUES ($1, $2::jsonb, $3, $4::timestamptz, $4::timestamptz)""",
                     grant.data_rights_grant_id,
-                    json.dumps(body), grant.tenant_id, grant.granted_at,
+                    json.dumps(body), grant.tenant_id, _as_datetime(grant.granted_at),
                 )
                 await self._insert_event(conn, event)
         return grant
@@ -179,28 +266,35 @@ class DataRightsGrantRepository:
     ) -> Optional[DataRightsGrant]:
         pool = await self._pool()
         if pool is None:
-            grant = self._local_grants.get(grant_id)
-            if grant is None or grant.tenant_id != tenant_id:
-                return None
-            if grant.status == GrantStatus.REVOKED:
-                return grant
-            updated = grant.model_copy(update={
-                "status": GrantStatus.REVOKED,
-                "revoked_at": revoked_at,
-                "revocation_reason": reason,
-                "revoked_by_user_id": actor,
-                "revocation_event_id": f"dre_{uuid.uuid4().hex}",
-            })
-            event = self._event(
-                grant=updated, event_type="revoked", actor=actor, reason=reason,
-                occurred_at=revoked_at, event_id=updated.revocation_event_id,
-            )
-            self._local_grants[grant_id] = updated
-            self._local_events.append(event)
-            return updated
+            async with self._local_lock(tenant_id, grant_id):
+                grant = self._local_grants.get(grant_id)
+                if grant is None or grant.tenant_id != tenant_id:
+                    return None
+                if grant.status == GrantStatus.REVOKED:
+                    return grant
+                updated = grant.model_copy(update={
+                    "status": GrantStatus.REVOKED,
+                    "revoked_at": revoked_at,
+                    "revocation_reason": reason,
+                    "revoked_by_user_id": actor,
+                    "revocation_event_id": f"dre_{uuid.uuid4().hex}",
+                })
+                event = self._event(
+                    grant=updated, event_type="revoked", actor=actor, reason=reason,
+                    occurred_at=revoked_at, event_id=updated.revocation_event_id,
+                )
+                self._local_grants[grant_id] = updated
+                self._local_events.append(event)
+                return updated
 
         async with pool.acquire() as conn:
             async with conn.transaction():
+                # Wait for in-flight raw-record writers holding this grant (see
+                # hold_unrevoked) before the revocation can commit.
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                    grant_lock_name(tenant_id, grant_id),
+                )
                 row = await conn.fetchrow(
                     "SELECT data FROM data_rights_grants WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
                     grant_id, tenant_id,
@@ -223,7 +317,7 @@ class DataRightsGrantRepository:
                     """UPDATE data_rights_grants
                        SET data = $1::jsonb, updated_at = $2::timestamptz
                        WHERE id = $3 AND tenant_id = $4""",
-                    json.dumps(body), revoked_at, grant_id, grant.tenant_id,
+                    json.dumps(body), _as_datetime(revoked_at), grant_id, grant.tenant_id,
                 )
                 await self._insert_event(conn, self._event(
                     grant=updated, event_type="revoked", actor=actor,
@@ -278,7 +372,7 @@ class DataRightsGrantRepository:
                VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::jsonb)""",
             event["event_id"], event["grant_ref"], event["tenant_id"],
             event["event_type"], event["actor"], event["reason"],
-            event["occurred_at"], json.dumps(event),
+            _as_datetime(event["occurred_at"]), json.dumps(event),
         )
 
 

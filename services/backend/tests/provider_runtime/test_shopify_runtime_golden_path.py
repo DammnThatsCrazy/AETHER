@@ -13,6 +13,8 @@ record is retained, normalized, and published.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import pytest
 
 import repositories.repos as repos
@@ -93,6 +95,10 @@ class _GrantedRightsAdmission:
             policy_version="irrl-2",
             evaluated_at="2026-10-03T00:00:00+00:00",
         )
+
+    @asynccontextmanager
+    async def hold_grant(self, record, admission):
+        yield
 
     async def verify_persisted(self, record, *, current_admission):
         return None

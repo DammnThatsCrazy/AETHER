@@ -19,7 +19,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/backend/services/provider_runtime/": "sha256:654c952f050f9122a6ed5323cc74c5ba84436344c3f4c812b5d1ade715ad0f17"
+  "services/backend/services/provider_runtime/": "sha256:615f58049dcfd5f699f2070f51c06f2367711420996f67f9305d6900f20a1117"
   "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
   "services/backend/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/backend/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
@@ -210,6 +210,10 @@ grants and append-only lifecycle events in the migration-owned repository;
 staging/production admission also requires the durable schema to be available.
 Missing, ambiguous, revoked, expired, or cross-tenant grants deny before raw
 payload or webhook-body persistence.
+A revocation that commits after admission but before the write also denies: the
+store holds the admitting grant (shared lock; revocation takes it exclusively)
+across the final grant re-read and the Bronze insert, so a revoked grant never
+leaves a retained record.
 
 Even after a delivery is verified and parsed, its normalized events are not
 immediately durable. The provider-runtime event bridge

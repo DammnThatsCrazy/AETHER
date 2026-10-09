@@ -18,7 +18,7 @@ source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
   "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
   "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
-  "services/backend/services/provider_runtime/": "sha256:654c952f050f9122a6ed5323cc74c5ba84436344c3f4c812b5d1ade715ad0f17"
+  "services/backend/services/provider_runtime/": "sha256:615f58049dcfd5f699f2070f51c06f2367711420996f67f9305d6900f20a1117"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -644,7 +644,9 @@ while the grant store is not durable — is not retained. The sync run closes as
 `ProviderRawRightsDenied`); the provider cursor and connection last-success
 timestamp remain unchanged. Inspect `provider_raw_rights_denials_total` by
 `reason` (`rights_denied`, `grant_scope_mismatch`, `grant_store_not_durable`,
-`authority_unavailable`, `admission_evidence_mismatch`). Retrying does not
+`authority_unavailable`, `admission_evidence_mismatch`, `grant_lookup_failed`,
+`grant_revoked_before_write`; the last means the grant was revoked between
+admission and the write, and nothing was retained). Retrying does not
 help until the tenant grants the account's rights; then the next sync resumes
 from the unchanged cursor.
 

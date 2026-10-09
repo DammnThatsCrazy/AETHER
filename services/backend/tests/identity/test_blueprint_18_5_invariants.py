@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import os
 import sys
 import uuid
@@ -266,6 +268,10 @@ async def test_split_execution_preserves_raw_provider_records(monkeypatch):
                 policy_version="irrl-2",
                 evaluated_at=utc_now().isoformat(),
             )
+
+        @asynccontextmanager
+        async def hold_grant(self, record, admission):
+            yield
 
         async def verify_persisted(self, admitted_record, *, current_admission):
             stored = admitted_record.metadata[PROVIDER_RAW_RIGHTS_METADATA_KEY]
