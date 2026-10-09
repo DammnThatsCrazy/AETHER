@@ -79,7 +79,6 @@ def test_new_flags_default_false_even_when_master_runtime_is_enabled() -> None:
 def test_sync_scheduler_cadence_defaults() -> None:
     cfg = settings_module.ProviderRuntimeConfig()
     assert cfg.provider_sync_interval_seconds == 3600
-    assert cfg.provider_sync_cron == ""
 
 
 # ── Settable (env-driven, verified through a module reload) ─────────────────
@@ -105,26 +104,22 @@ def test_sync_scheduler_cadence_settable_via_env(monkeypatch: pytest.MonkeyPatch
         monkeypatch,
         AETHER_PROVIDER_SYNC_SCHEDULER_ENABLED="true",
         AETHER_PROVIDER_SYNC_INTERVAL_SECONDS="120",
-        AETHER_PROVIDER_SYNC_CRON="*/5 * * * *",
     )
     cfg = settings_module.ProviderRuntimeConfig()
     assert cfg.provider_sync_scheduler_enabled is True
     assert cfg.provider_sync_interval_seconds == 120
-    assert cfg.provider_sync_cron == "*/5 * * * *"
 
 
 def test_flags_are_settable_via_kwargs() -> None:
     cfg = settings_module.ProviderRuntimeConfig(
         provider_sync_scheduler_enabled=True,
         provider_sync_interval_seconds=300,
-        provider_sync_cron="0 */6 * * *",
         provider_migrations_enabled=True,
         provider_legacy_decommission=True,
         kyber_runtime_ui_enabled=True,
     )
     assert cfg.provider_sync_scheduler_enabled is True
     assert cfg.provider_sync_interval_seconds == 300
-    assert cfg.provider_sync_cron == "0 */6 * * *"
     assert cfg.provider_migrations_enabled is True
     assert cfg.provider_legacy_decommission is True
     assert cfg.kyber_runtime_ui_enabled is True
@@ -145,7 +140,6 @@ def test_sync_scheduler_flag_gates_the_settings_singleton(
     runtime = settings_module.settings.provider_runtime
     assert runtime.provider_sync_scheduler_enabled is True
     assert runtime.provider_sync_interval_seconds == 3600
-    assert runtime.provider_sync_cron == ""
 
 
 # ── DECISION 3: flags are REAL gates (not no-op claims) ─────────────────────

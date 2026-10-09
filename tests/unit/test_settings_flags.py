@@ -67,7 +67,7 @@ def _allow(tmp_path: Path, allow, ledger_ids=("row-a",)) -> tuple[Path, Path]:
 def _errors(tmp_path, allow=(), permitted=None, **kwargs):
     root = _repo(tmp_path / "repo", **kwargs)
     allowlist, ledger = _allow(tmp_path, allow)
-    names = frozenset(permitted if permitted is not None else (item["env"] for item in allow if isinstance(item, dict) and "env" in item))
+    names = frozenset(permitted if permitted is not None else (item["field"] for item in allow if isinstance(item, dict) and "field" in item))
     return flags.validate(root, allowlist, ledger, permitted=names)
 
 
@@ -114,7 +114,7 @@ def test_documentation_and_examples_are_not_readers(tmp_path):
 
 
 def test_allowlist_covers_a_field_and_needs_a_ledger_row(tmp_path):
-    entry = {"env": "WIDGET_DEAD", "ledger": "row-a", "reason": "pinned by the profile contract"}
+    entry = {"field": "WidgetConfig.dead_flag", "ledger": "row-a", "reason": "pinned by the profile contract"}
     errors = _errors(tmp_path, allow=[entry])
     assert not any("dead_flag" in e for e in errors)
     errors = _errors(tmp_path / "missing", allow=[{**entry, "ledger": "nope"}])
@@ -122,30 +122,30 @@ def test_allowlist_covers_a_field_and_needs_a_ledger_row(tmp_path):
 
 
 def test_allowlist_can_only_shrink(tmp_path):
-    read = {"env": "WIDGET_USED", "ledger": "row-a", "reason": "x"}
-    gone = {"env": "WIDGET_GONE", "ledger": "row-a", "reason": "x"}
+    read = {"field": "WidgetConfig.used_flag", "ledger": "row-a", "reason": "x"}
+    gone = {"field": "WidgetConfig.gone", "ledger": "row-a", "reason": "x"}
     errors = _errors(tmp_path, allow=[read, gone])
-    assert any("WIDGET_USED is read now" in e for e in errors)
-    assert any("WIDGET_GONE no longer exists" in e for e in errors)
+    assert any("WidgetConfig.used_flag is read now" in e for e in errors)
+    assert any("WidgetConfig.gone no longer exists" in e for e in errors)
 
 
 def test_allowlist_entries_need_every_field_and_may_not_repeat(tmp_path):
-    entry = {"env": "WIDGET_DEAD", "ledger": "row-a", "reason": "x"}
-    errors = _errors(tmp_path, allow=[entry, entry, {"env": "WIDGET_USED"}, {"env": " ", "ledger": "row-a", "reason": "x"}])
+    entry = {"field": "WidgetConfig.dead_flag", "ledger": "row-a", "reason": "x"}
+    errors = _errors(tmp_path, allow=[entry, entry, {"field": "WidgetConfig.used_flag"}, {"field": " ", "ledger": "row-a", "reason": "x"}])
     assert any("listed twice" in e for e in errors)
-    assert sum("needs a non-empty env, ledger and reason" in e for e in errors) == 2
+    assert sum("needs a non-empty field (Class.field), ledger and reason" in e for e in errors) == 2
 
 
 def test_an_allowlist_entry_cannot_admit_a_field_the_validator_does_not_permit(tmp_path):
-    entry = {"env": "WIDGET_DEAD", "ledger": "row-a", "reason": "x"}
+    entry = {"field": "WidgetConfig.dead_flag", "ledger": "row-a", "reason": "x"}
     # row-a exists and the field is unread, so only the pinned set stops this.
     errors = _errors(tmp_path, allow=[entry], permitted=[])
-    assert any("WIDGET_DEAD is not a permitted exception" in e for e in errors)
+    assert any("WidgetConfig.dead_flag is not a permitted exception" in e for e in errors)
 
 
 def test_the_committed_allowlist_is_within_the_permitted_set():
     raw = yaml.safe_load(flags.ALLOWLIST.read_text(encoding="utf-8"))
-    assert {e["env"] for e in raw["allow"]} <= flags.PERMITTED_UNREAD
+    assert {e["field"] for e in raw["allow"]} <= flags.PERMITTED_UNREAD
 
 
 def test_allowlist_schema_is_enforced(tmp_path):
@@ -165,7 +165,7 @@ def test_the_committed_settings_have_no_unread_field_outside_the_allowlist():
 
 def test_every_committed_allowlist_entry_is_exercised():
     raw = yaml.safe_load(flags.ALLOWLIST.read_text(encoding="utf-8"))
-    assert [e["env"] for e in raw["allow"]] == [f.env for f in flags.unread_flags()]
+    assert [e["field"] for e in raw["allow"]] == [f"{f.cls}.{f.field}" for f in flags.unread_flags()]
 
 
 SHARED = textwrap.dedent(
@@ -242,3 +242,95 @@ def test_self_reads_inside_the_owning_class_count(tmp_path):
     # BetaConfig.on() reads self.port, which is BetaConfig.port.
     assert "BETA_PORT" not in unread
     assert "ALPHA_PORT" in unread
+
+
+def test_comments_docstrings_and_prose_are_not_reads(tmp_path):
+    reader = textwrap.dedent(
+        '''
+        """Gated by settings.widget.dead_flag (WIDGET_DEAD)."""
+        # settings.widget.dead_flag WIDGET_DEAD
+        MESSAGE = "dead_flag is off, set WIDGET_DEAD=1"
+        '''
+    )
+    errors = _errors(tmp_path, files={"services/backend/prose.py": reader})
+    assert any("dead_flag" in e for e in errors)
+
+
+def test_an_exact_string_constant_is_a_read_of_its_field_or_variable(tmp_path):
+    reader = 'import os\ngetattr(cfg, "dead_flag", False)\nos.environ.get("WIDGET_WRAPPED")\n'
+    errors = _errors(tmp_path, files={"services/backend/dyn.py": reader})
+    assert not any("dead_flag" in e or "wrapped" in e for e in errors)
+
+
+def test_an_alias_bound_in_one_function_does_not_credit_another(tmp_path):
+    reader = textwrap.dedent(
+        '''
+        from config.settings import settings
+
+        def bind():
+            cfg = settings.alpha
+            return cfg.quiet
+
+        def unrelated(cfg):
+            return cfg.enabled
+
+        def other():
+            cfg = something()
+            return cfg.enabled
+        '''
+    )
+    unread = _shared(tmp_path, reader)
+    assert "ALPHA_ENABLED" in unread
+
+
+def test_an_alias_bound_after_the_read_does_not_credit_it(tmp_path):
+    reader = "def f():\n    cfg.enabled\n    cfg = settings.alpha\n"
+    assert "ALPHA_ENABLED" in _shared(tmp_path, reader)
+
+
+def test_a_read_through_a_parameter_is_credited_from_the_call_site(tmp_path):
+    reader = textwrap.dedent(
+        '''
+        from config.settings import settings
+
+        def send(to, cfg):
+            return cfg.enabled
+
+        def entry():
+            cfg = settings.alpha
+            return send("x", cfg)
+        '''
+    )
+    unread = _shared(tmp_path, reader)
+    assert "ALPHA_ENABLED" not in unread
+    assert "BETA_ENABLED" in unread
+
+
+def test_a_helper_reading_getattr_of_a_section_by_name_credits_the_names_it_lists(tmp_path):
+    reader = textwrap.dedent(
+        '''
+        from config.settings import settings
+
+        FLAGS = ("enabled", "port")
+
+        def flag(attr):
+            return getattr(settings.beta, attr, False)
+        '''
+    )
+    unread = _shared(tmp_path, reader)
+    assert not ({"BETA_ENABLED", "BETA_PORT"} & unread)
+    assert "ALPHA_ENABLED" in unread
+
+
+def test_a_second_field_behind_a_permitted_variable_is_still_reported(tmp_path):
+    settings = SETTINGS + textwrap.dedent(
+        '''
+        @dataclass(frozen=True)
+        class OtherConfig:
+            twin: bool = _env_bool("WIDGET_DEAD", False)
+        '''
+    )
+    entry = {"field": "WidgetConfig.dead_flag", "ledger": "row-a", "reason": "x"}
+    errors = _errors(tmp_path, allow=[entry], settings=settings)
+    assert any(e.startswith("OtherConfig.twin") for e in errors)
+    assert not any(e.startswith("WidgetConfig.dead_flag") for e in errors)

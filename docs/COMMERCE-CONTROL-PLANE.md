@@ -130,7 +130,7 @@ All commerce events published under `aether.commerce.*` topic namespace on the e
 | `COMMERCE_CONTROL_PLANE_ENABLED` | `true` | Master flag |
 | `IG_X402_LAYER` | `true` | Underlying x402 L3b |
 
-Mandatory approval is not a flag: `PolicyEngine` enforces it for every spend class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in `services/x402/policies.py`).
+Mandatory approval is not a flag: `PolicyEngine` enforces it for every spend class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in `services/x402/policies.py`); only the engine's `set_mandatory_approval()` setter, which no production code calls, can change it.
 
 ## 9. SDK / API entry points
 

@@ -12,7 +12,7 @@ source_hashes:
   "tests/unit/derivatives/": "sha256:0a71a58fdd1359b80b626113a0ff48e7d8d1468a24007361a3637e2a71158621"
   "tests/unit/interop/": "sha256:85e975ceab4eca12f6a8fd2e687766d835cf4c82c8b47aac78fe4723ff78363e"
   "tests/unit/stablecoin/": "sha256:3bd47ec3116e37e8c19a306d86713149313d443fbe5174b73e2ed646e668d0f9"
-  "tests/unit/test_economic_noesis_ooda_wiring.py": "sha256:fd20cf5c1f3ec182374eb0c85a85261dc11a68bd4f6741ecafaef7a7ab6b27aa"
+  "tests/unit/test_economic_noesis_ooda_wiring.py": "sha256:2572a83e0c806eac355d7a0edb1efe8d0f9bf2bfd2ec586c73c535454f10303e"
 ---
 
 # Test Evidence

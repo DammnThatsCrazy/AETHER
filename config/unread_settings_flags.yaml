@@ -4,12 +4,12 @@
 # services/backend/config/settings.py reads an environment variable that no
 # production Python consults: setting it changes nothing, yet env examples,
 # release flag lists and runbooks present it as a control. This list is
-# shrink-only. Each entry names the debt-ledger row that owns its removal and is
+# shrink-only. Each entry is a Class.field and names the debt-ledger row that owns its removal and is
 # an error once the field is read, gone, or its ledger row disappears.
 
 schema_version: 1
 allow:
-  - env: ML_MODE
+  - field: RuntimeConfig.ml_mode
     ledger: delivery-unread-settings-flags-pending
     reason: >-
       each release profile pins ml_mode in its environment file and

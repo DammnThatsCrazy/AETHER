@@ -27,11 +27,13 @@ presence.
 | Geo/ASN lookup (local MaxMind fail-closed `not_provisioned`, deterministic test, honest null) | `services/backend/services/ingestion/geo_provider.py` |
 | The ONLY permitted IP transform: tenant-scoped rotating HMAC (windowed key derivation, one-way, no key table) | `shared/privacy/ip_hmac.py` |
 
-## Safety posture (defaults ON)
+## Safety posture
 
-- `AETHER_RAW_IP_PERSISTENCE_BLOCKED=true` — raw IPs exist transiently in
-  the enricher only; export/consent-audit routes persist the HMAC token;
-  guarded by `tests/security/test_no_raw_ip_persistence.py`.
+- Raw IPs exist transiently in the enricher only; export/consent-audit routes
+  persist the HMAC token. This is structural, not a flag, and is guarded by
+  `tests/security/test_no_raw_ip_persistence.py`. (An
+  `AETHER_RAW_IP_PERSISTENCE_BLOCKED` setting used to claim it; nothing read it,
+  so it was retired.)
 - Context never merges identities alone and never solely causes adverse action.
   This is structural, not a flag: context enrichment has no path into identity
   resolution (guarded by

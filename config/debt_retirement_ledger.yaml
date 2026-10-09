@@ -701,8 +701,8 @@ entries:
       - config/unread_settings_flags.yaml
     duplicates: []
     retire: >-
-      93 backend settings fields (and the PasswordAuthConfig and
-      PartnerEcosystemConfig classes) that read an environment variable nothing
+      100 backend settings fields (and the PasswordAuthConfig, PartnerEcosystemConfig and
+      Communication360Config classes) that read an environment variable nothing
       consults, or that duplicate a live field's variable: reserved partner,
       marketplace and developer-platform flags, per-engine extraction-mesh
       switches, comms campaign, journey, reply, graph, Profile360 and Noesis
@@ -710,9 +710,10 @@ entries:
       auto-delivery switches, stablecoin, derivatives, interop, context-capsule,
       AI-economics and agent-telemetry sub-flags, provider-corpus and Dune
       access-mode flags, product-intelligence and temporal-observatory master
-      switches, pool sizes and ports (including the OpenSearch endpoint and
-      port), Jira credentials, a duplicate stablecoin Profile360 flag, and four
-      tuning thresholds the code hardcodes. Their lines are removed from
+      switches, the unmounted Communication360 router's gate, the raw-IP and
+      identity-merge "safety" flags, pool sizes and ports (including the
+      OpenSearch endpoint and port), Jira credentials, a duplicate stablecoin
+      Profile360 flag, and five tuning thresholds the code hardcodes. Their lines are removed from
       .env.example, .env.local.example, .env.staging.example,
       .env.production.example and the production-lean and staging release flag
       lists, and the capability overlays no longer bind them.

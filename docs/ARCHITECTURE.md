@@ -22,7 +22,7 @@ reviewed_source_commits:
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
   "packages/shared/": "sha256:da728560c9dcaab2a7c0417e41e7e857fbf2d095187a45db17e6efcfddd063b6"
-  "services/backend/config/settings.py": "sha256:b9d93b70b3ca95148001842778a229665f5cd6e21cfbfd2c43d50a752c256d9d"
+  "services/backend/config/settings.py": "sha256:4c31fc9dd1fc2b5512d5207fa5ea61d8f961a37138912a924523856efdb6f4bf"
   "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
   "services/backend/services/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
@@ -507,7 +507,7 @@ projection degrades its own result, never the plane. P0 shipped the plane as a
 library with no projection route; projection routes land only as classified
 legacy bindings per vertical slice — the read-only `/v1/infrastructure` (every
 route a GET, no generic catch-all) was the first, and the read-only
-`/v1/communication360` surface follows the same template. The implemented
+`/v1/communication360` surface follows the same template (written, tested and classified, but not mounted in `main.py` today). The implemented
 providers are registered at boot — `main.py`'s lifespan calls
 `dependencies.projection_plane.register_implemented_projection_providers` — so a
 projection surface answers live instead of degrading to `provider_unavailable`

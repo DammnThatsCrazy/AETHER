@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
-  "config/capability_overlays.yaml": "sha256:c81ebe4beb4ab89319be42c6a4a9ad2f0638f7a7259225a721ad4a62628fada3"
+  "config/capability_overlays.yaml": "sha256:a5f005b0c7e2e8494d328c951bffd47842b24cc6f3ac8acaa439003eb3d2f091"
   "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"

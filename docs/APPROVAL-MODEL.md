@@ -82,8 +82,11 @@ don't see requests they couldn't ever approve.
 
 ## No self-service opt-down
 
-Mandatory approval is not configurable. `PolicyEngine` enforces it for every spend
-class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in `services/x402/policies.py`). A
+Mandatory approval is not configurable by a setting or a route. `PolicyEngine`
+enforces it for every spend class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in
+`services/x402/policies.py`). The one way to turn it off is the engine's
+`set_mandatory_approval(False)`, which no production code calls (only tests do);
+whether to remove that setter is a decision for the commerce owner. A
 `commerce_approval_required_all` setting used to be documented here; no code read it,
 so it was retired.
 

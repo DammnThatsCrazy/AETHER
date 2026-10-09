@@ -103,7 +103,7 @@ checks:
     owner: platform
     risk: high
     command: [python, scripts/validate_settings_flags.py]
-    runtime_budget_seconds: 10
+    runtime_budget_seconds: 30
   docs:
     owner: docs
     risk: high

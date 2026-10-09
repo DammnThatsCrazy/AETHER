@@ -212,18 +212,6 @@ class CommsConfig:
 
 
 # ---------------------------------------------------------------------------
-# Communication360 projection — rollout gate (Phase 3, OFF by default)
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class Communication360Config:
-    """Communication360 projection rollout gate — default OFF; see
-    docs/plans/COMMUNICATION_360_PHASES.md Phase 3.
-    """
-    enabled: bool = _env_bool("AETHER_COMMUNICATION360_ENABLED", False)
-
-
-# ---------------------------------------------------------------------------
 # Tenant Activation — turnkey activation state (flag-gated OFF by default)
 # ---------------------------------------------------------------------------
 
@@ -900,9 +888,6 @@ class SemanticIntelligenceConfig:
     canary_tenants: list[str] = field(
         default_factory=lambda: _env_list("SEMANTIC_CANARY_TENANTS", "")
     )
-    subject_confidence_threshold: float = float(
-        _env("SEMANTIC_SUBJECT_CONFIDENCE_THRESHOLD", "0.5")
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1366,8 +1351,7 @@ class ProviderRuntimeConfig:
 
     Follow-on runtime controls (all OFF by default, fail-closed):
     * sync scheduler — a background pull loop; cadence is interval-driven only
-      this build (``provider_sync_interval_seconds``). ``provider_sync_cron``
-      is RESERVED (unimplemented) — it does NOT override the interval.
+      this build (``provider_sync_interval_seconds``); there is no cron setting.
     * migrations — provider runtime data migrations.
     * legacy decommission — decommissioning legacy connector paths under the
       runtime.
@@ -1381,9 +1365,7 @@ class ProviderRuntimeConfig:
     provider_sync_scheduler_enabled: bool = _env_bool("AETHER_PROVIDER_SYNC_SCHEDULER_ENABLED", False)
     # Interval cadence in seconds when the scheduler is interval-driven.
     provider_sync_interval_seconds: int = _env_int("AETHER_PROVIDER_SYNC_INTERVAL_SECONDS", 3600)
-    # RESERVED (unimplemented this build) — the scheduler is interval-driven
-    # only; a cron expression set here is ignored (no "cron overrides interval").
-    provider_sync_cron: str = _env("AETHER_PROVIDER_SYNC_CRON", "")
+    # The scheduler is interval-driven only; there is no cron setting.
     provider_migrations_enabled: bool = _env_bool("AETHER_PROVIDER_MIGRATIONS_ENABLED", False)
     provider_legacy_decommission: bool = _env_bool("AETHER_PROVIDER_LEGACY_DECOMMISSION", False)
     # Gates the Kyber operator provider-connections UI (read/monitor + certify).
@@ -1423,13 +1405,9 @@ class SuggestionsConfig:
     default. Execution is a separate hard gate (also OFF by default) so
     suggestions can be created, reviewed, and delivered without enabling
     automated execution. Noesis read-only suggestion queries are independent
-    of the main `enabled` flag but respect `noesis_enabled`."""
+    of the main `enabled` flag."""
     enabled: bool = _env_bool("AETHER_SUGGESTIONS_ENABLED", False)
     execution_enabled: bool = _env_bool("AETHER_SUGGESTIONS_EXECUTION_ENABLED", False)
-    # Economic/interoperability adapters default OFF (fail-closed with their domains)
-    stablecoin_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_STABLECOIN_ADAPTER_ENABLED", False)
-    derivatives_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DERIVATIVES_ADAPTER_ENABLED", False)
-    interop_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_INTEROP_ADAPTER_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_SUGGESTIONS_ENABLED", True)
     tenant_enabled: bool = _env_bool("AETHER_TENANT_SUGGESTIONS_ENABLED", True)
 
@@ -1920,9 +1898,9 @@ class ProductIntelligenceConfig:
 @dataclass(frozen=True)
 class ContextIntelligenceConfig:
     enrichment_enabled: bool = _env_bool("AETHER_CONTEXT_ENRICHMENT_ENABLED", False)
-    # Safety defaults — ON. Raw IP must never persist; context/behavior alone
-    # must never merge identities or cause adverse action.
-    block_raw_ip: bool = _env_bool("AETHER_RAW_IP_PERSISTENCE_BLOCKED", True)
+    # Raw IP never persists and context never merges identities: both are
+    # structural, not flags (tests/security/test_no_raw_ip_persistence.py and
+    # tests/unit/test_context_has_no_identity_merge_path.py).
     trusted_proxy_cidrs: list[str] = field(
         default_factory=lambda: _env_list("AETHER_TRUSTED_PROXY_CIDRS", "")
     )
@@ -2085,8 +2063,6 @@ class Settings:
     # Communications Intelligence
     comms: CommsConfig = field(default_factory=CommsConfig)
 
-    # Communication360 projection (canonical convergence — default OFF)
-    communication360: Communication360Config = field(default_factory=Communication360Config)
 
     # Tenant Activation
     activation: ActivationConfig = field(default_factory=ActivationConfig)

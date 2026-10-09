@@ -23,7 +23,6 @@ overlays:
     status: bound
     flags:
       - AETHER_COMMS_INGESTION_ENABLED
-      - AETHER_COMMUNICATION360_ENABLED
   enable-campaigns:
     class: beta
     status: unbound

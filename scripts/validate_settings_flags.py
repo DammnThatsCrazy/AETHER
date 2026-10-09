@@ -7,22 +7,24 @@ it as one. "Flags describe capabilities" only holds if a flag gates something.
 
 For every dataclass field in ``services/backend/config/settings.py`` whose
 default reads an environment variable (``_env_bool("NAME", ...)`` and friends),
-the field counts as **read** when any of these holds:
+the field counts as **read** when any of these holds in production Python:
 
-* its attribute is read through its own config object: ``settings.comms.x``,
-  ``getattr(settings.comms, "x")``, a variable annotated or assigned from its
-  class or section, or ``self.x`` inside its own class. A name that only one
-  config class defines is credited on any attribute read; a name several classes
-  define (``enabled``, ``port``) must be read through the right one;
-* its environment variable name appears as a literal in production Python
-  (a direct ``os.environ`` read).
+* its environment variable name appears as a string constant that is exactly
+  that name (a direct ``os.environ`` or ``_env`` read), outside docstrings;
+* its attribute is read in code (``settings.comms.x``, ``self.x``) or named by an
+  exact string constant (``getattr(cfg, "x")``), where a name only one config
+  class defines is credited on any such read, and a name several classes define
+  (``enabled``, ``port``) is credited only to the class it is read through: its
+  section on ``Settings``, a variable annotated with the class or bound from the
+  section earlier in the same or an enclosing scope, or ``self.x`` inside the class.
 
-Test code does not count: a flag only a test reads is not a runtime control.
-Fields that cannot be retired yet go in ``config/unread_settings_flags.yaml``
-with the debt-ledger row that owns them and a reason. The list can only shrink:
-an entry that is read now, whose field is gone, or whose ledger row has
-disappeared is an error, and an entry outside ``PERMITTED_UNREAD`` (a constant in
-this file, reviewed with its test) is an error.
+Comments, docstrings and prose never count, and neither does test code: a flag
+only a test reads is not a runtime control. Fields that cannot be retired yet go
+in ``config/unread_settings_flags.yaml`` as ``Class.field`` with the debt-ledger
+row that owns them and a reason. The list can only shrink: an entry that is read
+now, whose field is gone, or whose ledger row has disappeared is an error, and an
+entry outside ``PERMITTED_UNREAD`` (a constant in this file, reviewed with its
+test) is an error.
 
 Only backend Python counts as a reader: an environment variable consumed by a
 different runtime (a Node service, a Terraform module) is not a field of this
@@ -50,7 +52,7 @@ LEDGER = ROOT / "config/debt_retirement_ledger.yaml"
 # this file, so it is reviewed with its test and the retirement page (the
 # ``settings_flags`` ownership category); a new allowlist entry alone cannot
 # admit a new inert field.
-PERMITTED_UNREAD = frozenset({"ML_MODE"})
+PERMITTED_UNREAD = frozenset({"RuntimeConfig.ml_mode"})
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # The validator names permitted fields as string literals; it is not a reader.
@@ -172,77 +174,187 @@ def _bound_names(value: ast.AST) -> list[str | None]:
     return [_terminal(value)]
 
 
-def _credits(text: str, owner_names: set[str], classes: set[str], shared: set[str], skip_lines: set[int]) -> dict[str, set[str]]:
-    """For each shared field name read in ``text``: the config owners it is read through.
+class _Scan:
+    """What one module reads: code names, exact string constants, and scoped credits."""
 
-    One pass collects the reads and the names bound from a section or class; a
-    read through a bound name is credited to what it was bound from.
-    """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return {}
-    alias: dict[str, str] = {}
-    reads: list[tuple[str, str | None]] = []
+    def __init__(self, text: str, skip_lines: frozenset[int] = frozenset()) -> None:
+        self.names: set[str] = set()
+        self.strings: set[str] = set()
+        self.tree: ast.AST | None
+        try:
+            self.tree = ast.parse(text)
+        except SyntaxError:
+            self.tree = None
+            return
+        bare: set[int] = set()
+        # ast.walk yields a parent before its children, so a bare string statement
+        # (a docstring) is recorded before the constant inside it is reached.
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Expr):
+                if isinstance(node.value, ast.Constant):
+                    bare.add(id(node.value))
+                continue
+            if getattr(node, "lineno", 0) in skip_lines:
+                continue
+            if isinstance(node, ast.Name):
+                if isinstance(node.ctx, ast.Load):
+                    self.names.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                if isinstance(node.ctx, ast.Load):
+                    self.names.add(node.attr)
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in bare:
+                self.strings.add(node.value)
 
-    def visit(node: ast.AST, owner_class: str | None) -> None:
-        if isinstance(node, ast.ClassDef):
-            owner_class = node.name
-        elif isinstance(node, ast.Assign):
-            targets = [t for t in (_terminal(x) for x in node.targets) if t]
-            for bound in _bound_names(node.value):
-                if bound in owner_names or bound in classes:
-                    for name in targets:
-                        alias[name] = bound  # type: ignore[assignment]
-        elif isinstance(node, ast.AnnAssign):
-            name, ann = _terminal(node.target), _terminal(node.annotation)
-            if name and ann in classes:
-                alias[name] = ann  # type: ignore[assignment]
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for arg in [*node.args.args, *node.args.kwonlyargs]:
-                ann = _terminal(arg.annotation) if arg.annotation is not None else None
+    def credits(
+        self, owner_names: set[str], classes: set[str], shared: set[str], skip_lines: frozenset[int]
+    ) -> dict[str, set[str]]:
+        """Owners each shared field name is read through, with lexical, ordered aliases.
+
+        A name bound from a section or class is credited only to reads that come
+        after the binding, in the same function or an enclosing one; a binding in
+        another function proves nothing. ``self.x = settings.section`` binds ``x``
+        for the whole class.
+        """
+        credited: dict[str, set[str]] = {}
+        dynamic: set[str] = set()  # owners read through getattr(<owner>, <variable>)
+        funcs: dict[str, list[str]] = {}  # function name -> parameter names (self excluded)
+        call_owner: dict[tuple[str, int | str], str] = {}  # (callee, position or keyword) -> owner passed
+        pending: list[tuple[str, str, str]] = []  # (field, enclosing function, parameter name)
+        func_stack: list[str] = []
+        if self.tree is None:
+            return credited
+        # scopes: list of (kind, bindings) where bindings maps name -> (owner, lineno)
+        scopes: list[tuple[str, dict[str, tuple[str, int]]]] = [("module", {})]
+        class_stack: list[str] = []
+
+        def lookup(name: str | None, line: int, via_self: bool) -> str | None:
+            if name is None:
+                return None
+            if name in owner_names or name in classes:
+                return name
+            for kind, bindings in reversed(scopes):
+                if via_self and kind != "class":
+                    continue
+                if not via_self and kind == "class":
+                    continue
+                hit = bindings.get(name)
+                if hit and (kind == "class" or hit[1] <= line):
+                    return hit[0]
+            return None
+
+        def bind(target: ast.AST, owner: str, line: int) -> None:
+            if isinstance(target, ast.Name):
+                scopes[-1][1][target.id] = (owner, line)
+            elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
+                for kind, bindings in reversed(scopes):
+                    if kind == "class":
+                        bindings[target.attr] = (owner, line)
+                        break
+
+        def credit(field_name: str, qualifier: ast.AST | None, line: int) -> None:
+            if field_name not in shared or line in skip_lines:
+                return
+            owner: str | None = None
+            if isinstance(qualifier, ast.Name) and qualifier.id == "self" and class_stack:
+                owner = class_stack[-1]
+            elif isinstance(qualifier, ast.Attribute) and isinstance(qualifier.value, ast.Name) and qualifier.value.id == "self":
+                owner = lookup(qualifier.attr, line, via_self=True)
+            else:
+                name = _terminal(qualifier)
+                owner = lookup(name, line, via_self=False)
+                if owner is None and isinstance(qualifier, ast.Name) and func_stack and name in funcs.get(func_stack[-1], ()):
+                    pending.append((field_name, func_stack[-1], name))
+            if owner:
+                credited.setdefault(field_name, set()).add(owner)
+
+        def visit(node: ast.AST) -> None:
+            if isinstance(node, ast.ClassDef):
+                scopes.append(("class", {}))
+                class_stack.append(node.name)
+                for child in node.body:
+                    visit(child)
+                class_stack.pop()
+                scopes.pop()
+                return
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                scopes.append(("function", {}))
+                fname = node.name if not isinstance(node, ast.Lambda) else ""
+                if not isinstance(node, ast.Lambda):
+                    params = [a.arg for a in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]]
+                    funcs[fname] = [p for p in params if p != "self"]
+                    for arg in [*node.args.args, *node.args.kwonlyargs]:
+                        ann = _terminal(arg.annotation) if arg.annotation is not None else None
+                        if ann in classes:
+                            scopes[-1][1][arg.arg] = (ann, node.lineno)  # type: ignore[assignment]
+                func_stack.append(fname)
+                for child in ast.iter_child_nodes(node):
+                    visit(child)
+                func_stack.pop()
+                scopes.pop()
+                return
+            if isinstance(node, ast.Assign):
+                visit(node.value)
+                for bound in _bound_names(node.value):
+                    if bound and (bound in owner_names or bound in classes):
+                        for target in node.targets:
+                            bind(target, bound, node.lineno)
+                return
+            if isinstance(node, ast.AnnAssign):
+                ann = _terminal(node.annotation)
+                if node.value is not None:
+                    visit(node.value)
                 if ann in classes:
-                    alias[arg.arg] = ann  # type: ignore[assignment]
-        elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load) and node.attr in shared:
-            if node.lineno not in skip_lines:
-                self_read = isinstance(node.value, ast.Name) and node.value.id == "self" and owner_class
-                reads.append((node.attr, owner_class if self_read else _terminal(node.value)))
-        elif (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "getattr"
-            and len(node.args) >= 2
-            and isinstance(node.args[1], ast.Constant)
-            and node.args[1].value in shared
-        ):
-            first = node.args[0]
-            self_read = isinstance(first, ast.Name) and first.id == "self" and owner_class
-            reads.append((node.args[1].value, owner_class if self_read else _terminal(first)))
-        for child in ast.iter_child_nodes(node):
-            visit(child, owner_class)
+                    bind(node.target, ann, node.lineno)  # type: ignore[arg-type]
+                else:
+                    for bound in _bound_names(node.value) if node.value is not None else []:
+                        if bound and (bound in owner_names or bound in classes):
+                            bind(node.target, bound, node.lineno)
+                return
+            if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+                credit(node.attr, node.value, node.lineno)
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in ("getattr", "hasattr")
+                and len(node.args) >= 2
+            ):
+                if isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str):
+                    credit(node.args[1].value, node.args[0], node.lineno)
+                else:
+                    owner = lookup(_terminal(node.args[0]), node.lineno, via_self=False)
+                    if owner:
+                        dynamic.add(owner)
+            if isinstance(node, ast.Call):
+                callee = _terminal(node.func)
+                if callee:
+                    for position, arg in enumerate(node.args):
+                        passed = lookup(_terminal(arg), node.lineno, via_self=False)
+                        if passed:
+                            call_owner[(callee, position)] = passed
+                    for keyword in node.keywords:
+                        passed = lookup(_terminal(keyword.value), node.lineno, via_self=False)
+                        if passed and keyword.arg:
+                            call_owner[(callee, keyword.arg)] = passed
+            for child in ast.iter_child_nodes(node):
+                visit(child)
 
-    visit(tree, None)
-    credited: dict[str, set[str]] = {}
-    for field_name, qualifier in reads:
-        if qualifier is None:
-            continue
-        owner = qualifier if qualifier in owner_names or qualifier in classes else alias.get(qualifier)
-        if owner:
-            credited.setdefault(field_name, set()).add(owner)
-    return credited
+        visit(self.tree)
+        # A function that reads a field through an unannotated parameter is credited
+        # to the owner the module passes it at a call site.
+        for field_name, fname, param in pending:
+            index = funcs[fname].index(param)
+            owner = call_owner.get((fname, index)) or call_owner.get((fname, param))
+            if owner:
+                credited.setdefault(field_name, set()).add(owner)
+        # A helper that reads ``getattr(<owner>, name)`` reads every shared field
+        # name the module lists as a string.
+        for name in self.strings & shared:
+            credited.setdefault(name, set()).update(dynamic)
+        return credited
 
 
 def unread_flags(root: Path = ROOT) -> list[Flag]:
-    """Fields no production code reads.
-
-    A field is read when its environment variable name appears in production
-    Python, or when its attribute is read through its own config object. An
-    attribute name shared by several config classes (``enabled``, ``port``) is
-    only credited to a class when the read goes through that class's mounted
-    section on ``Settings`` (``settings.comms.x``), a class-annotated variable, or
-    a name bound from one; ``something.enabled`` on an unrelated object proves
-    nothing.
-    """
+    """Fields no production code reads (see the module docstring for the rules)."""
     flags = settings_flags(root)
     mounted = _composites(root)
     classes = {f.cls for f in flags}
@@ -250,30 +362,38 @@ def unread_flags(root: Path = ROOT) -> list[Flag]:
     owner_names = sections | classes
     shared = {name for name, count in collections.Counter(f.field for f in flags).items() if count > 1}
     settings_text = (root / SETTINGS).read_text(encoding="utf-8")
-    defined = {n for f in flags for n in range(f.first_line, f.last_line + 1)}
-    settings_rest = "\n".join(line for i, line in enumerate(settings_text.split("\n"), 1) if i not in defined)
-    tokens: set[str] = set(_TOKEN.findall(settings_rest))
+    defined = frozenset(n for f in flags for n in range(f.first_line, f.last_line + 1))
+
+    names: set[str] = set()
+    strings: set[str] = set()
     credited: dict[str, set[str]] = {}
 
-    def add(found: dict[str, set[str]]) -> None:
-        for name, owners in found.items():
-            credited.setdefault(name, set()).update(owners)
+    def absorb(scan: _Scan, skip: frozenset[int], scoped: bool) -> None:
+        names.update(scan.names)
+        strings.update(scan.strings)
+        if scoped:
+            for key, owners in scan.credits(owner_names, classes, shared, skip).items():
+                credited.setdefault(key, set()).update(owners)
 
+    absorb(_Scan(settings_text, defined), defined, True)
+    # A file can only read a field if it contains the field's name or environment
+    # variable, so most files need no parse at all.
+    interesting = {f.env for f in flags} | {f.field for f in flags}
     for rel, text in _production_python(root):
         if rel == SETTINGS:
             continue
-        file_tokens = set(_TOKEN.findall(text))
-        tokens.update(file_tokens)
+        tokens = set(_TOKEN.findall(text))
+        if not tokens & interesting:
+            continue
+        scan = _Scan(text)
         # A credit needs the file to name a section or class, and a shared field.
-        if file_tokens & owner_names and file_tokens & shared:
-            add(_credits(text, owner_names, classes, shared, set()))
-    add(_credits(settings_text, owner_names, classes, shared, defined))
+        absorb(scan, frozenset(), bool(tokens & owner_names and tokens & shared))
 
     unread: list[Flag] = []
     for flag in flags:
-        if flag.env in tokens:
+        if flag.env in strings:
             continue
-        if flag.field not in tokens:
+        if flag.field not in names and flag.field not in strings:
             unread.append(flag)
         elif flag.field in shared and not (credited.get(flag.field, set()) & (mounted.get(flag.cls, set()) | {flag.cls})):
             unread.append(flag)
@@ -310,19 +430,19 @@ def _allowlist(path: Path, ledger_ids: set[str], permitted: frozenset[str] = PER
     out: dict[str, str] = {}
     for i, item in enumerate(allow):
         label = f"allow[{i}]"
-        if not (isinstance(item, dict) and _text(item.get("env")) and _text(item.get("ledger")) and _text(item.get("reason"))):
-            errors.append(f"{label}: needs a non-empty env, ledger and reason")
+        if not (isinstance(item, dict) and _text(item.get("field")) and _text(item.get("ledger")) and _text(item.get("reason"))):
+            errors.append(f"{label}: needs a non-empty field (Class.field), ledger and reason")
             continue
         if item["ledger"] not in ledger_ids:
             errors.append(f"{label}: ledger row {item['ledger']!r} does not exist")
-        if item["env"] not in permitted:
+        if item["field"] not in permitted:
             errors.append(
-                f"{label}: {item['env']} is not a permitted exception; delete the field instead "
+                f"{label}: {item['field']} is not a permitted exception; delete the field instead "
                 "(PERMITTED_UNREAD in scripts/validate_settings_flags.py is the reviewed limit)"
             )
-        if item["env"] in out:
-            errors.append(f"{label}: {item['env']} is listed twice")
-        out[item["env"]] = item["ledger"]
+        if item["field"] in out:
+            errors.append(f"{label}: {item['field']} is listed twice")
+        out[item["field"]] = item["ledger"]
     return out, errors
 
 
@@ -333,20 +453,20 @@ def validate(
     permitted: frozenset[str] = PERMITTED_UNREAD,
 ) -> list[str]:
     allow, errors = _allowlist(allowlist or ALLOWLIST, _ledger_ids(ledger or LEDGER), permitted)
-    flags = {f.env: f for f in settings_flags(root)}
-    unread = {f.env: f for f in unread_flags(root)}
-    for env, flag in sorted(unread.items()):
-        if env in allow:
+    flags = {f"{f.cls}.{f.field}": f for f in settings_flags(root)}
+    unread = {f"{f.cls}.{f.field}": f for f in unread_flags(root)}
+    for key, flag in sorted(unread.items()):
+        if key in allow:
             continue
         errors.append(
-            f"{flag.cls}.{flag.field} ({env}) is defined in settings but nothing reads it; "
+            f"{key} ({flag.env}) is defined in settings but nothing reads it; "
             "delete it, or wire it to the behavior it claims to gate"
         )
-    for env in sorted(allow):
-        if env not in flags:
-            errors.append(f"allowlist entry {env} no longer exists in settings; delete the entry")
-        elif env not in unread:
-            errors.append(f"allowlist entry {env} is read now; delete the entry")
+    for key in sorted(allow):
+        if key not in flags:
+            errors.append(f"allowlist entry {key} no longer exists in settings; delete the entry")
+        elif key not in unread:
+            errors.append(f"allowlist entry {key} is read now; delete the entry")
     return errors
 
 
