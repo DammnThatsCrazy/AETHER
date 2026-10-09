@@ -106,8 +106,6 @@ class DynamoDBConfig:
 
 @dataclass(frozen=True)
 class OpenSearchConfig:
-    endpoint: str = _env("OPENSEARCH_ENDPOINT", "localhost")
-    port: int = _env_int("OPENSEARCH_PORT", 9200)
     region: str = _env("AWS_REGION", "us-east-1")
 
 
@@ -205,9 +203,6 @@ class CommsConfig:
     (docs/comms/COMMS_RELEASE_READINESS.md).
     """
     ingestion_enabled: bool = _env_bool("AETHER_COMMS_INGESTION_ENABLED", True)
-    graph_enabled: bool = _env_bool("AETHER_COMMS_GRAPH_ENABLED", True)
-    profile360_enabled: bool = _env_bool("AETHER_COMMS_PROFILE360_ENABLED", True)
-    noesis_enabled: bool = _env_bool("AETHER_COMMS_NOESIS_ENABLED", True)
     # Attribution policy switches (ADR-C8)
     reported_opens_as_view_through: bool = _env_bool("AETHER_COMMS_OPENS_VIEW_THROUGH", False)
     # Provider suppression write-back is a separately-authorized capability
@@ -1357,13 +1352,6 @@ class ConnectorsConfig:
     are required only when a connector is enabled for a tenant."""
     enabled: bool = _env_bool("AETHER_CONNECTORS_ENABLED", False)
     kyber_connector_health_enabled: bool = _env_bool("KYBER_CONNECTOR_HEALTH_ENABLED", False)
-    # Legacy public webhook route that selects the tenant from the untrusted
-    # X-Aether-Tenant-ID header. Available ONLY in local development AND only
-    # with this explicit opt-in; everywhere else the route returns a uniform
-    # 404. The durable /{connector_type}/{endpoint_id} route is authoritative.
-    legacy_webhook_route_enabled: bool = _env_bool(
-        "AETHER_CONNECTOR_LEGACY_WEBHOOK_ROUTE_ENABLED", False
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1438,7 +1426,6 @@ class SuggestionsConfig:
     of the main `enabled` flag but respect `noesis_enabled`."""
     enabled: bool = _env_bool("AETHER_SUGGESTIONS_ENABLED", False)
     execution_enabled: bool = _env_bool("AETHER_SUGGESTIONS_EXECUTION_ENABLED", False)
-    noesis_enabled: bool = _env_bool("AETHER_SUGGESTIONS_NOESIS_ENABLED", True)
     # Economic/interoperability adapters default OFF (fail-closed with their domains)
     stablecoin_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_STABLECOIN_ADAPTER_ENABLED", False)
     derivatives_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DERIVATIVES_ADAPTER_ENABLED", False)
@@ -1535,7 +1522,6 @@ class StablecoinIntelligenceConfig:
     product surfaces, Kyber operations, Olympus benchmarks, and release evidence.
     """
     enabled: bool = _env_bool("AETHER_STABLECOIN_INTELLIGENCE_ENABLED", False)
-    profile360_enabled: bool = _env_bool("AETHER_STABLECOIN_PROFILE360_ENABLED", False)
     kill_switch: bool = _env_bool("AETHER_STABLECOIN_KILL_SWITCH", False)
     shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
     # Usage metering on the stablecoin observation path (default OFF, opt-in).
@@ -1826,7 +1812,6 @@ class StablecoinDomainConfig:
     ingestion_enabled: bool = _env_bool("AETHER_STABLECOIN_INGESTION_ENABLED", False)
     valuation_enabled: bool = _env_bool("AETHER_STABLECOIN_VALUATION_ENABLED", False)
     flows_enabled: bool = _env_bool("AETHER_STABLECOIN_FLOWS_ENABLED", False)
-    graph_enabled: bool = _env_bool("AETHER_STABLECOIN_GRAPH_ENABLED", False)
     profile360_enabled: bool = _env_bool("AETHER_STABLECOIN_PROFILE360_ENABLED", False)
     api_enabled: bool = _env_bool("AETHER_STABLECOIN_API_ENABLED", False)
     noesis_enabled: bool = _env_bool("AETHER_STABLECOIN_NOESIS_ENABLED", False)
@@ -1838,10 +1823,8 @@ class DerivativesIntelligenceConfig:
     """Derivatives Intelligence rollout flags. Observation-only domain —
     no execution capability exists behind any flag. All default False."""
     runtime_enabled: bool = _env_bool("AETHER_DERIVATIVES_RUNTIME_ENABLED", False)
-    adapters_enabled: bool = _env_bool("AETHER_DERIVATIVES_ADAPTERS_ENABLED", False)
     reconciliation_enabled: bool = _env_bool("AETHER_DERIVATIVES_RECONCILIATION_ENABLED", False)
     pnl_enabled: bool = _env_bool("AETHER_DERIVATIVES_PNL_ENABLED", False)
-    graph_enabled: bool = _env_bool("AETHER_DERIVATIVES_GRAPH_ENABLED", False)
     profile360_enabled: bool = _env_bool("AETHER_DERIVATIVES_PROFILE360_ENABLED", False)
     api_enabled: bool = _env_bool("AETHER_DERIVATIVES_API_ENABLED", False)
     noesis_enabled: bool = _env_bool("AETHER_DERIVATIVES_NOESIS_ENABLED", False)
@@ -1931,7 +1914,6 @@ class TemporalIntegrityConfig:
 
 @dataclass(frozen=True)
 class ProductIntelligenceConfig:
-    enabled: bool = _env_bool("AETHER_PRODUCT_INTELLIGENCE_ENABLED", False)
     catalog_enabled: bool = _env_bool("AETHER_PRODUCT_CATALOG_ENABLED", False)
 
 
@@ -1952,7 +1934,6 @@ class ContextIntelligenceConfig:
 
 @dataclass(frozen=True)
 class TemporalObservatoryConfig:
-    enabled: bool = _env_bool("AETHER_TEMPORAL_OBSERVATORY_ENABLED", False)
     mutation_gateway_mode: str = _env("AETHER_MUTATION_GATEWAY_MODE", "off")
 
 

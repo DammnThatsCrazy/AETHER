@@ -64,10 +64,11 @@ def _allow(tmp_path: Path, allow, ledger_ids=("row-a",)) -> tuple[Path, Path]:
     return allowlist, ledger
 
 
-def _errors(tmp_path, allow=(), **kwargs):
+def _errors(tmp_path, allow=(), permitted=None, **kwargs):
     root = _repo(tmp_path / "repo", **kwargs)
     allowlist, ledger = _allow(tmp_path, allow)
-    return flags.validate(root, allowlist, ledger)
+    names = frozenset(permitted if permitted is not None else (item["env"] for item in allow if isinstance(item, dict) and "env" in item))
+    return flags.validate(root, allowlist, ledger, permitted=names)
 
 
 def test_every_env_backed_field_shape_is_found(tmp_path):
@@ -135,6 +136,18 @@ def test_allowlist_entries_need_every_field_and_may_not_repeat(tmp_path):
     assert sum("needs a non-empty env, ledger and reason" in e for e in errors) == 2
 
 
+def test_an_allowlist_entry_cannot_admit_a_field_the_validator_does_not_permit(tmp_path):
+    entry = {"env": "WIDGET_DEAD", "ledger": "row-a", "reason": "x"}
+    # row-a exists and the field is unread, so only the pinned set stops this.
+    errors = _errors(tmp_path, allow=[entry], permitted=[])
+    assert any("WIDGET_DEAD is not a permitted exception" in e for e in errors)
+
+
+def test_the_committed_allowlist_is_within_the_permitted_set():
+    raw = yaml.safe_load(flags.ALLOWLIST.read_text(encoding="utf-8"))
+    assert {e["env"] for e in raw["allow"]} <= flags.PERMITTED_UNREAD
+
+
 def test_allowlist_schema_is_enforced(tmp_path):
     root = _repo(tmp_path / "repo")
     bad = tmp_path / "bad.yaml"
@@ -153,3 +166,79 @@ def test_the_committed_settings_have_no_unread_field_outside_the_allowlist():
 def test_every_committed_allowlist_entry_is_exercised():
     raw = yaml.safe_load(flags.ALLOWLIST.read_text(encoding="utf-8"))
     assert [e["env"] for e in raw["allow"]] == [f.env for f in flags.unread_flags()]
+
+
+SHARED = textwrap.dedent(
+    '''
+    from dataclasses import dataclass, field
+
+    def _env_bool(key, default=False): ...
+
+    @dataclass(frozen=True)
+    class AlphaConfig:
+        enabled: bool = _env_bool("ALPHA_ENABLED", False)
+        port: bool = _env_bool("ALPHA_PORT", False)
+        quiet: bool = _env_bool("ALPHA_QUIET", False)
+
+    @dataclass(frozen=True)
+    class BetaConfig:
+        enabled: bool = _env_bool("BETA_ENABLED", False)
+        port: bool = _env_bool("BETA_PORT", False)
+        loud: bool = _env_bool("BETA_LOUD", False)
+
+        def on(self) -> bool:
+            return self.port
+
+    @dataclass(frozen=True)
+    class Settings:
+        alpha: AlphaConfig = field(default_factory=AlphaConfig)
+        beta: BetaConfig = field(default_factory=BetaConfig)
+    '''
+)
+
+
+def _shared(tmp_path, reader: str) -> set[str]:
+    root = _repo(tmp_path / "repo", settings=SHARED, files={"services/backend/app.py": reader})
+    return {f.env for f in flags.unread_flags(root)}
+
+
+def test_a_name_two_classes_define_is_credited_to_the_class_that_is_read(tmp_path):
+    unread = _shared(tmp_path, "from config.settings import settings\nsettings.alpha.enabled\n")
+    assert "ALPHA_ENABLED" not in unread
+    # BetaConfig.enabled is a different field; alpha's read does not prove it.
+    assert "BETA_ENABLED" in unread
+
+
+def test_an_unrelated_object_with_the_same_attribute_name_proves_nothing(tmp_path):
+    unread = _shared(tmp_path, "widget = object()\nwidget.enabled\nother.enabled\n")
+    assert {"ALPHA_ENABLED", "BETA_ENABLED"} <= unread
+
+
+def test_a_variable_bound_from_a_section_or_annotated_with_its_class_is_credited(tmp_path):
+    reader = textwrap.dedent(
+        '''
+        from config.settings import settings, BetaConfig
+
+        cfg = settings.alpha
+        cfg.enabled
+
+        def use(conf: BetaConfig):
+            return conf.enabled
+        '''
+    )
+    unread = _shared(tmp_path, reader)
+    assert not ({"ALPHA_ENABLED", "BETA_ENABLED"} & unread)
+
+
+def test_getattr_with_a_literal_name_through_the_section_counts(tmp_path):
+    unread = _shared(tmp_path, 'getattr(settings.alpha, "port", False)\n')
+    assert "ALPHA_PORT" not in unread
+    # BetaConfig.port is read by BetaConfig.on(), not by this call.
+    assert "BETA_PORT" not in unread
+
+
+def test_self_reads_inside_the_owning_class_count(tmp_path):
+    unread = _shared(tmp_path, "pass\n")
+    # BetaConfig.on() reads self.port, which is BetaConfig.port.
+    assert "BETA_PORT" not in unread
+    assert "ALPHA_PORT" in unread

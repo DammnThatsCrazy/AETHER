@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/context-capsule-registry.json, packages/shared/context-capsule.ts, services/backend/shared/context_capsule/models.py, services/backend/shared/context_capsule/generated_taxonomy.py, services/backend/services/ingestion/context_enricher.py, services/backend/services/ingestion/geo_provider.py, services/backend/shared/privacy/ip_hmac.py, tests/security/test_no_raw_ip_persistence.py]
+source_files: [packages/shared/contracts/context-capsule-registry.json, packages/shared/context-capsule.ts, services/backend/shared/context_capsule/models.py, services/backend/shared/context_capsule/generated_taxonomy.py, services/backend/services/ingestion/context_enricher.py, services/backend/services/ingestion/geo_provider.py, services/backend/shared/privacy/ip_hmac.py, tests/security/test_no_raw_ip_persistence.py, tests/unit/test_context_has_no_identity_merge_path.py]
 last_synced_commit: a500f1f
 ---
 

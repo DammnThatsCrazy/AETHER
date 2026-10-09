@@ -16,7 +16,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
-  "services/backend/config/settings.py": "sha256:d3881a0d0effefeda41e8af8c66e04bef34344d780a076d6ba31bf33ded8793b"
+  "services/backend/config/settings.py": "sha256:b9d93b70b3ca95148001842778a229665f5cd6e21cfbfd2c43d50a752c256d9d"
   "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
   "services/backend/services/provider_runtime/": "sha256:615f58049dcfd5f699f2070f51c06f2367711420996f67f9305d6900f20a1117"
 ---

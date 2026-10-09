@@ -237,7 +237,6 @@ All responses are redacted via `redact_for_tenant()`.
 |----------|---------|-------------|
 | `AETHER_SUGGESTIONS_ENABLED` | `false` | Master switch |
 | `AETHER_SUGGESTIONS_EXECUTION_ENABLED` | `false` | Allow execution (explicit opt-in required) |
-| `AETHER_SUGGESTIONS_NOESIS_ENABLED` | `true` | Noesis suggestion intent handling |
 | `KYBER_SUGGESTIONS_ENABLED` | `true` | Kyber operator routes |
 | `AETHER_TENANT_SUGGESTIONS_ENABLED` | `true` | Tenant-safe routes |
 
