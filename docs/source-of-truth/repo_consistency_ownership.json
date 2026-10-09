@@ -848,6 +848,26 @@
         "python -m pytest tests/unit/test_debt_retirement_ledger.py -q"
       ],
       "remediation": "Update the ledger's unit test or the technical-debt retirement page with the change, then run python scripts/validate_debt_retirement_ledger.py."
+    },
+    {
+      "id": "environment_capability_registry",
+      "name": "canonical environment mapping or capability overlay registry changed",
+      "source_globs": [
+        "config/deployment_profiles.yaml",
+        "config/capability_overlays.yaml",
+        "scripts/release/check_profile_config.py",
+        "scripts/validate_capability_overlays.py"
+      ],
+      "required_changed_globs": [
+        "tests/unit/test_canonical_environments.py",
+        "docs/DEPLOYMENT-PROFILES.md"
+      ],
+      "required_commands": [
+        "python scripts/release/check_profile_config.py",
+        "python scripts/validate_capability_overlays.py",
+        "python -m pytest tests/unit/test_canonical_environments.py -q"
+      ],
+      "remediation": "Profiles describe environments and flags describe capabilities: update the canonical-environment test or docs/DEPLOYMENT-PROFILES.md with the change, then run both validators."
     }
   ]
 }
