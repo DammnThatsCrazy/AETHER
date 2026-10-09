@@ -41,13 +41,16 @@ def test_consumer_registers_for_split():
     assert Topic.IDENTITY_MERGED in subscribed
 
 
-async def _run(consumer, payload):
-    calls: list[tuple[str, str, str]] = []
+async def _run(consumer, payload, monkeypatch):
+    from services.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
 
-    async def _fake_rebuild(tenant_id, profile_id, reason):
-        calls.append((tenant_id, profile_id, reason))
+    queued: list[Event] = []
 
-    consumer._rebuild_and_reattribute = _fake_rebuild  # type: ignore[assignment]
+    async def _queue_event(self, event):
+        queued.append(event)
+        return MagicMock(id="restatement-1", tenant_id=TENANT, trigger_decision_id="split-1")
+
+    monkeypatch.setattr(ProjectionRestatementOrchestrator, "queue_restatement_from_event", _queue_event)
     event = Event(
         topic=Topic.IDENTITY_SPLIT,
         tenant_id=TENANT,
@@ -55,35 +58,42 @@ async def _run(consumer, payload):
         payload=payload,
     )
     await consumer.on_identity_split(event)
-    return calls
+    return queued
 
 
-async def test_split_recomputes_both_entities():
+async def test_split_consumer_queues_event_with_both_entities(monkeypatch):
     consumer = MeasurementIdentityConsumer(producer=MagicMock())
-    calls = await _run(consumer, {
+    queued = await _run(consumer, {
+        "decision_id": "split-1",
         "original_entity_id": "orig-1",
         "resulting_entity_id": "frag-1",
-    })
-    profiles = {c[1] for c in calls}
-    assert profiles == {"orig-1", "frag-1"}
+    }, monkeypatch)
+    assert len(queued) == 1
+    assert queued[0].topic == Topic.IDENTITY_SPLIT
+    assert queued[0].payload["original_entity_id"] == "orig-1"
+    assert queued[0].payload["resulting_entity_id"] == "frag-1"
 
 
-async def test_split_resulting_equal_to_original_recomputes_once():
+async def test_split_consumer_forwards_duplicate_entity_evidence_unchanged(monkeypatch):
     consumer = MeasurementIdentityConsumer(producer=MagicMock())
-    calls = await _run(consumer, {
+    queued = await _run(consumer, {
+        "decision_id": "split-1",
         "original_entity_id": "orig-1",
         "resulting_entity_id": "orig-1",
-    })
-    assert [c[1] for c in calls] == ["orig-1"]
+    }, monkeypatch)
+    assert len(queued) == 1
+    assert queued[0].payload["original_entity_id"] == queued[0].payload["resulting_entity_id"]
 
 
-async def test_split_missing_resulting_recomputes_origin_only():
+async def test_split_consumer_forwards_missing_resulting_entity_for_validation(monkeypatch):
     consumer = MeasurementIdentityConsumer(producer=MagicMock())
-    calls = await _run(consumer, {"original_entity_id": "orig-1"})
-    assert [c[1] for c in calls] == ["orig-1"]
+    queued = await _run(consumer, {"decision_id": "split-1", "original_entity_id": "orig-1"}, monkeypatch)
+    assert len(queued) == 1
+    assert queued[0].payload == {"decision_id": "split-1", "original_entity_id": "orig-1"}
 
 
-async def test_split_missing_original_is_a_noop():
+async def test_split_consumer_forwards_missing_original_for_validation(monkeypatch):
     consumer = MeasurementIdentityConsumer(producer=MagicMock())
-    calls = await _run(consumer, {"resulting_entity_id": "frag-1"})
-    assert calls == []
+    queued = await _run(consumer, {"decision_id": "split-1", "resulting_entity_id": "frag-1"}, monkeypatch)
+    assert len(queued) == 1
+    assert queued[0].payload == {"decision_id": "split-1", "resulting_entity_id": "frag-1"}

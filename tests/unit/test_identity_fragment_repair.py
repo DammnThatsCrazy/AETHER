@@ -13,6 +13,7 @@ IdentityResolutionRepository() pattern.
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -71,8 +72,19 @@ ACTOR = "operator-1"
 
 
 @pytest.fixture(autouse=True)
-def _clean_stores():
+def _clean_stores(monkeypatch):
+    from config.settings import settings
+
     reset_in_memory_stores()
+    monkeypatch.setattr(
+        settings,
+        "identity_continuity",
+        replace(
+            settings.identity_continuity,
+            split_enabled=True,
+            manual_split_enabled=True,
+        ),
+    )
     yield
     reset_in_memory_stores()
 
