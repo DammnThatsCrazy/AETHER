@@ -9,14 +9,18 @@ For every dataclass field in ``services/backend/config/settings.py`` whose
 default reads an environment variable (``_env_bool("NAME", ...)`` and friends),
 the field counts as **read** when any of these holds in production Python:
 
-* its environment variable name appears as a string constant that is exactly
-  that name (a direct ``os.environ`` or ``_env`` read), outside docstrings;
+* its environment variable name is the key of an environment read: an argument of
+  ``os.getenv`` or of an ``*env*`` helper or ``environ.get``, an ``environ[...]``
+  subscript, or ``"NAME" in environ`` (a name merely listed in a tuple, dict or
+  string elsewhere is not a read);
 * its attribute is read in code (``settings.comms.x``, ``self.x``) or named by an
-  exact string constant (``getattr(cfg, "x")``), where a name only one config
-  class defines is credited on any such read, and a name several classes define
-  (``enabled``, ``port``) is credited only to the class it is read through: its
+  exact string constant (``getattr(cfg, "x")``) through its own config object: its
   section on ``Settings``, a variable annotated with the class or bound from the
-  section earlier in the same or an enclosing scope, or ``self.x`` inside the class.
+  section earlier in the same or an enclosing scope (a later assignment of anything
+  else drops the binding), a parameter the module passes the section at a call site
+  (only when one function has that name), or ``self.x`` inside the class. The same
+  attribute name on an unrelated object (``args.port``) proves nothing, for every
+  field, not only for names several classes share.
 
 Comments, docstrings and prose never count, and neither does test code: a flag
 only a test reads is not a runtime control. Fields that cannot be retired yet go
@@ -45,14 +49,21 @@ from typing import Any, Iterable, NamedTuple
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-SETTINGS = "services/backend/config/settings.py"
+BACKEND = "services/backend"
+SETTINGS = f"{BACKEND}/config/settings.py"
 ALLOWLIST = ROOT / "config/unread_settings_flags.yaml"
 LEDGER = ROOT / "config/debt_retirement_ledger.yaml"
 # The only unread fields that may be allowlisted. Growing this set is a change to
 # this file, so it is reviewed with its test and the retirement page (the
 # ``settings_flags`` ownership category); a new allowlist entry alone cannot
 # admit a new inert field.
-PERMITTED_UNREAD = frozenset({"RuntimeConfig.ml_mode"})
+PERMITTED_UNREAD = frozenset(
+    {
+        "RuntimeConfig.ml_mode",
+        "TrustPlaneConfig.trust_plane_enabled",
+        "KyberWorkforceConfig.session_cookie_secure",
+    }
+)
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # The validator names permitted fields as string literals; it is not a reader.
@@ -156,6 +167,40 @@ def _composites(root: Path) -> dict[str, set[str]]:
     return mounted
 
 
+def _is_env(node: ast.AST | None) -> bool:
+    """``os.environ``, ``environ``, ``env`` and the like: an object that holds environment variables."""
+    name = _terminal(node)
+    return name is not None and ("environ" in name.lower() or name.lower() in {"env", "_env"})
+
+
+def _env_lookup_keys(node: ast.AST, consts: dict[str, str]) -> list[str]:
+    """String constants (or names bound to one) this node uses as the key of an environment read."""
+    keys: list[ast.AST] = []
+    if isinstance(node, ast.Call):
+        lowered = (_terminal(node.func) or "").lower()
+        reader = lowered == "getenv" or bool(set(lowered.split("_")) & {"env", "getenv", "environ", "dotenv"})
+        accessor = (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"get", "pop", "setdefault"}
+            and _is_env(node.func.value)
+        )
+        if reader or accessor:
+            keys.extend(node.args[:1])
+            keys.extend(keyword.value for keyword in node.keywords if keyword.arg in {"name", "key", "var"})
+    elif isinstance(node, ast.Subscript) and _is_env(node.value):
+        keys.append(node.slice)
+    elif isinstance(node, ast.Compare) and any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops):
+        if any(_is_env(comparator) for comparator in node.comparators):
+            keys.append(node.left)
+    found: list[str] = []
+    for key in keys:
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            found.append(key.value)
+        elif isinstance(key, ast.Name) and key.id in consts:
+            found.append(consts[key.id])
+    return found
+
+
 def _bound_names(value: ast.AST) -> list[str | None]:
     """Identifiers a value expression stands for: ``settings.comms``, ``x or settings.comms``,
     ``getattr(settings, "comms", None)``, ``CommsConfig()``."""
@@ -178,14 +223,40 @@ class _Scan:
     """What one module reads: code names, exact string constants, and scoped credits."""
 
     def __init__(self, text: str, skip_lines: frozenset[int] = frozenset()) -> None:
-        self.names: set[str] = set()
-        self.strings: set[str] = set()
+        self.strings: set[str] = set()  # every non-docstring string constant
+        self.dynamic_owners: set[str] = set()  # owners read through getattr(<owner>, <variable>)
+        self.imports: dict[str, tuple[str, str]] = {}  # local name -> (dotted module, original name)
+        self.collections: dict[str, set[str]] = {}  # module-level NAME = (<string constants>)
+        self.env_keys: set[str] = set()  # string constants used as an environment lookup key
         self.tree: ast.AST | None
         try:
             self.tree = ast.parse(text)
         except SyntaxError:
             self.tree = None
             return
+        consts: dict[str, str] = {}  # NAME = "LITERAL" anywhere in the module
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                for alias in node.names:
+                    self.imports[alias.asname or alias.name] = (node.module, alias.name)
+            if (
+                isinstance(node, ast.Assign)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        consts[target.id] = node.value.value
+        for node in getattr(self.tree, "body", []):
+            if (
+                isinstance(node, ast.Assign)
+                and isinstance(node.value, (ast.Tuple, ast.List, ast.Set))
+                and node.value.elts
+                and all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in node.value.elts)
+            ):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        self.collections[target.id] = {e.value for e in node.value.elts}
         bare: set[int] = set()
         # ast.walk yields a parent before its children, so a bare string statement
         # (a docstring) is recorded before the constant inside it is reached.
@@ -196,40 +267,62 @@ class _Scan:
                 continue
             if getattr(node, "lineno", 0) in skip_lines:
                 continue
-            if isinstance(node, ast.Name):
-                if isinstance(node.ctx, ast.Load):
-                    self.names.add(node.id)
-            elif isinstance(node, ast.Attribute):
-                if isinstance(node.ctx, ast.Load):
-                    self.names.add(node.attr)
-            elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in bare:
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in bare:
                 self.strings.add(node.value)
+            for key in _env_lookup_keys(node, consts):
+                self.env_keys.add(key)
 
     def credits(
-        self, owner_names: set[str], classes: set[str], shared: set[str], skip_lines: frozenset[int]
+        self, owner_names: set[str], classes: set[str], fields: set[str], skip_lines: frozenset[int]
     ) -> dict[str, set[str]]:
-        """Owners each shared field name is read through, with lexical, ordered aliases.
+        """Owners each field name is read through, with lexical, ordered aliases.
 
         A name bound from a section or class is credited only to reads that come
         after the binding, in the same function or an enclosing one; a binding in
-        another function proves nothing. ``self.x = settings.section`` binds ``x``
-        for the whole class.
+        another function proves nothing, and assigning anything else to the name
+        (or taking it as a parameter) drops the binding. ``self.x = settings.section``
+        binds ``x`` for the whole class.
         """
         credited: dict[str, set[str]] = {}
         dynamic: set[str] = set()  # owners read through getattr(<owner>, <variable>)
-        funcs: dict[str, list[str]] = {}  # function name -> parameter names (self excluded)
-        call_owner: dict[tuple[str, int | str], str] = {}  # (callee, position or keyword) -> owner passed
+        funcs: dict[str, list[list[str]]] = {}  # function name -> parameter names of each definition (self excluded)
+        call_owner: dict[tuple[str, int | str], set[str]] = {}  # (callee, position or keyword) -> owners passed
         pending: list[tuple[str, str, str]] = []  # (field, enclosing function, parameter name)
         func_stack: list[str] = []
         if self.tree is None:
             return credited
-        # scopes: list of (kind, bindings) where bindings maps name -> (owner, lineno)
-        scopes: list[tuple[str, dict[str, tuple[str, int]]]] = [("module", {})]
+        # Functions that only ever return a section or config class (``return settings.storage_plane``).
+        returns: dict[str, str] = {}
+        for fn in ast.walk(self.tree):
+            if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                params = {a.arg for a in [*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs]}
+                # ``return cfg`` of a parameter hands back what the caller passed: it is not
+                # another owner, so ``cfg or settings.x`` and ``if cfg is not None: return cfg``
+                # both leave the function standing for the section it falls back to.
+                values = [
+                    r.value
+                    for r in ast.walk(fn)
+                    if isinstance(r, ast.Return)
+                    and r.value is not None
+                    and not (isinstance(r.value, ast.Name) and r.value.id in params)
+                ]
+                owners = {
+                    n for v in values for n in _bound_names(v) if n and (n in owner_names or n in classes)
+                }
+                if values and len(owners) == 1 and all(
+                    any(n in owners for n in _bound_names(v)) for v in values
+                ):
+                    returns[fn.name] = next(iter(owners))
+        # scopes: list of (kind, bindings) where bindings maps name -> (owner, lineno);
+        # an owner of None records that the name was rebound to something else
+        scopes: list[tuple[str, dict[str, tuple[str | None, int]]]] = [("module", {})]
         class_stack: list[str] = []
 
         def lookup(name: str | None, line: int, via_self: bool) -> str | None:
             if name is None:
                 return None
+            if name == "settings" and "Settings" in classes and not via_self:
+                return "Settings"  # the module-level singleton: ``settings.debug``
             if name in owner_names or name in classes:
                 return name
             for kind, bindings in reversed(scopes):
@@ -242,9 +335,14 @@ class _Scan:
                     return hit[0]
             return None
 
-        def bind(target: ast.AST, owner: str, line: int) -> None:
+        def bind(target: ast.AST, owner: str | None, line: int) -> None:
             if isinstance(target, ast.Name):
                 scopes[-1][1][target.id] = (owner, line)
+            elif isinstance(target, (ast.Tuple, ast.List)):
+                for element in target.elts:
+                    bind(element, None, line)
+            elif isinstance(target, ast.Starred):
+                bind(target.value, None, line)
             elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
                 for kind, bindings in reversed(scopes):
                     if kind == "class":
@@ -252,7 +350,7 @@ class _Scan:
                         break
 
         def credit(field_name: str, qualifier: ast.AST | None, line: int) -> None:
-            if field_name not in shared or line in skip_lines:
+            if field_name not in fields or line in skip_lines:
                 return
             owner: str | None = None
             if isinstance(qualifier, ast.Name) and qualifier.id == "self" and class_stack:
@@ -260,12 +358,31 @@ class _Scan:
             elif isinstance(qualifier, ast.Attribute) and isinstance(qualifier.value, ast.Name) and qualifier.value.id == "self":
                 owner = lookup(qualifier.attr, line, via_self=True)
             else:
-                name = _terminal(qualifier)
-                owner = lookup(name, line, via_self=False)
-                if owner is None and isinstance(qualifier, ast.Name) and func_stack and name in funcs.get(func_stack[-1], ()):
-                    pending.append((field_name, func_stack[-1], name))
+                for name in (_bound_names(qualifier) if qualifier is not None else []):
+                    owner = lookup(name, line, via_self=False)
+                    if owner is None and isinstance(qualifier, ast.Call) and name in returns:
+                        owner = returns[name]  # ``self._plane().x`` where ``_plane`` returns a section
+                    if owner:
+                        break
+                if owner is None and isinstance(qualifier, ast.Name) and func_stack and func_stack[-1]:
+                    pending.append((field_name, func_stack[-1], qualifier.id))
             if owner:
                 credited.setdefault(field_name, set()).add(owner)
+
+        def visit_target(target: ast.AST) -> None:
+            """An assignment target can itself contain reads (``a.b[c.d] = ...``)."""
+            if isinstance(target, ast.Name):
+                return
+            if isinstance(target, (ast.Tuple, ast.List)):
+                for element in target.elts:
+                    visit_target(element)
+            elif isinstance(target, ast.Starred):
+                visit_target(target.value)
+            elif isinstance(target, ast.Attribute):
+                visit(target.value)
+            elif isinstance(target, ast.Subscript):
+                visit(target.value)
+                visit(target.slice)
 
         def visit(node: ast.AST) -> None:
             if isinstance(node, ast.ClassDef):
@@ -279,13 +396,15 @@ class _Scan:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
                 scopes.append(("function", {}))
                 fname = node.name if not isinstance(node, ast.Lambda) else ""
+                every = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+                for arg in (*every, *filter(None, (node.args.vararg, node.args.kwarg))):
+                    scopes[-1][1][arg.arg] = (None, node.lineno)  # a parameter shadows an outer binding
                 if not isinstance(node, ast.Lambda):
-                    params = [a.arg for a in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]]
-                    funcs[fname] = [p for p in params if p != "self"]
+                    funcs.setdefault(fname, []).append([a.arg for a in every if a.arg != "self"])
                     for arg in [*node.args.args, *node.args.kwonlyargs]:
                         ann = _terminal(arg.annotation) if arg.annotation is not None else None
                         if ann in classes:
-                            scopes[-1][1][arg.arg] = (ann, node.lineno)  # type: ignore[assignment]
+                            scopes[-1][1][arg.arg] = (ann, node.lineno)
                 func_stack.append(fname)
                 for child in ast.iter_child_nodes(node):
                     visit(child)
@@ -294,21 +413,45 @@ class _Scan:
                 return
             if isinstance(node, ast.Assign):
                 visit(node.value)
-                for bound in _bound_names(node.value):
-                    if bound and (bound in owner_names or bound in classes):
-                        for target in node.targets:
-                            bind(target, bound, node.lineno)
+                owners = [b for b in _bound_names(node.value) if b and (b in owner_names or b in classes)]
+                if not owners and isinstance(node.value, ast.Call):
+                    called = _terminal(node.value.func)
+                    if called in returns:  # ``cfg = _resolve_config(cfg)``
+                        owners = [returns[called]]
+                for target in node.targets:
+                    bind(target, owners[0] if owners else None, node.lineno)
+                    visit_target(target)
                 return
             if isinstance(node, ast.AnnAssign):
                 ann = _terminal(node.annotation)
                 if node.value is not None:
                     visit(node.value)
-                if ann in classes:
-                    bind(node.target, ann, node.lineno)  # type: ignore[arg-type]
-                else:
-                    for bound in _bound_names(node.value) if node.value is not None else []:
-                        if bound and (bound in owner_names or bound in classes):
-                            bind(node.target, bound, node.lineno)
+                owners = [b for b in (_bound_names(node.value) if node.value is not None else []) if b and (b in owner_names or b in classes)]
+                bind(node.target, ann if ann in classes else (owners[0] if owners else None), node.lineno)
+                visit_target(node.target)
+                return
+            if isinstance(node, ast.AugAssign):
+                visit(node.value)
+                bind(node.target, None, node.lineno)
+                visit_target(node.target)
+                return
+            if isinstance(node, (ast.For, ast.AsyncFor)):
+                visit(node.iter)
+                bind(node.target, None, node.lineno)
+                for child in [*node.body, *node.orelse]:
+                    visit(child)
+                return
+            if isinstance(node, (ast.With, ast.AsyncWith)):
+                for item in node.items:
+                    visit(item.context_expr)
+                    if item.optional_vars is not None:
+                        bind(item.optional_vars, None, node.lineno)
+                for child in node.body:
+                    visit(child)
+                return
+            if isinstance(node, ast.NamedExpr):
+                visit(node.value)
+                bind(node.target, None, node.lineno)
                 return
             if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
                 credit(node.attr, node.value, node.lineno)
@@ -330,26 +473,30 @@ class _Scan:
                     for position, arg in enumerate(node.args):
                         passed = lookup(_terminal(arg), node.lineno, via_self=False)
                         if passed:
-                            call_owner[(callee, position)] = passed
+                            call_owner.setdefault((callee, position), set()).add(passed)
                     for keyword in node.keywords:
                         passed = lookup(_terminal(keyword.value), node.lineno, via_self=False)
                         if passed and keyword.arg:
-                            call_owner[(callee, keyword.arg)] = passed
+                            call_owner.setdefault((callee, keyword.arg), set()).add(passed)
             for child in ast.iter_child_nodes(node):
                 visit(child)
 
         visit(self.tree)
         # A function that reads a field through an unannotated parameter is credited
-        # to the owner the module passes it at a call site.
+        # to the owners the module passes it at its call sites, when one function has
+        # that name (two definitions sharing a name cannot be told apart by name).
         for field_name, fname, param in pending:
-            index = funcs[fname].index(param)
-            owner = call_owner.get((fname, index)) or call_owner.get((fname, param))
-            if owner:
+            definitions = funcs.get(fname, [])
+            if len(definitions) != 1 or param not in definitions[0]:
+                continue
+            index = definitions[0].index(param)
+            for owner in call_owner.get((fname, index), set()) | call_owner.get((fname, param), set()):
                 credited.setdefault(field_name, set()).add(owner)
-        # A helper that reads ``getattr(<owner>, name)`` reads every shared field
-        # name the module lists as a string.
-        for name in self.strings & shared:
+        # A helper that reads ``getattr(<owner>, name)`` reads every field name the
+        # module lists as a string.
+        for name in self.strings & fields:
             credited.setdefault(name, set()).update(dynamic)
+        self.dynamic_owners = dynamic
         return credited
 
 
@@ -360,42 +507,49 @@ def unread_flags(root: Path = ROOT) -> list[Flag]:
     classes = {f.cls for f in flags}
     sections = {name for names in mounted.values() for name in names}
     owner_names = sections | classes
-    shared = {name for name, count in collections.Counter(f.field for f in flags).items() if count > 1}
+    fields = {f.field for f in flags}
     settings_text = (root / SETTINGS).read_text(encoding="utf-8")
     defined = frozenset(n for f in flags for n in range(f.first_line, f.last_line + 1))
 
-    names: set[str] = set()
-    strings: set[str] = set()
+    env_keys: set[str] = set()
     credited: dict[str, set[str]] = {}
 
     def absorb(scan: _Scan, skip: frozenset[int], scoped: bool) -> None:
-        names.update(scan.names)
-        strings.update(scan.strings)
+        env_keys.update(scan.env_keys)
         if scoped:
-            for key, owners in scan.credits(owner_names, classes, shared, skip).items():
+            for key, owners in scan.credits(owner_names, classes, fields, skip).items():
                 credited.setdefault(key, set()).update(owners)
 
     absorb(_Scan(settings_text, defined), defined, True)
-    # A file can only read a field if it contains the field's name or environment
-    # variable, so most files need no parse at all.
-    interesting = {f.env for f in flags} | {f.field for f in flags}
+    # Most files name neither an environment variable nor a section, so need no parse.
+    env_names = {f.env for f in flags}
+    scans: dict[str, _Scan] = {}
     for rel, text in _production_python(root):
         if rel == SETTINGS:
             continue
         tokens = set(_TOKEN.findall(text))
-        if not tokens & interesting:
+        # An environment read needs the variable's name in the file; a credit needs a
+        # section or class name (a module that loops ``getattr(section, name)`` over an
+        # imported tuple names no field itself, but it does name the section).
+        if not tokens & env_names and not tokens & owner_names:
             continue
         scan = _Scan(text)
-        # A credit needs the file to name a section or class, and a shared field.
-        absorb(scan, frozenset(), bool(tokens & owner_names and tokens & shared))
+        scans[rel] = scan
+        # A credit needs the file to name a section or class.
+        absorb(scan, frozenset(), bool(tokens & owner_names))
+    # A module that reads ``getattr(<owner>, name)`` for a tuple of names it imports
+    # (``for name in REQUIRED_FLAGS``) reads every field that tuple lists.
+    for scan in scans.values():
+        for module, original in scan.imports.values():
+            home = scans.get(f"{BACKEND}/{module.replace('.', '/')}.py")
+            for name in (home.collections.get(original, set()) if home else set()) & fields:
+                credited.setdefault(name, set()).update(scan.dynamic_owners)
 
     unread: list[Flag] = []
     for flag in flags:
-        if flag.env in strings:
+        if flag.env in env_keys:
             continue
-        if flag.field not in names and flag.field not in strings:
-            unread.append(flag)
-        elif flag.field in shared and not (credited.get(flag.field, set()) & (mounted.get(flag.cls, set()) | {flag.cls})):
+        if not credited.get(flag.field, set()) & (mounted.get(flag.cls, set()) | {flag.cls}):
             unread.append(flag)
     return unread
 

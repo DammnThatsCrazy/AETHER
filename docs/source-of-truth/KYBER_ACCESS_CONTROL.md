@@ -264,7 +264,7 @@ session", which callers treat as **deny**.
 | `bootstrap_founder_google_subject` | `KYBER_BOOTSTRAP_FOUNDER_GOOGLE_SUBJECT` | — |
 | `directory_sync_enabled` | `KYBER_DIRECTORY_SYNC_ENABLED` | false |
 | — (read by `DirectorySyncService`, not a settings field) | `KYBER_DIRECTORY_MAX_AGE_HOURS` | 24 |
-| `session_cookie_secure` | `KYBER_SESSION_COOKIE_SECURE` | true (non-local) |
+| `session_cookie_secure` | `KYBER_SESSION_COOKIE_SECURE` | true (non-local); declared but not read: the cookie's `Secure` attribute follows `AETHER_ENV` (`services/kyber/sessions/cookies.py`), and the field is awaiting retirement (`delivery-unread-settings-flags-pending`) |
 
 ### Rollback
 

@@ -68,7 +68,7 @@ def test_new_flags_default_to_false() -> None:
 
 def test_new_flags_default_false_even_when_master_runtime_is_enabled() -> None:
     """Turning on the master runtime switch does NOT turn on the follow-ons."""
-    cfg = settings_module.ProviderRuntimeConfig(enabled=True, entry_points_enabled=True)
+    cfg = settings_module.ProviderRuntimeConfig(enabled=True)
     assert cfg.enabled is True
     assert cfg.provider_sync_scheduler_enabled is False
     assert cfg.provider_migrations_enabled is False

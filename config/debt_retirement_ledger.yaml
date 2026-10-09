@@ -748,25 +748,35 @@ entries:
     classification: deprecated
     state: converge
     authority: >-
-      the deployment profile contract (config/deployment_profiles.yaml): either a
-      runtime reads ML_MODE or the profile dimension goes
+      the deployment profile and release posture contracts
+      (config/deployment_profiles.yaml, config/posture/, scripts/release): either
+      a runtime reads each of these flags or the contract stops requiring it
     current:
       - config/unread_settings_flags.yaml
       - tests/unit/test_release_profile_enforcement.py
     duplicates: []
     retire: >-
-      RuntimeConfig.ml_mode (ML_MODE). No production code reads it, but each
-      release profile pins it in its environment file and the profile enforcement
-      test checks the pin, so deleting it is a change to the profile contract and
-      is kept out of the settings cleanup.
+      RuntimeConfig.ml_mode (ML_MODE), TrustPlaneConfig.trust_plane_enabled
+      (TRUST_PLANE_ENABLED) and KyberWorkforceConfig.session_cookie_secure
+      (KYBER_SESSION_COOKIE_SECURE). No production code reads them, but each is
+      pinned by a release or deployment contract: the profile environment files
+      pin ML_MODE; the release gate (scripts/release/check_resolved_feature_flags.py)
+      requires TRUST_PLANE_ENABLED on, although the trust plane has no master
+      switch (its parts are HUMAN_SESSIONS_ENABLED, SERVICE_CREDENTIALS_ENABLED and
+      the other flags that gate behavior); Terraform passes KYBER_SESSION_COOKIE_SECURE
+      although the __Host- session cookie's Secure attribute follows AETHER_ENV
+      (on everywhere except local, dev and test;
+      services/backend/services/kyber/sessions/cookies.py). Deleting them changes those
+      contracts, so it is kept out of the settings cleanup.
     consumers:
       - tests/unit/test_release_profile_enforcement.py
-    compatibility: .env.production.example and .env.staging.example keep ML_MODE until the profile dimension is retired
+      - scripts/release/check_resolved_feature_flags.py
+    compatibility: .env.production.example and .env.staging.example keep ML_MODE, and the posture and release files keep TRUST_PLANE_ENABLED, until the contracts are retired
     mechanism: delete
     parity_evidence: null
     usage_evidence: >-
-      scripts/validate_settings_flags.py --report lists it as the only unread
-      settings field (2026-10-09)
+      scripts/validate_settings_flags.py --report lists these three as the only
+      unread settings fields (2026-10-09)
     rollback: n/a
     removal_pr: null
     deadline: 2027-03-31

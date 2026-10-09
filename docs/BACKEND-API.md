@@ -3398,8 +3398,9 @@ routes are untouched.
 **Feature gating (off by default, additive — zero impact until activated):**
 - `AETHER_PROVIDER_RUNTIME_ENABLED=false` gates the tenant + public-webhook routers.
 - `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED=false` additionally gates the admin router.
-- `AETHER_PROVIDER_ENTRY_POINTS_ENABLED=false` gates `importlib.metadata` plugin
-  discovery (the `aether.providers` entry-point group); local plugins always register.
+- `importlib.metadata` plugin discovery (the `aether.providers` entry-point group) is off
+  unless code builds the registry with `entry_points_enabled=True`; no environment
+  variable sets it, and local plugins always register.
 
 **Identity:** a plugin is `family.product.capability` (e.g. `shopify.admin.orders_read`).
 Legacy connectors register as `{connector_type}.ingestion.connector`.

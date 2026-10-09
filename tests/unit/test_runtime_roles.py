@@ -170,7 +170,6 @@ def test_runtime_config_defaults():
         assert rc.deployment_profile == "local-live"
         assert rc.database_backend == "postgres"
         assert rc.cache_backend == "memory"
-        assert rc.event_backend == "sns_sqs"
         assert rc.object_backend == "s3"
         assert rc.ml_mode == "inline"
         assert rc.is_all_role is True

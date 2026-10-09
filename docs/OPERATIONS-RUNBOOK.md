@@ -16,7 +16,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
-  "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
+  "services/backend/config/settings.py": "sha256:1b10df67cb8ad212c22f162f3c98f044fe8452f7709cb1531e35ae50a6ccd664"
   "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
   "services/backend/services/provider_runtime/": "sha256:820b6205b2a4f776a622c28a74e73f0d056161fa3b758ed6e7493cd42c469d24"
 ---
@@ -131,7 +131,7 @@ All extraction mesh keys use prefix `aether:exbudget:`:
 |----------|---------|---------|
 | `ML_SERVING_URL` | `http://localhost:8080` | Backend ML proxy |
 | `REDIS_HOST` | `localhost` | All caching |
-| `KAFKA_BROKERS` | `localhost:9092` | Event bus |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Event bus |
 | `ENABLE_EXTRACTION_DEFENSE` | `false` | ML Serving |
 | `PRICING_OPTION` | `B` | Backend (A/B/C — Market Entry / Ideal / Premium) |
 | `QUOTA_FLUSH_INTERVAL_S` | `60` | Backend (Redis → `tenant_usage` flush cadence) |
@@ -558,7 +558,6 @@ AETHER_PROVIDER_RUNTIME_ENABLED=true       → mounts provider_runtime router at
                                               + webhook gateway at /v1/provider-webhooks
 KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED=true → additionally mounts the operator plane at
                                               /v1/admin/kyber/provider-connections
-AETHER_PROVIDER_ENTRY_POINTS_ENABLED=true  → enable importlib.metadata entry-point plugin discovery
 ```
 
 Enable by setting the flags and restarting; provider registries auto-populate

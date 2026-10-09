@@ -8,7 +8,7 @@ status: experimental
 since_version: 0.1.0
 source_files: [services/backend/config/settings.py, tests/integration/test_comms_golden_scenario.py]
 source_hashes:
-  "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
+  "services/backend/config/settings.py": "sha256:1b10df67cb8ad212c22f162f3c98f044fe8452f7709cb1531e35ae50a6ccd664"
   "tests/integration/test_comms_golden_scenario.py": "sha256:a26db2d8632f089933adf8df5d15d2a20756b33e6f4f3e082d384e8d5dd831ff"
 ---
 
@@ -19,7 +19,6 @@ source_hashes:
 | Flag | Default | Gates |
 |---|---|---|
 | `AETHER_COMMS_INGESTION_ENABLED` | true | Silver projection of comm events (Bronze always accepts) |
-| `AETHER_COMMS_OPENS_VIEW_THROUGH` | false | Reported opens as low-confidence view-through |
 
 Campaign projection, journey inclusion, Campaign 360 and reply attribution are not separately flag-gated. Flags for them (`AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED`, `AETHER_COMMS_JOURNEYS_ENABLED`, `AETHER_COMMS_CAMPAIGN360_ENABLED`, `AETHER_COMMS_REPLIES_ELIGIBLE`), and for graph emission, Profile360 surfaces and the Noesis intent (`AETHER_COMMS_GRAPH_ENABLED`, `AETHER_COMMS_PROFILE360_ENABLED`, `AETHER_COMMS_NOESIS_ENABLED`), were documented here but no code read them, so they were retired.
 
@@ -53,7 +52,7 @@ Campaign projection, journey inclusion, Campaign 360 and reply attribution are n
 | Graph pressure | Disable the connector (graph emission has no switch of its own); facts stay in Bronze and replay later |
 | Provider flood | Disable connector; webhook inbox retains raw payloads |
 | Schema issue | `alembic downgrade 20260702_fraud_decisions` (additive-only drop) |
-| Attribution dispute | Toggle `AETHER_COMMS_OPENS_VIEW_THROUGH`; rerun attribution |
+| Attribution dispute | Reported opens count as view-through only when a caller passes `CommsAttributionConfig(reported_opens_as_view_through=True)`; there is no environment toggle. Rerun attribution after correcting the policy |
 
 ## Operator remediation surface
 

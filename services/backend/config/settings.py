@@ -116,8 +116,6 @@ class OpenSearchConfig:
 @dataclass(frozen=True)
 class EventBusConfig:
     broker_type: str = _env("EVENT_BROKER", "kafka")  # "kafka" or "sns_sqs"
-    kafka_brokers: str = _env("KAFKA_BROKERS", "localhost:9092")
-    consumer_group: str = _env("KAFKA_CONSUMER_GROUP", "aether-backend")
     sns_topic_arn: str = _env("SNS_TOPIC_ARN", "")
     sqs_queue_url: str = _env("SQS_QUEUE_URL", "")
 
@@ -203,8 +201,6 @@ class CommsConfig:
     (docs/comms/COMMS_RELEASE_READINESS.md).
     """
     ingestion_enabled: bool = _env_bool("AETHER_COMMS_INGESTION_ENABLED", True)
-    # Attribution policy switches (ADR-C8)
-    reported_opens_as_view_through: bool = _env_bool("AETHER_COMMS_OPENS_VIEW_THROUGH", False)
     # Provider suppression write-back is a separately-authorized capability
     # (read permission never implies suppression-write); OFF by default,
     # observe-only per ADR-C1.
@@ -309,16 +305,7 @@ class ModelExtractionDefenseConfig:
     enable_query_analysis: bool = _env_bool("ENABLE_QUERY_ANALYSIS", True)
     watermark_secret_key: str = _env("WATERMARK_SECRET_KEY", "aether-wm-default-change-me")
     canary_secret_seed: str = _env("CANARY_SECRET_SEED", "aether-canary-seed-change-me")
-    # Rate limits (per-API-key)
-    key_max_per_minute: int = _env_int("EXTRACTION_KEY_RPM", 60)
-    key_max_per_hour: int = _env_int("EXTRACTION_KEY_RPH", 1000)
-    key_max_per_day: int = _env_int("EXTRACTION_KEY_RPD", 10000)
-    # Rate limits (per-IP)
-    ip_max_per_minute: int = _env_int("EXTRACTION_IP_RPM", 120)
-    ip_max_per_hour: int = _env_int("EXTRACTION_IP_RPH", 3000)
-    ip_max_per_day: int = _env_int("EXTRACTION_IP_RPD", 30000)
     # Output perturbation
-    logit_noise_std: float = float(_env("EXTRACTION_NOISE_STD", "0.02"))
     output_precision: int = _env_int("EXTRACTION_OUTPUT_PRECISION", 2)
 
 
@@ -724,13 +711,14 @@ class RuntimeConfig:
     # Backend selectors — the concrete backend each subsystem binds to.
     database_backend: str = _env("DATABASE_BACKEND", "postgres")
     cache_backend: str = _env("CACHE_BACKEND", "memory")
-    event_backend: str = _env("EVENT_BACKEND", "sns_sqs")
     graph_backend: str = _env("GRAPH_BACKEND", "postgres")
-    # ANALYTICS_BACKEND is deliberately absent: it is a deployment-profile
-    # selector (Terraform gates the ClickHouse appliance and CLICKHOUSE_HOST on
-    # it; the release profile tooling checks it). The backend never branches on
-    # it — the analytics event store is PostgreSQL in every profile and
-    # ClickHouse is reached through CLICKHOUSE_HOST (shared/cis/clickhouse.py).
+    # EVENT_BACKEND and ANALYTICS_BACKEND are deliberately absent: they are
+    # deployment-profile selectors (the release profile tooling checks them, and
+    # Terraform gates the ClickHouse appliance and CLICKHOUSE_HOST on the
+    # analytics one). The backend never branches on either — the event bus is
+    # chosen by EVENT_BROKER (shared/events/events.py), the analytics event store
+    # is PostgreSQL in every profile, and ClickHouse is reached through
+    # CLICKHOUSE_HOST (shared/cis/clickhouse.py).
     object_backend: str = _env("OBJECT_BACKEND", "s3")
     ml_mode: str = _env("ML_MODE", "inline")
 
@@ -893,8 +881,10 @@ class SemanticIntelligenceConfig:
 # Integration consent governance — additive, default-off rollout controls.
 #
 # These names are generated into the public integration-consent contract. The
-# runtime settings mirror that contract exactly so code never infers rollout
-# state from generated constants. The connector policy gate is only consulted
+# runtime settings carry the three the backend consults, so code never infers
+# rollout state from generated constants; the contract's other flags
+# (preference center, checkout hardening, consent lifecycle enforcement) have no
+# backend setting because nothing reads them. The connector policy gate is only consulted
 # when both it and the V2 control plane are enabled; flag-off behavior remains
 # the existing connector behavior.
 # ---------------------------------------------------------------------------
@@ -909,15 +899,6 @@ class IntegrationConsentConfig:
     )
     integration_discovery_enabled: bool = _env_bool(
         "AETHER_INTEGRATION_DISCOVERY", False
-    )
-    preference_center_v1_enabled: bool = _env_bool(
-        "AETHER_PREFERENCE_CENTER_V1", False
-    )
-    checkout_hardening_v1_enabled: bool = _env_bool(
-        "AETHER_CHECKOUT_HARDENING_V1", False
-    )
-    consent_lifecycle_enforcement_enabled: bool = _env_bool(
-        "AETHER_CONSENT_LIFECYCLE_ENFORCEMENT", False
     )
 
 
@@ -1358,7 +1339,6 @@ class ProviderRuntimeConfig:
       surface (aggregate-only; never tenant-scoped create/test/sync).
     """
     enabled: bool = _env_bool("AETHER_PROVIDER_RUNTIME_ENABLED", False)
-    entry_points_enabled: bool = _env_bool("AETHER_PROVIDER_ENTRY_POINTS_ENABLED", False)
     kyber_health_enabled: bool = _env_bool("KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED", False)
     # Background sync scheduler (pull loop) — OFF by default.
     provider_sync_scheduler_enabled: bool = _env_bool("AETHER_PROVIDER_SYNC_SCHEDULER_ENABLED", False)
@@ -1388,7 +1368,6 @@ class ProviderCorpusConfig:
 
     # Provider source catalog
     kyber_provider_source_catalog_enabled: bool = _env_bool("KYBER_PROVIDER_SOURCE_CATALOG_ENABLED", False)
-    provider_sync_enabled: bool = _env_bool("AETHER_PROVIDER_SYNC_ENABLED", False)
 
     # Anti-distillation controls
     anti_distillation_enabled: bool = _env_bool("AETHER_ANTI_DISTILLATION_ENABLED", False)
@@ -1432,24 +1411,17 @@ class FraudIntelligenceConfig:
 class DeliveryConfig:
     """Durable delivery worker configuration.
 
-    Controls the DeliveryWorker poll loop, lease window, and retry behaviour.
+    Controls the DeliveryWorker poll loop and batch size; lease and retry limits live with the jobs repository.
     Provider credentials are resolved from the vault (ProvidersRepository)
     via secret_ref — never stored in this config.
     """
     enabled: bool = _env_bool("AETHER_DELIVERY_WORKER_ENABLED", True)
     batch_size: int = _env_int("DELIVERY_WORKER_BATCH_SIZE", 10)
-    lease_seconds: int = _env_int("DELIVERY_WORKER_LEASE_SECONDS", 120)
     poll_interval_seconds: float = float(_env("DELIVERY_WORKER_POLL_INTERVAL_S", "5"))
-    max_attempts: int = _env_int("DELIVERY_WORKER_MAX_ATTEMPTS", 5)
-
-    # Slack provider config (system-level default; per-tenant configured in UserNotificationChannel)
-    slack_bot_token: str = _env("DELIVERY_SLACK_BOT_TOKEN", "")
 
     # Webhook signing secret (for outbound X-Aether-Signature)
     webhook_signing_secret: str = _env("DELIVERY_WEBHOOK_SIGNING_SECRET", "")
 
-    # Linear API key (system-level default)
-    linear_api_key: str = _env("DELIVERY_LINEAR_API_KEY", "")
     # Inbound Linear webhook HMAC secret (system-level default; the inbox
     # processor resolves per-row secrets first, then falls back to this).
     linear_webhook_secret: str = _env("DELIVERY_LINEAR_WEBHOOK_SECRET", "")
@@ -1500,7 +1472,6 @@ class StablecoinIntelligenceConfig:
     """
     enabled: bool = _env_bool("AETHER_STABLECOIN_INTELLIGENCE_ENABLED", False)
     kill_switch: bool = _env_bool("AETHER_STABLECOIN_KILL_SWITCH", False)
-    shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
     # Usage metering on the stablecoin observation path (default OFF, opt-in).
     # Accept-then-meter, fail-open: records a RevOps usage-metering event AFTER an
     # observation is persisted, keyed by the deterministic observation_id so
