@@ -6,15 +6,16 @@ visibility: I
 audience: [buyer, ops, architect]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/intelligence/routes.py, services/backend/services/intelligence/outcome_ledger.py]
+source_files: [services/backend/services/intelligence/routes.py, services/backend/services/admin/routes.py, services/backend/services/intelligence/outcome_ledger.py]
 flags: []
 related: [ai/outcome-ledger]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
+  "services/backend/services/admin/routes.py": "sha256:37dad0a3d17a62ea0f5aff894615e08b81f92e9ebd211638d20cbc6a70d4ba43"
   "services/backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "services/backend/services/intelligence/routes.py": "sha256:f2099965fdde739456283916f2ab1db647f880ba7031794aa571a22e9b280a6a"
+  "services/backend/services/intelligence/routes.py": "sha256:60c27b7e09cf778e716f13414dd12157c6ac2cde5ccaccdde7f4d407051cdfc5"
 ---
 # Kyber Strategic Observability
 
@@ -29,6 +30,8 @@ Kyber strategic observability uses backend aggregate endpoints to show Olympus L
 - `GET /v1/admin/kyber/model-confidence-drift`
 - `GET /v1/admin/kyber/vertical-solution-signals`
 - `GET /v1/admin/kyber/expansion-opportunities`
+
+`recommendation-health` and `expansion-opportunities` are served by `services/intelligence/routes.py`. The other five are served by `services/admin/routes.py` and accept a `window` parameter; an older copy of each in `services/intelligence/routes.py` was shadowed by it and is deleted.
 
 ## Data boundaries
 

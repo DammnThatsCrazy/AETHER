@@ -455,7 +455,6 @@ class ClickHouseConfig:
 @dataclass(frozen=True)
 class CISConfig:
     enabled: bool = _env_bool("CIS_ENABLED", False)
-    drift_threshold: float = float(_env("CIS_DRIFT_THRESHOLD", "0.25"))
     quarantine_on_high_risk: bool = _env_bool("CIS_QUARANTINE_HIGH_RISK", True)
     # Scoring weights (must sum to 1.0; validated at runtime)
     health_weight_structural: float = float(_env("CIS_WEIGHT_STRUCTURAL", "0.20"))

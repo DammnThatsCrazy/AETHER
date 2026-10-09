@@ -151,6 +151,33 @@ These are measurements, each tied to a ledger row.
   unread field; the release profiles pin it, so it goes with that profile
   dimension. Rows `delivery-unread-settings-flags` and
   `delivery-unread-settings-flags-pending`.
+- **Backend code nothing mounts.** Import-graph reachability from `main.py`, the
+  packages loaded by name and every script, workflow or Dockerfile that names a
+  module (descriptive registries, docs and tests do not count) leaves 127 of
+  1,986 production modules, about 31,000 lines, unreachable. Nine had no test,
+  document or registry mention and are deleted (940 lines). The other 118 are
+  built and not connected: most are tested (Communication360, managed
+  integrations, the derivatives runtime, the OAuth broker, provider tenant
+  routes, identity calibration and split services, geo), some are documented as
+  shipped (seven suggestion adapters, commerce workers, x402 approvals routes),
+  and removing them is a product call. They are frozen in
+  `config/backend_reachability.yaml` against ledger row
+  `product-backend-unmounted-code-pending`, and
+  `scripts/validate_backend_reachability.py` fails any PR that adds a module
+  nothing reaches or leaves a stale allowlist entry. Rows
+  `product-backend-unmounted-code` and `product-backend-unmounted-code-pending`.
+- **Two handlers on one URL.** `tests/unit/test_route_conflicts.py` froze 7
+  duplicates but compared path-parameter names literally, so it could not see
+  `/profile/{user_id}/pnl` shadowing `/profile/{entity_id}/pnl`. Comparing with
+  parameter names erased and include prefixes applied finds 15. The five
+  `/v1/admin/kyber/*` copies in `services/intelligence/routes.py` were dead
+  (the Kyber hook calls the `admin/routes.py` shape and passes a `window` the
+  copies did not accept) and are deleted. Ten remain frozen because choosing the
+  authority changes behavior: the Stripe webhook (the served handler is the
+  older one; the fuller one is dead), the attribution model catalog, two PNL
+  computations, six economic sub-resources where empty response models shadow the
+  real aggregation, and the social-intelligence wrapper. Row
+  `intelligence-duplicate-route-handlers`.
 - **Eleven workflows start on `ready_for_review`** beside the canonical
   disposition. #734's R5 audit found no safe removal yet: similar commands do
   not prove equal selection or evidence. Row `delivery-pr-workflows-into-one-plan`.

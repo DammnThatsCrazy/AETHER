@@ -766,6 +766,132 @@ entries:
     removal_pr: null
     deadline: 2027-03-31
 
+  - id: product-backend-unmounted-code
+    domain: product
+    classification: removed
+    state: removed
+    authority: >-
+      the import graph of services/backend/main.py plus the packages loaded by
+      name; code no route, worker or import mounts is not product surface
+    current:
+      - config/backend_reachability.yaml
+      - scripts/validate_backend_reachability.py
+    duplicates:
+      - services/backend/repositories/idempotency.py
+      - services/backend/services/cis/engines/drift_engine.py
+      - services/backend/services/cis/engines/retrieval_engine.py
+      - services/backend/services/expectations/signal_builder.py
+      - services/backend/services/external_account_observability/portfolio_models.py
+      - services/backend/shared/cis/cache_provenance.py
+      - services/backend/shared/computation/temporal.py
+      - services/backend/shared/privacy/pii_masking.py
+      - services/backend/shared/scoring/anomaly_config.py
+    retire: >-
+      nine backend modules (940 lines) that no import, string reference, script,
+      workflow, registry, test or document names. Their packages keep their live
+      modules. Deleting the CIS drift engine left CISConfig.drift_threshold with
+      no reader, so that setting is deleted too (scripts/validate_settings_flags.py
+      caught it).
+    consumers: []
+    compatibility: none; nothing imported these modules, so no route, worker or schema changes
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: unreachable code has no behavior to preserve; the backend
+      test suite fails the same 18 tests before and after
+    usage_evidence: >-
+      scripts/validate_backend_reachability.py found no static import, dotted
+      string constant, path reference or outside caller for any of them, and a
+      repository search for each module path and name found no test, document
+      or registry mention (2026-10-09)
+    rollback: restore from git history
+    removal_pr: "#750"
+    deadline: null
+
+  - id: product-backend-unmounted-code-pending
+    domain: product
+    classification: experimental
+    state: converge
+    authority: >-
+      a route, worker or caller that mounts the module, or deletion together
+      with its tests; the allowlist in config/backend_reachability.yaml can only
+      shrink
+    current:
+      - config/backend_reachability.yaml
+      - services/backend/services/communication360
+      - services/backend/services/managed_integrations
+      - services/backend/services/derivatives
+      - services/backend/services/integrations
+      - services/backend/services/provider_runtime
+      - services/backend/services/suggestions/adapters
+      - services/backend/services/geo
+      - services/backend/shared/relationship_spine
+    duplicates: []
+    retire: >-
+      127 backend modules (about 31,000 lines) that nothing reaches from the
+      application. Most are implemented and tested but never mounted
+      (Communication360, managed integrations, derivatives runtime, OAuth broker,
+      provider tenant routes, identity calibration and split services, geo, the
+      relationship spine); some are documented as shipped but never wired (seven
+      suggestion adapters, commerce workers, x402 approvals routes); a few are
+      named only by a design spec. Deleting any of them is a product call because
+      each is a feature that was built and not connected. Each is mounted in a
+      route or worker, or deleted with its tests and documentation.
+    consumers: []
+    compatibility: none; none is reachable from the application today
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      reachability report (scripts/validate_backend_reachability.py --report)
+      lists exactly these modules (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2026-12-31
+
+  - id: intelligence-duplicate-route-handlers
+    domain: intelligence
+    classification: experimental
+    state: converge
+    authority: >-
+      one handler per method and path (tests/unit/test_route_conflicts.py,
+      which ignores path-parameter names and include prefixes)
+    current:
+      - tests/unit/test_route_conflicts.py
+    duplicates: []
+    retire: >-
+      ten shadowed handlers, each behind a handler of the same URL that FastAPI
+      matches first. POST /v1/admin/billing/stripe/webhook: admin/routes.py serves
+      and admin/webhook_routes.py (fuller, with signature-failure and duplicate
+      metrics and async-payment and finalized-invoice events) is dead. GET
+      /v1/attribution/models: attribution/routes.py serves, the measurement
+      router's catalog is dead, and the two list different model sets. GET
+      /v1/profile/{id}/pnl: services/pnl serves a PNLCalculator result while
+      profile/routes.py computes PNL from IntelligenceAggregator. GET
+      /v1/profile/{id}/economic and /web2, /web3, /warnings: services/economic
+      serves empty response models, with no read-permission check and, for web2,
+      no credit-consent check, while profile/routes.py holds the real aggregation
+      (agentic and campaigns are implemented in both). GET
+      /v1/profile/{id}/social-intelligence: services/social serves a wrapper
+      over the handler it shadows. Each is resolved by choosing the authority,
+      deleting the other and pointing the tests at it.
+    consumers:
+      - services/backend/main.py
+      - services/backend/services/admin/webhook_routes.py
+      - services/backend/services/profile/routes.py
+      - services/backend/services/measurement/routes/attribution.py
+    compatibility: >-
+      the URLs keep their served behavior until the authority is chosen; the
+      choice changes response bodies for the pnl, economic and attribution routes
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      the five /v1/admin/kyber/* handlers in intelligence/routes.py were the same
+      class of duplicate and are deleted in this change: admin/routes.py served
+      them and the Kyber hook calls its shape, with a window parameter the
+      deleted copy did not accept
+    rollback: keep the served handler; the shadowed one never ran
+    removal_pr: null
+    deadline: 2027-02-28
+
   - id: verification-unrun-typescript-test-estate
     domain: verification
     classification: internal
