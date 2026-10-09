@@ -631,6 +631,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_backend_reachability.py"],
+        name="Backend reachability",
+        results=results,
+        stop_on_failure=stop,
+        remediation="mount or import the unreachable backend module, delete it with its tests, or list it in config/backend_reachability.yaml with a debt-ledger row",
+    )
+
+    run(
         [sys.executable, "scripts/validate_settings_flags.py"],
         name="Settings flags are read",
         results=results,

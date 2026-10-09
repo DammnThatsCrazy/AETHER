@@ -10,9 +10,9 @@ source_files: [services/backend/services/admin/kyber_strategic.py, services/back
 flags: []
 related: [ai/kyber-strategic-observability, ai/playbooks, ai/recommendation-families]
 source_hashes:
-  services/backend/services/admin/kyber_strategic.py: sha256:53235e2711b40308c0fe42c96b4f442290c9c73c054931ad1c5683f69123151f
-  services/backend/services/admin/routes.py: sha256:37dad0a3d17a62ea0f5aff894615e08b81f92e9ebd211638d20cbc6a70d4ba43
-  frontend/kyber/src/components/recommendation-observability-panel.tsx: sha256:7aa4bfb78ced06b43c567563ca81a208a9e2f85e53bd184265e736758318bae1
+  "frontend/kyber/src/components/recommendation-observability-panel.tsx": "sha256:7aa4bfb78ced06b43c567563ca81a208a9e2f85e53bd184265e736758318bae1"
+  "services/backend/services/admin/kyber_strategic.py": "sha256:53235e2711b40308c0fe42c96b4f442290c9c73c054931ad1c5683f69123151f"
+  "services/backend/services/admin/routes.py": "sha256:afde854e3e99a713735396a7308ad6a79517f8b80237fb38b2dcfd0aceb67187"
 ---
 
 # Kyber Revenue Intelligence

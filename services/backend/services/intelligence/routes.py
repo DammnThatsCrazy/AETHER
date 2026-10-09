@@ -1922,46 +1922,6 @@ async def kyber_recommendation_health(request: Request):
     return APIResponse(data={"tenants": {k: v["summary"] for k, v in ledgers.items()}, "aggregate": _combine_summaries([v["summary"] for v in ledgers.values()])}).to_dict()
 
 
-@kyber_admin_router.get("/tenant-value-health")
-async def kyber_tenant_value_health(request: Request):
-    request.state.tenant.require_permission("admin")
-    ledgers = await _all_tenant_ledgers()
-    items = [{"tenant_id": tenant_id, "value_created": ledger["summary"]["observed_value"], "value_pending": max(ledger["summary"]["expected_value"] - ledger["summary"]["observed_value"], 0), "at_risk": ledger["summary"]["outcome_capture_rate"] < 0.25, "expansion_ready": ledger["summary"]["observed_value"] > 0 and ledger["summary"]["success_rate"] >= 0.5} for tenant_id, ledger in ledgers.items()]
-    return APIResponse(data={"items": items}).to_dict()
-
-
-@kyber_admin_router.get("/outcome-capture-health")
-async def kyber_outcome_capture_health(request: Request):
-    request.state.tenant.require_permission("admin")
-    ledgers = await _all_tenant_ledgers()
-    return APIResponse(data={"items": [{"tenant_id": t, "outcome_capture_rate": l["summary"]["outcome_capture_rate"], "stale_loops": l["summary"]["stale_loops"], "incomplete_loops": l["summary"]["incomplete_loops"]} for t, l in ledgers.items()]}).to_dict()
-
-
-@kyber_admin_router.get("/playbook-performance")
-async def kyber_playbook_performance(request: Request):
-    request.state.tenant.require_permission("admin")
-    ledgers = await _all_tenant_ledgers()
-    return APIResponse(data={"items": [item for ledger in ledgers.values() for item in ledger["by_playbook"]]}).to_dict()
-
-
-@kyber_admin_router.get("/model-confidence-drift")
-async def kyber_model_confidence_drift(request: Request):
-    request.state.tenant.require_permission("admin")
-    feedback = await _feedback.find_many({}, limit=1000)
-    return APIResponse(data={"confidence_deltas_over_time": feedback, "total_delta": round(sum(float(f.get("confidence_delta", 0)) for f in feedback), 4)}).to_dict()
-
-
-@kyber_admin_router.get("/vertical-solution-signals")
-async def kyber_vertical_solution_signals(request: Request):
-    request.state.tenant.require_permission("admin")
-    ledgers = await _all_tenant_ledgers()
-    clusters: dict[str, int] = {}
-    for ledger in ledgers.values():
-        for item in ledger["by_recommendation_type"]:
-            clusters[item["key"]] = clusters.get(item["key"], 0) + item["recommendations"]
-    return APIResponse(data={"clusters": clusters}).to_dict()
-
-
 @kyber_admin_router.get("/expansion-opportunities")
 async def kyber_expansion_opportunities(request: Request):
     request.state.tenant.require_permission("admin")

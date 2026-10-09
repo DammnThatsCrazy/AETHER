@@ -21,7 +21,7 @@ source_hashes:
   "Makefile": "sha256:1ac92aff2d1bfe44eb4cd2c8a00a63241e20d3fa6af80020c8c55b3443f773c5"
   "config/unread_settings_flags.yaml": "sha256:1101dd7c8623ce2458332dcd2505d8558a4c67e0b3f2ffe2b2eb73591e9c18f9"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:6e64f14b86dafb2b0b63ef06b763a8580a3c2cce7b76ef1e58eadcbc0734f245"
-  "scripts/repo_doctor.py": "sha256:44d9f31a032fe7e768b843c4463b0a8ade58fc8aded236a940f4d442e7145dca"
+  "scripts/repo_doctor.py": "sha256:10f8b54040fac6e71500ccdbfdcd343d7dd816544e2a651baad2dec6b1affc19"
   "scripts/validate_settings_flags.py": "sha256:04463e5e7a585df2b8b6ec26c7ceb73d9be1a5fb6b8a3c008b20a44bc18bd8dd"
 ---
 
@@ -87,7 +87,10 @@ directory has one lifecycle class), frontend reachability
 reachable from the app entry points or listed against a ledger row), and
 settings flags (`scripts/validate_settings_flags.py`: a field in
 `services/backend/config/settings.py` that reads an environment variable must be
-read by production code, or be listed against a ledger row). These checks
+read by production code, or be listed against a ledger row), and backend
+reachability (`config/backend_reachability.yaml`: every production module under
+`services/backend` is reachable from `main.py`, a runtime role, a script or a
+workflow, or is listed against a ledger row). These checks
 validate repository policy; they do not claim that AWS credentials, runtime
 validation, or production promotion occurred. The authority map records which
 GitHub workflow currently owns each delivery authority while the workflow

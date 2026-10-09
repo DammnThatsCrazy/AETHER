@@ -2,7 +2,7 @@
 
 Maps stuck cross-chain messages and security-policy changes to OODA
 suggestions. Suggestions only — Aether never relays, retries, or recovers
-messages. Not wired yet: nothing registers this adapter.
+messages. Not wired yet: nothing registers this adapter (see config/backend_reachability.yaml).
 """
 
 from __future__ import annotations

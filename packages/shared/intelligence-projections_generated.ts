@@ -1190,7 +1190,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/profile'],
       surfaceIds: ['profile360'],
-      services: ['services/backend/services/social'],
+      services: ['services/backend/services/profile'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/social360.md'
     },

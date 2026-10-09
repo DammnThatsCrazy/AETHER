@@ -315,7 +315,6 @@ from services.recommendations.routes import router as recommendations_router
 from services.pnl.routes import router as pnl_router
 from services.resolution.routes import router as resolution_router
 from services.signals.routes import router as signals_router
-from services.social.routes import router as social_router
 from services.geo.routes import router as geo_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
@@ -928,11 +927,7 @@ def create_app() -> FastAPI:
     app.include_router(customer_success_admin_router)
     app.include_router(value_review_router)
     app.include_router(extraction_intel_router)
-    # pnl_router and social_router define /v1/profile/{id}/pnl and
-    # /v1/profile/{id}/social-intelligence with richer responses than
-    # profile_router's handlers; mount them first so FastAPI matches them.
     app.include_router(pnl_router)
-    app.include_router(social_router)
     app.include_router(profile_router)
     app.include_router(profile360_router)
     app.include_router(sdk_coverage_router)

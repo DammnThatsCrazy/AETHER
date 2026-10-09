@@ -23,7 +23,8 @@ through the fail-isolated :class:`ProviderRegistry
 <shared.intelligence_projections.registry.ProviderRegistry>` (defaults to the
 plane's global ``projection_registry``; a registry may be injected via
 :func:`create_router` for tests / alternate wiring). There is NO write path —
-every route is a GET. The router is not mounted in ``main.py`` yet. (An
+every route is a GET. The router is not mounted in ``main.py`` yet; mounting it
+is tracked by ``config/backend_reachability.yaml``. (An
 ``AETHER_COMMUNICATION360_ENABLED`` setting used to claim to gate it; nothing
 read it, so it was retired.)
 """

@@ -13,13 +13,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:4c31fc9dd1fc2b5512d5207fa5ea61d8f961a37138912a924523856efdb6f4bf"
+  "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
   "services/backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
   "services/backend/services/intelligence/ooda_engine.py": "sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486"
   "services/backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "services/backend/services/intelligence/recommendation_families.py": "sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43"
   "services/backend/services/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
-  "services/backend/services/intelligence/routes.py": "sha256:f2099965fdde739456283916f2ab1db647f880ba7031794aa571a22e9b280a6a"
+  "services/backend/services/intelligence/routes.py": "sha256:60c27b7e09cf778e716f13414dd12157c6ac2cde5ccaccdde7f4d407051cdfc5"
 ---
 # Decision & Outcome Intelligence
 

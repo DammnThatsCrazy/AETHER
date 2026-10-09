@@ -1,8 +1,8 @@
 schema_version: 1
 default_lane: pr
 lanes:
-  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger, profile_config, capability_overlays, service_classification, frontend_reachability, settings_flags]
-  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger, profile_config, capability_overlays, service_classification, frontend_reachability, settings_flags]
+  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger, profile_config, capability_overlays, service_classification, frontend_reachability, settings_flags, backend_reachability]
+  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger, profile_config, capability_overlays, service_classification, frontend_reachability, settings_flags, backend_reachability]
   integration: [toolchain, repository_metadata, contracts, integration]
   regression: [toolchain, repository_metadata, contracts, integration, regression]
   release: [toolchain, repository_metadata, contracts, integration, regression, release]
@@ -104,6 +104,13 @@ checks:
     risk: high
     command: [python, scripts/validate_settings_flags.py]
     runtime_budget_seconds: 30
+  # Any backend change can orphan a module, and any ledger change can strand an
+  # allowlist row, so the reachability check also runs in every PR-lane plan.
+  backend_reachability:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_backend_reachability.py]
+    runtime_budget_seconds: 20
   docs:
     owner: docs
     risk: high

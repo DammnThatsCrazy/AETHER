@@ -10,7 +10,7 @@ source_files: [packages/shared/profile360-contract.ts, services/backend/services
 canonical_owner: platform@aether
 source_hashes:
   "packages/shared/profile360-contract.ts": "sha256:bad6bde6b18cd49a1ba08093b02ac9d1c97f75dfe30154e82565b71c2ae15033"
-  "services/backend/services/profile/routes.py": "sha256:4113de6d0b849835183bfad6de4bbaafe18fc9828c412d4767835b7bde01d718"
+  "services/backend/services/profile/routes.py": "sha256:80823d4e97c98e5a5899557f5fccfd4fecdb3271c5501490d31342992a9a3305"
 ---
 
 # Profile360 Surfaces

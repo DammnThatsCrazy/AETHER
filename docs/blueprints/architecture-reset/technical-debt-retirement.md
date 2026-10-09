@@ -151,6 +151,46 @@ These are measurements, each tied to a ledger row.
   unread field; the release profiles pin it, so it goes with that profile
   dimension. Rows `delivery-unread-settings-flags` and
   `delivery-unread-settings-flags-pending`.
+- **Backend code nothing mounts.** Import-graph reachability from `main.py`, the
+  packages loaded by name and every script, workflow or Dockerfile that names a
+  module (descriptive registries, docs, tests and a script's path or checklist
+  entry do not count; a script must import the module or name it as a dotted
+  string) leaves 133 of 1,984 production modules, about 32,700 lines,
+  unreachable. Nine had no test, document or registry mention and are deleted
+  (940 lines). The 133 that remain are
+  built and not connected: most are tested (Communication360, managed
+  integrations, the derivatives runtime, the OAuth broker, provider tenant
+  routes, identity calibration and split services, geo), some are documented as
+  shipped (seven suggestion adapters, commerce workers, x402 approvals routes),
+  and removing them is a product call. They are frozen in
+  `config/backend_reachability.yaml` against ledger row
+  `product-backend-unmounted-code-pending`, and
+  `scripts/validate_backend_reachability.py` fails any PR that adds a module
+  nothing reaches or leaves a stale allowlist entry. Rows
+  `product-backend-unmounted-code` and `product-backend-unmounted-code-pending`.
+- **Two handlers on one URL.** `tests/unit/test_route_conflicts.py` froze 7
+  duplicates but compared path-parameter names literally, so it could not see
+  `/profile/{user_id}/pnl` shadowing `/profile/{entity_id}/pnl`. Comparing with
+  parameter names erased and include prefixes applied finds 15, and all 15 are
+  resolved: the gate now allows none, and a second test pins the owner of each
+  URL that had a shadowed copy. The five `/v1/admin/kyber/*` copies in
+  `services/intelligence/routes.py` were dead (the Kyber hook calls the
+  `admin/routes.py` shape and passes a `window` the copies did not accept). The
+  other ten were resolved by choosing the handler on evidence. The Stripe webhook
+  is served by `admin/webhook_routes.py`, the fuller and tested handler (it
+  gains `invoice.payment_succeeded` and `invoice.created` from the inline copy,
+  whose API-key cache refresh was redundant because `APIKeyValidator` reads the
+  billing account's plan tier on every request). The attribution model catalog
+  and `/pnl` keep the served handler, because both frontends read them. Four of
+  the six economic sub-resources were empty response models that shadowed the
+  real aggregation with no read-permission check and, for web2, no credit-consent
+  check; the profile handlers (which the tests and Profile 360 docs describe) now
+  serve them, so those four bodies change and web2 returns 403 without credit
+  consent. The other two (`/agentic`, `/campaigns`) keep the economic handlers,
+  which compute spend and ROAS, and every `services/economic` route now requires
+  the `read` permission. The `services/social` wrapper called the same aggregator
+  as the handler it shadowed and is deleted. Rows
+  `intelligence-duplicate-route-handlers` and `product-legacy-social-route`.
 - **Eleven workflows start on `ready_for_review`** beside the canonical
   disposition. #734's R5 audit found no safe removal yet: similar commands do
   not prove equal selection or evidence. Row `delivery-pr-workflows-into-one-plan`.

@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:7d9e7cf90fc541b2874fb6ff29178c60ec6fec127158b39861e0c39e9e5b4233"
+  "services/backend/services/": "sha256:d28b605a135397d19067f347ce991efdafc04a200564763da901af68f512b990"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1635,12 +1635,12 @@ Unified economic observability across Web2, Web3, agentic (x402), and campaign r
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v1/profile/{entity_id}/economic` | Full economic breakdown for an entity (Web2 + Web3 + agentic + campaign) |
-| GET | `/v1/profile/{entity_id}/economic/web2` | Web2 GMV / revenue / payment volume |
-| GET | `/v1/profile/{entity_id}/economic/web3` | Web3 TVL / protocol exposure |
+| GET | `/v1/profile/{entity_id}/economic` | Economic profile: financials (PNL) and on-chain asset composition (served by the profile service) |
+| GET | `/v1/profile/{entity_id}/economic/web2` | TradFi signals; `403` without `credit` consent (profile service) |
+| GET | `/v1/profile/{entity_id}/economic/web3` | Asset composition, PNL and trading profile (profile service) |
 | GET | `/v1/profile/{entity_id}/economic/agentic` | Agentic / x402 spend, service calls, settlement success rate |
 | GET | `/v1/profile/{entity_id}/economic/campaigns` | Campaign-attributed economic value |
-| GET | `/v1/profile/{entity_id}/economic/warnings` | Entity-level data-quality warnings (mixed currency, stale prices) |
+| GET | `/v1/profile/{entity_id}/economic/warnings` | Missing, stale and contradicting dimensions for the entity (profile service) |
 | GET | `/v1/economic/overview` | Tenant economic overview (Total Value Observed, domain split) |
 | GET | `/v1/economic/warnings` | Tenant-wide economic data-quality warnings |
 

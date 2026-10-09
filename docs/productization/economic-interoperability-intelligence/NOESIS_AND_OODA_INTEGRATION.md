@@ -12,9 +12,9 @@ source_hashes:
   "services/backend/services/noesis/adapters/derivatives_adapter.py": "sha256:fdd0f5f13da071c5cc95ca03373c3b4e55d183e97373b2c6d8c76dffaaf44d5f"
   "services/backend/services/noesis/adapters/interop_adapter.py": "sha256:66dbd63ef28c1c38e991d91c6a0bd81d5d137de53f2aa1d46e232cb073c9cb0f"
   "services/backend/services/noesis/adapters/stablecoin_adapter.py": "sha256:d7e351b6efb8bd464e17f9474555bfa292a1ff5c0ef0dbfdf7167516702fa124"
-  "services/backend/services/suggestions/adapters/derivatives_adapter.py": "sha256:2f47d416a0759439ec6f9b94cb287094e6f93f8efc8f356776f10e19053a54ef"
-  "services/backend/services/suggestions/adapters/interop_adapter.py": "sha256:593bc90ea42fab17751119667e193a12dc88aad4b499a81ce0645f94b5cadda3"
-  "services/backend/services/suggestions/adapters/stablecoin_adapter.py": "sha256:25dec8847ba4a3f7a907a7bb4d3d18f9617e50550c8b7b385688b7f01de4e13e"
+  "services/backend/services/suggestions/adapters/derivatives_adapter.py": "sha256:971714ed5db6f9e6d979f76a0f2d4526e6064a91aff62a06a4ad63cfefc8ccc6"
+  "services/backend/services/suggestions/adapters/interop_adapter.py": "sha256:30e467f7d9680cdfb5466eba0ba57fa85c54692b12d12b265929d4907e764dfb"
+  "services/backend/services/suggestions/adapters/stablecoin_adapter.py": "sha256:8f97b8a7144330fca2a64a77b5e562b8f77354ac0111e5700e3594799a7f2ff7"
 ---
 
 # Noesis and OODA Integration

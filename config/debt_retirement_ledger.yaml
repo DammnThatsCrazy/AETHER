@@ -269,28 +269,30 @@ entries:
 
   - id: product-legacy-social-route
     domain: product
-    classification: deprecated
-    state: deprecated
+    classification: removed
+    state: removed
     authority: Profile360 IntelligenceAggregator.social_intelligence (services/backend/services/profile)
     current:
       - services/backend/services/profile
     duplicates:
       - services/backend/services/social
     retire: >-
-      the legacy compatibility route /v1/profile/{entity_id}/social-intelligence,
-      once Aether and Kyber call the canonical Profile360 path
-    consumers:
-      - services/backend/main.py
-      - services/backend/tests/social/test_legacy_social_honesty.py
-      - frontend/kyber/src/lib/api/endpoints.ts
-      - frontend/aether/src/lib/api/endpoints.ts
-    compatibility: the route stays mounted until both frontends migrate
-    mechanism: alias
-    parity_evidence: null
-    usage_evidence: null
-    rollback: keep the compatibility wrapper mounted
-    removal_pr: null
-    deadline: 2027-02-28
+      the services/social compatibility wrapper for /v1/profile/{entity_id}/social-intelligence.
+      It called the same aggregator as the profile handler it shadowed, so the
+      URL, body and permission check are unchanged and no client had to migrate.
+    consumers: []
+    compatibility: none; the profile handler serves the same URL with the same body
+    mechanism: delete
+    parity_evidence: >-
+      services/backend/tests/social/test_legacy_social_honesty.py now runs against
+      the profile handler
+    usage_evidence: >-
+      the wrapper and the profile handler both call IntelligenceAggregator.social_intelligence
+      with the same permission and window checks; both build the aggregator with
+      the same constructor (2026-10-09)
+    rollback: restore the wrapper package and its mount from git history
+    removal_pr: "#750"
+    deadline: null
 
   # ── Graph ──────────────────────────────────────────────────────────────────
   - id: graph-single-mutation-gateway
@@ -765,6 +767,138 @@ entries:
     rollback: n/a
     removal_pr: null
     deadline: 2027-03-31
+
+  - id: product-backend-unmounted-code
+    domain: product
+    classification: removed
+    state: removed
+    authority: >-
+      the import graph of services/backend/main.py plus the packages loaded by
+      name; code no route, worker or import mounts is not product surface
+    current:
+      - config/backend_reachability.yaml
+      - scripts/validate_backend_reachability.py
+    duplicates:
+      - services/backend/repositories/idempotency.py
+      - services/backend/services/cis/engines/drift_engine.py
+      - services/backend/services/cis/engines/retrieval_engine.py
+      - services/backend/services/expectations/signal_builder.py
+      - services/backend/services/external_account_observability/portfolio_models.py
+      - services/backend/shared/cis/cache_provenance.py
+      - services/backend/shared/computation/temporal.py
+      - services/backend/shared/privacy/pii_masking.py
+      - services/backend/shared/scoring/anomaly_config.py
+    retire: >-
+      nine backend modules (940 lines) that no import, string reference, script,
+      workflow, registry, test or document names. Their packages keep their live
+      modules. Deleting the CIS drift engine left CISConfig.drift_threshold with
+      no reader, so that setting is deleted too (scripts/validate_settings_flags.py
+      caught it).
+    consumers: []
+    compatibility: none; nothing imported these modules, so no route, worker or schema changes
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: unreachable code has no behavior to preserve; the backend
+      test suite fails the same 18 tests before and after
+    usage_evidence: >-
+      scripts/validate_backend_reachability.py found no static import, dotted
+      string constant, path reference or outside caller for any of them, and a
+      repository search for each module path and name found no test, document
+      or registry mention (2026-10-09)
+    rollback: restore from git history
+    removal_pr: "#750"
+    deadline: null
+
+  - id: product-backend-unmounted-code-pending
+    domain: product
+    classification: experimental
+    state: converge
+    authority: >-
+      a route, worker or caller that mounts the module, or deletion together
+      with its tests; the allowlist in config/backend_reachability.yaml can only
+      shrink
+    current:
+      - config/backend_reachability.yaml
+      - services/backend/services/communication360
+      - services/backend/services/managed_integrations
+      - services/backend/services/derivatives
+      - services/backend/services/integrations
+      - services/backend/services/provider_runtime
+      - services/backend/services/suggestions/adapters
+      - services/backend/services/geo
+      - services/backend/shared/relationship_spine
+    duplicates: []
+    retire: >-
+      133 backend modules (about 32,700 lines) that nothing reaches from the
+      application. Most are implemented and tested but never mounted
+      (Communication360, managed integrations, derivatives runtime, OAuth broker,
+      provider tenant routes, identity calibration and split services, geo, the
+      relationship spine); some are documented as shipped but never wired (seven
+      suggestion adapters, commerce workers, x402 approvals routes); a few are
+      named only by a design spec. Deleting any of them is a product call because
+      each is a feature that was built and not connected. Each is mounted in a
+      route or worker, or deleted with its tests and documentation.
+    consumers: []
+    compatibility: none; none is reachable from the application today
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      reachability report (scripts/validate_backend_reachability.py --report)
+      lists exactly these modules (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2026-12-31
+
+  - id: intelligence-duplicate-route-handlers
+    domain: intelligence
+    classification: removed
+    state: removed
+    authority: >-
+      one handler per method and path (tests/unit/test_route_conflicts.py, which
+      ignores path-parameter names and include prefixes and pins the owner of each
+      URL below)
+    current:
+      - tests/unit/test_route_conflicts.py
+    duplicates:
+      - services/backend/services/social
+    retire: >-
+      ten shadowed handlers, each behind a handler of the same URL that FastAPI
+      matches first. Owners chosen: POST /v1/admin/billing/stripe/webhook is
+      served by admin/webhook_routes.py (the async-payment events, metrics and
+      billing-disabled guard that handler adds were never running; the inline
+      copy in admin/routes.py also took invoice.payment_succeeded and
+      invoice.created, which are now dispatched too, and its API-key cache refresh
+      is redundant because APIKeyValidator reads the billing account's plan tier on
+      every request). GET /v1/attribution/models stays with attribution/routes.py
+      (the Aether and Kyber clients read it); the measurement router's catalog was
+      never reachable. GET /v1/profile/{id}/pnl stays with services/pnl (the Aether
+      profile page reads it). GET /v1/profile/{id}/economic, /web2, /web3 and
+      /warnings are now served by profile/routes.py: the services/economic copies
+      returned empty models with no read-permission check and, for web2, no
+      credit-consent check, while the profile handlers aggregate real data and are
+      the ones the tests and Profile 360 docs describe. /economic/agentic and
+      /economic/campaigns stay with services/economic (the profile copies returned
+      delegation lists, not spend or ROAS) and now require the read permission, as
+      do the tenant-level /v1/economic routes. GET /v1/profile/{id}/social-intelligence
+      is served by profile/routes.py; the services/social wrapper called the same
+      aggregator and is deleted with its mount.
+    consumers: []
+    compatibility: >-
+      the response bodies of the four re-pointed economic routes change from empty
+      models to the aggregated data (web2 now returns 403 without credit consent);
+      every other URL keeps the body it served
+    mechanism: delete
+    parity_evidence: >-
+      tests/unit/test_route_conflicts.py::test_each_formerly_duplicated_url_is_served_by_its_chosen_owner;
+      the social-intelligence honesty tests now run against the profile handler
+    usage_evidence: >-
+      the Kyber economic client methods have no callers; the Aether profile page
+      reads /pnl and /social-intelligence, which keep their bodies (2026-10-09)
+    rollback: >-
+      restore the deleted handler from git history; for the economic routes the
+      restored stub would shadow the profile handler again
+    removal_pr: "#750"
+    deadline: null
 
   - id: verification-unrun-typescript-test-estate
     domain: verification
