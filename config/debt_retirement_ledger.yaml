@@ -189,6 +189,51 @@ entries:
     removal_pr: null
     deadline: null
 
+  - id: identity-legacy-resolution-engine
+    domain: identity
+    classification: removed
+    state: removed
+    authority: services/backend/services/identity
+    current:
+      - services/backend/services/identity
+    duplicates:
+      - services/backend/services/resolution/engine.py
+      - services/backend/services/resolution/consumer.py
+      - services/backend/services/resolution/rules.py
+      - services/backend/services/resolution/signals.py
+      - services/backend/services/resolution/tasks.py
+      - services/backend/services/resolution/repository.py
+      - services/backend/services/resolution/models.py
+    retire: >-
+      the legacy resolution engine, event consumer, rules, signals, repository and
+      models (1,353 lines), and the pending, audit, reject and config routes they
+      backed. The engine's graph entry points already raised ServiceUnavailableError
+      and nothing registered the consumer, so none of it ever produced data.
+    consumers: []
+    compatibility: >-
+      GET /v1/resolution/pending, POST /v1/resolution/pending/{id}/reject,
+      GET /v1/resolution/audit/{id} and GET/PUT /v1/resolution/config now answer 404;
+      they returned no data because the engine never ran. Pending merge review is
+      /v1/admin/identity/review-queue.
+    mechanism: delete
+    parity_evidence: >-
+      the same SDK identify gate (resolution_enabled, sdk_late_binding_enabled,
+      anonymous_to_known_binding_enabled) is enforced by the live path in
+      services/ingestion/batch.py and services/identity and covered by
+      tests/identity (batch identify idempotency, SDK alias and late-binding,
+      legacy resolve late-binding); provider-delivery deferral is covered by
+      workers tests in test_provider_consumer_defer.py
+    usage_evidence: >-
+      no code outside tests imports or instantiates ResolutionEventConsumer,
+      IdentityResolutionEngine, ResolutionRepository or the rules and signals
+      (searched services, scripts, tests); the normalization-spine test's own
+      comment records that the consumer is unregistered; no reachable frontend code
+      calls the removed routes (Kyber's callers were unreachable hooks deleted in
+      #745)
+    rollback: restore from git history; the module held no data
+    removal_pr: "#747"
+    deadline: null
+
   - id: identity-legacy-resolution-module
     domain: identity
     classification: deprecated
@@ -199,15 +244,22 @@ entries:
     duplicates:
       - services/backend/services/resolution
     retire: >-
-      the legacy resolution engine, consumer, rules and routes; cluster, batch
-      and merge-approval routes already fail closed with 503 after #734
+      the three fail-closed tombstone routes that remain in
+      services/backend/services/resolution/routes.py (cluster read, merge approval,
+      batch), and the router mount in main.py, once the Aether user-profile page
+      stops requesting GET /v1/resolution/cluster/{id}
     consumers:
       - services/backend/main.py
       - services/backend/tests/resolution/test_legacy_routes_fail_closed.py
-      - services/backend/tests/identity/test_identity_feature_flags.py
+      - frontend/aether/src/pages/user-profile/user-profile-page.tsx
+      - frontend/aether/src/features/users/use-user-profile.ts
     compatibility: >-
-      pending, audit, reject and config routes still respond; no caller of the
-      503 routes may be left without a tenant-safe replacement
+      the Aether profile page's "Identity cluster" section already renders its empty
+      state because the cluster route answers 503; decide whether to remove the
+      section or serve it from a tenant-scoped canonical read before deleting the
+      route. The "Identity Resolution" entry in shared/plans/service_catalog.py
+      (endpoint /v1/resolution/*) is a priced catalog line and needs a commercial
+      decision, not a code change alone.
     mechanism: delete
     parity_evidence: null
     usage_evidence: null

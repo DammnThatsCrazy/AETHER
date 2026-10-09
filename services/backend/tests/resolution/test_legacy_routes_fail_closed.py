@@ -8,8 +8,6 @@ import pytest
 from fastapi import HTTPException
 
 from services.resolution import routes
-from services.resolution.engine import IdentityResolutionEngine
-from shared.common.common import ServiceUnavailableError
 
 
 class _Tenant:
@@ -56,18 +54,12 @@ async def test_approval_route_preserves_write_auth_without_mutating_decision() -
     assert exc.value.status_code == 503
 
 
-@pytest.mark.asyncio
-async def test_legacy_engine_graph_entry_points_fail_closed() -> None:
-    engine = IdentityResolutionEngine(None, None, None, None, None, None)
-
-    with pytest.raises(ServiceUnavailableError):
-        await engine.resolve_event("tenant-a", {"user_id": "user-1"})
-
-    with pytest.raises(ServiceUnavailableError):
-        await engine.batch_resolve("tenant-a")
-
-    with pytest.raises(ServiceUnavailableError):
-        await engine._handle_decision("tenant-a", None)
-
-    with pytest.raises(ServiceUnavailableError):
-        await engine.execute_merge("tenant-a", "user-1", "user-2", None)
+def test_retired_routes_are_not_served() -> None:
+    # Pending, audit, reject and config routes were backed by an engine nothing
+    # ran; only the three fail-closed tombstones remain.
+    served = {(tuple(sorted(r.methods)), r.path) for r in routes.router.routes}
+    assert served == {
+        (("GET",), "/v1/resolution/cluster/{user_id}"),
+        (("POST",), "/v1/resolution/pending/{decision_id}/approve"),
+        (("POST",), "/v1/resolution/batch"),
+    }

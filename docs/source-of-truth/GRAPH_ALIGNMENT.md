@@ -13,7 +13,6 @@ source_files:
   - services/backend/shared/graph/edge_properties.py
   - services/backend/shared/graph/mutation_gateway.py
   - services/backend/services/onchain/action_recorder.py
-  - services/backend/services/resolution/repository.py
   - services/backend/services/resolution/routes.py
 canonical_owner: graph@aether
 last_synced_commit: 401f9bd
@@ -26,8 +25,8 @@ availability. Vertex/edge definitions live in
 `services/backend/shared/graph/graph.py`. The lake mutation module formerly
 used for Silver/Gold projections has been removed. On-chain action writes now
 use `GraphMutationGateway`. The legacy identity-resolution graph mutation
-methods have been retired; cluster, merge-approval, and batch routes and the
-legacy engine's mutation entry points fail closed until a tenant-safe
+methods and the legacy engine have been deleted; only the cluster,
+merge-approval, and batch routes remain, failing closed until a tenant-safe
 compatibility path is implemented. The graph write-path validator reports no
 remaining direct service/repository writers.
 

@@ -696,8 +696,7 @@
         "services/backend/services/ingestion/replay_routes.py",
         "services/backend/services/ingestion/spine.py",
         "services/backend/services/ingestion/workers.py",
-        "services/backend/services/semantic_intelligence/consumer.py",
-        "services/backend/services/resolution/consumer.py"
+        "services/backend/services/semantic_intelligence/consumer.py"
       ],
       "required_changed_globs": [
         "docs/source-of-truth/**",
