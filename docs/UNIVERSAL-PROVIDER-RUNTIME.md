@@ -21,7 +21,7 @@ toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
   "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
-  "services/backend/services/provider_runtime/": "sha256:615f58049dcfd5f699f2070f51c06f2367711420996f67f9305d6900f20a1117"
+  "services/backend/services/provider_runtime/": "sha256:820b6205b2a4f776a622c28a74e73f0d056161fa3b758ed6e7493cd42c469d24"
   "services/backend/services/providers/": "sha256:c5f185eb1a96f4c9c081c70a930cddd1ab1cc183308663b0256944fca5fdf70e"
   "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"

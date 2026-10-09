@@ -2032,7 +2032,7 @@ jobs:
           # and deletes the tenant during unconditional cleanup.
           identity_capture_key = create_key(mine_id, "Identity Evidence", ["admin"], "enterprise")
           peer_id = create_tenant("Isolation", "free")
-          peer_key = create_key(peer_id, "Isolation", ["read"], "free")
+          peer_key = create_key(peer_id, "Isolation", ["read", "write"], "free")
           if mine_id == peer_id:
               sys.exit("::error::run-scoped rehearsal tenants must be distinct")
 
@@ -2075,7 +2075,8 @@ jobs:
               env.write(f"ISOLATION_PEER_API_KEY={peer_key}\n")
               env.write(f"REHEARSAL_TENANT_ID={mine_id}\n")
               env.write(f"ISOLATION_PEER_TENANT_ID={peer_id}\n")
-              env.write(f"AETHER_STAGING_TENANT_APP_KEY={sdk_app_key}\n")
+              env.write(f"AETHER_STAGING_TENANT_APP_KEY={sdk_site_id}\n")
+              env.write(f"AETHER_STAGING_SDK_API_KEY={sdk_app_key}\n")
               env.write(f"AETHER_STAGING_FOREIGN_ENTITY_ID={foreign_entity_id}\n")
           print(f"bootstrapped run-scoped tenants {mine_id} and {peer_id}")
           PY
@@ -2474,6 +2475,7 @@ jobs:
           AETHER_STAGING_CONNECTOR_CONNECTION_ID: ${{ env.AETHER_STAGING_PROVIDER_CONNECTION_ID }}
           AETHER_STAGING_TENANT_ID: ${{ env.REHEARSAL_TENANT_ID }}
           AETHER_STAGING_TENANT_APP_KEY: ${{ env.AETHER_STAGING_TENANT_APP_KEY }}
+          AETHER_STAGING_SDK_API_KEY: ${{ env.AETHER_STAGING_SDK_API_KEY }}
           AETHER_STAGING_FOREIGN_ENTITY_ID: ${{ env.AETHER_STAGING_FOREIGN_ENTITY_ID }}
           AETHER_STAGING_ADMIN_API_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}
         run: |
@@ -2481,7 +2483,9 @@ jobs:
           test -n "${AETHER_STAGING_SCENARIO_API_KEY:-}" \
             || { echo '::error::run-scoped identity scenario API key is missing'; exit 1; }
           test -n "${AETHER_STAGING_TENANT_APP_KEY:-}" \
-            || { echo '::error::run-scoped SDK publishable key is missing'; exit 1; }
+            || { echo '::error::run-scoped SDK site scope is missing'; exit 1; }
+          test -n "${AETHER_STAGING_SDK_API_KEY:-}" \
+            || { echo '::error::run-scoped SDK publishable credential is missing'; exit 1; }
           test -n "${AETHER_STAGING_FOREIGN_ENTITY_ID:-}" \
             || { echo '::error::isolated foreign-tenant entity was not provisioned'; exit 1; }
           test -n "${AETHER_STAGING_ADMIN_API_KEY:-}" \

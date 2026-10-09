@@ -388,7 +388,7 @@ class PullScheduler:
                 tenant_id=tenant_id,
                 connector_instance_id=connection_id,
                 provider=provider_identity,
-                provider_account_id=_connection_account_id(connection),
+                provider_account_id=account_id,
                 mode="incremental" if since else "backfill",
                 requested_window=since,
                 cursor_before=(prev_cursor or {}).get("cursor_value"),

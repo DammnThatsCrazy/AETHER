@@ -568,6 +568,18 @@ async def ingest_events(
                     "Identify idempotency claim unavailable event_id=%s tenant=%s: %s",
                     raw.get("event_id", ""), tenant_id, exc,
                 )
+                # Nothing in this request has been published yet. Release
+                # earlier claims so a retry can publish those events instead
+                # of treating them as duplicates.
+                for claimed_key in claimed_keys:
+                    try:
+                        await registry.cache.delete(claimed_key)
+                    except Exception:
+                        logger.warning(
+                            "Could not release batch idempotency claim key=%s",
+                            claimed_key,
+                            exc_info=True,
+                        )
                 raise ServiceUnavailableError(
                     "Identity ingestion temporarily unavailable — please retry"
                 ) from exc

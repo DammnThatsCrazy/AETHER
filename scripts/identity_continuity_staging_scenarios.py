@@ -66,6 +66,7 @@ class ScenarioContext:
     def call(
         self, method: str, path: str, body: dict[str, Any] | bytes | None = None,
         *, admin: bool = False, content_type: str = "application/json",
+        api_key: str | None = None,
     ) -> tuple[int, Any]:
         data = None if body is None else (
             body if isinstance(body, bytes) else json.dumps(body, separators=(",", ":")).encode()
@@ -74,7 +75,9 @@ class ScenarioContext:
             raise ScenarioFailure("an isolated tenant admin API key is required for this endpoint")
         headers = {
             "Accept": "application/json",
-            "X-API-Key": self.admin_api_key if admin else self.api_key,
+            "X-API-Key": (
+                self.admin_api_key if admin else api_key if api_key else self.api_key
+            ),
         }
         if data is not None:
             headers["Content-Type"] = content_type
@@ -189,8 +192,11 @@ def _data(value: Any) -> dict[str, Any]:
 
 
 def _required_data(ctx: ScenarioContext, method: str, path: str, body: Any = None,
-                   *, content_type: str = "application/json") -> dict[str, Any]:
-    status, raw = ctx.call(method, path, body, content_type=content_type)
+                   *, content_type: str = "application/json",
+                   api_key: str | None = None) -> dict[str, Any]:
+    status, raw = ctx.call(
+        method, path, body, content_type=content_type, api_key=api_key
+    )
     data = _data(raw)
     ctx.check(status == 200 and isinstance(data, dict), f"{method} {path} failed (HTTP {status})")
     return data
@@ -244,8 +250,10 @@ def _run_a(ctx: ScenarioContext) -> None:
     email = f"a-{tag}@example.invalid"
     _csv_import(ctx, "late-binding", email, f"csv-{tag}")
     app = os.getenv("AETHER_STAGING_TENANT_APP_KEY", "")
-    ctx.check(bool(app), "AETHER_STAGING_TENANT_APP_KEY is required for the SDK late-binding step")
-    if not app:
+    sdk_api_key = os.getenv("AETHER_STAGING_SDK_API_KEY", "")
+    ctx.check(bool(app), "AETHER_STAGING_TENANT_APP_KEY site scope is required for SDK late binding")
+    ctx.check(bool(sdk_api_key), "AETHER_STAGING_SDK_API_KEY is required for SDK authentication")
+    if not app or not sdk_api_key:
         return
     anonymous_id = f"a-anonymous-{tag}"
     _required_data(ctx, "POST", "/v1/consent/records", {
@@ -257,7 +265,7 @@ def _run_a(ctx: ScenarioContext) -> None:
         "tenant_app_key": app, "user_id": f"sdk-user-{tag}", "anonymous_id": anonymous_id,
         "traits": {"email": email}, "sdk_name": "aether-web", "sdk_version": "staging-proof",
         "idempotency_key": f"{ctx.execution_id}:scenario-a-identify",
-    })
+    }, api_key=sdk_api_key)
     ctx.check(bool(sdk.get("canonical_entity_id")) and sdk.get("resolution_outcome") not in {"blocked", "candidate", "pending_review"},
               "later SDK identify did not safely bind to an imported canonical entity")
 
@@ -357,8 +365,10 @@ def _run_deleted(ctx: ScenarioContext) -> None:
 def _run_multi_sdk(ctx: ScenarioContext) -> None:
     tag = ctx.execution_id[:8]
     app = os.getenv("AETHER_STAGING_TENANT_APP_KEY", "")
-    ctx.check(bool(app), "AETHER_STAGING_TENANT_APP_KEY is required for SDK API scenarios")
-    if not app:
+    sdk_api_key = os.getenv("AETHER_STAGING_SDK_API_KEY", "")
+    ctx.check(bool(app), "AETHER_STAGING_TENANT_APP_KEY site scope is required for SDK API scenarios")
+    ctx.check(bool(sdk_api_key), "AETHER_STAGING_SDK_API_KEY is required for SDK authentication")
+    if not app or not sdk_api_key:
         return
     common = {"tenant_app_key": app, "user_id": f"multi-sdk-user-{tag}",
               "traits": {"email": f"multi-sdk-{tag}@example.invalid"}}
@@ -372,7 +382,7 @@ def _run_multi_sdk(ctx: ScenarioContext) -> None:
         })
         body = {**common, "anonymous_id": anonymous_id, "sdk_name": sdk,
                 "idempotency_key": f"{ctx.execution_id}:{sdk}"}
-        status, raw = ctx.call("POST", "/sdk/identify", body)
+        status, raw = ctx.call("POST", "/sdk/identify", body, api_key=sdk_api_key)
         data = _data(raw)
         ctx.check(status == 200, f"{sdk} identify endpoint failed (HTTP {status})")
         outcomes.append(data.get("canonical_entity_id"))
@@ -548,6 +558,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("required identifiers must be valid single-line values")
     if any(not value or any(c in value for c in "\r\n\x00") for value in (base_url, api_key, tenant_id)):
         parser.error("base URL, API key, and tenant ID must be non-empty single-line values")
+    sdk_api_key = os.getenv("AETHER_STAGING_SDK_API_KEY", "")
+    if not sdk_api_key or any(c in sdk_api_key for c in "\r\n\x00"):
+        parser.error("AETHER_STAGING_SDK_API_KEY must be a non-empty single-line publishable key")
     if expected_deployment_id and any(c in expected_deployment_id for c in "\r\n\x00"):
         parser.error("deployment ID must be single-line")
     if not base_url.startswith("https://") and not base_url.startswith("http://localhost") and not base_url.startswith("http://127.0.0.1"):

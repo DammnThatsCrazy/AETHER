@@ -152,6 +152,12 @@ async def resolve_sdk_observation(event: Event, producer: EventProducer) -> None
     decision = await resolver.resolve_event(resolution_event, tenant_id)
     canonical_entity_id = str(getattr(decision, "canonical_entity_id", "") or "")
     outcome = str(getattr(getattr(decision, "decision", None), "value", ""))
+    reason_codes = list(getattr(decision, "reason_codes", []) or [])
+    if "internal_error" in reason_codes:
+        # The resolver converts unexpected infrastructure errors into NOOP.
+        # Propagate that failure so the broker retries instead of acknowledging
+        # a delivery whose canonical decision did not run.
+        raise RuntimeError("canonical identity resolver reported an internal error")
     owner_outcomes = {"create", "link", "merge", "noop"}
 
     if canonical_entity_id and outcome in owner_outcomes:

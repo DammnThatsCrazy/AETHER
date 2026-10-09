@@ -66,6 +66,10 @@ def upgrade() -> None:
            $$"""
     )
     op.execute(
+        "DROP TRIGGER IF EXISTS trg_data_rights_grant_events_immutable "
+        "ON data_rights_grant_events"
+    )
+    op.execute(
         """CREATE TRIGGER trg_data_rights_grant_events_immutable
            BEFORE UPDATE OR DELETE ON data_rights_grant_events
            FOR EACH ROW EXECUTE FUNCTION reject_data_rights_grant_event_mutation()"""

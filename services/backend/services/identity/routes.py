@@ -1246,13 +1246,14 @@ async def admin_approve_conflict(
                 # Merge is committed but its restatement enqueue failed. Retry
                 # through the same resolver idempotency key to recover the job.
                 claim_expected_status = "merge_committed"
-            return APIResponse(data={
-                "conflict_id": conflict_id,
-                "tenant_id": tenant.tenant_id,
-                "status": "approval_recovery_required",
-                "authority": "none",
-                "reason_codes": ["identity_late_binding_source_binding_failed"],
-            }).to_dict()
+            else:
+                return APIResponse(data={
+                    "conflict_id": conflict_id,
+                    "tenant_id": tenant.tenant_id,
+                    "status": "approval_recovery_required",
+                    "authority": "none",
+                    "reason_codes": ["identity_late_binding_source_binding_failed"],
+                }).to_dict()
         if not (
             flags.resolution_enabled
             and flags.sdk_late_binding_enabled
