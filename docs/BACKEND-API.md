@@ -1254,7 +1254,7 @@ requests are rejected). All are GET-only and never mutate reward state:
 
 Identity resolution is served by `/v1/identity/*` (`services/backend/services/identity/routes.py`); pending merge review is `/v1/admin/identity/review-queue`.
 
-**Removed:** the whole `/v1/resolution/*` surface (`GET /v1/resolution/cluster/{user_id}`, `POST /v1/resolution/pending/{id}/approve`, `POST /v1/resolution/batch`, `GET /v1/resolution/pending`, `POST /v1/resolution/pending/{id}/reject`, `GET /v1/resolution/audit/{decision_id}` and `GET`/`PUT /v1/resolution/config`). It was backed by an engine and event consumer that were never registered, so it never returned data; the last three routes answered 503 and now, like the rest, answer 404. The Aether profile page shows the canonical identity panel (`GET /v1/identity/profiles/{id}/identity/explanation`) instead of the cluster read.
+**Removed:** the whole `/v1/resolution/*` surface (`GET /v1/resolution/cluster/{user_id}`, `POST /v1/resolution/pending/{id}/approve`, `POST /v1/resolution/batch`, `GET /v1/resolution/pending`, `POST /v1/resolution/pending/{id}/reject`, `GET /v1/resolution/audit/{decision_id}` and `GET`/`PUT /v1/resolution/config`). It was backed by an engine and event consumer that were never registered, so it never returned data; the last three routes answered 503 and now, like the rest, answer 404 (403 `ROUTE_POLICY_UNKNOWN_ROUTE` where route-registry enforcement is on). The Aether profile page shows the canonical identity panel (`GET /v1/identity/profiles/{id}/identity/explanation`) instead of the cluster read.
 
 ---
 

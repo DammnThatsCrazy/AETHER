@@ -115,6 +115,15 @@ function bandLabel(band: string): string {
     .join(' ');
 }
 
+/** The scalar fields of the legacy identity profile, for the flag-off view (at most eight). */
+function legacySummary(profile: unknown): Array<[string, string]> {
+  const record = (profile && typeof profile === 'object' ? profile : {}) as Record<string, unknown>;
+  return Object.entries(record)
+    .filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value) && String(value) !== '')
+    .slice(0, 8)
+    .map(([key, value]): [string, string] => [key.replace(/_/g, ' '), String(value)]);
+}
+
 export const Profile360IdentityPanel: FC<{
   readonly userId: string;
   readonly className?: string;
@@ -132,10 +141,21 @@ export const Profile360IdentityPanel: FC<{
   });
 
   if (!enabled) {
+    const summary = legacySummary(profileData);
     return (
       <div className={`rounded border border-surface-border bg-surface-surface p-4 text-text-secondary text-sm ${className}`}>
         <div className="text-text-primary text-sm font-medium">Identity</div>
         <div className="mt-1 text-xs">Explainability not enabled — showing legacy summary.</div>
+        {summary.length > 0 && (
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+            {summary.map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="text-text-muted">{label}</dt>
+                <dd className="text-text-primary break-all">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
         {children}
       </div>
     );
