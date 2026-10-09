@@ -326,6 +326,10 @@ class DataRightsService:
     ) -> Optional[DataRightsGrant]:
         return await self._repository.get(grant_id, tenant_id=tenant_id)
 
+    def hold_grant_unrevoked(self, grant_id: str, *, tenant_id: str):
+        """Async context manager: no revocation of this grant commits while held."""
+        return self._repository.hold_unrevoked(grant_id, tenant_id=tenant_id)
+
     async def get_effective_grant(
         self, tenant_id: str, source_id: str,
     ) -> Optional[DataRightsGrant]:

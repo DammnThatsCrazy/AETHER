@@ -21,7 +21,7 @@ toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
   "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
-  "services/backend/services/provider_runtime/": "sha256:654c952f050f9122a6ed5323cc74c5ba84436344c3f4c812b5d1ade715ad0f17"
+  "services/backend/services/provider_runtime/": "sha256:615f58049dcfd5f699f2070f51c06f2367711420996f67f9305d6900f20a1117"
   "services/backend/services/providers/": "sha256:c5f185eb1a96f4c9c081c70a930cddd1ab1cc183308663b0256944fca5fdf70e"
   "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
@@ -242,6 +242,19 @@ tenant-scoped repository. Staging/production raw admission also checks that the
 database and required schema are available, and fails closed when they are not.
 Omitted use permissions default to false. This persistence change does not
 enable the provider runtime or alter environment flags.
+
+**Revocation fence.** Admission decides at one instant and Bronze is written
+later. `RawProviderRecordStore` therefore holds the admitting grant
+(`ProviderRawRightsAdmission.hold_grant`) across the final grant re-read, the
+Bronze insert and `verify_persisted`. `DataRightsGrantRepository.revoke` takes the
+same per-grant lock exclusively inside its transaction. A revocation either
+committed first, so the write is refused with `grant_revoked_before_write` and
+nothing is retained, or it waits until the in-flight write has committed and then
+sees the row. On PostgreSQL writers take a session-level shared advisory lock and
+revocation takes `pg_advisory_xact_lock`; local mode uses a per-grant asyncio
+lock. A writer pins one pooled connection while it holds the lock, so concurrent
+holders are capped below half of the pool size. Replay does not write new raw
+rows and still requires a fresh admission.
 Rows created under the earlier path remain quarantined because they have no
 persisted admission evidence or referenced allowed `RightsDecision`. Replay
 rejects their quarantine state and requires the original tenant-scoped decision

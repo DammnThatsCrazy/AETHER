@@ -211,6 +211,10 @@ The platform enforces grants at pipeline entry points. The rules are:
 2. **Expired grants = deny.** A grant past its `expires_at` is treated as absent.
 3. **Revoked grants = deny immediately.** Revocation takes effect at `revoked_at`,
    retroactively flagging records that entered the lake under the revoked grant.
+   Provider raw-record writes hold the admitting grant across their final grant
+   re-read and the Bronze insert, and revocation takes the same per-grant lock
+   exclusively: a revocation cannot commit between a writer's last check and its
+   insert, so either the write is refused or the revocation waits for it.
 4. **Partial grants are respected.** A grant with `tenant_lake_allowed=true` and
    `model_training_allowed=false` permits tenant-lake writes but blocks training
    pipelines. The structured contracts keep this rule: e.g. a `LearningAuthority`
