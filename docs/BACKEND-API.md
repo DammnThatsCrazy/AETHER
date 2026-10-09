@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:cf93bf4a5c3abbd01c9cf35f105cacf25f2b19c6bcad7f92102034d270aa5658"
+  "services/backend/services/": "sha256:219084f37aabf72884d67859db870e95fe7c11da03d2b21d756cdd0ff7665265"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -4261,3 +4261,16 @@ enforcement is on.
 | GET | `/v1/admin/kyber/managed-integrations/change-sets/{changeset_id}` | One ChangeSet detail | Status history, risk, approvals evidence |
 | GET | `/v1/admin/kyber/managed-integrations/approvals` | Approval records | §21 role-gated review queue |
 | GET | `/v1/admin/kyber/managed-integrations/action-required` | ActionRequired items | §12.14 exceptions awaiting an operator decision |
+
+## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
+
+| Method | Path | Permission | Summary |
+|---|---|---|---|
+| GET | `/v1/recommendations/{entity_id}` | `read` | Retarget recommendations for an entity, highest score first |
+| GET | `/v1/recommendations/{id}/status` | `read` | Review and execution status of one recommendation |
+| POST | `/v1/recommendations/{id}/approve` | `write` | Approve and push the audience to the recommended ad platform. The reviewer recorded is the authenticated caller; a `reviewed_by` in the body is ignored. A failed push returns `502` and puts the recommendation back in `pending_review` |
+| POST | `/v1/recommendations/{id}/reject` | `write` | Reject with a reason (final); reviewer is the authenticated caller |
+| POST | `/v1/stablecoins/reconciliation` | `stablecoins:investigate` | Compare independently sourced amounts (`tenant_reported`, `onchain`, `provider`…) for one of the tenant's observations. Appends a record to the reconciliation trail (`matched`, `partial`, `mismatched`, `missing_onchain`, `unresolved`) and never changes the observation. `404` for an observation the tenant does not own |
+| GET | `/v1/kyber/aggregate/fleet` | Kyber operator | Cross-tenant operator snapshot: worker fleet health, credential slot states (no secrets), provider cursor and reconciliation roll-up, activation and readiness roll-ups, credential-audit count. Each roll-up reports `truncated` when it hit its row limit; a source with no signal reports `null`, never a fabricated zero |
+
+Approving a delivery-eligible suggestion from a notification source hands it to the delivery pipeline; recording a suggestion outcome runs the outcome loop to `closed` (see the suggestion intelligence source of truth).

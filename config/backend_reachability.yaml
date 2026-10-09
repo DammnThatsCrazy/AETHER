@@ -57,10 +57,6 @@ allow_unreachable:
     modules: [oauth, oauth.broker, oauth.pkce, oauth.provider_config, oauth.state]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
-  - package: services.kyber
-    modules: [aggregate]
-    ledger: product-backend-unmounted-code-pending
-    reason: documented, but no route, worker or import path reaches it
   - package: services.managed_integrations
     modules: [rollout, rollout_repository, simulation, simulation_repository, source_authority, source_authority_repository]
     ledger: product-backend-unmounted-code-pending
@@ -101,16 +97,12 @@ allow_unreachable:
     modules: [connector_graph_writer, object_refs, tenant_route_repository, tenant_route_service]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
-  - package: services.recommendations
-    modules: [engine]
-    ledger: product-backend-unmounted-code-pending
-    reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.responsiveness
     modules: [routes]
     ledger: product-backend-unmounted-code-pending
     reason: documented, but no route, worker or import path reaches it
   - package: services.stablecoin
-    modules: [graph_mutations, reconciliation]
+    modules: [graph_mutations]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.stablecoins
@@ -118,7 +110,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.suggestions
-    modules: [adapters.ai_efficiency_adapter, adapters.data_quality_adapter, adapters.derivatives_adapter, adapters.governance_adapter, adapters.graph_adapter, adapters.interop_adapter, adapters.profile360_adapter, adapters.reliability_adapter, adapters.sdk_drift_adapter, adapters.sdk_health_adapter, adapters.stablecoin_adapter, dispatcher, outcome]
+    modules: [adapters.ai_efficiency_adapter, adapters.data_quality_adapter, adapters.derivatives_adapter, adapters.governance_adapter, adapters.graph_adapter, adapters.interop_adapter, adapters.profile360_adapter, adapters.reliability_adapter, adapters.sdk_drift_adapter, adapters.sdk_health_adapter, adapters.stablecoin_adapter]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: services.targeting_intelligence
@@ -142,7 +134,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: documented, but no route, worker or import path reaches it
   - package: shared
-    modules: [mobile, semantic_context]
+    modules: [semantic_context]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: shared.backend_interpretation
@@ -159,10 +151,6 @@ allow_unreachable:
     reason: only docs/AGENTIC_COMMERCE_BUILD_SPEC.md names them (the commerce event layer it describes); no route, worker or import path reaches them, so the owner decides whether that layer is built or dropped
   - package: shared.graph
     modules: [economic_schema, extraction_graph, graph_contract]
-    ledger: product-backend-unmounted-code-pending
-    reason: implemented and tested, but no route, worker or import path reaches it
-  - package: shared.mobile
-    modules: [models]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: shared.privacy

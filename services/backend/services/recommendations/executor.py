@@ -19,6 +19,7 @@ Ad platform APIs used:
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 
 from shared.logger.logger import get_logger
@@ -103,10 +104,10 @@ class RecommendationExecutor:
             "ad_platform_response": ad_platform_response,
         }
 
-        await self.repo.update(updated, tenant_id)
+        await self.repo.update(recommendation_id, updated)
 
         # Write to audit log
-        await self.audit_log.record({
+        await self.audit_log.insert(str(uuid.uuid4()), {
             "action": "retarget_recommendation_executed",
             "recommendation_id": recommendation_id,
             "entity_id": rec["entity_id"],
@@ -133,4 +134,4 @@ class RecommendationExecutor:
         updated = {**rec, "status": status}
         if error:
             updated["review_notes"] = (rec.get("review_notes") or "") + f" [execution_error: {error}]"
-        await self.repo.update(updated, tenant_id)
+        await self.repo.update(rec["recommendation_id"], updated)

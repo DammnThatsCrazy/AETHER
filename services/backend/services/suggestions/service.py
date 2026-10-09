@@ -12,6 +12,7 @@ from shared.events.events import EventProducer
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger
 
+from .dispatcher import dispatch, resolve_dispatch_mode
 from .events import emit_suggestion_event
 from .lifecycle import apply_transition, build_audit_event
 from .models import (
@@ -27,6 +28,7 @@ from .models import (
     SuggestionSuppressRequest,
     SuggestionSummary,
 )
+from .outcome import record_and_close
 from .policy import evaluate_suggestion_policy, redact_for_tenant, requires_approval
 from .repository import SuggestionRepository
 from .scorer import compute_scores
@@ -194,6 +196,15 @@ class SuggestionService:
             notes=body.notes,
         )
         await emit_suggestion_event(self._producer, "suggestion.approved", updated)
+        if resolve_dispatch_mode(updated) == "notify_only":
+            # Approval hands a delivery-eligible suggestion to the delivery pipeline
+            # (a DeliveryIntent + DeliveryJob per active channel). The suggestion
+            # stays APPROVED until the delivery worker confirms a provider receipt.
+            # A delivery problem never undoes the approval.
+            try:
+                updated = await dispatch(updated, tenant_context, self, execution_enabled=False)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"Delivery hand-off failed for suggestion {suggestion_id!r}: {exc}")
         return updated
 
     async def reject_suggestion(
@@ -253,6 +264,11 @@ class SuggestionService:
                 "Enable AETHER_SUGGESTIONS_EXECUTION_ENABLED to allow it."
             )
 
+        if resolve_dispatch_mode(record) == "legacy_recommendation_execute":
+            # The dispatcher runs the recommendation path and moves the
+            # suggestion on to EXECUTED (or FAILED), so it is never left in EXECUTING.
+            return await dispatch(record, tenant_context, self, execution_enabled=True)
+
         updated = await apply_transition(
             repo=self._repo,
             suggestion_id=suggestion_id,
@@ -290,35 +306,10 @@ class SuggestionService:
         body: SuggestionOutcomeRequest,
         tenant_context: TenantContext,
     ) -> dict:
-        await self._repo.get_or_fail(suggestion_id, tenant_context.tenant_id)
-        now = utc_now().isoformat()
-        outcome = {
-            "status": body.status,
-            "measured_impact": body.measured_impact,
-            "operator_notes": body.operator_notes,
-            "tenant_feedback": body.tenant_feedback,
-            "created_at": now,
-            "created_by": body.created_by or tenant_context.user_id,
-        }
-        updated = await self._repo.record_outcome(suggestion_id, tenant_context.tenant_id, outcome)
-
-        # Advance lifecycle if possible
-        current_status = SuggestionStatus(updated.get("status", "delivered"))
-        if current_status in (SuggestionStatus.EXECUTED, SuggestionStatus.DELIVERED):
-            try:
-                updated = await apply_transition(
-                    repo=self._repo,
-                    suggestion_id=suggestion_id,
-                    tenant_id=tenant_context.tenant_id,
-                    to_status=SuggestionStatus.MEASURED,
-                    actor_kind="system",
-                    notes="Outcome recorded",
-                )
-            except Exception:
-                pass
-
-        await emit_suggestion_event(self._producer, "suggestion.outcome_recorded", updated)
-        return updated
+        """Record an outcome and run the outcome loop (MEASURED → LEARNED → CLOSED)."""
+        return await record_and_close(
+            suggestion_id, body, self._repo, self._producer, tenant_context,
+        )
 
     async def submit_feedback(
         self,

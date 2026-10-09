@@ -304,6 +304,10 @@ kyber_routes:
     capability: kyber.platform.health.read
     disclosure: D1
     action_class: 0
+  - route: "GET /v1/kyber/aggregate/fleet"
+    capability: kyber.platform.health.read
+    disclosure: D1
+    action_class: 0
   - route: "GET /v1/kyber/semantic/review-queue"
     capability: kyber.platform.health.read
     disclosure: D1

@@ -400,6 +400,21 @@ class StablecoinSupportRequest(BaseModel):
     execution_by_aether: Literal[False] = False
 
 
+class StablecoinReconcileRequest(BaseModel):
+    """Compare independently sourced amounts for one observation.
+
+    ``sources`` maps a source name (``tenant_reported``, ``onchain``, ``provider``…)
+    to its amount, or ``null`` when that source has no record.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    observation_id: str
+    sources: dict[str, Optional[Decimal]] = Field(min_length=1)
+    tenant_id: Optional[str] = None
+    execution_by_aether: Literal[False] = False
+
+
 class StablecoinFlowComputeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

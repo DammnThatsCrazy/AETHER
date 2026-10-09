@@ -164,3 +164,63 @@ def test_graph_mutations_are_tenant_scoped_and_deterministic():
     observation["to_entity_ref"] = {"kind": "human", "id": "h2", "tenant_id": OTHER_TENANT}
     _, edges_mixed = build_observation_mutations(observation)
     assert all(e.edge_type != "SENT_STABLECOIN_TO" for e in edges_mixed)
+
+
+def _ingest(client, index: int = 1) -> str:
+    created = client.post("/v1/stablecoins/observations", json=_observation_payload(index))
+    assert created.status_code == 201, created.text
+    return created.json()["observation_id"]
+
+
+def test_reconciliation_run_records_a_variance_and_is_listed(monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "stablecoin", _FLAGS_ON)
+    client = _build_app(_FakeTenant(TENANT))
+    observation_id = _ingest(client)
+
+    run = client.post("/v1/stablecoins/reconciliation", json={
+        "observation_id": observation_id,
+        "sources": {"tenant_reported": "1.00", "onchain": "0.95"},
+    })
+    assert run.status_code == 201, run.text
+    assert run.json()["status"] == "mismatched"
+    assert run.json()["difference"] == "-0.05"
+
+    listed = client.get("/v1/stablecoins/reconciliation", params={"status": "mismatched"})
+    assert listed.json()["count"] == 1
+    assert listed.json()["items"][0]["observation_id"] == observation_id
+
+
+def test_reconciliation_run_matches_and_flags_a_missing_onchain_source(monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "stablecoin", _FLAGS_ON)
+    client = _build_app(_FakeTenant(TENANT))
+    observation_id = _ingest(client)
+    ok = client.post("/v1/stablecoins/reconciliation", json={
+        "observation_id": observation_id, "sources": {"tenant_reported": "1", "onchain": "1"},
+    })
+    assert ok.json()["status"] == "matched"
+    missing = client.post("/v1/stablecoins/reconciliation", json={
+        "observation_id": observation_id, "sources": {"tenant_reported": "1", "onchain": None},
+    })
+    assert missing.json()["status"] == "missing_onchain"
+
+
+def test_reconciliation_run_is_tenant_scoped_and_permission_gated(monkeypatch):
+    from config.settings import settings
+    from shared.auth.auth import Permissions
+
+    monkeypatch.setattr(settings, "stablecoin", _FLAGS_ON)
+    owner = _build_app(_FakeTenant(TENANT))
+    observation_id = _ingest(owner)
+    body = {"observation_id": observation_id, "sources": {"onchain": "1"}}
+
+    # Another tenant cannot reconcile an observation it does not own.
+    assert _build_app(_FakeTenant(OTHER_TENANT)).post("/v1/stablecoins/reconciliation", json=body).status_code == 404
+    # A read-only credential cannot run one at all.
+    reader = _build_app(_FakeTenant(TENANT, permissions={Permissions.STABLECOINS_READ}))
+    assert reader.post("/v1/stablecoins/reconciliation", json=body).status_code == 403
+    # An execution claim is refused like on every other stablecoin write.
+    assert owner.post("/v1/stablecoins/reconciliation", json={**body, "execution_by_aether": True}).status_code == 422
