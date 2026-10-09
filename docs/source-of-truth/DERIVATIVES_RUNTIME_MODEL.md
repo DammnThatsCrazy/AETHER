@@ -30,7 +30,7 @@ new rows, never mutations.
 The deterministic seeded simulator is `MOCKED_LOCAL`; no venue adapter
 claims `PROVIDER_LIVE` without live validation. `run_conformance()`
 verifies checkpoint monotonicity, idempotent replay, Decimal-only
-payloads, FSM-legal orderings, and `execution_by_aether == false`.
+payloads, canonical event names, and `execution_by_aether == false`. It does not exercise the order/position FSMs.
 
 ## Streams (`streams.py`)
 

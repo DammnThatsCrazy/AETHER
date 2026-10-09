@@ -133,7 +133,7 @@ and [`reports/social360/DEPENDENCY_MAP.md`](../../reports/social360/DEPENDENCY_M
 |---|---|---|
 | M0 | Reconnaissance and truth ledger (`reports/social360/`) | complete |
 | M1 | Canonical contracts and registries (Social360 facts, IncentiveContext, predicate + motif registries, fidelity schema; py/ts parity; ownership/tests) | complete — ci-check 63/0 (76e1ab56) |
-| M2 | UPR social provider convergence | implemented — 63/0 gate (b89edb3f) |
+| M2 | UPR social provider convergence | implemented as library code — 63/0 gate (b89edb3f); no runner invokes `evidence` / `motifs` / `promotion` yet, so `AETHER_RELATIONSHIP_PROMOTION_ENABLED` and `AETHER_RELATIONSHIP_MOTIFS_ENABLED` have no effect until the Social360 write path is wired |
 | M3 | Social Silver plane (deterministic normalization, identity + data-rights integration) | implemented — 63/0 gate (b89edb3f) |
 | M4 | Legacy social honesty migration (fabricated zeros, fixed overlap, influence defaults) | implemented — 63/0 gate (b89edb3f) |
 | M5 | IncentiveContext resolution (temporal segmentation, lineage, campaign/economic integration) | implemented — 63/0 gate (b89edb3f) |
