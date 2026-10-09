@@ -615,6 +615,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_debt_retirement_ledger.py"],
+        name="Technical-debt retirement ledger",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/debt_retirement_ledger.yaml: name real paths, keep deadlines current, and delete a duplicate only with parity and usage evidence",
+    )
+
+    run(
         [sys.executable, "scripts/validate_impact_graph.py"],
         name="Impact graph registry and router bindings",
         results=results,
