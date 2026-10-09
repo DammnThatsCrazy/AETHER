@@ -72,10 +72,11 @@ on AWS credentials or remote state.
 
 The canonical CI gate also validates the impact-aware verification router, the
 environment capability requirement registry, the GitHub-only deployment
-operator boundary, the delivery workflow authority map, and the technical-debt
+operator boundary, the delivery workflow authority map, the technical-debt
 retirement ledger (`config/debt_retirement_ledger.yaml`: named paths must exist,
 deadlines must be current, and a duplicate is deleted only with parity and usage
-evidence). These checks
+evidence), and the capability overlay registry (`config/capability_overlays.yaml`:
+a capability is an `enable-*` flag, never a deployment profile). These checks
 validate repository policy; they do not claim that AWS credentials, runtime
 validation, or production promotion occurred. The authority map records which
 GitHub workflow currently owns each delivery authority while the workflow

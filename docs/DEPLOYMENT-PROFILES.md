@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
-  "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
+  "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/main.tf": "sha256:b587c84f2f9c697401aa41a71178866931fe593c19c121c5a1e4a4b5f330a66e"
@@ -23,7 +23,7 @@ source_hashes:
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:ddc4bacad8ec5aa6047433d330c95afbcda39924c71f3d2c3a2f810ee6437eda"
   "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
-  "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
+  "scripts/release/check_profile_config.py": "sha256:6a905a22d126317dd3c0fee77858c4abfa7d9e79dc50846e589146f490a75cb1"
   "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
   "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
 ---
@@ -108,6 +108,39 @@ The `aws_iam_role_policy` attachment is the binding grant (rather than the
 module's `task_role_arns` input) to avoid a module dependency cycle: the ECS
 task role lives inside `module.ecs`, and `module.ecs` consumes this module's
 key id for `CREDENTIAL_KMS_KEY_ID`.
+
+## Canonical environments and capability overlays
+
+Profiles describe environments; flags describe capabilities. The five target
+environment names are an interface over the eight existing profiles
+(`canonical_environments` in `config/deployment_profiles.yaml`). No Terraform
+state key or profile name is renamed.
+
+| Environment | Existing expression |
+|---|---|
+| `local` | `local`, `local-full` |
+| `preview` | `preview` (ephemeral, cost-capped) |
+| `staging` | `staging`, lanes `full` and `pilot`, runtime states `awake` and `asleep` |
+| `pilot-prod` | none: explicitly `status: undefined` |
+| `production` | postures `lean` = `production-lean`, `scale` = `production-scale`, `isolated` = `enterprise-isolated` |
+
+`demo` is listed under `unmapped_profiles`: it is a separate seeded temporary
+environment whose product purpose is decided separately, and it is not merged into
+`preview` by spelling alone. `pilot-prod` has no profile or state namespace. The
+staging `pilot` lane is customer-pilot **staging** and must not be renamed into
+production; the profile check refuses a defined `pilot-prod` that lacks
+`approvals` and `rollback_source`, or that reuses a staging or production profile.
+`scripts/release/check_profile_config.py` also checks that every profile is mapped
+exactly once (or unmapped), that staging lanes equal the profile's
+`deployment_lanes`, and that the production postures match its three profiles.
+
+Capabilities are `enable-*` overlays in `config/capability_overlays.yaml`, each
+realized by existing runtime flags from `services/backend/config/settings.py`
+(`scripts/validate_capability_overlays.py`, run by `make repo-doctor`). An overlay
+name must never equal a profile name. Five overlays are bound today
+(communications, campaigns, agent beta, Kyber internal, advanced value); three
+names are reserved and unbound because no runtime flag exists yet
+(`enable-x402-experimental`, `enable-gcp-oauth`, `enable-sovereign-controls`).
 
 ## Profile summary
 

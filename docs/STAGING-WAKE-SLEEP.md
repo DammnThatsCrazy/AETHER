@@ -55,7 +55,7 @@ source_hashes:
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6db80a1a80262cc60923789c40b233659f495dd026d54585bf20c61db36ddcb2"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
-  "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
+  "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
