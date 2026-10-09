@@ -123,6 +123,7 @@ domains:
       services/compliance/**: [compliance]
       docs/archive/legacy-architecture/backend/services/journey-service/**: [journey-service]
       tests/**: [root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
+      tests/mocks/**: [functionality-proof-ts]
       tests/contracts/**: [functionality-proof-ts]
       tests/sdk/**: [functionality-proof-ts]
       tests/connectors/**: [functionality-proof-ts]
@@ -152,7 +153,7 @@ domains:
     minimum_lane: pr
   sdk:
     owner: sdk
-    paths: [packages/**, vitest.config.fps.ts]
+    paths: [packages/**, vitest.config.fps.ts, sdk-fixtures/**]
     checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, functionality-proof-ts, contracts]
     path_checks:
       packages/shared/**: [sdk-shared, functionality-proof-ts]
@@ -160,6 +161,7 @@ domains:
       packages/server/**: [sdk-server]
       packages/react-native/**: [sdk-react-native, functionality-proof-ts]
       vitest.config.fps.ts: [functionality-proof-ts]
+      sdk-fixtures/**: [functionality-proof-ts]
       packages/proof-contracts/**: [functionality-proof-ts]
       packages/proof-fixtures/**: [functionality-proof-ts]
     minimum_lane: pr

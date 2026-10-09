@@ -1422,7 +1422,7 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 120
-    paths: ["tests/contracts", "tests/sdk", "tests/connectors", "tests/identity", "tests/journeys", "tests/campaigns", "tests/value", "tests/lenses", "tests/e2e", "tests/graph", "vitest.config.fps.ts"]
+    paths: ["tests/contracts", "tests/sdk", "tests/connectors", "tests/identity", "tests/journeys", "tests/campaigns", "tests/value", "tests/lenses", "tests/e2e", "tests/graph", "tests/mocks", "sdk-fixtures", "vitest.config.fps.ts"]
     runner: ["npx", "vitest", "run", "--config", "vitest.config.fps.ts"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
