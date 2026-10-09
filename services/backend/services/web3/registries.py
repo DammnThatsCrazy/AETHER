@@ -1,7 +1,7 @@
 """
 Aether Web3 Coverage — Registry Repositories
 
-Each registry extends BaseRepository (asyncpg PostgreSQL in staging/production,
+Each registry extends TenantOwnedRepository (asyncpg PostgreSQL in staging/production,
 in-memory fallback for local development). All registries support:
 - CRUD with provenance tracking
 - Lookup by stable ID or address
@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Optional
 
-from repositories.repos import BaseRepository
+from repositories.repos import TenantOwnedRepository
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
 
@@ -26,17 +26,19 @@ logger = get_logger("aether.web3.registries")
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class ChainRegistry(BaseRepository):
+class ChainRegistry(TenantOwnedRepository):
     """Canonical chain registry. Tracks all supported blockchain networks."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_chains")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("chain_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_chain_id(self, chain_id: str) -> Optional[dict]:
         return await self.find_by_id(chain_id)
@@ -57,17 +59,19 @@ class ChainRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class ProtocolRegistry(BaseRepository):
+class ProtocolRegistry(TenantOwnedRepository):
     """Canonical protocol registry. Tracks all known DeFi/Web3 protocols."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_protocols")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("protocol_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_protocol_id(self, protocol_id: str) -> Optional[dict]:
         return await self.find_by_id(protocol_id)
@@ -97,17 +101,17 @@ class ProtocolRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class ContractSystemRegistry(BaseRepository):
+class ContractSystemRegistry(TenantOwnedRepository):
     """Tracks groups of related contracts that form a protocol deployment."""
 
     def __init__(self) -> None:
         super().__init__("web3_contract_systems")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("system_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_protocol(self, protocol_id: str, limit: int = 100) -> list[dict]:
         return await self.find_many(filters={"protocol_id": protocol_id}, limit=limit)
@@ -121,13 +125,13 @@ class ContractSystemRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class ContractInstanceRegistry(BaseRepository):
+class ContractInstanceRegistry(TenantOwnedRepository):
     """Tracks individual deployed contracts with classification and confidence."""
 
     def __init__(self) -> None:
         super().__init__("web3_contract_instances")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         # Use chain:address as the natural key
@@ -135,7 +139,7 @@ class ContractInstanceRegistry(BaseRepository):
         chain_id = data.get("chain_id", "")
         record_id = data.get("instance_id", f"{chain_id}:{address}")
         data["instance_id"] = record_id
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_address(self, chain_id: str, address: str) -> Optional[dict]:
         record_id = f"{chain_id}:{address.lower()}"
@@ -155,7 +159,7 @@ class ContractInstanceRegistry(BaseRepository):
 
     async def reclassify(
         self, instance_id: str, protocol_id: str, system_id: str,
-        role: str, confidence: float, tenant_id: str = "system",
+        role: str, confidence: float, tenant_id: Optional[str] = None,
     ) -> dict:
         """Reclassify a previously unknown contract."""
         record = await self.find_by_id_or_fail(instance_id)
@@ -165,7 +169,7 @@ class ContractInstanceRegistry(BaseRepository):
         record["classification_confidence"] = confidence
         record["completeness"] = "protocol_mapped"
         record["updated_at"] = utc_now()
-        return await self.upsert(instance_id, record, tenant_id)
+        return await self.upsert(instance_id, record, self._owner(tenant_id))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -173,17 +177,19 @@ class ContractInstanceRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TokenRegistry(BaseRepository):
+class TokenRegistry(TenantOwnedRepository):
     """Canonical token registry."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_tokens")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("token_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_address(self, chain_id: str, address: str) -> Optional[dict]:
         results = await self.find_many(
@@ -203,17 +209,19 @@ class TokenRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class AppRegistry(BaseRepository):
+class AppRegistry(TenantOwnedRepository):
     """App/dApp registry with protocol and domain linkage."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_apps")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("app_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_domain(self, domain: str) -> Optional[dict]:
         """Find an app that claims this frontend domain."""
@@ -236,19 +244,21 @@ class AppRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class FrontendDomainRegistry(BaseRepository):
+class FrontendDomainRegistry(TenantOwnedRepository):
     """Tracks known frontend domains serving Web3 apps."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_frontend_domains")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         domain = data.get("domain", "")
         record_id = data.get("domain_id", domain.lower().replace(".", "-"))
         data["domain_id"] = record_id
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_domain(self, domain: str) -> Optional[dict]:
         record_id = domain.lower().replace(".", "-")
@@ -260,17 +270,19 @@ class FrontendDomainRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class GovernanceSpaceRegistry(BaseRepository):
+class GovernanceSpaceRegistry(TenantOwnedRepository):
     """Governance spaces (Snapshot, Tally, on-chain governor contracts)."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_governance_spaces")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("space_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_protocol(self, protocol_id: str, limit: int = 10) -> list[dict]:
         return await self.find_many(filters={"protocol_id": protocol_id}, limit=limit)
@@ -281,17 +293,19 @@ class GovernanceSpaceRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class MarketVenueRegistry(BaseRepository):
+class MarketVenueRegistry(TenantOwnedRepository):
     """CEX/DEX market venue registry."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_market_venues")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("venue_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -299,17 +313,19 @@ class MarketVenueRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class BridgeRouteRegistry(BaseRepository):
+class BridgeRouteRegistry(TenantOwnedRepository):
     """Bridge routes between chains."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_bridge_routes")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("route_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_chain(self, chain_id: str, limit: int = 100) -> list[dict]:
         """Find routes that source or destination match chain_id."""
@@ -325,17 +341,19 @@ class BridgeRouteRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class DeployerEntityRegistry(BaseRepository):
+class DeployerEntityRegistry(TenantOwnedRepository):
     """Teams, multisigs, DAOs that deploy and control contracts."""
+
+    _shared_tenants = ("system",)
 
     def __init__(self) -> None:
         super().__init__("web3_deployer_entities")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("entity_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_address(self, address: str) -> Optional[dict]:
         """Find deployer entity that owns this address."""
@@ -352,17 +370,17 @@ class DeployerEntityRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class MigrationRegistry(BaseRepository):
+class MigrationRegistry(TenantOwnedRepository):
     """Protocol/contract migration history."""
 
     def __init__(self) -> None:
         super().__init__("web3_migrations")
 
-    async def record_migration(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record_migration(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("detected_at", utc_now())
         record_id = data.get("migration_id", str(uuid.uuid4()))
         data["migration_id"] = record_id
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_protocol(self, protocol_id: str, limit: int = 50) -> list[dict]:
         return await self.find_many(
@@ -376,19 +394,19 @@ class MigrationRegistry(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class Web3ObservationRepository(BaseRepository):
+class Web3ObservationRepository(TenantOwnedRepository):
     """Raw Web3 observations destined for Bronze lake tier."""
 
     def __init__(self) -> None:
         super().__init__("web3_observations")
 
-    async def record(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = str(uuid.uuid4())
         data["observation_id"] = record_id
         data.setdefault("observed_at", utc_now())
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
-    async def record_batch(self, records: list[dict], tenant_id: str = "system") -> int:
+    async def record_batch(self, records: list[dict], tenant_id: Optional[str] = None) -> int:
         """Bulk ingest observations."""
         count = 0
         for data in records:

@@ -24,7 +24,7 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Any, Optional, TypeVar
 
 from shared.cache.cache import TTL, CacheClient, CacheKey
-from shared.common.common import NotFoundError, utc_now
+from shared.common.common import ConflictError, NotFoundError, utc_now
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger
 from shared.temporal.instant import coerce_utc_lenient
@@ -887,6 +887,100 @@ class BaseRepository(ABC):
                 f"DELETE {self.table_name} {entity_field}={entity_id} count={count}"
             )
         return count
+
+
+class TenantOwnedRepository(BaseRepository):
+    """A repository whose rows belong to the tenant that wrote them.
+
+    ``BaseRepository`` ids are global, so two tenants writing the same id would
+    overwrite each other, and a plain ``find_by_id`` / ``find_many`` returns every
+    tenant's rows. This subclass closes both gaps:
+
+    * ``upsert`` stamps ``tenant_id`` on the row and refuses to overwrite a row
+      another tenant owns (a ``ConflictError`` that does not say whose it is).
+    * reads only work on an instance bound to a tenant with ``for_tenant``; they
+      then see that tenant's rows, plus the rows of any ``_shared_tenants`` (platform
+      reference data such as the seeded chain registry). An unbound instance raises
+      instead of returning everything, so a call site that forgets to bind fails
+      loudly.
+    """
+
+    _bound_tenant: Optional[str] = None
+    #: Tenants whose rows every bound tenant may read (platform-seeded reference data).
+    _shared_tenants: tuple[str, ...] = ()
+
+    def for_tenant(self, tenant_id: str) -> "TenantOwnedRepository":
+        """Return a view of this repository that reads only ``tenant_id``'s rows."""
+        if not tenant_id:
+            raise ValueError("for_tenant requires a non-empty tenant_id")
+        view = copy.copy(self)
+        view._bound_tenant = tenant_id
+        return view
+
+    def _visible_tenants(self) -> list[str]:
+        if not self._bound_tenant:
+            raise RuntimeError(
+                f"{type(self).__name__} reads are tenant-scoped: call "
+                f".for_tenant(tenant_id) first"
+            )
+        return list(dict.fromkeys((self._bound_tenant, *self._shared_tenants)))
+
+    def _owner(self, tenant_id: Optional[str]) -> str:
+        """Tenant a write is stamped with: explicit, else the bound tenant, else the platform."""
+        return tenant_id or self._bound_tenant or "system"
+
+    async def find_by_id(self, record_id: str) -> Optional[dict]:
+        visible = self._visible_tenants()
+        row = await super().find_by_id(record_id)
+        if row is None or row.get("tenant_id") not in visible:
+            return None
+        return row
+
+    async def find_many(
+        self,
+        filters: Optional[dict[str, Any]] = None,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: Optional[str] = None,
+        sort_order: str = "desc",
+    ) -> list[dict]:
+        visible = self._visible_tenants()
+        if len(visible) == 1:
+            return await super().find_many(
+                filters={**(filters or {}), "tenant_id": visible[0]},
+                limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order,
+            )
+        key = sort_by or self._default_sort
+        merged: list[dict] = []
+        for tenant_id in visible:
+            merged.extend(await super().find_many(
+                filters={**(filters or {}), "tenant_id": tenant_id},
+                limit=offset + limit, offset=0, sort_by=sort_by, sort_order=sort_order,
+            ))
+        merged.sort(key=lambda r: str(r.get(key, "")), reverse=sort_order == "desc")
+        return merged[offset: offset + limit]
+
+    async def count(self, filters: Optional[dict[str, Any]] = None) -> int:
+        total = 0
+        for tenant_id in self._visible_tenants():
+            total += await super().count({**(filters or {}), "tenant_id": tenant_id})
+        return total
+
+    async def upsert(self, record_id: str, data: dict, tenant_id: str) -> dict:
+        """Create ``record_id`` for ``tenant_id``, or merge into the tenant's own row.
+
+        The original ``created_at`` survives a re-registration.
+        """
+        if not tenant_id:
+            raise ValueError("upsert requires a tenant_id")
+        existing = await BaseRepository.find_by_id(self, record_id)
+        owner = existing.get("tenant_id") if existing is not None else None
+        if existing is not None and owner not in (None, "", tenant_id):
+            raise ConflictError(f"{self.table_name} id {record_id!r} already exists")
+        row = {**data, "tenant_id": tenant_id}
+        if owner == tenant_id:
+            return await self.for_tenant(tenant_id).update(record_id, row)
+        return await self.insert(record_id, row)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

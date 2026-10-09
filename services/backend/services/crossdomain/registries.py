@@ -1,7 +1,7 @@
 """
 Aether Cross-Domain — Registries
 
-All registries extend BaseRepository (asyncpg PostgreSQL in staging/production,
+All registries extend TenantOwnedRepository (asyncpg PostgreSQL in staging/production,
 in-memory fallback for local development). Reuses the Web3 registry pattern.
 """
 
@@ -10,23 +10,23 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from repositories.repos import BaseRepository
+from repositories.repos import TenantOwnedRepository
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.crossdomain.registries")
 
 
-class InstitutionRegistry(BaseRepository):
+class InstitutionRegistry(TenantOwnedRepository):
     """Financial and business institution registry."""
     def __init__(self) -> None:
         super().__init__("cd_institutions")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("institution_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_type(self, institution_type: str, limit: int = 100) -> list[dict]:
         return await self.find_many(filters={"institution_type": institution_type}, limit=limit)
@@ -40,16 +40,16 @@ class InstitutionRegistry(BaseRepository):
                 or any(q in a.lower() for a in r.get("aliases", []))][:limit]
 
 
-class AccountRegistry(BaseRepository):
+class AccountRegistry(TenantOwnedRepository):
     """Financial account registry (brokerage, bank, custody, etc.)."""
     def __init__(self) -> None:
         super().__init__("cd_accounts")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("account_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_owner(self, owner_entity_id: str, limit: int = 50) -> list[dict]:
         return await self.find_many(filters={"owner_entity_id": owner_entity_id}, limit=limit)
@@ -61,16 +61,16 @@ class AccountRegistry(BaseRepository):
         return await self.find_many(filters={"account_type": account_type}, limit=limit)
 
 
-class InstrumentRegistry(BaseRepository):
+class InstrumentRegistry(TenantOwnedRepository):
     """Market instrument registry (stocks, ETFs, options, bonds, etc.)."""
     def __init__(self) -> None:
         super().__init__("cd_instruments")
 
-    async def register(self, data: dict, tenant_id: str = "system") -> dict:
+    async def register(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         data.setdefault("registered_at", utc_now())
         data.setdefault("updated_at", utc_now())
         record_id = data.get("instrument_id", str(uuid.uuid4()))
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_symbol(self, symbol: str) -> Optional[dict]:
         results = await self.find_many(filters={"symbol": symbol.upper()}, limit=1)
@@ -95,15 +95,15 @@ class InstrumentRegistry(BaseRepository):
                 or q in r.get("instrument_id", "").lower()][:limit]
 
 
-class PositionRepository(BaseRepository):
+class PositionRepository(TenantOwnedRepository):
     """Account position records."""
     def __init__(self) -> None:
         super().__init__("cd_positions")
 
-    async def record(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = data.get("position_id", f"{data.get('account_id', '')}:{data.get('instrument_id', '')}:{data.get('as_of', utc_now())}")
         data["position_id"] = record_id
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_account(self, account_id: str, limit: int = 200) -> list[dict]:
         return await self.find_many(filters={"account_id": account_id}, limit=limit)
@@ -112,29 +112,29 @@ class PositionRepository(BaseRepository):
         return await self.find_many(filters={"instrument_id": instrument_id}, limit=limit)
 
 
-class OrderRepository(BaseRepository):
+class OrderRepository(TenantOwnedRepository):
     """Trade order records."""
     def __init__(self) -> None:
         super().__init__("cd_orders")
 
-    async def record(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = data.get("order_id", str(uuid.uuid4()))
         data.setdefault("submitted_at", utc_now())
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_account(self, account_id: str, limit: int = 200) -> list[dict]:
         return await self.find_many(filters={"account_id": account_id}, limit=limit, sort_by="submitted_at")
 
 
-class ExecutionRepository(BaseRepository):
+class ExecutionRepository(TenantOwnedRepository):
     """Trade execution/fill records."""
     def __init__(self) -> None:
         super().__init__("cd_executions")
 
-    async def record(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = data.get("execution_id", str(uuid.uuid4()))
         data.setdefault("executed_at", utc_now())
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_order(self, order_id: str, limit: int = 50) -> list[dict]:
         return await self.find_many(filters={"order_id": order_id}, limit=limit)
@@ -143,59 +143,59 @@ class ExecutionRepository(BaseRepository):
         return await self.find_many(filters={"account_id": account_id}, limit=limit, sort_by="executed_at")
 
 
-class BalanceRepository(BaseRepository):
+class BalanceRepository(TenantOwnedRepository):
     """Account balance snapshot records."""
     def __init__(self) -> None:
         super().__init__("cd_balances")
 
-    async def record(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = f"{data.get('account_id', '')}:{data.get('as_of', utc_now())}"
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def latest_for_account(self, account_id: str) -> Optional[dict]:
         results = await self.find_many(filters={"account_id": account_id}, limit=1, sort_by="as_of", sort_order="desc")
         return results[0] if results else None
 
 
-class CashMovementRepository(BaseRepository):
+class CashMovementRepository(TenantOwnedRepository):
     """Cash movement records (deposits, withdrawals, transfers)."""
     def __init__(self) -> None:
         super().__init__("cd_cash_movements")
 
-    async def record(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = data.get("movement_id", str(uuid.uuid4()))
         data["movement_id"] = record_id
         data.setdefault("initiated_at", utc_now())
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_account(self, account_id: str, limit: int = 200) -> list[dict]:
         return await self.find_many(filters={"account_id": account_id}, limit=limit, sort_by="initiated_at")
 
 
-class ComplianceActionRepository(BaseRepository):
+class ComplianceActionRepository(TenantOwnedRepository):
     """Internal compliance/business action records."""
     def __init__(self) -> None:
         super().__init__("cd_compliance_actions")
 
-    async def record(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = data.get("action_id", str(uuid.uuid4()))
         data["action_id"] = record_id
         data.setdefault("effective_at", utc_now())
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_entity(self, entity_id: str, limit: int = 100) -> list[dict]:
         return await self.find_many(filters={"entity_id": entity_id}, limit=limit, sort_by="effective_at")
 
 
-class BusinessEventRepository(BaseRepository):
+class BusinessEventRepository(TenantOwnedRepository):
     """Business application behavioral events."""
     def __init__(self) -> None:
         super().__init__("cd_business_events")
 
-    async def record(self, data: dict, tenant_id: str = "system") -> dict:
+    async def record(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = str(uuid.uuid4())
         data.setdefault("timestamp", utc_now())
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_by_entity(self, entity_id: str, limit: int = 200) -> list[dict]:
         return await self.find_many(filters={"entity_id": entity_id}, limit=limit, sort_by="timestamp")
@@ -204,15 +204,15 @@ class BusinessEventRepository(BaseRepository):
         return await self.find_many(filters={"instrument_id": instrument_id}, limit=limit, sort_by="timestamp")
 
 
-class CrossDomainLinkRepository(BaseRepository):
+class CrossDomainLinkRepository(TenantOwnedRepository):
     """Cross-domain identity links with confidence scoring."""
     def __init__(self) -> None:
         super().__init__("cd_identity_links")
 
-    async def create_link(self, data: dict, tenant_id: str = "system") -> dict:
+    async def create_link(self, data: dict, tenant_id: Optional[str] = None) -> dict:
         record_id = f"{data.get('source_entity_id', '')}:{data.get('target_entity_id', '')}:{data.get('link_signal', '')}"
         data.setdefault("created_at", utc_now())
-        return await self.upsert(record_id, data, tenant_id)
+        return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def list_for_entity(self, entity_id: str, limit: int = 100) -> list[dict]:
         all_links = await self.find_many(limit=5000)
