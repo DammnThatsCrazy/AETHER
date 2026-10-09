@@ -93,9 +93,6 @@ allow_unreachable:
     modules: [drift_monitor, model_registry]
     ledger: product-backend-unmounted-code-pending
     reason: only a compliance evidence list names drift_monitor; no route, worker or import path reaches either
-  - path: services.notification
-    ledger: product-backend-unmounted-code-pending
-    reason: no test or document uses it and no route, worker or import path reaches the package; deleting it is an owner decision
   - package: services.product_catalog
     modules: [mapping]
     ledger: product-backend-unmounted-code-pending
@@ -157,9 +154,9 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: shared.events
-    modules: [economic_schemas, economic_topics, validators]
+    modules: [economic_schemas, economic_topics]
     ledger: product-backend-unmounted-code-pending
-    reason: no test or document uses it and no route, worker or import path reaches it; it sits in a package with live code, so removing it is an owner decision
+    reason: only docs/AGENTIC_COMMERCE_BUILD_SPEC.md names them (the commerce event layer it describes); no route, worker or import path reaches them, so the owner decides whether that layer is built or dropped
   - package: shared.graph
     modules: [economic_schema, extraction_graph, graph_contract]
     ledger: product-backend-unmounted-code-pending

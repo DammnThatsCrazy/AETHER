@@ -832,7 +832,7 @@ entries:
       - services/backend/shared/relationship_spine
     duplicates: []
     retire: >-
-      133 backend modules (about 32,700 lines) that nothing reaches from the
+      130 backend modules (about 32,400 lines) that nothing reaches from the
       application. Most are implemented and tested but never mounted
       (Communication360, managed integrations, derivatives runtime, OAuth broker,
       provider tenant routes, identity calibration and split services, geo, the

@@ -107,7 +107,6 @@ services:
   model_governance: {class: beta, stage: control-plane, reason: "consent-scoped training-data admission and inference gates"}
   model_runtime: {class: experimental, stage: intelligence, reason: "provider-neutral multi-model intelligence harness"}
   noesis: {class: experimental, stage: intelligence, reason: "graph-native natural-language intelligence"}
-  notification: {class: beta, stage: action, reason: "webhooks, email alerts and Slack integrations"}
   notification_intelligence: {class: beta, stage: action, reason: "event-driven multi-channel notification pipeline"}
   onboarding: {class: beta, stage: tenant, reason: "customer onboarding lifecycle"}
   onchain: {class: experimental, stage: action, reason: "on-chain action recording, chain listening and RPC gateway"}
