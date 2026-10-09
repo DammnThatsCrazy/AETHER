@@ -130,7 +130,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: shared.graph
-    modules: [economic_schema, extraction_graph, graph_contract]
+    modules: [extraction_graph]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: shared.privacy

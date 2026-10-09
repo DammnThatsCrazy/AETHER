@@ -218,6 +218,43 @@ def check_no_api_key_in_query_params(events: dict) -> list[str]:
     return errors
 
 
+#: Edge endpoints the economic schema names that are not graph vertices: the tenant is
+#: the key-prefix scope of every vertex (``{tenant_id}:{vertex_id}``), not a vertex.
+_NON_VERTEX_ENDPOINTS = frozenset({"Tenant"})
+
+
+def check_graph_contracts() -> list[str]:
+    """The relationship-layer contract and the economic vertex/edge schemas agree.
+
+    * ``shared.graph.graph_contract.validate_contract`` - every canonical layer has
+      edges and vertex types, every ``EdgeType`` is mapped to a layer.
+    * ``shared.graph.economic_schema`` - every declared vertex type is a
+      ``VertexType``, every declared edge a ``EdgeType``, and every edge endpoint a
+      ``VertexType`` (or a documented non-vertex scope root).
+    """
+    backend = str(Path(__file__).resolve().parent.parent / "services" / "backend")
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    from shared.graph import economic_schema, graph_contract
+    from shared.graph.graph import EdgeType, VertexType
+
+    errors = [f"graph contract: {v}" for v in graph_contract.validate_contract()]
+    vertex_types = {v for k, v in vars(VertexType).items() if not k.startswith("_") and isinstance(v, str)}
+    edge_types = {v for k, v in vars(EdgeType).items() if not k.startswith("_") and isinstance(v, str)}
+    for schema in economic_schema.VERTEX_SCHEMA_MAP.values():
+        if schema.vertex_type not in vertex_types:
+            errors.append(f"economic schema: vertex {schema.vertex_type!r} is not a VertexType")
+    for schema in economic_schema.EDGE_SCHEMA_MAP.values():
+        if schema.edge_type not in edge_types:
+            errors.append(f"economic schema: edge {schema.edge_type!r} is not an EdgeType")
+        for endpoint in (schema.from_type, schema.to_type):
+            if endpoint not in vertex_types and endpoint not in _NON_VERTEX_ENDPOINTS:
+                errors.append(
+                    f"economic schema: edge {schema.edge_type!r} endpoint {endpoint!r} is not a VertexType"
+                )
+    return errors
+
+
 def run_identity_security_checks() -> list[str]:
     """Delegate to validate_identity_security and collect its errors inline."""
     import importlib.util
@@ -278,8 +315,9 @@ def main() -> int:
     errors += check_sdk_endpoint_not_ingest_events(events)
     errors += check_no_api_key_in_query_params(events)
     errors += run_identity_security_checks()
+    errors += check_graph_contracts()
 
-    checks_run = 7
+    checks_run = 8
     if errors:
         print(f"contract validator: {checks_run} checks, {len(errors)} inconsistencies.")
         print()
