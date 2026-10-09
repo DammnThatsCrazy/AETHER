@@ -373,6 +373,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_venue_sweep_coro()
 
+    def _derivatives_position_materializer() -> Coroutine[Any, Any, None]:
+        from services.derivatives.materializer import build_materializer_coro
+
+        return build_materializer_coro()
+
     def _readiness_revalidation() -> Coroutine[Any, Any, None]:
         from services.readiness_graph.revalidation_worker import (
             build_readiness_revalidation_worker,
@@ -779,6 +784,17 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="derivatives_venue_sweep",
             factory=_derivatives_venue_sweep,
             enabled=lambda: bool(settings.derivatives.reconciliation_enabled),
+        ),
+        # Replays raw fills into closed position epochs, P&L snapshots and
+        # venue-position variances. Observation only; each output is gated by
+        # its own flag inside the pass, the worker runs if either is on.
+        WorkerSpec(
+            name="derivatives_position_materializer",
+            factory=_derivatives_position_materializer,
+            enabled=lambda: bool(
+                settings.derivatives.runtime_enabled
+                and (settings.derivatives.pnl_enabled or settings.derivatives.reconciliation_enabled)
+            ),
         ),
         # Capability-readiness revalidation: re-walks the readiness graph and
         # re-checks capability credentials on a cadence. Gated off by default

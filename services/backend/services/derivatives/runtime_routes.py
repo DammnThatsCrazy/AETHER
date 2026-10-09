@@ -8,7 +8,7 @@ read-only credential authority only.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -36,6 +36,7 @@ from services.derivatives.foundation import (
     validate_payload_tenant,
 )
 from services.derivatives.runtime_models import AccountLinkRequest, DerivativesObservationIn
+from services.derivatives.state_machines import OrderStateMachine, PositionStateMachine
 
 router = APIRouter(prefix="/v1/derivatives/runtime", tags=["derivatives"])
 
@@ -214,6 +215,49 @@ async def link_account(payload: AccountLinkRequest, request: Request):
     }
 
 
+async def _classify_transition(
+    repo: Any, tenant_id: str, id_field: str, entity_id: str, record: dict[str, Any]
+) -> Optional[dict[str, Any]]:
+    """Where an incoming order/position status sits against what is already stored.
+
+    Classification only: the observation is stored either way (the tables are
+    append-only evidence), but the response says whether it advanced the entity,
+    repeated it, arrived out of order, or is not a legal step. ``None`` for facts
+    that carry no lifecycle status (fills).
+    """
+    if "order_status" in record:
+        machine, status_field = OrderStateMachine, "order_status"
+    elif "status" in record and id_field == "position_id":
+        machine, status_field = PositionStateMachine, "status"
+    else:
+        return None
+    incoming = str(record[status_field] or "")
+    rows = await repo.find_many({"tenant_id": tenant_id, id_field: entity_id})
+    if not rows:
+        return {"classification": "first_observation", "status": incoming}
+    # Judge against the furthest-advanced status already held, so a late low-rank
+    # observation can never be mistaken for progress.
+    held = max(
+        (str(r.get(status_field) or "unknown") for r in rows),
+        key=machine.rank,
+    )
+    result = machine.apply(held, incoming, str(record.get("observed_at") or ""))
+    if result.applied:
+        classification = "reapplied" if incoming == held else "advanced"
+    elif result.reason == "stale_out_of_order":
+        classification = "stale"
+    elif result.reason == "duplicate_evidence":
+        classification = "duplicate"
+    else:
+        classification = "rejected_transition"
+    return {
+        "classification": classification,
+        "status": incoming,
+        "held_status": held,
+        "reason": result.reason,
+    }
+
+
 @router.post("/observations", status_code=201)
 async def ingest_observation(payload: DerivativesObservationIn, request: Request):
     """Canonical derivatives event intake (order/fill/position facts)."""
@@ -248,6 +292,10 @@ async def ingest_observation(payload: DerivativesObservationIn, request: Request
     repo = repo_cls()
     record = {k: v for k, v in record.items() if k in repo.columns}
     record.setdefault(id_field, entity_id)
+    transition = await _classify_transition(repo, tenant_id, id_field, entity_id, record)
     inserted = await repo.insert(record)
     _meter("derivatives_event_ingested")
-    return {"inserted": inserted, id_field: entity_id, "event_name": payload.event_name}
+    body: dict[str, Any] = {"inserted": inserted, id_field: entity_id, "event_name": payload.event_name}
+    if transition is not None:
+        body["transition"] = transition
+    return body

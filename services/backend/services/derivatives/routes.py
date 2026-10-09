@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from services.derivatives import counters
 from services.derivatives.product import product_service
 
 router = APIRouter(prefix="/v1/derivatives", tags=["Derivatives"])
@@ -121,13 +122,19 @@ async def derivatives_export_evidence(request: Request) -> dict:
 @kyber_router.get("/fleet")
 async def kyber_derivatives_fleet(request: Request) -> dict:
     _require_kyber_operator(request)
-    return APIResponse(data=product_service.kyber_fleet(_tenant_id(request))).to_dict()
+    operator = _tenant_id(request)
+    computed = await counters.compute_kyber_fleet(operator_tenant_id=operator)
+    # Counters computed from durable state win; fields only the product snapshot
+    # model carries (e.g. backfill_state) are kept.
+    return APIResponse(data={**product_service.kyber_fleet(operator), **computed}).to_dict()
 
 
 @kyber_router.get("/data-quality")
 async def kyber_derivatives_data_quality(request: Request) -> dict:
     _require_kyber_operator(request)
-    return APIResponse(data=product_service.kyber_data_quality(_tenant_id(request))).to_dict()
+    operator = _tenant_id(request)
+    computed = await counters.compute_kyber_data_quality(operator_tenant_id=operator)
+    return APIResponse(data={**product_service.kyber_data_quality(operator), **computed}).to_dict()
 
 
 @kyber_router.get("/reconciliation")
@@ -139,7 +146,9 @@ async def kyber_derivatives_reconciliation(request: Request, tenant_id: str | No
 @kyber_router.get("/graph-quality")
 async def kyber_derivatives_graph_quality(request: Request) -> dict:
     _require_kyber_operator(request)
-    return APIResponse(data=product_service.kyber_graph_quality(_tenant_id(request))).to_dict()
+    operator = _tenant_id(request)
+    computed = await counters.compute_kyber_graph_quality(operator_tenant_id=operator)
+    return APIResponse(data={**product_service.kyber_graph_quality(operator), **computed}).to_dict()
 
 
 @kyber_router.get("/intelligence-quality")

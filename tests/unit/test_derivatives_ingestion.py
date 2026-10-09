@@ -26,7 +26,6 @@ def deriv():
             generic=importlib.import_module("services.derivatives.connectors.generic_import"),
             hyperliquid=importlib.import_module("services.derivatives.connectors.hyperliquid"),
             position=importlib.import_module("services.derivatives.position_engine"),
-            reconciliation=importlib.import_module("services.derivatives.reconciliation"),
             replay=importlib.import_module("services.derivatives.replay"),
         )
     finally:
@@ -98,15 +97,6 @@ def test_position_engine_reconstructs_epochs_and_net_pnl(deriv):
     assert state.realized_pnl == Decimal("0")
     assert state.net_realized_pnl == Decimal("-3")
     assert state.closed_at == "t3"
-
-
-def test_reconciliation_detects_variance(deriv):
-    state = deriv.models.PositionEpochState("tenant-a", "acct", "BTC-PERP", "epoch-1", size=Decimal("1"), status=deriv.models.PositionStatus.OPEN)
-    variance = deriv.reconciliation.reconcile_position_size(computed=state, observed_size=Decimal("1.5"), source_ref="snapshot-1")
-    assert variance is not None
-    assert variance.variance_type == "position_size_mismatch"
-    assert variance.difference == Decimal("-0.5")
-    assert variance.status == "variance_detected"
 
 
 def test_replay_is_deterministic(deriv):

@@ -20,9 +20,9 @@ source_hashes:
   "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
   "services/backend/services/runtime/consumer_specs.py": "sha256:0bd54fe2c7dd031759f31f312b068428e11958169066764b3bb00792f4e82dac"
-  "services/backend/services/runtime/roles.py": "sha256:e84861ab29821f52ab82b4337317ae87dc9e553a18e0c768906f5fe06ba53a50"
+  "services/backend/services/runtime/roles.py": "sha256:2c63231ee21e24da7724f3ca400d6b5cdee45ce5c6890742f5a0b62c30b51cc8"
   "services/backend/services/runtime/run_role.py": "sha256:4b78f8c38ffa1e805ba8e910d2c960e5f37262e7d4b24a5fa6e5a2d1a2b06d9e"
-  "services/backend/services/runtime/specs.py": "sha256:6d2445e0b9fce3d128bcada3bfc51e5ad82f132e7905e55eaa0c2f3824f41c54"
+  "services/backend/services/runtime/specs.py": "sha256:41f38e1d4255446c402a6f13d33cac5e5923343d6f5b030e1c7d07dd47167da7"
 ---
 
 # Backend Execution Model

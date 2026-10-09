@@ -171,6 +171,8 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
          # requeue sweeper: both reconcile durable state the same way as the
          # payment-rail sync/repair loops that ride this role.
          "derivatives_venue_sweep", "dead_letter_sweeper",
+         # Fill replay into epochs / P&L snapshots / venue variances.
+         "derivatives_position_materializer",
          # Commerce control-plane convergence: stale approvals / entitlements and
          # the read-only drift reconciliation, one periodic loop each.
          "commerce_approval_sweeper", "commerce_entitlement_sweeper",

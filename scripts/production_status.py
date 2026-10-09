@@ -629,10 +629,14 @@ AREAS: list[Area] = [
         "stream sequence tracking with gap detection/recovery, raw intake "
         "(orders, fills, positions) and read-only lists, a cursor-only venue sweep. "
         "Alembic adoption of the PR1 raw-SQL DDL. "
-        "The position engine, order/position FSMs, Decimal-only P&L and "
-        "snapshot-vs-projection reconciliation exist as tested library code that no "
-        "worker runs yet, so the P&L, reconciliation-variance and position-epoch "
-        "tables stay empty. "
+        "A supervised position materializer (derivatives_position_materializer, "
+        "off unless AETHER_DERIVATIVES_RUNTIME_ENABLED and the P&L or "
+        "reconciliation flag is on) replays stored fills through the position engine "
+        "into closed position epochs, Decimal-only P&L snapshots (marked "
+        "mark_price_available=false when no mark exists) and venue-position "
+        "variances; order/position FSMs classify each intake observation; the "
+        "kyber fleet/data-quality/graph-quality routes report counters computed "
+        "from durable state. None of it has run against a live venue or in staging. "
         "All four venue adapters (Hyperliquid, dYdX, GMX, Drift) resolve to "
         "CREDENTIAL_WAITING in the credentialless matrix; stream gap/disconnect/"
         "reorder/rate-limit/timeout recovery is pinned by tests/chaos. "
@@ -832,12 +836,12 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "Derivatives position engine, FSMs, P&L and reconciliation are library code "
-        "that no worker runs: the P&L, reconciliation-variance and position-epoch "
-        "tables stay empty",
+        "Derivatives materializer is built and flag-gated off by default, but has "
+        "never run on venue data, and the entitlement guard (guards.py), usage "
+        "meter sink and graph projections (graph_mutations.py) are still not wired",
         "derivatives intelligence",
-        "Add a materializer WorkerSpec that applies fills to positions, writes P&L "
-        "snapshots and reconciliation variances, and wire the entitlement guard",
+        "Enable the materializer in staging against a read-only venue credential, "
+        "then install the plan-entitlement resolver and metering sink",
     ),
     Blocker(
         "pre-production-blocker",

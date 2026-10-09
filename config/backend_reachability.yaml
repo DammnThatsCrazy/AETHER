@@ -30,7 +30,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: documented, but no route, worker or import path reaches it
   - package: services.derivatives
-    modules: [connectors.generic_import, counters, graph_mutations, guards, meter, pnl, position_engine, reconciliation, replay, runtime_reconciliation, state_machines, topic_contract]
+    modules: [connectors.generic_import, graph_mutations, guards, meter, replay]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: services.exploration

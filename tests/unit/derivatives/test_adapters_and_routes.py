@@ -210,3 +210,63 @@ def test_execution_claims_rejected(monkeypatch):
         "payload": {"fill_id": "f-2", "execution_by_aether": True},
     })
     assert response.status_code == 422
+
+
+def _order(client, order_id, event, status):
+    return client.post("/v1/derivatives/runtime/observations", json={
+        "event_name": event,
+        "payload": {
+            "order_id": order_id, "trading_account_id": "acct-xyz",
+            "canonical_market_id": "sim:btc-perp", "order_status": status,
+        },
+    })
+
+
+def test_order_observations_are_classified_against_what_is_held(monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
+    client = _build_app(TENANT)
+
+    first = _order(client, "o-fsm", "derivatives_order_observed", "open")
+    assert first.json()["transition"]["classification"] == "first_observation"
+
+    advanced = _order(client, "o-fsm", "derivatives_order_updated_observed", "filled")
+    assert advanced.json()["transition"]["classification"] == "advanced"
+
+    # A late "open" after "filled" is stale evidence: stored, never a regression.
+    stale = _order(client, "o-fsm", "derivatives_order_updated_observed", "open")
+    assert stale.status_code == 201
+    assert stale.json()["transition"] == {
+        "classification": "stale", "status": "open", "held_status": "filled",
+        "reason": "stale_out_of_order",
+    }
+
+    # Judged against the furthest status held, not the most recent row.
+    again = _order(client, "o-fsm", "derivatives_order_updated_observed", "filled")
+    assert again.json()["transition"]["classification"] == "duplicate"
+
+
+def test_an_illegal_order_step_is_flagged_not_dropped(monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
+    client = _build_app(TENANT)
+    _order(client, "o-ill", "derivatives_order_observed", "cancelled")
+    odd = _order(client, "o-ill", "derivatives_order_rejected_observed", "rejected")
+    assert odd.json()["transition"]["classification"] == "rejected_transition"
+    assert odd.json()["inserted"] is True
+
+
+def test_fills_carry_no_transition(monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
+    client = _build_app(TENANT)
+    fill = client.post("/v1/derivatives/runtime/observations", json={
+        "event_name": "derivatives_fill_observed",
+        "payload": {"fill_id": "f-nt", "trading_account_id": "acct-xyz",
+                    "canonical_market_id": "sim:btc-perp", "side": "buy",
+                    "price": "1", "quantity": "1", "executed_at": "2026-07-08T12:00:00Z"},
+    })
+    assert "transition" not in fill.json()
