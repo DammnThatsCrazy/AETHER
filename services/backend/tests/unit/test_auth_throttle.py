@@ -44,6 +44,10 @@ class FakeRedis:
         self.values[key] = self.values.get(key, 0) + 1
         return self.values[key]
 
+    async def decr(self, key):
+        self.values[key] = self.values.get(key, 0) - 1
+        return self.values[key]
+
     async def expire(self, key, seconds):
         self.ttls[key] = seconds
 
@@ -62,7 +66,7 @@ class BrokenRedis:
     async def incr(self, key):
         raise ConnectionError("redis down")
 
-    get = delete = expire = ttl = incr
+    get = delete = expire = ttl = decr = incr
 
 
 # ── the counter ──────────────────────────────────────────────────────────
@@ -148,6 +152,22 @@ def test_parallel_attempts_cannot_all_slip_under_the_cap():
     assert refused.count(True) == 1 and refused.count(False) == 5
 
 
+def test_a_refunded_event_no_longer_counts():
+    counter = at.AttemptCounter("t", 60, clock=Clock())
+    redis = FakeRedis()
+    _run(counter.hit("k"))
+    _run(counter.hit("k"))
+    _run(counter.refund("k"))
+    assert _run(counter.hit("k"))[0] == 2
+    _run(counter.hit("r", redis))
+    _run(counter.hit("r", redis))
+    _run(counter.refund("r", redis))
+    assert _run(counter.hit("r", redis))[0] == 2
+    _run(counter.refund("never-hit", redis))  # a refund can only undo, never go below zero in memory
+    _run(counter.refund("never-hit"))
+    assert _run(counter.hit("never-hit"))[0] == 1
+
+
 def test_the_client_ip_is_the_address_the_load_balancer_appended():
     headers = {"x-forwarded-for": "198.51.100.7, 203.0.113.9"}  # the caller claimed .7
     assert at.client_ip(headers, "10.0.0.2") == "203.0.113.9"
@@ -224,6 +244,19 @@ def test_parallel_wrong_passwords_cannot_all_be_checked_past_the_cap(auth, monke
     outcomes = _run(burst())
     assert sum(isinstance(o, RateLimitedError) for o in outcomes) == 1
     assert sum(isinstance(o, BadRequestError) for o in outcomes) == 5
+
+
+def test_retrying_during_the_address_wide_lockout_does_not_spend_the_clients_own_budget(auth):
+    _run(_seed("w@x.io"))
+    for client in range(5):  # trip the address-wide ceiling from five other clients
+        for _ in range(5):
+            with pytest.raises(BadRequestError):
+                _login(auth, "w@x.io", "wrong-password", _request(peer=f"198.51.100.{client}"))
+    for _ in range(6):  # the account holder keeps trying from a fresh network meanwhile
+        with pytest.raises(RateLimitedError):
+            _login(auth, "w@x.io", PASSWORD, _request(peer="203.0.113.7"))
+    auth.throttle.login_failures.reset()  # the address-wide window ends
+    assert "data" in _login(auth, "w@x.io", PASSWORD, _request(peer="203.0.113.7"))
 
 
 def test_the_sixth_wrong_password_from_one_client_is_refused_even_with_the_right_one(auth):

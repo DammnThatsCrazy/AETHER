@@ -13,7 +13,7 @@ import {
   useToast,
 } from "@aether/ui";
 import type { SocialProvider } from "@aether/ui";
-import { useAuth, resolveAuthGrant, describeAuthRateLimit } from "@aether-app/features/auth";
+import { useAuth, resolveAuthGrant, describeAuthRateLimit, retryAfterSeconds } from "@aether-app/features/auth";
 import { useAuth0 } from "@auth0/auth0-react";
 import {
   parseBillingInterval,
@@ -39,6 +39,8 @@ const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
 ];
 
 const RESEND_COOLDOWN = 30;
+/** A rate-limit wait up to this long is the per-minute request throttle, not the 15-minute lockout. */
+const SHORT_THROTTLE_SECONDS = 120;
 const SDK_VERSIONS = {
   web: "8.9.0",
   ios: "8.3.1",
@@ -250,11 +252,17 @@ export function EmailSignupPage() {
     } catch (err) {
       const limited = describeAuthRateLimit(err);
       if (limited) {
-        // The lockout outlasts the code (codes expire after 10 minutes, the
-        // lockout after 15), so the code entered now cannot be retried later.
-        setOtpError(`${limited} Request a new code once the wait is over.`);
-        setResendHighlighted(true);
-        setOtp("");
+        if ((retryAfterSeconds(err) ?? 0) > SHORT_THROTTLE_SECONDS) {
+          // The per-address lockout outlasts the code (codes expire after 10
+          // minutes, the lockout after 15), so this code cannot be retried later.
+          setOtpError(`${limited} Request a new code once the wait is over.`);
+          setResendHighlighted(true);
+          setOtp("");
+        } else {
+          // A one-minute request throttle (many people behind one address): the
+          // code is still good, so keep it for the retry.
+          setOtpError(limited);
+        }
         return;
       }
       setOtpError("Invalid or expired code — try again or request a new one");

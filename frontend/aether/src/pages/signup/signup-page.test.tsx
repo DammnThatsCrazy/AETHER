@@ -225,6 +225,25 @@ describe("SignupPage rate-limited requests", () => {
     expect(screen.queryByText("Check your email")).not.toBeInTheDocument();
   });
 
+  it("keeps a still-valid code when the code check hits only the short request throttle", async () => {
+    authApi.verifyEmail.mockRejectedValue(limited(30));
+    renderSignup("/signup");
+    fillStepOne();
+    await userEvent.click(screen.getByRole("button", { name: "Continue →" }));
+    await screen.findByText("Check your email");
+
+    fireEvent.paste(screen.getByLabelText("Digit 1 of 6"), {
+      clipboardData: { getData: () => "123456" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: /verify.*continue/i }));
+
+    expect(
+      await screen.findByText("Too many attempts. Try again in 30 seconds."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Request a new code/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Digit 1 of 6")).toHaveValue("1");
+  });
+
   it("asks for a fresh code, not a retry, when the code check is rate limited", async () => {
     authApi.verifyEmail.mockRejectedValue(limited(900));
     renderSignup("/signup");

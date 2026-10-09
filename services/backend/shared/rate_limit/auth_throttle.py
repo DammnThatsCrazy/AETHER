@@ -111,6 +111,17 @@ class AttemptCounter:
         entry[0] += 1
         return int(entry[0]), max(1, int(entry[1] - now))
 
+    async def refund(self, key: str, redis: Any = None) -> None:
+        """Give back one counted event, for a request refused by a different limit."""
+        if redis is not None:
+            try:
+                await redis.decr(self._redis_key(key))
+            except Exception:  # noqa: BLE001
+                pass
+        entry = self._memory.get(key)
+        if entry is not None and entry[0] > 0:
+            entry[0] -= 1
+
     async def clear(self, key: str, redis: Any = None) -> None:
         if redis is not None:
             try:

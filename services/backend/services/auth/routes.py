@@ -40,6 +40,7 @@ from shared.common.common import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
+    RateLimitedError,
     UnauthorizedError,
     utc_now,
 )
@@ -854,7 +855,13 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
     await throttle.enforce_rate(
         throttle.login_failures_by_ip, pair_key, throttle.LOGIN_FAILURES_PER_EMAIL_AND_IP, redis,
     )
-    await throttle.enforce_rate(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
+    try:
+        await throttle.enforce_rate(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
+    except RateLimitedError:
+        # Refused by the address-wide ceiling: do not also spend this client's own
+        # budget, or retrying during the lockout would extend it for that client.
+        await throttle.login_failures_by_ip.refund(pair_key, redis)
+        raise
 
     user_rec: dict = {}
     try:
