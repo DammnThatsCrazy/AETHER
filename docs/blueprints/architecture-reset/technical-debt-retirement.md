@@ -113,7 +113,7 @@ These are measurements, each tied to a ledger row.
   only it used) was exported but never rendered and is deleted, leaving
   `components/profile360/` as the only implementation; the per-entity 360 views
   remain. Row `product-shared-360-primitives`.
-- **Unmounted Kyber code.** Import-graph reachability from the app entry points
+- **Unmounted frontend code.** Import-graph reachability from the app entry points
   found 139 Kyber source files (5,433 lines: feature hooks, commerce, approvals,
   entitlements and economics components, unused barrels) that nothing reaches.
   They are deleted; the backend endpoints they would have called are unchanged.
@@ -122,9 +122,11 @@ These are measurements, each tied to a ledger row.
   `config/frontend_reachability.yaml` against ledger row
   `product-kyber-unmounted-code-pending`. `scripts/validate_frontend_reachability.py`
   now fails any PR that adds an unreachable Kyber file, and fails an allowlist
-  entry that is stale, so the list can only shrink. The Aether app has 58
-  unreachable files (2,646 lines) and is the next application of the same check.
-  Rows `product-kyber-unmounted-code` and `product-kyber-unmounted-code-pending`.
+  entry that is stale, so the list can only shrink. The Aether app had 58
+  unreachable files: 50 are deleted (1,704 lines) and eight are kept because the
+  identity-continuity-gates workflow and component tests depend on three barrels
+  and the identity panels they export; it is under the same check. Rows `product-kyber-unmounted-code`, `product-kyber-unmounted-code-pending`,
+  `product-aether-unmounted-code` and `product-aether-unmounted-code-pending`.
 - **A legacy resolution module.** `services/backend/services/resolution` (9
   files) is still mounted in `main.py`; its cluster, batch and merge-approval
   routes already return 503. Row `identity-legacy-resolution-module`.

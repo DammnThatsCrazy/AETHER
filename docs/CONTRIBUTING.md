@@ -79,8 +79,8 @@ evidence), the capability overlay registry (`config/capability_overlays.yaml`:
 a capability is an `enable-*` flag, never a deployment profile), the backend
 service classification (`config/service_classification.yaml`: every service
 directory has one lifecycle class), and frontend reachability
-(`config/frontend_reachability.yaml`: every Kyber source file is reachable from
-the app entry points or listed against a ledger row). These checks
+(`config/frontend_reachability.yaml`: every Kyber and Aether source file is
+reachable from the app entry points or listed against a ledger row). These checks
 validate repository policy; they do not claim that AWS credentials, runtime
 validation, or production promotion occurred. The authority map records which
 GitHub workflow currently owns each delivery authority while the workflow
