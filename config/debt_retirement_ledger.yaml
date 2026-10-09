@@ -352,6 +352,121 @@ entries:
     removal_pr: null
     deadline: 2027-02-28
 
+  - id: product-kyber-unmounted-code
+    domain: product
+    classification: removed
+    state: removed
+    authority: >-
+      the import graph of frontend/kyber/src/app/main.tsx; code no route mounts
+      is not product surface
+    current:
+      - config/frontend_reachability.yaml
+      - scripts/validate_frontend_reachability.py
+    duplicates:
+      - frontend/kyber/src/components/approvals
+      - frontend/kyber/src/components/charts
+      - frontend/kyber/src/components/diagnostics
+      - frontend/kyber/src/components/economics
+      - frontend/kyber/src/components/entitlements
+      - frontend/kyber/src/components/notifications
+      - frontend/kyber/src/features/agent
+      - frontend/kyber/src/features/attribution
+      - frontend/kyber/src/features/automation
+      - frontend/kyber/src/features/behavior
+      - frontend/kyber/src/features/behavioral
+      - frontend/kyber/src/features/brief
+      - frontend/kyber/src/features/campaigns
+      - frontend/kyber/src/features/commerce
+      - frontend/kyber/src/features/consent
+      - frontend/kyber/src/features/consent-governance
+      - frontend/kyber/src/features/crossdomain
+      - frontend/kyber/src/features/data-pipeline
+      - frontend/kyber/src/features/delegation
+      - frontend/kyber/src/features/entitlements
+      - frontend/kyber/src/features/facilitators
+      - frontend/kyber/src/features/flows
+      - frontend/kyber/src/features/governance
+      - frontend/kyber/src/features/identity
+      - frontend/kyber/src/features/intelligence
+      - frontend/kyber/src/features/investigation
+      - frontend/kyber/src/features/lab
+      - frontend/kyber/src/features/lake
+      - frontend/kyber/src/features/onchain
+      - frontend/kyber/src/features/operator
+      - frontend/kyber/src/features/oracle
+      - frontend/kyber/src/features/policies
+      - frontend/kyber/src/features/population
+      - frontend/kyber/src/features/profile
+      - frontend/kyber/src/features/providers
+      - frontend/kyber/src/features/resolution
+      - frontend/kyber/src/features/resources
+      - frontend/kyber/src/features/rewards
+      - frontend/kyber/src/features/rwa
+      - frontend/kyber/src/features/scoring
+      - frontend/kyber/src/features/settlement
+      - frontend/kyber/src/features/traffic
+      - frontend/kyber/src/features/web3
+      - frontend/kyber/src/features/x402
+      - frontend/kyber/src/lib/query
+      - frontend/kyber/src/lib/replay
+    retire: >-
+      139 Kyber source files (5,433 lines) that no entry point reaches: 85
+      feature hooks, 38 components, 16 lib files across the approvals,
+      entitlements, economics, settlement, policies, facilitators, resources,
+      x402, web3, rwa and similar sets, plus unused barrels. The backend
+      endpoints they called are unchanged.
+    consumers: []
+    compatibility: none; nothing imported these files, so no route, URL, API or build output changes
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: unreachable code has no behavior to preserve; Kyber
+      typecheck is unchanged, 607 unit + 433 component + 6 integration tests
+      pass, and the bundle builds (2026-10-09)
+    usage_evidence: >-
+      import-graph reachability from src/app/main.tsx and the package.json
+      "health" script found no importer for any removed file; only five tests
+      imported unreachable files, and those files were kept (see
+      product-kyber-unmounted-code-pending)
+    rollback: restore from git history
+    removal_pr: "#745"
+    deadline: null
+
+  - id: product-kyber-unmounted-code-pending
+    domain: product
+    classification: experimental
+    state: converge
+    authority: >-
+      a Kyber route that mounts the surface, or deletion; the allowlist in
+      config/frontend_reachability.yaml can only shrink
+    current:
+      - config/frontend_reachability.yaml
+      - frontend/kyber/src/components/entities/agent-profile.tsx
+      - frontend/kyber/src/pages/fraud/fraud-decisions-page.tsx
+      - frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx
+      - frontend/kyber/src/pages/customer-success/index.ts
+      - frontend/kyber/src/components/graph/path-inspector.tsx
+      - frontend/kyber/src/features/graph/use-graph-health.ts
+      - frontend/kyber/src/lib/schemas/index.ts
+      - frontend/kyber/src/components/commerce/lifecycle-trace-view.tsx
+    duplicates: []
+    retire: >-
+      eight Kyber files no entry point reaches, kept because deleting them is a
+      product call: three unrouted pages (fraud decisions, campaign registry
+      health, which docs/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness
+      scorecard name, and customer success), an unrendered agent profile, and
+      four modules kept alive only by their own tests. Each is mounted in a
+      route or deleted with its test.
+    consumers: []
+    compatibility: none; none is reachable from the app today
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      reachability report (scripts/validate_frontend_reachability.py --report)
+      lists no other unreachable file in Kyber (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2026-12-31
+
   # ── Delivery + governance ──────────────────────────────────────────────────
   - id: delivery-pr-workflows-into-one-plan
     domain: delivery

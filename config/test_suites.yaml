@@ -1181,6 +1181,7 @@ suites:
       "tests/unit/test_derivatives_intelligence.py",
       "tests/unit/test_derivatives_product.py",
       "tests/unit/test_dimension_status.py",
+      "tests/unit/test_frontend_reachability.py",
       "tests/unit/test_dsr_coverage.py",
       "tests/unit/test_dune_feeder.py",
       "tests/unit/test_dune_promotion.py",

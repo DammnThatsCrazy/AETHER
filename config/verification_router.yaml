@@ -1,8 +1,8 @@
 schema_version: 1
 default_lane: pr
 lanes:
-  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger, profile_config, capability_overlays, service_classification]
-  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger, profile_config, capability_overlays, service_classification]
+  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger, profile_config, capability_overlays, service_classification, frontend_reachability]
+  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger, profile_config, capability_overlays, service_classification, frontend_reachability]
   integration: [toolchain, repository_metadata, contracts, integration]
   regression: [toolchain, repository_metadata, contracts, integration, regression]
   release: [toolchain, repository_metadata, contracts, integration, regression, release]
@@ -89,6 +89,13 @@ checks:
     owner: platform
     risk: high
     command: [python, scripts/validate_service_classification.py]
+    runtime_budget_seconds: 10
+  # Any frontend change can orphan a file, and any ledger change can strand an
+  # allowlist row, so the reachability check also runs in every PR-lane plan.
+  frontend_reachability:
+    owner: frontend
+    risk: high
+    command: [python, scripts/validate_frontend_reachability.py]
     runtime_budget_seconds: 10
   docs:
     owner: docs

@@ -623,6 +623,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_frontend_reachability.py"],
+        name="Frontend reachability",
+        results=results,
+        stop_on_failure=stop,
+        remediation="mount the unreachable frontend file in a route, delete it, or list it in config/frontend_reachability.yaml with a debt-ledger row",
+    )
+
+    run(
         [sys.executable, "scripts/validate_debt_retirement_ledger.py"],
         name="Technical-debt retirement ledger",
         results=results,

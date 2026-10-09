@@ -885,6 +885,23 @@
         "python -m pytest tests/unit/test_service_classification.py -q"
       ],
       "remediation": "Update the registry's unit test or the technical-debt retirement page with the change, then run python scripts/validate_service_classification.py."
+    },
+    {
+      "id": "frontend_reachability",
+      "name": "frontend reachability config or its validator changed",
+      "source_globs": [
+        "config/frontend_reachability.yaml",
+        "scripts/validate_frontend_reachability.py"
+      ],
+      "required_changed_globs": [
+        "tests/unit/test_frontend_reachability.py",
+        "docs/blueprints/architecture-reset/technical-debt-retirement.md"
+      ],
+      "required_commands": [
+        "python scripts/validate_frontend_reachability.py",
+        "python -m pytest tests/unit/test_frontend_reachability.py -q"
+      ],
+      "remediation": "Update the reachability test or the technical-debt retirement page with the change, then run python scripts/validate_frontend_reachability.py."
     }
   ]
 }
