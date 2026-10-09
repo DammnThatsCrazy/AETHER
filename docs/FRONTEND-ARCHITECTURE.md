@@ -44,7 +44,7 @@ reviewed_source_commits:
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
   "frontend/aether/src/": "sha256:ad7db035ad1e2e124e967ed3a49c2697b2a63ab2b3efbd769efe59a5f5981a5d"
-  "frontend/kyber/src/": "sha256:5be6084c1c17b8787018e1070b6cf8aca4e9277b1704d31720c004449d790557"
+  "frontend/kyber/src/": "sha256:31dbcbd6f7c39c07ac734b305abc582d6e930d2d0a45716d011ff5453db002d1"
   "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
 ---
 
@@ -783,9 +783,8 @@ These components exist and should be extended — not replaced.
 |---|---|---|
 | Graph canvas | `apps/kyber/src/components/graph/graph-canvas.tsx` | Cytoscape-backed; extend node/edge renderers for new entity types |
 | Entity 360 page | `apps/kyber/src/pages/entities/entity-360.tsx` | Profile360 aggregation point |
-| Entity 360 view | `apps/kyber/src/components/entities/entity-360-view.tsx` | Tab layout; extend tab set with Social, Financial, Geo |
+| Profile360 view | `apps/kyber/src/components/profile360/profile360-view.tsx` | The only Profile360 view (21 tabs, including Social and Financial); rendered by the Entity 360 page |
 | Entity list table | `apps/kyber/src/components/entities/entity-list-table.tsx` | Extend for new entity kinds; add kind badge column |
-| Score card | `apps/kyber/src/components/entities/entity-score-card.tsx` | Trust/risk/anomaly — reuse as-is |
 | Timeline components | `apps/kyber/src/components/timelines/` | Reuse for Journey tab events |
 | WebSocket hook | `apps/kyber/src/hooks/use-websocket.ts` | Reuse for live freshness updates |
 | API endpoints | `apps/kyber/src/lib/api/endpoints.ts` | Extend with all new Profile360 sub-resource routes |

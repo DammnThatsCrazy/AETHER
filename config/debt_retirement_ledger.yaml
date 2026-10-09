@@ -301,22 +301,28 @@ entries:
     current:
       - frontend/kyber/src/components/profile360
       - frontend/kyber/src/features/profile360
-    duplicates:
-      - frontend/kyber/src/components/entities/entity-360-view.tsx
-      - frontend/kyber/src/components/entities/profile360-drill-stack.tsx
-      - frontend/kyber/src/components/entities/profile360-summary-card.tsx
-      - frontend/kyber/src/components/entities/profile360-surfaces.tsx
-      - frontend/kyber/src/components/entities/profile360-utils.ts
+    duplicates: []
     retire: >-
-      the second Profile360 implementation in Kyber (two components named
-      Profile360DrillStack with different props and state models), then the
-      per-entity copies in campaign360, risk360, fraud360 and the Aether app
-    consumers:
-      - frontend/kyber/src/components/entities/index.ts
+      remaining per-entity 360 presentation (the campaign360 overview, the
+      risk360 and fraud360 views, the Aether app's profile360 panels) once each
+      composes the shared primitives. Done: the second Profile360 implementation
+      in Kyber (Entity360View and the files only it used, 1,439 lines, with a
+      second Profile360DrillStack) was deleted; it was exported but never
+      rendered. Not deleted: components/entities/agent-profile.tsx is wired to
+      the agent APIs but nothing renders it; the Agent 360 owner decides whether
+      to mount it or remove it.
+    consumers: []
     compatibility: existing routes and URLs; domain-specific data semantics stay per entity
     mechanism: adapter
-    parity_evidence: null
-    usage_evidence: null
+    parity_evidence: >-
+      not applicable to the deleted code: pages/entities/entity-360.tsx and
+      pages/profile360.tsx already mount Profile360View from components/profile360
+    usage_evidence: >-
+      before deletion, repository-wide search found no importer of Entity360View,
+      profile360-surfaces, profile360-utils, the entities Profile360DrillStack,
+      NeedsHelpPanel or EntityScoreCard outside the deleted files and
+      entities/index.ts; Kyber typecheck shows no new errors, 607 unit and 433
+      component tests pass, and vite build succeeds (2026-10-09)
     rollback: keep the old view mounted behind its route until the primitive view matches
     removal_pr: null
     deadline: 2027-02-28
@@ -416,24 +422,25 @@ entries:
     domain: verification
     classification: internal
     state: converge
-    authority: one suite in config/test_suites.yaml that runs tests/**/*.test.ts
+    authority: the functionality-proof-ts suite in config/test_suites.yaml
     current:
       - vitest.config.fps.ts
+      - config/test_suites.yaml
     duplicates: []
     retire: >-
-      the unreferenced config and any of the 93 TypeScript test files whose
-      invariant is already covered by a proof-* package test or a Python suite.
-      On 2026-10-09 the config ran 74 files (580 tests) green, 10 files failed to
-      resolve @aether/web, and 9 were skipped; nothing in CI, the Makefile, the
-      package scripts or the suite registry runs it.
+      any of the 93 TypeScript test files under tests/ whose invariant is already
+      covered by a proof-* package test or a Python suite, and the 9 files
+      skipped by describe.skip once an owner decides to fix or delete them. The
+      suite now runs the config in the PR lane (84 files, 666 tests green, 9
+      files skipped); before #741 nothing ran it.
     consumers: []
-    compatibility: none; these tests are not part of any gate today
+    compatibility: none; the suite is a PR-lane gate selected only by the paths it imports
     mechanism: none
     parity_evidence: null
     usage_evidence: >-
-      grep for vitest.config.fps across workflows, Makefile, package.json,
-      scripts and config returns no references (2026-10-09)
-    rollback: n/a
+      before #741, grep for vitest.config.fps across workflows, Makefile,
+      package.json, scripts and config returned no references (2026-10-09)
+    rollback: remove the suite entry; the tests return to their previous, unrun state
     removal_pr: null
     deadline: 2026-12-31
 
