@@ -60,6 +60,10 @@ router = APIRouter(tags=["Admin — Stripe Webhook"])
 
 # Plan tier used when a subscription is deleted / payment lapses beyond recovery.
 _FALLBACK_TIER = PlanTier.ALPHA
+# Subscription statuses that grant the tier of the subscribed price, and statuses where
+# access drops to the fallback tier.
+_ACTIVE_STATUSES = frozenset({"active", "trialing"})
+_DOWNGRADE_STATUSES = frozenset({"canceled", "unpaid", "incomplete_expired"})
 
 
 # ---------------------------------------------------------------------------
@@ -456,8 +460,17 @@ async def _apply_subscription_state(sub: dict[str, Any], *, event_name: str) -> 
         current_period_end=current_period_end,
     )
 
-    if plan_tier:
+    # Only a paying subscription grants the price's tier; a terminal one drops to the
+    # fallback tier; any other status (incomplete, past_due) leaves the tier alone.
+    if status in _DOWNGRADE_STATUSES:
+        await stripe_repository.update_plan_tier(tenant_id, _FALLBACK_TIER.value)
+        plan_tier = None
+    elif status in _ACTIVE_STATUSES and plan_tier:
         await stripe_repository.update_plan_tier(tenant_id, plan_tier.value)
+    else:
+        plan_tier = None
+
+    if plan_tier:
         metrics.increment(
             f"stripe_webhook_{event_name.replace('.', '_').replace('customer_', '')}",
             labels={"plan_tier": plan_tier.value, "status": status},

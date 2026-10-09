@@ -426,6 +426,33 @@ class TestWebhookHandling:
             assert acct["stripe_price_id"] == "price_gamma"
             assert acct["stripe_subscription_id"] == "sub_1"
 
+    def test_subscription_status_gates_the_tier(self, monkeypatch):
+        # Matches the contract in docs/STRIPE-BILLING.md: active/trialing grant the price's
+        # tier, canceled/unpaid/incomplete_expired drop to alpha, other statuses change nothing.
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+
+            stripe_repository._reset_in_memory_for_tests()
+            wh = importlib.import_module("services.admin.webhook_routes")
+
+            def apply(tenant, status, price="price_gamma"):
+                asyncio.run(wh._apply_subscription_state({
+                    "id": f"sub_{tenant}", "customer": f"cus_{tenant}", "status": status,
+                    "metadata": {"tenant_id": tenant},
+                    "items": {"data": [{"price": {"id": price}}]},
+                }, event_name="customer.subscription.updated"))
+                return asyncio.run(stripe_repository.get_billing_account(tenant))
+
+            assert apply("t-trial", "trialing")["plan_tier"] == "gamma"
+            assert apply("t-inc", "incomplete").get("plan_tier") != "gamma"
+            asyncio.run(stripe_repository.update_plan_tier("t-past", "gamma"))
+            assert apply("t-past", "past_due", "price_delta")["plan_tier"] == "gamma"
+            for status in ("unpaid", "canceled", "incomplete_expired"):
+                asyncio.run(stripe_repository.update_plan_tier(f"t-{status}", "gamma"))
+                assert apply(f"t-{status}", status)["plan_tier"] == "alpha"
+
     def test_subscription_deleted_downgrades_to_p1(self, monkeypatch):
         self._setup(monkeypatch)
         with backend_path():

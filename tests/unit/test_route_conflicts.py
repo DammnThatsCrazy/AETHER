@@ -101,6 +101,12 @@ RESOLVED_OWNERS = {
     ("/v1/profile/{}/economic/campaigns", "GET"): "services.economic.routes",
     ("/v1/profile/{}/pnl", "GET"): "services.pnl.routes",
     ("/v1/profile/{}/social-intelligence", "GET"): "services.profile.routes",
+    # The five /v1/admin/kyber/* copies deleted from services/intelligence/routes.py.
+    ("/v1/admin/kyber/tenant-value-health", "GET"): "services.admin.routes",
+    ("/v1/admin/kyber/outcome-capture-health", "GET"): "services.admin.routes",
+    ("/v1/admin/kyber/playbook-performance", "GET"): "services.admin.routes",
+    ("/v1/admin/kyber/model-confidence-drift", "GET"): "services.admin.routes",
+    ("/v1/admin/kyber/vertical-solution-signals", "GET"): "services.admin.routes",
 }
 
 

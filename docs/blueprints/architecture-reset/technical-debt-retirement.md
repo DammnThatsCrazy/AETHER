@@ -153,9 +153,11 @@ These are measurements, each tied to a ledger row.
   `delivery-unread-settings-flags-pending`.
 - **Backend code nothing mounts.** Import-graph reachability from `main.py`, the
   packages loaded by name and every script, workflow or Dockerfile that names a
-  module (descriptive registries, docs and tests do not count) leaves 127 of
-  1,986 production modules, about 31,000 lines, unreachable. Nine had no test,
-  document or registry mention and are deleted (940 lines). The other 118 are
+  module (descriptive registries, docs, tests and a script's path or checklist
+  entry do not count; a script must import the module or name it as a dotted
+  string) leaves 133 of 1,984 production modules, about 32,700 lines,
+  unreachable. Nine had no test, document or registry mention and are deleted
+  (940 lines). The 133 that remain are
   built and not connected: most are tested (Communication360, managed
   integrations, the derivatives runtime, the OAuth broker, provider tenant
   routes, identity calibration and split services, geo), some are documented as

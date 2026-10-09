@@ -81,10 +81,21 @@ allow_unreachable:
     modules: [adapters.projection_intelligence_adapter, conversations]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
-  - package: services.notification
-    modules: [routes]
+  - package: services.agent
+    modules: [lifecycle_mapper]
     ledger: product-backend-unmounted-code-pending
-    reason: no test or document uses it and no route, worker or import path reaches it; it sits in a package with live code, so removing it is an owner decision
+    reason: only the production-status checklist names it; no route, worker or import path reaches it
+  - package: services.campaign
+    modules: [metrics]
+    ledger: product-backend-unmounted-code-pending
+    reason: no route, worker or import path reaches it; owner decides whether to mount or delete
+  - package: services.lake
+    modules: [drift_monitor, model_registry]
+    ledger: product-backend-unmounted-code-pending
+    reason: only a compliance evidence list names drift_monitor; no route, worker or import path reaches either
+  - path: services.notification
+    ledger: product-backend-unmounted-code-pending
+    reason: no test or document uses it and no route, worker or import path reaches the package; deleting it is an owner decision
   - package: services.product_catalog
     modules: [mapping]
     ledger: product-backend-unmounted-code-pending
@@ -130,7 +141,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.x402
-    modules: [approvals_routes]
+    modules: [approvals_routes, lifecycle_mapper]
     ledger: product-backend-unmounted-code-pending
     reason: documented, but no route, worker or import path reaches it
   - package: shared

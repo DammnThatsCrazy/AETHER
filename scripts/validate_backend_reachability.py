@@ -155,8 +155,13 @@ def outside_references(root: Path, backend: str, known: dict[str, Path]) -> dict
             text = (root / rel).read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        if rel.startswith(backend + "/"):
-            pass  # non-Python files inside the backend (alembic.ini, Dockerfile, entrypoint.sh)
+        if rel.endswith(".py"):
+            # A Python script reaches a module only by importing it or naming it as a
+            # dotted module string. A path or name in a checklist (``Path(...).exists()``)
+            # is descriptive evidence, not a caller.
+            for target in _edges(root / rel, "scripts._outside", known):
+                refs.setdefault(target, set()).add(rel)
+            continue
         for match in _DOTTED.finditer(text):
             target = _resolve(match.group(0), known)
             if target:
@@ -260,6 +265,7 @@ def validate(config_path: Path = CONFIG, ledger: Path = LEDGER, root: Path = ROO
     if not isinstance(allow, list):
         return errors + ["allow_unreachable must be a list"]
     allowed: set[str] = set()
+    subtrees: set[str] = set()  # names from a ``path`` entry, which covers the whole package
     for index, item in enumerate(allow):
         label = f"allow_unreachable[{index}]"
         if not (isinstance(item, dict) and _text(item.get("ledger")) and _text(item.get("reason"))):
@@ -275,16 +281,23 @@ def validate(config_path: Path = CONFIG, ledger: Path = LEDGER, root: Path = ROO
             if name in allowed:
                 errors.append(f"{label}: {name} is listed twice")
             allowed.add(name)
+            if _text(item.get("path")):
+                subtrees.add(name)
 
     result = analyse({**raw, "dynamic_packages": [d for d in raw.get("dynamic_packages") or [] if isinstance(d, dict)]}, root)
     unreachable = set(result["unreachable"])
+    def covers(name: str, module: str) -> bool:
+        # A ``package`` + ``modules`` entry names exact modules: a listed package does not
+        # cover modules added under it later. Only a ``path`` entry covers a subtree.
+        return _under(module, name) if name in subtrees else module == name
+
     for name in sorted(allowed):
-        if not any(_under(m, name) for m in result["known"]):
+        if not any(covers(name, m) for m in result["known"]):
             errors.append(f"allow_unreachable {name}: no such module (delete the entry)")
-        elif not any(_under(m, name) for m in unreachable):
+        elif not any(covers(name, m) for m in unreachable):
             errors.append(f"allow_unreachable {name}: reachable now; remove it from the allowlist")
     for module in result["unreachable"]:
-        if any(_under(module, name) for name in allowed):
+        if any(covers(name, module) for name in allowed):
             continue
         rel = result["known"][module].relative_to(root).as_posix()
         errors.append(

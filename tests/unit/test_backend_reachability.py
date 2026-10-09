@@ -173,3 +173,18 @@ def test_every_committed_allowlist_row_exists_in_the_ledger():
     ledger = reach._ledger_ids(reach.LEDGER)
     assert raw["allow_unreachable"]  # the rule is exercised by real data
     assert {item["ledger"] for item in raw["allow_unreachable"]} <= ledger
+
+
+def test_a_listed_package_does_not_cover_modules_added_under_it_later(tmp_path):
+    files = {**TREE, "services/alpha/pkg/__init__.py": "", "services/alpha/pkg/old.py": "", "services/alpha/pkg/new.py": ""}
+    entry = {"package": "services.alpha", "modules": ["orphan", "pkg", "pkg.old"], "ledger": "row-a", "reason": "x"}
+    errors = _errors(tmp_path, files, allow=[entry])
+    assert any("services/alpha/pkg/new.py is not reachable" in e for e in errors)
+    assert not any("pkg/old.py is not reachable" in e for e in errors)
+
+
+def test_a_script_naming_a_module_path_in_a_checklist_is_not_a_caller(tmp_path):
+    outside = {"scripts/status.py": 'CHECKS = ["services/backend/services/alpha/orphan.py"]\n'}
+    assert _unreachable(tmp_path, TREE, outside=outside) == ["services.alpha.orphan"]
+    outside = {"scripts/run.py": 'import importlib\nimportlib.import_module("services.alpha.orphan")\n'}
+    assert _unreachable(tmp_path / "b", TREE, outside=outside) == []
