@@ -159,9 +159,10 @@ These are measurements, each tied to a ledger row.
   packages loaded by name and every script, workflow or Dockerfile that names a
   module (descriptive registries, docs, tests and a script's path or checklist
   entry do not count; a script must import the module or name it as a dotted
-  string) leaves 133 of 1,984 production modules, about 32,700 lines,
-  unreachable. Nine had no test, document or registry mention and are deleted
-  (940 lines). The 133 that remain are
+  string) leaves 130 of 1,981 production modules, about 32,400 lines,
+  unreachable. Eleven had no test, document or registry mention and are deleted
+  (1,200 lines: nine first, then the legacy `services/notification` router and
+  `shared/events/validators.py`). The 130 that remain are
   built and not connected: most are tested (Communication360, managed
   integrations, the derivatives runtime, the OAuth broker, provider tenant
   routes, identity calibration and split services, geo), some are documented as

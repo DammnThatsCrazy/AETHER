@@ -77,7 +77,6 @@ REPO_SERVICES: dict[str, dict[str, str]] = {
     "services/backend/services/agent":        {"lang": "python", "runtime": "python", "tool": "docker"},
     "services/backend/services/campaign":     {"lang": "python", "runtime": "python", "tool": "docker"},
     "services/backend/services/consent":      {"lang": "python", "runtime": "python", "tool": "docker"},
-    "services/backend/services/notification": {"lang": "python", "runtime": "python", "tool": "docker"},
     "services/backend/services/admin":        {"lang": "python", "runtime": "python", "tool": "docker"},
 }
 
@@ -372,7 +371,6 @@ class ChangeDetectionConfig:
         "services/backend/services/agent":        "agent",
         "services/backend/services/campaign":     "campaign",
         "services/backend/services/consent":      "consent",
-        "services/backend/services/notification": "notification",
         "services/backend/services/admin":        "admin",
     })
 

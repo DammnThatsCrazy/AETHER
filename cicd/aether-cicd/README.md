@@ -272,7 +272,6 @@ The pipeline manages the following Aether monorepo layout:
 | `services/backend/services/agent`            | Python | Python  |
 | `services/backend/services/campaign`        | Python | Python  |
 | `services/backend/services/consent`         | Python | Python  |
-| `services/backend/services/notification`    | Python | Python  |
 | `services/backend/services/admin`           | Python | Python  |
 
 ---

@@ -72,7 +72,7 @@ terminal off-ramps `suppressed` and `expired`. Transitions are forward-only
 legacy `services/backend/services/notification` router — whose 6 endpoints were all first-match-shadowed
 except `POST /webhooks/{id}/test` — was **retired**: that one endpoint was migrated into
 `notification_intelligence` (gaining the SSRF guard the legacy handler lacked; both
-already shared `WebhookRepository`), and the legacy router was unmounted. The route
+already shared `WebhookRepository`), the legacy router was unmounted, and its code has since been deleted. The route
 `(method, path)`-uniqueness ratchet (`tests/unit/test_route_conflicts.py`) enforces that
 the collision stays fixed — the 5 resolved pairs were removed from its allowlist.
 
