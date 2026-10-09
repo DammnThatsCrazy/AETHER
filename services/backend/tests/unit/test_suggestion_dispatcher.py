@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from services.suggestions.dispatcher import (
     _IDEMPOTENT_STATUSES,
-    _resolve_dispatch_mode,
+    resolve_dispatch_mode,
     dispatch,
 )
 from services.suggestions.models import (
@@ -66,7 +66,7 @@ def _make_service(deliver_result: dict = None) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
-# _resolve_dispatch_mode()
+# resolve_dispatch_mode()
 # ---------------------------------------------------------------------------
 
 def test_resolve_mode_recommendation_eligible_returns_legacy_execute():
@@ -74,7 +74,7 @@ def test_resolve_mode_recommendation_eligible_returns_legacy_execute():
         source=SuggestionSource.RECOMMENDATION_ENGINE.value,
         execution_eligible=True,
     )
-    mode = _resolve_dispatch_mode(suggestion)
+    mode = resolve_dispatch_mode(suggestion)
     assert mode == "legacy_recommendation_execute"
 
 
@@ -83,7 +83,7 @@ def test_resolve_mode_notification_source_delivery_eligible_returns_notify_only(
         source=SuggestionSource.NOTIFICATION_INTELLIGENCE.value,
         delivery_eligible=True,
     )
-    mode = _resolve_dispatch_mode(suggestion)
+    mode = resolve_dispatch_mode(suggestion)
     assert mode == "notify_only"
 
 
@@ -92,7 +92,7 @@ def test_resolve_mode_data_quality_source_delivery_eligible_returns_notify_only(
         source=SuggestionSource.DATA_QUALITY.value,
         delivery_eligible=True,
     )
-    mode = _resolve_dispatch_mode(suggestion)
+    mode = resolve_dispatch_mode(suggestion)
     assert mode == "notify_only"
 
 
@@ -101,7 +101,7 @@ def test_resolve_mode_governance_source_delivery_eligible_returns_notify_only():
         source=SuggestionSource.GOVERNANCE.value,
         delivery_eligible=True,
     )
-    mode = _resolve_dispatch_mode(suggestion)
+    mode = resolve_dispatch_mode(suggestion)
     assert mode == "notify_only"
 
 
@@ -111,7 +111,7 @@ def test_resolve_mode_operator_source_returns_no_op():
         execution_eligible=False,
         delivery_eligible=False,
     )
-    mode = _resolve_dispatch_mode(suggestion)
+    mode = resolve_dispatch_mode(suggestion)
     assert mode == "no_op"
 
 
@@ -121,7 +121,7 @@ def test_resolve_mode_recommendation_not_eligible_returns_no_op():
         execution_eligible=False,
         delivery_eligible=False,
     )
-    mode = _resolve_dispatch_mode(suggestion)
+    mode = resolve_dispatch_mode(suggestion)
     assert mode == "no_op"
 
 

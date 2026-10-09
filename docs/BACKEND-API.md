@@ -4261,3 +4261,16 @@ enforcement is on.
 | GET | `/v1/admin/kyber/managed-integrations/change-sets/{changeset_id}` | One ChangeSet detail | Status history, risk, approvals evidence |
 | GET | `/v1/admin/kyber/managed-integrations/approvals` | Approval records | §21 role-gated review queue |
 | GET | `/v1/admin/kyber/managed-integrations/action-required` | ActionRequired items | §12.14 exceptions awaiting an operator decision |
+
+## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
+
+| Method | Path | Permission | Summary |
+|---|---|---|---|
+| GET | `/v1/recommendations/{entity_id}` | `read` | Retarget recommendations for an entity, highest score first |
+| GET | `/v1/recommendations/{id}/status` | `read` | Review and execution status of one recommendation |
+| POST | `/v1/recommendations/{id}/approve` | `write` | Approve and push the audience to the recommended ad platform. The reviewer recorded is the authenticated caller; a `reviewed_by` in the body is ignored. A failed push returns `502` and puts the recommendation back in `pending_review` |
+| POST | `/v1/recommendations/{id}/reject` | `write` | Reject with a reason (final); reviewer is the authenticated caller |
+| POST | `/v1/stablecoins/reconciliation` | `stablecoins:investigate` | Compare independently sourced amounts (`tenant_reported`, `onchain`, `provider`…) for one of the tenant's observations. Appends a record to the reconciliation trail (`matched`, `partial`, `mismatched`, `missing_onchain`, `unresolved`) and never changes the observation. `404` for an observation the tenant does not own |
+| GET | `/v1/kyber/aggregate/fleet` | Kyber operator | Cross-tenant operator snapshot: worker fleet health, credential slot states (no secrets), provider cursor and reconciliation roll-up, activation and readiness roll-ups, credential-audit count. Each roll-up reports `truncated` when it hit its row limit; a source with no signal reports `null`, never a fabricated zero |
+
+Approving a delivery-eligible suggestion from a notification source hands it to the delivery pipeline; recording a suggestion outcome runs the outcome loop to `closed` (see the suggestion intelligence source of truth).

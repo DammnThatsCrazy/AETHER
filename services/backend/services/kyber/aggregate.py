@@ -11,8 +11,8 @@ real durable source; a source that has produced no signal reports ``None`` /
 explicit ``"unknown"``, never a fabricated zero. Counts that come from a
 successful repository read are genuine zeros.
 
-Not mounted here — the application assembles it (see wiringNeeds). The router
-is gated by the canonical ``require_kyber_operator`` gate, which denies every
+Mounted by ``main.py`` beside the other Kyber operator routers. The router is
+gated by the canonical ``require_kyber_operator`` gate, which denies every
 Aether tenant including ``Role.ADMIN``.
 """
 
@@ -42,6 +42,10 @@ router = APIRouter(
 )
 
 _LIVE_WORKER_STATES = frozenset({"running", "restarting"})
+#: Rows read per roll-up. A roll-up that reaches its limit says so (``truncated``)
+#: rather than presenting a partial count as the whole fleet.
+_PROVIDER_LIMIT = 1000
+_ROLLUP_LIMIT = 2000
 
 
 def _fleet_worker_summary() -> dict[str, Any]:
@@ -80,25 +84,27 @@ def _fleet_worker_summary() -> dict[str, Any]:
 async def _provider_rollup() -> dict[str, Any]:
     """Interop provider checkpoint roll-up across tenants."""
     try:
-        checkpoints = await InteropProviderCheckpointRepo().find_many(limit=1000)
+        checkpoints = await InteropProviderCheckpointRepo().find_many(limit=_PROVIDER_LIMIT)
     except Exception:  # noqa: BLE001
-        return {"checkpoint_count": None, "reconciliation_conflicts_total": None}
+        return {"checkpoint_count": None, "reconciliation_conflicts_total": None, "truncated": None}
     conflicts = 0
+    truncated = len(checkpoints) >= _PROVIDER_LIMIT
     for cp in checkpoints:
         runtime = (cp.get("evidence") or {}).get("runtime") or {}
         conflicts += int(runtime.get("reconciliation_conflicts") or 0)
     return {
         "checkpoint_count": len(checkpoints),
         "reconciliation_conflicts_total": conflicts,
+        "truncated": truncated,
     }
 
 
 async def _activation_rollup() -> dict[str, Any]:
     """Activation lifecycle roll-up across tenants (read-only, no writes)."""
     try:
-        records = await ActivationRepository().find_many(limit=2000)
+        records = await ActivationRepository().find_many(limit=_ROLLUP_LIMIT)
     except Exception:  # noqa: BLE001
-        return {"tenant_count": None, "by_state": None}
+        return {"tenant_count": None, "by_state": None, "truncated": None}
     by_state: dict[str, int] = {}
     tenants: set[str] = set()
     for record in records:
@@ -107,16 +113,20 @@ async def _activation_rollup() -> dict[str, Any]:
         tenant_id = record.get("tenant_id")
         if tenant_id:
             tenants.add(tenant_id)
-    return {"tenant_count": len(tenants), "by_state": by_state}
+    return {
+        "tenant_count": len(tenants),
+        "by_state": by_state,
+        "truncated": len(records) >= _ROLLUP_LIMIT,
+    }
 
 
 async def _readiness_rollup() -> dict[str, Any]:
     """Launch-readiness roll-up across recorded tenants."""
     try:
-        records = await TenantReadinessRepository().list_all(limit=2000)
+        records = await TenantReadinessRepository().list_all(limit=_ROLLUP_LIMIT)
     except Exception:  # noqa: BLE001
         return {"tenant_count": None, "ready_count": None,
-                "not_ready_count": None, "demoted_count": None}
+                "not_ready_count": None, "demoted_count": None, "truncated": None}
     ready = not_ready = demoted = 0
     for record in records:
         if record.get("demotion_reason"):
@@ -130,6 +140,7 @@ async def _readiness_rollup() -> dict[str, Any]:
         "ready_count": ready,
         "not_ready_count": not_ready,
         "demoted_count": demoted,
+        "truncated": len(records) >= _ROLLUP_LIMIT,
     }
 
 

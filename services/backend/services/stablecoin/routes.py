@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from config.settings import settings
 from repositories.stablecoin_repos import (
@@ -30,10 +30,12 @@ from services.stablecoin.foundation import (
 from services.stablecoin.models import (
     StablecoinFlowComputeRequest,
     StablecoinObservationIngest,
+    StablecoinReconcileRequest,
     StablecoinSupportRequest,
     StablecoinValuationRequest,
 )
 from services.stablecoin.flows import FlowService
+from services.stablecoin.reconciliation import ReconciliationService
 from services.stablecoin.registry import StablecoinRegistry
 from services.stablecoin.service import StablecoinObservationService
 from services.stablecoin.support import SupportService
@@ -172,6 +174,26 @@ async def list_reconciliation_records(
         filters["status"] = status
     rows = await ReconciliationRepo().find_many(filters, limit=limit, offset=offset)
     return {"items": _stringify(rows), "count": len(rows)}
+
+
+@router.post("/reconciliation", status_code=201)
+async def run_reconciliation(payload: StablecoinReconcileRequest, request: Request):
+    """Compare independently sourced amounts for one of the tenant's observations.
+
+    Appends a reconciliation record (the correction trail) and never changes the
+    observation itself.
+    """
+    tenant_id = _gate(request, Permissions.STABLECOINS_INVESTIGATE)
+    validate_payload_tenant(payload, tenant_id)
+    _check_no_execution(payload)
+    observation = await StablecoinObservationRepo().find_one(
+        {"tenant_id": tenant_id, "observation_id": payload.observation_id}
+    )
+    if observation is None:
+        raise HTTPException(status_code=404, detail="observation not found")
+    return await ReconciliationService().reconcile_observation(
+        tenant_id, payload.observation_id, payload.sources,
+    )
 
 
 # ── Observation intake ──────────────────────────────────────────────────────

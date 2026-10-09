@@ -17,6 +17,7 @@ from shared.auth.auth import TenantContext
 from shared.common.common import APIResponse, NotFoundError
 from services.client_sync.emitter import enqueue_sync_change
 from services.mobile.config import DISTRIBUTION_PROFILES
+from shared.mobile.models import INSTALLATION_PLATFORMS, PUSH_PROVIDERS
 
 from services.mobile import service as mobile_service
 
@@ -52,6 +53,20 @@ class RegistrationRequest(BaseModel):
     app_version: Optional[str] = None
     distribution_profile: Optional[str] = None
 
+    @field_validator("platform")
+    @classmethod
+    def _platform(cls, v: str) -> str:
+        if v not in INSTALLATION_PLATFORMS:
+            raise ValueError(f"platform must be one of {', '.join(INSTALLATION_PLATFORMS)}")
+        return v
+
+    @field_validator("push_provider")
+    @classmethod
+    def _push_provider(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in PUSH_PROVIDERS:
+            raise ValueError(f"push_provider must be one of {', '.join(PUSH_PROVIDERS)}")
+        return v
+
     @field_validator("distribution_profile")
     @classmethod
     def _distribution_profile(cls, v: Optional[str]) -> Optional[str]:
@@ -69,6 +84,20 @@ class SubscriptionRequest(BaseModel):
     provider: str
     push_token: str
     environment: str
+
+    @field_validator("platform")
+    @classmethod
+    def _platform(cls, v: str) -> str:
+        if v not in INSTALLATION_PLATFORMS:
+            raise ValueError(f"platform must be one of {', '.join(INSTALLATION_PLATFORMS)}")
+        return v
+
+    @field_validator("provider")
+    @classmethod
+    def _provider(cls, v: str) -> str:
+        if v not in PUSH_PROVIDERS:
+            raise ValueError(f"provider must be one of {', '.join(PUSH_PROVIDERS)}")
+        return v
 
 
 class DeepLinkResolveRequest(BaseModel):

@@ -148,3 +148,29 @@ def test_foreign_principal_add_subscription_404():
             SubscriptionRequest(platform="ios", provider="apns", push_token="foreign-token", environment="production"),
             installation_id="dev-1",
         ))
+
+
+# ── Request vocabularies come from shared.mobile.models ────────────────────
+
+
+def test_registration_rejects_an_unknown_platform_or_push_provider():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _reg(platform="windows-phone")
+    with pytest.raises(ValidationError):
+        _reg(push_provider="carrier-pigeon")
+    for platform in ("ios", "android", "web"):
+        assert _reg(platform=platform).platform == platform
+    assert _reg(push_provider="web_push").push_provider == "web_push"
+
+
+def test_subscription_rejects_an_unknown_platform_or_provider():
+    from pydantic import ValidationError
+
+    ok = dict(platform="android", provider="fcm", push_token="t", environment="production")
+    assert SubscriptionRequest(**ok).provider == "fcm"
+    with pytest.raises(ValidationError):
+        SubscriptionRequest(**{**ok, "provider": "smoke-signal"})
+    with pytest.raises(ValidationError):
+        SubscriptionRequest(**{**ok, "platform": "palm"})
