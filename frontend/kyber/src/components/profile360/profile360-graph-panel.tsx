@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@aether/ui';
 import { GraphCanvas } from '@kyber/components/graph';
 import type { Entity, GraphEdge, GraphNode, GraphOverlay, Profile360Graph, Profile360Reference, Profile360Summary } from '@kyber/types';
-import { Profile360SummaryCard } from '@kyber/components/entities/profile360-summary-card';
+import { Profile360SummaryCard } from './profile360-summary-card';
 
 interface Profile360GraphPanelProps {
   readonly graph: Profile360Graph;

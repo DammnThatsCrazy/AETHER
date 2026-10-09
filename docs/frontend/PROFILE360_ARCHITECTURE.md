@@ -13,7 +13,7 @@ canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "frontend/kyber/src/components/profile360/": "sha256:1ff83559492baf1c8f94243087044db21ae6faa993a8c2410b8e8f199a57f740"
+  "frontend/kyber/src/components/profile360/": "sha256:4ff8edc07d30d190e7aca43a785f9126cc0c01bb28f467f25d2344d7247f7fcf"
   "frontend/kyber/src/features/profile360/": "sha256:1c583c2cef37ec6c3d8d2fe1754c35d38bc94fb03eb2a2dffc39d096ddf8e663"
 ---
 # Aether Profile360 Frontend Architecture
@@ -23,8 +23,8 @@ This document records the incremental Profile360 migration for the existing Kybe
 ## 1. Current frontend architecture analysis
 
 - **Routing:** `apps/kyber/src/pages/entities/entities-page.tsx` owns `/entities/:type?/:id?`, switches between the entity table and selected entity surface, and delegates selected profile detail to `Entity360Page`.
-- **Profile page composition:** `apps/kyber/src/pages/entities/entity-360.tsx` fetches entity detail, timeline, graph neighborhood, interventions, recommendations, notes, and needs-help data before rendering `Entity360View`.
-- **Profile UI:** `apps/kyber/src/components/entities/entity-360-view.tsx` already contains the compact 360 profile, overview cards, timeline, graph neighborhood, trust/risk, notes, and actions.
+- **Profile page composition:** `apps/kyber/src/pages/entities/entity-360.tsx` (`Entity360Page`) is a thin wrapper that renders the canonical `Profile360View` for the selected entity; `pages/profile360.tsx` mounts the same view for `/profile360/:type/:id`. `Profile360View` loads every dimension through `useProfile360`.
+- **Profile UI:** `frontend/kyber/src/components/profile360/profile360-view.tsx` is the only profile view (section 11). An earlier `Entity360View` implementation in `components/entities/` was exported but never rendered once `Profile360View` took over, and it was deleted along with the components only it used.
 - **Entity cards/list:** `apps/kyber/src/components/entities/entity-list-table.tsx` provides compact operational scanning with trust/risk/anomaly/status indicators.
 - **Graph system:** `apps/kyber/src/components/graph/graph-canvas.tsx`, graph controls, toolbar, and inspector provide Cytoscape-backed graph rendering and selection.
 - **Temporal/event components:** `apps/kyber/src/components/timelines/*` and live event hooks provide existing timeline/event-feed patterns that Profile360 can reuse.
@@ -37,12 +37,10 @@ This document records the incremental Profile360 migration for the existing Kybe
 Reusable building blocks retained:
 
 - `Card`, `Badge`, `StatusIndicator`, `Tabs`, `ScrollArea`, `Button`, `Input`, `TerminalSeparator` for visual continuity.
-- `EntityScoreCard` for trust/risk/anomaly continuity.
-- `NeedsHelpPanel` for intervention/action explanations.
 - `GraphCanvas` for node/edge visualization.
 - Runtime fixture files were removed as part of the fail-closed data-truth work; edge-case coverage now lives inline in the Profile360 component tests (`frontend/kyber/src/test/component/profile360.test.ts`).
 
-No stable component was replaced. The new implementation layers Profile360 components above and alongside the existing `Entity360View` detail tabs.
+`Profile360View` replaced the earlier `Entity360View`; the unrendered implementation and the components only it used (`EntityScoreCard`, `NeedsHelpPanel`, a second `Profile360DrillStack` and its helpers) were deleted, so Kyber has one Profile360 implementation. `components/entities/` now holds only `EntityListTable`.
 
 ### Canonical entity identity treatment
 
@@ -64,39 +62,32 @@ Profile360 is implemented as progressive disclosure:
 2. Add a summary card that adapts by entity type.
 3. Add a drill stack that records Human → Agent → Wallet → Transaction → Protocol → Session → Journey → Event → Trace navigation without changing routes.
 4. Add six additive views: Identity, System, Financial, Graph, Analytics, Debug.
-5. Keep older Overview/Timeline/Graph/Trust/Notes/Actions tabs as familiar deep detail surfaces during migration.
+5. The older Overview/Timeline/Graph/Trust/Notes/Actions tab set of `Entity360View` is gone; `Profile360View` carries the tabs listed in section 11.
 
 ## 4. Updated component hierarchy
 
 ```text
-EntitiesPage
-└─ Entity360Page
-   ├─ useEntityData
-   ├─ api.profile.timeline / graph / behavioral
-   └─ Entity360View
-      ├─ Profile360SummaryCard
-      ├─ Profile360DrillStack
-      ├─ Profile360Views
-      │  ├─ RelationshipGraphSurface
-      │  ├─ UnifiedTemporalActivityTimeline
-      │  ├─ Profile360GraphView
-      │  │  └─ GraphCanvas
-      │  └─ Profile360AnalyticsPanel
-      ├─ RealtimeEventIntelligenceFeed
-      └─ Existing legacy-compatible tabs
+EntitiesPage                      (pages/entities/entities-page.tsx)
+└─ Entity360Page                  (pages/entities/entity-360.tsx, thin wrapper)
+   └─ Profile360View              (components/profile360/profile360-view.tsx)
+      ├─ useProfile360              (features/profile360, normalized store + websocket)
+      ├─ Profile360SectionGrid      (section tabs)
+      ├─ Profile360 contextual panels
+      ├─ Profile360TimelinePanel
+      ├─ Profile360GraphPanel
+      │  └─ Profile360SummaryCard
+      └─ Profile360DrillStack
 ```
 
 ## 5. Drill-stack architecture
 
 - `Profile360DrillItem` is the normalized panel descriptor.
-- Timeline events convert with `eventToDrillItem`.
-- Relationships convert with `relationshipToDrillItem`.
-- Stack state currently lives locally in `Entity360View`; it is shaped to move into a global normalized Profile360 store later.
+- References open through `openReference` in `Profile360View`, which pushes onto the drill stack held in the normalized Profile360 store (`profile360Actions.pushDrill`, `popDrill`, `clearDrill`).
 - Drill items preserve `kind`, `entityId`, `timestamp`, parent context, and metadata for async detail loading.
 
 ## 6. Timeline evolution strategy
 
-The existing profile timeline evolves into `UnifiedTemporalActivityTimeline`:
+The profile timeline is `Profile360TimelinePanel` (the "Causality timeline"):
 
 - Filters by event type using compact inline controls.
 - Groups by `causalityId` or event type for causal-chain views.
@@ -107,7 +98,7 @@ The existing profile timeline evolves into `UnifiedTemporalActivityTimeline`:
 ## 7. Graph visualization system
 
 - `GraphCanvas` now recognizes humans, organizations, journeys, sessions, platforms, devices, browsers, rewards, financial activity, delegations, and relationships.
-- `Profile360GraphView` embeds the graph inside the profile drawer/page while still linking to Noesis for full-screen exploration.
+- `Profile360GraphPanel` embeds the graph inside the profile view while still linking to Noesis for full-screen exploration.
 - Relationship lists are metadata-rich, searchable, risk/trust-aware, and drillable.
 - Graph interactions can synchronize with drill stack immediately and with global timeline/event highlights in the normalized-state phase.
 
@@ -125,7 +116,7 @@ The existing profile timeline evolves into `UnifiedTemporalActivityTimeline`:
 - `activeSessionIds`
 - `streamStatus`
 
-The next migration should instantiate this shape with `createStore` in `apps/kyber/src/state/store.ts` or a new `profile360-store.ts`, then hydrate it from existing hooks and websocket updates.
+This shape is instantiated with `createStore` in `frontend/kyber/src/features/profile360/profile360-store.ts` and hydrated by `useProfile360` from the profile API and entity websocket updates.
 
 ## 9. Query architecture
 
@@ -170,14 +161,9 @@ The following files implement the complete Profile360 frontend product:
 - `frontend/kyber/src/components/profile360/profile360-timeline-panel.tsx`: Timeline with filter controls and drill-on-click.
 - `frontend/kyber/src/components/profile360/profile360-contextual-panels.tsx`: All 13 contextual tab panels (sessions, journeys, wallets, behavioral, attribution, cluster, agents, consent, quality, recommendations, outcomes, intelligence, provenance). The attribution panel (`Profile360AttributionPanel`) accepts a `profileId` prop and includes an **Acquisition** section surfacing `first_campaign`, `campaign_history`, `attributed_conversions`, and `attributed_revenue` from section data; each campaign history row has a **Campaign 360 →** link navigating to `/measurement/campaigns/:id?profile_id={profileId}` so operators can deep-link from a profile straight into the Campaign 360 surface pre-filtered to that entity.
 
-### Entity360View graph tab (embedded)
+### Summary card
 
-- `frontend/kyber/src/components/entities/entity-360-view.tsx`: The graph tab now renders `GraphCanvas` with full Cytoscape graph (not a placeholder). Overlay controls (none/trust/risk/anomaly) and node selection drives the drill stack. `profile_links` metadata on graph nodes enables direct profile navigation.
-
-### Summary card and helpers
-
-- `frontend/kyber/src/components/entities/profile360-summary-card.tsx`: Compact preview card showing avatar initials, trust/wallet/agent tiles, primary metrics with tone colours, tags, and NEEDS HELP badge.
-- `frontend/kyber/src/components/entities/needs-help-panel.tsx`: Needs-help intervention panel.
+- `frontend/kyber/src/components/profile360/profile360-summary-card.tsx`: Compact preview card showing avatar initials, trust/wallet/agent tiles, primary metrics with tone colours, tags, and NEEDS HELP badge. `Profile360GraphPanel` renders it in the graph inspector; `profile_links` metadata on graph nodes enables direct profile navigation.
 
 ### Fixtures and tests
 

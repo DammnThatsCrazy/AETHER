@@ -101,13 +101,18 @@ These are measurements, each tied to a ledger row.
   Makefile target, package script or suite registers it. Run by hand on
   2026-10-09 it executed 74 files (580 tests) green, 10 files failed to resolve
   `@aether/web`, and 9 were skipped. This is a verification gap before it is
-  dead weight: the next step is to map each file's invariant to a proof package
-  or Python suite, wire the keepers into one registered suite, and retire the
-  rest. Row `verification-unrun-typescript-test-estate`.
+  dead weight. Status: #741 registered them as the PR-lane suite
+  `functionality-proof-ts` (84 files / 666 tests green, 9 skipped by
+  `describe.skip`); the next step is to map each file's invariant to a proof
+  package or Python suite and retire the duplicates. Row
+  `verification-unrun-typescript-test-estate`.
 - **Two Profile360 implementations in Kyber.** `components/entities/` and
   `components/profile360/` each hold a view, a summary, a drill stack and utils,
   and both export a component named `Profile360DrillStack` with different props
-  and state models. Row `product-shared-360-primitives`.
+  and state models. Status: the `entities` copy (`Entity360View` and the files
+  only it used) was exported but never rendered and is deleted, leaving
+  `components/profile360/` as the only implementation; the per-entity 360 views
+  remain. Row `product-shared-360-primitives`.
 - **A legacy resolution module.** `services/backend/services/resolution` (9
   files) is still mounted in `main.py`; its cluster, batch and merge-approval
   routes already return 503. Row `identity-legacy-resolution-module`.
@@ -250,14 +255,14 @@ These are views over vocabularies that already exist. Do not add a parallel enum
 Each step is its own PR on `Development` and states what it makes deletable.
 
 1. This ledger, its validator, and the first deletion (`packages/skeleton-crew`).
-2. Wire the unrun TypeScript tests into one registered suite; fix the 10
-   unresolved imports; map invariants and retire duplicates.
+2. Wire the unrun TypeScript tests into one registered suite (done in #741, with
+   the 10 unresolved imports fixed); map invariants and retire duplicates.
 3. Provider cutover: finish R1 for providers, then SDK V1 and V2 dual-read
    parity per tenant, then the V1 write path.
 4. Retire `services/backend/services/resolution` once the three remaining
    consumers are migrated.
-5. Kyber Profile360: one implementation, then shared primitives for the other
-   360 views.
+5. Kyber Profile360: one implementation (done: the orphaned second one is
+   deleted), then shared primitives for the other 360 views.
 6. Delivery: make each `ready_for_review` workflow a worker of the canonical
    plan or move it to staging, nightly or release; derive profile names from
    `config/deployment_profiles.yaml`.
