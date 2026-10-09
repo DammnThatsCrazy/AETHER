@@ -91,7 +91,7 @@ export function connectionStateLabel(
     case "disabled":
       return "Disabled";
     case "initial_sync_pending":
-      return "Ready for first sync";
+      return "Credential saved; first sync pending";
     case "initial_sync_running":
       return "Initial sync running";
     case "connected":
@@ -727,6 +727,14 @@ export function ActivatePage() {
               <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
                 Recommended connect plan
               </h2>
+              <p
+                data-testid="activation-evidence-explainer"
+                className="text-xs text-text-secondary"
+              >
+                Credentials and provider connection state show setup and sync
+                progress. They do not establish that usable events reached Aether
+                or that the graph is ready; those are checked below.
+              </p>
 
               {plan.isLoading && !plan.data && <LoadingState lines={4} />}
               {plan.error && (
@@ -767,8 +775,9 @@ export function ActivatePage() {
                 Finish activation — prove first value
               </h2>
               <p className="text-xs text-text-secondary">
-                Once your integrations are connected, send a first event through
-                the SDK to prove Aether works end-to-end.
+                Prove data flow through one path: run a recommended connector's
+                first sync or send an SDK test event. Activation and graph
+                readiness below use observed evidence.
               </p>
               <PlanStep status={status.data} />
               <SdkStep status={status.data} />

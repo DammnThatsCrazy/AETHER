@@ -29,6 +29,7 @@ from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.lake")
+SOURCE_TAG_ROLLBACK_CAP = 10_000
 
 
 async def _tenant_scoped_find(
@@ -300,13 +301,34 @@ class BronzeRepository(BaseRepository):
                 count += 1
         return count
 
-    async def query_by_source_tag(self, source_tag: str, limit: int = 100) -> list[dict]:
-        """Query raw records by source_tag for audit/rollback."""
-        return await self.find_many(filters={"source_tag": source_tag}, limit=limit)
+    async def query_by_source_tag(
+        self, source_tag: str, *, tenant_id: str, limit: int = 100
+    ) -> list[dict]:
+        """Query source-tag records owned by one tenant, never global rows."""
+        if not tenant_id:
+            raise ValueError("tenant_id is required for source-tag queries")
+        return await self.find_many(
+            filters={"source_tag": source_tag, "tenant_id": tenant_id}, limit=limit
+        )
 
-    async def rollback_by_source_tag(self, source_tag: str) -> int:
-        """Delete all records matching a source_tag. Returns count deleted."""
-        records = await self.query_by_source_tag(source_tag, limit=10000)
+    async def preflight_source_tag_rollback(
+        self, source_tag: str, *, tenant_id: str
+    ) -> list[dict]:
+        """Fetch and validate the complete deletion set before external mutations."""
+        if not tenant_id:
+            raise ValueError("tenant_id is required for source-tag rollback")
+        records = await self.query_by_source_tag(
+            source_tag, tenant_id=tenant_id, limit=SOURCE_TAG_ROLLBACK_CAP + 1
+        )
+        if len(records) > SOURCE_TAG_ROLLBACK_CAP:
+            raise ValueError(
+                f"source-tag rollback exceeds safety cap of {SOURCE_TAG_ROLLBACK_CAP} rows"
+            )
+        return records
+
+    async def rollback_by_source_tag(self, source_tag: str, *, tenant_id: str) -> int:
+        """Delete this tenant's records for a source tag; fail closed above cap."""
+        records = await self.preflight_source_tag_rollback(source_tag, tenant_id=tenant_id)
         count = 0
         for rec in records:
             if await self.delete(rec["id"]):
@@ -415,9 +437,9 @@ class SilverRepository(BaseRepository):
             tenant_id, limit=100,
         )
 
-    async def rollback_by_source_tag(self, source_tag: str) -> int:
-        """Delete all Silver records matching a source_tag."""
-        records = await self.find_many(filters={"source_tag": source_tag}, limit=10000)
+    async def rollback_by_source_tag(self, source_tag: str, *, tenant_id: str) -> int:
+        """Delete this tenant's Silver records for a source tag."""
+        records = await self.preflight_source_tag_rollback(source_tag, tenant_id=tenant_id)
         count = 0
         for rec in records:
             if await self.delete(rec["id"]):
@@ -425,6 +447,22 @@ class SilverRepository(BaseRepository):
         if count > 0:
             logger.warning(f"Silver rollback: source_tag={source_tag} deleted={count}")
         return count
+
+    async def preflight_source_tag_rollback(
+        self, source_tag: str, *, tenant_id: str
+    ) -> list[dict]:
+        """Fetch and validate this tenant's complete Silver deletion set."""
+        if not tenant_id:
+            raise ValueError("tenant_id is required for source-tag rollback")
+        records = await self.find_many(
+            filters={"source_tag": source_tag, "tenant_id": tenant_id},
+            limit=SOURCE_TAG_ROLLBACK_CAP + 1,
+        )
+        if len(records) > SOURCE_TAG_ROLLBACK_CAP:
+            raise ValueError(
+                f"source-tag rollback exceeds safety cap of {SOURCE_TAG_ROLLBACK_CAP} rows"
+            )
+        return records
 
 
 # ═══════════════════════════════════════════════════════════════════════════

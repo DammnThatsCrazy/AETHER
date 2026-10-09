@@ -182,46 +182,54 @@ async def test_backfill_is_idempotent(repo):
 # ── measurement consumer reads the real payload keys ─────────────────────────
 
 
-async def test_consumer_reads_primary_secondary_keys(monkeypatch):
+async def test_consumer_forwards_merge_event_to_durable_restatement_queue(monkeypatch):
     from shared.events.events import Event, Topic
     from services.measurement.identity_consumer import MeasurementIdentityConsumer
+    from services.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
 
     consumer = MeasurementIdentityConsumer(producer=MagicMock())
+    queued: list[Event] = []
 
-    calls: list[tuple[str, str, str]] = []
+    async def _queue_event(self, event):
+        queued.append(event)
+        return MagicMock(id="restatement-1", tenant_id=TENANT, trigger_decision_id="merge-1")
 
-    async def _fake_rebuild(tenant_id, profile_id, reason):
-        calls.append((tenant_id, profile_id, reason))
-
-    monkeypatch.setattr(consumer, "_rebuild_and_reattribute", _fake_rebuild)
+    monkeypatch.setattr(ProjectionRestatementOrchestrator, "queue_restatement_from_event", _queue_event)
 
     event = Event(
         topic=Topic.IDENTITY_MERGED,
         tenant_id=TENANT,
         source_service="identity",
         payload={
-            "primary_entity_id": "survivor-1",
-            "secondary_entity_id": "consumed-1",
-            "canonical_entity_id": "survivor-1",
+            "decision_id": "merge-1",
+            "resolution_revision_before": 4,
+            "resolution_revision_after": 5,
+            "affected_canonical_entity_ids": ["survivor-1", "consumed-1"],
         },
     )
     await consumer.on_identity_merged(event)
 
-    profiles = {c[1] for c in calls}
-    assert "survivor-1" in profiles, "survivor not recomputed from primary_entity_id"
-    assert "consumed-1" in profiles, "consumed profile not recomputed from secondary_entity_id"
+    assert queued == [event]
+    assert queued[0].payload["affected_canonical_entity_ids"] == ["survivor-1", "consumed-1"]
 
 
-async def test_consumer_legacy_keys_still_work(monkeypatch):
+async def test_non_queueable_legacy_event_does_not_fall_back_to_inline_rebuild(monkeypatch):
     from shared.events.events import Event, Topic
     from services.measurement.identity_consumer import MeasurementIdentityConsumer
+    from services.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
 
     consumer = MeasurementIdentityConsumer(producer=MagicMock())
-    calls: list[str] = []
+    queued: list[Event] = []
+    rebuilt: list[str] = []
+
+    async def _queue_event(self, event):
+        queued.append(event)
+        return None
 
     async def _fake_rebuild(tenant_id, profile_id, reason):
-        calls.append(profile_id)
+        rebuilt.append(profile_id)
 
+    monkeypatch.setattr(ProjectionRestatementOrchestrator, "queue_restatement_from_event", _queue_event)
     monkeypatch.setattr(consumer, "_rebuild_and_reattribute", _fake_rebuild)
 
     event = Event(
@@ -231,4 +239,5 @@ async def test_consumer_legacy_keys_still_work(monkeypatch):
         payload={"surviving_profile_id": "legacy-surv"},
     )
     await consumer.on_identity_merged(event)
-    assert calls == ["legacy-surv"]
+    assert queued == [event]
+    assert rebuilt == []

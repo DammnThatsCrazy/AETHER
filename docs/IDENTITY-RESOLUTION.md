@@ -14,13 +14,13 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
-  "services/backend/services/identity/": "sha256:657064df36794615baf613ca32958f3ef7d57adf1a4dc1b598fb4767cff39b32"
+  "services/backend/services/identity/": "sha256:c419c4b1509d9de2d0e8ba9751a0ad8f96d3411f8f0a0e35c243600c123f18e2"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
 ## Overview
 
-Aether's Identity Resolution system unifies user profiles across devices, browsers, wallets, and sessions into a single **Identity Cluster**. It uses a hybrid approach: **deterministic signals** (exact identifier matches) auto-merge immediately, while **probabilistic signals** (fingerprint similarity, IP clustering, behavioral patterns) flag candidate merges for review.
+Aether's Identity Resolution system unifies user profiles across devices, browsers, wallets, and sessions into a single **Identity Cluster**. It uses a hybrid approach: **deterministic signals** (exact identifier matches) can auto-merge when rollout policy allows, while **probabilistic signals** (fingerprint similarity, IP clustering, behavioral patterns) flag candidate merges for review. Resolution is disabled by default (`IDENTITY_RESOLUTION_ENABLED=false`); auto-merge and manual review are separately gated and also default off. Identity-link consent is required before identifiers are resolved.
 
 > **Staging/production default:** strong (probabilistic) auto-linking is **off by default** in `staging`/`production` — only deterministic signals auto-merge; strong matches go to candidate/conflict review. Set `AETHER_IDENTITY_STRONG_AUTOLINK=1` to re-enable strong auto-link under explicit tenant policy. Fingerprint-only and cross-tenant matches never auto-link in any environment.
 
@@ -167,9 +167,12 @@ An event that carries a `userId` **together with** its `anonymousId` (the SDK
 `identify` call, and every event the SDK sends after it) is the SDK asserting
 that this anonymous visitor *is* that user. The resolver treats that
 co-occurrence as **deterministic** evidence (`authenticated_user_binding`
-reason code): the anonymous profile and the user's profile are merged
-immediately — `MERGE` with `DETERMINISTIC` tier, collapsing every compatible
-candidate into the oldest surviving entity. The binding applies only when:
+reason code). When the relevant resolution and auto-merge rollout flags and
+server-authoritative consent permit it, the anonymous profile and user's
+profile can merge at the `DETERMINISTIC` tier, collapsing every compatible
+candidate into the oldest surviving entity. With auto-merge off, the result is
+a review candidate when manual review is enabled, or blocked. The binding
+applies only when:
 
 - the event carries exactly one `userId` and its `anonymousId` matched an
   existing profile;
@@ -178,21 +181,25 @@ candidate into the oldest surviving entity. The binding applies only when:
 - no candidate — including fragments already merged into it — holds a
   **different** `userId`, `external_id`, or verified wallet.
 
-A contradiction (a shared device whose anonymous id already belongs to another
-user) never merges: the event resolves to its own profile and a
-`conflicting_user_binding` conflict is opened for review. A plain returning
+When a different tenant/app-scoped `userId` is presented with only a shared
+device, browser, installation, session, or anonymous signal, the resolver
+creates a separate profile and does not attach the shared signal as an alias.
+This prevents a fingerprint or shared device from joining the people. If the
+event binds an `anonymousId` already associated with a different `userId`, it
+never merges: it resolves to its own profile and opens a
+`conflicting_user_binding` conflict for review. A plain returning
 anonymous visitor (same `anonymousId`, no `userId`) stays `PROBABLE` →
 `CANDIDATE`, and a session-only match stays `WEAK` → `REJECT`
 (`insufficient_evidence`): probabilistic evidence still needs corroboration.
 Matches follow merge tombstones, so an alias left on a merged fragment resolves
 to the surviving profile.
 
-**First sighting.** An event whose identifiers match nothing yet creates a new
-profile (`CREATE`, scored on the event's own signals) and links its aliases, so
-the next event can match. It is `BLOCKED` only when its own signals are
-unusable (fingerprint-only, or only consent-gated signals without consent).
-Previously the empty match set was scored as `insufficient_evidence`, no alias
-was ever written, and no profile could ever merge.
+**First sighting.** A consented, tenant/app-scoped `userId` can anchor a new
+profile when there are no existing candidates. That narrow fallback links
+deterministic user, external, and anonymous identifiers; it does not turn a
+device fingerprint, observed email/phone, or wallet into a profile alias just
+because the profile was created. Other first sightings follow the regular
+policy and consent checks.
 
 **Consent.** Identity-stitching consent (`analytics`, `identity`, or
 `marketing`) is read from both snapshot shapes: the nested
@@ -200,6 +207,10 @@ was ever written, and no profile could ever merge.
 in `context.consent` (`{"analytics": true, ...}`). Consent-gated identifiers
 (email/phone hash, installation/browser id, fingerprint) are neither scored nor
 stored as aliases without it.
+The direct `POST /v1/identity/resolve` route requires a server-side identity-link
+consent receipt for the authenticated tenant and request `anonymous_id`; a
+caller-supplied `consent_snapshot` is not authorization. Missing receipts or
+consent lookup failures return a blocked decision.
 
 **Where identifiers are read from.** `userId`, `anonymousId`, `sessionId` from
 the event; email/phone from `properties`, `properties.traits` (the web SDK

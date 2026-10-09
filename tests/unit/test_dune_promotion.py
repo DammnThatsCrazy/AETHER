@@ -94,6 +94,35 @@ async def test_bronze_to_silver_promotion_pass(feeder):
 
 
 @pytest.mark.asyncio
+async def test_bronze_to_silver_shared_tag_is_tenant_scoped(feeder):
+    bronze = feeder.bronze_repo
+    for tenant in ("tenant-a", "tenant-b"):
+        await bronze.ingest(
+            source="dune", source_tag="shared-tag",
+            provider_record_id=f"{tenant}:row",
+            payload=_fresh_row(entity_id=f"entity-{tenant}"),
+            schema_version="1.0", entity_id=f"entity-{tenant}",
+            entity_type="wallet", tenant_id=tenant,
+        )
+
+    result = await feeder.promotion_service.promote_batch(
+        bronze, feeder.silver_repo, source_tag="shared-tag", tenant_id="tenant-a",
+        entity_id_field="entity_id", required_fields=["entity_id"],
+        max_age_hours=24, null_rate_threshold=0.3,
+    )
+
+    assert result["promoted_count"] == 1
+    rows_a = await feeder.silver_repo.find_many(
+        filters={"source_tag": "shared-tag", "tenant_id": "tenant-a"}, limit=10
+    )
+    rows_b = await feeder.silver_repo.find_many(
+        filters={"source_tag": "shared-tag", "tenant_id": "tenant-b"}, limit=10
+    )
+    assert len(rows_a) == 1
+    assert rows_b == []
+
+
+@pytest.mark.asyncio
 async def test_bronze_to_silver_freshness_gate(feeder):
     # Insert raw bronze record with an old ingested_at directly
     stale_ts = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()

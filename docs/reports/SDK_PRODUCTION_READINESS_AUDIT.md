@@ -15,7 +15,7 @@ source_hashes:
   "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
   "packages/web/src/core/event-queue.ts": "sha256:051105933fa4b11add2ab8d5548a18400bcb5f592b8b70dd42197363f885121d"
   "packages/web/src/health/sdk-health-agent.ts": "sha256:3cca664a5ca1b53a50bed15af670685bdc22840451a95d330dda572345348c20"
-  "packages/web/src/index.ts": "sha256:ab8e89f8d3bd62e4059cf4cb14e643933bbef51d928fe4bc8bf40cd4d42fa1b7"
+  "packages/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
 ---
 
 # Aether SDK Production Readiness Audit
@@ -30,6 +30,11 @@ SDK↔runtime commerce bridges shipped after this audit, on top of the audited
 8.11.0 surface (see [SDK-COMMERCE-BRIDGES.md](../SDK-COMMERCE-BRIDGES.md) and
 the Ecommerce entry in §1.1). Version references in the body below document
 the audited version and are intentionally unchanged.
+
+This is historical audit evidence, not a current release-readiness statement.
+The current SDK sources declare version `0.1.0-alpha.0`, and the shared consent
+contract currently defines 12 purposes; the 8.11/8.12 version and six-purpose
+references below record the dated audit state.
 
 ---
 
@@ -557,7 +562,7 @@ npm run test --workspace=packages/web
 # 3. Verify SDK version alignment
 python scripts/validate_sdk_release_alignment.py
 
-# Expected: all four platforms report 8.9.0; no drift detected
+# Expected: all four platforms align with `0.1.0-alpha.0`; no drift detected
 
 # 4. Verify platform parity matrix (docs consistency)
 python scripts/docs_drift.py --strict

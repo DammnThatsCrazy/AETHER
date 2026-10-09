@@ -32,6 +32,12 @@ Read:
 
 ## Target Architecture
 
+The [Aether Root Architecture](docs/architecture/AETHER_ROOT_ARCHITECTURE.md)
+defines the architecture reset's target runtime and operator control plane.
+Its [delivery plan](docs/blueprints/architecture-reset/README.md) maps the
+existing implementation to that target and tracks migration evidence. These
+are target documents while the current architecture below remains active.
+
 Read:
 
 - `docs/architecture/target/production-readiness.md`

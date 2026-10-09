@@ -838,13 +838,18 @@ async def rollback_import(
     if commit.get("rolled_back"):
         raise ConflictError(f"commit {commit_id} is already rolled back")
 
+    from repositories.lake import BronzeRepository
+
+    bronze_repo = BronzeRepository(BRONZE_DOMAIN)
+    await bronze_repo.preflight_source_tag_rollback(
+        commit.get("bronze_source_tag", commit_id), tenant_id=tenant_id
+    )
+
     revoked = await _revoke_commit_edges(tenant_id, commit, reason)
     vertex_gc = await _garbage_collect_vertices(tenant_id, commit)
 
-    from repositories.lake import BronzeRepository
-
-    bronze_deleted = await BronzeRepository(BRONZE_DOMAIN).rollback_by_source_tag(
-        commit.get("bronze_source_tag", commit_id)
+    bronze_deleted = await bronze_repo.rollback_by_source_tag(
+        commit.get("bronze_source_tag", commit_id), tenant_id=tenant_id
     )
     manifest = {
         "edges_revoked": revoked,

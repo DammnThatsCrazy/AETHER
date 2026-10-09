@@ -22,13 +22,13 @@ reviewed_source_commits:
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
-  ".github/workflows/staging-lifecycle.yml": "sha256:2dcb69dca4c0f699dd67e6e9a519acfc6430b941bdfb0cd6361eab7574210352"
+  ".github/workflows/staging-lifecycle.yml": "sha256:b935d4f5544e47011da16bed427fb47b423189e8e4236e76b6d17dd3df4b6fca"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/backend/repositories/repos.py": "sha256:2555cbee6fe1d8a93c02e2b8c0b4d5cc8a0e041b248f7aa02f915bb112af4e20"
-  "services/backend/services/auth/routes.py": "sha256:93e65e73ba6cbcebd86dd1eea2873d108eca36427b24aa2d256170c359de7bed"
+  "services/backend/services/auth/routes.py": "sha256:32680c7b7ac8add2fe09fa46c7c4c950535b73eddb0cb376fd11228c02b6df50"
 ---
 
 # AETHER first-admin bootstrap
@@ -90,7 +90,8 @@ checksum, and checks the lane's explicit identity evidence. It also validates
 the delivery and rehearsal credential contracts, confirms the configured
 `AetherStagingDeploy` principal and ECR pull policy, and checks the ECS
 task-definition/secret-mount contract on the revisions delivery will clone
-(each family's latest ACTIVE revision). It verifies the active staging
+(each family's latest ACTIVE revision), and validates the configured identity
+provider inputs before wake planning. It verifies the active staging
 DynamoDB cache table and simulates the live application task-role permissions
 against that exact table before planning a wake. The pilot lane additionally
 proves that the GitHub credential can create and remove the disposable secret

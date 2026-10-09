@@ -105,8 +105,8 @@ outcome results persist) when the flag is ON.
 
 ## 3. Kyber ingestion control plane surfaces (Gate G)
 
-All Kyber-scoped operator surfaces are **read-only** and **Kyber-operator-only**
-(router-level `require_kyber_operator`, which the default-deny route-policy
+The observability surfaces are **read-only**. Observability and replay routes
+are **Kyber-operator-only** (router-level `require_kyber_operator`, which the default-deny route-policy
 registry also classifies as audited + high-risk). Routers stay mounted so gateway
 discovery sees them; bodies are flag-gated (report `enabled: false` while OFF)
 — the same adoption posture as the replay kill switch.
@@ -120,8 +120,20 @@ discovery sees them; bodies are flag-gated (report `enabled: false` while OFF)
 | Pipeline health | `GET /v1/health/pipeline` | source health, ingestion lag | Funnel summary; `healthy` / `degraded` / `disabled`; NOT operator-gated (liveness + operator hook both read it) |
 | SDK capability manifest | `GET /v1/config/sdk/versions` | schema health | Static tier table + `enabled`/`mode`; NOT operator-gated (SDKs read it) |
 | SDK signed manifest | `GET /v1/config/sdk/manifest` | schema health | Existing signed manifest surface |
-| Replay service status | `GET /v1/kyber/ingest/replay/status` | replay | Durable Bronze replay service status |
-| Replay run/preview | `POST /v1/kyber/ingest/replay/events` | replay, rejection | Operator-triggered replay / dry-run of durable Bronze rows |
+| Replay service status | `GET /v1/kyber/ingest/replay/status` | replay | Reports the feature switch; it does not certify that a durable replay run is available |
+| Replay run/preview | `POST /v1/kyber/ingest/replay/events` | replay, rejection | Dry-run previews durable Bronze rows. Live publish is limited to an explicit local, in-memory backend; hosted live replay returns unavailable until delivery identity and consumer idempotency are durable. A row publish error marks the run `partial`; repeating the same tenant/run ID/filter scope returns the cached partial summary within that process, avoiding an automatic republish of rows already delivered. This guard is process-local, so restart-safe or exactly-once replay is not provided. |
+
+Replay occurrence bounds are inclusive, timezone-qualified ISO-8601 instants.
+The runner compares them in UTC against each Bronze row's original occurrence
+time, excludes rows whose occurrence time is missing or invalid when a window
+is requested, and rejects malformed or reversed bounds before publishing.
+Rows without an occurrence window remain eligible for preview; replay still
+cannot establish current rights or consent re-admission on its own.
+When a local live publish fails after one or more rows have been delivered, the
+run is reported as `partial`. Its process-local run journal prevents an
+automatic same-process retry from resending those earlier rows, but a process
+restart can lose that guard; durable replay delivery identity and consumer
+idempotency are still required before hosted replay.
 
 `GET /v1/health/pipeline` (in `services/backend/services/gateway/routes.py`) fixes the
 previously-**phantom** pipeline health endpoint the Kyber operator hook called:

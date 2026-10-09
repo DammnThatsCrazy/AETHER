@@ -27,7 +27,7 @@ _rpc = RPCGateway()
 async def record_action(body: ActionRecord, request: Request):
     """Record an on-chain action and create graph entities."""
     request.state.tenant.require_permission("onchain:write")
-    result = await _recorder.record(body)
+    result = await _recorder.record(body, tenant_id=request.state.tenant.tenant_id)
     return APIResponse(data=result.model_dump()).to_dict()
 
 
@@ -35,15 +35,19 @@ async def record_action(body: ActionRecord, request: Request):
 async def get_agent_actions(agent_id: str, request: Request):
     """Get all on-chain actions for a specific agent."""
     request.state.tenant.require_permission("onchain:read")
-    actions = await _recorder.get_agent_actions(agent_id)
+    actions = await _recorder.get_agent_actions(
+        agent_id, tenant_id=request.state.tenant.tenant_id
+    )
     return APIResponse(data={"agent_id": agent_id, "actions": actions, "count": len(actions)}).to_dict()
 
 
 @router.get("/contracts/{address}")
-async def get_contract(address: str, request: Request):
+async def get_contract(address: str, request: Request, chain_id: str | None = None):
     """Get contract details and call graph."""
     request.state.tenant.require_permission("onchain:read")
-    info = await _recorder.get_contract_info(address)
+    info = await _recorder.get_contract_info(
+        address, tenant_id=request.state.tenant.tenant_id, chain_id=chain_id
+    )
     if not info:
         raise NotFoundError(f"Contract {address}")
     return APIResponse(data=info.model_dump()).to_dict()

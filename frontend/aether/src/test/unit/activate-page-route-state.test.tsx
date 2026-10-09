@@ -22,6 +22,8 @@ const state = vi.hoisted(() => ({
   firstValue: {} as Record<string, unknown>,
   createKeys: {} as Record<string, unknown>,
   sendEvent: {} as Record<string, unknown>,
+  readiness: {} as Record<string, unknown>,
+  graphMaturity: {} as Record<string, unknown>,
 }));
 
 const NOT_STARTED = {
@@ -50,12 +52,8 @@ vi.mock("@aether-app/features/activation/use-activation", () => ({
 }));
 
 vi.mock("@aether-app/features/activation/use-tenant-readiness", () => ({
-  useTenantReadiness: () => ({
-    data: undefined,
-    isLoading: false,
-    error: null,
-  }),
-  deriveGraphMaturity: () => ({ state: "no_data", blocking: [] }),
+  useTenantReadiness: () => state.readiness,
+  deriveGraphMaturity: () => state.graphMaturity,
 }));
 
 vi.mock("@aether-app/features/activation/use-activation-intents", () => ({
@@ -122,6 +120,12 @@ describe("/activation — ActivatePage route states", () => {
       data: null,
       reset: vi.fn(),
     };
+    state.readiness = {
+      data: undefined,
+      isLoading: false,
+      error: null,
+    };
+    state.graphMaturity = { state: "no_data", blocking: ["events_received"] };
   });
 
   it("renders a loading skeleton without drawing any activation conclusions", () => {
@@ -219,5 +223,76 @@ describe("/activation — ActivatePage route states", () => {
     expect(
       screen.queryByText("No activation intents available"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps configured credentials, observed events, and graph readiness distinct", async () => {
+    state.status = {
+      data: NOT_STARTED,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    state.catalog = {
+      data: { intents: [] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    state.plan = {
+      data: {
+        needs_selection: false,
+        selected_intents: ["grow_revenue"],
+        categories: [
+          {
+            experience_category: "commerce",
+            display_name: "Commerce & Revenue",
+            recommended_by_intents: ["grow_revenue"],
+            connected_count: 0,
+            integration_count: 1,
+            integrations: [
+              {
+                key: "shopify",
+                family: "shopify",
+                product: "shopify",
+                display_name: "Shopify",
+                experience_category: "commerce",
+                connectable: true,
+                connect_unavailable_reason: null,
+                credential_required: true,
+                authentication: "api_key",
+                accounts_discovery: false,
+                accounts_selection_required: false,
+                sync_initial_backfill: true,
+                manifest_readiness: { state: "ready", level: 3 },
+                connection_state: "initial_sync_pending",
+                next_action: "first_sync",
+                can_act: true,
+                record: null,
+              },
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    state.readiness = {
+      data: { checks: [{ name: "events_received", status: "pending" }] },
+      isLoading: false,
+      error: null,
+    };
+    state.graphMaturity = { state: "no_data", blocking: ["events_received"] };
+
+    renderActivate();
+
+    expect(await screen.findByText("Credential saved; first sync pending")).toBeInTheDocument();
+    expect(screen.getByTestId("activation-evidence-explainer")).toHaveTextContent(
+      "Credentials and provider connection state show setup and sync progress",
+    );
+    expect(screen.getByTestId("activation-zero-data")).toHaveTextContent(
+      "No observed events yet",
+    );
+    expect(screen.queryByTestId("activation-graph-ready")).not.toBeInTheDocument();
   });
 });

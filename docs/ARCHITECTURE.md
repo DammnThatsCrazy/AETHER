@@ -9,6 +9,10 @@ since_version: "0.1.0"
 source_files:
   - services/backend/main.py
   - services/backend/middleware/middleware.py
+  - services/backend/config/settings.py
+  - services/backend/services/ingestion/replay.py
+  - services/backend/services/ingestion/replay_routes.py
+  - services/backend/shared/events/events.py
   - packages/shared/
 canonical_owner: platform@aether
 estimated_read_minutes: 20
@@ -17,9 +21,13 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:36ba3883b69547e3da32726f271844c9632d0d197720ebff1933b66d58222e22"
+  "packages/shared/": "sha256:4f07a7d9517381b954610c79ba1615e1e6d4ced456dcd48df83a77172c9fd02a"
+  "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
   "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
+  "services/backend/services/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
+  "services/backend/services/ingestion/replay_routes.py": "sha256:44e6e89117a8cbbebe2cd45bac315e616e87b2cf823e82c5af3f503de44eea56"
+  "services/backend/shared/events/events.py": "sha256:8b8f303710a2d213fdc13f6fed05a900f0d3f50ba698223b1073ddc33dc86ffd"
 ---
 # Aether vNext — Architecture Guide
 
@@ -29,7 +37,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 
 1. **SDK Plane** — Thin-client SDKs (Web, iOS, Android, React Native) collect raw events, fingerprints, wallet interactions, and session data. SDKs ship raw data to the backend.
 
-2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery; mobile push (APNs/FCM) carries only a redacted projection — amounts/PII are `[redacted]`, never raw payload), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Continuity and mobile surfaces complete the plane: the **continuation plane** (`/v1/continuations` — durable, CAS-guarded context-handoff tokens, never a whole graph; the operator twin `/v1/kyber/continuations` exposes the same shapes to Kyber workforce sessions via `require_kyber_access`), the **client-sync feed** (`/v1/client-sync` — gapless per-scope catch-up cursor; operators read the same feed scoped to their own identity through `/v1/kyber/client-sync`), and the **mobile gateway** (`/v1/mobile/*` — installation + push-subscription registration, per-install configuration with distribution profiles, and bounded redacted projections over owning services). Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), event bus with 181 topics (Kafka via aiokafka, or AWS SNS/SQS when `EVENT_BROKER=sns_sqs`), S3, Prometheus. In `AETHER_ENV=local` with no broker reachable, the event bus falls back to an in-memory list and the `main.py` lifespan runs `EventProducer.pump_local` to drain published events into the in-process consumer — so the single-process local stack delivers Bronze→Silver projections without a broker (a broker-connected producer is never double-delivered).
+2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery; mobile push (APNs/FCM) carries only a redacted projection — amounts/PII are `[redacted]`, never raw payload), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Continuity and mobile surfaces complete the plane: the **continuation plane** (`/v1/continuations` — durable, CAS-guarded context-handoff tokens, never a whole graph; the operator twin `/v1/kyber/continuations` exposes the same shapes to Kyber workforce sessions via `require_kyber_access`), the **client-sync feed** (`/v1/client-sync` — gapless per-scope catch-up cursor; operators read the same feed scoped to their own identity through `/v1/kyber/client-sync`), and the **mobile gateway** (`/v1/mobile/*` — installation + push-subscription registration, per-install configuration with distribution profiles, and bounded redacted projections over owning services). Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), a typed event bus (Kafka via aiokafka, or AWS SNS/SQS when `EVENT_BROKER=sns_sqs`), S3, Prometheus. In `AETHER_ENV=local` with no broker reachable, the event bus falls back to an in-memory list and the `main.py` lifespan runs `EventProducer.pump_local` to drain published events into the in-process consumer — so the single-process local stack delivers Bronze→Silver projections without a broker (a broker-connected producer is never double-delivered).
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
@@ -246,7 +254,11 @@ The backend runs a cross-device identity resolution engine that merges user prof
 | `IP_MAPS_TO` | IPAddress → Location | Geolocation mapping |
 | `RESOLVED_AS` | User → User | Identity merge (audit trail) |
 
-### Resolution Signals
+### Legacy resolution signals
+
+The signal weights below describe the unregistered legacy resolution engine,
+not the active tenant-facing identity resolver. The legacy cluster, approval,
+and batch routes return HTTP 503 until their graph access is tenant safe.
 
 **Deterministic (confidence = 1.0, auto-merge):**
 - `UserIdSignal` — Same `userId` across profiles
@@ -267,35 +279,20 @@ The backend runs a cross-device identity resolution engine that merges user prof
 
 ### Resolution Flow
 
+```text
+SDK event → validated ingestion event → identity_signal_emitter
+                                       → tenant-scoped identity evidence
+Tenant identity API → IdentityResolver → identity decision/review
+                                   → IdentityGraphWriter → GraphMutationGateway
 ```
-SDK Event (with fingerprint + identifiers)
-    │
-    ▼
-Ingestion Service
-    ├── IP Enrichment (MaxMind GeoLite2)
-    ├── Normalize & validate
-    └── Publish SDK_EVENTS_VALIDATED
-         │
-         ▼
-Resolution Consumer (real-time)
-    ├── 1. Extract identifiers (anonymousId, userId, email, phone, wallets, fingerprintId, ip_hash)
-    ├── 2. Upsert graph vertices (DeviceFingerprint, IPAddress, Location, Email, Phone, Wallet)
-    ├── 3. Create/update edges (HAS_FINGERPRINT, SEEN_FROM_IP, HAS_EMAIL, etc.)
-    ├── 4. Find candidate profiles (other Users linked to same vertices)
-    └── 5. Run deterministic signals
-              │
-              ├── Match found → AUTO MERGE (confidence = 1.0)
-              └── No match → Queue for batch
-                               │
-                               ▼
-                  Batch Resolution Job (hourly)
-                    ├── Run probabilistic signals on candidates
-                    ├── Compute weighted composite score
-                    └── Apply rules engine:
-                          ├── >= 0.95 → auto_merge (if configured)
-                          ├── >= 0.70 → flag_for_review
-                          └── < 0.70  → reject
-```
+
+The old `ResolutionEventConsumer` and hourly `ResolutionBatchJob` are not
+registered in the production runtime. The legacy graph repository exposed
+unscoped reads and direct writes; its direct mutation methods have been
+removed, and the remaining mounted legacy graph routes fail closed. Canonical
+identity decisions belong to the tenant-scoped resolver and
+`GraphMutationGateway`. The retired graph routes stay unavailable until a
+replacement compatibility path is implemented and proves tenant scope.
 
 ## Backend API Endpoints
 
@@ -303,7 +300,7 @@ Resolution Consumer (real-time)
 |---|---|---|
 | `/v1/batch` | POST | Canonical batched raw events (ALL SDKs — web, iOS, Android, RN) |
 | `/v1/ingest/events[/batch]` | POST | Deprecated server-to-server connector aliases — converged (WS-B2) onto the canonical `/v1/batch` spine (same validation/consent/scrub/Bronze/idempotency/publish path + `write` auth); retire with HTTP 410 when `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true` |
-| `/v1/kyber/ingest/replay/*` | POST/GET | Kyber-operator Bronze-ingestion replay (WS-B4) — re-deliver a tenant's durable Bronze SDK events with original-time preservation; `POST /v1/kyber/ingest/replay/events` dry-runs by default (zero publishes), a real run requires `AETHER_INGESTION_REPLAY_ENABLED` (else HTTP 403); `GET /v1/kyber/ingest/replay/status` reports gate state |
+| `/v1/kyber/ingest/replay/*` | POST/GET | Kyber-operator Bronze-ingestion replay (WS-B4) — re-deliver a tenant's durable Bronze SDK events with original-time preservation; timezone-qualified occurrence bounds compare in UTC and exclude rows without a valid original time; `POST /v1/kyber/ingest/replay/events` dry-runs by default (zero publishes); live publishing requires `AETHER_INGESTION_REPLAY_ENABLED` and is available only with explicit `AETHER_ENV=local`, in-memory storage, and an in-memory event bus (otherwise HTTP 403 when disabled or 503 when the runtime is not local); a local publish run may end as `partial` on row errors and its process-local journal prevents the same run ID from silently replaying rows on retry; `GET /v1/kyber/ingest/replay/status` reports the feature-flag state |
 | `/v1/kyber/ingest/observability*` | GET | Kyber-operator ingestion-funnel telemetry + Observation Inspector (WS-E; flag-gated `AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF — while OFF the routes stay mounted but report `enabled: false` / empty, never an error) |
 | `/v1/health/pipeline` | GET | Ingestion funnel health summary (`healthy`/`degraded`/`disabled`; `enabled: false` + zeroed counters while the observability flag is OFF) |
 | `/v1/config/sdk/versions` | GET | SDK version-compatibility tier manifest (supported / deprecated / read-compatible / blocked-after-date + per-band capabilities; static non-secret policy data, always served — the `/v1/batch` ingress consultation rides `AETHER_SDK_VERSION_COMPAT_ENABLED` / `_MODE` (`off`/`shadow`/`warn`/`enforce`), default OFF) |
@@ -322,14 +319,14 @@ Resolution Consumer (real-time)
 | `/v1/rewards/proofs` | GET | On-chain claim proofs |
 | `/v1/rewards/rails` | POST/GET | Tenant delivery rail config |
 | `/v1/track/traffic-source` | POST | Traffic source classification |
-| `/v1/onchain/contracts/{address}` | GET | On-chain contract metadata |
-| `/v1/resolution/cluster/{user_id}` | GET | Identity cluster for a user |
+| `/v1/onchain/contracts/{address}` | GET | Tenant-scoped contract metadata; optional `chain_id` disambiguates same-address contracts across chains |
+| `/v1/resolution/cluster/{user_id}` | GET | Unavailable (503); the legacy graph read route is retired and has no tenant-scoped compatibility path |
 | `/v1/resolution/pending` | GET | Pending merge decisions (admin) |
-| `/v1/resolution/pending/{id}/approve` | POST | Approve merge |
+| `/v1/resolution/pending/{id}/approve` | POST | Unavailable (503); the legacy graph mutation route is retired; `write` permission is still checked |
 | `/v1/resolution/pending/{id}/reject` | POST | Reject merge |
 | `/v1/resolution/audit/{id}` | GET | Audit trail for a decision |
 | `/v1/resolution/config` | GET/PUT | Resolution thresholds |
-| `/v1/resolution/batch` | POST | Trigger batch matching job |
+| `/v1/resolution/batch` | POST | Unavailable (503); the legacy graph batch route is retired; `write` permission is still checked |
 | `/v1/agent/deployments` | POST/GET/PATCH | External agent deployment registry (flag-gated, observation-only) |
 | `/v1/providers/keys` | POST/GET/DELETE | BYOK key management (encrypted at rest) |
 | `/v1/providers/usage` | GET | Per-tenant provider usage stats |

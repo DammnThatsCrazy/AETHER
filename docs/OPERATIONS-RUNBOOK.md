@@ -16,9 +16,9 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
-  "services/backend/config/settings.py": "sha256:2fd39d4ff1bb287b3ea68d6b86281c7b8c0e2de0278784fa8bdde15163c995e8"
+  "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
   "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
-  "services/backend/services/provider_runtime/": "sha256:b2a3e39e1032cbb1b93e8e546f6ce97541c978d183f96460afcc08aead164154"
+  "services/backend/services/provider_runtime/": "sha256:24f5445f73434daf958f26f6548f51f4ed22ed196812088898a8e2195eb094a1"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -597,6 +597,19 @@ deploy-profile/compose/Terraform/topology-validator fan-out; running under
 deploy artifact. Because it runs as the `materializer` principal (not a tenant
 principal), scheduled sync never elevates a tenant principal's rights.
 
+### Provider source-rights quarantine
+
+Pull sync retains raw provider rows in Bronze before processing. A persisted
+row without valid provenance, license, approved terms, approved commercial
+use, or a clear quarantine state is not promoted to identity evidence,
+normalization, or event publication. The sync run closes as `partial` with
+`safe_error_code=source_rights_rejected`; the provider cursor and connection's
+last-success timestamp remain unchanged. Inspect the sync-run counts and the
+Bronze provenance fields. Do not retry expecting the same missing evidence to
+clear: the current provider pull path does not yet populate rights grants from
+the authoritative rights workflow, so an unknown status remains quarantined.
+This is a deliberate stop condition until that integration is implemented.
+
 ### Reconciled Control Plane reconcile scheduler (flag-gated OFF)
 
 The Reconciled Control Plane lane adds `reconciled_control_scheduler`, a
@@ -632,7 +645,15 @@ universal ingestion gateway with **original occurrence times preserved**
 
 - `POST /v1/kyber/ingest/replay/events` — Kyber-operator run/preview.
   `dry_run` defaults to **true** (counts only, zero publishes). A real run
-  (`dry_run=false`) is refused with HTTP 403 until the flag is ON.
+  (`dry_run=false`) is refused with HTTP 403 until the flag is ON. When enabled,
+  live publishing is still restricted to an explicitly local, in-memory
+  backend with no database URL or initialized database pool; hosted and durable
+  backends fail closed as unavailable. The process-local `replay_run_id`
+  journal is not durable delivery identity or a downstream idempotency guarantee.
+  Optional `occurred_from` and `occurred_to` are inclusive original-occurrence
+  bounds with required timezones. Malformed or reversed bounds fail before
+  publishing; rows with no valid original occurrence are excluded from a
+  bounded run. Preview the same bounds before a local live run.
 - `GET /v1/kyber/ingest/replay/status` — kill-switch state and the
   `source_service` replayed events carry.
 

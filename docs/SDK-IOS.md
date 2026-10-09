@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:160edb44deed2037faed7f8862baf2ada6ee740a1caa72a627600c17e36f40bb"
+  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:06f27d5201fde11faf35e157e9b1f47302cd82afdd34d22cccbee606a36ce6be"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
 ---
@@ -26,7 +26,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/AetherSDK/aether-ios.git", from: "8.3.1")
+    .package(url: "https://github.com/AetherSDK/aether-ios.git", from: "0.1.0-alpha.0")
 ]
 ```
 
@@ -35,7 +35,7 @@ Or in Xcode: File > Add Packages > enter the repository URL.
 ### CocoaPods
 
 ```ruby
-pod 'AetherSDK', '~> 8.0'
+pod 'AetherSDK', '= 0.1.0-alpha.0'
 ```
 
 ## Quick Start

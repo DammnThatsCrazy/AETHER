@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from shared.common.common import APIResponse, ConflictError, ForbiddenError, NotFoundError
 from shared.cache.cache import CacheClient
@@ -23,10 +23,17 @@ from .repository import ResolutionRepository
 from .rules import ResolutionConfig, ResolutionRulesEngine
 from .signals import default_signals
 from .engine import IdentityResolutionEngine
-from .tasks import ResolutionBatchJob
 
 logger = get_logger("aether.service.resolution")
 router = APIRouter(prefix="/v1/resolution", tags=["Identity Resolution"])
+
+
+def _legacy_graph_unavailable() -> None:
+    """Fail closed while this legacy graph surface lacks tenant isolation."""
+    raise HTTPException(
+        status_code=503,
+        detail="Legacy identity graph resolution is unavailable",
+    )
 
 
 # ── Module-level singletons (initialised lazily) ─────────────────────
@@ -82,18 +89,9 @@ def _get_engine(
 async def get_cluster(
     user_id: str,
     request: Request,
-    repo: ResolutionRepository = Depends(_get_resolution_repo),
-    identity_repo: IdentityRepository = Depends(_get_identity_repo),
 ):
-    """Get the identity cluster for a user (linked profiles, devices, IPs, wallets, emails)."""
-    tenant = request.state.tenant
-    profile = await identity_repo.get_profile(tenant.tenant_id, user_id)
-    # get_profile does not filter by tenant_id in the DB query — verify ownership explicitly.
-    # Return NotFoundError (not Forbidden) to avoid leaking cross-tenant user existence.
-    if not profile or profile.get("tenant_id") != tenant.tenant_id:
-        raise NotFoundError("Profile")
-    cluster = await repo.get_cluster(user_id)
-    return APIResponse(data=cluster).to_dict()
+    """Unavailable until the legacy graph cluster read is tenant scoped."""
+    _legacy_graph_unavailable()
 
 
 @router.get("/pending")
@@ -112,46 +110,11 @@ async def list_pending_resolutions(
 async def approve_resolution(
     decision_id: str,
     request: Request,
-    repo: ResolutionRepository = Depends(_get_resolution_repo),
-    identity_repo: IdentityRepository = Depends(_get_identity_repo),
-    producer: EventProducer = Depends(get_producer),
 ):
-    """Admin approves a pending identity merge."""
+    """Unavailable until approval uses a tenant-safe graph mutation path."""
     tenant = request.state.tenant
     tenant.require_permission("write")
-
-    existing = await repo._pending.find_by_id(decision_id)
-    if not existing:
-        raise NotFoundError("Resolution decision")
-    if existing.get("tenant_id") != tenant.tenant_id:
-        raise ForbiddenError("Resolution decision belongs to a different tenant")
-    if existing.get("status") != "pending":
-        raise ConflictError(f"Resolution decision is already {existing.get('status')}")
-
-    record = await repo.approve_resolution(decision_id)
-
-    # Execute the actual merge
-    primary_id = record.get("profile_a_id", "")
-    secondary_id = record.get("profile_b_id", "")
-
-    if primary_id and secondary_id:
-        await identity_repo.merge_identities(
-            tenant.tenant_id, primary_id, secondary_id,
-        )
-
-    await producer.publish(Event(
-        topic=Topic.RESOLUTION_APPROVED,
-        tenant_id=tenant.tenant_id,
-        source_service="resolution",
-        payload={
-            "decision_id": decision_id,
-            "primary_id": primary_id,
-            "secondary_id": secondary_id,
-            "approved_at": record.get("resolved_at", ""),
-        },
-    ))
-
-    return APIResponse(data=record).to_dict()
+    _legacy_graph_unavailable()
 
 
 @router.post("/pending/{decision_id}/reject")
@@ -250,13 +213,8 @@ async def update_resolution_config(
 @router.post("/batch")
 async def trigger_batch_job(
     request: Request,
-    engine: IdentityResolutionEngine = Depends(_get_engine),
 ):
-    """Trigger a batch probabilistic matching job."""
+    """Unavailable until batch matching uses tenant-safe graph reads."""
     tenant = request.state.tenant
     tenant.require_permission("write")
-
-    batch_job = ResolutionBatchJob(engine)
-    summary = await batch_job.run(tenant.tenant_id)
-
-    return APIResponse(data=summary).to_dict()
+    _legacy_graph_unavailable()

@@ -552,6 +552,17 @@ def test_semantic_to_semantic_payload_aether_subject_flag_on(monkeypatch) -> Non
 
 
 async def test_resolution_consumer_aether_subject_flag_on(monkeypatch) -> None:
+    from dataclasses import replace
+
+    from config import settings as settings_module
+
+    # The legacy consumer is unregistered and its resolution gate defaults
+    # off. This unit test exercises only its normalized subject projection.
+    monkeypatch.setattr(
+        settings_module.settings,
+        "identity_continuity",
+        replace(settings_module.settings.identity_continuity, resolution_enabled=True),
+    )
     engine = SimpleNamespace(resolve_event=AsyncMock(return_value=None))
     producer = SimpleNamespace(publish=AsyncMock())
     consumer = ResolutionEventConsumer(engine=engine, producer=producer)  # type: ignore[arg-type]

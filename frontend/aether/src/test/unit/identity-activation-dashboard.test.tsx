@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 const runtime = vi.hoisted(() => ({
   activationEnabled: true,
   queryEnabled: false,
+  queryMode: 'ready' as 'ready' | 'loading' | 'error',
   status: {
     tenant_id: 'tenant-a',
     historical_data_status: 'available',
@@ -39,10 +40,10 @@ vi.mock('@aether/ui', () => ({
   useQuery: ({ fetcher, enabled }: { fetcher: () => Promise<unknown>; enabled: boolean }) => {
     runtime.queryEnabled = enabled;
     return {
-    data: runtime.status,
-    isLoading: false,
-    error: null,
-    refetch: fetcher,
+      data: runtime.queryMode === 'ready' ? runtime.status : null,
+      isLoading: runtime.queryMode === 'loading',
+      error: runtime.queryMode === 'error' ? new Error('identity status unavailable') : null,
+      refetch: fetcher,
     };
   },
 }));
@@ -53,8 +54,11 @@ describe('Tenant activation dashboard state rendering', () => {
   beforeEach(() => {
     runtime.activationEnabled = true;
     runtime.queryEnabled = false;
+    runtime.queryMode = 'ready';
+    runtime.status.historical_data_status = 'available';
     runtime.status.sdk_status = 'stale';
     runtime.status.projection_restatement_status = 'needs_attention';
+    runtime.status.resolution_counts.total_entities = 3;
   });
 
   it('shows persisted heartbeat freshness, restatement failures, reviews, and runtime controls', () => {
@@ -81,5 +85,35 @@ describe('Tenant activation dashboard state rendering', () => {
     render(<TenantActivationDashboard />);
     expect(screen.getByText(/dashboard is not enabled/i)).toBeInTheDocument();
     expect(runtime.queryEnabled).toBe(false);
+  });
+
+  it('shows loading without presenting an empty or failed activation result', () => {
+    runtime.queryMode = 'loading';
+    render(<TenantActivationDashboard />);
+
+    expect(screen.getByText('Loading activation status...')).toBeInTheDocument();
+    expect(screen.queryByText(/No historical identity data/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Unable to load activation status/)).not.toBeInTheDocument();
+  });
+
+  it('shows a successful no-data state from tenant activation status', () => {
+    runtime.status.historical_data_status = 'empty';
+    runtime.status.sdk_status = 'not_connected';
+    runtime.status.resolution_counts.total_entities = 0;
+    render(<TenantActivationDashboard />);
+
+    expect(screen.getByText('No historical identity data has been imported yet.')).toBeInTheDocument();
+    expect(screen.getByText(/No durable SDK heartbeat has been received yet/)).toBeInTheDocument();
+    expect(screen.getByText('Total Entities').previousElementSibling).toHaveTextContent('0');
+    expect(screen.queryByText(/Unable to load activation status/)).not.toBeInTheDocument();
+  });
+
+  it('shows failure and retry rather than claiming successful empty data', () => {
+    runtime.queryMode = 'error';
+    render(<TenantActivationDashboard />);
+
+    expect(screen.getByText(/Unable to load activation status/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByText(/No historical identity data/)).not.toBeInTheDocument();
   });
 });

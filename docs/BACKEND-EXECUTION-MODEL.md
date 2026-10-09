@@ -17,7 +17,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:2fd39d4ff1bb287b3ea68d6b86281c7b8c0e2de0278784fa8bdde15163c995e8"
+  "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
   "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
   "services/backend/services/runtime/consumer_specs.py": "sha256:122f290376b080e67d990e6f3a8655addb000f72a9980896e49b9e6c43216266"
   "services/backend/services/runtime/roles.py": "sha256:9d1787f19ddc91d640098ff3e992b4cc1cfaf410bcc49c79e41ed3c5810dc48a"
@@ -153,7 +153,12 @@ route — **not** a runtime role and not a durable-jobs control plane. A dry run
 (`dry_run=false`) republishes the Bronze rows onto `SDK_EVENTS_VALIDATED` with
 their original occurrence timestamps preserved (Invariant #15) only when
 `AETHER_INGESTION_REPLAY_ENABLED` (`settings.ingest_replay.enabled`, default
-OFF) is on — otherwise refused with 403. Republished events carry
+OFF) is on — otherwise refused with 403. Even with the flag on, publishing is
+allowed only when `AETHER_ENV=local`, no `DATABASE_URL` or database pool is
+present, and the producer resolves to the in-memory backend; other modes fail
+closed as unavailable. `replay_run_id` suppression is process-local and does
+not provide durable delivery identity or downstream side-effect guarantees.
+Republished events carry
 `source_service="ingestion.replay"`, and the Bronze-writer consumer
 (`services/backend/services/ingestion/workers.py`) skips them for the same reason it skips
 relay-originated events: the durable Bronze row already exists, so writing

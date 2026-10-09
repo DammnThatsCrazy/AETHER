@@ -77,7 +77,7 @@ from .models import (
 )
 from .repository import IdentityResolutionRepository
 from .signals import extract_signals
-from .confidence import CONSENT_REQUIRED_SIGNALS, has_stitching_consent
+from .confidence import CONSENT_REQUIRED_SIGNALS, has_stitching_consent, _has_consent
 from .split_policy import SplitPolicyContext, evaluate_split
 from .veto_engine import evaluate_vetoes, get_confidence_band
 from .models import ConfidenceBand
@@ -170,6 +170,18 @@ _BINDING_DETERMINISTIC_TYPES: frozenset[IdentitySignalType] = frozenset({
     IdentitySignalType.USER_ID,
     IdentitySignalType.EXTERNAL_ID,
     IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+})
+
+# Signals that can be shared across people. When they are the only path to a
+# candidate and the incoming tenant/app-scoped user ID contradicts it, retain
+# a separate profile instead of reusing the shared-signal target.
+_SHARED_IDENTITY_SIGNAL_TYPES: frozenset[IdentitySignalType] = frozenset({
+    IdentitySignalType.ANONYMOUS_ID,
+    IdentitySignalType.SESSION_ID,
+    IdentitySignalType.DEVICE_FINGERPRINT,
+    IdentitySignalType.BROWSER_ID,
+    IdentitySignalType.INSTALLATION_ID,
+    IdentitySignalType.MOBILE_INSTALL_ID,
 })
 
 
@@ -587,6 +599,22 @@ class IdentityResolutionService:
         event_user_hashes = {
             h for (t, h, _) in hashed_signals if t == IdentitySignalType.USER_ID
         }
+        conflicting_user_identity = False
+        if existing_entity_ids and len(event_user_hashes) == 1:
+            conflicting_user_identity = await self._has_conflicting_user_id(
+                tenant_id, existing_entity_ids, next(iter(event_user_hashes))
+            )
+        identity_signal_types = {
+            t for (t, _, _) in hashed_signals if t not in _ATTRIBUTION_ONLY
+        }
+        separate_user_profile = bool(
+            conflicting_user_identity
+            and IdentitySignalType.USER_ID in identity_signal_types
+            and identity_signal_types <= (
+                _SHARED_IDENTITY_SIGNAL_TYPES | {IdentitySignalType.USER_ID}
+            )
+            and _has_consent(consent_snapshot)
+        )
         event_has_anonymous = any(
             t == IdentitySignalType.ANONYMOUS_ID for (t, _, _) in hashed_signals
         )
@@ -608,6 +636,14 @@ class IdentityResolutionService:
             else:
                 authenticated_binding = True
                 has_conflict = False
+
+        # Anonymous-to-user contradictions keep the existing review workflow:
+        # the new profile is created, while the conflicting candidate remains
+        # attached to a durable conflict record. The separate-profile path is
+        # reserved for a person reached only through non-binding shared-device
+        # or session evidence.
+        if binding_contradicted:
+            separate_user_profile = False
 
         # ── 7. Apply merge policy ─────────────────────────────────────────
         # Strong (probabilistic) auto-linking is OFF by default in staging/
@@ -638,7 +674,6 @@ class IdentityResolutionService:
         # its keyed alias so subsequent platform SDKs for the same tenant app
         # can resolve to it. Consent is required here because there is no
         # existing alias yet for the policy scorer to evaluate.
-        from .confidence import _has_consent
         identity_consent_valid = _has_consent(consent_snapshot)
         initial_user_id_anchor = False
 
@@ -785,6 +820,18 @@ class IdentityResolutionService:
                 current_verified_emails=current_verified_emails,
                 current_authenticated_user_ids=current_authenticated_user_ids,
             )
+            if separate_user_profile or binding_contradicted:
+                # The contradictory authenticated user proves this is a
+                # different person. Shared-device and conflicting-user vetoes
+                # still prevent merging, but should not force the new person
+                # onto the existing profile.
+                _vetoes = [
+                    veto for veto in _vetoes
+                    if veto.veto_type not in {
+                        VetoType.SHARED_DEVICE,
+                        VetoType.CONFLICTING_AUTHENTICATED_USER,
+                    }
+                ]
             if _vetoes:
                 # Blocked band on veto — confidence tier forced to BLOCKED
                 blocked_band = get_confidence_band(
@@ -835,6 +882,13 @@ class IdentityResolutionService:
             ]
             logger.warning("identity candidate state unavailable: %s", type(e).__name__)
 
+        if separate_user_profile and not _vetoes:
+            policy_result.decision = MergeDecision.CREATE
+            policy_result.reason_codes = list(dict.fromkeys([
+                *policy_result.reason_codes,
+                "distinct_scoped_user_on_shared_signal",
+            ]))
+
         # ── 8. Create or fetch canonical entity ───────────────────────────
         canonical_entity_id: str
         is_new = False
@@ -848,9 +902,10 @@ class IdentityResolutionService:
             policy_result.decision == MergeDecision.CREATE
             or not existing_entity_ids
             or (binding_contradicted and policy_result.decision != MergeDecision.BLOCKED)
+            or separate_user_profile
         ):
             # A contradicted binding (this user_id on a device whose anonymous
-            # id already belongs to a DIFFERENT user) resolves to the event's
+            # id already belongs to a DIFFERENT scoped user) resolves to the event's
             # own entity; the candidates go to a conflict record for review
             # instead of absorbing another person's aliases.
             canonical_entity_id = str(uuid.uuid4())
@@ -901,6 +956,17 @@ class IdentityResolutionService:
         if can_link_aliases:
             for (sig_type, sig_hash, display) in hashed_signals:
                 if sig_type in _ATTRIBUTION_ONLY:
+                    continue
+                if separate_user_profile and sig_type != IdentitySignalType.USER_ID:
+                    # Keep shared device/session/anonymous aliases off either
+                    # profile; only the tenant/app-scoped user ID belongs here.
+                    continue
+                if sig_type == IdentitySignalType.DEVICE_FINGERPRINT and (
+                    IdentitySignalType.USER_ID in identity_signal_types
+                ):
+                    # A device fingerprint is a weak, potentially shared
+                    # observation. It cannot serve as a durable alias of a
+                    # user profile merely because a user ID was supplied.
                     continue
                 if sig_type in CONSENT_REQUIRED_SIGNALS and not stitching_consent:
                     continue
@@ -1299,6 +1365,33 @@ class IdentityResolutionService:
                 family.add(src)
                 frontier.append(src)
         return family
+
+    async def _has_conflicting_user_id(
+        self, tenant_id: str, entity_ids: list[str], event_user_hash: str
+    ) -> bool:
+        """Whether a candidate (or merged fragment) is owned by another user.
+
+        This is used only to keep a distinct tenant/app-scoped user ID from
+        being assigned to a profile reached through a shared device/session
+        alias. A lookup failure never authorizes profile creation on this basis.
+        """
+        try:
+            for survivor in entity_ids:
+                for entity_id in await self._entity_family(tenant_id, survivor):
+                    for alias in await self._repo.get_aliases_for_entity(
+                        tenant_id, entity_id
+                    ):
+                        if (
+                            not alias.get("revoked_at")
+                            and alias.get("alias_type") == IdentitySignalType.USER_ID.value
+                            and alias.get("alias_value_hash")
+                            and alias["alias_value_hash"] != event_user_hash
+                        ):
+                            return True
+            return False
+        except Exception as exc:  # noqa: BLE001 - do not infer conflict on read failure
+            logger.warning("identity user contradiction check failed: %s", exc)
+            return False
 
     async def _binding_contradicted(
         self, tenant_id: str, entity_ids: list[str], event_user_hash: str

@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:5786cd6f2b681b7f5eebe69321170ff90887780d2e7983a42a5bc640ba668b0d"
+  "frontend/aether/src/": "sha256:ad7db035ad1e2e124e967ed3a49c2697b2a63ab2b3efbd769efe59a5f5981a5d"
   "frontend/kyber/src/": "sha256:5be6084c1c17b8787018e1070b6cf8aca4e9277b1704d31720c004449d790557"
   "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
 ---
@@ -283,9 +283,9 @@ The platform serves e-commerce companies, SaaS businesses, financial institution
 
 ## Core Mental Model
 
-**Everything starts with the graph.** A graph node is an entity — a human, an organization, an AI agent, or a system. Edges are relationships. When you click a node, you see that entity's Profile360. The profile has tabs. Every data point on every tab traces back to a graph relationship.
+**Everything starts with the graph.** A graph node is an entity — a human, an organization, an AI agent, or a system. Edges are relationships. Profiles are reachable from the Profiles destination and from selected graph nodes. The profile has tabs. Every data point on every tab traces back to a graph relationship.
 
-The graph is the primary navigation surface. It opens on load. Profile tabs are drilldowns. The system compounds in value over time: more events → richer relationships → stronger attribution → better intelligence.
+The graph is the primary analysis workspace after activation. Incomplete tenants first enter guided activation; completed tenants return to their last useful workspace or default to Explore. Profile tabs are drilldowns. The system compounds in value over time: more events → richer relationships → stronger attribution → better intelligence.
 
 The defining moment the product must create is when an operator realizes:
 - A high-value customer is connected to a fraud cluster through 2 hops they couldn't see before
@@ -299,7 +299,7 @@ The UX must surface these moments. **The graph makes the invisible visible.**
 
 ## Navigation Model
 
-The intelligence graph is the primary surface. Entity profiles are drilldowns from selected graph nodes.
+The intelligence graph is the primary analysis surface. Entity profiles are available from the Profiles destination and as drilldowns from selected graph nodes.
 
 ```
 /explore                         → primary Aether graph workspace
@@ -314,29 +314,35 @@ The intelligence graph is the primary surface. Entity profiles are drilldowns fr
 /ai-efficiency                   → AI efficiency dashboard (flag-gated; proposals only)
 ```
 
-The authenticated tenant landing target is `/explore` once activation is
-complete. The minimal application rail exposes Explore plus real Sources and
-Settings capabilities; Findings, Investigations, Outcomes, and Reports remain
-visibly not ready instead of linking to fabricated surfaces. Explore composes
-the shared context bar, time rail, and collapsed Noesis context strip around
-the existing server-backed graph canvas, loading/error/empty states, table/path
-modes, and inspector. The lens dock reports availability from the generated
-lens/projection registries; it remains non-executing until the graph query seam
-accepts canonical lens identifiers, so a visible lens never implies a filter
-was applied. Selecting a real graph node synchronizes the shared GraphContext
-focus and URL, and entity nodes can open the existing Profile360 route. The
-Noesis strip links to the existing Noesis surface rather than synthesizing
-recommendations.
+Incomplete tenants landing at `/` are routed to `/activation`. A completed
+tenant returns to their last useful workspace, or to `/explore` when no saved
+workspace is available; requested protected deep links render directly. The
+application sidebar links to Graph (`/explore`), Profiles (`/users`), Connectors
+(`/settings/integrations`), and Settings (`/settings`). Connectors is hidden
+when its backend capability is unavailable. Snapshot, Journeys, Signals, Lenses,
+and Value remain visibly not ready instead of linking to fabricated surfaces.
+Explore composes the shared context bar, time rail, and collapsed Noesis context
+strip around the existing server-backed graph canvas, loading/error/empty
+states, table/path modes, and inspector. The lens dock reports availability
+from the generated lens/projection registries; it remains non-executing until
+the graph query seam accepts canonical lens identifiers, so a visible lens
+never implies a filter was applied. Selecting a real graph node synchronizes
+the shared GraphContext focus and URL, and entity nodes can open the existing
+Profile360 route. The Noesis strip links to the existing Noesis surface rather
+than synthesizing recommendations.
 
 Activation joins its server-owned lifecycle state with the typed tenant
 readiness snapshot to show the current stage, next permitted action, graph
 evidence state, and blocked/external recovery paths. It derives no numeric
 maturity score: `no_data`, `building`, and `ready` come from the named launch
-checks. Completed activation offers an explicit Explore handoff without an
-automatic redirect. The tenant decision panel likewise separates approval from
-execution: it records the authenticated decision, creates a durable planned
-action, and tells the user that a configured target is still required before
-dispatch.
+checks. Intent selection, credentials, and provider connection state show
+setup and sync progress; they do not prove that usable events reached Aether or
+that the graph is ready. First value is enabled only when the backend confirms
+evidence from real events, and completed activation offers an explicit Explore
+handoff without an automatic redirect. The tenant decision panel likewise
+separates approval from execution: it records the authenticated decision,
+creates a durable planned action, and tells the user that a configured target
+is still required before dispatch.
 
 Campaign360 gains a **Targeting Intelligence** tab and Cluster360 a
 **Targeting Impact** tab (flag-gated; observation-only — "Aether does not

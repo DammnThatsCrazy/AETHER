@@ -3927,6 +3927,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/AETHER_ROOT_ARCHITECTURE.md",
+      "title": "Aether Root Architecture",
+      "slug": "architecture/aether-root-architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "security"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
       "title": "Aether Backend Intelligence Architecture Blueprint",
       "slug": "architecture/backend-intelligence",
@@ -4567,6 +4582,93 @@
       "status": "beta"
     },
     {
+      "path": "docs/blueprints/architecture-reset/README.md",
+      "title": "Aether Architecture Reset Delivery Plan",
+      "slug": "blueprints/architecture-reset",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "security"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/blueprints/architecture-reset/cutover-inventory.md",
+      "title": "Aether Architecture Reset Cutover Inventory",
+      "slug": "blueprints/architecture-reset/cutover-inventory",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/blueprints/architecture-reset/delivery-authority-map.md",
+      "title": "Architecture Reset Delivery Authority Map",
+      "slug": "blueprints/architecture-reset/delivery-authority-map",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops",
+        "security"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0-alpha.0"
+    },
+    {
+      "path": "docs/blueprints/architecture-reset/product-surface-map.md",
+      "title": "Architecture Reset Product Surface Map",
+      "slug": "blueprints/architecture-reset/product-surface-map",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/blueprints/architecture-reset/proof-ledger.md",
+      "title": "Aether Architecture Reset Proof Ledger",
+      "slug": "blueprints/architecture-reset/proof-ledger",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "security"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/blueprints/architecture-reset/runtime-authority-map.md",
+      "title": "Architecture Reset Runtime Authority Map",
+      "slug": "blueprints/architecture-reset/runtime-authority-map",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/blueprints/communication360.md",
       "title": "Communication360 Vertical Slice Blueprint",
       "slug": "blueprints/communication360",
@@ -4629,6 +4731,18 @@
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/identity-continuity/confidence-calibration.md",
+      "title": "Identity Confidence Evaluation",
+      "slug": "blueprints/identity-continuity/confidence-calibration",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
     },
     {
       "path": "docs/blueprints/identity-continuity/current-state-inventory.md",

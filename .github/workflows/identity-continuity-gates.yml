@@ -125,8 +125,11 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Bootstrap minimal CI control plane
-        run: make bootstrap-ci-control
+      - name: Bootstrap backend test environment
+        run: |
+          make bootstrap-ci-control
+          .venv/bin/python -m pip install --disable-pip-version-check -e ".[dev,backend]"
+          .venv/bin/python -m pytest --version
 
       - name: Gate 2 — exercise import, SDK, and commerce identity routing
         run: |
@@ -165,8 +168,11 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Bootstrap minimal CI control plane
-        run: make bootstrap-ci-control 2>&1 | tail -n 30 || python -m pip install -e ".[dev]" 2>&1 | tail -n 30 || true
+      - name: Bootstrap backend test environment
+        run: |
+          make bootstrap-ci-control
+          .venv/bin/python -m pip install --disable-pip-version-check -e ".[dev,backend]"
+          .venv/bin/python -m pytest --version
 
       - name: Gate 3 — run merge-safety pytest suite
         run: |
@@ -220,8 +226,11 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Bootstrap minimal CI control plane
-        run: make bootstrap-ci-control 2>&1 | tail -n 30 || python -m pip install -e ".[dev]" 2>&1 | tail -n 30 || true
+      - name: Bootstrap backend test environment
+        run: |
+          make bootstrap-ci-control
+          .venv/bin/python -m pip install --disable-pip-version-check -e ".[dev,backend]"
+          .venv/bin/python -m pytest --version
 
       - name: Gate 4 — run bad-merge split suite
         run: |
@@ -253,8 +262,11 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Bootstrap minimal CI control plane
-        run: make bootstrap-ci-control 2>&1 | tail -n 30 || python -m pip install -e ".[dev]" 2>&1 | tail -n 30 || true
+      - name: Bootstrap backend test environment
+        run: |
+          make bootstrap-ci-control
+          .venv/bin/python -m pip install --disable-pip-version-check -e ".[dev,backend]"
+          .venv/bin/python -m pytest --version
 
       - name: Gate 5 — run projection restatement suite
         run: |
@@ -378,6 +390,14 @@ jobs:
           set -o pipefail
           python scripts/generate_contracts.py --check 2>&1 | tee artifacts/identity-continuity-proof/logs/contract-check.log
 
+      - name: Build proof package dependencies
+        id: proof-dependencies
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm --filter @aether/proof-contracts build 2>&1 | tee artifacts/identity-continuity-proof/logs/proof-contracts-build.log
+
       - name: Build proof fixtures package
         id: proof-fixtures
         if: always()
@@ -385,6 +405,14 @@ jobs:
         run: |
           set -o pipefail
           pnpm --filter @aether/proof-fixtures build 2>&1 | tee artifacts/identity-continuity-proof/logs/proof-fixtures-build.log
+
+      - name: Build proof runner package
+        id: proof-runner
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm --filter @aether/proof-runner build 2>&1 | tee artifacts/identity-continuity-proof/logs/proof-runner-build.log
 
       - name: Build and test proof reporting package
         id: proof-reporting
@@ -410,7 +438,9 @@ jobs:
           PYTHON_BOOTSTRAP: ${{ steps.python-bootstrap.outcome }}
           DEPENDENCY_INSTALL: ${{ steps.dependency-install.outcome }}
           CONTRACT_CHECK: ${{ steps.contract-check.outcome }}
+          PROOF_DEPENDENCIES: ${{ steps.proof-dependencies.outcome }}
           PROOF_FIXTURES: ${{ steps.proof-fixtures.outcome }}
+          PROOF_RUNNER: ${{ steps.proof-runner.outcome }}
           PROOF_REPORTING: ${{ steps.proof-reporting.outcome }}
           IDENTITY_SUITE: ${{ steps.identity-suite.outcome }}
           GITHUB_SHA: ${{ github.sha }}
@@ -427,7 +457,9 @@ jobs:
               ("Python bootstrap", os.environ["PYTHON_BOOTSTRAP"]),
               ("pnpm dependency install", os.environ["DEPENDENCY_INSTALL"]),
               ("Generated contract twins", os.environ["CONTRACT_CHECK"]),
+              ("Proof contracts package build", os.environ["PROOF_DEPENDENCIES"]),
               ("Proof fixtures package build", os.environ["PROOF_FIXTURES"]),
+              ("Proof runner package build", os.environ["PROOF_RUNNER"]),
               ("Proof reporting package build and tests", os.environ["PROOF_REPORTING"]),
               ("Identity and restatement suite", os.environ["IDENTITY_SUITE"]),
           ]
@@ -476,12 +508,14 @@ jobs:
           PYTHON_BOOTSTRAP: ${{ steps.python-bootstrap.outcome }}
           DEPENDENCY_INSTALL: ${{ steps.dependency-install.outcome }}
           CONTRACT_CHECK: ${{ steps.contract-check.outcome }}
+          PROOF_DEPENDENCIES: ${{ steps.proof-dependencies.outcome }}
           PROOF_FIXTURES: ${{ steps.proof-fixtures.outcome }}
+          PROOF_RUNNER: ${{ steps.proof-runner.outcome }}
           PROOF_REPORTING: ${{ steps.proof-reporting.outcome }}
           IDENTITY_SUITE: ${{ steps.identity-suite.outcome }}
         run: |
           failed=0
-          for outcome in "$PYTHON_BOOTSTRAP" "$DEPENDENCY_INSTALL" "$CONTRACT_CHECK" "$PROOF_FIXTURES" "$PROOF_REPORTING" "$IDENTITY_SUITE"; do
+          for outcome in "$PYTHON_BOOTSTRAP" "$DEPENDENCY_INSTALL" "$CONTRACT_CHECK" "$PROOF_DEPENDENCIES" "$PROOF_FIXTURES" "$PROOF_RUNNER" "$PROOF_REPORTING" "$IDENTITY_SUITE"; do
             if [ "$outcome" != "success" ]; then failed=1; fi
           done
           if [ "$failed" -ne 0 ]; then

@@ -13,7 +13,7 @@ toc_depth: 3
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
-  "services/backend/repositories/lake.py": "sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd"
+  "services/backend/repositories/lake.py": "sha256:be627f85ad552ddc89224ca93dc891f68a1c73077b1a90dc506d2da014ea5ef0"
   "services/backend/repositories/repos.py": "sha256:2555cbee6fe1d8a93c02e2b8c0b4d5cc8a0e041b248f7aa02f915bb112af4e20"
 ---
 
@@ -240,6 +240,12 @@ table and caches it. Writes and filters are then bound to the migrated types:
 `BronzeRepository.ingest()` returns `(record, is_new: bool)` — callers use the boolean to distinguish new inserts from duplicates without a separate read. Bronze records carry a provenance envelope: `provenance_status`, `license_status`, `terms_status`, `commercial_use_status`, `model_training_status`, `quarantine_status`, and `raw_payload_hash` (SHA-256 of raw payload). Records with `license_status="missing"` or `provenance_status` not equal to `VALID` are automatically set to `quarantine_status="quarantined"`. Cleared license statuses (`valid`, `public_api`, `open_license`, `enterprise_contract`) combined with cleared terms statuses (`approved`, `public_api`, `open_license`, `enterprise_contract`, `valid`) yield `provenance_status=VALID` and bypass quarantine.
 
 `SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions. `SilverRepository.check_promotion_eligibility(bronze_record)` enforces the promotion gate: quarantined Bronze records cannot be promoted to Silver (returns `(False, reason)` with the blocking reason).
+
+Source-tag audit and rollback require a non-empty tenant ID and filter records
+by both `tenant_id` and `source_tag`. The lake API supplies the authenticated
+tenant. Bronze and Silver rollback refuse more than 10,000 matching rows before
+deletion instead of silently truncating the selection. Rollback remains a hard
+delete; it does not create a durable correction or erasure receipt.
 
 Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)` with optional `lineage_id`, `source_manifest_ids`, and `model_training_eligible` parameters that attach enrichment lineage to Gold artifacts.
 The `IntelligenceAggregator` queries via `get_metrics(entity_id)` and applies

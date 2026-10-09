@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:d72649962c0bf6c89d0d86eaf6fdec3c0e0b7d7f3d6455b0b655b050da26c018"
+  "services/backend/services/": "sha256:b026c7f721ee7431f73838d941f4528a26d1704420a84bb907afb5c286acbe02"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1254,37 +1254,7 @@ requests are rejected). All are GET-only and never mutate reward state:
 
 ### GET /v1/resolution/cluster/{user_id}
 
-Get the full identity cluster for a user — all merged profiles, linked devices, IPs, wallets, and emails.
-
-**Response:**
-```json
-{
-  "cluster_id": "clust-abc",
-  "canonical_user_id": "user-123",
-  "confidence": 1.0,
-  "member_count": 3,
-  "resolution_status": "auto_merged",
-  "members": [
-    { "user_id": "user-123", "role": "primary", "joined_at": "2026-01-15T..." },
-    { "user_id": "anon-456", "role": "merged", "joined_at": "2026-02-01T..." },
-    { "user_id": "anon-789", "role": "merged", "joined_at": "2026-03-01T..." }
-  ],
-  "linked_devices": [
-    { "fingerprint_id": "a1b2c3...", "first_seen": "2026-01-15T...", "observations": 47 },
-    { "fingerprint_id": "d4e5f6...", "first_seen": "2026-02-01T...", "observations": 23 }
-  ],
-  "linked_ips": [
-    { "ip_hash": "abc123...", "ip_range": "192.168.1.0/24", "observations": 120 }
-  ],
-  "linked_wallets": [
-    { "address": "0x1234...abcd", "vm": "evm", "ens": "user.eth" },
-    { "address": "7nY4...Kx3p", "vm": "svm" }
-  ],
-  "linked_emails": [
-    { "email_hash": "def456...", "domain": "gmail.com" }
-  ]
-}
-```
+**Unavailable (HTTP 503).** The legacy graph read route was retired because it lacks tenant isolation. It returns `Legacy identity graph resolution is unavailable`; no tenant-scoped compatibility path currently serves identity-cluster data through this endpoint.
 
 ### GET /v1/resolution/pending
 
@@ -1311,7 +1281,7 @@ List pending resolution decisions awaiting admin review.
 
 ### POST /v1/resolution/pending/{id}/approve
 
-Admin approves a pending identity merge.
+Unavailable (HTTP 503). The legacy graph mutation route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not approve or apply a merge, and no replacement compatibility path is implemented.
 
 ### POST /v1/resolution/pending/{id}/reject
 
@@ -1352,7 +1322,7 @@ Update resolution engine configuration thresholds.
 
 ### POST /v1/resolution/batch
 
-Trigger a batch probabilistic matching job for the tenant.
+Unavailable (HTTP 503). The legacy graph batch route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not start a batch matching job, and no replacement compatibility path is implemented.
 
 ---
 
@@ -1380,11 +1350,17 @@ Three service groups are available when Intelligence Graph feature flags are ena
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/onchain/actions` | Record an on-chain action |
-| GET | `/v1/onchain/actions/{agent_id}` | List agent's on-chain actions |
-| GET | `/v1/onchain/contracts/{address}` | Contract details + call graph |
+| POST | `/v1/onchain/actions` | Record a tenant-scoped on-chain action through the graph gateway; provide a stable `action_id` or `tx_hash` |
+| GET | `/v1/onchain/actions/{agent_id}` | List the authenticated tenant's agent actions; returns unavailable rather than a truncated result above the current read cap |
+| GET | `/v1/onchain/contracts/{address}` | Contract metadata and call count in the authenticated tenant; optional `chain_id` disambiguates an address on multiple chains, which otherwise returns a conflict |
 | POST | `/v1/onchain/listener/configure` | Configure chain event listener |
 | GET | `/v1/onchain/rpc/health` | RPC gateway health check |
+
+The recorder derives an action ID from tenant, chain, and transaction hash when
+`action_id` is omitted. Its schema has no log index, so multiple actions in one
+transaction need distinct stable caller-supplied IDs. A rejected gateway intent
+stops publication and returns an error; earlier intents may already have been
+applied because the action's graph mutations do not share a transaction.
 
 ### x402 Service (L3b)
 
@@ -1538,8 +1514,8 @@ credential slot must be ACTIVE, entitlement must approve).
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/lake/ingest` | Ingest provider data into Bronze tier (batch, source-tagged) |
-| POST | `/v1/lake/rollback` | Rollback records by source_tag across specified tiers |
-| GET | `/v1/lake/audit/{domain}/{source_tag}` | Query audit trail for a source_tag |
+| POST | `/v1/lake/rollback` | Roll back the authenticated tenant's records by source_tag across specified tiers; refuses over 10,000 matching rows before deleting |
+| GET | `/v1/lake/audit/{domain}/{source_tag}` | Query the authenticated tenant's Bronze records for a source_tag |
 | POST | `/v1/lake/materialize` | Write Gold metric/feature/highlight |
 | GET | `/v1/lake/gold/{domain}/{entity_id}` | Query Gold metrics for an entity |
 | GET | `/v1/lake/quality/{domain}` | Run data quality checks on a domain's Bronze tier |
@@ -1550,7 +1526,7 @@ credential slot must be ACTIVE, entitlement must approve).
 
 **Required fields for ingest:** `domain`, `source`, `source_tag`, `records[]`
 
-**Permissions:** `write` for ingest/materialize, `read` for queries, `admin` for rollback/quality
+**Permissions:** `write` for ingest/materialize, tenant-scoped `read` for queries/audit, tenant-scoped `admin` for rollback/quality
 
 ---
 
@@ -1639,7 +1615,7 @@ Core identity resolution and entity management endpoints.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. A first sighting returns `create`; a `user_id` sent with a matching `anonymous_id` merges deterministically (`authenticated_user_binding`) unless a candidate holds a different user_id (conflict) |
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. The route is disabled by default (`IDENTITY_RESOLUTION_ENABLED=false`) and is blocked unless the server finds an identity-link consent receipt for the authenticated tenant and request `anonymous_id`; a caller-supplied consent snapshot is not authorization. A `user_id` sent with a matching `anonymous_id` may merge deterministically (`authenticated_user_binding`) when auto-merge is enabled; otherwise it is a review candidate when manual review is enabled, or blocked |
 | GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
@@ -1988,13 +1964,21 @@ Registry-first Web3 intelligence system with canonical chain/protocol/app/domain
 | `POST` | `/v1/web3/classify/contract` | Classify a contract address |
 | `POST` | `/v1/web3/classify/method` | Map method selector to canonical action |
 | `POST` | `/v1/web3/classify/domain` | Attribute a frontend domain |
-| `POST` | `/v1/web3/classify/observation` | Classify a full Web3 observation |
+| `POST` | `/v1/web3/classify/observation` | Classify a full Web3 observation; optional graph writes use the authenticated tenant scope |
 
 **Observation Ingestion**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/web3/observations/batch` | Bulk ingest Web3 observations (up to 500/batch) |
+| `POST` | `/v1/web3/observations/batch` | Bulk ingest Web3 observations (up to 500/batch); graph writes use the authenticated tenant scope |
+
+When graph construction is requested for an observation, the service requires
+the authenticated tenant's `write` permission and sends vertex and edge
+mutations through the canonical Graph Mutation Gateway. The single-observation,
+batch-ingestion, and migration-detection routes enforce `write` before they
+write observations or graph state; registry mutation routes enforce `write`,
+and registry seeding requires `admin`. Web3 graph object IDs are
+tenant-qualified; transaction hashes provide source-event identity when present.
 
 **Migration Tracking**
 
@@ -2202,7 +2186,7 @@ the tenant-facing `/v1/events/replay` service above. The router is mounted in
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`. |
+| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). Occurrence bounds require timezone offsets and are compared in UTC; malformed or reversed bounds fail validation, and bounded runs exclude events with unknown original times. `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`; even with the flag on, publishing is limited to an explicitly local, in-memory backend and fails closed as unavailable on hosted or durable backends. Per-row publish errors mark the run `partial`; reusing the same tenant and run ID with the same filters returns that cached result instead of silently publishing earlier rows again. This journal is process-local, not durable across restarts, and does not provide exactly-once delivery. |
 | GET | `/v1/kyber/ingest/replay/status` | Gate state: `enabled` (the `AETHER_INGESTION_REPLAY_ENABLED` kill switch), the `source_service` label replayed events carry (`ingestion.replay`), and `dry_run_default`. |
 
 ### Operator ingestion observability & SDK version tiers (WS-E, v8.12.0)
@@ -3505,6 +3489,12 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
 - `POST /v1/provider-connections/{connection_id}/credentials` — store a structured
   credential. Only a `credential_ref` is ever returned or stored on the connection;
   secrets are never echoed.
+- `DELETE /v1/provider-connections/{connection_id}/credentials` — hard-delete
+  the connection's broker credential and clear its credential ref. Requires the
+  tenant `write` permission, accepts no request body, and returns the standard
+  success envelope with `data: {"connection_id": "...", "credential_deleted": true}`;
+  cross-tenant connection IDs resolve to 404. Deletion is refused while another
+  connection in the tenant still references the same credential.
 - `POST /v1/provider-connections/{connection_id}/test` — live connectivity test
   through the provider's auth adapter.
 - `GET /v1/provider-connections/{connection_id}/accounts` — account discovery.
@@ -3512,7 +3502,11 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   account to scope ingestion.
 - `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
   (optional `since` for backfill). Provider failure marks the run failed with a
-  safe error classification — never a silent empty success.
+  safe error classification — never a silent empty success. A pulled row that
+  fails the persisted Bronze source-rights admission is retained in quarantine,
+  excluded from identity evidence/normalization/publication, and closes the run
+  as `partial` with `source_rights_rejected`; the cursor and last-success time
+  do not advance.
 - `GET /v1/provider-connections/{connection_id}/sync-runs` — durable sync-run
   history.
 - `POST /v1/provider-connections/{connection_id}/confirm` — server-side
