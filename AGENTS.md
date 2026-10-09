@@ -66,7 +66,7 @@ unless the user requests a commit.
 - `make repo-doctor-fix` — regenerate generated docs + sync, then validate.
 - `make docs-fix` — regenerate and sync docs only.
 - `make docs-generate` — generate only generated/sync-managed docs.
-- `make docs-generate-changed` — update only source-linked docs with changed source bytes.
+- `make docs-generate-changed` — update only source-linked docs with changed source bytes. Set `DOCS_CHANGED="docs/a.md docs/b.md"` to limit the update to reviewed repo-relative paths; untracked or unlinked paths fail closed.
 - `make docs-verify-idempotent` — prove the second generation pass is byte-identical.
 - `make verification-disposition BASE=<base> EXECUTE=1` — normal PR authority.
 - `make ci-check` — broad consistency and repository evidence (fails if generators produce a diff).
@@ -94,8 +94,9 @@ outputs, and other vendored or generated dependency trees.
 - `source_hashes:` records deterministic SHA-256 content markers for those inputs.
 - `last_synced_commit:` is legacy metadata and must not be added to new docs.
 - A source mismatch requires reviewing the listed page. Update only the affected
-  hashes with `make docs-generate-changed`; never solve a docs failure by globally
-  restamping every page.
+  hashes with `make docs-generate-changed`; use `DOCS_CHANGED="docs/a.md docs/b.md"`
+  when only a reviewed subset is in scope. Never solve a docs failure by globally
+  restamping unrelated pages.
 - If a source change is intentionally orthogonal to a page, record the decision
   in the PR and keep the page's hash update scoped to that reviewed page.
 

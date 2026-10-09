@@ -73,9 +73,9 @@ def _isolated(monkeypatch):
     monkeypatch.setattr(impact_mod, "_pb1_repositories", lambda: repos)
     monkeypatch.setattr(lifecycle_mod, "_pb1_repositories", lambda: repos)
     monkeypatch.setattr(impact_mod, "_grant_loader", _load_grant_for_test)
-    async def _revoke(grant_id, body):
+    async def _revoke(grant_id, body, *, tenant_id=None):
         grant = _TEST_GRANTS.get(grant_id)
-        if grant is None:
+        if grant is None or (tenant_id is not None and grant.tenant_id != tenant_id):
             return None
         values = vars(grant).copy()
         values.update(status="revoked", revoked_at="2026-09-09T00:00:00Z")

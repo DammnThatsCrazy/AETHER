@@ -81,6 +81,16 @@ class RightsDecisionRepository(_ScopedRepo):
     async def get(self, decision_id: str) -> Optional[dict]:
         return await self.find_by_id(decision_id)
 
+    async def get_for_tenant(
+        self, decision_id: str, *, tenant_id: str,
+    ) -> Optional[dict]:
+        """Return a decision only when its persisted tenant matches the caller."""
+        rows = await self.find_many(
+            filters={"decision_id": decision_id, "tenant_id": tenant_id},
+            limit=1,
+        )
+        return rows[0] if rows else None
+
     async def find_by_identity(
         self,
         tenant_id: str,

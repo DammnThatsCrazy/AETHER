@@ -295,7 +295,7 @@ validate-docs: ## Check for version drift across docs
 	python scripts/validate_docs.py
 
 validate-frontmatter: ## Validate YAML frontmatter on docs/*.md against scripts/docs_schema.json
-	python scripts/validate_frontmatter.py
+	$(GATE_PY) scripts/validate_frontmatter.py
 
 extract-docs: ## Regenerate docs/_generated/*.json from canonical sources
 	python scripts/docs_extract/run_all.py
@@ -435,8 +435,8 @@ docs-check: ## Docs-focused validation with shared consistency preflight
 
 docs-generate: docs-fix ## Regenerate generated and sync-managed docs (never authored source-linked docs)
 
-docs-generate-changed: ## Update only source-linked docs whose declared source content changed
-	$(GATE_PY) scripts/docs_drift.py --update
+docs-generate-changed: ## Update reviewed source-linked docs (DOCS_CHANGED may scope paths)
+	$(GATE_PY) scripts/docs_drift.py --update $(foreach doc,$(DOCS_CHANGED),--path "$(doc)")
 
 docs-migrate: ## One-time migration from Git SHA stamps to deterministic source-content hashes
 	$(GATE_PY) scripts/docs_drift.py --migrate-to-content-hashes

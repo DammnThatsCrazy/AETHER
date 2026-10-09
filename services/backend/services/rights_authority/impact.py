@@ -306,6 +306,7 @@ async def revocation_pipeline(
             revocation_reason=reason,
             revoked_by_user_id=f"tenant:{tenant_id}",
         ),
+        tenant_id=tenant_id,
     )
     if revoked is None:
         raise RevocationError(f"revocation refused for grant {grant_id}: grant disappeared")

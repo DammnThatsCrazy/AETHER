@@ -33,6 +33,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from services.provider_runtime.connection import SCHEDULED_SYNC_STATES
 from shared.logger.logger import get_logger, metrics
 from shared.temporal import try_parse_instant
 
@@ -40,22 +41,6 @@ logger = get_logger("aether.provider_runtime.sync_worker")
 
 #: Default interval when the config field is absent (Team D not landed yet).
 _DEFAULT_INTERVAL_S = 300
-
-#: Lifecycle states a connection may be in and still be worth a scheduled sync.
-#: A connection that is disabled, deprecated, unsupported, or failed is never
-#: auto-synced — a scheduled sync must not resurrect a terminal/blocked state.
-_SYNCABLE_STATES: frozenset[str] = frozenset(
-    {
-        "available",
-        "credentials_received",
-        "verifying",
-        "verified",
-        "account_selection_required",
-        "configuration_required",
-        "initial_sync_pending",
-        "connected",
-    }
-)
 
 
 def _config_value(settings: Any, name: str, default: Any) -> Any:
@@ -130,7 +115,7 @@ class ProviderSyncRunner:
         state = getattr(connection, "state", None)
         if hasattr(state, "value"):
             state = state.value
-        if str(state) not in _SYNCABLE_STATES:
+        if str(state) not in SCHEDULED_SYNC_STATES:
             return False
         if not getattr(connection, "credential_ref", ""):
             return False
@@ -197,9 +182,7 @@ class ProviderSyncRunner:
                 )
 
         metrics.increment("provider_sync_scheduler_pass_total")
-        metrics.increment(
-            "provider_sync_scheduler_due_total", value=len(due)
-        )
+        metrics.increment("provider_sync_scheduler_due_total", value=len(due))
         return summary
 
 
@@ -210,9 +193,7 @@ def _connection_from_row(row: Optional[dict]) -> Any:
     from services.provider_runtime.connection import ProviderConnection
 
     try:
-        return ProviderConnection.model_validate(
-            {k: v for k, v in row.items() if k != "id"}
-        )
+        return ProviderConnection.model_validate({k: v for k, v in row.items() if k != "id"})
     except Exception:  # pragma: no cover - unparseable row is skipped honestly
         return None
 
@@ -233,9 +214,7 @@ async def run_provider_sync_loop(interval_seconds: Optional[int] = None) -> None
         interval = int(
             interval_seconds
             if interval_seconds is not None
-            else _config_value(
-                settings, "provider_sync_interval_seconds", _DEFAULT_INTERVAL_S
-            )
+            else _config_value(settings, "provider_sync_interval_seconds", _DEFAULT_INTERVAL_S)
         )
         try:
             await _sweep_once(settings)
@@ -251,9 +230,7 @@ async def _sweep_once(settings: Any) -> None:
     """One sweep pass — a no-op unless the Team-D scheduler flag is enabled."""
     if not bool(_config_value(settings, "provider_sync_scheduler_enabled", False)):
         return
-    interval = int(
-        _config_value(settings, "provider_sync_interval_seconds", _DEFAULT_INTERVAL_S)
-    )
+    interval = int(_config_value(settings, "provider_sync_interval_seconds", _DEFAULT_INTERVAL_S))
     summary = await ProviderSyncRunner(interval_seconds=interval).run_pass()
     if summary["due"]:
         logger.info(

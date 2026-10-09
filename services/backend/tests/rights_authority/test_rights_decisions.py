@@ -83,6 +83,18 @@ async def test_decision_list_for_tenant_scoping():
     assert [r["decision_id"] for r in tenant_2_rows] == ["rdec_t2"]
 
 
+async def test_decision_get_for_tenant_rejects_cross_tenant_reference():
+    decision = _decision(decision_id="rdec_scoped", tenant_id="tenant_1")
+    await rights_decision_repository.record(decision)
+
+    assert await rights_decision_repository.get_for_tenant(
+        decision.decision_id, tenant_id="tenant_1",
+    ) is not None
+    assert await rights_decision_repository.get_for_tenant(
+        decision.decision_id, tenant_id="tenant_2",
+    ) is None
+
+
 async def test_list_known_as_of_filters_by_effective_time():
     early = _decision(decision_id="rdec_early")
     late = _decision(decision_id="rdec_late")

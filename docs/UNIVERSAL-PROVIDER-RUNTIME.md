@@ -20,12 +20,12 @@ estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
-  "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
-  "services/backend/services/provider_runtime/": "sha256:24f5445f73434daf958f26f6548f51f4ed22ed196812088898a8e2195eb094a1"
-  "services/backend/services/providers/": "sha256:6d1ba9157c4e120bdf799b6d717252fafbb3369d47ceabed255ca8933c06be82"
-  "services/backend/services/providers/shopify/": "sha256:b06727a9e1f397fdb52babcf270f1c2198d8b84e23f183855bece2dcb22e4a22"
+  "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
+  "services/backend/services/provider_runtime/": "sha256:654c952f050f9122a6ed5323cc74c5ba84436344c3f4c812b5d1ade715ad0f17"
+  "services/backend/services/providers/": "sha256:c5f185eb1a96f4c9c081c70a930cddd1ab1cc183308663b0256944fca5fdf70e"
+  "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
-  "services/backend/shared/integration_contracts/": "sha256:ef4cb78f58482052f180f54b494bcc90a4dcea3777dfbb0e901a1f214fb1e683"
+  "services/backend/shared/integration_contracts/": "sha256:e7cbea51644fe93fb204a21cf8e2ece11833a6aa7803b6fdf2dfc076988e5929"
   "services/backend/shared/rate_limit/feature_gate.py": "sha256:a93ea91270a1d0ca3d8664ddea29b75cbfca8c2180a239cb78a3a61d8facda96"
 ---
 
@@ -107,6 +107,8 @@ services/backend/
 │   │   ├── results.py                  #   AdapterResult + bridge mappers
 │   │   ├── normalization.py            #   EventNormalizer, NormalizationResult
 │   │   ├── events.py                   #   RawProviderRecord, ReadBatch, AetherEvent
+│   │   ├── streams.py                  #   stream mode/cursor declarations
+│   │   ├── source_objects.py           #   non-identity object refs, logical event key
 │   │   ├── certification.py            #   CertificationReport, readiness tokens
 │   │   ├── catalog.py                  #   derived catalog — 4 groups (connectors, ad-platforms, payment-rails, credit bureaus)
 │   │   ├── experience.py               #   ExperienceCategory + experience_category_for (customer-facing projection)
@@ -120,7 +122,7 @@ services/backend/
 ├── services/
 │   ├── provider_runtime/               # NEW — the runtime service
 │   │   ├── acquisition.py              #   account discovery/selection coordinator
-│   │   ├── bridge.py                   #   event bridge (canonical event → Bronze + bus)
+│   │   ├── bridge.py                   #   canonical event → typed Bronze + outbox
 │   │   ├── certification.py            #   certification harness (certify_provider)
 │   │   ├── connection.py               #   connection lifecycle
 │   │   ├── credential_broker.py        #   credential resolution via credential_service
@@ -133,6 +135,10 @@ services/backend/
 │   │   ├── plugin.py                   #   BaseProviderPlugin + register_provider
 │   │   ├── rate_limit.py               #   per-provider rate limiting
 │   │   ├── raw_store.py                #   raw-before-canonical Bronze persistence
+│   │   ├── object_refs.py              #   verified source-object IDs and aliases
+│   │   ├── tenant_route_repository.py  #   audited route ledger and writer fence
+│   │   ├── tenant_route_service.py     #   governed route transitions
+│   │   ├── connector_graph_writer.py  #   opt-in guarded graph mutation seam
 │   │   ├── reconciliation.py           #   reconciliation
 │   │   ├── registry.py                 #   ProviderRegistry — register/load_all, entry points
 │   │   ├── retry.py                    #   retry policy
@@ -148,6 +154,7 @@ services/backend/
 │   │   │   ├── auth.py                 #   AuthAdapter (credential validation + connectivity)
 │   │   │   ├── account.py              #   AccountAdapter (shop discovery/selection)
 │   │   │   ├── pull.py                 #   PullAdapter (page_info / since_id cursors)
+│   │   │   ├── graphql_pull.py         #   opt-in version-pinned GraphQL orders
 │   │   │   ├── webhook.py              #   WebhookAdapter (HMAC-SHA256 verify + parse)
 │   │   │   ├── normalizer.py           #   Shopify order → commerce.order.*
 │   │   │   └── payloads.py             #   strict Shopify REST payload models
@@ -166,52 +173,95 @@ Provider adapter
         │  RawProviderRecord (provider's own payload, untouched)
         ▼
 BronzeRepository("provider_records")      ← idempotent (raw idempotency key)
-        │  durable, re-playable
+        │  raw rights are resolved before insert; a denied record is never written
+        │  (staging/production require the migrated durable grant schema)
+        │  normalize only if the persisted row is valid / not_quarantined
         ▼
-Persisted Bronze rights admission
-  ├─ missing / denied / quarantined → retain raw row; no identity, normalize, or bridge
-  └─ valid provenance + license + terms + commercial use
+Tenant rights admission (ProviderRawRightsAdmission — the single admission gate)
+  ├─ missing / denied / non-durable grant store → ProviderRawRightsDenied:
+  │    nothing retained, run fails, cursor and last-success unchanged
+  └─ allowed RightsDecision + active tenant_byod_data grant + valid persisted evidence
         ▼
 Normalization engine (EventNormalizer.normalize)
         │  deterministic, network-free; NormalizationResult
         ▼
 Event bridge
-  1. canonical AetherEvent → bronze_connectors (existing store)
-  2. event bus publish                        ← Bronze-before-publish
+  1. consent-admitted canonical AetherEvent → typed bronze_sdk_events
+  2. SDK_EVENTS_VALIDATED outbox row in the same database transaction
+  3. supervised event-outbox relay → event bus when enabled
         ▼
 Downstream consumers (analytics, outbox, intelligence)
 ```
 
 The pipeline honors three invariants:
 
-- **Idempotency.** `RawProviderRecord.idempotency_key` dedups raw ingestion;
-  `AetherEvent.idempotency_key` dedups event publication. Re-running a pull or
-  replaying a webhook never double-persists or double-publishes.
-- **Bronze-before-publish.** An `AetherEvent` is only published after its raw
-  record is durably stored, so replay cannot fabricate events the lake lacks.
-- **Deterministic normalization.** A normalizer never depends on wall-clock,
-  randomness, or provider I/O; anything it cannot translate is surfaced via
-  `dropped`, never silently skipped.
-- **Source-rights admission for pulls.** After Bronze retention, the pull
-  scheduler reads the persisted row's provenance, license, terms,
-  commercial-use, and quarantine state. Missing or denied rights keep the raw
-  record in Bronze but block provider identity evidence, normalization, and
-  event bridging. The sync ledger reports `partial` with
-  `source_rights_rejected`; the provider cursor and last-success timestamp do
-  not advance. The current provider pull integration does not populate an
-  authoritative rights grant, so unknown rows remain quarantined until that
-  separate intake is connected. Provider certification is not a rights grant.
+- **Idempotency.** Legacy raw keys remain readable. Schema v2 raw keys include
+  the verified source account, object, and source revision, so a changed
+  source object is retained while a duplicate revision returns the original
+  Bronze lineage ID. The typed canonical Bronze/outbox transaction deduplicates
+  the event ID. Provider-specific semantic duplication still needs source
+  authority and reconciliation.
+- **Bronze-before-publish.** Pull and webhook ingress persist a raw record,
+  then admit it to normalization only if the persisted Bronze provenance and
+  quarantine statuses pass the fail-closed check below. For an admitted record,
+  the bridge commits a typed canonical Bronze row
+  and an outbox row atomically. A persistence failure leaves the pull cursor or
+  webhook inbox receipt unadvanced. Bus delivery requires the existing
+  supervised relay, and downstream projection is a separate authority.
+- **Deterministic normalization.** A normalizer must not depend on wall-clock,
+  randomness, or provider I/O. Dropped or invalid records remain a visible
+  normalization outcome; provider-specific quarantine and repair are still
+  required before a stream is promoted.
 - **Ingress consent gate (WS-B3).** The event bridge scrubs sensitive values
   from each `AetherEvent`'s `data`/`context` in place before the durable dump
   (mandatory and unconditional — Bronze and the publish carry only scrubbed
   payloads) and runs the shared ingress decision
   (`services/backend/services/ingestion/validation.evaluate_ingress_decision`) per event. A
-  denied event is rejected — no Bronze row, no publish,
-  `provider_runtime_consent_blocked_total` incremented — while the provider RAW
-  record stays intact for replay; a delivery is never failed wholesale. The
+  denied event is rejected — no canonical Bronze/outbox row or publish,
+  `provider_runtime_consent_blocked_total` incremented. Any already-admitted
+  provider raw record remains available only while its rights/retention basis
+  permits; it is not preserved indefinitely as an audit exception. The internal
+  raw replay service has no public/operator authorization surface today. The
   per-subject (S) server-receipt rejection applies only when
   `PROVIDER_RUNTIME_CONSENT_ENFORCEMENT_ENABLED` is set (default True) AND the
   authoritative consent flag is on AND the event resolves a purpose + subject.
+  Provider raw retention and deletion remain governed separately by rights and
+  data-use policy.
+
+**Current raw-rights admission gate:** UPR resolves the provider account at
+`source_id="provider-account:{connection_id}:{account_id}"`. The required
+`DataRightsGrant` is tenant-scoped to the verified connection, sets
+`connector_id` to the provider identity and `connector_class` to
+`tenant_byod_data`, and grants tenant-lake permission. Raw payload is retained
+only after an allowed, immutable `RightsDecision` is recorded; the persisted
+Bronze row must also have `provenance_status=valid` and
+`quarantine_status=not_quarantined` before normalization. Replay requires the
+tenant-scoped decision reference and a fresh rights check. `DataRightsService`
+persists canonical grants and create/revoke events through its migration-owned
+tenant-scoped repository. Staging/production raw admission also checks that the
+database and required schema are available, and fails closed when they are not.
+Omitted use permissions default to false. This persistence change does not
+enable the provider runtime or alter environment flags.
+Rows created under the earlier path remain quarantined because they have no
+persisted admission evidence or referenced allowed `RightsDecision`. Replay
+rejects their quarantine state and requires the original tenant-scoped decision
+reference plus a fresh current-grant check. No historical-row re-admission
+path exists, so operators cannot unquarantine or replay these rows manually. A
+future governed path must resolve immutable decision evidence for each
+unchanged Bronze row and perform a fresh rights check; it must not rewrite the
+raw row to bypass replay admission. `BronzeRepository.update` rejects
+post-insert changes to provider raw, source, provenance, and quarantine fields.
+Its only exception appends IDs to `payload.metadata.confirmed_signal_ids`.
+Quarantine does not grant an audit-retention exception: current rights and
+retention rules govern preservation, deletion, and suppression. The runtime
+flag remains default-off; an adapter payload or manifest cannot grant
+admission.
+
+Provider credentials use a separate secret reference. New credential writes use
+opaque refs scoped to tenant, provider identity, and connection. Persisted
+legacy tenant/provider refs remain resolvable for existing connections, but
+new writes do not reuse or rewrite them. This credential boundary does not
+grant raw-data retention rights.
 
 ## Feature flag & wiring
 
@@ -232,7 +282,14 @@ The pipeline honors three invariants:
   API key and MUST self-verify inbound calls **fail-closed** inside the handler:
   a signature scheme without a configured secret, or an `endpoint_secret`
   scheme without a matching per-connection token, is DENIED with a closed 4xx
-  and an auditable denial record — there is no "no secret ⇒ trust" path.
+  and no "no secret ⇒ trust" path. Before verification proves connection
+  ownership, the public response is a generic closed denial. Internal
+  telemetry may record a bounded reason label with no tenant label; it does
+  not write tenant-scoped Bronze denial rows or inbox bodies. A webhook body
+  is retained only after successful verification, binding, and raw-rights
+  admission. Later tenant-scoped metadata-only failure evidence is retained
+  only after successful verification and binding and only if its own raw-rights
+  admission succeeds; a rights denial creates no such evidence.
 
 ## How a new provider lands
 
@@ -263,6 +320,31 @@ The pipeline honors three invariants:
 - Certification runs are recorded; a provider's earned readiness is auditable.
 
 ## Limits & follow-on
+
+**Universal connector foundation in this branch:** manifests can declare
+independently addressable streams, raw v2 records preserve account/realm/object
+revisions, non-identity source objects have scoped opaque IDs and aliases,
+and a pure length-prefixed helper encodes the proposed 160-bit logical event
+ID. The helper does not verify account evidence or publish facts; the object
+repository verifies account ownership. `provider_object_refs` remains
+repository-only: Shopify normalizers do not call it, emitted Shopify events do
+not carry its IDs, and graph projection does not consume it. Tenant routes have
+audited transitions plus an opt-in graph writer fence. The graph writer holds
+a PostgreSQL route row lock through a bounded enforced gateway call and
+rejects absent PostgreSQL outside local mode.
+Shopify's GraphQL orders adapter is opt-in and remains credential-waiting.
+These primitives do not make cutover or commerce graph projection live: both
+legacy and native writers must use the route fence, provider facts need
+authority/reconciliation and projection consumers, and provider replay and
+external sandbox evidence must pass their own gates. The
+[implementation blueprint](blueprints/universal-connector-runtime/README.md)
+tracks the complete target and remaining acceptance evidence.
+
+The tenant sync route accepts an optional `stream_ids` list (maximum 32 unique,
+nonblank IDs, each at most 128 characters) in addition to `since`. It rejects
+the complete selection before provider work unless every requested stream is
+declared, pullable, and active; empty or omitted selection runs every active
+pull stream. The API does not yet provide a durable long-backfill job request.
 
 **Update (follow-on program, shipped):** the UPR follow-on program landed as
 PR-A (shared seams + legacy SSRF hardening) → PR-B (six native provider

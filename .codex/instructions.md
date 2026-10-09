@@ -25,7 +25,9 @@ generator inputs, contract inputs, or source-linked documentation are affected:
    every path in their `source_files:` frontmatter.
 2. Update authored prose when the documented behavior changed.
 3. Run `make docs-generate-changed` only after review. It updates only the
-   affected `source_hashes:` markers.
+   affected `source_hashes:` markers. Set `DOCS_CHANGED="docs/a.md docs/b.md"`
+   to restrict the update to reviewed repo-relative paths; unknown or unlinked
+   paths are rejected.
 4. Run `make docs-generate` when a canonical generator input or generator
    implementation changed.
 5. Run `make verification-disposition BASE=<base> EXECUTE=1` as the normal PR

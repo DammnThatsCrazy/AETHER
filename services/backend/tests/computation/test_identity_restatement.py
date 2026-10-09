@@ -59,8 +59,19 @@ ENTITY_CONSUMED = "entity_consumed"
 
 
 @pytest.fixture(autouse=True)
-def _reset():
+def _reset(monkeypatch):
+    from config import settings as settings_module
+
     reset_in_memory_stores()
+    monkeypatch.setattr(
+        settings_module.settings,
+        "identity_continuity",
+        replace(
+            settings_module.settings.identity_continuity,
+            resolution_enabled=True,
+            auto_merge_enabled=True,
+        ),
+    )
 
 
 class _FakeProducer:

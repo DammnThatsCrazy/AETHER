@@ -15,20 +15,9 @@ import pytest
 import pytest_asyncio
 
 from services.provider_runtime.errors import ProviderPullFailed
+from services.provider_runtime.connection import SCHEDULED_SYNC_STATES
 from services.provider_runtime.sync_worker import ProviderSyncRunner
-
-_SYNCABLE_STATES = frozenset(
-    {
-        "available",
-        "credentials_received",
-        "verifying",
-        "verified",
-        "account_selection_required",
-        "configuration_required",
-        "initial_sync_pending",
-        "connected",
-    }
-)
+from shared.integration_contracts.lifecycle import ConnectionState
 
 
 def _row(
@@ -36,7 +25,7 @@ def _row(
     tenant_id: str,
     provider_identity: str,
     *,
-    state: str = "verified",
+    state: str = "initial_sync_pending",
     credential_ref: str = "",
     last_successful_sync_at: str | None = None,
 ) -> dict:
@@ -80,9 +69,7 @@ class FakeScheduler:
     async def run_sync(self, connection, *, since=None):
         self.calls.append((connection.connection_id, since))
         if self.outcome == "fail":
-            raise ProviderPullFailed(
-                f"provider pull failed for {connection.provider_identity}"
-            )
+            raise ProviderPullFailed(f"provider pull failed for {connection.provider_identity}")
         if self.outcome == "raise":
             raise RuntimeError("unexpected scheduler crash")
         return {"connection_id": connection.connection_id, "records_received": 0}
@@ -93,10 +80,7 @@ class FakeScheduler:
 
 @pytest.mark.parametrize(
     "state,expect_due",
-    [
-        (state, True) for state in sorted(_SYNCABLE_STATES)
-    ]
-    + [(state, False) for state in ("disabled", "failed", "deprecated", "revoked")],
+    [(state.value, state.value in SCHEDULED_SYNC_STATES) for state in ConnectionState],
 )
 def test_is_due_state_gating(state: str, expect_due: bool) -> None:
     from services.provider_runtime.connection import ProviderConnection

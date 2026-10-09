@@ -105,7 +105,7 @@ for feedback. After integrating the blueprint, reviewing and remediating gaps,
 and updating required docs and derived surfaces, finalize the PR once. Then:
 
 1. If docs, generator inputs, or contract inputs changed, run `make docs-generate`.
-2. Review source-linked docs and run `make docs-generate-changed` only for the reviewed pages.
+2. Review source-linked docs and run `make docs-generate-changed DOCS_CHANGED="docs/a.md docs/b.md"` only for the reviewed pages. The allowlist rejects untracked or unlinked paths.
 3. Run `make verification-disposition BASE=<ref> EXECUTE=1` once as the normal PR authority.
 4. Commit all generated docs and sync outputs.
 5. Do not hand-edit generated docs.

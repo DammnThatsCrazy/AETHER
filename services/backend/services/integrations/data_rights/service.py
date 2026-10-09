@@ -38,6 +38,7 @@ from services.integrations.data_rights.models import (
     TenantLicenseRights,
     TerminationAuthority,
 )
+from services.integrations.data_rights.repository import DataRightsGrantRepository
 
 logger = get_logger("aether.service.data_rights")
 
@@ -234,14 +235,19 @@ def resolve_structured_rights(grant: DataRightsGrant) -> Dict[str, Any]:
 
 
 class DataRightsService:
-    """In-memory data rights ledger with fail-closed policy checks.
+    """Canonical data-rights ledger with local-memory and durable backends."""
 
-    Production implementation should persist to DynamoDB/TimescaleDB
-    with event sourcing for audit trail completeness.
-    """
-
-    def __init__(self) -> None:
+    def __init__(self, repository: Optional[DataRightsGrantRepository] = None) -> None:
         self._grants: Dict[str, DataRightsGrant] = {}
+        self._events: List[Dict[str, Any]] = []
+        self._repository = repository or DataRightsGrantRepository(
+            local_grants=self._grants,
+            local_events=self._events,
+        )
+
+    async def is_durable(self) -> bool:
+        """True only when the configured persistent backend and schema are ready."""
+        return await self._repository.is_ready()
 
     async def create_grant(
         self,
@@ -304,7 +310,7 @@ class DataRightsService:
             audit_event_id=audit_id,
         )
 
-        self._grants[grant_id] = grant
+        await self._repository.create(grant, actor=granted_by_user_id)
 
         logger.info(
             f"DataRightsGrant created: grant_id={grant_id} "
@@ -315,15 +321,39 @@ class DataRightsService:
 
         return grant
 
-    async def get_grant(self, grant_id: str) -> Optional[DataRightsGrant]:
-        return self._grants.get(grant_id)
+    async def get_grant(
+        self, grant_id: str, *, tenant_id: Optional[str] = None,
+    ) -> Optional[DataRightsGrant]:
+        return await self._repository.get(grant_id, tenant_id=tenant_id)
 
-    async def get_grant_structured(self, grant_id: str) -> Optional[Dict[str, Any]]:
+    async def get_effective_grant(
+        self, tenant_id: str, source_id: str,
+    ) -> Optional[DataRightsGrant]:
+        """Return the sole active grant for a tenant/source, denying ambiguity."""
+        grants = await self._repository.list(
+            tenant_id=tenant_id, source_id=source_id, status=GrantStatus.ACTIVE,
+        )
+        effective = [
+            grant for grant in grants
+            if grant.revoked_at is None and _is_not_expired(grant)
+        ]
+        if len(effective) != 1:
+            if len(effective) > 1:
+                logger.warning(
+                    "Ambiguous active data-rights grants denied: "
+                    f"tenant={tenant_id} source={source_id} count={len(effective)}"
+                )
+            return None
+        return effective[0]
+
+    async def get_grant_structured(
+        self, grant_id: str, *, tenant_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Structured nested rights view for a stored grant (None if not found).
 
         Convenience wrapper over resolve_structured_rights for the resolver stream.
         """
-        grant = self._grants.get(grant_id)
+        grant = await self.get_grant(grant_id, tenant_id=tenant_id)
         if not grant:
             return None
         return resolve_structured_rights(grant)
@@ -334,16 +364,12 @@ class DataRightsService:
         connector_id: Optional[str] = None,
         status: Optional[GrantStatus] = None,
     ) -> List[DataRightsGrantSummary]:
-        results = []
-        for grant in self._grants.values():
-            if tenant_id and grant.tenant_id != tenant_id:
-                continue
-            if connector_id and grant.connector_id != connector_id:
-                continue
-            if status and grant.status != status:
-                continue
-
-            results.append(DataRightsGrantSummary(
+        grants = await self._repository.list(
+            tenant_id=tenant_id or None,
+            connector_id=connector_id or None,
+            status=status,
+        )
+        results = [DataRightsGrantSummary(
                 data_rights_grant_id=grant.data_rights_grant_id,
                 tenant_id=grant.tenant_id,
                 source_id=grant.source_id,
@@ -356,7 +382,7 @@ class DataRightsService:
                 commercial_reuse_allowed=grant.commercial_reuse_allowed,
                 granted_at=grant.granted_at,
                 revoked_at=grant.revoked_at,
-            ))
+            ) for grant in grants]
 
         return results
 
@@ -364,28 +390,31 @@ class DataRightsService:
         self,
         grant_id: str,
         body: DataRightsGrantRevoke,
+        *,
+        tenant_id: Optional[str] = None,
     ) -> Optional[DataRightsGrant]:
         """Revoke a grant. Fail-closed: revoked grants block all use immediately."""
-        grant = self._grants.get(grant_id)
-        if not grant:
+        existing = await self._repository.get(grant_id, tenant_id=tenant_id)
+        if existing is None:
             return None
-
         now = _utc_now()
-        audit_id = _audit_event_id()
-
-        updated = grant.model_copy(update={
-            "status": GrantStatus.REVOKED,
-            "revoked_at": now,
-            "revocation_reason": body.revocation_reason,
-            "audit_event_id": audit_id,
-        })
-        self._grants[grant_id] = updated
+        updated = await self._repository.revoke(
+            grant_id,
+            tenant_id=tenant_id or existing.tenant_id,
+            actor=body.revoked_by_user_id,
+            reason=body.revocation_reason,
+            revoked_at=now,
+        )
+        if not updated:
+            return None
+        if updated.status != GrantStatus.REVOKED:
+            return updated
 
         logger.warning(
             f"DataRightsGrant revoked: grant_id={grant_id} "
             f"reason={body.revocation_reason} "
             f"revoked_by={body.revoked_by_user_id} "
-            f"audit_event={audit_id}"
+            f"audit_event={updated.revocation_event_id}"
         )
 
         return updated
@@ -397,7 +426,7 @@ class DataRightsService:
     ) -> PolicyCheckResult:
         """Evaluate a specific policy check on a grant. Fail closed."""
         now = _utc_now()
-        grant = self._grants.get(grant_id)
+        grant = await self.get_grant(grant_id)
 
         if not grant:
             return PolicyCheckResult(

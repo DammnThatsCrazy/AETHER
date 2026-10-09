@@ -4,7 +4,7 @@ Aether — Data Rights Ledger Models
 All data use decisions are fail-closed: absent an explicit grant, use is denied.
 
 DataRightsGrant is the canonical record for every data use permission:
-- Tenant BYOD connectors: tenant_lake_allowed=True by default only
+- Tenant BYOD connectors: every use permission requires explicit approval
 - Olympus provider sources: olympus_baseline_allowed=True, model_training=False (requires compliance review)
 - Cross-tenant aggregates: cross_tenant_aggregate_allowed=False always by default
 - Model training: model_training_allowed=False always by default
@@ -295,7 +295,7 @@ class DataRightsGrant(BaseModel):
 
     Default behaviors by connector class:
     - OLYMPUS_PROVIDER: olympus_baseline_allowed=True, model_training=False
-    - TENANT_BYOD_DATA: tenant_lake_allowed=True, tenant_graph_allowed=True, rest False
+    - TENANT_BYOD_DATA: every use permission defaults to False
     - BYOK_GATEWAY: no lake rights (credential control only)
     """
     data_rights_grant_id: str
@@ -310,9 +310,9 @@ class DataRightsGrant(BaseModel):
     raw_data_owner: str
 
     # ── Write permissions — all fail closed ──────────────────────────────────
-    tenant_lake_allowed: bool = True
-    tenant_graph_allowed: bool = True
-    tenant_insights_allowed: bool = True
+    tenant_lake_allowed: bool = False
+    tenant_graph_allowed: bool = False
+    tenant_insights_allowed: bool = False
     olympus_baseline_allowed: bool = False
     cross_tenant_aggregate_allowed: bool = False
     model_training_allowed: bool = False
@@ -329,6 +329,8 @@ class DataRightsGrant(BaseModel):
     expires_at: Optional[str] = None
     revoked_at: Optional[str] = None
     revocation_reason: Optional[str] = None
+    revoked_by_user_id: Optional[str] = None
+    revocation_event_id: Optional[str] = None
     status: GrantStatus = GrantStatus.ACTIVE
     audit_event_id: str
 
@@ -425,9 +427,9 @@ class DataRightsGrantCreate(BaseModel):
     data_category: str
     data_sensitivity: str = "unclassified"
     raw_data_owner: str
-    tenant_lake_allowed: bool = True
-    tenant_graph_allowed: bool = True
-    tenant_insights_allowed: bool = True
+    tenant_lake_allowed: bool = False
+    tenant_graph_allowed: bool = False
+    tenant_insights_allowed: bool = False
     olympus_baseline_allowed: bool = False
     cross_tenant_aggregate_allowed: bool = False
     model_training_allowed: bool = False

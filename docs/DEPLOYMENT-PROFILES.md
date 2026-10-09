@@ -293,11 +293,11 @@ delete/recreate plan.
 | **Deployment lane** | `deployment_lane=full` preserves this existing release rehearsal. `deployment_lane=pilot` is an additive, complete lean AWS staging lane that keeps `deployment_profile=staging` and the unchanged `profiles/staging/terraform.tfstate` state key; it does not create a second Terraform profile or state namespace. |
 | **Pilot contract** | Pilot retains all five public Aether/Olympus hosts (served by the unified site and the end-user app), the AWS backend, durable Aurora/persistence, networking, Secrets Manager, tenant isolation, Stripe billing/webhooks/entitlements, CloudWatch observability, lifecycle/redeploy controls, migrations and full smoke coverage. Only Kyber operator/workforce identity and GCP/Google hosting/credentials are deferred. The existing Kyber Auth0 client association is preserved by the one shared enabled-client-set resource; its duplicate Terraform state address is forgotten without destroying remote state. Pilot plans fail closed on ECS service replacement or capacity-provider strategy drift, autoscaling-target replacement or identity/role/maximum-capacity drift, Application Auto Scaling ownership-tag drift, destructive Aether Auth0 changes, or Auth0 mutations outside the Aether path. `scripts/release/check_staging_lane_contract.py` fails closed until ECS/bootstrap Stripe wiring is complete and the four real self-service Stripe test price secrets (`aether/stripe-price-{alpha,beta,gamma,delta}`) have populated current versions; Epsilon/Omicron/Omega remain optional contract-tier mappings, and the yearly Beta/Gamma/Delta prices (`aether/stripe-price-{beta,gamma,delta}-annual`) are mounted only with `stripe_annual_prices_enabled`. The staging profile turns that flag on, so the checker then also requires the three yearly secrets to have populated current versions. Bootstrap validates identifiers before write and no price IDs are invented. |
 | **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, private S3 SPA artifacts + SSM pointers, one Amplify public web app (`AETHER-staging-web`: the unified site for `www`, `aether`, `docs`, `status` and `app`, with the end-user app under `aether.*/app`; plus one unconnected Amplify app for per-PR previews when `enable_frontend_previews` is on; see [Preview Environments](PREVIEW-ENVIRONMENTS.md)), ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. The reviewed paid-account staging profile uses the customer-managed Aurora KMS key; free-tier rehearsals may set `aurora_express_mode = true` or `skip_aurora = true` according to the account-plan guard. Aurora and Postgres graph remain omitted from the staging `required_resources` list only so a free-tier rehearsal can defer them safely. |
-| **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks when awake: `api` (1 vCPU / 2 GiB, max 2) and `lean-worker` (1 vCPU / 4 GiB, max 2) hosting all eight worker roles. `staging_state: asleep` drives every desired count **and every autoscaling floor** to zero. |
+| **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks when awake: `api` (1 vCPU / 2 GiB, max 2) and `lean-worker` (1 vCPU / 4 GiB, max 2) hosting all eight worker roles. `staging_state: asleep` drives every desired count and both autoscaling bounds to zero. |
 | **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. The canonical and retained legacy staging Aurora clusters use 0–2 ACU and auto-pause after 300 idle seconds; storage and other non-compute charges continue. For the imported legacy cluster, Terraform manages only this scaling configuration and preserves its existing write-forwarding and final-snapshot settings. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. Tasks carry a public IP on the task ENI for egress; inbound is governed entirely by the task security group, which accepts traffic only from the ALB. |
 | **Cost posture** | Target USD 25/month, hard ceiling USD 50/month, against a declared `maximum_scheduled_awake_hours_per_month: 40`. Hourly resources are prorated by awake hours; per-month charges (KMS keys, secrets, alarms) accrue regardless of sleep. See [Cost Optimization](COST-OPTIMIZATION.md). |
-| **TTL / lifecycle** | An awake lease is written to SSM at wake (1–8 h, default 4). `.github/workflows/staging-ttl-guard.yml` runs hourly, treats a missing or unparseable lease as **expired**, scales services to zero and drops autoscaling floors, then fails the run so the lapse is visible. Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN` — it then has no credential to read the lease or enforce the TTL, reports it is a NO-OP and passes green, which is **not** a claim that staging is asleep; it re-arms fail-closed the moment the role is wired. Full procedure: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md). |
+| **TTL / lifecycle** | An awake lease is written to SSM at wake (1–8 h, default 4). `.github/workflows/staging-ttl-guard.yml` runs hourly, treats a missing or unparseable lease as **expired**, scales services to zero and clamps each staging autoscaling target to `0..0`, then fails the run so the lapse is visible. Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN` — it then has no credential to read the lease or enforce the TTL, reports it is a NO-OP and passes green, which is **not** a claim that staging is asleep; it re-arms fail-closed the moment the role is wired. Full procedure: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md). |
 | **Security posture** | Same isolation shape as production-lean. The rehearsal itself probes cross-tenant reads, unauthenticated access and empty-state behaviour with two distinct tenants. |
 | **Validation** | `make test-staging-lifecycle`, `make test-terraform-profiles` (run blocks `staging_profile_plan` and `staging_asleep_profile_plan`), `make deployment-profile-gate`. |
 | **Limitations** | No rehearsal has been executed against real AWS. Every lifecycle control is code-complete and externally unverified — see [Readiness](#readiness-and-what-is-externally-blocked). |
@@ -416,20 +416,21 @@ exception: `api` is served by the Terraform-provisioned
 ### `staging_state`
 
 `staging` declares a `staging_state` block with `awake` (multiplier 1) and
-`asleep` (multiplier 0). Both lanes scale `desired_count` and autoscaling
-`min_capacity`; full also scales capacity-provider `base_count`, while pilot
-pins that field to zero in both states to keep the ECS service strategy
-invariant:
+`asleep` (multiplier 0). Both lanes scale `desired_count` and both autoscaling
+bounds; full also scales capacity-provider `base_count`, while pilot pins that
+field to zero in both states to keep the ECS service strategy invariant:
 
 | Scaled | Why |
 |---|---|
 | `desired_count` | The obvious one, and on its own not enough. |
 | autoscaling `min_capacity` | Application Auto Scaling clamps a service back up to its floor. A floor of 1 against a desired count of 0 revives the task within a cooldown, so staging never sleeps while appearing to. |
+| autoscaling `max_capacity` | A non-zero ceiling lets target-tracking policies scale a service out on queue or request metrics. The asleep plan pins both bounds to zero until a reviewed wake restores the declared envelope. |
 | capacity provider `base_count` | Full lane scales the guaranteed floor and rejects `base_count > desired_count`; pilot holds the FARGATE strategy at base 0 because strategy changes force service replacement. |
 
-`max_capacity` is deliberately **not** scaled: the ceiling is a static safety
-bound on the shape, and collapsing it would erase the reviewed envelope from a
-sleeping plan. Pilot asleep/awake plans therefore retain the same services and
+The declared `max_capacity` is the awake surge envelope. Asleep plans set it to
+zero along with the floor, preventing attached target-tracking policies from
+reviving staging. The reviewed wake plan restores the declared minimum and
+maximum. Pilot asleep/awake plans retain the same services and
 capacity-provider strategy; `check_terraform_plan_policy.py` blocks apply if a
 pilot plan includes service replacement or managed scaling-tag removal.
 
@@ -591,10 +592,11 @@ approved. The three production-class profiles ignore it.
 `.github/workflows/staging-lifecycle.yml` never runs `terraform apply` itself;
 every mutation is a dispatch of `terraform-promote.yml`, and it independently
 re-verifies the reviewed plan (including asserting the planned ECS desired
-counts and autoscaling floors match the pinned `awake`/`asleep` shape) before
+counts and autoscaling bounds match the pinned `awake`/`asleep` shape) before
 dispatching. `.github/workflows/staging-ttl-guard.yml` deliberately runs no
-Terraform at all: its only enforcement action is an ECS scale-to-zero, which can
-only reduce running compute.
+Terraform at all: its only enforcement action is ECS scale-to-zero plus
+clamping staging autoscaling bounds to `0..0`, which can only reduce running
+compute.
 
 ---
 

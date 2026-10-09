@@ -463,6 +463,8 @@ async def _run_workers(role: str) -> int:
     """Boot the supervised worker subset owned by ``role`` and run forever."""
     from config.settings import settings
     from dependencies.providers import get_registry
+    from services.provider_runtime.outbox_guard import validate_provider_outbox_delivery
+    from shared.logger.logger import get_logger
     from services.runtime import (
         WorkerSupervisor,
         build_worker_specs,
@@ -473,6 +475,10 @@ async def _run_workers(role: str) -> int:
         build_consumer_runners,
         start_consumer_runners,
     )
+
+    # Split materializer/consumer processes must honor the same provider
+    # ingress/outbox coherence check as the API lifespan before starting work.
+    validate_provider_outbox_delivery(settings, logger=get_logger("aether.runtime.run_role"))
 
     registry = get_registry()
     await registry.startup()

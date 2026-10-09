@@ -148,8 +148,14 @@ that does.
   self-verify (HMAC/signature) inside the handler before processing,
   **fail-closed**: a signature scheme without a configured secret, or an
   `endpoint_secret` scheme without a matching per-connection token, is DENIED
-  (closed 4xx + auditable denial record). There is no "no secret ⇒ trust"
-  path.
+  (closed 4xx). Before verification proves tenant/connection ownership, the
+  public response is generic and handled denials produce only a bounded-reason
+  tenantless internal metric; no tenant-scoped denial row or inbox body is
+  persisted. A webhook request body is retained only after successful
+  verification, connection/account binding, and raw-rights admission. A
+  raw-rights denial retains neither the body nor a tenant-scoped raw denial
+  record. Later failure evidence may be tenant-scoped metadata only when its
+  own raw-rights admission succeeds. There is no "no secret ⇒ trust" path.
 - Provider adapters never receive direct database authority; the runtime
   executes all persistence.
 - Tenant scope is server-authoritative; raw records and events are

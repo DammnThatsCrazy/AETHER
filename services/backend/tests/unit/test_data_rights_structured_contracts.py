@@ -240,7 +240,9 @@ def test_legacy_instantiation_defaults_structured_fields_to_none():
     assert grant.termination_authority is None
     assert grant.rights_profile == IntelligenceRightsProfile.STANDARD.value
     # Legacy top-level semantics untouched.
-    assert grant.tenant_lake_allowed is True
+    assert grant.tenant_lake_allowed is False
+    assert grant.tenant_graph_allowed is False
+    assert grant.tenant_insights_allowed is False
     assert grant.olympus_baseline_allowed is False
     assert grant.model_training_allowed is False
 
@@ -249,6 +251,9 @@ def test_legacy_grant_structured_view_does_not_broaden():
     """A pure legacy grant resolves source_use 1:1 and learning only from
     model_training_allowed; every other structured component is fail-closed."""
     grant = _make_legacy_grant(
+        tenant_lake_allowed=True,
+        tenant_graph_allowed=True,
+        tenant_insights_allowed=True,
         model_training_allowed=False,
         olympus_baseline_allowed=False,
     )

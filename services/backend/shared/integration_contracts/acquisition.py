@@ -29,6 +29,7 @@ class AcquisitionContext(BaseModel):
     provider_identity: str
     connection_id: str = ""
     account_id: str = ""
+    stream_id: Optional[str] = None
     config: dict[str, Any] = Field(default_factory=dict)
     credential: Optional[StructuredCredential] = None
 

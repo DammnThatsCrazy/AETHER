@@ -391,7 +391,9 @@ lane the bootstrap route is explicitly disabled and its approved email is
 empty, so production-lean receives no staging bootstrap behavior.
 
 Pilot wake/sleep keeps each ECS capacity-provider strategy stable (FARGATE
-base 0, weight 100) and changes desired task counts plus autoscaling floors.
+base 0, weight 100) and changes desired task counts plus both autoscaling
+bounds. Asleep services use a `0..0` scaling range so target-tracking policies
+cannot revive them; the reviewed wake plan restores the declared range.
 This avoids replacement-only ECS service changes during a lifecycle transition.
 The exact plan is rejected before apply if it replaces an ECS service or
 scaling target, removes workflow-managed Application Auto Scaling tags, deletes

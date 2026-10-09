@@ -10,12 +10,12 @@ since_version: "0.1.0"
 
 # Provider Normalization
 
-Provider plugins under `services/backend/services/providers/` normalize provider-shaped
-records into provider-neutral `AetherEvent` instances through the canonical
-contract at `shared/integration_contracts/normalization.py`. This is the same
-canonical contract layer the connector subsystem registry and capability
-coverage docs point to — there is exactly one normalization contract for
-provider plugins, and it is not duplicated elsewhere.
+Provider plugins under `services/backend/services/providers/` normalize
+provider-shaped records into provider-neutral `AetherEvent` instances through
+`shared/integration_contracts/normalization.py`. This describes the native UPR
+plugin path. Legacy integration, measurement, communications, import, and
+specialized financial connectors may retain their own normalization and
+persistence contracts while migration proceeds.
 
 ## The two envelopes
 
@@ -31,9 +31,13 @@ provider signal passes through:
   `event_type` is provider-neutral (e.g. `commerce.order.created`); all
   provider-specific detail lives under `context`.
 
-Both envelopes carry an `idempotency_key` so ingestion can dedupe exactly
-once per `(tenant, provider, provider-record)` or
-`(tenant, event_type, source-record)` pair.
+The envelopes have versioned idempotency behavior. Raw schema v1 preserves the
+historical provider-record key; raw schema v2 keys a source-account/realm,
+object, and source revision. `AetherEvent` schema v1 preserves its historical
+event-type/source-record key. Schema v2 uses `event_id == event_revision_id`
+as an immutable interpretation key while `logical_event_id` identifies the
+stable source fact. A durable logical-fact ledger and v1-to-v2 migration map
+remain future work.
 
 ## The `EventNormalizer` contract
 
@@ -52,12 +56,11 @@ Normalization is a deterministic, network-free translation seam:
 
 - A normalizer must never depend on wall-clock time, randomness, or provider
   I/O — the same raw record always yields the same events.
-- `AetherEvent.event_id` defaults to a random `uuid4().hex`, which is fine for
-  general envelope construction but **must** be overridden by a normalizer
-  with a value derived deterministically from the `RawProviderRecord` (for
-  example, `raw.idempotency_key` or `f"{raw.record_id}:{event_type}"`), so
-  re-normalizing the same record yields byte-identical output for
-  replay/debug.
+- Schema-v1 normalizers must supply a deterministic `event_id` rather than
+  rely on the envelope's random `uuid4().hex` default. Schema-v2 normalizers
+  supply a stable `logical_event_id`, pinned mapping and normalizer versions,
+  a canonical payload digest, and source revision; the contract derives a
+  full SHA-256 `event_revision_id` and requires `event_id` to equal it.
 - Anything a normalizer cannot translate must be surfaced explicitly via
   `dropped` rather than silently skipped.
 
@@ -75,25 +78,29 @@ A provider plugin exposes its normalizer through a `normalizer()` accessor
 
 ## Reference implementation
 
-`services/backend/services/providers/shopify/normalizer.py` (`ShopifyOrderNormalizer`) maps a
-`RawProviderRecord` whose payload is a Shopify order dict onto a single
-`commerce.order.*` `AetherEvent`:
+`services/backend/services/providers/shopify/normalizer.py`
+(`ShopifyOrderNormalizer`) maps a `RawProviderRecord` to a `commerce.order.*`
+`AetherEvent`:
 
 - Money fields are parsed via `Decimal(str(value))` — Shopify amounts are
   strings and are never routed through binary floats.
-- The full raw payload is preserved under
-  `AetherEvent.context["raw_provider_payload"]`, so no provider field is ever
-  silently lost even when the canonical order model does not capture it;
-  provider-specific fields are additionally surfaced under
+- REST mode remains schema v1 and preserves the historical full provider
+  payload under `AetherEvent.context["raw_provider_payload"]` for compatibility.
+  Provider fields not in the order model are also selectively surfaced under
   `data["provider"]`.
-- `event_id` is set deterministically from `raw.record_id` and the resolved
-  `event_type` (e.g. `"<record_id>:commerce.order.created"`).
+- GraphQL mode retains the original provider payload in protected raw Bronze,
+  emits narrower event data/context, and uses a PII-free economic revision to
+  compute `logical_event_id`. `event_id` equals a full SHA-256
+  `event_revision_id` over the logical ID, event schema, mapping, normalizer,
+  and canonical payload digest.
 - Unknown record types, and any parse or money-conversion failure, are
   reported through `dropped` rather than raised or silently zeroed.
 
-New provider normalizers should follow this shape: deterministic `event_id`,
-full raw-payload preservation in `context`, and explicit `dropped` reporting
-for anything unparseable.
+New provider normalizers should use the schema appropriate to the migration:
+preserve v1 compatibility where existing consumers depend on it, but keep raw
+provider payloads in protected raw storage for new v2 mappings. Derive stable
+logical identities and immutable interpretation revisions for v2, and return
+explicit `dropped` reasons for anything unparseable.
 
 ## Certification
 
