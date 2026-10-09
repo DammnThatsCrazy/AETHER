@@ -4669,6 +4669,20 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/blueprints/architecture-reset/technical-debt-retirement.md",
+      "title": "Aether Architecture Reset Technical-Debt Retirement Ledger",
+      "slug": "blueprints/architecture-reset/technical-debt-retirement",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/blueprints/communication360.md",
       "title": "Communication360 Vertical Slice Blueprint",
       "slug": "blueprints/communication360",

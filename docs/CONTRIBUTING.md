@@ -18,7 +18,7 @@ source_hashes:
   "AGENTS.md": "sha256:f2b594293edb54f1ecd03b5294b1bc0aec3665445fdca0a250afda2e212aca9c"
   "Makefile": "sha256:1ac92aff2d1bfe44eb4cd2c8a00a63241e20d3fa6af80020c8c55b3443f773c5"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:6e64f14b86dafb2b0b63ef06b763a8580a3c2cce7b76ef1e58eadcbc0734f245"
-  "scripts/repo_doctor.py": "sha256:96a8ef3a60787275ff29edbe11697865ad5ea9bd1e01025e1a7f5ce030481c57"
+  "scripts/repo_doctor.py": "sha256:58535ee7e63f6453354c3c2acc2cce85d5defd8f7b3c9ac263a4b3ee1ad46faa"
 ---
 
 # Contributing
@@ -72,7 +72,10 @@ on AWS credentials or remote state.
 
 The canonical CI gate also validates the impact-aware verification router, the
 environment capability requirement registry, the GitHub-only deployment
-operator boundary, and the delivery workflow authority map. These checks
+operator boundary, the delivery workflow authority map, and the technical-debt
+retirement ledger (`config/debt_retirement_ledger.yaml`: named paths must exist,
+deadlines must be current, and a duplicate is deleted only with parity and usage
+evidence). These checks
 validate repository policy; they do not claim that AWS credentials, runtime
 validation, or production promotion occurred. The authority map records which
 GitHub workflow currently owns each delivery authority while the workflow

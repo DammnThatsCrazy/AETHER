@@ -1,0 +1,479 @@
+# Technical-debt retirement ledger — the enforceable cutover registry for the
+# architecture reset (docs/blueprints/architecture-reset/technical-debt-retirement.md).
+#
+# One row per duplicated authority. A cutover is finished when the replaced path
+# is gone, not when the new path works. `scripts/validate_debt_retirement_ledger.py`
+# enforces this file (run by `make repo-doctor`); `--report` prints repository size
+# against the baseline below.
+#
+# Fields
+#   id               stable slug
+#   domain           runtime-spine stage or control-plane area
+#   classification   core | beta | experimental | internal | deprecated | archived | removed
+#   state            retain | converge | deprecated | deletion-ready | removed
+#   authority        the single canonical owner after the cutover
+#   current          paths that implement the authority today (must exist until removed)
+#   duplicates       whole paths that disappear at cutover (must exist until removed;
+#                    must be gone when state is removed)
+#   retire           what is retired when it is not a whole path (a function, a table, a flag)
+#   consumers        paths that keep the duplicate alive today; deletion-ready needs []
+#   compatibility    API / SDK / data compatibility that must survive
+#   mechanism        adapter | dual-write | dual-read | alias | migration | delete | none
+#   parity_evidence  what shows the new path behaves the same (required to delete)
+#   usage_evidence   what shows the old path is unused (required to delete)
+#   rollback         what happens if the new authority fails
+#   removal_pr       the PR that physically deletes it (required when removed)
+#   deadline         ISO date; converge / deprecated / deletion-ready rows must have one,
+#                    and an expired deadline fails validation so a compatibility layer
+#                    cannot become permanent
+#
+# Source of the structural claims: docs/blueprints/architecture-reset/
+# {runtime-authority-map,delivery-authority-map,cutover-inventory}.md.
+
+schema_version: 1
+authority: debt-retirement
+
+baseline:
+  date: 2026-10-09
+  commit: e41a801
+  note: >-
+    Measured with `scripts/validate_debt_retirement_ledger.py --report --json` on
+    Development after #734. Counts come from `git ls-files`, so they are
+    reproducible. These are measurements, not targets.
+  metrics:
+    tracked_files: 8429
+    files_services: 3137
+    files_frontend: 1713
+    files_tests: 770
+    files_docs: 1107
+    files_docs_archive: 219
+    files_packages: 710
+    files_scripts: 284
+    files_deploy: 165
+    files_config: 93
+    python_test_files: 1434
+    ts_test_files: 443
+    validator_scripts: 72
+    workflows: 27
+    workflows_on_ready_for_review: 11
+    deployment_profile_registry_lines: 1295
+    backend_service_dirs: 142
+
+entries:
+  # ── Source + intake ────────────────────────────────────────────────────────
+  - id: intake-sdk-batch-v1-v2
+    domain: intake
+    classification: core
+    state: converge
+    authority: >-
+      V2 typed Bronze plus transactional outbox
+      (services/backend/services/ingestion/bronze_bulk.py)
+    current:
+      - services/backend/services/ingestion/bronze_bulk.py
+      - services/backend/services/ingestion/batch.py
+    duplicates: []
+    retire: >-
+      V1 BronzeRepository("sdk_events") writes and the post-Bronze Redis
+      idempotency claim; the flat-event fallback in the ingestion gateway
+    consumers:
+      - services/backend/services/ingestion/workers.py
+      - services/backend/services/activation/service.py
+      - services/backend/services/comms/ingest.py
+      - services/backend/services/auth/routes.py
+    compatibility: >-
+      /v1/batch response shape, accepted/rejected event IDs, privacy scrub,
+      and reads of existing sdk_events rows by activation and backfill
+    mechanism: dual-read
+    parity_evidence: null
+    usage_evidence: null
+    rollback: switch the affected tenant/source back to the V1 write path; admitted evidence is never deleted
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: intake-provider-runtime-vs-legacy-connectors
+    domain: intake
+    classification: core
+    state: converge
+    authority: Universal Provider Runtime (services/backend/services/provider_runtime)
+    current:
+      - services/backend/services/provider_runtime
+      - services/backend/services/providers
+    duplicates: []
+    retire: >-
+      the legacy BaseConnector pull/webhook path, one capability at a time, after
+      native UPR cutover evidence; LegacyConnectorPlugin is the transition adapter
+    consumers:
+      - services/backend/services/integrations/connectors
+      - services/backend/services/managed_integrations
+    compatibility: existing connector routes, tenant configuration, cursors and webhook URLs
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: route the capability back through LegacyConnectorPlugin
+    removal_pr: null
+    deadline: 2027-06-30
+
+  - id: evidence-single-admission-and-replay
+    domain: evidence
+    classification: core
+    state: converge
+    authority: >-
+      ProviderRawRightsAdmission for provider raw evidence; one append-only L0
+      record per tenant + source namespace + object/delivery/revision
+    current:
+      - services/backend/services/provider_runtime/raw_store.py
+      - services/backend/services/provider_runtime/rights_admission.py
+      - services/backend/repositories/lake.py
+    duplicates: []
+    retire: >-
+      per-path idempotency and retention behaviour in SDK V1/V2, import and feed
+      persistence; Bronze rollback by hard delete (replace with governed revocation)
+    consumers:
+      - services/backend/services/ingestion/replay.py
+      - services/backend/services/data_exchange
+    compatibility: raw record IDs and lineage for rows already persisted
+    mechanism: dual-write
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep per-path persistence authoritative until parity is shown per source
+    removal_pr: null
+    deadline: 2027-03-31
+
+  # ── Normalization ──────────────────────────────────────────────────────────
+  - id: normalization-one-fact-authority
+    domain: normalization
+    classification: core
+    state: converge
+    authority: >-
+      the registry-routed Silver dispatcher with versioned deterministic
+      source-to-fact adapters (services/backend/services/silver)
+    current:
+      - services/backend/services/silver
+      - services/backend/services/provider_runtime/normalization.py
+    duplicates: []
+    retire: >-
+      SDK-only flat Silver reads and the flag-gated normalization spine bypass;
+      provider events get Silver projectors instead of being deferred
+    consumers:
+      - services/backend/services/ingestion/spine.py
+      - services/backend/services/ingestion/validation.py
+    compatibility: event registry versions and existing Silver fact IDs
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep the flat read behind the spine flag until fact IDs match on fixtures
+    removal_pr: null
+    deadline: 2027-03-31
+
+  # ── Resolution ─────────────────────────────────────────────────────────────
+  - id: identity-single-resolver
+    domain: identity
+    classification: core
+    state: retain
+    authority: services/backend/services/identity (resolver, source identity registry, merge policy)
+    current:
+      - services/backend/services/identity
+    duplicates: []
+    retire: >-
+      none: import_candidate_adapter.py and data_exchange/identity_preview.py are
+      evidence and preview adapters, not resolvers. They must never write a
+      canonical entity ID.
+    consumers:
+      - services/backend/services/identity/import_candidate_adapter.py
+      - services/backend/services/data_exchange/identity_preview.py
+    compatibility: import and SDK identify APIs, aliases, reviewed decisions, split and restatement
+    mechanism: none
+    parity_evidence: null
+    usage_evidence: null
+    rollback: n/a (retained authority)
+    removal_pr: null
+    deadline: null
+
+  - id: identity-legacy-resolution-module
+    domain: identity
+    classification: deprecated
+    state: deprecated
+    authority: services/backend/services/identity
+    current:
+      - services/backend/services/identity
+    duplicates:
+      - services/backend/services/resolution
+    retire: >-
+      the legacy resolution engine, consumer, rules and routes; cluster, batch
+      and merge-approval routes already fail closed with 503 after #734
+    consumers:
+      - services/backend/main.py
+      - services/backend/tests/resolution/test_legacy_routes_fail_closed.py
+      - services/backend/tests/identity/test_identity_feature_flags.py
+    compatibility: >-
+      pending, audit, reject and config routes still respond; no caller of the
+      503 routes may be left without a tenant-safe replacement
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: null
+    rollback: restore the router mount; the module holds no data
+    removal_pr: null
+    deadline: 2027-02-28
+
+  # ── Graph ──────────────────────────────────────────────────────────────────
+  - id: graph-single-mutation-gateway
+    domain: graph
+    classification: core
+    state: converge
+    authority: MutationIntent to GraphMutationGateway.apply (services/backend/shared/graph)
+    current:
+      - services/backend/shared/graph/mutation_gateway.py
+      - services/backend/shared/graph/mutation_intents.py
+      - scripts/validate_graph_write_paths.py
+    duplicates: []
+    retire: >-
+      the gateway "off" and "shadow" rollout modes once every writer is on
+      enforce; any remaining producer that builds graph writes outside an intent
+    consumers:
+      - services/backend/services/identity/graph_writer.py
+      - services/backend/services/silver/projectors/silver_graph_projector.py
+      - services/backend/services/semantic_intelligence/graph_projector.py
+      - services/backend/services/onchain/action_recorder.py
+    compatibility: graph vertex and edge IDs; ledger and projection recovery
+    mechanism: dual-write
+    parity_evidence: null
+    usage_evidence: null
+    rollback: set the gateway mode back to shadow for the affected writer
+    removal_pr: null
+    deadline: 2027-03-31
+
+  # ── Intelligence / action ──────────────────────────────────────────────────
+  - id: intelligence-journey-and-value-composition
+    domain: intelligence
+    classification: core
+    state: converge
+    authority: services/backend/services/measurement/engine/journey_compiler.py
+    current:
+      - services/backend/services/measurement/engine/journey_compiler.py
+    duplicates:
+      - services/backend/services/journeys/stitching.py
+    retire: overlapping journey, value and outcome read compositions behind versioned projections
+    consumers: []
+    compatibility: existing journey and value route shapes
+    mechanism: dual-read
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep the previous composer as the read path until tenant-visible output matches
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: action-single-delivery-authority
+    domain: action
+    classification: core
+    state: converge
+    authority: >-
+      DeliveryIntent / DeliveryJob / ProviderReceipt with approval and policy
+      before effect (services/backend/services/delivery)
+    current:
+      - services/backend/services/delivery
+    duplicates:
+      - services/backend/services/recommendations/executor.py
+      - services/backend/services/suggestions/adapters/recommendation_adapter.py
+    retire: >-
+      parallel recommendation execution seams, and direct dispatch from
+      intelligence routes and agent/mutation_commit.py, in bounded slices
+    consumers:
+      - services/backend/services/agent/mutation_commit.py
+      - services/backend/services/intelligence/routes.py
+    compatibility: action log, receipts, approvals and idempotency reservations
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: switch the caller back to its direct dispatch; no effect may repeat
+    removal_pr: null
+    deadline: 2027-06-30
+
+  # ── Product surface ────────────────────────────────────────────────────────
+  - id: product-shared-360-primitives
+    domain: product
+    classification: core
+    state: converge
+    authority: >-
+      one set of 360 presentation primitives (EntityHeader, SummaryCards,
+      EvidenceTimeline, RelationshipGraph, JourneyPanel, CommunicationPanel,
+      ValuePanel, LensPanel, ConfidencePanel, ExplanationDrawer, ActionPanel)
+      composed per entity by thin adapters
+    current:
+      - frontend/kyber/src/components/profile360
+      - frontend/kyber/src/features/profile360
+    duplicates:
+      - frontend/kyber/src/components/entities/entity-360-view.tsx
+      - frontend/kyber/src/components/entities/profile360-drill-stack.tsx
+      - frontend/kyber/src/components/entities/profile360-summary-card.tsx
+      - frontend/kyber/src/components/entities/profile360-surfaces.tsx
+      - frontend/kyber/src/components/entities/profile360-utils.ts
+    retire: >-
+      the second Profile360 implementation in Kyber (two components named
+      Profile360DrillStack with different props and state models), then the
+      per-entity copies in campaign360, risk360, fraud360 and the Aether app
+    consumers:
+      - frontend/kyber/src/components/entities/index.ts
+    compatibility: existing routes and URLs; domain-specific data semantics stay per entity
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep the old view mounted behind its route until the primitive view matches
+    removal_pr: null
+    deadline: 2027-02-28
+
+  # ── Delivery + governance ──────────────────────────────────────────────────
+  - id: delivery-pr-workflows-into-one-plan
+    domain: delivery
+    classification: core
+    state: converge
+    authority: >-
+      .github/workflows/repo-consistency.yml (verification / disposition) with
+      workers selected by config/test_suites.yaml
+    current:
+      - .github/workflows/repo-consistency.yml
+      - config/test_suites.yaml
+      - config/verification_policy.yaml
+    duplicates: []
+    retire: >-
+      ready_for_review as an independent trigger on the other ten workflows:
+      each becomes a worker of the canonical plan or moves to staging, nightly or
+      release. #734's R5 audit found no safe removal yet, so each needs selection
+      and evidence parity first (for example Hardhat contract-path selection).
+    consumers:
+      - .github/workflows/aether-test.yml
+      - .github/workflows/kyber-e2e.yml
+      - .github/workflows/frontend-preview.yml
+      - .github/workflows/production-equivalent-ci.yml
+      - .github/workflows/smart-contract-analysis.yml
+      - .github/workflows/sdk-release-validation.yml
+      - .github/workflows/repo-health.yml
+      - .github/workflows/infrastructure.yml
+      - .github/workflows/identity-continuity-gates.yml
+      - .github/workflows/functionality-proof.yml
+    compatibility: the stable "verification / disposition" check name; unique security evidence (Slither/SARIF, coverage thresholds)
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: restore the workflow trigger
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: delivery-profile-registries
+    domain: delivery
+    classification: core
+    state: converge
+    authority: config/deployment_profiles.yaml (canonical profile and environment mapping)
+    current:
+      - config/deployment_profiles.yaml
+    duplicates: []
+    retire: >-
+      repeated profile names across the other registries and workflow inputs;
+      derive them from the canonical mapping (environment = production,
+      posture = lean | scale | isolated; staging capability = pilot | full).
+      Each facet that enforces a different invariant stays.
+    consumers:
+      - config/deploy_profile.yaml
+      - config/deployment_profile_compatibility.yaml
+      - config/runtime_deployment.yaml
+      - config/environment_requirements.yaml
+      - config/dependency_profiles.yaml
+      - config/readiness_model.yaml
+    compatibility: Terraform state keys and profile names are not renamed
+    mechanism: alias
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep the existing per-registry names
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: delivery-legacy-staging-compose
+    domain: delivery
+    classification: deprecated
+    state: deprecated
+    authority: deploy/aws/terraform/profiles/staging.tfvars via staging-lifecycle.yml
+    current:
+      - deploy/aws/terraform
+    duplicates:
+      - deploy/legacy-staging
+    retire: >-
+      the quarantined Redis + Kafka + Prometheus local stack that contradicts
+      the canonical staging profile
+    consumers:
+      - docker-compose.yml
+      - docs/DEPLOYMENT-RUNBOOK.md
+      - docs/SMOKE-TEST-CHECKLIST.md
+      - scripts/release/check_delivery_compose_parity.py
+    compatibility: local development harness only
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: null
+    rollback: restore the directory from git
+    removal_pr: null
+    deadline: 2027-03-31
+
+  # ── Verification ───────────────────────────────────────────────────────────
+  - id: verification-unrun-typescript-test-estate
+    domain: verification
+    classification: internal
+    state: converge
+    authority: one suite in config/test_suites.yaml that runs tests/**/*.test.ts
+    current:
+      - vitest.config.fps.ts
+    duplicates: []
+    retire: >-
+      the unreferenced config and any of the 93 TypeScript test files whose
+      invariant is already covered by a proof-* package test or a Python suite.
+      On 2026-10-09 the config ran 74 files (580 tests) green, 10 files failed to
+      resolve @aether/web, and 9 were skipped; nothing in CI, the Makefile, the
+      package scripts or the suite registry runs it.
+    consumers: []
+    compatibility: none; these tests are not part of any gate today
+    mechanism: none
+    parity_evidence: null
+    usage_evidence: >-
+      grep for vitest.config.fps across workflows, Makefile, package.json,
+      scripts and config returns no references (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2026-12-31
+
+  # ── Repository ─────────────────────────────────────────────────────────────
+  - id: repository-skeleton-crew-package
+    domain: repository
+    classification: removed
+    state: removed
+    authority: none (abandoned proof of concept)
+    current: []
+    duplicates:
+      - packages/skeleton-crew
+    retire: >-
+      packages/skeleton-crew: a README with no source, no package.json, and
+      committed merge-conflict markers
+    consumers: []
+    compatibility: none
+    mechanism: delete
+    parity_evidence: not applicable; the package contains no code
+    usage_evidence: >-
+      packages/skeleton-crew contains only README.md; no workspace, import, CI,
+      config or doc references it (2026-10-09)
+    rollback: restore from git
+    removal_pr: "#740"
+    deadline: null
+
+  - id: repository-historical-docs
+    domain: repository
+    classification: archived
+    state: retain
+    authority: docs/archive (historical, outside the active authority graph)
+    current:
+      - docs/archive
+    duplicates: []
+    retire: none; keep the design history out of runtime and architecture authority
+    consumers: []
+    compatibility: none
+    mechanism: none
+    parity_evidence: null
+    usage_evidence: null
+    rollback: n/a
+    removal_pr: null
+    deadline: null

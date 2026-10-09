@@ -1,8 +1,8 @@
 schema_version: 1
 default_lane: pr
 lanes:
-  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding]
-  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts]
+  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger]
+  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger]
   integration: [toolchain, repository_metadata, contracts, integration]
   regression: [toolchain, repository_metadata, contracts, integration, regression]
   release: [toolchain, repository_metadata, contracts, integration, regression, release]
@@ -63,6 +63,13 @@ checks:
     risk: high
     command: [python, scripts/validate_frontend_branding.py]
     runtime_budget_seconds: 15
+  # The ledger names repository paths, so any change can strand a row; it runs in
+  # every PR-lane plan rather than only when the ledger file itself changes.
+  debt_retirement_ledger:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_debt_retirement_ledger.py]
+    runtime_budget_seconds: 10
   docs:
     owner: docs
     risk: high

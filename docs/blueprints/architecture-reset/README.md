@@ -107,6 +107,11 @@ ancestor of `Development`.
 | [Product surfaces](product-surface-map.md) | Which customer and operator routes, 360 components, truth states, and aliases already exist? | Mapped; identity route-state assertions are in the frame; a follow-up cutover maps supported navigation and separates activation setup from observed evidence; end-to-end proof remains pending |
 | [Delivery controls](delivery-authority-map.md) | Which commands, docs ownership rules, CI paths, profiles, and deployment controls are truly authoritative? | Mapped; a focused workflow-overlap audit found no safe gate removal yet; contract-suite path selection needs proof before reconsidering the apparent Hardhat duplicate; delivery cutovers remain pending |
 
+The [technical-debt retirement ledger](technical-debt-retirement.md) turns each
+overlapping authority into an enforceable registry row with consumers, evidence,
+a rollback and a deadline, so a cutover is only finished when the replaced path
+is deleted.
+
 The [cutover inventory](cutover-inventory.md) gives the first `keep`, `merge`,
 `simplify`, and `defer` decisions for overlapping paths. It names consumers,
 compatibility and rollback obligations, and remaining proof before any old
