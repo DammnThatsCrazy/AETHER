@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:b026c7f721ee7431f73838d941f4528a26d1704420a84bb907afb5c286acbe02"
+  "services/backend/services/": "sha256:0fb41a025a1ccf7a9f28339b1ec9051d1d064460d3374df57ff273b0b08cbd88"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -3154,7 +3154,7 @@ Feature-flagged (`AETHER_CONNECTOR_DATA_RIGHTS_ENABLED`). Tenant API key require
 | POST | `/v1/integrations/data-rights/grants/{grant_id}/revoke` | Revoke a grant (immediate denial) |
 | POST | `/v1/integrations/data-rights/policy-check` | Run a named policy check against a grant |
 
-All policy checks are fail-closed: absent an explicit grant, all use (Olympus baseline, model training, cross-tenant aggregate) is denied.
+All permission fields default to false, including tenant-lake, tenant-graph, and tenant-insights uses. A create request must explicitly grant each intended use. Grant records and append-only create/revoke lifecycle events persist through the canonical tenant-scoped rights repository; tenant grant reads and revocations are scoped in the repository itself. This persistence does not change feature-flag defaults or enable provider ingestion.
 
 ### Tenant — BYOK Key Rotate / Revoke / Verify (`/v1/providers/keys/*`)
 
@@ -3487,26 +3487,32 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
 - `DELETE /v1/provider-connections/{connection_id}` — disable the connection
   (transition to `disabled`).
 - `POST /v1/provider-connections/{connection_id}/credentials` — store a structured
-  credential. Only a `credential_ref` is ever returned or stored on the connection;
+  credential under a new opaque ref scoped to that connection. Persisted legacy
+  tenant/provider refs remain resolvable for existing connections, but new writes
+  do not reuse them. Only the `credential_ref` is stored on the connection;
   secrets are never echoed.
 - `DELETE /v1/provider-connections/{connection_id}/credentials` — hard-delete
-  the connection's broker credential and clear its credential ref. Requires the
-  tenant `write` permission, accepts no request body, and returns the standard
-  success envelope with `data: {"connection_id": "...", "credential_deleted": true}`;
-  cross-tenant connection IDs resolve to 404. Deletion is refused while another
-  connection in the tenant still references the same credential.
+  credential material and clear the connection's reference. Deletion is refused
+  while another connection references the same secret; otherwise the response
+  reports `credential_deleted: true` for both a newly removed and already absent
+  tenant-scoped ref. Secret material is never returned.
 - `POST /v1/provider-connections/{connection_id}/test` — live connectivity test
   through the provider's auth adapter.
 - `GET /v1/provider-connections/{connection_id}/accounts` — account discovery.
+  For Shopify GraphQL mode, the server reveals the connection's credential to
+  the adapter in memory, verifies the immutable Shop ID and live/test realm,
+  and persists only non-secret account evidence. A domain-only account is not
+  sufficient for v2 source-object mapping.
 - `POST /v1/provider-connections/{connection_id}/accounts/select` — select an
   account to scope ingestion.
 - `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
-  (optional `since` for backfill). Provider failure marks the run failed with a
-  safe error classification — never a silent empty success. A pulled row that
-  fails the persisted Bronze source-rights admission is retained in quarantine,
-  excluded from identity evidence/normalization/publication, and closes the run
-  as `partial` with `source_rights_rejected`; the cursor and last-success time
-  do not advance.
+  (optional `since` for backfill and optional `stream_ids` to select at most 32
+  unique, nonblank stream identifiers). An omitted or empty list runs all
+  active pull streams. The runtime rejects unknown, inactive, or non-pullable
+  stream selections before provider work; streamless legacy plugins reject an
+  explicit selection. Provider failure marks the run failed with a safe error
+  classification — never a silent empty success. Raw or canonical persistence
+  failure also blocks cursor advancement.
 - `GET /v1/provider-connections/{connection_id}/sync-runs` — durable sync-run
   history.
 - `POST /v1/provider-connections/{connection_id}/confirm` — server-side
@@ -3517,8 +3523,11 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   `not_found`).
 - `GET /v1/provider-connections/{connection_id}/health` — provider health report
   (state, readiness, last sync/webhook, rate-limit, error signals).
-- `GET /v1/provider-connections/{connection_id}/raw-records` — replayed raw
-  provider records from the Bronze `provider_records` store (tenant-scoped).
+- `GET /v1/provider-connections/{connection_id}/raw-records` — read raw provider
+  records from the Bronze `provider_records` store after checking connection
+  ownership. Results are filtered by tenant and provider identity because Bronze
+  currently stores these rows at that granularity; this endpoint does not run
+  replay or filter by individual connection/account.
 
 Kyber operator surface (`/v1/admin/kyber/provider-connections/*`, operator scope,
 fail-closed):
@@ -3571,16 +3580,32 @@ Public provider webhooks (`/v1/provider-webhooks/*`):
   connection's webhook secret — a signature scheme (e.g. `shopify_hmac`) requires
   a verifying signature, and `endpoint_secret` requires a caller-presented
   per-connection token that constant-time-matches the stored secret. A delivery
-  that cannot be proven is DENIED with an auditable metadata-only denial record
-  and a closed 403 — there is no "no secret ⇒ trust" path.
+  that cannot be proven is DENIED with a closed generic response — there is no
+  "no secret ⇒ trust" path. Before verification establishes tenant/connection
+  ownership, handled denials emit only a bounded-reason tenantless internal
+  metric; the public response does not reveal the reason or routing result,
+  and no tenant-scoped denial row or webhook inbox entry is created. A full
+  webhook request body is retained only after successful verification,
+  connection/account binding, and raw-rights admission. A raw-rights denial
+  retains neither the body nor a tenant-scoped raw denial record. After proof,
+  later failure evidence may be tenant-scoped metadata only when its own
+  raw-rights admission succeeds.
 
   Headers:
   - `X-Aether-Tenant-ID` — **routing hint only, not an authorization signal**;
     the connection is located by tenant + identity and verified against its own
-    secret before anything is persisted.
+    secret, connection/account binding, and raw-rights admission before an
+    inbox body is persisted.
   - `X-Signature` / `X-Aether-Signature` — provider-native signature (signature schemes).
   - `X-Aether-Webhook-Endpoint-Token` — caller-presented endpoint token
     (`endpoint_secret` schemes).
+
+The provider bridge now commits consent-admitted canonical events to typed
+Bronze and the transactional event outbox. Staging and production refuse to
+start UPR ingress with the outbox relay disabled. Tenant route records, source
+object mappings, and internal replay services do not add cutover, replay, or
+graph mutation HTTP endpoints in this branch; those operations remain gated
+until authorization, writer fencing, and projection evidence are complete.
 
 ---
 

@@ -10,6 +10,8 @@ under ``credentials[...]``).
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 import pytest_asyncio
 
@@ -42,8 +44,14 @@ class FakeBroker:
         self.stored = stored
         self.writes: list[tuple] = []
 
-    def provider_ref(self, tenant_id: str, identity_key: str) -> str:
-        return f"provider:{tenant_id}:{identity_key}"
+    def provider_ref(
+        self, tenant_id: str, identity_key: str, *, connection_id: str | None = None
+    ) -> str:
+        ref = f"provider:{tenant_id}:{identity_key}"
+        if connection_id is None:
+            return ref
+        digest = hashlib.sha256(connection_id.encode("utf-8")).hexdigest()
+        return f"{ref}:connection:v2:{digest}"
 
     async def resolve(self, tenant_id: str, ref: str) -> StructuredCredential | None:
         return self.stored
@@ -188,17 +196,24 @@ async def test_apply_projection_flat_credential_creates_native_connection() -> N
     broker = FakeBroker(stored=legacy)
     connections = FakeConnections()
     native = await apply_projection(
-        "t1", "shopify", _SHOPIFY_CONFIG, _SHOPIFY_REF,
-        broker=broker, connections=connections,
+        "t1",
+        "shopify",
+        _SHOPIFY_CONFIG,
+        _SHOPIFY_REF,
+        broker=broker,
+        connections=connections,
     )
     assert native.provider_identity == "shopify.admin.orders_read"
-    assert native.credential_ref == "provider:t1:shopify.admin.orders_read"
+    scoped_ref = broker.provider_ref(
+        "t1", "shopify.admin.orders_read", connection_id=native.connection_id
+    )
+    assert native.credential_ref == scoped_ref
     # The returned connection carries ONLY a ref — never secret material.
     assert "api_key" not in native.model_dump()
     assert "webhook_secret" not in native.model_dump()
     # The stored native credential is re-wrapped as SecretStr (refs-only).
     stored_ref, stored_cred = broker.writes[0][1], broker.writes[0][2]
-    assert stored_ref == "provider:t1:shopify.admin.orders_read"
+    assert stored_ref == scoped_ref
     assert isinstance(stored_cred, ApiKeyWebhookSecretCredential)
     assert stored_cred.api_key.get_secret_value() == "shpat_NATIVE_KEY_1"
     assert stored_cred.webhook_secret.get_secret_value() == "whsec_NATIVE_1"
@@ -223,10 +238,16 @@ async def test_apply_projection_multicredential_shape() -> None:
     broker = FakeBroker(stored=legacy)
     connections = FakeConnections()
     native = await apply_projection(
-        "t1", "shopify", _SHOPIFY_CONFIG, _SHOPIFY_REF,
-        broker=broker, connections=connections,
+        "t1",
+        "shopify",
+        _SHOPIFY_CONFIG,
+        _SHOPIFY_REF,
+        broker=broker,
+        connections=connections,
     )
-    assert native.credential_ref == "provider:t1:shopify.admin.orders_read"
+    assert native.credential_ref == broker.provider_ref(
+        "t1", "shopify.admin.orders_read", connection_id=native.connection_id
+    )
     stored_cred = broker.writes[0][2]
     assert isinstance(stored_cred, ApiKeyWebhookSecretCredential)
     assert stored_cred.api_key.get_secret_value() == "shpat_MULTI_KEY_2"

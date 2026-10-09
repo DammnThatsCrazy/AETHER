@@ -2,22 +2,36 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, Optional
 
 import pytest
+from pydantic import SecretStr
 
 from repositories.repos import reset_in_memory_stores
 from shared.integration_contracts.acquisition import ProviderAccount
+from shared.integration_contracts.events import ReadBatch
 from shared.integration_contracts.lifecycle import ConnectionState
 from shared.integration_contracts.results import AdapterResult
+from shared.credentials.types import ApiKeyCredential, MultiCredential
+from services.comms.sync_runs import SyncRunService
 
 from services.provider_runtime.acquisition import (
     AcquisitionCoordinator,
     ProviderAccountRecord,
     ProviderAccountRepository,
 )
-from services.provider_runtime.connection import ProviderConnection
-from services.provider_runtime.errors import PluginIncompatible, ProviderNotInstalled
+from services.provider_runtime.connection import (
+    ProviderConnection,
+    ProviderConnectionRepository,
+    SCHEDULED_SYNC_STATES,
+)
+from services.provider_runtime.errors import (
+    PluginIncompatible,
+    ProviderConfigurationInvalid,
+    ProviderNotInstalled,
+)
+from services.provider_runtime.scheduler import PullScheduler
 
 
 # ── Test-local account adapter double (protocol-conforming) ──
@@ -44,11 +58,58 @@ class _FakeAccount:
 
 
 class _FakePlugin:
-    def __init__(self, account: Optional[_FakeAccount] = None) -> None:
+    def __init__(
+        self,
+        account: Optional[_FakeAccount] = None,
+        *,
+        manifest: Any = None,
+        pull: Any = None,
+    ) -> None:
         self._account = account or _FakeAccount()
+        self._manifest = manifest
+        self._pull = pull
 
     def account(self) -> _FakeAccount:
         return self._account
+
+    def manifest(self) -> Any:
+        return self._manifest
+
+    def pull(self) -> Any:
+        return self._pull
+
+
+class _EmptyPull:
+    def __init__(self) -> None:
+        self.calls: list[Any] = []
+
+    async def fetch(self, context, cursor=None, limit=None):
+        self.calls.append(context)
+        return AdapterResult.ok(
+            ReadBatch(records=[], next_cursor=None, has_more=False)
+        )
+
+
+class _Registry:
+    def __init__(self, plugin: Any) -> None:
+        self.plugin = plugin
+
+    def get(self, provider_identity: str) -> Any:
+        return self.plugin
+
+
+class _RawStore:
+    async def ingest(self, records, *, tenant_id=None):
+        return [(record, True) for record in records]
+
+
+class _Bridge:
+    async def ingest_events(self, tenant_id: str, events) -> int:
+        return len(events)
+
+
+async def _ignore_meter(*args) -> None:
+    return None
 
 
 @pytest.fixture
@@ -72,6 +133,16 @@ def _connection(*, state: ConnectionState = ConnectionState.AVAILABLE) -> Provid
     )
 
 
+def _graphql_connection() -> ProviderConnection:
+    connection = _connection(state=ConnectionState.ACCOUNT_SELECTION_REQUIRED)
+    connection.provider_identity = "shopify.admin.orders_read"
+    connection.config = {
+        "orders_api": "graphql", "source_account_realm": "test",
+        "shop_domain": "myshop.myshopify.com",
+    }
+    return connection
+
+
 @pytest.mark.asyncio
 async def test_discover_accounts_persists_records(coordinator: AcquisitionCoordinator, accounts: ProviderAccountRepository):
     conn = _connection()
@@ -88,6 +159,70 @@ async def test_discover_accounts_persists_records(coordinator: AcquisitionCoordi
     assert {r.account_id for r in stored} == {"conn_1:acc_1", "conn_1:acc_2"}
     assert stored[0].tenant_id == "tenant-1"
     assert stored[0].provider_identity == "shopify.orders.catalog"
+
+
+@pytest.mark.asyncio
+async def test_graphql_account_selection_requires_persisted_immutable_shop_evidence(
+    coordinator: AcquisitionCoordinator, accounts: ProviderAccountRepository,
+) -> None:
+    connection = _graphql_connection()
+    shop = ProviderAccount(
+        account_id="shop:myshop.myshopify.com",
+        external_id="gid://shopify/Shop/123",
+        metadata={
+            "shop_gid": "gid://shopify/Shop/123", "source_account_realm": "test",
+            "shop_domain": "myshop.myshopify.com",
+        },
+    )
+    plugin = _FakePlugin(_FakeAccount(discover=AdapterResult.ok([shop])))
+    with pytest.raises(ProviderConfigurationInvalid, match="discovery is required"):
+        await coordinator.select_account(
+            connection, account_id=shop.account_id, plugin=plugin
+        )
+
+    credential = MultiCredential(credentials={
+        "shop_access_token": ApiKeyCredential(api_key=SecretStr("synthetic-secret")),
+    })
+    discovered = await coordinator.discover_accounts(
+        connection, plugin=plugin, credential=credential
+    )
+    assert discovered.success is True
+    assert plugin.account().discover_calls[0].credential == credential
+    selected = await coordinator.select_account(
+        connection, account_id=shop.account_id, plugin=plugin
+    )
+    assert shop.account_id in selected.selected_accounts
+    persisted = await accounts.find(f"{connection.connection_id}:{shop.account_id}")
+    assert persisted.external_id == shop.external_id
+    assert persisted.metadata["source_account_realm"] == "test"
+    assert "synthetic-secret" not in str(persisted.model_dump())
+
+    # Keep discovery internally consistent so the coordinator reaches its
+    # persisted immutable-ID comparison (rather than rejecting a mismatched
+    # external_id/metadata pair before that branch).
+    changed = shop.model_copy(update={
+        "external_id": "gid://shopify/Shop/456",
+        "metadata": {
+            **shop.metadata,
+            "shop_gid": "gid://shopify/Shop/456",
+        },
+    })
+    plugin.account()._discover = AdapterResult.ok([changed])
+    with pytest.raises(ProviderConfigurationInvalid, match="identity changed"):
+        await coordinator.discover_accounts(connection, plugin=plugin, credential=credential)
+
+
+@pytest.mark.asyncio
+async def test_graphql_discovery_rejects_domain_only_account(
+    coordinator: AcquisitionCoordinator, accounts: ProviderAccountRepository,
+) -> None:
+    connection = _graphql_connection()
+    plugin = _FakePlugin(_FakeAccount(discover=AdapterResult.ok([
+        ProviderAccount(account_id="shop:myshop.myshopify.com")
+    ])))
+    with pytest.raises(ProviderConfigurationInvalid, match="immutable shop identity"):
+        await coordinator.discover_accounts(connection, plugin=plugin)
+    assert await accounts.list_for_connection(connection.connection_id) == []
 
 
 @pytest.mark.asyncio
@@ -147,6 +282,71 @@ async def test_select_account_enters_account_selection_required_from_verified(
     # VERIFIED -> ACCOUNT_SELECTION_REQUIRED is a legal transition.
     assert updated.state == ConnectionState.ACCOUNT_SELECTION_REQUIRED
     assert "acc_1" in updated.selected_accounts
+
+
+@pytest.mark.asyncio
+async def test_manifest_required_first_selection_runs_sync_and_is_schedule_eligible(
+    coordinator: AcquisitionCoordinator,
+):
+    conn = _connection(state=ConnectionState.VERIFIED)
+    pull = _EmptyPull()
+    plugin = _FakePlugin(
+        manifest=SimpleNamespace(
+            accounts=SimpleNamespace(selection_required=True),
+            streams=[],
+        ),
+        pull=pull,
+    )
+
+    selected = await coordinator.select_account(
+        conn, account_id="acc_1", plugin=plugin
+    )
+
+    assert selected.state == ConnectionState.INITIAL_SYNC_PENDING
+    assert selected.selected_accounts == ["acc_1"]
+    assert selected.state.value in SCHEDULED_SYNC_STATES
+
+    connections = ProviderConnectionRepository()
+    await connections.upsert(selected)
+    scheduler = PullScheduler(
+        raw_store=_RawStore(),
+        normalization=object(),
+        bridge=_Bridge(),
+        registry=_Registry(plugin),
+        connections=connections,
+        sync_runs=SyncRunService(),
+        meters=_ignore_meter,
+    )
+    result = await scheduler.run_sync(selected)
+
+    assert result.status == "completed"
+    assert len(pull.calls) == 1
+    assert pull.calls[0].account_id == "acc_1"
+    persisted = await connections.find(conn.connection_id)
+    assert persisted is not None
+    assert persisted.state == ConnectionState.CONNECTED
+    assert persisted.last_successful_sync_at
+
+
+@pytest.mark.asyncio
+async def test_additional_account_selection_preserves_pending_sync_state(
+    coordinator: AcquisitionCoordinator,
+):
+    conn = _connection(state=ConnectionState.VERIFIED)
+    plugin = _FakePlugin(
+        manifest=SimpleNamespace(
+            accounts=SimpleNamespace(selection_required=True),
+            streams=[],
+        )
+    )
+
+    await coordinator.select_account(conn, account_id="acc_1", plugin=plugin)
+    updated = await coordinator.select_account(
+        conn, account_id="acc_2", plugin=plugin
+    )
+
+    assert updated.selected_accounts == ["acc_1", "acc_2"]
+    assert updated.state == ConnectionState.INITIAL_SYNC_PENDING
 
 
 @pytest.mark.asyncio

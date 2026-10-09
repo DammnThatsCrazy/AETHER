@@ -45,6 +45,26 @@ policies:
     requires_consent_invalidation: true
     requires_permission_hash: false
 
+  # Raw provider payloads may include subject data. Keep replayable payloads
+  # under the same consent-invalidation, legal-hold, and erasure controls as
+  # raw SDK events; the runtime may externalize them as compressed JSONL.
+  - resource_type: bronze_provider_records
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: zstd
+    format: jsonl
+    cache_ttl_seconds: 0
+    materialization_mode: on_demand
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: true
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
   - resource_type: dune_bronze_records
     authoritative_store: postgres
     metadata_store: postgres
@@ -5228,6 +5248,81 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false
+
+  # Canonical provider object mappings persist HMACed source identifiers only;
+  # keep them tenant-erasure capable and do not externalize mapping rows.
+  - resource_type: provider_object_refs
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: provider_object_aliases
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Route state is tenant-scoped writer-control configuration. The transition
+  # table below is the durable evidence trail; the mutable route may be erased.
+  - resource_type: tenant_connector_routes
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Append-only route decisions carry actor/decision/evidence references and
+  # are retained as control-plane audit evidence, without externalization.
+  - resource_type: tenant_connector_route_transitions
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: commerce_challenges
     authoritative_store: postgres
     metadata_store: postgres
@@ -7770,5 +7865,42 @@ policies:
     allow_adaptive_materialization: false
     allow_object_externalization: false
     allow_historical_table_storage: false
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Tenant data-rights grants authorize raw provider retention. Revocation is a
+  # state change plus an appended event; neither is hard-deleted, and the event
+  # table is immutable by trigger.
+  - resource_type: data_rights_grants
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: data_rights_grant_events
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false

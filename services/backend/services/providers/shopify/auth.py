@@ -1,7 +1,8 @@
 """Shopify credential validation and live connectivity test (:class:`AuthAdapter`).
 
-The credential is ``{'api_key': str, 'password': str, 'shop_domain': str}``
-(with an optional ``shop_access_token`` for the OAuth-style admin API header).
+The REST pull-only credential is ``api_key`` + ``password`` + ``shop_domain``.
+REST webhook mode also requires ``webhook_secret``. The opt-in GraphQL orders
+mode uses ``shop_access_token`` and ``shop_domain`` and remains poll-only.
 No secret material is ever included in an error message or result ``detail``.
 
 The credential is read defensively because ``AcquisitionContext.credential`` may
@@ -27,6 +28,7 @@ from shared.integration_contracts.results import (
 
 DEFAULT_API_VERSION = "2024-10"
 REQUIRED_CREDENTIAL_FIELDS = ("api_key", "password", "shop_domain")
+ORDERS_API_MODES = frozenset({"rest", "rest_webhook", "graphql"})
 _REQUEST_TIMEOUT_SECONDS = 10.0
 
 # SSRF gate: real Shopify admin API hosts are always ``{shop}.myshopify.com``.
@@ -49,15 +51,31 @@ def _credential_dict(context: AcquisitionContext) -> dict[str, Any]:
     the structured shapes (``token``/``username``) are mapped onto the Shopify
     field names so a compatible structured shape still works.
     """
-    cred = context.credential
-    if cred is None:
+    credential = context.credential
+    if credential is None:
         return {}
-    if isinstance(cred, dict):
-        return dict(cred)
-    try:
-        plain: dict[str, Any] = to_plaintext_dict(cred)  # type: ignore[arg-type]
-    except Exception:  # pragma: no cover - defensive: unknown credential object
-        plain = getattr(cred, "model_dump", lambda: {})()
+    if isinstance(credential, dict):
+        plain = dict(credential)
+    else:
+        try:
+            plain = to_plaintext_dict(credential)  # type: ignore[arg-type]
+        except Exception:  # pragma: no cover - defensive: unknown credential object
+            plain = getattr(credential, "model_dump", lambda: {})()
+    if plain.get("type") == "multi":
+        components = plain.get("credentials")
+        if not isinstance(components, dict):
+            return {}
+        # The structured platform has no provider-specific secret bag. A
+        # MultiCredential stores each Shopify secret as a named ApiKeyCredential;
+        # unwrap only the exact components this adapter understands.
+        return {
+            name: component["api_key"]
+            for name in ("api_key", "password", "shop_access_token", "webhook_secret")
+            if isinstance((component := components.get(name)), dict)
+            and component.get("type") == "api_key"
+            and isinstance(component.get("api_key"), str)
+            and component["api_key"]
+        }
     out: dict[str, Any] = {}
     for key in (
         "api_key",
@@ -77,6 +95,22 @@ def _credential_dict(context: AcquisitionContext) -> dict[str, Any]:
     if "shop_domain" not in out and plain.get("username") is not None:
         out["shop_domain"] = plain["username"]
     return out
+
+
+def _source_account_realm(context: AcquisitionContext) -> Optional[str]:
+    """Require an explicit identity namespace for GraphQL source objects.
+
+    Shopify's Admin API does not label a shop's data as live or test. This
+    tenant choice must be explicit so a development shop is never silently
+    mapped into the live canonical-object namespace.
+    """
+    value = context.config.get("source_account_realm")
+    return value if value in ("live", "test") else None
+
+
+def _orders_api_mode(context: AcquisitionContext) -> str:
+    """Return the configured Shopify order acquisition mode."""
+    return str(context.config.get("orders_api") or "rest").lower()
 
 
 def _validated_shop_domain(shop_domain: str) -> Optional[str]:
@@ -157,9 +191,24 @@ def _api_version(context: AcquisitionContext) -> str:
 
 def _missing_fields(context: AcquisitionContext) -> list[str]:
     cred = _credential_dict(context)
+    orders_api = _orders_api_mode(context)
+    if orders_api == "graphql":
+        return [
+            name
+            for name in ("shop_access_token", "shop_domain")
+            if not str(
+                (cred.get(name) if name != "shop_domain" else _raw_shop_domain(context)) or ""
+            ).strip()
+        ]
+    required_fields = REQUIRED_CREDENTIAL_FIELDS + (
+        ("webhook_secret",) if orders_api == "rest_webhook" else ()
+    )
     return [
-        name for name in REQUIRED_CREDENTIAL_FIELDS
-        if not str(cred.get(name) or "").strip()
+        name
+        for name in required_fields
+        if not str(
+            (cred.get(name) if name != "shop_domain" else _raw_shop_domain(context)) or ""
+        ).strip()
     ]
 
 
@@ -192,12 +241,10 @@ def _retry_after_ms(headers) -> Optional[float]:
 
 
 class ShopifyAuthAdapter:
-    """AuthAdapter: structural credential check + live /shop.json probe.
+    """AuthAdapter: structural credential check + live shop-identity probe.
 
-    The live probe mirrors the legacy connector's auth style: Shopify admin
-    credentials are ``api_key`` + ``password`` presented as HTTP Basic auth
-    (the ``X-Shopify-Access-Token`` OAuth header is supported for pull via the
-    optional ``shop_access_token`` field).
+    REST uses the legacy ``/shop.json`` Basic-auth probe. GraphQL mode uses a
+    version-pinned Admin API query and its ``X-Shopify-Access-Token`` credential.
     """
 
     async def validate_credentials(self, context: AcquisitionContext) -> AdapterResult[Any]:
@@ -206,6 +253,23 @@ class ShopifyAuthAdapter:
         A non-conforming shop_domain is a PERMANENT_ERROR (``shop_domain_invalid``)
         checked WITHOUT a network call — a bad host must never be probed.
         """
+        orders_api = _orders_api_mode(context)
+        if orders_api not in ORDERS_API_MODES:
+            return AdapterResult(
+                success=False,
+                status=AdapterStatus.PERMANENT_ERROR,
+                error_code="orders_api_invalid",
+                retryable=False,
+                data={"detail": "orders_api must be rest, rest_webhook, or graphql"},
+            )
+        if orders_api == "graphql" and not _source_account_realm(context):
+            return AdapterResult(
+                success=False,
+                status=AdapterStatus.PERMANENT_ERROR,
+                error_code="source_account_realm_invalid",
+                retryable=False,
+                data={"detail": "GraphQL source_account_realm must be explicitly live or test"},
+            )
         missing = _missing_fields(context)
         if missing:
             return AdapterResult(
@@ -226,7 +290,7 @@ class ShopifyAuthAdapter:
         return AdapterResult.ok({})
 
     async def test(self, context: AcquisitionContext) -> AdapterResult[Any]:
-        """Live GET ``{base}/admin/api/{version}/shop.json`` with Basic auth.
+        """Probe the shop over the configured REST or GraphQL Admin API.
 
         Returns ``AdapterResult`` following ``from_connection_test`` semantics:
         success + latency_ms; failures are classified (401 -> UNAUTHORIZED,
@@ -235,6 +299,23 @@ class ShopifyAuthAdapter:
         """
         import time
 
+        orders_api = _orders_api_mode(context)
+        if orders_api not in ORDERS_API_MODES:
+            return AdapterResult(
+                success=False,
+                status=AdapterStatus.PERMANENT_ERROR,
+                error_code="orders_api_invalid",
+                retryable=False,
+                data={"detail": "orders_api must be rest, rest_webhook, or graphql"},
+            )
+        if orders_api == "graphql" and not _source_account_realm(context):
+            return AdapterResult(
+                success=False,
+                status=AdapterStatus.PERMANENT_ERROR,
+                error_code="source_account_realm_invalid",
+                retryable=False,
+                data={"detail": "GraphQL source_account_realm must be explicitly live or test"},
+            )
         cred = _credential_dict(context)
         missing = _missing_fields(context)
         if missing:
@@ -254,6 +335,68 @@ class ShopifyAuthAdapter:
                 error_code="shop_domain_invalid",
                 retryable=False,
                 data={"detail": "shop_domain is not a valid *.myshopify.com host"},
+            )
+        if orders_api == "graphql":
+            from services.providers.shopify.graphql_pull import (
+                GRAPHQL_API_VERSION,
+                _GraphQLFailure,
+                _SHOP_GID_RE,
+                _post,
+            )
+
+            start = time.perf_counter()
+            url = f"https://{shop_domain}/admin/api/{GRAPHQL_API_VERSION}/graphql.json"
+            try:
+                async with _http_client() as client:
+                    body = await _post(
+                        client,
+                        url,
+                        str(cred["shop_access_token"]),
+                        "query AetherShopProbe { shop { id } currentAppInstallation { accessScopes { handle } } }",
+                        {},
+                    )
+                shop = body["data"].get("shop")
+                if (
+                    not isinstance(shop, dict)
+                    or not isinstance(shop.get("id"), str)
+                    or not _SHOP_GID_RE.fullmatch(shop["id"])
+                ):
+                    raise _GraphQLFailure(AdapterStatus.RETRYABLE_ERROR, "shop_identity_missing")
+                installation = body["data"].get("currentAppInstallation")
+                scopes = (
+                    installation.get("accessScopes") if isinstance(installation, dict) else None
+                )
+                if not isinstance(scopes, list) or any(
+                    not isinstance(scope, dict) or not isinstance(scope.get("handle"), str)
+                    for scope in scopes
+                ):
+                    raise _GraphQLFailure(
+                        AdapterStatus.RETRYABLE_ERROR, "order_scope_evidence_missing"
+                    )
+                scope_handles = {scope["handle"] for scope in scopes}
+                if "read_orders" not in scope_handles:
+                    raise _GraphQLFailure(AdapterStatus.PERMANENT_ERROR, "read_orders_required")
+            except _GraphQLFailure as exc:
+                return AdapterResult(
+                    success=False,
+                    status=exc.status,
+                    error_code=exc.code,
+                    retryable=exc.status
+                    in (AdapterStatus.RETRYABLE_ERROR, AdapterStatus.RATE_LIMITED),
+                    latency_ms=(time.perf_counter() - start) * 1000.0,
+                    rate_limit=RateLimitInfo(retry_after_ms=exc.retry_after_ms)
+                    if exc.retry_after_ms is not None
+                    else None,
+                    data={"detail": exc.code.replace("_", " ")},
+                )
+            return AdapterResult.ok(
+                {
+                    "detail": "shop reachable via GraphQL",
+                    "status": "ok",
+                    "read_orders": True,
+                    "historical_backfill_available": "read_all_orders" in scope_handles,
+                },
+                latency_ms=(time.perf_counter() - start) * 1000.0,
             )
         api_version = _api_version(context)
         url = f"https://{shop_domain}/admin/api/{api_version}/shop.json"
@@ -293,7 +436,9 @@ class ShopifyAuthAdapter:
                 error_code="unauthorized",
                 retryable=False,
                 latency_ms=latency_ms,
-                data={"detail": f"shop {shop_domain} rejected the credential (HTTP {response.status_code})"},
+                data={
+                    "detail": f"shop {shop_domain} rejected the credential (HTTP {response.status_code})"
+                },
             )
         if response.status_code == 429:
             retry_after = _retry_after_ms(response.headers)

@@ -33,6 +33,19 @@ from services.provider_runtime.errors import (
 )
 from services.provider_runtime.credential_broker import credential_broker
 
+SYNC_ELIGIBLE_STATES: frozenset[str] = frozenset(
+    {
+        ConnectionState.INITIAL_SYNC_PENDING.value,
+        ConnectionState.INITIAL_SYNC_RUNNING.value,
+        ConnectionState.CONNECTED.value,
+        ConnectionState.DEGRADED.value,
+        ConnectionState.SYNC_FAILED.value,
+    }
+)
+SCHEDULED_SYNC_STATES: frozenset[str] = SYNC_ELIGIBLE_STATES - {
+    ConnectionState.INITIAL_SYNC_RUNNING.value
+}
+
 
 def _now_iso() -> str:
     """Current UTC time in ISO-8601 form (caller-supplied timestamps)."""
@@ -76,7 +89,9 @@ class ProviderConnectionRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("provider_connections")
 
-    async def list_for_tenant(self, tenant_id: str, *, limit: int = 100) -> list[ProviderConnection]:
+    async def list_for_tenant(
+        self, tenant_id: str, *, limit: int = 100
+    ) -> list[ProviderConnection]:
         rows = await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
         return [_connection_from_row(r) for r in rows if _connection_from_row(r) is not None]
 
@@ -107,7 +122,9 @@ class ConnectionOrchestrator:
     """Lifecycle operations with ConnectionState transitions guarded by can_transition."""
 
     def __init__(self, *, connections=None, broker=None) -> None:
-        self.connections = connections if connections is not None else ProviderConnectionRepository()
+        self.connections = (
+            connections if connections is not None else ProviderConnectionRepository()
+        )
         self.broker = broker if broker is not None else credential_broker
 
     async def create_connection(
@@ -139,12 +156,18 @@ class ConnectionOrchestrator:
     ) -> ProviderConnection:
         """Store a structured credential behind a ref; advance to CREDENTIALS_RECEIVED.
 
-        Ref = ``broker.provider_ref(tenant, provider_identity)``. The state move is
-        only performed when the transition table allows it from the connection's
-        current state (see seam note: ``CREDENTIAL_WAITING → CREDENTIALS_RECEIVED``
-        is not a single legal hop; the legal path is via ``AVAILABLE``).
+        New refs are scoped to this connection. Existing rows with a legacy
+        tenant/provider ref remain readable because this method does not revoke,
+        delete, or rewrite the prior credential. The state move is only performed
+        when the transition table allows it from the connection's current state
+        (see seam note: ``CREDENTIAL_WAITING → CREDENTIALS_RECEIVED`` is not a
+        single legal hop; the legal path is via ``AVAILABLE``).
         """
-        ref = self.broker.provider_ref(connection.tenant_id, connection.provider_identity)
+        ref = self.broker.provider_ref(
+            connection.tenant_id,
+            connection.provider_identity,
+            connection_id=connection.connection_id,
+        )
         await self.broker.store(connection.tenant_id, ref, credential)
         connection.credential_ref = ref
         if can_transition(connection.state, ConnectionState.CREDENTIALS_RECEIVED):
@@ -238,7 +261,14 @@ class ConnectionOrchestrator:
         await self.connections.upsert(connection)
         return result
 
-    async def run_sync(self, connection: ProviderConnection, *, since: str | None = None):
+    async def run_sync(
+        self,
+        connection: ProviderConnection,
+        *,
+        since: str | None = None,
+        stream_id: str | None = None,
+        stream_ids: Optional[list[str]] = None,
+    ):
         """Delegate a sync to Team E's PullScheduler.
 
         The scheduler is imported lazily inside the method to avoid the D↔E
@@ -247,7 +277,16 @@ class ConnectionOrchestrator:
         from services.provider_runtime.scheduler import PullScheduler  # type: ignore[import-not-found]
 
         scheduler = PullScheduler()
-        return await scheduler.run(connection=connection, since=since)
+        if stream_ids is not None:
+            return await scheduler.run(
+                connection=connection,
+                since=since,
+                stream_id=stream_id,
+                stream_ids=stream_ids,
+            )
+        if stream_id is None:
+            return await scheduler.run(connection=connection, since=since)
+        return await scheduler.run(connection=connection, since=since, stream_id=stream_id)
 
     def transition(
         self,
@@ -273,4 +312,6 @@ __all__ = [
     "ConnectionOrchestrator",
     "ProviderConnection",
     "ProviderConnectionRepository",
+    "SCHEDULED_SYNC_STATES",
+    "SYNC_ELIGIBLE_STATES",
 ]

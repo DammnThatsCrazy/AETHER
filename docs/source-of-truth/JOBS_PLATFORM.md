@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/jobs/handlers.py, services/backend/services/jobs/service.py, services/backend/services/jobs/worker.py, services/backend/services/jobs/scheduler.py, services/backend/services/jobs/routes.py, services/backend/services/jobs/kyber_routes.py, services/backend/repositories/jobs_repo.py]
+source_files: [services/backend/services/jobs/handlers.py, services/backend/services/jobs/service.py, services/backend/services/jobs/worker.py, services/backend/services/jobs/scheduler.py, services/backend/services/jobs/routes.py, services/backend/services/jobs/kyber_routes.py, services/backend/services/jobs/bootstrap.py, services/backend/services/provider_runtime/replay.py, services/backend/repositories/jobs_repo.py]
 last_synced_commit: pending
 ---
 
@@ -56,6 +56,17 @@ async def generate_export(payload: dict, ctx: JobContext) -> JobOutcome:
   `POST /v1/jobs`; every other type is internal-only (schedules, other services,
   Kyber). Handlers are module-level functions and are registered at startup
   before the supervised worker starts claiming.
+
+`provider.raw_replay` is an internal-only handler registered from
+`services/jobs/bootstrap.py` when the provider runtime is enabled. Its
+provider-runtime service re-normalizes a closed, tenant/connection/account/
+stream/time-bounded slice of durable provider Bronze records with a pinned
+normalizer and event schema version. The job checkpoints after each accepted
+or explicitly skipped raw record, heartbeats its lease, and uses the existing
+event bridge for consent-gated canonical Bronze/outbox writes. It does not pull
+from provider APIs, write directly to the graph, or backfill legacy
+`bronze_connector_events`; this implementation provides no public replay
+authorization or operator route.
 
 ## Surfaces
 

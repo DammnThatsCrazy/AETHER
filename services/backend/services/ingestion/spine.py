@@ -176,6 +176,43 @@ def _looks_like_aether_event(payload: Mapping[str, Any]) -> bool:
     )
 
 
+def is_provider_canonical_event(payload: Mapping[str, Any] | object) -> bool:
+    """Recognize the provider AetherEvent shape, including historical dumps.
+
+    The provider bridge now adds ``source_type=provider``, but older queued
+    events do not have that marker. Requiring the provider's source lineage
+    fields as well as the AetherEvent shape avoids trusting an SDK-supplied
+    marker to bypass SDK consumers.
+    """
+    return bool(
+        isinstance(payload, Mapping)
+        and _looks_like_aether_event(payload)
+        and payload.get("provider_identity")
+        and payload.get("source_record_id")
+        and payload.get("provider")
+    )
+
+
+def is_provider_delivery(payload: Mapping[str, Any] | object, source_service: str) -> bool:
+    """Defer only backend-origin provider deliveries on the shared topic.
+
+    ``source_type`` is payload data and is insufficient on its own: the SDK
+    request body must not opt out of SDK projections by setting a marker. The
+    bus source service is assigned by backend publishers, not by the client.
+    Legacy direct bridge publishes had no marker; new outbox and governed
+    replay deliveries do, and share relay/replay source-service names with
+    non-provider observations.
+    """
+    if not is_provider_canonical_event(payload):
+        return False
+    if source_service == "provider_runtime.bridge":
+        return True
+    return bool(
+        source_service in {"ingestion.outbox_relay", "ingestion.replay"}
+        and payload.get("source_type") == "provider"
+    )
+
+
 def _from_sdk_flat(payload: Mapping[str, Any]) -> ObservationView:
     context = _as_dict(payload.get("context"))
     subjects: tuple[SubjectView, ...] = ()
@@ -272,6 +309,8 @@ def to_observation_view(payload: Mapping[str, Any]) -> ObservationView:
 __all__ = [
     "ObservationView",
     "SubjectView",
+    "is_provider_canonical_event",
+    "is_provider_delivery",
     "normalization_spine_enabled",
     "to_observation_view",
 ]

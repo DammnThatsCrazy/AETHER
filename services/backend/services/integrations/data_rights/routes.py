@@ -111,13 +111,10 @@ async def create_grant(body: DataRightsGrantCreate, request: Request):
 async def get_grant(grant_id: str, request: Request):
     """Get full detail for a data rights grant."""
     tenant_id = _tenant_id(request)
-    grant = await data_rights_service.get_grant(grant_id)
+    grant = await data_rights_service.get_grant(grant_id, tenant_id=tenant_id)
 
     if not grant:
         raise NotFoundError("grant")
-    if grant.tenant_id != tenant_id:
-        raise ForbiddenError("Access denied to this grant")
-
     return APIResponse(data=grant.model_dump()).to_dict()
 
 
@@ -125,14 +122,13 @@ async def get_grant(grant_id: str, request: Request):
 async def revoke_grant(grant_id: str, body: DataRightsGrantRevoke, request: Request):
     """Revoke a data rights grant. All data use is denied immediately."""
     tenant_id = _tenant_id(request, "admin")
-    grant = await data_rights_service.get_grant(grant_id)
+    grant = await data_rights_service.get_grant(grant_id, tenant_id=tenant_id)
 
     if not grant:
         raise NotFoundError("grant")
-    if grant.tenant_id != tenant_id:
-        raise ForbiddenError("Access denied to this grant")
-
-    updated = await data_rights_service.revoke_grant(grant_id, body)
+    updated = await data_rights_service.revoke_grant(
+        grant_id, body, tenant_id=tenant_id,
+    )
     return APIResponse(data=updated.model_dump()).to_dict()
 
 
@@ -140,13 +136,10 @@ async def revoke_grant(grant_id: str, body: DataRightsGrantRevoke, request: Requ
 async def policy_check(body: PolicyCheckRequest, request: Request):
     """Evaluate a specific policy check on a grant (fail-closed)."""
     tenant_id = _tenant_id(request)
-    grant = await data_rights_service.get_grant(body.grant_id)
+    grant = await data_rights_service.get_grant(body.grant_id, tenant_id=tenant_id)
 
     if not grant:
         raise NotFoundError("grant")
-    if grant.tenant_id != tenant_id:
-        raise ForbiddenError("Access denied to this grant")
-
     result = await data_rights_service.check_policy(body.grant_id, body.check_type)
     return APIResponse(data=result.model_dump()).to_dict()
 
@@ -192,5 +185,7 @@ async def admin_revoke_grant(grant_id: str, body: DataRightsGrantRevoke, request
     if not grant:
         raise NotFoundError("grant")
 
-    updated = await data_rights_service.revoke_grant(grant_id, body)
+    updated = await data_rights_service.revoke_grant(
+        grant_id, body, tenant_id=grant.tenant_id,
+    )
     return APIResponse(data=updated.model_dump()).to_dict()
