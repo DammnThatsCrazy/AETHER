@@ -104,7 +104,7 @@ domains:
     paths: [services/backend/**, services/agents/**, services/compliance/**, docs/archive/legacy-architecture/backend/**, tests/**]
     # Component suites are the ordinary-PR authority. The aggregate backend
     # suite remains registered for regression/release lanes only.
-    checks: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform, functionality-proof-ts]
+    checks: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
     path_checks:
       services/backend/services/identity/**: [backend-identity]
       services/backend/services/ingestion/**: [backend-ingestion]
@@ -154,7 +154,7 @@ domains:
   sdk:
     owner: sdk
     paths: [packages/**, vitest.config.fps.ts, sdk-fixtures/**]
-    checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, functionality-proof-ts, contracts]
+    checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, contracts]
     path_checks:
       packages/shared/**: [sdk-shared, functionality-proof-ts]
       packages/web/**: [sdk-web, functionality-proof-ts]

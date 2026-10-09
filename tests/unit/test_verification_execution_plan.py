@@ -44,3 +44,41 @@ def test_unknown_path_is_blocked_instead_of_emitting_zero_work() -> None:
     assert plan["status"] == "BLOCKED"
     assert plan["jobs"] == []
     assert plan["unresolved_paths"] == ["new-runtime-surface/worker.py"]
+
+
+def _suite_ids(plan: dict) -> set[str]:
+    return {sid for job in plan["jobs"] for sid in job.get("suite_ids", [])}
+
+
+def test_functionality_proof_suite_is_selected_only_by_the_paths_it_imports() -> None:
+    # The suite imports packages/{shared,web,react-native,proof-*}, its own
+    # test directories, the mocks and fixtures they load, and its vitest config.
+    for path in (
+        "packages/shared/consent-receipt.ts",
+        "packages/web/src/index.ts",
+        "packages/react-native/src/index.ts",
+        "packages/proof-contracts/index.ts",
+        "packages/proof-fixtures/index.json",
+        "tests/sdk/web/web-offline.test.ts",
+        "tests/mocks/react-native.ts",
+        "sdk-fixtures/canonical-first-value-journey.json",
+        "vitest.config.fps.ts",
+    ):
+        plan = build_execution_plan([path])
+        assert plan["status"] == "READY", path
+        assert "functionality-proof-ts" in _suite_ids(plan), path
+
+
+def test_functionality_proof_suite_is_not_a_domain_wide_default() -> None:
+    # A path with no specific rule falls back to its domain's `checks`; the proof
+    # suite must not be in those defaults or unrelated SDK, mobile and backend
+    # changes would pay for a Node install and an 84-file run.
+    for path in (
+        "packages/ios/Sources/AetherSDK/Aether.swift",
+        "packages/mobile-core/src/index.ts",
+        "packages/brand/src/index.ts",
+        "services/backend/config/settings.py",
+    ):
+        plan = build_execution_plan([path])
+        assert plan["status"] == "READY", path
+        assert "functionality-proof-ts" not in _suite_ids(plan), path
