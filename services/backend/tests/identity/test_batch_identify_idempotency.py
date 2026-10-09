@@ -47,7 +47,7 @@ class _Producer:
 
 
 @pytest.mark.asyncio
-async def test_retry_of_identify_event_does_not_repeat_canonical_resolution(monkeypatch):
+async def test_retry_of_identify_event_is_published_once_and_never_resolved_inline(monkeypatch):
     cache = _Cache()
     producer = _Producer()
     resolver_calls = []
@@ -81,7 +81,7 @@ async def test_retry_of_identify_event_does_not_repeat_canonical_resolution(monk
         return batch.EventResult(id=kwargs["sdk_event"].id, status="accepted")
 
     monkeypatch.setattr(batch, "get_registry", lambda: registry)
-    monkeypatch.setattr(batch, "get_identity_resolver", lambda: resolver)
+    monkeypatch.setattr("services.identity.routes.get_identity_resolver", lambda: resolver)
     monkeypatch.setattr(batch, "validate_event", validate)
     monkeypatch.setattr(batch, "_process_single_event", process)
     monkeypatch.setattr(
@@ -123,9 +123,9 @@ async def test_retry_of_identify_event_does_not_repeat_canonical_resolution(monk
     assert first.accepted == 1
     assert second.duplicates == 1
     assert len(producer.batches) == 1
-    assert len(resolver_calls) == 1
-    assert resolver_calls[0][0]["event_id"] == "stable-event-123"
-    assert resolver_calls[0][1] == "tenant-a"
+    # Resolution is the identity-worker's job (it consumes SDK_EVENTS_VALIDATED),
+    # so the request path never resolves, whether or not the event is a retry.
+    assert resolver_calls == []
 
     retry_event = event.model_copy(update={"id": "event-publish-retry"})
     producer.fail_next = True
@@ -135,8 +135,8 @@ async def test_retry_of_identify_event_does_not_repeat_canonical_resolution(monk
             server_context=None, granted_consents=frozenset(), sent_at=None,
             producer=producer,
         )
-    # A failed publish releases its event claim, so a retry can publish and
-    # resolve once after delivery succeeds.
+    # A failed publish releases its event claim, so a retry can publish once
+    # after delivery succeeds.
     retried = await batch.ingest_events(
         [retry_event], tenant_id="tenant-a", request_privacy=batch.RequestPrivacySignals(),
         server_context=None, granted_consents=frozenset(), sent_at=None,
@@ -144,9 +144,8 @@ async def test_retry_of_identify_event_does_not_repeat_canonical_resolution(monk
     )
     await asyncio.sleep(0)
     assert retried.accepted == 1
-    assert [call[0]["event_id"] for call in resolver_calls] == [
-        "stable-event-123", "event-publish-retry"
-    ]
+    assert len(producer.batches) == 2
+    assert resolver_calls == []
 
     cache.fail = True
     publish_count = len(producer.batches)
@@ -159,7 +158,7 @@ async def test_retry_of_identify_event_does_not_repeat_canonical_resolution(monk
         )
     await asyncio.sleep(0)
     assert len(producer.batches) == publish_count
-    assert len(resolver_calls) == 2
+    assert resolver_calls == []
 
 
 @pytest.mark.asyncio
@@ -172,7 +171,7 @@ async def test_retry_of_identify_event_does_not_repeat_canonical_resolution(monk
         (True, True, True, False),
     ],
 )
-async def test_identity_off_flags_do_not_schedule_batch_identify_resolution(
+async def test_identity_flags_never_schedule_inline_batch_identify_resolution(
     monkeypatch, resolution_enabled, late_binding_enabled, anonymous_binding_enabled,
     connector_backfill_enabled,
 ):
@@ -213,7 +212,7 @@ async def test_identity_off_flags_do_not_schedule_batch_identify_resolution(
         connector_backfill_enabled=connector_backfill_enabled,
     ))
     monkeypatch.setattr(batch, "get_registry", lambda: registry)
-    monkeypatch.setattr(batch, "get_identity_resolver", lambda: resolver)
+    monkeypatch.setattr("services.identity.routes.get_identity_resolver", lambda: resolver)
     monkeypatch.setattr(batch, "validate_event", validate)
     monkeypatch.setattr(batch, "_process_single_event", process)
     monkeypatch.setattr(batch, "_apply_temporal_enforcement", lambda **kwargs: kwargs["result"])
@@ -240,10 +239,9 @@ async def test_identity_off_flags_do_not_schedule_batch_identify_resolution(
     await asyncio.sleep(0)
 
     assert response.accepted == 1
-    if resolution_enabled and late_binding_enabled and anonymous_binding_enabled:
-        assert len(resolver_calls) == 1
-    else:
-        assert resolver_calls == []
+    # No flag combination brings request-local resolution back; the identity
+    # worker reads the flags when it consumes the published event.
+    assert resolver_calls == []
 
 
 @pytest.mark.asyncio
@@ -283,7 +281,7 @@ async def test_sdk_late_binding_off_does_not_schedule_batch_identify_resolution(
         sdk_late_binding_enabled=False,
     ))
     monkeypatch.setattr(batch, "get_registry", lambda: registry)
-    monkeypatch.setattr(batch, "get_identity_resolver", lambda: resolver)
+    monkeypatch.setattr("services.identity.routes.get_identity_resolver", lambda: resolver)
     monkeypatch.setattr(batch, "validate_event", validate)
     monkeypatch.setattr(batch, "_process_single_event", process)
     monkeypatch.setattr(batch, "_apply_temporal_enforcement", lambda **kwargs: kwargs["result"])
