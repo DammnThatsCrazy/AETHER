@@ -1170,6 +1170,7 @@ suites:
       "tests/unit/test_artifact_builder_defaults.py",
       "tests/unit/test_backend_inmemory_guards.py",
       "tests/unit/test_canonical_activity.py",
+      "tests/unit/test_canonical_environments.py",
       "tests/unit/test_capability_matrix_join.py",
       "tests/unit/test_card_linked_payments.py",
       "tests/unit/test_connectors.py",

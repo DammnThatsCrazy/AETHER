@@ -33,6 +33,85 @@ ALLOWED_STAGES = {
 }
 
 
+CANONICAL_ENVIRONMENTS = ["local", "preview", "staging", "pilot-prod", "production"]
+PRODUCTION_POSTURES = {"lean", "scale", "isolated"}
+
+
+def _check_canonical_environments(r, data: dict, profiles: dict) -> None:
+    """The five target environments map onto the existing profiles, without renames."""
+    envs = data.get("canonical_environments")
+    if not isinstance(envs, dict):
+        r.fail("canonical_environments block missing")
+        return
+    r.require(
+        list(envs) == CANONICAL_ENVIRONMENTS,
+        "canonical environments are exactly local, preview, staging, pilot-prod, production",
+        f"canonical environments must be {CANONICAL_ENVIRONMENTS}, got {list(envs)}",
+    )
+    unmapped = list(data.get("unmapped_profiles") or [])
+    mapped: list[str] = []
+    for name, spec in envs.items():
+        mapped.extend((spec or {}).get("profiles") or [])
+    r.require(
+        len(mapped) == len(set(mapped)),
+        "no profile belongs to two canonical environments",
+        f"profiles mapped to more than one environment: "
+        f"{sorted({p for p in mapped if mapped.count(p) > 1})}",
+    )
+    both = sorted(set(mapped) & set(unmapped))
+    r.require(
+        not both,
+        "no profile is both mapped to an environment and listed as unmapped",
+        f"profiles both mapped and unmapped: {both}",
+    )
+    covered = set(mapped) | set(unmapped)
+    r.require(
+        covered == set(profiles),
+        "every profile is mapped to an environment or explicitly unmapped",
+        f"unmapped profiles: {sorted(set(profiles) - covered)}; "
+        f"unknown names: {sorted(covered - set(profiles))}",
+    )
+
+    staging = envs.get("staging") or {}
+    lanes = set(((profiles.get("staging") or {}).get("deployment_lanes") or {}))
+    r.require(
+        set(staging.get("lanes") or []) == lanes,
+        "staging lanes match the staging profile's deployment_lanes",
+        f"staging lanes {staging.get('lanes')} != deployment_lanes {sorted(lanes)}",
+    )
+
+    production = envs.get("production") or {}
+    postures = production.get("postures") or {}
+    r.require(
+        set(postures) == PRODUCTION_POSTURES
+        and sorted(postures.values()) == sorted(production.get("profiles") or []),
+        "production postures lean, scale, isolated map to exactly its profiles",
+        f"production postures {postures} do not match profiles {production.get('profiles')}",
+    )
+
+    pilot_prod = envs.get("pilot-prod") or {}
+    if pilot_prod.get("profiles"):
+        # Defined: must carry approvals and a rollback source, and must not alias
+        # staging (the staging `pilot` lane is staging) or a production profile.
+        r.require(
+            bool(pilot_prod.get("approvals")) and bool(pilot_prod.get("rollback_source")),
+            "pilot-prod declares approvals and rollback_source",
+            "pilot-prod is defined without approvals and rollback_source",
+        )
+        r.require(
+            not set(pilot_prod["profiles"]) & set((staging.get("profiles") or [])
+                                                 + (production.get("profiles") or [])),
+            "pilot-prod does not alias a staging or production profile",
+            "pilot-prod must not reuse a staging or production profile",
+        )
+    else:
+        r.require(
+            pilot_prod.get("status") == "undefined",
+            "pilot-prod is explicitly undefined (no profile or state namespace yet)",
+            "pilot-prod has no profiles and must say `status: undefined`",
+        )
+
+
 def check() -> int:
     r = Reporter("PROFILE CONFIG — deployment_profiles.yaml + posture")
 
@@ -69,6 +148,8 @@ def check() -> int:
         r.require(not missing,
                   f"{name}: all backend dimensions declared",
                   f"{name}: missing backend dimensions {missing}")
+
+    _check_canonical_environments(r, data or {}, profiles)
 
     # Posture file
     try:

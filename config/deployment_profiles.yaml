@@ -33,6 +33,38 @@ canonical_source: config/deployment_profiles.yaml
 # enterprise-GA-compatible architecture, and does NOT claim anything beyond it.
 max_supported_profile: enterprise-isolated
 
+# Canonical environment interface over the profiles below. Profiles describe
+# environments (runtime shape, cost and isolation policy); capability flags
+# describe capabilities (config/capability_overlays.yaml). No Terraform state key
+# or profile name is renamed by this mapping, and each facet that enforces a
+# different invariant stays its own profile. `pilot-prod` has no profile or state
+# namespace yet: the staging `pilot` lane is customer-pilot STAGING and must not be
+# renamed into production. Defining pilot-prod needs `approvals` and
+# `rollback_source` first (enforced by scripts/release/check_profile_config.py).
+canonical_environments:
+  local:
+    profiles: [local, local-full]
+  preview:
+    profiles: [preview]
+  staging:
+    profiles: [staging]
+    lanes: [full, pilot]
+    runtime_states: [awake, asleep]
+  pilot-prod:
+    profiles: []
+    status: undefined
+  production:
+    profiles: [production-lean, production-scale, enterprise-isolated]
+    postures:
+      lean: production-lean
+      scale: production-scale
+      isolated: enterprise-isolated
+
+# Profiles that are deliberately not part of the canonical environment interface.
+# `demo` is a separate seeded temporary environment; its product purpose is
+# decided separately and it must not be merged into preview by spelling alone.
+unmapped_profiles: [demo]
+
 profiles:
 
   local:

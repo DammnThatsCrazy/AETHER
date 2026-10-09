@@ -1,8 +1,8 @@
 schema_version: 1
 default_lane: pr
 lanes:
-  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger]
-  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger]
+  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger, profile_config, capability_overlays]
+  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger, profile_config, capability_overlays]
   integration: [toolchain, repository_metadata, contracts, integration]
   regression: [toolchain, repository_metadata, contracts, integration, regression]
   release: [toolchain, repository_metadata, contracts, integration, regression, release]
@@ -69,6 +69,19 @@ checks:
     owner: platform
     risk: high
     command: [python, scripts/validate_debt_retirement_ledger.py]
+    runtime_budget_seconds: 10
+  # The environment-to-profile mapping and the capability overlays are read by
+  # every delivery registry, so they are checked in every PR-lane plan, not only
+  # when the profile file itself changes.
+  profile_config:
+    owner: release
+    risk: critical
+    command: [python, scripts/release/check_profile_config.py]
+    runtime_budget_seconds: 10
+  capability_overlays:
+    owner: release
+    risk: high
+    command: [python, scripts/validate_capability_overlays.py]
     runtime_budget_seconds: 10
   docs:
     owner: docs

@@ -623,6 +623,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_capability_overlays.py"],
+        name="Capability overlay registry",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep capabilities as enable-* flags in config/capability_overlays.yaml; never add a deployment profile per capability",
+    )
+
+    run(
         [sys.executable, "scripts/validate_impact_graph.py"],
         name="Impact graph registry and router bindings",
         results=results,
