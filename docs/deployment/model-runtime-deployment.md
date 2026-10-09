@@ -144,11 +144,32 @@ falling back to an insecure default.
 | `MODEL_RUNTIME_CIRCUIT_RECOVERY_TIMEOUT_S` | `60` | Optional (seconds before a tripped provider retries) | Recovery is time-boxed and re-trips on repeat failure |
 | `MODEL_RUNTIME_ADAPTERS_DIR` | `services/backend/services/model_runtime/adapters` | Optional (provider adapter registry directory) | Only providers in this directory are loadable |
 
-Secrets are **never** declared in `.env` files — the `MODEL_RUNTIME_COMPAT_*`
-and `MODEL_RUNTIME_DETERMINISTIC_*` provider-level overrides are the only
-credential-bearing surface, and they are deploy-time injected (env or AWS
-Secrets Manager), never committed. Key rotation is handled entirely by the
-secret backend.
+Secrets are **never** declared in `.env` files — the provider-level variables
+below are the only credential-bearing surface, and they are deploy-time injected
+(env or AWS Secrets Manager), never committed. Key rotation is handled entirely
+by the secret backend.
+
+### Provider credentials
+
+Every adapter-backed provider is registered at startup
+(`services/model_runtime/providers.py`) and, without its credentials, reports
+`waiting on credentials: set <VARIABLES>` on `GET /v1/model-runtime/health`. It
+never serves a request and never fails startup. Supplying the variables is the
+only step left to turn a provider on.
+
+| Provider | Variables (all required) |
+|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `kimi`, `deepseek`, `qwen` | `MODEL_RUNTIME_<NAME>_API_KEY`, `MODEL_RUNTIME_<NAME>_BASE_URL` (optional `MODEL_RUNTIME_<NAME>_MODEL`) |
+| `openai_compatible` | `MODEL_RUNTIME_COMPAT_API_KEY`, `MODEL_RUNTIME_COMPAT_BASE_URL` (optional `MODEL_RUNTIME_COMPAT_MODEL`, `MODEL_RUNTIME_COMPAT_PROVIDER_NAME`) |
+
+A key without its endpoint stays "waiting" (the compatible endpoints would
+otherwise fall back to OpenAI's URL), and each named endpoint reads only its own
+variables, never the shared `COMPAT` ones. There is deliberately no tenant
+completion route yet: it needs a durable entitlement store and a per-tenant
+token budget, otherwise any entitled tenant would spend the platform key without
+limit. `HarnessPipeline` is likewise not yet called by a route or by Noesis.
 
 ## 4. Security model
 

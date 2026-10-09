@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:d336ba573d9463e654242980dfd2df9f5f092b132b119494c01f9f482f46f492"
+  "services/backend/services/": "sha256:3299bb0aa52e7dc9edb2bc9c1f83ff07b6a6cd7bd361e3559b976d868d90046d"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -3858,8 +3858,11 @@ request/response content; trace summaries carry routing-decision fields only.
 
 **Backing stores.** The registry is the generated model catalog
 (`shared/model_governance/generated_model_registry.py`). Health is probed by
-`RuntimeHealthProbe` over a deterministic seed provider set — all
-network-backed registry providers report unconfigured (fail-closed). Usage and
+`RuntimeHealthProbe` over the real provider set (anthropic, openai, kimi,
+deepseek, qwen, openai_compatible, plus the local deterministic provider). A
+provider without credentials reports `waiting on credentials: set <variables>`
+(fail-closed; it never serves) and turns on when the variables are supplied.
+Usage and
 traces are deterministic, clearly-marked seed data (all-zero usage); a real
 metering/trace store plugs in later. The tenant default model is a
 non-durable in-memory seed.

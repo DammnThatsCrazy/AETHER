@@ -42,8 +42,9 @@ Security contract (D9):
 
 Backing stores: the model registry is the generated catalog
 (``shared.model_governance.generated_model_registry.MODEL_REGISTRY_MODELS``),
-health is probed via :class:`RuntimeHealthProbe` over a deterministic seed
-provider set, and entitlements use the server-authoritative
+health is probed via :class:`RuntimeHealthProbe` over the real provider set
+(:mod:`services.model_runtime.providers`; a provider without credentials is
+"waiting on credentials"), and entitlements use the server-authoritative
 :class:`AllowlistEntitlementResolver`. Usage and traces are deterministic seed
 data (no metering/trace store is wired into this surface yet); every route that
 serves seed data says so in its docstring and returns fail-closed shapes that
@@ -58,7 +59,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict
 
 from services.model_runtime.config import ModelRuntimeSettings
-from services.model_runtime.deterministic import DeterministicModelProvider
+from services.model_runtime.providers import build_providers, credential_reason
 from services.model_runtime.observability.health import (
     ProviderHealthCheck,
     RuntimeHealth,
@@ -408,8 +409,8 @@ def _registry_models_out() -> list[RegistryModelOut]:
     ]
 
 
-class _UnconfiguredSeedProvider:
-    """AsyncModelProvider-shaped seed that reports itself unconfigured."""
+class _NoAdapterProvider:
+    """AsyncModelProvider-shaped placeholder for a registry provider with no adapter yet."""
 
     def __init__(self, name: str) -> None:
         self.provider_name = name
@@ -418,29 +419,41 @@ class _UnconfiguredSeedProvider:
         return False
 
 
-def _seed_providers() -> dict[str, object]:
-    """Deterministic provider set for the health seed.
+def _provider_set() -> dict[str, object]:
+    """The provider set the health surface reports on.
 
-    The local deterministic provider is configured by construction; every
-    network-backed registry provider is reported unconfigured (fail-closed) —
-    no real adapters are wired into this surface yet.
+    Every provider with a transport adapter is the real adapter (see
+    :mod:`services.model_runtime.providers`): configured exactly when its credentials
+    are present, otherwise waiting on them. A registry provider with no adapter at all is
+    reported as such.
     """
-    providers: dict[str, object] = {"deterministic": DeterministicModelProvider()}
-    providers.update(
-        {name: _UnconfiguredSeedProvider(name) for name in MODEL_REGISTRY_PROVIDERS}
-    )
+    providers: dict[str, object] = dict(build_providers())
+    for name in MODEL_REGISTRY_PROVIDERS:
+        providers.setdefault(name, _NoAdapterProvider(name))
     return providers
 
 
-def _build_runtime_health() -> RuntimeHealth:
-    """Probe provider health (deterministic seed data).
+def _health_reason(health: object) -> str:
+    """Reason text for one provider.
 
-    Uses the landed :class:`RuntimeHealthProbe`/:class:`ProviderHealthCheck`
-    over ``_seed_providers``. This is seed data — the probe slot is where a
-    real ModelRuntimeService provider set plugs in. Health is a global Kyber
-    admin surface: it carries no per-tenant data, so it needs no tenant scope.
+    The probe's two standard reasons ("configured" / "not configured") are replaced by
+    the credential wording naming the variables that unlock the provider; any other
+    probe reason passes through unchanged so it is still sanitized.
     """
-    probe = RuntimeHealthProbe(ProviderHealthCheck(_seed_providers()))
+    reason = getattr(health, "reason", "")
+    if reason in ("configured", "not configured"):
+        return credential_reason(health.provider, health.configured)
+    return reason
+
+
+def _build_runtime_health() -> RuntimeHealth:
+    """Probe provider health over the real provider set.
+
+    Uses the landed :class:`RuntimeHealthProbe`/:class:`ProviderHealthCheck` over
+    :func:`_provider_set`. Health is a global Kyber admin surface: it carries no
+    per-tenant data, so it needs no tenant scope.
+    """
+    probe = RuntimeHealthProbe(ProviderHealthCheck(_provider_set()))
     return probe.status()
 
 
@@ -646,7 +659,8 @@ async def get_health(
     (Kyber admin surface). Global surface: carries no per-tenant data, so no
     tenant scope is required. Reasons pass through :func:`_sanitize_reason` so
     secret-shaped material is blanked before it can reach the client. Backed by
-    ``RuntimeHealthProbe`` over the deterministic seed provider set.
+    ``RuntimeHealthProbe`` over the real provider set; a provider without
+    credentials reports ``waiting on credentials`` and the variables that unlock it.
     """
     health = _build_runtime_health()
     return HealthResponseOut(
@@ -656,7 +670,7 @@ async def get_health(
                 provider=p.provider,
                 configured=p.configured,
                 healthy=p.healthy,
-                reason=_sanitize_reason(p.reason),
+                reason=_sanitize_reason(_health_reason(p)),
             )
             for p in health.providers
         ],

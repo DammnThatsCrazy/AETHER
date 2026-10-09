@@ -62,7 +62,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.model_runtime
-    modules: [adapters.compatible, pipeline]
+    modules: [pipeline]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.noesis
