@@ -1,8 +1,8 @@
 schema_version: 1
 default_lane: pr
 lanes:
-  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding]
-  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts]
+  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts, frontend_branding, debt_retirement_ledger, profile_config, capability_overlays, service_classification, frontend_reachability, settings_flags, backend_reachability]
+  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts, debt_retirement_ledger, profile_config, capability_overlays, service_classification, frontend_reachability, settings_flags, backend_reachability]
   integration: [toolchain, repository_metadata, contracts, integration]
   regression: [toolchain, repository_metadata, contracts, integration, regression]
   release: [toolchain, repository_metadata, contracts, integration, regression, release]
@@ -63,6 +63,54 @@ checks:
     risk: high
     command: [python, scripts/validate_frontend_branding.py]
     runtime_budget_seconds: 15
+  # The ledger names repository paths, so any change can strand a row; it runs in
+  # every PR-lane plan rather than only when the ledger file itself changes.
+  debt_retirement_ledger:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_debt_retirement_ledger.py]
+    runtime_budget_seconds: 10
+  # The environment-to-profile mapping and the capability overlays are read by
+  # every delivery registry, so they are checked in every PR-lane plan, not only
+  # when the profile file itself changes.
+  profile_config:
+    owner: release
+    risk: critical
+    command: [python, scripts/release/check_profile_config.py]
+    runtime_budget_seconds: 10
+  capability_overlays:
+    owner: release
+    risk: high
+    command: [python, scripts/validate_capability_overlays.py]
+    runtime_budget_seconds: 10
+  # Adding or removing a directory under services/backend/services changes what
+  # this registry must say, so it also runs in every PR-lane plan.
+  service_classification:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_service_classification.py]
+    runtime_budget_seconds: 10
+  # Any frontend change can orphan a file, and any ledger change can strand an
+  # allowlist row, so the reachability check also runs in every PR-lane plan.
+  frontend_reachability:
+    owner: frontend
+    risk: high
+    command: [python, scripts/validate_frontend_reachability.py]
+    runtime_budget_seconds: 10
+  # A new settings field, a deleted reader, or a change to the allowlist can each
+  # leave a flag that nothing reads, so this runs in every PR-lane plan too.
+  settings_flags:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_settings_flags.py]
+    runtime_budget_seconds: 30
+  # Any backend change can orphan a module, and any ledger change can strand an
+  # allowlist row, so the reachability check also runs in every PR-lane plan.
+  backend_reachability:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_backend_reachability.py]
+    runtime_budget_seconds: 20
   docs:
     owner: docs
     risk: high
@@ -123,6 +171,17 @@ domains:
       services/compliance/**: [compliance]
       docs/archive/legacy-architecture/backend/services/journey-service/**: [journey-service]
       tests/**: [root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
+      tests/mocks/**: [functionality-proof-ts]
+      tests/contracts/**: [functionality-proof-ts]
+      tests/sdk/**: [functionality-proof-ts]
+      tests/connectors/**: [functionality-proof-ts]
+      tests/identity/**: [functionality-proof-ts]
+      tests/journeys/**: [functionality-proof-ts]
+      tests/campaigns/**: [functionality-proof-ts]
+      tests/value/**: [functionality-proof-ts]
+      tests/lenses/**: [functionality-proof-ts]
+      tests/e2e/**: [functionality-proof-ts]
+      tests/graph/**: [functionality-proof-ts]
     minimum_lane: pr
   frontend:
     owner: frontend
@@ -142,13 +201,17 @@ domains:
     minimum_lane: pr
   sdk:
     owner: sdk
-    paths: [packages/**]
+    paths: [packages/**, vitest.config.fps.ts, sdk-fixtures/**]
     checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, contracts]
     path_checks:
-      packages/shared/**: [sdk-shared]
-      packages/web/**: [sdk-web]
+      packages/shared/**: [sdk-shared, functionality-proof-ts]
+      packages/web/**: [sdk-web, functionality-proof-ts]
       packages/server/**: [sdk-server]
-      packages/react-native/**: [sdk-react-native]
+      packages/react-native/**: [sdk-react-native, functionality-proof-ts]
+      vitest.config.fps.ts: [functionality-proof-ts]
+      sdk-fixtures/**: [functionality-proof-ts]
+      packages/proof-contracts/**: [functionality-proof-ts]
+      packages/proof-fixtures/**: [functionality-proof-ts]
     minimum_lane: pr
   machine_learning:
     owner: ml

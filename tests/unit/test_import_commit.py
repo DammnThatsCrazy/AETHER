@@ -203,7 +203,9 @@ async def test_rollback_revokes_edges_and_deletes_bronze(clean):
     assert live == []  # all revoked
     assert await gc.get_vertex(f"entity:{TENANT}:alice") is None
     # Bronze rows for the commit are gone.
-    remaining = await BronzeRepository(cm.BRONZE_DOMAIN).query_by_source_tag(record["commit_id"])
+    remaining = await BronzeRepository(cm.BRONZE_DOMAIN).query_by_source_tag(
+        record["commit_id"], tenant_id=TENANT
+    )
     assert remaining == []
 
     detail = await svc.get_import(TENANT, import_id)
@@ -216,6 +218,37 @@ async def test_rollback_twice_conflicts(clean):
     await cm.rollback_import(TENANT, import_id)
     with raises_named("ConflictError"):
         await cm.rollback_import(TENANT, import_id)
+
+
+async def test_over_cap_rollback_preflight_prevents_graph_and_manifest_mutation(clean):
+    from repositories.lake import BronzeRepository, SOURCE_TAG_ROLLBACK_CAP
+    from shared.graph.graph import get_graph_client
+
+    import_id = await _seed_approved()
+    commit = await cm.commit_import(TENANT, import_id)
+    bronze = BronzeRepository(cm.BRONZE_DOMAIN)
+    for i in range(SOURCE_TAG_ROLLBACK_CAP - 1):
+        row_id = f"over-cap-{i}"
+        await bronze.insert(row_id, {
+            "id": row_id,
+            "source_tag": commit["commit_id"],
+            "tenant_id": TENANT,
+        })
+
+    gc = get_graph_client()
+    before_edges = await gc.get_edges(f"entity:{TENANT}:alice", direction="out")
+    before_vertex = await gc.get_vertex(f"entity:{TENANT}:alice")
+
+    with pytest.raises(ValueError, match="exceeds safety cap"):
+        await cm.rollback_import(TENANT, import_id)
+
+    after_edges = await gc.get_edges(f"entity:{TENANT}:alice", direction="out")
+    after_vertex = await gc.get_vertex(f"entity:{TENANT}:alice")
+    assert after_edges == before_edges
+    assert after_vertex == before_vertex
+    assert await clean.list_rollbacks(TENANT, import_id) == []
+    detail = await svc.get_import(TENANT, import_id)
+    assert detail["session"]["status"] == "committed"
 
 
 # ── replay ───────────────────────────────────────────────────────────────────

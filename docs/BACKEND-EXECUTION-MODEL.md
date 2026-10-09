@@ -17,11 +17,11 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:2fd39d4ff1bb287b3ea68d6b86281c7b8c0e2de0278784fa8bdde15163c995e8"
-  "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
-  "services/backend/services/runtime/consumer_specs.py": "sha256:122f290376b080e67d990e6f3a8655addb000f72a9980896e49b9e6c43216266"
+  "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
+  "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
+  "services/backend/services/runtime/consumer_specs.py": "sha256:0bd54fe2c7dd031759f31f312b068428e11958169066764b3bb00792f4e82dac"
   "services/backend/services/runtime/roles.py": "sha256:9d1787f19ddc91d640098ff3e992b4cc1cfaf410bcc49c79e41ed3c5810dc48a"
-  "services/backend/services/runtime/run_role.py": "sha256:a7442987d86a0d2b649884821b9575c442363228617e9ffde1c62e1b29afde6d"
+  "services/backend/services/runtime/run_role.py": "sha256:4b78f8c38ffa1e805ba8e910d2c960e5f37262e7d4b24a5fa6e5a2d1a2b06d9e"
   "services/backend/services/runtime/specs.py": "sha256:999c9da733093cce92d1af9192ea112ffdbbb9307c9698b80a18f2c1700f3a06"
 ---
 
@@ -40,7 +40,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
 | `outbox-relay` | Outbox relay workers: the notification outbox, the ingestion `event_outbox` relay (FT-6), and the reward delivery outbox (drains `reward_delivery_jobs` through the rail-sender registry — the at-least-once delivery path for the reward plane). |
 | `stream-worker` | Stream loops plus Bronze/Silver projection, the analytics event-store projection (`analytics_event_recorder` → the `events`/`sessions` tables the analytics API reads), and notification consumers. |
-| `identity-worker` | Identity-signal emission from validated SDK events. |
+| `identity-worker` | Source-identity registration and canonical resolution for validated SDK observations; emits `IDENTITY_RESOLVED` only after a real decision. |
 | `graph-writer` | Profile/graph projection and delegation mutation consumers. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
@@ -118,12 +118,19 @@ in every profile, and ClickHouse is reached through `CLICKHOUSE_HOST`
 
 The `/v1/batch` V2 path (FT-5) writes typed Bronze rows plus a transactional
 `event_outbox` row in one transaction and never publishes in-request. The
+Universal Provider Runtime now uses that same typed Bronze/outbox transaction
+after preserving a verified provider raw record and normalizing it. In
+staging/production, enabling provider ingress without `OUTBOX_RELAY_ENABLED`
+fails both API and split worker startup; local/dev/integration warn. This
+configuration check does not prove that a separate relay process is healthy.
+The
 **event-outbox relay** (`services/backend/services/ingestion/outbox_relay.py`, WorkerSpec
 `event_outbox_relay`, owned by the `outbox-relay` role, gated by
 `OUTBOX_RELAY_ENABLED`) drains that table and publishes each row to the event
-bus, where the existing idempotent consumers (`services/backend/services/ingestion/workers.py`)
-run the Bronze→Silver projection, identity signals, and measurement fan-out —
-downstream work becomes replayable instead of riding the request.
+bus, where the idempotent consumers run Bronze→Silver projection and
+measurement fan-out. The identity worker registers source identity and invokes
+the canonical resolver on the same validated event — downstream work becomes
+replayable instead of riding the request.
 
 - **Claiming:** one `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)` claims a
   batch, so any number of relay processes cooperate without double-claiming.
@@ -137,6 +144,12 @@ downstream work becomes replayable instead of riding the request.
 - **Delivery:** at-least-once. Relay-published events carry
   `source_service="ingestion.outbox_relay"`; the Bronze-writer consumer skips
   them because the V2 ingest transaction already persisted the typed Bronze row.
+
+Provider `AetherEvent` payloads share the transport topic but are deliberately
+deferred by SDK-only Silver, analytics, and identity consumers. That deferral
+is metered and leaves the canonical Bronze/outbox evidence available for a
+provider-aware authority/projector path. A relay publish does not itself
+create order, payment, or graph truth.
 
 Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
 `OUTBOX_RELAY_POLL_INTERVAL_S` (2), `OUTBOX_RELAY_LEASE_SECONDS` (60),
@@ -153,7 +166,12 @@ route — **not** a runtime role and not a durable-jobs control plane. A dry run
 (`dry_run=false`) republishes the Bronze rows onto `SDK_EVENTS_VALIDATED` with
 their original occurrence timestamps preserved (Invariant #15) only when
 `AETHER_INGESTION_REPLAY_ENABLED` (`settings.ingest_replay.enabled`, default
-OFF) is on — otherwise refused with 403. Republished events carry
+OFF) is on — otherwise refused with 403. Even with the flag on, publishing is
+allowed only when `AETHER_ENV=local`, no `DATABASE_URL` or database pool is
+present, and the producer resolves to the in-memory backend; other modes fail
+closed as unavailable. `replay_run_id` suppression is process-local and does
+not provide durable delivery identity or downstream side-effect guarantees.
+Republished events carry
 `source_service="ingestion.replay"`, and the Bronze-writer consumer
 (`services/backend/services/ingestion/workers.py`) skips them for the same reason it skips
 relay-originated events: the durable Bronze row already exists, so writing

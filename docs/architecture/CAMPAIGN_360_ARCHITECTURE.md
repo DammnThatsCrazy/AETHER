@@ -13,7 +13,7 @@ source_files: [services/backend/services/campaign/exploration.py, services/backe
 source_hashes:
   "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
   "services/backend/services/campaign/routes.py": "sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e"
-  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:b18112dc8b209e1b8630654c7891c0408f4f24bc702980cb03d45b5fc606a800"
+  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:0a1ec25f6d8bb3ff911ac0e966df64775438ccbcfd7e2cc7e5d73715c4c8482c"
   "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:7ce28680d047299ad11e38a2767b2f8dec878afce70203340d6e1286dea1c374"
   "services/backend/services/measurement/repositories/touchpoint_repo.py": "sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8"
   "services/backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
@@ -54,8 +54,10 @@ Campaign 360 page
 
 ## 2. Population Semantics
 
-The Campaign 360 population model defines five stages of the identity funnel.
-Every entity can only belong to one stage at a time (the highest it has reached).
+The Campaign 360 population model defines five cumulative stages of the
+identity funnel. An entity may appear in each stage it reaches; the API returns
+the selected stage's population rather than assigning each entity to only one
+stage.
 
 | Population | Definition | Data source |
 |------------|------------|-------------|
@@ -81,14 +83,18 @@ registry minimum is met.
 
 ### Reconciliation invariants
 
-The explorer enforces these invariants on every `get_overview()` call:
+The overview targets this funnel ordering:
 
 ```
 attributed_count ≤ converted_count ≤ resolved_count ≤ observed_count
 ```
 
-Any violation raises an assertion error and is surfaced as a `reconciliation_status: error`
-in the `data_quality` block. This is a strict invariant — it will never be silenced.
+The current implementation clamps `resolved` to `observed`, `engaged` to the
+clamped `resolved`, and `attributed` to `converted`. It does not clamp
+`converted` to `resolved`. If one of those three clamps changes a value,
+`data_quality.reconciliation_status` is `inconsistent`; otherwise it is
+`unknown`. The explorer does not raise an assertion or report `ok` for this
+check.
 
 ---
 

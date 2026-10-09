@@ -128,7 +128,7 @@ async def compute_intent_residue(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Detect unfinished high-intent flows across sessions."""
-    events = await analytics.query_events(tenant_id, {"user_id": entity_id}, limit=200)
+    events = await analytics.query_events(tenant_id, {"canonical_entity_id": entity_id}, limit=200)
     if not events:
         return None
 
@@ -182,7 +182,7 @@ async def compute_wallet_friction(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Detect wallet-connect friction patterns."""
-    events = await analytics.query_events(tenant_id, {"user_id": entity_id}, limit=200)
+    events = await analytics.query_events(tenant_id, {"canonical_entity_id": entity_id}, limit=200)
     if not events:
         return None
 
@@ -270,7 +270,7 @@ async def compute_pre_post_continuity(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Measure pre-connect to post-connect behavioral continuity."""
-    events = await analytics.query_events(tenant_id, {"user_id": entity_id}, limit=200)
+    events = await analytics.query_events(tenant_id, {"canonical_entity_id": entity_id}, limit=200)
     if len(events) < 5:
         return None
 
@@ -332,7 +332,7 @@ async def compute_sequence_scars(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Detect repeated failure patterns across sessions."""
-    events = await analytics.query_events(tenant_id, {"user_id": entity_id}, limit=300)
+    events = await analytics.query_events(tenant_id, {"canonical_entity_id": entity_id}, limit=300)
     if len(events) < 10:
         return None
 
@@ -433,7 +433,7 @@ async def compute_reward_near_miss(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Detect entities who nearly qualified for rewards but missed narrowly."""
-    events = await analytics.query_events(tenant_id, {"user_id": entity_id}, limit=200)
+    events = await analytics.query_events(tenant_id, {"canonical_entity_id": entity_id}, limit=200)
     if not events:
         return None
 
@@ -484,7 +484,7 @@ async def compute_social_chain_lag(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Measure lag between social/attention signals and on-chain behavior."""
-    events = await analytics.query_events(tenant_id, {"user_id": entity_id}, limit=300)
+    events = await analytics.query_events(tenant_id, {"canonical_entity_id": entity_id}, limit=300)
     if len(events) < 5:
         return None
 
@@ -528,7 +528,7 @@ async def compute_cex_dex_transition(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Detect CEX-to-DEX or DEX-to-CEX transition behavior."""
-    events = await analytics.query_events(tenant_id, {"user_id": entity_id}, limit=300)
+    events = await analytics.query_events(tenant_id, {"canonical_entity_id": entity_id}, limit=300)
     if not events:
         return None
 
@@ -580,7 +580,7 @@ async def compute_behavioral_twins(
     tenant_id: str = "",
 ) -> Optional[dict]:
     """Find entities with similar early behavior but different outcomes."""
-    events = await analytics.query_events(tenant_id, {"user_id": entity_id}, limit=100)
+    events = await analytics.query_events(tenant_id, {"canonical_entity_id": entity_id}, limit=100)
     if len(events) < 5:
         return None
 

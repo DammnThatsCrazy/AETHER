@@ -14,6 +14,8 @@ never re-run, so a duplicate verification callback cannot double-merge.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
@@ -79,6 +81,20 @@ class ResolutionReplayService:
         and returns ``{"status": "error", ...}``.
         """
         key = f"{tenant_id}:{trigger_id}:{policy_version}"
+        normalized_identifier_type = (identifier_type or "").strip().lower()
+        # Bind a completed idempotency key to the immutable evidence input. A
+        # reused trigger id with a different value or consent snapshot is a
+        # caller error, not permission to silently skip new evidence.
+        evidence_fingerprint = hashlib.sha256(json.dumps(
+            {
+                "identifier_type": normalized_identifier_type,
+                "identifier_hash": identifier_hash,
+                "consent_snapshot": consent_snapshot,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")).hexdigest()
 
         # ── Idempotency: a completed job is never re-run ──────────────────
         try:
@@ -86,10 +102,21 @@ class ResolutionReplayService:
         except Exception:  # noqa: BLE001 - missing ledger row is not an error
             existing = None
         if existing and existing.get("status") == "completed":
-            return {"status": "noop", "idempotent": True, "key": key}
+            if existing.get("evidence_fingerprint") != evidence_fingerprint:
+                return {
+                    "status": "error",
+                    "error": "trigger_id_reused_with_different_evidence",
+                    "key": key,
+                    "idempotent": False,
+                    "policy_version": policy_version,
+                }
+            return {
+                "status": "noop", "idempotent": True, "key": key,
+                "policy_version": policy_version,
+            }
 
         try:
-            sig_type = _IDENTIFIER_SIGNAL_TYPES.get((identifier_type or "").strip().lower())
+            sig_type = _IDENTIFIER_SIGNAL_TYPES.get(normalized_identifier_type)
             if sig_type is None:
                 await self._mark(
                     key, tenant_id, trigger_type, trigger_id, policy_version,
@@ -105,7 +132,23 @@ class ResolutionReplayService:
             # Record an in-progress job before doing any work.
             await self._mark(
                 key, tenant_id, trigger_type, trigger_id, policy_version, "in_progress",
+                evidence_fingerprint=evidence_fingerprint,
             )
+
+            supports_policy = getattr(self._resolver, "supports_policy_version", None)
+            if callable(supports_policy) and not supports_policy(policy_version):
+                await self._mark(
+                    key, tenant_id, trigger_type, trigger_id, policy_version, "failed",
+                    error=f"unsupported policy_version: {policy_version}",
+                    evidence_fingerprint=evidence_fingerprint,
+                )
+                return {
+                    "status": "error",
+                    "error": f"unsupported policy_version: {policy_version}",
+                    "key": key,
+                    "idempotent": False,
+                    "policy_version": policy_version,
+                }
 
             # ── Component discovery (bounded, blueprint §29) ──────────────
             # Entities that already own this identifier hash under the verified
@@ -134,7 +177,11 @@ class ResolutionReplayService:
                 ],
                 "source": "resolution_replay",
             }
-            decision = await self._resolver.resolve_event(synthetic, tenant_id)
+            decision = await self._resolver.resolve_event(
+                synthetic, tenant_id, policy_version=policy_version
+            )
+            if "unsupported_policy_version" in (decision.reason_codes or []):
+                raise ValueError(f"unsupported policy_version: {policy_version}")
 
             affected = sorted(set(ids_verified) | set(ids_observed))
             summary = {
@@ -142,10 +189,14 @@ class ResolutionReplayService:
                 "canonical_entity_id": decision.canonical_entity_id,
                 "reason_codes": list(decision.reason_codes),
                 "affected": affected,
+                "policy_version": policy_version,
+                "restatement_status": decision.restatement_status,
+                "restatement_job_id": decision.restatement_job_id,
             }
             await self._mark(
                 key, tenant_id, trigger_type, trigger_id, policy_version,
                 "completed", summary=summary,
+                evidence_fingerprint=evidence_fingerprint,
             )
             if self._metrics is not None:
                 try:
@@ -159,8 +210,11 @@ class ResolutionReplayService:
                 "canonical_entity_id": decision.canonical_entity_id,
                 "reason_codes": list(decision.reason_codes),
                 "affected": affected,
+                "restatement_status": decision.restatement_status,
+                "restatement_job_id": decision.restatement_job_id,
                 "key": key,
                 "idempotent": False,
+                "policy_version": policy_version,
             }
         except Exception as exc:  # noqa: BLE001 - replay must never raise
             logger.warning("resolution replay failed for key=%s: %s", key, exc)
@@ -168,6 +222,7 @@ class ResolutionReplayService:
                 await self._mark(
                     key, tenant_id, trigger_type, trigger_id, policy_version,
                     "failed", error=str(exc),
+                    evidence_fingerprint=evidence_fingerprint,
                 )
             except Exception:  # noqa: BLE001
                 pass
@@ -184,6 +239,7 @@ class ResolutionReplayService:
         *,
         summary: Optional[dict] = None,
         error: Optional[str] = None,
+        evidence_fingerprint: Optional[str] = None,
     ) -> None:
         """Upsert the replay job row (insert is an upsert on id)."""
         await self._jobs.insert(key, {
@@ -191,6 +247,7 @@ class ResolutionReplayService:
             "trigger_type": trigger_type,
             "trigger_id": trigger_id,
             "policy_version": policy_version,
+            "evidence_fingerprint": evidence_fingerprint,
             "status": status,
             "summary": summary,
             "error": error,

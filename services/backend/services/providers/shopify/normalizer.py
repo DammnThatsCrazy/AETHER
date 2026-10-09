@@ -4,19 +4,23 @@ Maps ONE ``RawProviderRecord`` whose ``payload`` is a Shopify order dict (from
 pull or webhook, or a ``ShopifyOrder`` ``model_dump``) onto a single provider-
 neutral ``commerce.order.*`` :class:`AetherEvent <shared.integration_contracts.events.AetherEvent>`.
 
-Event-type mapping (status rule, in order):
+REST v1 event-type mapping (status rule, in order):
 
 * ``cancelled_at`` set          -> ``OrderStatus.cancelled``  -> ``commerce.order.cancelled``
 * ``created_at == updated_at``  -> ``OrderStatus.created``    -> ``commerce.order.created``
 * ``financial_status == refunded`` -> ``OrderStatus.refunded`` -> ``commerce.order.refunded``
 * otherwise                     -> ``OrderStatus.updated``    -> ``commerce.order.updated``
 
+GraphQL v2 polls are snapshots. They emit ``commerce.order.updated`` or
+``commerce.order.cancelled`` from store order lifecycle. A Shopify display
+financial status alone is not processor refund or settlement evidence.
+
 Money is parsed via ``decimal.Decimal(str(value))`` — Shopify amounts are
-strings and are never handled through binary floats. No loss: the full raw
-payload is preserved in ``AetherEvent.context["raw_provider_payload"]`` and
-provider-specific fields the order model does not capture are surfaced under
-``data["provider"]``. Unknown record types are reported via ``dropped`` — never
-silent.
+strings and are never handled through binary floats. REST v1 retains its
+historical full raw context. GraphQL v2 keeps the full provider payload only
+in protected raw Bronze and emits opaque lineage in the canonical event, so
+contact fields and notes do not spread through graph/outbox consumers.
+Unknown record types are reported via ``dropped`` — never silent.
 """
 
 from __future__ import annotations
@@ -33,10 +37,22 @@ from shared.commerce_contracts.order import (
     OrderTotals,
     order_to_snapshot,
 )
-from shared.integration_contracts.events import AetherEvent, RawProviderRecord
+from shared.integration_contracts.events import AetherEvent, RawProviderRecord, compute_checksum
 from shared.integration_contracts.normalization import EventNormalizer, NormalizationResult
+from shared.integration_contracts.source_objects import (
+    event_revision_id_for_parts,
+    logical_event_id_for_source_parts,
+)
 
 from services.providers.shopify.payloads import ShopifyOrder
+from services.providers.shopify.graphql_pull import (
+    PAYLOAD_SCHEMA_VERSION,
+    _SHOP_GID_RE,
+    _economic_revision_key,
+    _money_amount as _graphql_money_amount,
+    _source_revision_key,
+    _validate_order as _validate_graphql_order,
+)
 
 # Identity continuity: source identity creation for Shopify customers (via SourceIdentityRegistry)
 from services.identity.integration import IdentityIngestionWire
@@ -97,7 +113,10 @@ async def register_shopify_customer_identity(
         _logger.warning("shopify source identity registration failed: %s", e)
         return None
 
+
 NORMALIZER_VERSION = "1"
+EVENT_SCHEMA_VERSION = "2"
+GRAPHQL_MAPPING_VERSION = "shopify.order.snapshot.v1"
 SUPPORTED_RECORD_TYPE = "order"
 
 # OrderStatus -> provider-neutral event_type.
@@ -133,6 +152,79 @@ def _money(value: Any, currency: str) -> Money:
     return Money(amount=Decimal(str(value)), currency=currency)
 
 
+def _legacy_id_from_gid(value: Any, resource: str) -> int | None:
+    """Recover the numeric REST ID only from a Shopify GID of the right type."""
+    if value is None:
+        return None
+    prefix = f"gid://shopify/{resource}/"
+    if not isinstance(value, str) or not value.startswith(prefix):
+        raise ValueError("invalid Shopify GID")
+    numeric = value[len(prefix) :]
+    if not numeric.isdigit() or not numeric or int(numeric) <= 0:
+        raise ValueError("invalid Shopify GID")
+    return int(numeric)
+
+
+def _graphql_order_to_rest_shape(node: dict[str, Any]) -> dict[str, Any]:
+    """Project a complete native GraphQL node for the existing commerce mapper.
+
+    The returned dict is an in-memory projection only. Protected raw Bronze
+    retains the original GraphQL payload and exact money strings.
+    GraphQL current totals reflect the state after returns and order edits.
+    """
+    _validate_graphql_order(node)
+    if node["lineItems"]["pageInfo"]["hasNextPage"]:
+        raise ValueError("incomplete GraphQL line items")
+    currency = node["currencyCode"]
+    customer = node.get("customer")
+    if customer is not None:
+        if not isinstance(customer, dict) or customer.get("legacyResourceId") is None:
+            raise ValueError("customer identity missing")
+        # Protected Bronze retains the exact provider payload. The canonical
+        # commerce projection only needs the opaque customer reference; never
+        # carry contact details or freeform customer text into normalizer
+        # intermediates that may later be reused by graph or outbox code.
+        customer = {"id": customer["legacyResourceId"]}
+    line_items = []
+    for line in node["lineItems"]["nodes"]:
+        product = line.get("product")
+        variant = line.get("variant")
+        line_items.append(
+            {
+                "id": _legacy_id_from_gid(line["id"], "LineItem"),
+                "product_id": _legacy_id_from_gid(product.get("id"), "Product")
+                if isinstance(product, dict)
+                else None,
+                "variant_id": _legacy_id_from_gid(variant.get("id"), "ProductVariant")
+                if isinstance(variant, dict)
+                else None,
+                "sku": line.get("sku"),
+                "title": line["title"],
+                "quantity": line["quantity"],
+                "price": _graphql_money_amount(line["originalUnitPriceSet"], currency),
+                "total_discount": _graphql_money_amount(line["totalDiscountSet"], currency),
+            }
+        )
+    return {
+        "id": int(node["legacyResourceId"]),
+        "name": node.get("name") or "",
+        "created_at": node["createdAt"],
+        "updated_at": node["updatedAt"],
+        "cancelled_at": node.get("cancelledAt"),
+        "closed_at": node.get("closedAt"),
+        "financial_status": (node.get("displayFinancialStatus") or "").lower(),
+        "fulfillment_status": (node.get("displayFulfillmentStatus") or "").lower(),
+        "currency": currency,
+        "subtotal_price": _graphql_money_amount(node["currentSubtotalPriceSet"], currency),
+        "total_shipping": _graphql_money_amount(node["currentShippingPriceSet"], currency),
+        "total_tax": _graphql_money_amount(node["currentTotalTaxSet"], currency),
+        "total_discounts": _graphql_money_amount(node["currentTotalDiscountsSet"], currency),
+        "total_price": _graphql_money_amount(node["currentTotalPriceSet"], currency),
+        "line_items": line_items,
+        "customer": customer,
+    }
+
+
 def _order_status(order: ShopifyOrder) -> OrderStatus:
     """Resolve the canonical status per the documented rule (checked in order)."""
     if order.cancelled_at:
@@ -144,11 +236,51 @@ def _order_status(order: ShopifyOrder) -> OrderStatus:
     return OrderStatus.updated
 
 
-def to_commerce_order(order: ShopifyOrder, *, account_id: str = "default") -> CommerceOrder:
+def _logical_event_id(raw: RawProviderRecord, revision_key: str) -> str:
+    """Stable logical identity for one Shopify order economic/lifecycle fact.
+
+    Raw acquisition revisions include contact material and updatedAt. This
+    identity deliberately includes only the PII-free economic revision and
+    immutable tenant, shop, realm, order and semantic event scope.
+    """
+    return logical_event_id_for_source_parts(
+        tenant_id=raw.tenant_id,
+        provider_family="shopify",
+        source_account_realm=raw.source_account_realm,
+        source_account_key=raw.source_account_key,
+        source_object_type=raw.source_object_type,
+        source_object_id=raw.source_object_id,
+        source_revision_key=revision_key,
+        semantic_slot="order.snapshot",
+    )
+
+
+def _event_revision_id(
+    *,
+    logical_event_id: str,
+    mapping_version: str,
+    normalizer_version: str,
+    canonical_payload_digest: str,
+) -> str:
+    """Identify one immutable Shopify interpretation of a logical order fact."""
+    return event_revision_id_for_parts(
+        logical_event_id=logical_event_id,
+        event_schema_version=EVENT_SCHEMA_VERSION,
+        mapping_version=mapping_version,
+        normalizer_version=normalizer_version,
+        canonical_payload_digest=canonical_payload_digest,
+    )
+
+
+def to_commerce_order(
+    order: ShopifyOrder, *, account_id: str = "default", snapshot_mode: bool = False
+) -> CommerceOrder:
     """Map a parsed :class:`ShopifyOrder` onto a :class:`CommerceOrder`.
 
     All money comes from ``Decimal(str(value))``; line totals are computed from
-    decimals (``unit_price * quantity``), never floats.
+    decimals (``unit_price * quantity``), never floats. A GraphQL poll is a
+    snapshot, with no creation event topic or processor settlement proof, so
+    ``snapshot_mode`` emits updated/cancelled order lifecycle only.
     """
     currency = order.currency
     totals = OrderTotals(
@@ -187,7 +319,9 @@ def to_commerce_order(order: ShopifyOrder, *, account_id: str = "default") -> Co
     return CommerceOrder(
         order_id=str(order.id),
         account_id=account_id,
-        status=_order_status(order),
+        status=(OrderStatus.cancelled if order.cancelled_at else OrderStatus.updated)
+        if snapshot_mode
+        else _order_status(order),
         currency=currency,
         totals=totals,
         line_items=line_items,
@@ -216,8 +350,35 @@ class ShopifyOrderNormalizer:
         # amount string) must surface as a visible drop — the normalizer never
         # raises and never silently zeroes a bad amount.
         try:
-            order = ShopifyOrder.from_api_dict(raw.payload)
-            commerce = to_commerce_order(order, account_id=raw.account_id or "default")
+            if raw.schema_version == "2" and raw.payload_schema_version != PAYLOAD_SCHEMA_VERSION:
+                raise ValueError("unrecognized v2 Shopify payload schema")
+            if raw.payload_schema_version == PAYLOAD_SCHEMA_VERSION:
+                source_payload = _graphql_order_to_rest_shape(raw.payload)
+            elif str(raw.payload.get("id", "")).startswith("gid://shopify/"):
+                raise ValueError("unrecognized GraphQL payload schema")
+            else:
+                source_payload = raw.payload
+            if raw.schema_version == "2":
+                if (
+                    raw.source_account_realm not in ("live", "test")
+                    or raw.metadata.get("source_account_realm") != raw.source_account_realm
+                    or not isinstance(raw.source_account_key, str)
+                    or not _SHOP_GID_RE.fullmatch(raw.source_account_key)
+                    or raw.metadata.get("shopify_shop_gid") != raw.source_account_key
+                    or raw.source_object_type != "order"
+                    or raw.source_object_id != raw.payload.get("id")
+                    or raw.provider_record_id != str(raw.payload.get("legacyResourceId"))
+                    or raw.source_revision_key != _source_revision_key(raw.payload)
+                    or raw.checksum != compute_checksum(raw.payload)
+                ):
+                    raise ValueError("GraphQL source identity mismatch")
+                economic_revision_key = _economic_revision_key(raw.payload)
+            order = ShopifyOrder.from_api_dict(source_payload)
+            commerce = to_commerce_order(
+                order,
+                account_id=raw.account_id or "default",
+                snapshot_mode=raw.schema_version == "2",
+            )
         except Exception as exc:  # noqa: BLE001 - unparseable payload is a visible drop
             return NormalizationResult(
                 events=[],
@@ -230,25 +391,76 @@ class ShopifyOrderNormalizer:
         event_type = _EVENT_TYPE_BY_STATUS[status]
         account_id = raw.account_id or "default"
 
-        data: dict[str, Any] = order_to_snapshot(commerce).model_dump()
-        data["provider"] = {
-            key: raw.payload.get(key)
-            for key in _PROVIDER_DATA_FIELDS
-            if key in raw.payload and raw.payload.get(key) is not None
-        }
+        # V2 canonical event data is JSON-safe before it is hashed. In
+        # particular, Pydantic's Python dump leaves Money.amount as Decimal,
+        # which the shared checksum's canonical JSON encoder rejects. Keep the
+        # existing v1 in-memory data shape unchanged for REST consumers.
+        data: dict[str, Any] = order_to_snapshot(commerce).model_dump(
+            mode="json" if raw.schema_version == "2" else "python"
+        )
+        if raw.schema_version == "2":
+            # Shopify's display financial status is an order observation. It
+            # is not evidence that a payment processor settled funds.
+            data["provider"] = {
+                "shopify_display_financial_status": order.financial_status,
+                "shopify_display_fulfillment_status": source_payload.get("fulfillment_status"),
+            }
+            context: dict[str, Any] = {
+                "acquisition_mode": raw.acquisition_mode,
+                "connection_id": raw.connection_id,
+                "raw_record_id": raw.record_id,
+                "raw_provider_checksum": raw.checksum,
+                "bronze_provider_record_id": raw.bronze_provider_record_id,
+                "payload_schema_version": raw.payload_schema_version,
+                "source_account_key": raw.source_account_key,
+                "source_object_id": raw.source_object_id,
+                "source_revision_key": raw.source_revision_key,
+                "economic_revision_key": economic_revision_key,
+                "source_account_realm": raw.source_account_realm,
+                "stream_id": raw.stream_id,
+            }
+        else:
+            data["provider"] = {
+                key: source_payload.get(key)
+                for key in _PROVIDER_DATA_FIELDS
+                if key in source_payload and source_payload.get(key) is not None
+            }
+            context = {
+                "acquisition_mode": raw.acquisition_mode,
+                "connection_id": raw.connection_id,
+                "raw_provider_event_type": _TOPIC_BY_STATUS[status],
+                "financial_status": order.financial_status,
+                "fulfillment_status": source_payload.get("fulfillment_status"),
+                # Historical REST v1 context retained until its cutover.
+                "raw_provider_payload": raw.payload,
+            }
 
-        context: dict[str, Any] = {
-            "acquisition_mode": raw.acquisition_mode,
-            "connection_id": raw.connection_id,
-            "raw_provider_event_type": _TOPIC_BY_STATUS[status],
-            "financial_status": order.financial_status,
-            "fulfillment_status": raw.payload.get("fulfillment_status"),
-            # Full raw payload — guarantees no silent loss of provider fields.
-            "raw_provider_payload": raw.payload,
-        }
+        event_revision_fields: dict[str, str] = {}
+        if raw.schema_version == "2":
+            logical_event_id = _logical_event_id(raw, economic_revision_key)
+            canonical_payload_digest = compute_checksum(
+                {"event_type": event_type, "event_family": "commerce", "data": data}
+            )
+            event_revision_id = _event_revision_id(
+                logical_event_id=logical_event_id,
+                mapping_version=GRAPHQL_MAPPING_VERSION,
+                normalizer_version=self.normalizer_version,
+                canonical_payload_digest=canonical_payload_digest,
+            )
+            event_revision_fields = {
+                "logical_event_id": logical_event_id,
+                "event_revision_id": event_revision_id,
+                "mapping_version": GRAPHQL_MAPPING_VERSION,
+                "normalizer_version": self.normalizer_version,
+                "source_revision_key": raw.source_revision_key or "",
+                "canonical_payload_digest": canonical_payload_digest,
+            }
 
         event = AetherEvent(
-            event_id=f"{raw.record_id}:{event_type}",
+            event_id=event_revision_fields.get(
+                "event_revision_id", f"{raw.record_id}:{event_type}"
+            ),
+            **event_revision_fields,
             event_type=event_type,
             event_family="commerce",
             tenant_id=raw.tenant_id,
@@ -260,7 +472,7 @@ class ShopifyOrderNormalizer:
             account_id=account_id,
             data=data,
             context=context,
-            schema_version="1",
+            schema_version=EVENT_SCHEMA_VERSION if raw.schema_version == "2" else "1",
         )
         return NormalizationResult(
             events=[event],

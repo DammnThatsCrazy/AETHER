@@ -49,7 +49,7 @@ DEFAULT_P95_THRESHOLD_MS = 200
 # fast enough that the baseline completes quickly in CI.
 _ENDPOINT_SIMULATED_LATENCY_MS: dict[str, float] = {
     "/v1/ingest/batch": 5.0,
-    "/v1/resolution/resolve": 8.0,
+    "/v1/identity/resolve": 8.0,
     "/v1/profile/profile360": 12.0,
     "/v1/analytics/graphql": 6.0,
     "/v1/agent/tasks": 10.0,
@@ -90,7 +90,7 @@ class _MockHandler(BaseHTTPRequestHandler):
 
         if path == "/v1/ingest/batch":
             self._send_json(200, {"status": "ok", "accepted": 10})
-        elif path == "/v1/resolution/resolve":
+        elif path == "/v1/identity/resolve":
             self._send_json(200, {"status": "ok", "profile_id": "synth-profile-1"})
         elif path == "/v1/analytics/graphql":
             self._send_json(200, {"data": {"events": []}})
@@ -138,9 +138,9 @@ _SCENARIOS: list[dict[str, Any]] = [
         "threshold_ms": 200,
     },
     {
-        "name": "/v1/resolution/resolve",
+        "name": "/v1/identity/resolve",
         "method": "POST",
-        "path": "/v1/resolution/resolve",
+        "path": "/v1/identity/resolve",
         "body": {"anchors": [{"type": "email", "value": "test@example.com"}]},
         "threshold_ms": 300,
     },

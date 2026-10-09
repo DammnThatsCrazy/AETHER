@@ -15,6 +15,8 @@ from shared.integration_contracts.manifest import (
     Sync,
 )
 from shared.integration_contracts.plugin import PluginValidationError
+from shared.integration_contracts.streams import StreamDescriptor
+from shared.privacy.classification import DataClassification
 
 from services.provider_runtime.validation import (
     assert_plugin_honest,
@@ -29,6 +31,99 @@ def test_honest_shopify_plugin_has_no_violations() -> None:
     assert_plugin_honest(plugin)  # does not raise
 
 
+def _declared_shopify_stream(**overrides: object) -> StreamDescriptor:
+    values: dict[str, object] = dict(
+        stream_id="orders",
+        object_kind="order",
+        domain_pack="commerce",
+        acquisition_modes=("pull", "webhook"),
+        output_contract="bronze.provider_events",
+        source_authority_class="commerce_order",
+        data_classification=DataClassification.SENSITIVE_PII,
+        cursor_scheme="updated_at_and_id",
+        webhook_topics=("orders/create",),
+        initial_backfill=True,
+        incremental=True,
+    )
+    values.update(overrides)
+    return StreamDescriptor(**values)  # type: ignore[arg-type]
+
+
+class _DeclaredShopifyPlugin(ShopifyOrdersPlugin):
+    def manifest(self):
+        return super().manifest().model_copy(update={"streams": [_declared_shopify_stream()]})
+
+
+class _MissingReportAdapterPlugin(_DeclaredShopifyPlugin):
+    def manifest(self):
+        base = super().manifest()
+        return base.model_copy(
+            update={
+                "streams": [
+                    *base.streams,
+                    _declared_shopify_stream(
+                        stream_id="reports",
+                        object_kind="order_report",
+                        acquisition_modes=("report",),
+                        webhook_topics=(),
+                        initial_backfill=False,
+                        incremental=False,
+                    ),
+                ]
+            }
+        )
+
+
+class _HiddenReportAdapterPlugin(_DeclaredShopifyPlugin):
+    def report(self):
+        return object()
+
+
+class _MissingStreamAdapterPlugin(_DeclaredShopifyPlugin):
+    def manifest(self):
+        base = super().manifest()
+        return base.model_copy(
+            update={
+                "streams": [
+                    *base.streams,
+                    _declared_shopify_stream(
+                        stream_id="continuous_orders",
+                        object_kind="order",
+                        acquisition_modes=("stream",),
+                        webhook_topics=(),
+                        initial_backfill=False,
+                        incremental=False,
+                    ),
+                ]
+            }
+        )
+
+
+class _HiddenStreamAdapterPlugin(_DeclaredShopifyPlugin):
+    def stream(self):
+        return object()
+
+
+def test_declared_streams_with_installed_adapters_are_honest() -> None:
+    assert capability_violations(_DeclaredShopifyPlugin()) == []
+
+
+@pytest.mark.parametrize(
+    ("plugin", "needle"),
+    [
+        (_MissingReportAdapterPlugin(), "no report() adapter"),
+        (_HiddenReportAdapterPlugin(), "no declared stream claims report"),
+        (_MissingStreamAdapterPlugin(), "no stream() adapter"),
+        (_HiddenStreamAdapterPlugin(), "no declared stream claims stream"),
+    ],
+)
+def test_explicit_stream_modes_match_present_adapters(
+    plugin: ShopifyOrdersPlugin, needle: str
+) -> None:
+    violations = capability_violations(plugin)
+    assert any(needle in v for v in violations)
+
+
 class _NoWebhookAdapterPlugin(ShopifyOrdersPlugin):
     """Dishonest: manifest claims webhooks.supported but no webhook adapter."""
 
@@ -41,15 +136,26 @@ class _UnclaimedPullAdapterPlugin(ShopifyOrdersPlugin):
 
     def manifest(self):
         base = super().manifest()
-        return base.model_copy(update={"sync": Sync(cursor="updated_at")})
+        return base.model_copy(
+            update={
+                "streams": [],
+                "sync": Sync(initial_backfill=False, incremental=False),
+            }
+        )
 
 
 class _NoCursorManifestPlugin(ShopifyOrdersPlugin):
-    """Dishonest at the manifest level: incremental without a cursor."""
+    """Dishonest at the manifest level: incremental stream without a cursor."""
 
     def manifest(self):
         base = super().manifest()
-        return base.model_copy(update={"sync": Sync(incremental=True, cursor=None)})
+        return base.model_copy(
+            update={
+                "streams": [
+                    stream.model_copy(update={"cursor_scheme": ""}) for stream in base.streams
+                ]
+            }
+        )
 
 
 class _NoWebhookSchemeManifestPlugin(ShopifyOrdersPlugin):
@@ -147,7 +253,8 @@ def test_assert_plugin_honest_passes_clean_plugin() -> None:
 
 
 def test_readiness_level_on_honest_manifest() -> None:
-    """Sanity: the honest fixture carries a level-3 ready manifest."""
+    """A credential-waiting connector stays hidden until replay evidence exists."""
     manifest: ProviderManifest = ShopifyOrdersPlugin().manifest()
     assert isinstance(manifest.readiness, ManifestReadiness)
-    assert manifest.readiness.level >= 3
+    assert manifest.readiness.level == 2
+    assert manifest.availability.environments.any_enabled() is False

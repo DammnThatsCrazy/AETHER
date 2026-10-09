@@ -559,7 +559,9 @@ def test_the_pinned_desired_counts_are_asserted_from_the_plan_itself():
     # asleep additionally means nothing may scale itself back up.
     sleep_script = _job_script(doc, "sleep")
     assert "aws_appautoscaling_target" in sleep_script
-    assert "autoscaling floor" in sleep_script
+    assert "expected_autoscaling" in sleep_script
+    assert "max_capacity" in sleep_script
+    assert "planned ECS autoscaling bounds" in sleep_script
 
 
 def test_the_consolidated_worker_group_is_the_pinned_awake_shape():
@@ -793,10 +795,124 @@ def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tena
         if "always()" in condition:
             assert name in {
                 "Collect logs, metrics, plans, test output and cost",
+                "Run live identity continuity scenarios",
+                "Run identity UI evidence with fixture API",
+                "Run authenticated live staging identity UI evidence",
+                "Capture identity continuity evidence",
+                "Build identity continuity proof pack collector",
+                "Collect and validate identity continuity staging proof pack",
+                "Delete run-scoped provider credential",
                 "Delete or expire the rehearsal tenant",
             } or step.get("uses") == "actions/upload-artifact@v4", name
         else:
             assert "failure()" not in condition, name
+
+    capture = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Capture identity continuity evidence"
+    )
+    assert "always()" in capture["if"]
+    assert "identity-continuity-capture.json" in capture["run"]
+    assert "scripts/identity_staging_capture.py" in capture["run"]
+    assert "IDENTITY_STAGING_CAPTURE_API_KEY" in capture["env"]["AETHER_STAGING_CAPTURE_API_KEY"]
+    assert names.index("Capture identity continuity evidence") < names.index("Delete or expire the rehearsal tenant")
+
+
+def test_identity_scenarios_use_real_run_scoped_prerequisites_and_upload_before_cleanup():
+    doc = _workflow_yaml(LIFECYCLE)
+    steps = _steps(doc, "rehearse")
+    names = [step.get("name") for step in steps]
+    provider_bootstrap = next(
+        step for step in steps
+        if step.get("name") == "Bootstrap run-scoped provider connection for identity reimport"
+    )
+    provider_cleanup = next(
+        step for step in steps
+        if step.get("name") == "Delete run-scoped provider credential"
+    )
+    scenario = next(step for step in steps if step.get("name") == "Run live identity continuity scenarios")
+    assert "scripts/identity_staging_provider_bootstrap.py" in provider_bootstrap["run"]
+    assert "secrets.IDENTITY_STAGING_PROVIDER_IDENTITY" in provider_bootstrap["env"]["AETHER_STAGING_PROVIDER_IDENTITY"]
+    assert "secrets.IDENTITY_STAGING_PROVIDER_CONFIG_JSON" in provider_bootstrap["env"]["AETHER_STAGING_PROVIDER_CONFIG_JSON"]
+    assert "secrets.IDENTITY_STAGING_PROVIDER_CREDENTIAL_JSON" in provider_bootstrap["env"]["AETHER_STAGING_PROVIDER_CREDENTIAL_JSON"]
+    assert "IDENTITY_STAGING_CAPTURE_API_KEY" in provider_bootstrap["env"]["AETHER_STAGING_TENANT_ADMIN_KEY"]
+    assert "--cleanup" in provider_cleanup["run"]
+    assert "always()" in provider_cleanup["if"]
+    assert "IDENTITY_STAGING_CAPTURE_API_KEY" in provider_cleanup["env"]["AETHER_STAGING_TENANT_ADMIN_KEY"]
+    assert "AETHER_STAGING_PROVIDER_CONNECTION_ID" in scenario["env"]["AETHER_STAGING_CONNECTOR_CONNECTION_ID"]
+    assert "scripts/identity_continuity_staging_scenarios.py" in scenario["run"]
+    assert "AETHER_STAGING_SCENARIO_API_KEY" in scenario["env"]
+    assert "AETHER_STAGING_TENANT_APP_KEY" in scenario["env"]
+    assert "AETHER_STAGING_FOREIGN_ENTITY_ID" in scenario["env"]
+    assert "AETHER_STAGING_ADMIN_API_KEY" in scenario["env"]
+    assert "AETHER_STAGING_ADMIN_API_KEY" in scenario["env"]
+    assert "IDENTITY_STAGING_CAPTURE_API_KEY" in scenario["env"]["AETHER_STAGING_ADMIN_API_KEY"]
+    assert "STAGING_IDENTITY_CONNECTOR_CONNECTION_ID" not in str(scenario)
+    assert "connector" in scenario["run"].lower() or "identity_continuity_staging_scenarios.py" in scenario["run"]
+    bootstrap = next(step for step in steps if step.get("name") == "Bootstrap run-scoped rehearsal tenants and API keys")
+    assert '"key_class": "publishable"' in bootstrap["run"]
+    assert '"site_ids": [sdk_site_id]' in bootstrap["run"]
+    assert '"/v1/identity/resolve"' in bootstrap["run"]
+    assert "foreign_entity_id" in bootstrap["run"]
+    scenario_upload_index = next(
+        index for index, step in enumerate(steps)
+        if step.get("uses") == "actions/upload-artifact@v4"
+        and "identity-continuity-scenarios-${{ github.run_id }}" in str(step.get("with", {}).get("name", ""))
+    )
+    assert names.index("Run live identity continuity scenarios") < names.index(
+        "Capture identity continuity evidence"
+    ) < scenario_upload_index < names.index("Delete or expire the rehearsal tenant")
+    assert names.index(provider_bootstrap["name"]) < names.index("Run live identity continuity scenarios")
+    assert names.index("Capture identity continuity evidence") < names.index(provider_cleanup["name"])
+    assert names.index(provider_cleanup["name"]) < names.index("Delete or expire the rehearsal tenant")
+    assert steps[scenario_upload_index].get("if") == "always()"
+    assert "identity-continuity-scenarios" in steps[scenario_upload_index]["with"]["path"]
+
+
+def test_identity_ui_fixture_and_authenticated_staging_evidence_feed_proof_pack():
+    doc = _workflow_yaml(LIFECYCLE)
+    steps = _steps(doc, "rehearse")
+    names = [step.get("name") for step in steps]
+    setup_pnpm = next(step for step in steps if step.get("name") == "Set up pnpm for identity UI evidence")
+    setup_node = next(step for step in steps if step.get("name") == "Set up Node.js for identity UI evidence")
+    install = next(step for step in steps if step.get("name") == "Install identity UI E2E workspace dependencies")
+    browser = next(step for step in steps if step.get("name") == "Install Playwright Chromium for identity UI evidence")
+    ui = next(step for step in steps if step.get("name") == "Run identity UI evidence with fixture API")
+    live_ui = next(step for step in steps if step.get("name") == "Run authenticated live staging identity UI evidence")
+    capture = next(step for step in steps if step.get("name") == "Capture identity continuity evidence")
+    upload = next(step for step in steps if step.get("name") == "Upload identity UI artifacts on E2E failure")
+    proof_build = next(step for step in steps if step.get("name") == "Build identity continuity proof pack collector")
+    proof_collect = next(step for step in steps if step.get("name") == "Collect and validate identity continuity staging proof pack")
+    proof_upload = next(step for step in steps if step.get("name") == "Upload identity continuity staging proof pack")
+    provider_cleanup = next(step for step in steps if step.get("name") == "Delete run-scoped provider credential")
+    tenant_cleanup = next(step for step in steps if step.get("name") == "Delete or expire the rehearsal tenant")
+
+    assert setup_pnpm["with"]["version"] == "12.4.2"
+    assert setup_node["with"]["node-version"] == "22"
+    assert setup_node["with"]["cache"] == "pnpm"
+    assert "pnpm-lock.yaml" in setup_node["with"]["cache-dependency-path"]
+    assert "--filter '@aether/aether...'" in install["run"]
+    assert "--filter '@aether/proof-reporting...'" in install["run"]
+    assert "playwright install --with-deps chromium" in browser["run"]
+    assert ui["id"] == "identity_ui_e2e"
+    assert "always()" in ui["if"]
+    assert "fixture API" in ui["name"]
+    assert "identity-continuity.spec.ts" in ui["run"]
+    assert ui["env"]["PLAYWRIGHT_OUTPUT_DIR"] == "${{ github.workspace }}/artifacts/rehearsal/identity-continuity-ui"
+    assert "identity-continuity-live.spec.ts" in live_ui["run"]
+    assert live_ui["env"]["IDENTITY_STAGING_UI_BASE_URL"] == "${{ secrets.TF_AETHER_APP_URL }}"
+    assert "IDENTITY_STAGING_CAPTURE_API_KEY" in live_ui["env"]
+    assert live_ui["env"]["PLAYWRIGHT_OUTPUT_DIR"] == "${{ github.workspace }}/artifacts/rehearsal/identity-continuity-ui-live"
+    assert '--ui-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui"' in capture["run"]
+    assert '--ui-live-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui-live"' in capture["run"]
+    assert upload["if"] == "always() && steps.identity_ui_e2e.outcome == 'failure'"
+    assert upload["with"]["path"] == "artifacts/rehearsal/identity-continuity-ui"
+    assert "@aether/proof-reporting build" in proof_build["run"]
+    assert "@aether/proof-reporting proof-pack -- collect" in proof_collect["run"]
+    assert "identity-continuity-capture.json" in proof_collect["run"]
+    assert proof_upload["with"]["path"] == "artifacts/rehearsal/identity-continuity-proof-pack"
+    assert names.index(setup_pnpm["name"]) < names.index(setup_node["name"]) < names.index(install["name"]) < names.index(browser["name"]) < names.index(ui["name"]) < names.index(live_ui["name"])
+    assert names.index(live_ui["name"]) < names.index(capture["name"]) < names.index(proof_build["name"]) < names.index(proof_collect["name"]) < names.index(upload["name"]) < names.index(provider_cleanup["name"]) < names.index(tenant_cleanup["name"])
 
 
 def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
@@ -804,6 +920,16 @@ def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
     workflow = _workflow(LIFECYCLE)
     preflight = doc["jobs"]["preflight-rehearsal-inputs"]
     assert set(preflight.get("env", {})) == {"DEPLOYMENT_LANE"}
+    provider_preflight = next(
+        step for step in preflight["steps"]
+        if step.get("name") == "Validate identity provider inputs before wake planning"
+    )
+    assert "secrets.IDENTITY_STAGING_PROVIDER_IDENTITY" in provider_preflight["env"]["AETHER_STAGING_PROVIDER_IDENTITY"]
+    assert "secrets.IDENTITY_STAGING_PROVIDER_CONFIG_JSON" in provider_preflight["env"]["AETHER_STAGING_PROVIDER_CONFIG_JSON"]
+    assert "secrets.IDENTITY_STAGING_PROVIDER_CREDENTIAL_JSON" in provider_preflight["env"]["AETHER_STAGING_PROVIDER_CREDENTIAL_JSON"]
+    assert "--validate-inputs-only" in provider_preflight["run"]
+    assert "Validate identity provider inputs before wake planning" in _workflow(LIFECYCLE)
+    assert _workflow(LIFECYCLE).index("Validate identity provider inputs before wake planning") < _workflow(LIFECYCLE).index("Credentialed wake plan")
     full_key_preflight = next(
         step for step in preflight["steps"]
         if step.get("name") == "Require a durable admin key for full-lane rehearsal"
@@ -991,6 +1117,7 @@ def test_cleanup_requires_a_complete_erasure_receipt_and_declares_all_rehearsal_
         "analytics_events",
         "analytics_sessions",
         "profiles",
+        "identity_scenario_execution_evidence",
         "tenant_graph",
     ):
         assert surface in (
@@ -1019,7 +1146,7 @@ def test_sleep_runs_under_always():
         "amplify-preflight",
     }
     # And the steps that stop cost run even when an earlier sleep step failed.
-    for step_id in ("last-resort", "residual", "report"):
+    for step_id in ("enforce-sleep", "residual", "report"):
         step = next(s for s in _steps(doc, "sleep") if s.get("id") == step_id)
         assert str(step["if"]).startswith("always()"), (
             f"sleep step {step_id} is skipped once something fails"
@@ -1084,7 +1211,7 @@ def test_sleep_verifies_zero_desired_counts_and_prices_the_residual():
     assert "desiredCount" in run
     assert "still non-zero after sleep" in run, "a non-zero desired count is not an error"
     assert "describe-scalable-targets" in run, "an autoscaling floor could revive staging"
-    assert "still hold a non-zero floor" in run
+    assert "exact [0,0] bounds" in run
     # The residual cost is priced from the canonical price book, not a guess.
     assert "config/aws_price_book.yaml" in run
     assert "vcpu_hour" in run and "gb_hour" in run
@@ -1094,17 +1221,22 @@ def test_sleep_verifies_zero_desired_counts_and_prices_the_residual():
     ids = [s.get("id") for s in _steps(doc, "sleep")]
     assert ids.index("sleep-apply") < ids.index("residual")
 
-    # The last-resort cost stop only fires when the reviewed sleep did not land,
-    # and it can only ever reduce compute.
-    last_resort = next(s for s in _steps(doc, "sleep") if s.get("id") == "last-resort")
-    assert "steps.sleep-apply.outputs.conclusion != 'success'" in str(last_resort["if"])
-    assert "--desired-count 0" in last_resort["run"]
-    assert re.search(r"--desired-count [1-9]", last_resort["run"]) is None, (
-        "the last-resort cost stop can scale staging UP"
+    # The zero-bound enforcement runs whenever the live state is not already
+    # proven asleep, even if a preceding Terraform step failed or was skipped.
+    enforce = next(s for s in _steps(doc, "sleep") if s.get("id") == "enforce-sleep")
+    assert "steps.already.outputs.asleep != 'true'" in str(enforce["if"])
+    assert str(enforce["if"]).startswith("always()")
+    assert "--desired-count 0" in enforce["run"]
+    assert "--max-capacity 0" in enforce["run"]
+    assert re.search(r"--desired-count [1-9]", enforce["run"]) is None, (
+        "the sleep enforcement can scale staging UP"
     )
-    assert 'test "$STAGING_CLUSTER" = "AETHER-staging"' in last_resort["run"], (
-        "the last-resort cost stop is not pinned to the staging cluster"
+    assert 'test "$STAGING_CLUSTER" = "AETHER-staging"' in enforce["run"], (
+        "the sleep enforcement is not pinned to the staging cluster"
     )
+    assert enforce["run"].index("--max-capacity 0") < enforce["run"].index("aws ecs update-service")
+    assert "600" in enforce["run"] and "sleep 10" in enforce["run"]
+    assert "for target in sorted(actual)" in enforce["run"]
 
 
 def test_the_evidence_bundle_is_checksummed():
@@ -1334,7 +1466,7 @@ def test_an_unexpired_lease_is_not_killed_mid_rehearsal():
         "the guard would scale staging to zero regardless of its lease"
     )
     assert "steps.config.outputs.mode == 'enforce'" in condition
-    assert "steps.state.outputs.awake_tasks != '0'" in condition
+    assert "steps.state.outputs.awake_tasks != '0'" not in condition
 
 
 def test_ttl_guard_enforcement_only_reduces_and_is_logged():
@@ -1347,6 +1479,7 @@ def test_ttl_guard_enforcement_only_reduces_and_is_logged():
     assert "--desired-count 0" in run
     assert re.search(r"--desired-count [1-9]", run) is None, "enforcement can scale UP"
     assert "--min-capacity 0" in run, "an autoscaling floor survives enforcement"
+    assert "--max-capacity 0" in run, "autoscaling can still revive staging"
     assert re.search(r"--min-capacity [1-9]", run) is None
     # Every cleanup action is written to a durable log that ships as evidence.
     assert "artifacts/ttl-guard/actions.log" in run
@@ -1384,17 +1517,15 @@ def test_ttl_guard_counts_task_arns_not_response_keys():
         assert counted == expected
 
 
-def test_last_resort_cost_stop_lowers_autoscaling_floors_but_not_ceilings():
+def test_sleep_enforcement_clamps_scaling_bounds_and_drains_staging():
     doc = _workflow_yaml(LIFECYCLE)
-    run = next(s for s in _steps(doc, "sleep") if s.get("id") == "last-resort")["run"]
-    assert "--min-capacity 0" in run, "an autoscaling floor revives staging after the cost stop"
-    assert re.search(r"--min-capacity [1-9]", run) is None
-    assert "--max-capacity" not in run, (
-        "the cost stop changes the reviewed autoscaling ceiling, which the next wake plan rejects"
-    )
+    run = next(s for s in _steps(doc, "sleep") if s.get("id") == "enforce-sleep")["run"]
+    assert "--min-capacity 0 --max-capacity 0" in run
     assert "starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')" in run
-    assert "could not read staging autoscaling targets" in run
-    assert run.index("stop-task") < run.index("register-scalable-target")
+    assert "staging autoscaling target set differs from the runtime matrix" in run
+    assert "could not clamp autoscaling target" in run
+    assert run.index("register-scalable-target") < run.index("update-service")
+    assert run.index("stop-task") < run.index("staging did not reach exact zero services")
 
 
 def test_ttl_guard_raises_a_blocking_alert_rather_than_passing_quietly():
@@ -1407,8 +1538,8 @@ def test_ttl_guard_raises_a_blocking_alert_rather_than_passing_quietly():
     assert str(alert["if"]).strip() == "always()"
     run = alert["run"]
     assert run.count("exit 1") >= 2, "the alert cannot fail the run"
-    assert "could not bring it to zero" in run
-    assert "was force-scaled to zero" in run
+    assert '"${ASLEEP:-unknown}" != true' in run
+    assert '"${CONVERGED:-false}" != true' in run
     assert "action: apply-sleep" in run, (
         "the alert does not tell operators how to reconcile Terraform state"
     )
@@ -1472,6 +1603,34 @@ def test_business_hours_follow_new_york_time_on_weekdays():
     assert "*) transition=skip" in choose
     # A lease longer than the lifecycle cap would be refused at wake time.
     assert int(doc["env"]["MAX_AWAKE_HOURS"]) <= 8
+
+
+def test_scheduled_wake_can_be_held_without_holding_sleep_or_manual_wake():
+    """STAGING_WAKE_HOLD pauses only the timer's wake.
+
+    Sleep is a cost and safety control, and an operator's manual dispatch is an
+    explicit decision, so neither may be held by the variable.
+    """
+    doc = _workflow_yaml(BUSINESS_HOURS)
+    step = next(
+        step
+        for job in doc["jobs"].values()
+        for step in job["steps"]
+        if step.get("name") == "Choose the transition"
+    )
+    assert step["env"]["WAKE_HOLD"] == "${{ vars.STAGING_WAKE_HOLD }}"
+    run = step["run"]
+    assert "${{" not in run
+    hold = (
+        'if [ "$transition" = wake ] && [ "$EVENT_NAME" = schedule ] '
+        '&& [ "${WAKE_HOLD:-}" = true ]; then'
+    )
+    assert hold in run
+    # The hold runs after the transition is chosen and before it is validated.
+    assert run.index('transition="$REQUESTED"') < run.index(hold) < run.index(
+        "wake|sleep|skip) ;;"
+    )
+    assert "transition=skip" in run[run.index(hold):]
 
 
 # ---------------------------------------------------------------------------
@@ -1580,12 +1739,12 @@ def test_the_cleanup_gate_treats_an_unreadable_staging_state_as_not_asleep():
     run = step["run"]
     assert "asleep=true" in run
     # Every failure path publishes `unknown`, and none of them publishes `true`.
-    assert run.count("asleep=unknown") == 4, (
+    assert run.count("asleep=unknown") >= 8, (
         "not every unreadable-state path reports the state as unknown"
     )
     for guard in (
         'if ! services_raw="$(aws ecs list-services',
-        'if ! nonzero="$(aws ecs describe-services',
+        'if ! aws ecs describe-services',
     ):
         assert guard in run, f"{guard} is not status-checked"
     assert "must not be treated as asleep" in run
@@ -1593,7 +1752,7 @@ def test_the_cleanup_gate_treats_an_unreadable_staging_state_as_not_asleep():
     # the no-service equivalent) is zero and a separate task listing proves
     # there is no running/pending task. An empty service list must still reach
     # that task check.
-    assert run.count("asleep=true") == 1
+    assert run.count("echo 'asleep=true'") == 1
     first_guard = run.index('if ! services_raw="$(aws ecs list-services')
     assert all(
         position > first_guard
@@ -1606,9 +1765,123 @@ def test_the_cleanup_gate_treats_an_unreadable_staging_state_as_not_asleep():
     doc = _workflow_yaml(LIFECYCLE)
     plan_step = next(s for s in _steps(doc, "sleep") if s.get("id") == "sleep-plan")
     assert "steps.already.outputs.asleep != 'true'" in str(plan_step["if"])
-    last_resort = next(s for s in _steps(doc, "sleep") if s.get("id") == "last-resort")
-    assert "steps.already.outputs.asleep != 'true'" in str(last_resort["if"])
-    assert str(last_resort["if"]).startswith("always()")
+    assert "needs.select-profile.outputs.apply_sleep == 'true'" in str(plan_step["if"]), (
+        "a live zero envelope can hide an awake Terraform state that still needs a reviewed sleep apply"
+    )
+    enforce = next(s for s in _steps(doc, "sleep") if s.get("id") == "enforce-sleep")
+    assert "steps.already.outputs.asleep != 'true'" in str(enforce["if"])
+    assert str(enforce["if"]).startswith("always()")
+
+
+def test_already_asleep_requires_the_exact_live_service_set(tmp_path):
+    step = next(s for s in _steps(_workflow_yaml(LIFECYCLE), "sleep") if s.get("id") == "already")
+    cluster = "AETHER-staging"
+    backend = f"{cluster}-backend"
+    worker = f"{cluster}-lean-worker"
+    extra = f"{cluster}-orphan"
+    for index, (names, stopping_status, expected) in enumerate((
+        ([backend, worker], None, "true"),
+        ([backend], None, "false"),
+        ([backend, worker, extra], None, "false"),
+        ([backend, worker], "RUNNING", "false"),
+    )):
+        output = tmp_path / f"already-{index}.output"
+        rows = json.dumps([
+            {"name": name, "desired": 0, "running": 0, "pending": 0}
+            for name in names
+        ])
+        targets = json.dumps([
+            {"id": f"service/{cluster}/{name}", "min": 0, "max": 0}
+            for name in (backend, worker)
+        ])
+        script = """mapfile() {
+          local variable="$2" line
+          eval "$variable=()"
+          while IFS= read -r line; do
+            eval "$variable+=(\"\$line\")"
+          done
+        }
+        aws() {
+          case "$*" in
+            *"ecs list-services"*) printf '%s\\n' "$MOCK_SERVICE_ARNS" ;;
+            *"ecs describe-services"*) printf '%s\\n' "$MOCK_SERVICE_ROWS" ;;
+            *"ecs list-tasks"*"--desired-status STOPPED"*) printf '%s\\n' "$MOCK_STOPPED_TASKS" ;;
+            *"ecs list-tasks"*) printf '[]\\n' ;;
+            *"ecs describe-tasks"*) printf '%s\\n' "$MOCK_STOPPED_DESCRIBED" ;;
+            *"application-autoscaling describe-scalable-targets"*) printf '%s\\n' "$MOCK_TARGETS" ;;
+            *) return 1 ;;
+          esac
+        }
+        """ + step["run"]
+        env = {
+            **os.environ,
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ['PATH']}",
+            "STAGING_CLUSTER": cluster,
+            "RUNNER_TEMP": str(tmp_path),
+            "GITHUB_OUTPUT": str(output),
+            "MOCK_SERVICE_ARNS": "\t".join(
+                f"arn:aws:ecs:us-east-1:123456789012:service/{cluster}/{name}" for name in names
+            ),
+            "MOCK_SERVICE_ROWS": rows,
+            "MOCK_TARGETS": targets,
+            "MOCK_STOPPED_TASKS": json.dumps(["arn:aws:ecs:task/stopping"] if stopping_status else []),
+            "MOCK_STOPPED_DESCRIBED": json.dumps({
+                "failures": [],
+                "tasks": [{"lastStatus": stopping_status}] if stopping_status else [],
+            }),
+        }
+        result = subprocess.run(
+            ["bash", "-c", script], cwd=ROOT, env=env,
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert f"asleep={expected}" in output.read_text()
+
+
+def test_already_asleep_apply_sleep_still_reconciles_reviewed_state(tmp_path):
+    doc = _workflow_yaml(LIFECYCLE)
+    route = next(s for s in _steps(doc, "select-profile") if s.get("id") == "route")["run"]
+    assert re.search(r"apply-sleep\)\s+plan_sleep=true; apply_sleep=true", route)
+    assert re.search(r"full-rehearsal\).*?plan_sleep=true; apply_sleep=true", route, re.S)
+
+    sleep_steps = _steps(doc, "sleep")
+    plan = next(s for s in sleep_steps if s.get("id") == "sleep-plan")
+    verify = next(s for s in sleep_steps if s.get("id") == "sleep-verify")
+    apply = next(s for s in sleep_steps if s.get("id") == "sleep-apply")
+    assert "needs.select-profile.outputs.apply_sleep == 'true'" in str(plan["if"])
+    preflight = plan["run"].split("reconcile_staging_state()", 1)[0]
+    result = subprocess.run(
+        ["bash", "-c", preflight], cwd=ROOT,
+        env={**os.environ, "GH_TOKEN": "test", "BACKEND_IMAGE_DIGEST": ""},
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    assert "apply-sleep requires an approved backend_image_digest" in result.stdout
+    assert "steps.sleep-plan.outputs.plan_run_id != ''" in str(verify["if"])
+    assert "steps.sleep-verify.outputs.plan_checksum != ''" in str(apply["if"])
+    assert "steps.already.outputs.asleep" not in str(apply["if"])
+
+    report = next(s for s in sleep_steps if s.get("id") == "report")
+    output = tmp_path / "report.output"
+    summary = tmp_path / "report.summary"
+    env = {
+        **os.environ,
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_STEP_SUMMARY": str(summary),
+        "APPLY_SLEEP": "true",
+        "ALREADY_ASLEEP": "true",
+        "SLEEP_APPLY_CONCLUSION": "success",
+        "ENFORCE_RESULT": "skipped",
+        "ZERO_OK": "true",
+        "RESIDUAL_TASKS": "0",
+    }
+    result = subprocess.run(
+        ["bash", "-c", report["run"]], cwd=ROOT, env=env,
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "cleanup_result=success" in output.read_text()
+    assert "manual_intervention_required=false" in output.read_text()
 
 
 def test_the_residual_check_never_reports_zero_it_could_not_measure():
@@ -1618,7 +1891,7 @@ def test_the_residual_check_never_reports_zero_it_could_not_measure():
     run = step["run"]
     # Service, autoscaling, and residual-task reads all have explicit failure
     # branches; each branch sets zero_ok=false before the report is emitted.
-    assert run.count("zero_ok=false") == 8, (
+    assert run.count("zero_ok=false") >= 13, (
         "a residual measurement path no longer fails closed"
     )
     assert run.count("residual_tasks=unknown") >= 1
@@ -1651,6 +1924,39 @@ def test_the_cleanup_report_fails_on_an_unproven_zero():
     # The disclosure reaches the summary a human reads.
     assert "staging proven at zero after sleep" in run
     assert 'exit 1' in run
+
+
+def test_cleanup_report_never_downgrades_unproven_zero_to_degraded(tmp_path):
+    report = next(
+        s for s in _steps(_workflow_yaml(LIFECYCLE), "sleep") if s.get("id") == "report"
+    )
+    for already_asleep, zero_ok, sleep_apply, expected in (
+        ("false", "false", "failure", "failure"),
+        ("false", "true", "failure", "degraded"),
+        ("true", "true", "failure", "failure"),
+    ):
+        output = tmp_path / f"report-{already_asleep}-{zero_ok}.output"
+        summary = tmp_path / f"report-{already_asleep}-{zero_ok}.summary"
+        env = {
+            **os.environ,
+            "GITHUB_OUTPUT": str(output),
+            "GITHUB_STEP_SUMMARY": str(summary),
+            "APPLY_SLEEP": "true",
+            "ALREADY_ASLEEP": already_asleep,
+            "SLEEP_APPLY_CONCLUSION": sleep_apply,
+            "ENFORCE_RESULT": "skipped" if already_asleep == "true" else "success",
+            "DRAIN_OK": "true",
+            "ZERO_OK": zero_ok,
+            "OUTSIDE_TERRAFORM_ACTIONS": "1",
+            "RESIDUAL_TASKS": "unknown" if zero_ok == "false" else "0",
+        }
+        result = subprocess.run(
+            ["bash", "-c", report["run"]], cwd=ROOT, env=env,
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert f"cleanup_result={expected}" in output.read_text()
+        assert f"| cleanup result | {expected} |" in summary.read_text()
 
 
 def test_the_ttl_guard_never_reports_asleep_on_an_unreadable_environment():
@@ -1690,10 +1996,12 @@ def test_the_ttl_guard_never_reports_asleep_on_an_unreadable_environment():
 
 def test_the_ttl_guard_enforcement_fails_closed_on_an_unreadable_environment():
     run = _guard_step("enforce")["run"]
-    assert 'if ! services_raw="$(aws ecs list-services' in run
-    assert "TTL enforcement did not run" in run
-    assert 'if ! targets_raw="$(aws application-autoscaling describe-scalable-targets' in run
-    assert "an autoscaling floor may revive staging" in run
+    assert 'if services_raw="$(aws ecs list-services' in run
+    assert "could not enumerate staging ECS services" in run
+    assert 'if targets_raw="$(aws application-autoscaling describe-scalable-targets' in run
+    assert "the sleep bounds are unknown" in run
+    assert "--max-capacity 0" in run
+    assert "--max-capacity 0" in run[: run.index("aws ecs update-service")]
 
 
 # ---------------------------------------------------------------------------

@@ -316,7 +316,7 @@ async def test_dsr_erasure_job_erases_analytics_and_marks_step(job_env):
     cache_key = CacheKey.analytics_query(
         TENANT,
         CacheKey.hash_query(
-            f"{sorted({'user_id': USER}.items())}|from=None|to=None|limit=10|gen={generation}"
+            f"{sorted({'user_id': USER}.items())}|canonical=|from=None|to=None|limit=10|gen={generation}"
         ),
     )
     assert await job_env.get_json(cache_key)

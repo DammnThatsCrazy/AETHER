@@ -684,21 +684,21 @@ export const api = {
     decisionDetail: (decisionId: string, tenantId: string) =>
       restClient.get(`/v1/identity/profiles/${tenantId}/identity/decision/${decisionId}`, wrap(unknownSchema)).then(r => r.data),
 
-    /** Admin: list open conflicts/reviews with candidate A/B, evidence, recommended action. */
-    reviewQueue: (tenantId: string, limit = 50) =>
-      restClient.get(`/v1/admin/identity/review-queue?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+    /** Tenant-scoped review list; the backend derives tenant scope from auth. */
+    reviewQueue: (limit = 50) =>
+      restClient.get(`/v1/identity/review-queue?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
 
-    /** Admin: approve a conflict/review. */
-    approveConflict: (conflictId: string, tenantId: string) =>
-      restClient.post(`/v1/admin/identity/review-queue/${conflictId}/approve`, wrap(unknownSchema), { tenant_id: tenantId }).then(r => r.data),
+    /** Tenant approval; tenant ownership is derived from the authenticated request. */
+    approveConflict: (conflictId: string) =>
+      restClient.post(`/v1/identity/review-queue/${encodeURIComponent(conflictId)}/approve`, wrap(unknownSchema), {}).then(r => r.data),
 
-    /** Admin: reject a conflict/review with a reason. */
-    rejectConflict: (conflictId: string, tenantId: string, body: { reason: string }) =>
-      restClient.post(`/v1/admin/identity/review-queue/${conflictId}/reject`, wrap(unknownSchema), { ...body, tenant_id: tenantId }).then(r => r.data),
+    /** Tenant rejection; tenant ownership is derived from the authenticated request. */
+    rejectConflict: (conflictId: string, body: { reason: string }) =>
+      restClient.post(`/v1/identity/review-queue/${encodeURIComponent(conflictId)}/reject`, wrap(unknownSchema), body).then(r => r.data),
 
-    /** Admin: tenant activation dashboard data. */
-    activationStatus: (tenantId: string) =>
-      restClient.get(`/v1/admin/identity/activation-status?tenant_id=${tenantId}`, wrap(unknownSchema)).then(r => r.data),
+    /** Tenant activation dashboard data; tenant scope is derived from auth. */
+    activationStatus: () =>
+      restClient.get('/v1/identity/activation-status', wrap(unknownSchema)).then(r => r.data),
 
     /** Admin: merge/split audit log. */
     mergeSplitAudit: (tenantId: string, limit = 50) =>
@@ -713,12 +713,6 @@ export const api = {
       restClient.get(`/v1/admin/identity/review-queue/${conflictId}?tenant_id=${tenantId}`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Resolution (identity cluster — read-only for tenants) ─────────────────
-  resolution: {
-    cluster: (userId: string) =>
-      restClient.get(`/v1/resolution/cluster/${userId}`, wrap(unknownSchema)).then(r => r.data),
-  },
-
   // ── Graph & Relationships (H2H / H2A / A2H / A2A) ─────────────────────────
   graph: {
     /**
@@ -728,13 +722,6 @@ export const api = {
      */
     entityGraph: (entityId: string) =>
       restClient.get(`/v1/entities/${entityId}/graph`, wrap(unknownSchema)).then(r => r.data as EntityGraph),
-
-    /**
-     * Identity cluster — entities probabilistically resolved to the same
-     * real-world actor, with shared tissue (devices, IPs, wallets, campaigns).
-     */
-    cluster: (entityId: string) =>
-      restClient.get(`/v1/resolution/cluster/${entityId}`, wrap(unknownSchema)).then(r => r.data as EntityCluster),
 
     /**
      * Identity links for an entity — H2H same-person, shares_device, shares_wallet.

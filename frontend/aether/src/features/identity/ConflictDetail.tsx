@@ -47,11 +47,13 @@ async function fetchConflictDetail(conflictId: string, tenantId: string): Promis
 }
 
 async function approveConflict(conflictId: string, tenantId: string): Promise<void> {
-  await api.identity.approveConflict(conflictId, tenantId);
+  void tenantId;
+  await api.identity.approveConflict(conflictId);
 }
 
 async function rejectConflict(conflictId: string, tenantId: string, reason: string): Promise<void> {
-  await api.identity.rejectConflict(conflictId, tenantId, { reason });
+  void tenantId;
+  await api.identity.rejectConflict(conflictId, { reason });
 }
 
 function riskBadge(risk: string): string {

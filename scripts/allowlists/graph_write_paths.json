@@ -1,6 +1,1 @@
-[
-  "services/backend/services/lake/graph_mutations.py",
-  "services/backend/services/onchain/action_recorder.py",
-  "services/backend/services/resolution/repository.py",
-  "services/backend/services/web3/classifier.py"
-]
+[]

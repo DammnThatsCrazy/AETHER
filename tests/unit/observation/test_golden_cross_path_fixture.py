@@ -91,6 +91,7 @@ class _FakeProducer:
 
     def __init__(self) -> None:
         self.events: list = []
+        self.mode = "in-memory"
 
     async def publish_batch(self, events) -> None:
         self.events.extend(events)
@@ -123,6 +124,7 @@ def _run(coro):
 def _fresh():
     saved = dict(os.environ)
     os.environ["AETHER_ENV"] = "local"
+    os.environ.pop("DATABASE_URL", None)
     os.environ.setdefault("JWT_SECRET", "test-secret")
     _evict_backend()
     try:

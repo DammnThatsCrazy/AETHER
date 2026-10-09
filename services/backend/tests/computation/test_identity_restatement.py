@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import sys
+from dataclasses import replace
 
 import pytest
 
@@ -58,8 +59,19 @@ ENTITY_CONSUMED = "entity_consumed"
 
 
 @pytest.fixture(autouse=True)
-def _reset():
+def _reset(monkeypatch):
+    from config import settings as settings_module
+
     reset_in_memory_stores()
+    monkeypatch.setattr(
+        settings_module.settings,
+        "identity_continuity",
+        replace(
+            settings_module.settings.identity_continuity,
+            resolution_enabled=True,
+            auto_merge_enabled=True,
+        ),
+    )
 
 
 class _FakeProducer:
@@ -100,6 +112,20 @@ async def _force_auto_merge(resolver: IdentityResolutionService, monkeypatch) ->
     # Two pre-existing subjects the incoming signal maps to.
     await resolver._repo.create_subject(TENANT, ENTITY_SURVIVOR)
     await resolver._repo.create_subject(TENANT, ENTITY_CONSUMED)
+
+    # This test exercises the automatic merge event path; opt into that
+    # production gate explicitly instead of depending on the host environment.
+    from config.settings import settings
+
+    monkeypatch.setattr(
+        settings,
+        "identity_continuity",
+        replace(
+            settings.identity_continuity,
+            resolution_enabled=True,
+            auto_merge_enabled=True,
+        ),
+    )
 
     async def _fake_find_subjects_by_alias(tenant_id, sig_type, sig_hash):
         return [ENTITY_SURVIVOR, ENTITY_CONSUMED]

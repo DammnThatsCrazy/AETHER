@@ -147,6 +147,9 @@ _REASON_BY_SIGNAL: dict[IdentitySignalType, str] = {
 # ── Signals requiring explicit consent ───────────────────────────────────────
 
 CONSENT_REQUIRED_SIGNALS: frozenset[IdentitySignalType] = frozenset({
+    # SDK user IDs are deterministic within an app, but cross-platform linking
+    # remains an identity operation and needs server-authorized consent.
+    IdentitySignalType.USER_ID,
     IdentitySignalType.EMAIL_HASH,
     # Verified email ownership still requires identity-linking consent before it
     # may stitch entities together (blueprint §40).

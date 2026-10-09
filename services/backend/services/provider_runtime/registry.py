@@ -26,6 +26,7 @@ from typing import Optional
 from shared.integration_contracts.catalog import manifest_by_identity
 from shared.integration_contracts.manifest import ProviderManifest
 from shared.integration_contracts.plugin import PluginValidationError, plugin_identity_key
+from shared.integration_contracts.streams import StreamDescriptor
 
 from services.provider_runtime.errors import (
     PluginIncompatible,
@@ -58,6 +59,7 @@ class ProviderRegistry:
         self.auto_install_legacy = auto_install_legacy
         self._plugins: dict[str, BaseProviderPlugin] = {}
         self._sources: dict[str, str] = {}
+        self._stream_descriptors: dict[str, tuple[StreamDescriptor, ...]] = {}
         self._loaded = False
 
     # ── Registration ────────────────────────────────────────────────────────
@@ -110,6 +112,7 @@ class ProviderRegistry:
 
         self._plugins[key] = plugin
         self._sources[key] = source
+        self._stream_descriptors[key] = tuple(manifest.streams)
         logger.info("registered provider %s (source=%s)", key, source)
         return key
 
@@ -135,6 +138,16 @@ class ProviderRegistry:
     def manifests(self) -> dict[str, ProviderManifest]:
         """Identity key -> honest manifest for every registered plugin."""
         return {key: plugin.manifest() for key, plugin in self._plugins.items()}
+
+    def streams_for(self, identity_key: str) -> tuple[StreamDescriptor, ...]:
+        """Registration-time declared streams for an installed capability.
+
+        An empty tuple means a v1 manifest has no stream declarations; it does
+        not mean the provider lacks source objects. These declarations do not
+        certify provider API behavior or downstream normalization.
+        """
+        self.require(identity_key)
+        return self._stream_descriptors[identity_key]
 
     def sources(self) -> dict[str, str]:
         """Identity key -> registration source (``legacy``, ``local``, ...)."""

@@ -615,6 +615,54 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_service_classification.py"],
+        name="Backend service classification",
+        results=results,
+        stop_on_failure=stop,
+        remediation="classify every backend service directory in config/service_classification.yaml; deprecated services also need a debt retirement ledger row",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_frontend_reachability.py"],
+        name="Frontend reachability",
+        results=results,
+        stop_on_failure=stop,
+        remediation="mount the unreachable frontend file in a route, delete it, or list it in config/frontend_reachability.yaml with a debt-ledger row",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_backend_reachability.py"],
+        name="Backend reachability",
+        results=results,
+        stop_on_failure=stop,
+        remediation="mount or import the unreachable backend module, delete it with its tests, or list it in config/backend_reachability.yaml with a debt-ledger row",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_settings_flags.py"],
+        name="Settings flags are read",
+        results=results,
+        stop_on_failure=stop,
+        remediation="delete the unread field from services/backend/config/settings.py (and its env example, release flag and doc lines), or wire it to the behavior it claims to gate",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_debt_retirement_ledger.py"],
+        name="Technical-debt retirement ledger",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/debt_retirement_ledger.yaml: name real paths, keep deadlines current, and delete a duplicate only with parity and usage evidence",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_capability_overlays.py"],
+        name="Capability overlay registry",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep capabilities as enable-* flags in config/capability_overlays.yaml; never add a deployment profile per capability",
+    )
+
+    run(
         [sys.executable, "scripts/validate_impact_graph.py"],
         name="Impact graph registry and router bindings",
         results=results,

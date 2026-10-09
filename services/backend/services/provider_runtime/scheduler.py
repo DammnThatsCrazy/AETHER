@@ -7,8 +7,8 @@ Mirrors the canonical ordering of ``ConnectorService.sync()``:
 
 Zero returned records is a SUCCESS **only when the provider actually returned
 none**; a provider failure marks the sync run failed with a typed error and is
-never a silent empty success. The sync-run ledger is best-effort (a truthful
-record, never a sync gate), exactly like the legacy connector service.
+never a silent empty success. Raw persistence, normalization, event persistence,
+and cursor advancement fail closed. The sync-run ledger is best-effort.
 
 :class:`PullScheduler` is the engine Team D's ``ConnectionOrchestrator.run_sync``
 delegates to (``scheduler.run(connection=..., since=...)``); :meth:`run_sync` is
@@ -29,14 +29,18 @@ defaults resolve lazily from the team-owned modules):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
+import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository
 from services.comms.sync_runs import SyncRun, SyncRunService
 from services.integrations.connectors.base import now_iso
+from services.provider_runtime.connection import SYNC_ELIGIBLE_STATES
 from services.provider_runtime.errors import (
+    ConnectionStateViolation,
     ProviderNotInstalled,
     ProviderPullFailed,
 )
@@ -46,7 +50,12 @@ from services.provider_runtime.rate_limit import RateLimitCoordinator
 from services.provider_runtime.retry import RetryCoordinator
 from shared.integration_contracts.acquisition import AcquisitionContext
 from shared.integration_contracts.events import AetherEvent, ReadBatch
+from shared.integration_contracts.lifecycle import ConnectionState
 from shared.integration_contracts.results import AdapterResult, AdapterStatus
+from shared.integration_contracts.streams import StreamDescriptor
+
+_MAX_REQUESTED_STREAM_IDS = 32
+_MAX_REQUESTED_STREAM_ID_LENGTH = 128
 
 
 def _now_iso() -> str:
@@ -60,20 +69,46 @@ def _connection_account_id(connection: Any) -> str:
 
 
 class ProviderCursorRepository(BaseRepository):
-    """Durable cursor position per (tenant, connection, provider_identity)."""
+    """Durable cursor position, with an additive account/stream scoped key.
+
+    The three-part key remains readable for existing v1 connections. New
+    account/stream callers must supply both dimensions and get an isolated v2
+    cursor; no implicit migration of the old cursor is performed.
+    """
 
     def __init__(self) -> None:
         super().__init__("provider_cursors")
 
     @staticmethod
-    def _cursor_id(tenant_id: str, connection_id: str, provider_identity: str) -> str:
-        return f"{tenant_id}:{connection_id}:{provider_identity}"
+    def _cursor_id(
+        tenant_id: str,
+        connection_id: str,
+        provider_identity: str,
+        account_id: Optional[str] = None,
+        stream_id: Optional[str] = None,
+    ) -> str:
+        if account_id is None and stream_id is None:
+            return f"{tenant_id}:{connection_id}:{provider_identity}"
+        if account_id is None or not stream_id:
+            raise ValueError("account_id and stream_id are both required for a scoped cursor")
+        material = json.dumps(
+            [tenant_id, connection_id, provider_identity, account_id, stream_id],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return "v2:" + hashlib.sha256(material.encode("utf-8")).hexdigest()
 
     async def get_cursor(
-        self, tenant_id: str, connection_id: str, provider_identity: str
+        self,
+        tenant_id: str,
+        connection_id: str,
+        provider_identity: str,
+        *,
+        account_id: Optional[str] = None,
+        stream_id: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
         return await self.find_by_id(
-            self._cursor_id(tenant_id, connection_id, provider_identity)
+            self._cursor_id(tenant_id, connection_id, provider_identity, account_id, stream_id)
         )
 
     async def set_cursor(
@@ -83,19 +118,29 @@ class ProviderCursorRepository(BaseRepository):
         provider_identity: str,
         cursor_value: str,
         event_count: int = 0,
+        *,
+        account_id: Optional[str] = None,
+        stream_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        cursor_id = self._cursor_id(tenant_id, connection_id, provider_identity)
+        cursor_id = self._cursor_id(
+            tenant_id, connection_id, provider_identity, account_id, stream_id
+        )
         now = _now_iso()
-        return await self.insert(cursor_id, {
-            "cursor_id": cursor_id,
-            "tenant_id": tenant_id,
-            "connection_id": connection_id,
-            "provider_identity": provider_identity,
-            "cursor_value": cursor_value,
-            "last_synced_at": now,
-            "last_event_count": event_count,
-            "updated_at": now,
-        })
+        return await self.insert(
+            cursor_id,
+            {
+                "cursor_id": cursor_id,
+                "tenant_id": tenant_id,
+                "connection_id": connection_id,
+                "provider_identity": provider_identity,
+                "account_id": account_id,
+                "stream_id": stream_id,
+                "cursor_value": cursor_value,
+                "last_synced_at": now,
+                "last_event_count": event_count,
+                "updated_at": now,
+            },
+        )
 
 
 class PullScheduler:
@@ -119,6 +164,7 @@ class PullScheduler:
         broker: Any = None,
         registry: Any = None,
         connections: Any = None,
+        accounts: Any = None,
         sync_runs: Any = None,
         meters: Any = None,
     ) -> None:
@@ -131,6 +177,7 @@ class PullScheduler:
         self.broker = broker
         self.registry = registry
         self.connections = connections
+        self.accounts = accounts
         self.sync_runs = sync_runs
         self.meter = meters or _default_meter
 
@@ -139,12 +186,14 @@ class PullScheduler:
     def _registry(self) -> Any:
         if self.registry is None:
             from services.provider_runtime.registry import registry
+
             self.registry = registry
         return self.registry
 
     def _broker(self) -> Any:
         if self.broker is None:
             from services.provider_runtime.credential_broker import CredentialBroker
+
             self.broker = CredentialBroker()
         return self.broker
 
@@ -153,12 +202,21 @@ class PullScheduler:
             from services.provider_runtime.connection import (
                 ProviderConnectionRepository,
             )
+
             self.connections = ProviderConnectionRepository()
         return self.connections
+
+    def _accounts(self) -> Any:
+        if self.accounts is None:
+            from services.provider_runtime.acquisition import ProviderAccountRepository
+
+            self.accounts = ProviderAccountRepository()
+        return self.accounts
 
     def _raw_store(self) -> Any:
         if self.raw_store is None:
             from services.provider_runtime.raw_store import RawProviderRecordStore
+
             self.raw_store = RawProviderRecordStore()
         return self.raw_store
 
@@ -166,11 +224,13 @@ class PullScheduler:
         if self.normalization is not None:
             return self.normalization
         from services.provider_runtime.normalization import NormalizationEngine
+
         return NormalizationEngine(plugin)
 
     def _bridge(self) -> Any:
         if self.bridge is None:
             from services.provider_runtime.bridge import EventBridge
+
             self.bridge = EventBridge()
         return self.bridge
 
@@ -181,16 +241,27 @@ class PullScheduler:
         connection: Any,
         *,
         since: Optional[str] = None,
+        stream_id: Optional[str] = None,
+        stream_ids: Optional[list[str]] = None,
     ) -> SyncRun | dict[str, Any]:
         """D↔E-compatible alias — Team D's ``ConnectionOrchestrator`` calls
         ``PullScheduler().run(connection=..., since=...)``."""
-        return await self.run_sync(connection, since=since)
+        return await self.run_sync(
+            connection,
+            since=since,
+            stream_id=stream_id,
+            stream_ids=stream_ids,
+        )
 
     async def run_sync(
         self,
         connection: Any,
         *,
         since: Optional[str] = None,
+        stream_id: Optional[str] = None,
+        stream_ids: Optional[list[str]] = None,
+        _stream_descriptor: Optional[StreamDescriptor] = None,
+        _selected_account_id: Optional[str] = None,
     ) -> SyncRun | dict[str, Any]:
         """connection: ProviderConnection (Team D).
 
@@ -198,22 +269,102 @@ class PullScheduler:
         by SyncRunService.complete_run (its real type), or a dict summary if the
         ledger was unavailable (best-effort ledger, never a sync gate).
         """
+        self._require_sync_eligible(connection)
         tenant_id = connection.tenant_id
         connection_id = connection.connection_id
         provider_identity = connection.provider_identity
 
+        requested_stream_ids = list(stream_ids or ())
+        if stream_id is not None:
+            if requested_stream_ids:
+                return await self._fail_run(
+                    connection,
+                    self.sync_runs or SyncRunService(),
+                    None,
+                    error_code="provider_stream_selection_invalid",
+                    detail="use either stream_id or stream_ids, not both",
+                )
+            requested_stream_ids = [stream_id]
+        selection_error: Optional[tuple[str, str]] = None
+        if len(requested_stream_ids) > _MAX_REQUESTED_STREAM_IDS:
+            selection_error = (
+                "provider_stream_selection_too_large",
+                f"at most {_MAX_REQUESTED_STREAM_IDS} stream IDs may be selected",
+            )
+        elif any(
+            not isinstance(value, str)
+            or not value.strip()
+            or len(value) > _MAX_REQUESTED_STREAM_ID_LENGTH
+            for value in requested_stream_ids
+        ):
+            selection_error = (
+                "provider_stream_selection_invalid",
+                "stream IDs must be non-empty and at most 128 characters",
+            )
+        elif len(set(requested_stream_ids)) != len(requested_stream_ids):
+            selection_error = (
+                "provider_stream_selection_duplicate",
+                "stream_ids must not contain duplicates",
+            )
+        if selection_error is not None:
+            error_code, detail = selection_error
+            return await self._fail_run(
+                connection,
+                self.sync_runs or SyncRunService(),
+                None,
+                error_code=error_code,
+                detail=detail,
+            )
+
         # Resolve the plugin once. A missing plugin is a hard error — there is
         # nothing honest we can sync against.
         plugin = self._resolve_plugin(provider_identity)
+
+        # Manifests with no declared streams retain the v1 capability-level
+        # path below. Explicit stream manifests use isolated per-account,
+        # per-stream cursors and adapter contexts.
+        if _stream_descriptor is None:
+            manifest_fn = getattr(plugin, "manifest", None)
+            manifest = manifest_fn() if callable(manifest_fn) else None
+            declared_streams = tuple(getattr(manifest, "streams", ()) or ())
+            if declared_streams:
+                return await self._run_declared_streams(
+                    connection,
+                    manifest=manifest,
+                    streams=declared_streams,
+                    since=since,
+                    requested_stream_ids=tuple(requested_stream_ids),
+                )
+            if requested_stream_ids:
+                return await self._fail_run(
+                    connection,
+                    None,
+                    None,
+                    error_code="provider_stream_not_found",
+                    detail="provider manifest does not declare streams",
+                )
+
         pull = plugin.pull() if plugin is not None else None
         if pull is None:
-            detail = (
-                f"provider {provider_identity} does not implement the pull capability"
-            )
+            detail = f"provider {provider_identity} does not implement the pull capability"
             return await self._fail_run(
-                connection, None, None,
-                error_code="provider_pull_not_supported", detail=detail,
+                connection,
+                None,
+                None,
+                error_code="provider_pull_not_supported",
+                detail=detail,
             )
+
+        # Stream manifests fan out into nested per-account/per-stream calls.
+        # Their outer dispatcher owns the single initial-sync transition.
+        lifecycle_started = _stream_descriptor is not None
+
+        scoped_stream_id = _stream_descriptor.stream_id if _stream_descriptor else None
+        account_id = (
+            _selected_account_id
+            if _selected_account_id is not None
+            else _connection_account_id(connection)
+        )
 
         # Open a durable sync-run ledger entry BEFORE provider work (mirror
         # ConnectorService.sync §12.4). Best-effort: never a sync gate.
@@ -221,13 +372,23 @@ class PullScheduler:
         sync_run: Optional[SyncRun] = None
         prev_cursor: Optional[dict[str, Any]] = None
         try:
-            prev_cursor = await self.cursors.get_cursor(
-                tenant_id, connection_id, provider_identity
-            )
+            if _stream_descriptor is None:
+                prev_cursor = await self.cursors.get_cursor(
+                    tenant_id, connection_id, provider_identity
+                )
+            else:
+                prev_cursor = await self.cursors.get_cursor(
+                    tenant_id,
+                    connection_id,
+                    provider_identity,
+                    account_id=account_id,
+                    stream_id=scoped_stream_id,
+                )
             sync_run = await run_service.open_run(
                 tenant_id=tenant_id,
                 connector_instance_id=connection_id,
                 provider=provider_identity,
+                provider_account_id=account_id,
                 mode="incremental" if since else "backfill",
                 requested_window=since,
                 cursor_before=(prev_cursor or {}).get("cursor_value"),
@@ -240,12 +401,47 @@ class PullScheduler:
         # across pages). Missing/None is passed through — the adapter classifies
         # it (typically UNAUTHORIZED), which fails the run with a typed error.
         credential = await self._resolve_credential(connection)
+        config = dict(getattr(connection, "config", None) or {})
+        if (
+            provider_identity == "shopify.admin.orders_read"
+            and str(config.get("orders_api") or "rest").lower() == "graphql"
+        ):
+            selected_id = account_id
+            selected = (
+                await self._accounts().find(f"{connection_id}:{selected_id}")
+                if selected_id
+                else None
+            )
+            if (
+                selected is None
+                or selected.account_id != f"{connection_id}:{selected_id}"
+                or selected.tenant_id != tenant_id
+                or selected.connection_id != connection_id
+                or selected.provider_identity != provider_identity
+                or not selected.external_id
+                or selected.external_id != selected.metadata.get("shop_gid")
+                or selected.metadata.get("source_account_realm")
+                != config.get("source_account_realm")
+                or config.get("source_account_realm") not in ("live", "test")
+                or not getattr(connection, "last_verified_at", None)
+            ):
+                return await self._fail_run(
+                    connection,
+                    run_service,
+                    sync_run,
+                    error_code="provider_account_unverified",
+                    detail="Selected Shopify GraphQL shop identity is not verified",
+                )
+            # This value is inserted only from the tenant-scoped persisted
+            # account. It is never trusted from connection config or user input.
+            config["_verified_shop_gid"] = selected.external_id
         context = AcquisitionContext(
             tenant_id=tenant_id,
             provider_identity=provider_identity,
             connection_id=connection_id,
-            account_id=_connection_account_id(connection),
-            config=dict(getattr(connection, "config", None) or {}),
+            account_id=account_id,
+            stream_id=scoped_stream_id,
+            config=config,
             credential=credential,
         )
         normalization = self._normalization_engine(plugin)
@@ -262,6 +458,9 @@ class PullScheduler:
         _sync_started_at = datetime.now(timezone.utc).isoformat()
 
         try:
+            if _stream_descriptor is None:
+                lifecycle_started = True
+                await self._record_connection_sync_started(connection)
             while True:
                 page += 1
                 if page > self.MAX_PAGES:
@@ -273,7 +472,9 @@ class PullScheduler:
                         detail="pagination cap exceeded (has_more never cleared)",
                     )
                 result, page_retries, page_rate_limits = await self._fetch_with_retry(
-                    pull, context, cursor,
+                    pull,
+                    context,
+                    cursor,
                     tenant_id=tenant_id,
                     provider_identity=provider_identity,
                     connection_id=connection_id,
@@ -282,32 +483,131 @@ class PullScheduler:
                 rate_limit_events += page_rate_limits
                 if result.status != AdapterStatus.OK:
                     terminal = self._classify_failure(
-                        provider_identity, result, retry_count=retry_count,
+                        provider_identity,
+                        result,
+                        retry_count=retry_count,
                     )
                     break
                 batch = self._batch_of(result)
                 records = list(batch.records or [])
+                if _stream_descriptor is not None:
+                    try:
+                        records = self._bind_stream_raw_records(
+                            records,
+                            tenant_id=tenant_id,
+                            provider_identity=provider_identity,
+                            connection_id=connection_id,
+                            account_id=account_id,
+                            stream_id=scoped_stream_id or "",
+                        )
+                    except ValueError as exc:
+                        raise _pull_failed(
+                            "provider returned a raw record outside its stream scope",
+                            provider_identity=provider_identity,
+                            error_code="provider_raw_scope_mismatch",
+                            detail=str(exc),
+                        ) from exc
+                else:
+                    try:
+                        records = self._bind_streamless_raw_records(
+                            records,
+                            tenant_id=tenant_id,
+                            provider_identity=provider_identity,
+                            connection_id=connection_id,
+                            account_id=account_id,
+                        )
+                    except ValueError as exc:
+                        raise _pull_failed(
+                            "provider returned a raw record outside its selected account scope",
+                            provider_identity=provider_identity,
+                            error_code="provider_raw_scope_mismatch",
+                            detail=str(exc),
+                        ) from exc
                 records_received += len(records)
 
-                # raw store → normalize → bridge (each best-effort, never
-                # breaks the sync — mirroring bronze_connectors.ingest).
+                # Persist before normalization. Never advance a cursor past a
+                # page whose raw or canonical events were not durably accepted.
                 try:
-                    await self._raw_store().ingest(records)
-                except Exception as exc:  # pragma: no cover - best-effort
-                    self._warn(
-                        f"provider raw ingest failed tenant={tenant_id} "
-                        f"provider={provider_identity}: {exc}"
-                    )
-                events = await self._normalize_records(normalization, records)
+                    persisted = await self._raw_store().ingest(records, tenant_id=tenant_id)
+                    if len(persisted) != len(records):
+                        raise ValueError("raw store returned an incomplete page")
+                except Exception as exc:
+                    raise _pull_failed(
+                        f"provider raw persistence failed for {provider_identity}",
+                        provider_identity=provider_identity,
+                        error_code="provider_raw_persist_failed",
+                        detail=type(exc).__name__,
+                    ) from exc
+                persisted_records = []
+                for persisted_record, _was_new in persisted:
+                    if _stream_descriptor is not None:
+                        if not self._raw_record_matches_stream_scope(
+                            persisted_record,
+                            tenant_id=tenant_id,
+                            provider_identity=provider_identity,
+                            connection_id=connection_id,
+                            account_id=account_id,
+                            stream_id=scoped_stream_id or "",
+                        ):
+                            raise _pull_failed(
+                                "raw store returned a record outside its stream scope",
+                                provider_identity=provider_identity,
+                                error_code="provider_raw_scope_mismatch",
+                                detail="persisted raw record scope does not match selected account and stream",
+                            )
+                    elif (
+                        persisted_record.tenant_id != tenant_id
+                        or persisted_record.provider_identity != provider_identity
+                        or persisted_record.connection_id != connection_id
+                        or persisted_record.account_id != account_id
+                    ):
+                        raise _pull_failed(
+                            "provider raw persistence returned a record outside sync scope",
+                            provider_identity=provider_identity,
+                            error_code="provider_raw_persist_failed",
+                            detail="raw store returned a record outside selected account scope",
+                        )
+                    persisted_records.append(persisted_record)
+                if persisted and sync_run is not None:
+                    try:
+                        from services.identity.provider_evidence import (
+                            capture_durable_provider_customer_evidence,
+                        )
+
+                        await capture_durable_provider_customer_evidence(
+                            persisted_records,
+                            persisted,
+                            tenant_id=tenant_id,
+                            connection_id=connection_id,
+                            account_id=account_id,
+                            lifecycle_type="provider_sync_run",
+                            lifecycle_id=sync_run.sync_run_id,
+                        )
+                    except Exception as exc:  # evidence failure is observable, never candidate-visible
+                        self._warn(
+                            f"provider identity evidence capture failed tenant={tenant_id} "
+                            f"provider={provider_identity}: {type(exc).__name__}"
+                        )
+                try:
+                    events = await self._normalize_records(normalization, persisted_records)
+                except Exception as exc:
+                    raise _pull_failed(
+                        f"provider normalization failed for {provider_identity}",
+                        provider_identity=provider_identity,
+                        error_code="provider_normalization_failed",
+                        detail=type(exc).__name__,
+                    ) from exc
                 if events:
                     try:
-                        await self._bridge().ingest_events(tenant_id, events)
-                    except Exception as exc:  # pragma: no cover - best-effort
-                        self._warn(
-                            f"provider event bridge failed tenant={tenant_id} "
-                            f"provider={provider_identity}: {exc}"
-                        )
-                events_published += len(events)
+                        accepted = await self._bridge().ingest_events(tenant_id, events)
+                    except Exception as exc:
+                        raise _pull_failed(
+                            f"provider event persistence failed for {provider_identity}",
+                            provider_identity=provider_identity,
+                            error_code="provider_event_persist_failed",
+                            detail=type(exc).__name__,
+                        ) from exc
+                    events_published += accepted
 
                 # Responsiveness spine: first-sample milestone (progressive provider sync).
                 if not _first_sample_emitted and events:
@@ -340,8 +640,7 @@ class PullScheduler:
             # legacy connector's `except Exception -> status="failed"`, never a
             # silent empty success nor a hung open run.
             self._warn(
-                f"provider pull raised tenant={tenant_id} "
-                f"provider={provider_identity}: {exc!r}"
+                f"provider pull raised tenant={tenant_id} provider={provider_identity}: {exc!r}"
             )
             terminal = _pull_failed(
                 f"provider pull raised for {provider_identity}",
@@ -352,24 +651,50 @@ class PullScheduler:
 
         if terminal is not None:
             return await self._fail_run(
-                connection, run_service, sync_run,
+                connection,
+                run_service,
+                sync_run,
                 error_code=terminal.details.get("error_code") or "provider_pull_failed",
                 detail=terminal.details.get("detail") or str(terminal),
                 retry_count=retry_count,
                 rate_limit_events=rate_limit_events,
                 pages=page,
+                lifecycle_started=lifecycle_started,
             )
 
         # Success: advance cursor, close the ledger with honest counts, record
         # the connection's last_successful_sync_at, and meter.
         try:
-            await self.cursors.set_cursor(
-                tenant_id, connection_id, provider_identity,
-                cursor_value=last_cursor or "",
-                event_count=records_received,
+            if _stream_descriptor is None:
+                await self.cursors.set_cursor(
+                    tenant_id,
+                    connection_id,
+                    provider_identity,
+                    cursor_value=last_cursor or "",
+                    event_count=records_received,
+                )
+            else:
+                await self.cursors.set_cursor(
+                    tenant_id,
+                    connection_id,
+                    provider_identity,
+                    cursor_value=last_cursor or "",
+                    event_count=records_received,
+                    account_id=account_id,
+                    stream_id=scoped_stream_id,
+                )
+        except Exception as exc:
+            return await self._fail_run(
+                connection,
+                run_service,
+                sync_run,
+                error_code="provider_cursor_persist_failed",
+                detail=type(exc).__name__,
+                retry_count=retry_count,
+                rate_limit_events=rate_limit_events,
+                pages=page,
+                lifecycle_started=lifecycle_started,
             )
-        except Exception as exc:  # pragma: no cover - best-effort, never break sync
-            self._warn(f"provider cursor upsert failed tenant={tenant_id}: {exc}")
 
         completed = sync_run
         if sync_run is not None and run_service is not None:
@@ -390,9 +715,34 @@ class PullScheduler:
                 self._warn(
                     f"provider sync-run close(completed) failed tenant={tenant_id}: {exc}"
                 )
-        await self._record_connection_success(connection, last_sync_at=now_iso())
+        if (
+            sync_run is not None
+            and completed is not None
+            and getattr(completed, "status", None) == "completed"
+        ):
+            try:
+                from services.identity.provider_evidence_anchors import (
+                    ProviderIdentityEvidenceAnchorRepository,
+                )
+
+                await ProviderIdentityEvidenceAnchorRepository().finish_lifecycle(
+                    tenant_id=tenant_id,
+                    lifecycle_type="provider_sync_run",
+                    lifecycle_id=sync_run.sync_run_id,
+                    status="completed",
+                )
+            except Exception as exc:
+                self._warn(
+                    f"provider evidence lifecycle completion failed tenant={tenant_id}: "
+                    f"{type(exc).__name__}"
+                )
+        if _stream_descriptor is None:
+            await self._record_connection_success(connection, last_sync_at=now_iso())
         await self.meter(
-            tenant_id, "provider.sync.completed", connection_id, "provider_runtime",
+            tenant_id,
+            "provider.sync.completed",
+            connection_id,
+            "provider_runtime",
         )
         if completed is not None:
             return completed
@@ -406,6 +756,268 @@ class PullScheduler:
         }
 
     # ── Internals ───────────────────────────────────────────────────────────
+
+    async def _run_declared_streams(
+        self,
+        connection: Any,
+        *,
+        manifest: Any,
+        streams: tuple[Any, ...],
+        since: Optional[str],
+        requested_stream_ids: tuple[str, ...],
+    ) -> dict[str, Any]:
+        """Dispatch declared pull streams across the connection's accounts."""
+        provider_identity = connection.provider_identity
+        run_service = self.sync_runs or SyncRunService()
+        if requested_stream_ids:
+            selected_streams = []
+            for requested_stream_id in requested_stream_ids:
+                selected = next(
+                    (stream for stream in streams if stream.stream_id == requested_stream_id),
+                    None,
+                )
+                if selected is None:
+                    return await self._fail_run(
+                        connection,
+                        run_service,
+                        None,
+                        error_code="provider_stream_not_found",
+                        detail="requested stream is not declared by the provider manifest",
+                    )
+                if "pull" not in selected.acquisition_modes:
+                    return await self._fail_run(
+                        connection,
+                        run_service,
+                        None,
+                        error_code="provider_stream_not_pullable",
+                        detail="requested stream does not declare pull acquisition",
+                    )
+                if not self._stream_is_enabled(selected, connection, manifest):
+                    return await self._fail_run(
+                        connection,
+                        run_service,
+                        None,
+                        error_code="provider_stream_inactive",
+                        detail="requested stream is not enabled by the connection configuration",
+                    )
+                selected_streams.append(selected)
+        else:
+            selected_streams = [
+                stream
+                for stream in streams
+                if "pull" in stream.acquisition_modes
+                and self._stream_is_enabled(stream, connection, manifest)
+            ]
+            if not selected_streams:
+                return {
+                    "provider_identity": provider_identity,
+                    "connection_id": connection.connection_id,
+                    "status": "skipped",
+                    "reason": "no_active_pull_streams",
+                    "stream_runs": [],
+                }
+
+        configured_accounts = list(getattr(connection, "selected_accounts", None) or [])
+        account_ids = list(dict.fromkeys(str(account_id) for account_id in configured_accounts))
+        accounts_spec = getattr(manifest, "accounts", None)
+        if not account_ids:
+            if bool(getattr(accounts_spec, "selection_required", False)):
+                return await self._fail_run(
+                    connection,
+                    run_service,
+                    None,
+                    error_code="provider_account_selection_required",
+                    detail="a selected provider account is required for stream sync",
+                )
+            account_ids = [""]
+
+        try:
+            await self._record_connection_sync_started(connection)
+        except (Exception, asyncio.CancelledError):
+            await self._record_connection_sync_failure(connection)
+            raise
+        results: list[dict[str, Any]] = []
+        for account_id in account_ids:
+            for stream in selected_streams:
+                try:
+                    result = await self.run_sync(
+                        connection,
+                        since=since,
+                        _stream_descriptor=stream,
+                        _selected_account_id=account_id,
+                    )
+                except (Exception, asyncio.CancelledError):
+                    await self._record_connection_sync_failure(connection)
+                    raise
+                results.append(
+                    {
+                        "account_id": account_id,
+                        "stream_id": stream.stream_id,
+                        "result": result,
+                    }
+                )
+        await self._record_connection_success(connection, last_sync_at=now_iso())
+        return {
+            "provider_identity": provider_identity,
+            "connection_id": connection.connection_id,
+            "status": "completed",
+            "stream_runs": results,
+        }
+
+    def _require_sync_eligible(self, connection: Any) -> None:
+        state = self._state_value(connection)
+        if state not in SYNC_ELIGIBLE_STATES:
+            raise ConnectionStateViolation(
+                f"provider sync is not allowed while connection is {state}",
+                details={
+                    "connection_id": getattr(connection, "connection_id", ""),
+                    "state": state,
+                    "eligible_states": sorted(SYNC_ELIGIBLE_STATES),
+                },
+            )
+
+    @staticmethod
+    def _state_value(connection: Any) -> str:
+        state = getattr(connection, "state", None)
+        return str(getattr(state, "value", state))
+
+    def _transition_connection(self, connection: Any, target: ConnectionState) -> bool:
+        current = ConnectionState(self._state_value(connection))
+        if current == target:
+            return False
+        from services.provider_runtime.connection import ConnectionOrchestrator
+
+        ConnectionOrchestrator(connections=self._connections()).transition(connection, target)
+        return True
+
+    async def _record_connection_sync_started(self, connection: Any) -> None:
+        """Persist INITIAL_SYNC_RUNNING before the first provider request."""
+        state = self._state_value(connection)
+        transitioned = False
+        if state == ConnectionState.SYNC_FAILED.value and not getattr(
+            connection, "last_successful_sync_at", None
+        ):
+            transitioned = self._transition_connection(
+                connection, ConnectionState.INITIAL_SYNC_PENDING
+            )
+            transitioned = (
+                self._transition_connection(connection, ConnectionState.INITIAL_SYNC_RUNNING)
+                or transitioned
+            )
+        elif state == ConnectionState.INITIAL_SYNC_PENDING.value:
+            transitioned = self._transition_connection(
+                connection, ConnectionState.INITIAL_SYNC_RUNNING
+            )
+        if transitioned:
+            await self._connections().upsert(connection)
+
+    @staticmethod
+    def _stream_is_enabled(
+        stream: StreamDescriptor,
+        connection: Any,
+        manifest: Any,
+    ) -> bool:
+        if stream.enabled_by_default:
+            return True
+        field = stream.activation_config_field
+        expected = stream.activation_config_value
+        if field is None or expected is None:
+            return False
+        config = getattr(connection, "config", None) or {}
+        if field in config:
+            actual = config[field]
+        else:
+            configuration = getattr(manifest, "configuration", None)
+            config_fields = getattr(configuration, "fields", ()) or ()
+            declared_field = next(
+                (item for item in config_fields if getattr(item, "name", None) == field),
+                None,
+            )
+            actual = getattr(declared_field, "default_value", None)
+        return actual == expected
+
+    @staticmethod
+    def _raw_record_matches_stream_scope(
+        record: Any,
+        *,
+        tenant_id: str,
+        provider_identity: str,
+        connection_id: str,
+        account_id: str,
+        stream_id: str,
+    ) -> bool:
+        return all(
+            (
+                getattr(record, "tenant_id", None) == tenant_id,
+                getattr(record, "provider_identity", None) == provider_identity,
+                getattr(record, "connection_id", None) == connection_id,
+                getattr(record, "account_id", None) == account_id,
+                getattr(record, "stream_id", None) == stream_id,
+            )
+        )
+
+    @classmethod
+    def _bind_stream_raw_records(
+        cls,
+        records: list[Any],
+        *,
+        tenant_id: str,
+        provider_identity: str,
+        connection_id: str,
+        account_id: str,
+        stream_id: str,
+    ) -> list[Any]:
+        """Bind absent scope fields and reject any provider-supplied mismatch."""
+        bound: list[Any] = []
+        for record in records:
+            if getattr(record, "provider_identity", None) != provider_identity:
+                raise ValueError("raw record provider_identity does not match the active provider")
+            expected_scope = {
+                "tenant_id": tenant_id,
+                "connection_id": connection_id,
+                "account_id": account_id,
+                "stream_id": stream_id,
+            }
+            updates: dict[str, str] = {}
+            for field, expected in expected_scope.items():
+                actual = getattr(record, field, None)
+                if actual not in (None, "", expected):
+                    raise ValueError(f"raw record {field} does not match the active stream scope")
+                if actual != expected:
+                    updates[field] = expected
+            bound.append(record.model_copy(update=updates) if updates else record)
+        return bound
+
+    @staticmethod
+    def _bind_streamless_raw_records(
+        records: list[Any],
+        *,
+        tenant_id: str,
+        provider_identity: str,
+        connection_id: str,
+        account_id: str,
+    ) -> list[Any]:
+        """Bind absent v1 scope fields and reject raw records outside the selected account."""
+        expected_scope = {
+            "tenant_id": tenant_id,
+            "connection_id": connection_id,
+            "account_id": account_id,
+        }
+        bound: list[Any] = []
+        for record in records:
+            if getattr(record, "provider_identity", None) != provider_identity:
+                raise ValueError("raw record provider_identity does not match the active provider")
+            updates: dict[str, str] = {}
+            for field, expected in expected_scope.items():
+                actual = getattr(record, field, None)
+                if actual not in (None, "", expected):
+                    raise ValueError(
+                        f"raw record {field} does not match the selected account scope"
+                    )
+                if actual != expected:
+                    updates[field] = expected
+            bound.append(record.model_copy(update=updates) if updates else record)
+        return bound
 
     def _resolve_plugin(self, provider_identity: str) -> Any:
         plugin = self._registry().get(provider_identity)
@@ -421,7 +1033,8 @@ class PullScheduler:
             return None
         try:
             return await self._broker().reveal(
-                connection.tenant_id, credential_ref,
+                connection.tenant_id,
+                credential_ref,
             )
         except Exception as exc:  # pragma: no cover - credential is best-effort
             self._warn(
@@ -450,10 +1063,10 @@ class PullScheduler:
             result = await pull.fetch(context, cursor=cursor, limit=None)
             if result.status == AdapterStatus.OK:
                 return result, retries, rate_limit_hits
-            if (
-                result.status in (AdapterStatus.RETRYABLE_ERROR, AdapterStatus.RATE_LIMITED)
-                and self.retry.should_retry(result.status, attempt=attempt)
-            ):
+            if result.status in (
+                AdapterStatus.RETRYABLE_ERROR,
+                AdapterStatus.RATE_LIMITED,
+            ) and self.retry.should_retry(result.status, attempt=attempt):
                 if result.status == AdapterStatus.RATE_LIMITED:
                     rate_limit_hits += 1
                     await self.rate_limit.on_rate_limited(
@@ -479,7 +1092,9 @@ class PullScheduler:
         return ReadBatch(**batch)  # type: ignore[arg-type]
 
     async def _normalize_records(
-        self, normalization: Any, records: list[Any],
+        self,
+        normalization: Any,
+        records: list[Any],
     ) -> list[AetherEvent]:
         if not records:
             return []
@@ -531,6 +1146,7 @@ class PullScheduler:
         retry_count: int = 0,
         rate_limit_events: int = 0,
         pages: int = 0,
+        lifecycle_started: bool = False,
     ) -> SyncRun | dict[str, Any]:
         """Close the ledger as failed, record the connection error, raise."""
         if sync_run is not None and run_service is not None:
@@ -548,12 +1164,28 @@ class PullScheduler:
                 )
             except Exception as exc:  # pragma: no cover - best-effort
                 self._warn(
-                    f"provider sync-run close(failed) failed "
-                    f"tenant={connection.tenant_id}: {exc}"
+                    f"provider sync-run close(failed) failed tenant={connection.tenant_id}: {exc}"
                 )
-        await self._record_connection_error(
-            connection, error_code=error_code, detail=detail,
-        )
+            else:
+                try:
+                    from services.identity.provider_evidence_anchors import (
+                        ProviderIdentityEvidenceAnchorRepository,
+                    )
+
+                    await ProviderIdentityEvidenceAnchorRepository().finish_lifecycle(
+                        tenant_id=connection.tenant_id,
+                        lifecycle_type="provider_sync_run",
+                        lifecycle_id=sync_run.sync_run_id,
+                        status="failed",
+                    )
+                except Exception as exc:
+                    self._warn(
+                        f"provider evidence failure transition failed "
+                        f"tenant={connection.tenant_id}: {type(exc).__name__}"
+                    )
+        if lifecycle_started:
+            await self._record_connection_sync_failure(connection)
+        await self._record_connection_error(connection, error_code=error_code, detail=detail)
         raise _pull_failed(
             f"provider sync failed for {connection.provider_identity}: {detail}",
             provider_identity=connection.provider_identity,
@@ -562,7 +1194,7 @@ class PullScheduler:
         )
 
     async def _record_connection_success(self, connection: Any, *, last_sync_at: str) -> None:
-        """Record last_successful_sync_at in place + best-effort persist.
+        """Record CONNECTED and last_successful_sync_at in place + best-effort persist.
 
         Persists through the lazy ``_connections()`` resolver so the real
         orchestration path (``PullScheduler()`` with no injected repo, which is
@@ -570,21 +1202,45 @@ class PullScheduler:
         the timestamp to the connection store — otherwise the health engine
         would read ``None`` forever after a successful sync.
         """
-        try:
-            connection.last_successful_sync_at = last_sync_at  # type: ignore[attr-defined]
-            connection.updated_at = last_sync_at  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover - read-only connection is fine
-            pass
+        state = self._state_value(connection)
+        if state in {
+            ConnectionState.INITIAL_SYNC_RUNNING.value,
+            ConnectionState.DEGRADED.value,
+            ConnectionState.SYNC_FAILED.value,
+        }:
+            self._transition_connection(connection, ConnectionState.CONNECTED)
+        connection.last_successful_sync_at = last_sync_at
+        connection.updated_at = last_sync_at
         try:
             await self._connections().upsert(connection)
         except Exception as exc:  # pragma: no cover - best-effort
             self._warn(
-                f"provider connection success record failed "
-                f"tenant={connection.tenant_id}: {exc}"
+                f"provider connection success record failed tenant={connection.tenant_id}: {exc}"
+            )
+
+    async def _record_connection_sync_failure(self, connection: Any) -> None:
+        """Move an active sync lifecycle to SYNC_FAILED and persist best-effort."""
+        state = self._state_value(connection)
+        if state not in {
+            ConnectionState.INITIAL_SYNC_RUNNING.value,
+            ConnectionState.CONNECTED.value,
+            ConnectionState.DEGRADED.value,
+        }:
+            return
+        try:
+            self._transition_connection(connection, ConnectionState.SYNC_FAILED)
+            await self._connections().upsert(connection)
+        except Exception as exc:  # preserve the original provider failure
+            self._warn(
+                f"provider connection failure state record failed tenant={connection.tenant_id}: {exc}"
             )
 
     async def _record_connection_error(
-        self, connection: Any, *, error_code: str, detail: str,
+        self,
+        connection: Any,
+        *,
+        error_code: str,
+        detail: str,
     ) -> None:
         """Best-effort in-place error counters.
 
@@ -601,6 +1257,7 @@ class PullScheduler:
 
     def _warn(self, message: str) -> None:
         from shared.logger.logger import get_logger as _get_logger
+
         _get_logger("aether.provider_runtime.scheduler").warning(message)
 
 
@@ -622,4 +1279,4 @@ def _pull_failed(
     )
 
 
-__all__ = ["ProviderCursorRepository", "PullScheduler"]
+__all__ = ["ProviderCursorRepository", "PullScheduler", "SYNC_ELIGIBLE_STATES"]

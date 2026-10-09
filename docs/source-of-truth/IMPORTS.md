@@ -110,7 +110,11 @@ staged, with lineage, into two durable places:
   `import.replay` handlers) — retryable, leased, audited — and records real
   counts; a partial failure yields `partially_committed`, never a silent success.
 - **Rollback** soft-revokes the commit's graph edges (`GraphClient.revoke_edge`)
-  and deletes its Bronze rows (`rollback_by_source_tag`). Upserted vertices
+  and deletes its Bronze rows (`rollback_by_source_tag`) using the authenticated
+  tenant and the commit's source tag. Same-tag rows owned by another tenant are
+  excluded. A rollback with more than 10,000 matching Bronze rows fails closed
+  before graph or Bronze mutation. This is still a hard delete, not a durable
+  revocation or erasure receipt. Upserted vertices
   persist — the graph client exposes no vertex delete and a vertex may be shared;
   revoking the edges disconnects the import's contribution. The source file is
   untouched, so a rolled-back import is fully re-committable via **replay**.

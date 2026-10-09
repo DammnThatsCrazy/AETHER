@@ -10,17 +10,24 @@ since_version: "0.1.0"
 
 # Connector Capability Coverage
 
-This matrix enumerates each connector subsystem's supported capabilities.
+This is an implementation inventory, not a certification report. It describes
+the current connector execution surfaces, including native UPR provider
+plugins; the repository also has specialized payment, import, SDK, and provider
+execution paths. A registered connector or declared manifest capability does
+not by itself prove sandbox operation, production availability, data authority,
+or graph projection.
 
 ## Subsystems
 
-Aether has three connector subsystems, each under `services/backend/services/`:
+Aether has multiple connector execution surfaces under
+`services/backend/services/`:
 
 | Subsystem | Path | Purpose |
 |---|---|---|
 | Integrations | `services/backend/services/integrations/connectors/` | Email and marketing platform connectors |
 | Measurement | `services/backend/services/measurement/connectors/` | Ad platform measurement connectors |
 | Derivatives | `services/backend/services/derivatives/connectors/` | Financial venue connectors |
+| Universal Provider Runtime (UPR) | `services/backend/services/provider_runtime/` and `services/backend/services/providers/` | Manifest-driven provider lifecycle, stream sync, webhook, raw storage, normalization, and replay runtime |
 
 ## Integration Connectors
 
@@ -48,20 +55,26 @@ Aether has three connector subsystems, each under `services/backend/services/`:
 
 ## Provider Plugins
 
-Provider plugins at `services/backend/services/providers/` emit through `shared/integration_contracts/normalization.py`:
+Provider plugins at `services/backend/services/providers/` normalize through
+`shared/integration_contracts/normalization.py`. The table reflects structural
+plugin capability; follow the current manifest and certification evidence for
+per-stream availability. Credentials vary by provider and profile.
 
-| Provider | Auth | Pull | Webhook | Normalizer |
+| Provider | Credential declaration | Pull | Webhook | Normalizer |
 |---|---|---|---|---|
-| Amazon | OAuth | Yes | No | `AetherEvent` via canonical contract |
-| eBay | OAuth | Yes | No | `AetherEvent` via canonical contract |
-| Etsy | OAuth | Yes | No | `AetherEvent` via canonical contract |
-| Shopify | OAuth | Yes | Yes | `AetherEvent` via canonical contract |
-| TikTok | OAuth | Yes | Yes | `AetherEvent` via canonical contract |
-| Walmart | OAuth | Yes | No | `AetherEvent` via canonical contract |
-| WooCommerce | OAuth | Yes | Yes | `AetherEvent` via canonical contract |
+| Amazon | Manifest-defined | Yes | No | `AetherEvent` via canonical contract |
+| eBay | Manifest-defined | Yes | No | `AetherEvent` via canonical contract |
+| Etsy | Manifest-defined | Yes | No | `AetherEvent` via canonical contract |
+| Shopify | API-key credential profiles for REST, REST-webhook, and GraphQL modes | Yes | Mode-gated | `AetherEvent`; GraphQL emits schema-v2 revisions, REST remains v1 |
+| TikTok | Manifest-defined | Yes | Yes | `AetherEvent` via canonical contract |
+| Walmart | Manifest-defined | Yes | No | `AetherEvent` via canonical contract |
+| WooCommerce | Manifest-defined | Yes | Yes | `AetherEvent` via canonical contract |
 
 ## Validation
 
-All connector subsystems normalize into canonical Aether contracts. The provider
-runtime enforces this through `services/backend/services/provider_runtime/validation.py` and
-`services/backend/services/provider_runtime/certification.py`.
+UPR manifest honesty and structural certification are enforced through
+`services/backend/services/provider_runtime/validation.py` and
+`services/backend/services/provider_runtime/certification.py`. Legacy
+integration, measurement, communications, import, and specialized financial
+paths retain their own adapters and persistence contracts; this validator does
+not certify those paths or prove a graph projector exists.

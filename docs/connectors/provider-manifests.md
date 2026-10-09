@@ -41,6 +41,7 @@ manifest's three identity fields must agree.
 | `accounts` | Whether account discovery and selection are supported |
 | `webhooks` | Whether webhooks are supported, whether registration is automated, and the signature verification scheme |
 | `sync` | Initial backfill, incremental sync, reconciliation, and the cursor field an incremental sync advances |
+| `streams` | Optional versioned `StreamDescriptor` inventory: stable stream ID, source object/domain, pull/webhook/report/stream modes, cursor/topics, scopes, output, classification, and authority class |
 | `data_outputs` | Canonical output streams the plugin writes to (e.g. `bronze.provider_events`) |
 | `product_destinations` | Downstream products the capability feeds |
 | `deployment` | Required environment variables, secrets, public URLs, and provider-side registration steps |
@@ -49,9 +50,19 @@ Manifest construction (`ProviderManifest(...)`) only enforces types and simple
 field bounds. `validate_manifest` enforces the §32 honesty invariants
 separately — for example: a manifest visible in an environment must claim
 `level >= 3`; a supported webhook must declare a verification scheme;
-incremental sync must declare its cursor; a secret credential field may never
+capability-level incremental sync must declare its cursor when no streams are
+listed; each declared incremental stream needs its own cursor scheme; a secret
+credential field may never
 be marked optional. This split lets tests construct a structurally-valid but
 dishonest manifest and assert the honesty gate rejects it.
+
+For a manifest with explicit streams, registration checks unique stream IDs
+and webhook topics, matching aggregate sync/webhook flags, declared OAuth
+scopes and outputs, and presence of matching plugin adapters. The runtime
+registry exposes the validated inventory via
+`ProviderRegistry.streams_for(identity_key)`. Legacy manifests return an empty
+inventory; this does not imply that their provider has no data streams.
+Declarations alone do not prove per-stream acquisition or certification.
 
 ## Certification
 
@@ -59,9 +70,9 @@ dishonest manifest and assert the honesty gate rejects it.
 set of honesty checks against a plugin and returns a `CertificationReport`.
 Checks include: identity parses and is non-empty; the manifest passes
 `validate_manifest`; the capability set is honest
-(`services/backend/services/provider_runtime/validation.py`); credential schemas never mark a
-secret field optional; `webhooks.supported` implies both a verification scheme
-and a webhook adapter; the normalizer never raises on an opaque record; auth
+(`services/backend/services/provider_runtime/validation.py`); optional secret
+fields are covered by complete mode-selected credential profiles;
+`webhooks.supported` implies both a verification scheme and a webhook adapter; the normalizer never raises on an opaque record; auth
 and pull adapters return an `AdapterResult` (never raise) for a
 no-credential context without leaking secrets; declared outputs/destinations
 are non-empty; and the claimed readiness `level` never exceeds what its

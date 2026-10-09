@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:d72649962c0bf6c89d0d86eaf6fdec3c0e0b7d7f3d6455b0b655b050da26c018"
+  "services/backend/services/": "sha256:1ec6e2a2f79ff44f7193f5165c19985169450fb7e6b008e529b29f3b42aa545f"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -204,10 +204,10 @@ signature-verification failures.
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/v1/tenants` | POST | Public tenant sign-up (programmatic / legacy path) |
-| `/v1/auth/register` | POST | Email sign-up step 1 — send OTP to the supplied email |
-| `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key |
-| `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost |
-| `/v1/auth/login` | POST | Email + password → API key (creates a new key per login) |
+| `/v1/auth/register` | POST | Email sign-up step 1 — send OTP to the supplied email (20 requests per minute per client IP; 5 codes per address per 15 minutes) |
+| `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key (20 requests per minute per client IP; 5 wrong codes per address per 15 minutes, then `429` even for the right code) |
+| `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost (same IP and per-address limits as `register`) |
+| `/v1/auth/login` | POST | Email + password → API key (creates a new key per login). Throttled: 10 attempts per minute per client IP, and 5 failed attempts per 15 minutes per address (cleared by a successful login); over either limit answers `429` |
 | `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off). An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; staging never self-provisions a tenant. A rejected token returns 400 and logs the reason (see [Access Control](ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
@@ -1252,107 +1252,9 @@ requests are rejected). All are GET-only and never mutate reward state:
 
 ## Identity Resolution
 
-### GET /v1/resolution/cluster/{user_id}
+Identity resolution is served by `/v1/identity/*` (`services/backend/services/identity/routes.py`); pending merge review is `/v1/admin/identity/review-queue`.
 
-Get the full identity cluster for a user — all merged profiles, linked devices, IPs, wallets, and emails.
-
-**Response:**
-```json
-{
-  "cluster_id": "clust-abc",
-  "canonical_user_id": "user-123",
-  "confidence": 1.0,
-  "member_count": 3,
-  "resolution_status": "auto_merged",
-  "members": [
-    { "user_id": "user-123", "role": "primary", "joined_at": "2026-01-15T..." },
-    { "user_id": "anon-456", "role": "merged", "joined_at": "2026-02-01T..." },
-    { "user_id": "anon-789", "role": "merged", "joined_at": "2026-03-01T..." }
-  ],
-  "linked_devices": [
-    { "fingerprint_id": "a1b2c3...", "first_seen": "2026-01-15T...", "observations": 47 },
-    { "fingerprint_id": "d4e5f6...", "first_seen": "2026-02-01T...", "observations": 23 }
-  ],
-  "linked_ips": [
-    { "ip_hash": "abc123...", "ip_range": "192.168.1.0/24", "observations": 120 }
-  ],
-  "linked_wallets": [
-    { "address": "0x1234...abcd", "vm": "evm", "ens": "user.eth" },
-    { "address": "7nY4...Kx3p", "vm": "svm" }
-  ],
-  "linked_emails": [
-    { "email_hash": "def456...", "domain": "gmail.com" }
-  ]
-}
-```
-
-### GET /v1/resolution/pending
-
-List pending resolution decisions awaiting admin review.
-
-**Query Parameters:** `limit` (optional, default: 50)
-
-**Response:**
-```json
-{
-  "data": [
-    {
-      "decision_id": "dec-123",
-      "profile_a_id": "user-123",
-      "profile_b_id": "anon-456",
-      "composite_confidence": 0.82,
-      "deterministic_match": false,
-      "signals": { "fingerprint": 0.85, "ip_cluster": 0.78, "location": 0.6 },
-      "created_at": "2026-03-05T12:00:00Z"
-    }
-  ]
-}
-```
-
-### POST /v1/resolution/pending/{id}/approve
-
-Admin approves a pending identity merge.
-
-### POST /v1/resolution/pending/{id}/reject
-
-Admin rejects a pending identity merge.
-
-### GET /v1/resolution/audit/{decision_id}
-
-Get the full audit trail for a resolution decision — includes all signal snapshots at decision time.
-
-### GET /v1/resolution/config
-
-Get the current resolution engine configuration.
-
-**Response:**
-```json
-{
-  "auto_merge_threshold": 0.95,
-  "review_threshold": 0.70,
-  "max_cluster_size": 50,
-  "cooldown_hours": 24,
-  "require_deterministic_for_auto": true,
-  "allow_probabilistic_auto_merge": false
-}
-```
-
-### PUT /v1/resolution/config
-
-Update resolution engine configuration thresholds.
-
-**Request:**
-```json
-{
-  "auto_merge_threshold": 0.90,
-  "review_threshold": 0.65,
-  "max_cluster_size": 100
-}
-```
-
-### POST /v1/resolution/batch
-
-Trigger a batch probabilistic matching job for the tenant.
+**Removed:** the whole `/v1/resolution/*` surface (`GET /v1/resolution/cluster/{user_id}`, `POST /v1/resolution/pending/{id}/approve`, `POST /v1/resolution/batch`, `GET /v1/resolution/pending`, `POST /v1/resolution/pending/{id}/reject`, `GET /v1/resolution/audit/{decision_id}` and `GET`/`PUT /v1/resolution/config`). It was backed by an engine and event consumer that were never registered, so it never returned data; the last three routes answered 503 and now, like the rest, answer 404 (403 `ROUTE_POLICY_UNKNOWN_ROUTE` where route-registry enforcement is on). The Aether profile page shows the canonical identity panel (`GET /v1/identity/profiles/{id}/identity/explanation`) instead of the cluster read.
 
 ---
 
@@ -1380,11 +1282,17 @@ Three service groups are available when Intelligence Graph feature flags are ena
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/onchain/actions` | Record an on-chain action |
-| GET | `/v1/onchain/actions/{agent_id}` | List agent's on-chain actions |
-| GET | `/v1/onchain/contracts/{address}` | Contract details + call graph |
+| POST | `/v1/onchain/actions` | Record a tenant-scoped on-chain action through the graph gateway; provide a stable `action_id` or `tx_hash` |
+| GET | `/v1/onchain/actions/{agent_id}` | List the authenticated tenant's agent actions; returns unavailable rather than a truncated result above the current read cap |
+| GET | `/v1/onchain/contracts/{address}` | Contract metadata and call count in the authenticated tenant; optional `chain_id` disambiguates an address on multiple chains, which otherwise returns a conflict |
 | POST | `/v1/onchain/listener/configure` | Configure chain event listener |
 | GET | `/v1/onchain/rpc/health` | RPC gateway health check |
+
+The recorder derives an action ID from tenant, chain, and transaction hash when
+`action_id` is omitted. Its schema has no log index, so multiple actions in one
+transaction need distinct stable caller-supplied IDs. A rejected gateway intent
+stops publication and returns an error; earlier intents may already have been
+applied because the action's graph mutations do not share a transaction.
 
 ### x402 Service (L3b)
 
@@ -1538,8 +1446,8 @@ credential slot must be ACTIVE, entitlement must approve).
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/lake/ingest` | Ingest provider data into Bronze tier (batch, source-tagged) |
-| POST | `/v1/lake/rollback` | Rollback records by source_tag across specified tiers |
-| GET | `/v1/lake/audit/{domain}/{source_tag}` | Query audit trail for a source_tag |
+| POST | `/v1/lake/rollback` | Roll back the authenticated tenant's records by source_tag across specified tiers; refuses over 10,000 matching rows before deleting |
+| GET | `/v1/lake/audit/{domain}/{source_tag}` | Query the authenticated tenant's Bronze records for a source_tag |
 | POST | `/v1/lake/materialize` | Write Gold metric/feature/highlight |
 | GET | `/v1/lake/gold/{domain}/{entity_id}` | Query Gold metrics for an entity |
 | GET | `/v1/lake/quality/{domain}` | Run data quality checks on a domain's Bronze tier |
@@ -1550,7 +1458,7 @@ credential slot must be ACTIVE, entitlement must approve).
 
 **Required fields for ingest:** `domain`, `source`, `source_tag`, `records[]`
 
-**Permissions:** `write` for ingest/materialize, `read` for queries, `admin` for rollback/quality
+**Permissions:** `write` for ingest/materialize, tenant-scoped `read` for queries/audit, tenant-scoped `admin` for rollback/quality
 
 ---
 
@@ -1578,7 +1486,7 @@ authenticated tenant.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). `limit` 1–200 (default 50). Non-empty results are cached for up to 5 minutes, but every newly recorded event in the tenant retires the tenant's cached results, so a new event is visible on the next read; an empty result is never cached. |
+| POST | `/v1/analytics/events/query` | Filter processed events by `event_type`, `user_id`, `canonical_entity_id`, `session_id`, and `start_date` / `end_date` (ISO-8601 date or datetime bounds on the event's occurrence time, inclusive; an unparseable bound returns 422). A canonical entity filter follows identity-observation assignments and merge lineage, including anonymous events resolved after capture. `limit` 1–200 (default 50). Non-empty results are cached for up to 5 minutes, but new event or identity ownership writes retire the tenant's cached results. |
 | GET | `/v1/analytics/events/{event_id}` | One processed event by its SDK event id |
 | GET | `/v1/analytics/dashboard/summary` | Last 24h, computed from the store: `total_events`, `total_sessions`, `unique_users` (distinct `user_id`, else `anonymous_id`), `top_event_types` (up to 10 `{event_type, count}`) |
 | POST | `/v1/analytics/graphql` | Field-selected reads (introspection disabled; up to 50 rows). `events` reads the event store (variables `event_type`, `session_id`, `user_id`). `sessions` reads the per-session rollups the projector maintains, most recently active first (variables `session_id`, `user_id`, `anonymous_id`; fields `session_id`, `user_id`, `anonymous_id`, `first_seen_at`, `last_seen_at`, `duration` in seconds, `event_count`, `page_views` (`page` and `screen` events), `last_event_type`). Device attributes are not offered because SDK `context` is never stored. `campaigns` reads the tenant's campaigns. |
@@ -1639,7 +1547,7 @@ Core identity resolution and entity management endpoints.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. A first sighting returns `create`; a `user_id` sent with a matching `anonymous_id` merges deterministically (`authenticated_user_binding`) unless a candidate holds a different user_id (conflict) |
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence. The route is disabled by default (`IDENTITY_RESOLUTION_ENABLED=false`) and is blocked unless the server finds an identity-link consent receipt for the authenticated tenant and request `anonymous_id`; a caller-supplied consent snapshot is not authorization. A `user_id` sent with a matching `anonymous_id` may merge deterministically (`authenticated_user_binding`) when auto-merge is enabled; otherwise it is a review candidate when manual review is enabled, or blocked |
 | GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
@@ -1715,12 +1623,12 @@ Unified economic observability across Web2, Web3, agentic (x402), and campaign r
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v1/profile/{entity_id}/economic` | Full economic breakdown for an entity (Web2 + Web3 + agentic + campaign) |
-| GET | `/v1/profile/{entity_id}/economic/web2` | Web2 GMV / revenue / payment volume |
-| GET | `/v1/profile/{entity_id}/economic/web3` | Web3 TVL / protocol exposure |
+| GET | `/v1/profile/{entity_id}/economic` | Economic profile: financials (PNL) and on-chain asset composition (served by the profile service) |
+| GET | `/v1/profile/{entity_id}/economic/web2` | TradFi signals; `403` without `credit` consent (profile service) |
+| GET | `/v1/profile/{entity_id}/economic/web3` | Asset composition, PNL and trading profile (profile service) |
 | GET | `/v1/profile/{entity_id}/economic/agentic` | Agentic / x402 spend, service calls, settlement success rate |
 | GET | `/v1/profile/{entity_id}/economic/campaigns` | Campaign-attributed economic value |
-| GET | `/v1/profile/{entity_id}/economic/warnings` | Entity-level data-quality warnings (mixed currency, stale prices) |
+| GET | `/v1/profile/{entity_id}/economic/warnings` | Missing, stale and contradicting dimensions for the entity (profile service) |
 | GET | `/v1/economic/overview` | Tenant economic overview (Total Value Observed, domain split) |
 | GET | `/v1/economic/warnings` | Tenant-wide economic data-quality warnings |
 
@@ -1751,8 +1659,8 @@ expose the same pattern behind their convergence flags (below):
 |--------|----------|-------------|
 | GET | `/v1/infrastructure/{subject_kind}/{subject_id}` | Run the infrastructure360 projection for the requesting tenant (summary / state / deployments / evidence / findings sections; `subject_kind` ∈ `deployment` \| `infrastructure`) |
 | GET | `/v1/infrastructure/health` | Plane probe: provider registered + contract-compatible (`availability()` only) |
-| GET | `/v1/communication360/{subject_kind}/{subject_id}` | Run the communication360 projection for the requesting tenant (information-fidelity / knowledge / authority / resolution engines over the comms canonical facts; read-only) |
-| GET | `/v1/communication360/health` | Plane probe: provider registered + contract-compatible (`availability()` only) |
+| GET | `/v1/communication360/{subject_kind}/{subject_id}` | **Not mounted in `main.py` today.** Run the communication360 projection for the requesting tenant (information-fidelity / knowledge / authority / resolution engines over the comms canonical facts; read-only) |
+| GET | `/v1/communication360/health` | **Not mounted in `main.py` today.** Plane probe: provider registered + contract-compatible (`availability()` only) |
 
 **Permissions:** `read` + the projection's `infrastructure360.read` / `communication360.read`
 capability key (fail-closed). The infrastructure360 provider reads the
@@ -1988,13 +1896,21 @@ Registry-first Web3 intelligence system with canonical chain/protocol/app/domain
 | `POST` | `/v1/web3/classify/contract` | Classify a contract address |
 | `POST` | `/v1/web3/classify/method` | Map method selector to canonical action |
 | `POST` | `/v1/web3/classify/domain` | Attribute a frontend domain |
-| `POST` | `/v1/web3/classify/observation` | Classify a full Web3 observation |
+| `POST` | `/v1/web3/classify/observation` | Classify a full Web3 observation; optional graph writes use the authenticated tenant scope |
 
 **Observation Ingestion**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/web3/observations/batch` | Bulk ingest Web3 observations (up to 500/batch) |
+| `POST` | `/v1/web3/observations/batch` | Bulk ingest Web3 observations (up to 500/batch); graph writes use the authenticated tenant scope |
+
+When graph construction is requested for an observation, the service requires
+the authenticated tenant's `write` permission and sends vertex and edge
+mutations through the canonical Graph Mutation Gateway. The single-observation,
+batch-ingestion, and migration-detection routes enforce `write` before they
+write observations or graph state; registry mutation routes enforce `write`,
+and registry seeding requires `admin`. Web3 graph object IDs are
+tenant-qualified; transaction hashes provide source-event identity when present.
 
 **Migration Tracking**
 
@@ -2202,7 +2118,7 @@ the tenant-facing `/v1/events/replay` service above. The router is mounted in
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`. |
+| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). Occurrence bounds require timezone offsets and are compared in UTC; malformed or reversed bounds fail validation, and bounded runs exclude events with unknown original times. `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`; even with the flag on, publishing is limited to an explicitly local, in-memory backend and fails closed as unavailable on hosted or durable backends. Per-row publish errors mark the run `partial`; reusing the same tenant and run ID with the same filters returns that cached result instead of silently publishing earlier rows again. This journal is process-local, not durable across restarts, and does not provide exactly-once delivery. |
 | GET | `/v1/kyber/ingest/replay/status` | Gate state: `enabled` (the `AETHER_INGESTION_REPLAY_ENABLED` kill switch), the `source_service` label replayed events carry (`ingestion.replay`), and `dry_run_default`. |
 
 ### Operator ingestion observability & SDK version tiers (WS-E, v8.12.0)
@@ -3170,11 +3086,11 @@ Feature-flagged (`AETHER_CONNECTOR_DATA_RIGHTS_ENABLED`). Tenant API key require
 | POST | `/v1/integrations/data-rights/grants/{grant_id}/revoke` | Revoke a grant (immediate denial) |
 | POST | `/v1/integrations/data-rights/policy-check` | Run a named policy check against a grant |
 
-All policy checks are fail-closed: absent an explicit grant, all use (Olympus baseline, model training, cross-tenant aggregate) is denied.
+All permission fields default to false, including tenant-lake, tenant-graph, and tenant-insights uses. A create request must explicitly grant each intended use. Grant records and append-only create/revoke lifecycle events persist through the canonical tenant-scoped rights repository; tenant grant reads and revocations are scoped in the repository itself. This persistence does not change feature-flag defaults or enable provider ingestion.
 
 ### Tenant — BYOK Key Rotate / Revoke / Verify (`/v1/providers/keys/*`)
 
-Feature-flagged (`AETHER_CONNECTOR_BYOK_ENABLED`). Tenant API key required.
+Tenant API key required.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -3226,7 +3142,7 @@ Feature-flagged (`KYBER_PROVIDER_SOURCE_CATALOG_ENABLED`). Operator permission r
 
 ### Kyber Admin — Anti-Distillation (`/v1/admin/kyber/intelligence/*`)
 
-Feature-flagged (`KYBER_ANTI_DISTILLATION_ENABLED`). Operator permission required.
+Operator permission required.
 
 Anti-distillation enforcement on intelligence query endpoints is activated by `AETHER_ANTI_DISTILLATION_ENABLED=true`. When enabled, wallet risk and profile endpoints run pattern detection (rapid diverse-query, honeypot wallet, sequential enumeration) on every request and emit audit events on suspicious activity. Honeypot wallet queries return `403 Forbidden`. Score precision is binned by plan tier (`ALPHA=0.1`, `BETA=0.05`, `GAMMA=0.01`, `DELTA/EPSILON/OMICRON/OMEGA=0.001`).
 
@@ -3503,16 +3419,32 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
 - `DELETE /v1/provider-connections/{connection_id}` — disable the connection
   (transition to `disabled`).
 - `POST /v1/provider-connections/{connection_id}/credentials` — store a structured
-  credential. Only a `credential_ref` is ever returned or stored on the connection;
+  credential under a new opaque ref scoped to that connection. Persisted legacy
+  tenant/provider refs remain resolvable for existing connections, but new writes
+  do not reuse them. Only the `credential_ref` is stored on the connection;
   secrets are never echoed.
+- `DELETE /v1/provider-connections/{connection_id}/credentials` — hard-delete
+  credential material and clear the connection's reference. Deletion is refused
+  while another connection references the same secret; otherwise the response
+  reports `credential_deleted: true` for both a newly removed and already absent
+  tenant-scoped ref. Secret material is never returned.
 - `POST /v1/provider-connections/{connection_id}/test` — live connectivity test
   through the provider's auth adapter.
 - `GET /v1/provider-connections/{connection_id}/accounts` — account discovery.
+  For Shopify GraphQL mode, the server reveals the connection's credential to
+  the adapter in memory, verifies the immutable Shop ID and live/test realm,
+  and persists only non-secret account evidence. A domain-only account is not
+  sufficient for v2 source-object mapping.
 - `POST /v1/provider-connections/{connection_id}/accounts/select` — select an
   account to scope ingestion.
 - `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
-  (optional `since` for backfill). Provider failure marks the run failed with a
-  safe error classification — never a silent empty success.
+  (optional `since` for backfill and optional `stream_ids` to select at most 32
+  unique, nonblank stream identifiers). An omitted or empty list runs all
+  active pull streams. The runtime rejects unknown, inactive, or non-pullable
+  stream selections before provider work; streamless legacy plugins reject an
+  explicit selection. Provider failure marks the run failed with a safe error
+  classification — never a silent empty success. Raw or canonical persistence
+  failure also blocks cursor advancement.
 - `GET /v1/provider-connections/{connection_id}/sync-runs` — durable sync-run
   history.
 - `POST /v1/provider-connections/{connection_id}/confirm` — server-side
@@ -3523,8 +3455,11 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   `not_found`).
 - `GET /v1/provider-connections/{connection_id}/health` — provider health report
   (state, readiness, last sync/webhook, rate-limit, error signals).
-- `GET /v1/provider-connections/{connection_id}/raw-records` — replayed raw
-  provider records from the Bronze `provider_records` store (tenant-scoped).
+- `GET /v1/provider-connections/{connection_id}/raw-records` — read raw provider
+  records from the Bronze `provider_records` store after checking connection
+  ownership. Results are filtered by tenant and provider identity because Bronze
+  currently stores these rows at that granularity; this endpoint does not run
+  replay or filter by individual connection/account.
 
 Kyber operator surface (`/v1/admin/kyber/provider-connections/*`, operator scope,
 fail-closed):
@@ -3577,16 +3512,32 @@ Public provider webhooks (`/v1/provider-webhooks/*`):
   connection's webhook secret — a signature scheme (e.g. `shopify_hmac`) requires
   a verifying signature, and `endpoint_secret` requires a caller-presented
   per-connection token that constant-time-matches the stored secret. A delivery
-  that cannot be proven is DENIED with an auditable metadata-only denial record
-  and a closed 403 — there is no "no secret ⇒ trust" path.
+  that cannot be proven is DENIED with a closed generic response — there is no
+  "no secret ⇒ trust" path. Before verification establishes tenant/connection
+  ownership, handled denials emit only a bounded-reason tenantless internal
+  metric; the public response does not reveal the reason or routing result,
+  and no tenant-scoped denial row or webhook inbox entry is created. A full
+  webhook request body is retained only after successful verification,
+  connection/account binding, and raw-rights admission. A raw-rights denial
+  retains neither the body nor a tenant-scoped raw denial record. After proof,
+  later failure evidence may be tenant-scoped metadata only when its own
+  raw-rights admission succeeds.
 
   Headers:
   - `X-Aether-Tenant-ID` — **routing hint only, not an authorization signal**;
     the connection is located by tenant + identity and verified against its own
-    secret before anything is persisted.
+    secret, connection/account binding, and raw-rights admission before an
+    inbox body is persisted.
   - `X-Signature` / `X-Aether-Signature` — provider-native signature (signature schemes).
   - `X-Aether-Webhook-Endpoint-Token` — caller-presented endpoint token
     (`endpoint_secret` schemes).
+
+The provider bridge now commits consent-admitted canonical events to typed
+Bronze and the transactional event outbox. Staging and production refuse to
+start UPR ingress with the outbox relay disabled. Tenant route records, source
+object mappings, and internal replay services do not add cutover, replay, or
+graph mutation HTTP endpoints in this branch; those operations remain gated
+until authorization, writer fencing, and projection evidence are complete.
 
 ---
 

@@ -25,15 +25,15 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
-  "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
-  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
+  "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/DECOMMISSION.md": "sha256:f1199d32b3e315cd78dcc4beaf3589ac46fc69134ea7083ce5698c270ab2f377"
   "deploy/aws/terraform/main.tf": "sha256:b587c84f2f9c697401aa41a71178866931fe593c19c121c5a1e4a4b5f330a66e"
   "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
-  "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
+  "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
-  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:4eb03ce529255774d2adb66cc8a064850447ef24193230be031ffdf90115ae45"
+  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:9137ae8d1c65b753f85662dc8cc5dd5387cf17f31ba0965f2b9b317ffc2e6c9d"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
 ---
 
@@ -391,7 +391,9 @@ lane the bootstrap route is explicitly disabled and its approved email is
 empty, so production-lean receives no staging bootstrap behavior.
 
 Pilot wake/sleep keeps each ECS capacity-provider strategy stable (FARGATE
-base 0, weight 100) and changes desired task counts plus autoscaling floors.
+base 0, weight 100) and changes desired task counts plus both autoscaling
+bounds. Asleep services use a `0..0` scaling range so target-tracking policies
+cannot revive them; the reviewed wake plan restores the declared range.
 This avoids replacement-only ECS service changes during a lifecycle transition.
 The exact plan is rejected before apply if it replaces an ECS service or
 scaling target, removes workflow-managed Application Auto Scaling tags, deletes

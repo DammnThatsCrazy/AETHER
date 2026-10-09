@@ -3,8 +3,8 @@
 The ``/v1/communication360`` router is a read-only projection surface. These
 tests pin the route shape, the health probe, the tenant read gate (fail-closed
 on a missing declared capability), and the tolerant projection-request builder.
-The router is mounted flag-gated (``AETHER_COMMUNICATION360_ENABLED``, OFF by
-default), so these tests exercise the module directly with an injected registry.
+The router is not mounted in ``main.py`` yet, so these tests exercise the module
+directly with an injected registry.
 """
 
 from __future__ import annotations

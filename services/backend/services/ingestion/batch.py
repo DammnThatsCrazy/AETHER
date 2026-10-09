@@ -40,7 +40,6 @@ from shared.common.common import (
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_producer, get_registry
-from services.identity.routes import get_identity_resolver
 
 from services.ingestion.generated_registry import (
     CANONICAL_EVENT_TYPES,
@@ -433,6 +432,7 @@ async def ingest_events(
                 normalized["sdk_tier"] = _advisory
             if server_context is not None:
                 normalized["server_context"] = server_context
+            _stamp_identity_namespace(normalized, tenant_id, declared_site)
             if settings.observation_envelope.enabled:
                 # WS-A5/WS-B1 flag-gated adoption (default OFF). Builds the
                 # canonical Envelope-B observation for this accepted SDK event
@@ -544,33 +544,6 @@ async def ingest_events(
 
         schedule_install_projection(tenant_id, accepted_raw, declared_site)
 
-    # ── Identity resolution (fire-and-forget, non-blocking) ────────────────
-    # Run after Bronze durability is confirmed. Resolution errors never fail
-    # ingestion — events are already durable and recoverable via recompute.
-    if accepted_raw:
-        import asyncio as _asyncio
-        resolver = get_identity_resolver()
-        for normalized in accepted_raw:
-            task = _asyncio.create_task(
-                _resolve_identity_safe(resolver, normalized, tenant_id)
-            )
-
-            def _log_task_exc(
-                t: "_asyncio.Task",
-                _tid: str = tenant_id,
-                _eid: str = normalized.get("event_id", ""),
-            ) -> None:
-                if t.cancelled():
-                    return
-                exc = t.exception()
-                if exc:
-                    logger.error(
-                        "Identity resolution task failed event=%s tenant=%s: %s",
-                        _eid, _tid, exc,
-                    )
-
-            task.add_done_callback(_log_task_exc)
-
     # ── Atomic idempotency claim AFTER Bronze write, BEFORE bus publish ───
     # Build a lookup from event_id → index in results so we can update in-place.
     event_id_to_result_idx: dict[str, int] = {}
@@ -586,8 +559,31 @@ async def ingest_events(
         cache_key = f"aether:idempotency:{idempotency_key}"
         try:
             claimed = await registry.cache.set_nx(cache_key, "1", ttl=TTL.DAY)
-        except Exception:
-            claimed = True  # allow on cache error
+        except Exception as exc:
+            # Canonical identify resolution can mutate source-identity claims
+            # and merge decisions. Do not bypass the only V1 event-ID dedupe
+            # guard for those events when its cache is unavailable.
+            if raw.get("event_type") == "identify":
+                logger.error(
+                    "Identify idempotency claim unavailable event_id=%s tenant=%s: %s",
+                    raw.get("event_id", ""), tenant_id, exc,
+                )
+                # Nothing in this request has been published yet. Release
+                # earlier claims so a retry can publish those events instead
+                # of treating them as duplicates.
+                for claimed_key in claimed_keys:
+                    try:
+                        await registry.cache.delete(claimed_key)
+                    except Exception:
+                        logger.warning(
+                            "Could not release batch idempotency claim key=%s",
+                            claimed_key,
+                            exc_info=True,
+                        )
+                raise ServiceUnavailableError(
+                    "Identity ingestion temporarily unavailable — please retry"
+                ) from exc
+            claimed = True  # preserve legacy fail-open behavior for other types
         if claimed:
             claimed_keys.append(cache_key)
             final_accepted_events.append(event)
@@ -627,6 +623,10 @@ async def ingest_events(
             raise ServiceUnavailableError(
                 "Ingestion temporarily unavailable — please retry"
             )
+
+    # Identity resolution is consumed from SDK_EVENTS_VALIDATED by the
+    # identity-worker role. V1 and V2 therefore share broker retry and replay
+    # semantics; never launch request-local resolver work here.
 
     # ── Tally results ─────────────────────────────────────────────────────
     n_accepted = sum(1 for r in results if r.status == "accepted")
@@ -787,6 +787,7 @@ async def _ingest_batch_v2(
             normalized["sdk_tier"] = _advisory
         if server_context is not None:
             normalized["server_context"] = server_context
+        _stamp_identity_namespace(normalized, tenant.tenant_id, declared_site)
 
         entity_id = normalized.get("user_id") or normalized.get("anonymous_id", "")
         candidates.append(BronzeSDKEvent(
@@ -1143,26 +1144,18 @@ def _strip_canonical_entity_id(obj: Any) -> Any:
     return obj
 
 
-async def _resolve_identity_safe(resolver, normalized: dict, tenant_id: str) -> None:
-    """Run identity resolution without propagating exceptions to the ingestion path."""
-    try:
-        from services.identity.schemas import IdentityResolveRequest
-        req = IdentityResolveRequest(
-            event_id=normalized["event_id"],
-            tenant_id=tenant_id,
-            user_id=normalized.get("user_id"),
-            anonymous_id=normalized.get("anonymous_id"),
-            session_id=normalized.get("session_id"),
-            properties=normalized.get("properties") or {},
-            context=normalized.get("context") or {},
-        )
-        await resolver.resolve_event(req.model_dump(), tenant_id)
-    except Exception as exc:
-        logger.warning(
-            "Identity resolution failed for event %s (tenant=%s): %s",
-            normalized.get("event_id"), tenant_id, exc,
-        )
-        metrics.increment("identity_resolve_error_total")
+def _stamp_identity_namespace(
+    normalized: dict[str, Any], tenant_id: str, declared_site: Optional[str]
+) -> None:
+    """Stamp the authenticated site as identity scope; discard caller scope."""
+    context = dict(normalized.get("context") or {})
+    # The route policy requires X-Aether-Site to match the publishable key's
+    # site binding. Secret tenant-wide keys have no site binding, so they use a
+    # tenant-local namespace. Never read identity scope from SDK context.
+    context["identity_namespace"] = (
+        f"site:{declared_site}" if declared_site else f"tenant:{tenant_id}"
+    )
+    normalized["context"] = context
 
 
 def _scrub_sensitive_fields(

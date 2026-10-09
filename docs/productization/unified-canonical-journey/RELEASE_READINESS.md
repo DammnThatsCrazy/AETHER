@@ -8,11 +8,11 @@ status: stable
 since_version: 0.1.0
 source_files: [services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/routes/journeys.py, services/backend/services/measurement/routes/kyber.py, frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx, frontend/kyber/src/pages/measurement/journey-explorer-page.tsx]
 source_hashes:
-  services/backend/services/measurement/engine/journey_compiler.py: sha256:53c760d1ef1a8c9efdd63665039287f033904f4c29e665341ffc6e5efdd40b4e
-  services/backend/services/measurement/routes/journeys.py: sha256:a7ad8d25a2fdfca0c105cd75e2a30429eb7f0043092f5e30f09f91c023f9995c
-  services/backend/services/measurement/routes/kyber.py: sha256:c1676ae3c3dd86f71404f94dfaa08cd7a63772526bf0e7869fc6eed92f5ab0c7
-  frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx: sha256:86c800647910e475576cfd992419c080885fd36c892f11e5a60d5f0cafc087ba
-  frontend/kyber/src/pages/measurement/journey-explorer-page.tsx: sha256:3972c57f24822589bc1cb1b56453bde92ee4c8b071730063f4913a7f702664e6
+  "frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx": "sha256:86c800647910e475576cfd992419c080885fd36c892f11e5a60d5f0cafc087ba"
+  "frontend/kyber/src/pages/measurement/journey-explorer-page.tsx": "sha256:3972c57f24822589bc1cb1b56453bde92ee4c8b071730063f4913a7f702664e6"
+  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:8727689ddad81c0b06586c538e445d1dafb0cb27ba1cd5e7b3a6c1b3c69ecf7b"
+  "services/backend/services/measurement/routes/journeys.py": "sha256:a7ad8d25a2fdfca0c105cd75e2a30429eb7f0043092f5e30f09f91c023f9995c"
+  "services/backend/services/measurement/routes/kyber.py": "sha256:c1676ae3c3dd86f71404f94dfaa08cd7a63772526bf0e7869fc6eed92f5ab0c7"
 ---
 
 # Release Readiness — Unified Canonical Journey
@@ -63,5 +63,5 @@ and a passing canonical `make release-gate` scorecard for the release candidate.
 
 - `rebuild_queue_depth` and `web3_finality_backlog` in `/v1/kyber/measurement/journey-health` return `null` until a dedicated queue/counter is wired to the metrics module.
 - The virtualized timeline (`@tanstack/react-virtual`) requires the npm lockfile to be updated after the first `npm ci` run that resolves the new dependency.
-- The journey compiler's `_MAX_STEPS = 2000` bound prevents runaway compiles; high-activity profiles require the configurable window to be raised with an ops override.
+- The journey compiler applies a fixed `_MAX_JOURNEY_STEPS = 2000` input limit. Raising it requires a code change; this source does not expose an ops override.
 - Source classification repair is tenant-scoped and durable, but large repair batches can create attribution recompute load that requires operator monitoring.

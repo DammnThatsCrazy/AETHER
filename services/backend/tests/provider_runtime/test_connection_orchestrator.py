@@ -11,7 +11,11 @@ from pydantic import SecretStr
 from repositories.repos import reset_in_memory_stores
 from shared.credentials.in_memory import InMemoryCredentialBackend
 from shared.credentials.service import CredentialService
-from shared.credentials.types import ApiKeyCredential
+from shared.credentials.types import (
+    ApiKeyCredential,
+    ApiKeyWebhookSecretCredential,
+    OAuthTokenCredential,
+)
 from shared.integration_contracts.lifecycle import ConnectionState, can_transition
 from shared.integration_contracts.results import AdapterResult
 
@@ -25,6 +29,7 @@ from services.provider_runtime.errors import (
     ConnectionStateViolation,
     PluginIncompatible,
     ProviderNotInstalled,
+    ProviderRuntimeError,
 )
 
 
@@ -79,7 +84,9 @@ async def test_create_connection_defaults_to_available(orchestrator: ConnectionO
 
 
 @pytest.mark.asyncio
-async def test_create_connection_is_persisted(orchestrator: ConnectionOrchestrator, connections: ProviderConnectionRepository):
+async def test_create_connection_is_persisted(
+    orchestrator: ConnectionOrchestrator, connections: ProviderConnectionRepository
+):
     conn = await orchestrator.create_connection(
         tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
     )
@@ -92,6 +99,7 @@ async def test_create_connection_is_persisted(orchestrator: ConnectionOrchestrat
 @pytest.mark.asyncio
 async def test_store_credential_moves_to_credentials_received(
     orchestrator: ConnectionOrchestrator,
+    broker: CredentialBroker,
 ):
     conn = await orchestrator.create_connection(
         tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
@@ -99,10 +107,68 @@ async def test_store_credential_moves_to_credentials_received(
     cred = ApiKeyCredential(api_key=SecretStr("sk_live_abc"))
     updated = await orchestrator.store_credential(conn, cred)
 
-    assert updated.credential_ref == "provider:tenant-1:shopify.orders.catalog"
+    assert updated.credential_ref == broker.provider_ref(
+        "tenant-1",
+        "shopify.orders.catalog",
+        connection_id=conn.connection_id,
+    )
     assert updated.state == ConnectionState.CREDENTIALS_RECEIVED
     # Ref is stored, secret is not.
     assert "sk_live_abc" not in updated.credential_ref
+
+
+@pytest.mark.asyncio
+async def test_delete_credential_hard_deletes_backend_secret_and_clears_ref(
+    orchestrator: ConnectionOrchestrator,
+    broker: CredentialBroker,
+):
+    conn = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    await orchestrator.store_credential(
+        conn, ApiKeyCredential(api_key=SecretStr("staging-secret-value"))
+    )
+    ref = conn.credential_ref
+    assert await broker.resolve("tenant-1", ref) is not None
+
+    assert await orchestrator.delete_credential(conn) is True
+    assert conn.credential_ref == ""
+    assert await broker.resolve("tenant-1", ref) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_credential_is_idempotent_when_backend_ref_is_absent(
+    orchestrator: ConnectionOrchestrator,
+):
+    conn = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    assert await orchestrator.delete_credential(conn) is False
+    assert conn.credential_ref == ""
+
+
+@pytest.mark.asyncio
+async def test_delete_credential_refuses_to_break_another_connection(
+    orchestrator: ConnectionOrchestrator,
+    connections: ProviderConnectionRepository,
+    broker: CredentialBroker,
+):
+    first = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    await orchestrator.store_credential(
+        first, ApiKeyCredential(api_key=SecretStr("shared-secret"))
+    )
+    second = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    second.credential_ref = first.credential_ref
+    await connections.upsert(second)
+
+    with pytest.raises(ProviderRuntimeError, match="shared with another connection"):
+        await orchestrator.delete_credential(first)
+    assert first.credential_ref
+    assert await broker.resolve("tenant-1", first.credential_ref) is not None
 
 
 @pytest.mark.asyncio
@@ -116,6 +182,80 @@ async def test_store_credential_resolves_through_broker(
     resolved = await orchestrator.broker.resolve(conn.tenant_id, conn.credential_ref)
     assert resolved is not None
     assert resolved.api_key.get_secret_value() == "sk_live_abc"
+
+
+@pytest.mark.asyncio
+async def test_same_tenant_provider_connections_keep_credentials_independent(
+    orchestrator: ConnectionOrchestrator,
+    connections: ProviderConnectionRepository,
+):
+    connection_a = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.admin.orders_read"
+    )
+    connection_b = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.admin.orders_read"
+    )
+    oauth_credential = OAuthTokenCredential(
+        access_token=SecretStr("oauth-access-store-a"),
+        refresh_token=SecretStr("oauth-refresh-store-a"),
+    )
+    api_credential = ApiKeyWebhookSecretCredential(
+        api_key=SecretStr("api-key-store-b"),
+        webhook_secret=SecretStr("webhook-secret-store-b"),
+    )
+
+    await orchestrator.store_credential(connection_a, oauth_credential)
+    await orchestrator.store_credential(connection_b, api_credential)
+
+    persisted_a = await connections.find(connection_a.connection_id)
+    persisted_b = await connections.find(connection_b.connection_id)
+    assert persisted_a is not None and persisted_b is not None
+    assert persisted_a.credential_ref != persisted_b.credential_ref
+    resolved_a = await orchestrator.broker.resolve(
+        persisted_a.tenant_id, persisted_a.credential_ref
+    )
+    resolved_b = await orchestrator.broker.resolve(
+        persisted_b.tenant_id, persisted_b.credential_ref
+    )
+    assert isinstance(resolved_a, OAuthTokenCredential)
+    assert resolved_a.access_token.get_secret_value() == "oauth-access-store-a"
+    assert resolved_a.refresh_token.get_secret_value() == "oauth-refresh-store-a"
+    assert isinstance(resolved_b, ApiKeyWebhookSecretCredential)
+    assert resolved_b.api_key.get_secret_value() == "api-key-store-b"
+    assert resolved_b.webhook_secret.get_secret_value() == "webhook-secret-store-b"
+    await orchestrator.broker.revoke(persisted_a.tenant_id, persisted_a.credential_ref)
+    assert (
+        await orchestrator.broker.resolve(persisted_a.tenant_id, persisted_a.credential_ref) is None
+    )
+    still_resolved_b = await orchestrator.broker.resolve(
+        persisted_b.tenant_id, persisted_b.credential_ref
+    )
+    assert isinstance(still_resolved_b, ApiKeyWebhookSecretCredential)
+    assert still_resolved_b.webhook_secret.get_secret_value() == "webhook-secret-store-b"
+
+
+@pytest.mark.asyncio
+async def test_existing_legacy_connection_ref_remains_resolvable(
+    orchestrator: ConnectionOrchestrator,
+    connections: ProviderConnectionRepository,
+):
+    legacy_ref = orchestrator.broker.provider_ref("tenant-1", "shopify.admin.orders_read")
+    await orchestrator.broker.store(
+        "tenant-1",
+        legacy_ref,
+        ApiKeyCredential(api_key=SecretStr("legacy-shop-token")),
+    )
+    connection = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.admin.orders_read"
+    )
+    connection.credential_ref = legacy_ref
+    await connections.upsert(connection)
+    auth = _FakeAuth()
+
+    await orchestrator.test_connection(connection, plugin=_FakePlugin(auth=auth))
+
+    assert auth.calls[0].credential is not None
+    assert auth.calls[0].credential.api_key.get_secret_value() == "legacy-shop-token"
 
 
 @pytest.mark.asyncio
@@ -189,9 +329,11 @@ async def test_test_connection_plugin_without_auth_is_incompatible(
     conn = await orchestrator.create_connection(
         tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
     )
+
     class _NoAuthPlugin:
         def auth(self):
             return None
+
     with pytest.raises(PluginIncompatible):
         await orchestrator.test_connection(conn, plugin=_NoAuthPlugin())
 
@@ -256,13 +398,53 @@ async def test_run_sync_delegates_to_pull_scheduler(orchestrator: ConnectionOrch
             captured["since"] = since
             return {"status": "completed"}
 
-    with mock.patch(
-        "services.provider_runtime.scheduler.PullScheduler", _FakeScheduler
-    ):
+    with mock.patch("services.provider_runtime.scheduler.PullScheduler", _FakeScheduler):
         result = await orchestrator.run_sync(conn, since="2026-08-08T00:00:00+00:00")
 
     assert captured["connection_id"] == conn.connection_id
     assert captured["since"] == "2026-08-08T00:00:00+00:00"
+    assert result == {"status": "completed"}
+
+
+@pytest.mark.asyncio
+async def test_run_sync_forwards_explicit_stream_id(orchestrator: ConnectionOrchestrator):
+    conn = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    captured: dict = {}
+
+    class _FakeScheduler:
+        async def run(self, *, connection, since=None, stream_id=None):
+            captured["connection_id"] = connection.connection_id
+            captured["stream_id"] = stream_id
+            return {"status": "completed"}
+
+    with mock.patch("services.provider_runtime.scheduler.PullScheduler", _FakeScheduler):
+        result = await orchestrator.run_sync(conn, stream_id="orders")
+
+    assert captured["connection_id"] == conn.connection_id
+    assert captured["stream_id"] == "orders"
+    assert result == {"status": "completed"}
+
+
+@pytest.mark.asyncio
+async def test_run_sync_forwards_stream_id_list(orchestrator: ConnectionOrchestrator):
+    conn = await orchestrator.create_connection(
+        tenant_id="tenant-1", provider_identity="shopify.orders.catalog"
+    )
+    captured: dict = {}
+
+    class _FakeScheduler:
+        async def run(self, *, connection, since=None, stream_id=None, stream_ids=None):
+            captured["connection_id"] = connection.connection_id
+            captured["stream_ids"] = stream_ids
+            return {"status": "completed"}
+
+    with mock.patch("services.provider_runtime.scheduler.PullScheduler", _FakeScheduler):
+        result = await orchestrator.run_sync(conn, stream_ids=["orders", "refunds"])
+
+    assert captured["connection_id"] == conn.connection_id
+    assert captured["stream_ids"] == ["orders", "refunds"]
     assert result == {"status": "completed"}
 
 

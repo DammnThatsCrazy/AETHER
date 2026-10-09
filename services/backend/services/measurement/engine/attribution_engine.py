@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from services.attribution.models import Touchpoint
 from services.attribution.resolver import AttributionConfig, AttributionResolver
@@ -63,6 +63,7 @@ class AttributionEngine:
         fraud_policy: Optional[str] = None,
         trigger_reason: Optional[str] = None,
         source_classifier_version: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run attribution for one conversion and persist the result.
 
@@ -75,6 +76,18 @@ class AttributionEngine:
             raise ValueError(f"Conversion {conversion_id} not found for tenant {tenant_id}")
         if not conversion.get("attribution_eligible", True):
             raise ValueError(f"Conversion {conversion_id} is not attribution-eligible")
+
+        stable_run_id = None
+        if idempotency_key:
+            stable_run_id = str(uuid5(
+                NAMESPACE_URL,
+                f"aether:attribution:{tenant_id}:{conversion_id}:{idempotency_key}",
+            ))
+            existing_idempotent_run = await self._run_repo.get_run(
+                stable_run_id, tenant_id=tenant_id
+            )
+            if existing_idempotent_run and existing_idempotent_run.get("status") == "complete":
+                return existing_idempotent_run
 
         prior_run = await self._run_repo.get_active_run(tenant_id, conversion_id)
         effective_model = model_type or (
@@ -154,6 +167,7 @@ class AttributionEngine:
 
         # 2. Create pending run
         run = await self._run_repo.create_run({
+            **({"attribution_run_id": stable_run_id} if stable_run_id else {}),
             "tenant_id": tenant_id,
             "conversion_id": conversion_id,
             "model_type": effective_model,

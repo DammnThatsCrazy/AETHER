@@ -50,13 +50,13 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-business-hours.yml": "sha256:1c98e9019319d685635b04c4131abb01020700719cedd8e82342d27103bc660a"
-  ".github/workflows/staging-lifecycle.yml": "sha256:2dcb69dca4c0f699dd67e6e9a519acfc6430b941bdfb0cd6361eab7574210352"
+  ".github/workflows/staging-business-hours.yml": "sha256:952bc0b2d3b975491df69df71000d04988fc6a087a3f98896f59052b19848247"
+  ".github/workflows/staging-lifecycle.yml": "sha256:91b3012ba7e1985bd5ea5731ee31d3f3ced51bb9b40807420d2b62f0a6077c8f"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:506e98c36a7d2b280a1e00397c9b8afe3c170c4d77b57e79ab36ddc88a664a8f"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:6db80a1a80262cc60923789c40b233659f495dd026d54585bf20c61db36ddcb2"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
-  "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
-  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
+  "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
@@ -65,7 +65,7 @@ source_hashes:
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
-  "deploy/aws/terraform/profiles.tf": "sha256:be5cedd8602afe2450d53747e0d17f34817435939880a57b20e2b7fd4c50e3a0"
+  "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:13bfa71ca795f6920b6e41eb844bfd6cecb6c6d34c326d69af2a0209eb52003f"
   "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
@@ -105,31 +105,33 @@ against `config/runtime_deployment.yaml` →
 `profiles.staging.staging_state.states.<state>.desired_count_multiplier`
 (`awake: 1`, `asleep: 0`).
 
-`profiles.tf` applies that multiplier to task count and autoscaling floor for
-both lanes:
+`profiles.tf` applies that multiplier to task count and both autoscaling bounds
+for both lanes:
 
 - `desired_count`
 - the autoscaling **floor** (`min_capacity`)
+- the autoscaling **ceiling** (`max_capacity`)
 
-The autoscaling ceiling (`max_capacity`) is deliberately unchanged; it is the
-static safety bound, not current capacity. In the full lane, Terraform also
-scales the capacity provider's guaranteed `base_count`. The **pilot** lane
-instead pins `base_count = 0` for both awake and asleep states: staging uses a
-single FARGATE provider at weight 100, so `desired_count` alone controls task
-capacity. This stable strategy is important because the AWS Terraform provider
-marks changes to `aws_ecs_service.capacity_provider_strategy` as
-replacement-only. Pilot plan policy fails before apply if an ECS service or
-scaling target would be replaced, scaling-target tags would be removed, an
-Aether Auth0 resource would be deleted, or a deferred Auth0 surface would be
-mutated.
+The awake values define the reviewed capacity envelope. In the asleep state,
+both autoscaling bounds become zero so queue or request metrics cannot scale a
+service back out. The reviewed wake plan restores the declared awake bounds. In
+the full lane, Terraform also scales the capacity provider's guaranteed
+`base_count`. The **pilot** lane instead pins `base_count = 0` for both awake
+and asleep states: staging uses a single FARGATE provider at weight 100, so
+`desired_count` alone controls task capacity. This stable strategy is important
+because the AWS Terraform provider marks changes to
+`aws_ecs_service.capacity_provider_strategy` as replacement-only. Pilot plan
+policy fails before apply if an ECS service or scaling target would be
+replaced, scaling-target tags would be removed, an Aether Auth0 resource would
+be deleted, or a deferred Auth0 surface would be mutated.
 
 The floor and pilot's stable strategy are not decoration. The `api` service's
 `desired_count` is `ignore_changes`d in `modules/ecs` so an apply cannot fight
 Application Auto Scaling mid-scale-out; on an already-applied workspace the
 scaling target is the only lever that still reaches a running service. So
-`asleep` has to set desired count and autoscaling floor to zero. Pilot's
-capacity-provider base stays zero in both states; `max_capacity` stays at the
-reviewed ceiling. For the full lane, a guaranteed on-demand floor of 1
+`asleep` has to set desired count and both autoscaling bounds to zero. Pilot's
+capacity-provider base stays zero in both states; waking restores the reviewed
+`max_capacity` ceiling. For the full lane, a guaranteed on-demand floor of 1
 contradicts a desired count of 0; `scripts/release/check_delivery_topology.py`
 rejects `base_count > desired_count`.
 
@@ -421,6 +423,15 @@ guard still scales staging to zero if a sleep is missed.
 For a demo outside these hours, dispatch the workflow with
 `transition=wake`, and later `transition=sleep`.
 
+**Holding the scheduled wake.** While the repository variable
+`STAGING_WAKE_HOLD` is `true`, the 08:15 timer skips its wake and reports a
+notice, so a new release on `main` is not deployed to staging by the schedule.
+The 17:00 sleep is never held, and a manual dispatch with `transition=wake` is
+never held. Unset the variable or set it to anything other than `true` to
+resume the weekday wake. Separately, `deploy.yml` only mutates ECS on a push to
+`main` when `STAGING_RUNTIME_ENABLED` is `true`; a push otherwise builds the
+release without rolling it out.
+
 ## The TTL guard
 
 `.github/workflows/staging-ttl-guard.yml` runs **hourly at minute 17 UTC** and
@@ -446,8 +457,8 @@ it:
 - It **never runs Terraform** and **never dispatches a reviewed apply**.
   `terraform-promote.yml` is `workflow_dispatch`-only precisely so no timer can
   reach an apply.
-- Its only enforcement is an ECS scale-to-zero plus zeroing Application Auto
-  Scaling floors — operations that can only *reduce* compute.
+- Its only enforcement is ECS scale-to-zero plus clamping staging Application
+  Auto Scaling bounds to `0..0` — operations that can only *reduce* compute.
 - **A missing, empty, unparseable or `None` lease is treated as expired.** So is
   a lease more than `MAX_TOTAL_AWAKE_HOURS` (12 h) in the future.
 - On a scheduled run the mode is forced to `enforce`; it cannot degrade to
@@ -471,20 +482,20 @@ gh workflow run staging-ttl-guard.yml -f mode=enforce
 When enforcement fires it, in order: refuses to act unless the cluster is
 literally `AETHER-staging`; checks the exact scalable-target set and ownership
 tags; sets every service's `--desired-count 0`; registers every matching
-scalable target at `--min-capacity 0`; deletes the lease; then re-reads the
-cluster to compute residual tasks. Task counts come from the projected
+scalable target at `--min-capacity 0 --max-capacity 0`; deletes the lease; then
+re-reads the cluster to compute residual tasks. Task counts come from the projected
 `taskArns[]` list, never the length of the raw `list-tasks` response object,
 which is always 1 and once made every run report a phantom residual task.
 Conflicting or missing target tags never
 produce a false green: the guard still attempts ECS scale-to-zero and task
-stopping, while failed autoscaling-floor enforcement remains visible. Missing
+stopping, while failed autoscaling-bound enforcement remains visible. Missing
 tags are repaired only by the reviewed Terraform apply path, which verifies
 them after applying.
 
 **A successful enforcement makes the run red on purpose.** The guard emits an
 error telling the operator to run `staging-lifecycle.yml` with
 `action: apply-sleep` to reconcile Terraform state, because the guard changed
-live desired counts and autoscaling floors *outside* Terraform. A green TTL
+live desired counts and autoscaling bounds *outside* Terraform. A green TTL
 guard run means nothing needed doing; a red one is either "I cleaned up after
 you, now reconcile" or "I could not clean up, intervene manually".
 
@@ -629,6 +640,16 @@ Steps, in order, with what each proves:
    by data subject and answers `200 {"consent": null}` for unknown subjects, so
    a bare 200 is not itself a breach.) An unauthenticated `/v1/me` must fail
    closed.
+
+   The rehearsal then provisions a run-scoped publishable web key and provider
+   connection and runs ten live, tenant-authenticated identity-continuity
+   scenarios: import-first/SDK-later, shared-device non-merge, bad-merge split,
+   agent/person separation, shared-email review, cross-tenant blocking,
+   deleted/suppressed identity blocking, multi-SDK same-user, connector
+   reimport idempotency, and projection restatement. It also runs fixture-backed
+   and authenticated live Playwright identity UI evidence. The capture process
+   redacts API transcripts before recording them and packages the scenario and
+   UI results as a retained proof artifact.
 8. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
    `scripts/smoke_test.py` (the tenant key covers data-plane checks; the
    encrypted durable `STAGING_ADMIN_API_KEY` (`ak_` plus 24 alphanumeric
@@ -672,9 +693,11 @@ Steps, in order, with what each proves:
     public ingest identifiers before deleting or deactivating the tenant. A
     successful DELETE must return a `cleanup_complete` receipt after erasing
     every rehearsal surface (consent/DSR and propagation indexes, feed and SDK
-    Bronze/Silver/Gold records, analytics, profiles, and graph projection);
-    billing and security-audit evidence retained by policy is detached rather
-    than silently claimed erased. Marker IDs are validated and cleanup refuses
+    Bronze/Silver/Gold records, analytics, profiles, graph projection, and
+    identity scenario execution evidence); billing and security-audit evidence
+    retained by policy is detached rather than silently claimed erased. The
+    workflow uploads redacted scenario transcripts before deleting the
+    tenant-bound evidence rows. Marker IDs are validated and cleanup refuses
     to guess when a marker is malformed or absent. Cleanup attempts every
     recorded tenant even if one delete and its deactivation fallback fail, then
     fails the step with the complete list of failures; neither operation may
@@ -704,9 +727,9 @@ at the end.
    the expected map must be **all zero** (a non-zero expected count means the
    `asleep` multiplier itself has drifted); the planned counts must equal it
    exactly; and **every** Application Auto Scaling target in the plan must have
-   a floor of 0 or null — `asleep plan leaves an autoscaling floor of N` is a
-   failure. Enabled EventBridge/Scheduler rules are collected and printed but
-   do not fail.
+   both `min_capacity` and `max_capacity` at 0. A non-zero bound fails the
+   guard. Enabled EventBridge/Scheduler rules are collected and printed but do
+   not fail.
 5. **Apply the reviewed sleep plan** when `action=apply-sleep` or
    `full-rehearsal`. A non-success conclusion here is a **warning**, not a
    failure, precisely so the last-resort stop below still runs.
@@ -714,8 +737,8 @@ at the end.
 ### Fail-safe cleanup
 
 If staging was not already at zero and the reviewed sleep apply did not
-succeed, the last-resort cost stop runs. It scales services down, lowers the
-matching autoscaling floors through the reviewed lifecycle permissions, and
+succeed, the last-resort cost stop runs. It scales services down, clamps the
+matching autoscaling bounds to zero through the reviewed lifecycle permissions, and
 stops every remaining running or pending ECS task in the staging cluster:
 
 ```bash
@@ -731,19 +754,18 @@ done
 for target in "${targets[@]}"; do   # exact service/AETHER-staging/ targets only
   aws application-autoscaling register-scalable-target --service-namespace ecs \
     --scalable-dimension ecs:service:DesiredCount --resource-id "$target" \
-    --min-capacity 0
+    --min-capacity 0 --max-capacity 0
 done
 ```
 
-Only the floor is lowered. `max_capacity` stays at the reviewed ceiling: the
-pilot wake policy rejects any ceiling change as autoscaling shape drift, so a
-cost stop that clamped it would make the next wake plan unapplyable. An
-unreadable autoscaling namespace fails the step rather than leaving a floor
-that could revive staging.
+Both bounds are set to zero. The pilot wake plan restores the declared awake
+ceiling and floor; an unreadable autoscaling namespace fails the step rather
+than leaving a non-zero bound that could revive or scale out staging.
 
-It reduces only and never provisions. Any force-stop or floor change is called
+It reduces only and never provisions. Any force-stop or bounds change is called
 out as outside-Terraform state that requires a later reviewed reconciliation;
-the residual check below still fails if a floor, service, or task remains.
+the residual check below still fails if either bound, a service, or a task
+remains.
 
 The stop also fires on a plain `plan-sleep` run whenever staging was not
 already at zero, because there is no apply conclusion to succeed.
@@ -758,7 +780,8 @@ the `AETHER-staging` cluster:
   any of the three non-zero fails the job.
 - **Application Auto Scaling scalable targets** in the `ecs` namespace whose
   `ResourceId` contains `AETHER-staging`, written to
-  `artifacts/sleep/autoscaling.json`. Any non-zero `MinCapacity` fails the job.
+  `artifacts/sleep/autoscaling.json`. Any non-zero `MinCapacity` or
+  `MaxCapacity` fails the job.
 
 It then prices the residue: task sizes come from
 `config/runtime_deployment.yaml`, rates from `config/aws_price_book.yaml`
@@ -767,7 +790,7 @@ It then prices the residue: task sizes come from
 `residual_cost_usd_per_hour`.
 
 **Known scope limit.** Residue detection covers ECS services, running/pending
-ECS tasks, and ECS autoscaling floors. EC2 instances, RDS, NAT Gateways and
+ECS tasks, and ECS autoscaling bounds. EC2 instances, RDS, NAT Gateways and
 Elastic IPs are not inspected by the sleep job; staging's `nat_mode` is `none`
 and Aurora auto-pauses at 0 ACU. A task that cannot be enumerated or described
 is an unknown-state failure, not an asleep result.
@@ -780,8 +803,11 @@ bundle.
 | Artifact | Contents | Retention |
 |---|---|---|
 | `staging-wake-plan-validation-<run_id>` | `artifacts/wake-plan-policy.txt`, `artifacts/wake-plan-cost.txt`, `artifacts/profile-resource-inventory.json` | 14 days |
-| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — `bootstrap-marker.json`, `registration-marker.json`, `static-origin-verification.txt`, `migrations.txt`, `ready.json`, `tenant.json`, `capability-matrix.json`, `capabilities.json`, `smoke.txt`, `data-truth.txt`, `load.json`, `load.txt`, `rollback.txt`, `ecs-services.json`, `log-groups.json`, `metrics.json`, `release.json`, `cost.txt` | 30 days |
+| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — including identity scenario transcripts, redacted identity capture, UI evidence, and proof-pack files, alongside bootstrap, registration, static-origin, migration, readiness, capability, smoke, data-truth, load, rollback, ECS, CloudWatch, release, and cost evidence | 30 days |
 | `staging-lifecycle-evidence-<run_id>` | `artifacts/sleep-plan-policy.txt`, `artifacts/sleep/desired-counts.json`, `artifacts/sleep/autoscaling.json`, `artifacts/evidence.sha256`, `artifacts/evidence.sha256.sha256` | 30 days |
+| `identity-continuity-scenarios-<run_id>` | Ten redacted live identity API scenario transcripts, uploaded before tenant cleanup | 30 days |
+| `identity-continuity-proof-pack-<run_id>` | Collected and validated identity capture pack with scenario and UI evidence | 90 days |
+| `identity-continuity-ui-failure-<run_id>` | Fixture-backed Playwright artifacts when that UI run fails | 30 days |
 | `staging-ttl-guard-<run_id>` | `services.json`, `services-after.json`, `actions.log` | 30 days |
 
 `artifacts/evidence.sha256` is a deterministic `sha256sum` manifest of every

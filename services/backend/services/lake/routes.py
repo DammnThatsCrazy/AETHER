@@ -148,16 +148,28 @@ async def rollback_by_source_tag(body: RollbackRequest, request: Request):
     """Rollback records by source_tag across specified tiers."""
     request.state.tenant.require_permission("admin")
 
-    results = {}
+    tenant_id = request.state.tenant.tenant_id
+    selected = []
     for tier in body.tiers:
         if tier == "bronze":
             repo = _BRONZE_REPOS.get(body.domain)
             if repo:
-                results["bronze"] = await repo.rollback_by_source_tag(body.source_tag)
+                selected.append((tier, repo))
         elif tier == "silver":
             repo = _SILVER_REPOS.get(body.domain)
             if repo:
-                results["silver"] = await repo.rollback_by_source_tag(body.source_tag)
+                selected.append((tier, repo))
+
+    # Validate every tier before deleting any rows so a later cap rejection
+    # cannot leave earlier tiers partially rolled back.
+    for _, repo in selected:
+        await repo.preflight_source_tag_rollback(body.source_tag, tenant_id=tenant_id)
+
+    results = {}
+    for tier, repo in selected:
+        results[tier] = await repo.rollback_by_source_tag(
+            body.source_tag, tenant_id=tenant_id
+        )
 
     return APIResponse(data={
         "domain": body.domain,
@@ -176,7 +188,9 @@ async def audit_source_tag(domain: str, source_tag: str, request: Request):
         raise BadRequestError(f"Unknown domain: {domain}")
 
     page_cap = 50
-    records = await repo.query_by_source_tag(source_tag)
+    records = await repo.query_by_source_tag(
+        source_tag, tenant_id=request.state.tenant.tenant_id
+    )
     # query_by_source_tag already fetches up to its own default (100), well
     # beyond page_cap, so we already have the evidence to say for certain
     # whether the 50-row page below is complete — no separate probe needed.

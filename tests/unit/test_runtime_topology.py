@@ -124,14 +124,26 @@ def test_staging_awake_runs_one_api_task_and_one_worker_task():
     assert {svc: cfg["desired_count"] for svc, cfg in services.items()} == {
         "api": 1, "lean-worker": 1,
     }
+    assert all(
+        cfg["autoscaling"] == {
+            **cfg["autoscaling"],
+            "min_capacity": 1,
+            "max_capacity": 2,
+        }
+        for cfg in services.values()
+    )
 
 
 def test_staging_asleep_drives_every_service_to_zero_desired_tasks():
     services = topo.resolve_services(_profile("staging"), "asleep")
     assert sum(cfg["desired_count"] for cfg in services.values()) == 0
-    # The autoscaling floor must drop too, or the scaling policy immediately
-    # scales the environment back up out of its sleep.
-    assert all(cfg["autoscaling"]["min_capacity"] == 0 for cfg in services.values())
+    # Both bounds must be zero: the floor prevents forced capacity, and the
+    # ceiling prevents backlog/request policies from scaling back out.
+    assert all(
+        cfg["autoscaling"]["min_capacity"] == 0
+        and cfg["autoscaling"]["max_capacity"] == 0
+        for cfg in services.values()
+    )
 
 
 def test_staging_asleep_keeps_the_same_service_and_role_ownership():

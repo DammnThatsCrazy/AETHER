@@ -25,7 +25,13 @@ class IdentityResolveRequest(BaseModel):
     org_id: Optional[str] = None
     campaign_id: Optional[str] = None
     journey_id: Optional[str] = None
-    consent_snapshot: Optional[dict[str, Any]] = None
+    consent_snapshot: Optional[dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Legacy untrusted claim; the resolve API ignores it and validates "
+            "identity-link consent against a server-side receipt for anonymous_id."
+        ),
+    )
     properties: Optional[dict[str, Any]] = Field(default_factory=dict)
     context: Optional[dict[str, Any]] = Field(default_factory=dict)
 
@@ -116,6 +122,11 @@ class IdentityMergeResponse(BaseModel):
     reason_codes: list[str]
     audit_id: Optional[str] = None
     graph_edges_written: list[str] = Field(default_factory=list)
+    resolution_revision_before: Optional[int] = None
+    resolution_revision_after: Optional[int] = None
+    restatement_status: str = "not_queueable"
+    restatement_job_id: Optional[str] = None
+    restatement_error: Optional[str] = None
 
 
 class IdentitySplitRequest(BaseModel):
@@ -131,6 +142,13 @@ class IdentitySplitResponse(BaseModel):
     new_entity_id: Optional[str] = None
     revoked_edge_ids: list[str] = Field(default_factory=list)
     reason_codes: list[str] = Field(default_factory=list)
+    decision_id: Optional[str] = None
+    resolution_revision_before: Optional[int] = None
+    resolution_revision_after: Optional[int] = None
+    resulting_resolution_revision_after: Optional[int] = None
+    restatement_status: str = "not_queueable"
+    restatement_job_id: Optional[str] = None
+    restatement_error: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -199,6 +217,13 @@ class IdentityFragmentSplitResponse(BaseModel):
     moved_observation_ids: list[str] = Field(default_factory=list)
     revoked_edge_ids: list[str] = Field(default_factory=list)
     reason_codes: list[str] = Field(default_factory=list)
+    decision_id: Optional[str] = None
+    resolution_revision_before: Optional[int] = None
+    resolution_revision_after: Optional[int] = None
+    resulting_resolution_revision_after: Optional[int] = None
+    restatement_status: str = "not_queueable"
+    restatement_job_id: Optional[str] = None
+    restatement_error: Optional[str] = None
     rejection_reason: Optional[str] = None
     error: Optional[str] = None
 
@@ -347,6 +372,20 @@ class IdentityExplanationResponse(BaseModel):
     resolution_decision_summary: str
 
 
+class IdentityExplanationEnvelope(BaseModel):
+    """The standard ``APIResponse`` envelope around :class:`IdentityExplanationResponse`.
+
+    The explanation route returns ``APIResponse(...).to_dict()``, so its ``response_model``
+    must describe the envelope, as for :class:`IdentityHealthEnvelope`; declaring the bare
+    payload made FastAPI validate the envelope's top-level keys against it and answer 500.
+    """
+
+    data: IdentityExplanationResponse
+    status: Literal["success"] = "success"
+    timestamp: str
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class IdentityDecisionDetailsResponse(BaseModel):
     decision_id: str
     found: bool
@@ -439,8 +478,14 @@ class AdminIdentityReconcileResponse(BaseModel):
 class ReviewQueueEntry(BaseModel):
     conflict_id: str
     tenant_id: str
+    entry_type: str = "conflict"
     candidate_a: dict
     candidate_b: dict
+    candidate_source_identity_ids: list[str] = Field(default_factory=list)
+    identify_source_identity_id: Optional[str] = None
+    reason_codes: list[str] = Field(default_factory=list)
+    authority: str = "none"
+    seen_count: int = 1
     matching_evidence: list[dict] = Field(default_factory=list)
     conflicting_evidence: list[dict] = Field(default_factory=list)
     recommended_action: str
@@ -464,4 +509,8 @@ class ActivationStatusResponse(BaseModel):
     resolution_counts: dict = Field(default_factory=dict)
     conflict_counts: dict = Field(default_factory=dict)
     projection_restatement_status: str
+    projection_restatement_counts: dict[str, int] = Field(default_factory=dict)
+    pending_review_counts: dict[str, int] = Field(default_factory=dict)
+    runtime_flags: dict[str, bool] = Field(default_factory=dict)
+    sdk_last_seen_at: Optional[str] = None
     computed_at: str

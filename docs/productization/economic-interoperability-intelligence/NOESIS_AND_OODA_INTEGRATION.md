@@ -9,12 +9,12 @@ since_version: 0.1.0
 source_files: [services/backend/services/noesis/adapters/stablecoin_adapter.py, services/backend/services/noesis/adapters/derivatives_adapter.py, services/backend/services/noesis/adapters/interop_adapter.py, services/backend/services/suggestions/adapters/stablecoin_adapter.py, services/backend/services/suggestions/adapters/derivatives_adapter.py, services/backend/services/suggestions/adapters/interop_adapter.py]
 canonical_owner: platform@aether
 source_hashes:
-  services/backend/services/noesis/adapters/derivatives_adapter.py: sha256:fdd0f5f13da071c5cc95ca03373c3b4e55d183e97373b2c6d8c76dffaaf44d5f
-  services/backend/services/noesis/adapters/interop_adapter.py: sha256:66dbd63ef28c1c38e991d91c6a0bd81d5d137de53f2aa1d46e232cb073c9cb0f
-  services/backend/services/noesis/adapters/stablecoin_adapter.py: sha256:d7e351b6efb8bd464e17f9474555bfa292a1ff5c0ef0dbfdf7167516702fa124
-  services/backend/services/suggestions/adapters/derivatives_adapter.py: sha256:2ff88e8ed0436798ed395e2013f3ab4d920b1394e3167ad5e56a489660a639cc
-  services/backend/services/suggestions/adapters/interop_adapter.py: sha256:e0b474c87a04b89c7bbd46f21c3bebca79197b128cca352d5e907837f3644fa6
-  services/backend/services/suggestions/adapters/stablecoin_adapter.py: sha256:9bb974b3b7d19af4adb1abbab4b72cb4f06eecb9a9f85ca91469bff900f46f12
+  "services/backend/services/noesis/adapters/derivatives_adapter.py": "sha256:fdd0f5f13da071c5cc95ca03373c3b4e55d183e97373b2c6d8c76dffaaf44d5f"
+  "services/backend/services/noesis/adapters/interop_adapter.py": "sha256:66dbd63ef28c1c38e991d91c6a0bd81d5d137de53f2aa1d46e232cb073c9cb0f"
+  "services/backend/services/noesis/adapters/stablecoin_adapter.py": "sha256:d7e351b6efb8bd464e17f9474555bfa292a1ff5c0ef0dbfdf7167516702fa124"
+  "services/backend/services/suggestions/adapters/derivatives_adapter.py": "sha256:971714ed5db6f9e6d979f76a0f2d4526e6064a91aff62a06a4ad63cfefc8ccc6"
+  "services/backend/services/suggestions/adapters/interop_adapter.py": "sha256:30e467f7d9680cdfb5466eba0ba57fa85c54692b12d12b265929d4907e764dfb"
+  "services/backend/services/suggestions/adapters/stablecoin_adapter.py": "sha256:8f97b8a7144330fca2a64a77b5e562b8f77354ac0111e5700e3594799a7f2ff7"
 ---
 
 # Noesis and OODA Integration
@@ -40,11 +40,12 @@ Rule-sourced factories mapping observed facts to `SuggestionCreate`:
 | Message stuck past phase SLA | `INTEROP_DELIVERY_HEALTH` |
 | Security-policy content-hash change | `INTEROP_DELIVERY_HEALTH` |
 
-Per-adapter flags in `SuggestionsConfig`
-(`AETHER_SUGGESTIONS_{STABLECOIN,DERIVATIVES,INTEROP}_ADAPTER_ENABLED`)
-default OFF. Suggestions carry evidence + lineage ids; the platform's
-separate execution gate remains OFF and no economic suggestion is
-executable.
+The stablecoin, derivatives and interop suggestion adapters are written and
+tested but nothing registers them with the suggestion dispatcher yet. Per-adapter
+`SuggestionsConfig` flags (`AETHER_SUGGESTIONS_{STABLECOIN,DERIVATIVES,INTEROP}_ADAPTER_ENABLED`)
+used to claim to gate them; nothing read those flags, so they were retired.
+Suggestions carry evidence + lineage ids; the platform's separate execution gate
+remains OFF and no economic suggestion is executable.
 
 ## Alerts
 

@@ -161,16 +161,6 @@ export function useUserGraph(userId: string) {
   });
 }
 
-export function useUserCluster(userId: string) {
-  return useQuery({
-    key: key(userId, 'cluster'),
-    fetcher: () => api.graph.cluster(userId),
-    staleTime: STALE,
-    enabled: !!userId,
-  });
-}
-
-/** Chronological event stream with optional type filter and limit. */
 export function useUserTimeline(
   userId: string,
   params?: { limit?: number; event_type?: string },

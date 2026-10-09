@@ -230,7 +230,6 @@ milestones:
 rollout_controls:               # blueprint §121-122; all OFF until activated
   flags:
     AETHER_SOCIAL360_ENABLED: "false"
-    AETHER_SOCIAL_UPR_ENABLED: "false"
     AETHER_RELATIONSHIP_MOTIFS_ENABLED: "false"
     AETHER_RELATIONSHIP_FIDELITY_MODE: "off"
     AETHER_PATH_FIDELITY_ENABLED: "false"
@@ -280,6 +279,10 @@ key_decisions:
       model belongs to social360-surface activation (M10 operational / M11). Recorded residual:
       when the social360 surface activates under its flag, gate historical social reads on the
       registered consent model before projection.
+    update: >-
+      2026-10-09: the services/social wrapper is deleted. It called the same aggregator, with
+      the same read-permission and window checks, as the profile handler it shadowed, so the
+      URL and body are unchanged; the residual above now applies to the profile handler.
   - id: D-06
     date: 2026-09-04
     decision: "Section-154 standalone source-of-truth docs (SOCIAL360,

@@ -2,17 +2,18 @@
 
 These tests pin the M4 honesty migration outcome for the legacy social surface:
 
-* ``services/social/routes.py`` is a *compatibility wrapper* that delegates to the
-  canonical Profile360 ``IntelligenceAggregator.social_intelligence`` and returns
+* ``GET /v1/profile/{id}/social-intelligence`` is served by the Profile360 handler,
+  which delegates to ``IntelligenceAggregator.social_intelligence`` and returns
   the aggregator envelope verbatim inside the standard ``APIResponse`` shape. It
-  synthesizes NO metrics of its own.
+  synthesizes NO metrics of its own. (A ``services/social`` wrapper over the same
+  call used to be mounted first; it is deleted, see ``test_route_conflicts``.)
 * The fabricated legacy summary fields (``total_followers_deduped``,
   ``influence_level``, ``engagement_rate``, ``platforms_connected``) are gone.
 * An empty / evidence-free result is an empty items list + an unpopulated summary
   — never ``followers = 0``, ``influence_level = "low"`` or ``engagement_rate =
   0.0`` for unknown data.
-* The dead ``services/social/social_aggregator.py`` (fixed cross-platform overlap
-  percentages + missing-data-as-zero fetchers) and the dead
+* The dead ``services/social`` package (fixed cross-platform overlap
+  percentages + missing-data-as-zero fetchers, then a wrapper) and the dead
   ``docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_social_intelligence.py`` ClickHouse DDL
   are removed and must not be importable / present.
 """
@@ -34,9 +35,9 @@ for _p in (_BACKEND_ROOT, _REPO_ROOT):
         sys.path.insert(0, _p)
 
 import pytest
-from fastapi import HTTPException
 
-from services.social.routes import get_social_intelligence
+from services.profile.routes import get_social_intelligence
+from shared.common.common import BadRequestError
 
 _TS = "2026-09-04T00:00:00+00:00"
 
@@ -198,11 +199,10 @@ class TestWrapperDelegatesVerbatim:
 
 
 class TestWrapperGuardRails:
-    def test_invalid_window_raises_400_without_calling_aggregator(self):
+    def test_invalid_window_is_a_bad_request_without_calling_aggregator(self):
         agg = _FakeAggregator(_canonical_envelope())
-        with pytest.raises(HTTPException) as excinfo:
+        with pytest.raises(BadRequestError):
             _run(get_social_intelligence("u-1", _request(_Tenant()), window="bogus", intel=agg))
-        assert excinfo.value.status_code == 400
         assert agg.calls == []  # rejected before delegation
 
     def test_valid_windows_pass_through(self):
@@ -223,27 +223,11 @@ class TestWrapperGuardRails:
 
 
 class TestDeadCodeRemoved:
-    def test_social_aggregator_module_is_gone(self):
-        spec = importlib.util.find_spec("services.social.social_aggregator")
-        assert spec is None, "dead social_aggregator module must not be importable"
-
-    def test_social_aggregator_symbol_not_reexported(self):
-        with pytest.raises(ImportError):
-            from services.social import SocialAggregator  # noqa: F401
-
-    def test_fixed_overlap_constants_absent_from_social_package(self):
-        # The dead module was the sole carrier of the fabricated cross-platform
-        # overlap percentages. Guard against reintroduction in the surviving
-        # services/social package sources.
-        social_dir = Path(_BACKEND_ROOT) / "services" / "social"
-        forbidden = ("0.20", "0.15", "0.25", "x*0.85", "x * 0.85")
-        found: list[str] = []
-        for py in sorted(social_dir.glob("*.py")):
-            text = py.read_text(encoding="utf-8")
-            for token in forbidden:
-                if token in text:
-                    found.append(f"{py.name}: {token}")
-        assert not found, f"fixed-overlap dishonesty reintroduced: {found}"
+    def test_the_social_package_is_gone(self):
+        # One handler serves the URL; the wrapper package and the dead aggregator
+        # (the sole carrier of the fabricated overlap percentages) must not return.
+        assert not (Path(_BACKEND_ROOT) / "services" / "social").exists()
+        assert importlib.util.find_spec("services.social") is None
 
     def test_dead_gold_social_intelligence_ddl_is_gone(self):
         ddl = (

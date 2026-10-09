@@ -45,7 +45,7 @@ from shared.integration_contracts.manifest import (
     Webhooks,
 )
 from shared.integration_contracts.normalization import NormalizationResult
-from shared.integration_contracts.results import AdapterResult
+from shared.integration_contracts.results import AdapterResult, AdapterStatus
 
 # ── Fakes ───────────────────────────────────────────────────────────────────
 
@@ -81,6 +81,7 @@ class FakeOrchestrator:
     def __init__(self) -> None:
         self.connections = FakeConnectionsRepo()
         self.stored_credentials: list[object] = []
+        self.sync_calls: list[tuple[str, str | None, list[str]]] = []
 
     async def create_connection(self, *, tenant_id, provider_identity, display_name="", config=None):
         connection = ProviderConnection(
@@ -100,6 +101,10 @@ class FakeOrchestrator:
         connection.credential_ref = "ref_1"
         return connection
 
+    async def delete_credential(self, connection):
+        connection.credential_ref = ""
+        return True
+
     async def test_connection(self, connection, *, plugin=None):
         if plugin is None:
             raise ProviderNotInstalled(
@@ -107,7 +112,8 @@ class FakeOrchestrator:
             )
         return AdapterResult.ok(data={"ok": True})
 
-    async def run_sync(self, connection, *, since=None):
+    async def run_sync(self, connection, *, since=None, stream_ids=None):
+        self.sync_calls.append((connection.connection_id, since, stream_ids or []))
         return {"sync_run_id": "run_1", "status": "completed"}
 
     def transition(self, connection, target):
@@ -367,6 +373,35 @@ def test_store_credential_never_echoes_secrets(client, orchestrator):
     assert "sk_live_TOP_SECRET" not in response.text
 
 
+def test_delete_credential_clears_broker_reference(client, orchestrator):
+    await_create_connection(orchestrator)
+    stored = client.post(
+        "/v1/provider-connections/conn_test/credentials",
+        json={"type": "api_key", "api_key": "sk_live_TOP_SECRET"},
+    )
+    assert stored.status_code == 200
+    response = client.delete("/v1/provider-connections/conn_test/credentials")
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "connection_id": "conn_test",
+        "credential_deleted": True,
+    }
+    assert "sk_live_TOP_SECRET" not in response.text
+    assert orchestrator.connections._store["conn_test"].credential_ref == ""
+
+
+def test_delete_credential_enforces_connection_tenant_ownership(client, orchestrator):
+    await_create_connection(orchestrator)
+    client.post(
+        "/v1/provider-connections/conn_test/credentials",
+        json={"type": "api_key", "api_key": "sk_live_TOP_SECRET"},
+    )
+    cross = TestClient(_make_app(tenant_id="tenant_other"))
+    response = cross.delete("/v1/provider-connections/conn_test/credentials")
+    assert response.status_code == 404
+    assert orchestrator.connections._store["conn_test"].credential_ref == "ref_1"
+
+
 def test_store_credential_rejects_invalid_payload(client, orchestrator):
     await_create_connection(orchestrator)
 
@@ -399,6 +434,108 @@ def test_list_accounts(client, orchestrator):
     assert response.json()["data"]["items"][0]["account_id"] == "acct_1"
 
 
+def test_list_accounts_keeps_error_details_out_of_account_items(client, orchestrator, monkeypatch):
+    await_create_connection(orchestrator)
+
+    class FailedCoordinator:
+        async def discover_accounts(self, connection, *, plugin=None, credential=None):
+            return AdapterResult(
+                success=False,
+                status=AdapterStatus.PERMANENT_ERROR,
+                error_code="scope_required",
+                data={"detail": "provider scope is unavailable"},
+            )
+
+    monkeypatch.setattr(routes_mod, "_COORDINATOR", FailedCoordinator())
+    response = client.get("/v1/provider-connections/conn_test/accounts")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["items"] == []
+    assert response.json()["data"]["adapter"]["success"] is False
+
+
+def test_graphql_account_route_reveals_structured_credential_without_exposing_it(
+    client, orchestrator, registry, monkeypatch,
+):
+    import asyncio
+    import httpx
+    from pydantic import SecretStr
+
+    from repositories.repos import reset_in_memory_stores
+    from services.provider_runtime.acquisition import AcquisitionCoordinator, ProviderAccountRepository
+    from services.providers.shopify.plugin import ShopifyOrdersPlugin
+    from shared.credentials.types import ApiKeyCredential, MultiCredential
+    import services.providers.shopify.account as account_mod
+
+    reset_in_memory_stores()
+    shop = "synthetic-store.myshopify.com"
+    gid = "gid://shopify/Shop/123456"
+    connection = ProviderConnection(
+        connection_id="conn_test", tenant_id="tenant_abc",
+        provider_identity="shopify.admin.orders_read",
+        config={"orders_api": "graphql", "source_account_realm": "test", "shop_domain": shop},
+        credential_ref="provider:tenant_abc:shopify.admin.orders_read",
+    )
+    asyncio.run(orchestrator.connections.upsert(connection))
+    credential = MultiCredential(credentials={
+        "shop_access_token": ApiKeyCredential(api_key=SecretStr("synthetic-secret")),
+        "webhook_secret": ApiKeyCredential(api_key=SecretStr("synthetic-hmac")),
+    })
+
+    class Broker:
+        calls = []
+
+        async def reveal(self, tenant_id, ref):
+            self.calls.append((tenant_id, ref))
+            return credential
+
+    orchestrator.broker = Broker()
+    registry._plugins["shopify.admin.orders_read"] = ShopifyOrdersPlugin()
+    repo = ProviderAccountRepository()
+    monkeypatch.setattr(routes_mod, "_COORDINATOR", AcquisitionCoordinator(accounts=repo))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["X-Shopify-Access-Token"] == "synthetic-secret"
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "shop": {"id": gid, "name": "Synthetic Store"},
+                    "currentAppInstallation": {
+                        "accessScopes": [{"handle": "read_orders"}],
+                    },
+                },
+            },
+        )
+
+    monkeypatch.setattr(account_mod, "_http_client", lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    response = client.get("/v1/provider-connections/conn_test/accounts")
+    assert response.status_code == 200
+    assert response.json()["data"]["items"][0]["external_id"] == gid
+    assert orchestrator.broker.calls == [("tenant_abc", connection.credential_ref)]
+    assert "synthetic-secret" not in response.text
+    assert "synthetic-hmac" not in response.text
+    stored = asyncio.run(repo.find(f"conn_test:shop:{shop}"))
+    assert stored.external_id == gid
+    assert stored.metadata["source_account_realm"] == "test"
+    assert "synthetic-secret" not in str(stored.model_dump())
+
+
+def test_graphql_account_route_requires_brokered_credential(client, orchestrator, registry):
+    import asyncio
+    from services.providers.shopify.plugin import ShopifyOrdersPlugin
+
+    connection = ProviderConnection(
+        connection_id="conn_test", tenant_id="tenant_abc",
+        provider_identity="shopify.admin.orders_read",
+        config={"orders_api": "graphql", "source_account_realm": "test"},
+    )
+    asyncio.run(orchestrator.connections.upsert(connection))
+    registry._plugins["shopify.admin.orders_read"] = ShopifyOrdersPlugin()
+    response = client.get("/v1/provider-connections/conn_test/accounts")
+    assert response.status_code == 401
+
+
 def test_select_account(client, orchestrator):
     await_create_connection(orchestrator)
 
@@ -421,6 +558,40 @@ def test_trigger_sync(client, orchestrator):
 
     assert response.status_code == 200
     assert response.json()["data"]["sync_run_id"] == "run_1"
+    assert orchestrator.sync_calls == [("conn_test", None, [])]
+
+
+def test_trigger_sync_forwards_selected_streams(client, orchestrator):
+    await_create_connection(orchestrator)
+
+    response = client.post(
+        "/v1/provider-connections/conn_test/sync",
+        json={"stream_ids": ["orders", "refunds"]},
+    )
+
+    assert response.status_code == 200
+    assert orchestrator.sync_calls == [("conn_test", None, ["orders", "refunds"])]
+
+
+@pytest.mark.parametrize(
+    "stream_ids",
+    [
+        pytest.param(["orders", "orders"], id="duplicates"),
+        pytest.param([f"stream_{index}" for index in range(33)], id="too-many"),
+        pytest.param(["s" * 129], id="identifier-too-long"),
+        pytest.param([""], id="empty-identifier"),
+    ],
+)
+def test_trigger_sync_rejects_invalid_stream_selection(client, orchestrator, stream_ids):
+    await_create_connection(orchestrator)
+
+    response = client.post(
+        "/v1/provider-connections/conn_test/sync",
+        json={"stream_ids": stream_ids},
+    )
+
+    assert response.status_code == 422
+    assert orchestrator.sync_calls == []
 
 
 def test_list_sync_runs(client, orchestrator, monkeypatch):
@@ -642,6 +813,47 @@ def test_webhook_denial_acknowledgement_is_403(client, monkeypatch):
     body = response.json()
     assert body["status"] == 403
     assert "verification_failed" in body["detail"]
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["webhook_mode_disabled", "graphql_webhook_requires_hydration"],
+)
+def test_shopify_poll_only_mode_denial_is_permanent_403(client, monkeypatch, reason):
+    async def denying_ingest(identity_key, *, raw_body, headers, signature, tenant_id):
+        return {
+            "accepted": False,
+            "reason": reason,
+            "error_code": reason,
+            "record_count": 0,
+            "event_count": 0,
+        }
+
+    monkeypatch.setattr(routes_mod, "_GATEWAY", _GatewayWith(denying_ingest))
+    response = client.post(
+        "/v1/provider-webhooks/shopify.admin.orders_read",
+        content=b'{"id":"o1"}',
+        headers={"X-Aether-Tenant-ID": "tenant_abc"},
+    )
+
+    assert response.status_code == 403
+    assert reason in response.json()["detail"]
+
+
+def test_webhook_processing_failure_is_retryable_server_error(client, monkeypatch):
+    async def failing_ingest(identity_key, *, raw_body, headers, signature, tenant_id):
+        return {"accepted": False, "reason": "raw_persist_failed",
+                "record_count": 0, "event_count": 0}
+
+    monkeypatch.setattr(routes_mod, "_GATEWAY", _GatewayWith(failing_ingest))
+    response = client.post(
+        "/v1/provider-webhooks/shopify.products.read",
+        content=b"{}",
+        headers={"X-Aether-Tenant-ID": "tenant_abc"},
+    )
+
+    assert response.status_code == 500
+    assert "raw_persist_failed" in response.json()["detail"]
 
 
 def test_create_connection_unknown_provider_404(client):

@@ -1165,6 +1165,7 @@ class AnalyticsRepository:
         invalidation does not stampede the event store.
         """
         params = dict(query_params or {})
+        canonical_entity_id = params.pop("canonical_entity_id", None)
         occurred_from = canonical_utc_timestamp(params.pop("start_date", None))
         occurred_to = canonical_utc_timestamp(
             params.pop("end_date", None), end_of_day=True
@@ -1179,7 +1180,8 @@ class AnalyticsRepository:
         cache_key = CacheKey.analytics_query(
             tenant_id,
             CacheKey.hash_query(
-                f"{sorted(params.items())}|from={occurred_from}"
+                f"{sorted(params.items())}|canonical={canonical_entity_id or ''}"
+                f"|from={occurred_from}"
                 f"|to={occurred_to}|limit={limit}|gen={generation}"
             ),
         )
@@ -1205,6 +1207,9 @@ class AnalyticsRepository:
             results = await self._events.query(
                 tenant_id,
                 params,
+                canonical_entity_id=(
+                    str(canonical_entity_id) if canonical_entity_id else None
+                ),
                 occurred_from=occurred_from,
                 occurred_to=occurred_to,
                 limit=limit,
@@ -1758,6 +1763,7 @@ class _EventStore(BaseRepository):
         tenant_id: str,
         equals: dict[str, Any],
         *,
+        canonical_entity_id: Optional[str] = None,
         occurred_from: Optional[str] = None,
         occurred_to: Optional[str] = None,
         limit: int = 50,
@@ -1779,7 +1785,25 @@ class _EventStore(BaseRepository):
         pool = await self._ensure_pool()
         if pool is None:
             filters = {**equals, "tenant_id": tenant_id}
-            rows = [r for r in self._store.values() if _matches_filters(r, filters)]
+            canonical_event_ids: set[str] = set()
+            if canonical_entity_id:
+                from services.identity.repository import IdentityResolutionRepository
+
+                canonical_event_ids = set(
+                    await IdentityResolutionRepository().get_event_ids_for_canonical_entity(
+                        tenant_id, canonical_entity_id
+                    )
+                )
+            rows = [
+                r for r in self._store.values()
+                if _matches_filters(r, filters)
+                and (
+                    not canonical_entity_id
+                    or r.get("canonical_entity_id") == canonical_entity_id
+                    or r.get("user_id") == canonical_entity_id
+                    or str(r.get("event_id") or "") in canonical_event_ids
+                )
+            ]
             if occurred_from is not None:
                 rows = [r for r in rows if (r.get("occurred_at") or "") >= occurred_from]
             if occurred_to is not None:
@@ -1793,6 +1817,22 @@ class _EventStore(BaseRepository):
         await self._ensure_table()
         conditions = ["tenant_id = $1"]
         params: list[Any] = [tenant_id]
+        if canonical_entity_id:
+            params.append(canonical_entity_id)
+            conditions.append(
+                "(data->>'canonical_entity_id' = $2 OR data->>'user_id' = $2 "
+                "OR data->>'event_id' IN ("
+                "WITH RECURSIVE identity_scope(entity_id) AS ("
+                "SELECT $2::text UNION "
+                "SELECT merges.from_entity_id FROM identity_merge_events merges "
+                "JOIN identity_scope scope ON merges.into_entity_id = scope.entity_id "
+                "WHERE merges.tenant_id = $1"
+                ") SELECT observations.source_event_id "
+                "FROM identity_signal_observations observations "
+                "WHERE observations.tenant_id = $1 "
+                "AND observations.canonical_entity_id IN "
+                "(SELECT entity_id FROM identity_scope)))"
+            )
         for key, value in equals.items():
             if value is None:
                 conditions.append(f"data->>'{key}' IS NULL")

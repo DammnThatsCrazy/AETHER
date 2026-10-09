@@ -1,5 +1,9 @@
 """Shopify pull ingestion (:class:`PullAdapter`).
 
+The default REST transport remains a compatibility path. Set
+``orders_api=graphql`` on the connection to use the version-pinned GraphQL
+orders adapter with its independent cursor and token credential profile.
+
 GET ``{base}/admin/api/{version}/orders.json?status=any&limit=250`` with
 ``page_info`` (opaque next-page token) or ``since_id`` (legacy-style
 incremental id) cursors.
@@ -77,7 +81,7 @@ def _build_params(cursor: Optional[str], limit: Optional[int]) -> dict[str, str]
     }
     if cursor:
         if cursor.startswith(PAGE_INFO_PREFIX):
-            params["page_info"] = cursor[len(PAGE_INFO_PREFIX):]
+            params["page_info"] = cursor[len(PAGE_INFO_PREFIX) :]
         elif cursor.isdigit():
             params["since_id"] = cursor
         # Any other cursor shape is dropped: it is neither a page token nor an
@@ -150,7 +154,7 @@ def _retry_after_ms(headers) -> Optional[float]:
 
 
 class ShopifyPullAdapter:
-    """PullAdapter: cursor-addressable order ingestion (poll sync)."""
+    """PullAdapter: REST by default, GraphQL when explicitly configured."""
 
     def __init__(self, *, provider_identity: str) -> None:
         self.provider_identity = provider_identity
@@ -166,6 +170,40 @@ class ShopifyPullAdapter:
         cursor: Optional[str],
         limit: Optional[int] = None,
     ) -> AdapterResult[ReadBatch]:
+        orders_api = str(context.config.get("orders_api") or "rest").lower()
+        if orders_api == "graphql":
+            if context.stream_id not in (None, "orders"):
+                return AdapterResult(
+                    success=False,
+                    status=AdapterStatus.PERMANENT_ERROR,
+                    error_code="shopify_stream_mode_mismatch",
+                    retryable=False,
+                    data={"detail": "GraphQL mode requires the orders stream"},
+                )
+            # Opt-in cutover only. GraphQL owns a distinct, scoped cursor; a
+            # persisted REST cursor will fail explicitly in that adapter.
+            from services.providers.shopify.graphql_pull import ShopifyGraphQLPullAdapter
+
+            return await ShopifyGraphQLPullAdapter(provider_identity=self.provider_identity).fetch(
+                context, cursor=cursor, limit=limit
+            )
+        if orders_api not in {"rest", "rest_webhook"}:
+            return AdapterResult(
+                success=False,
+                status=AdapterStatus.PERMANENT_ERROR,
+                error_code="orders_api_invalid",
+                retryable=False,
+                data={"detail": "orders_api must be rest, rest_webhook, or graphql"},
+            )
+        stream_id = "orders_rest_webhook" if orders_api == "rest_webhook" else "orders_rest"
+        if context.stream_id not in (None, stream_id):
+            return AdapterResult(
+                success=False,
+                status=AdapterStatus.PERMANENT_ERROR,
+                error_code="shopify_stream_mode_mismatch",
+                retryable=False,
+                data={"detail": f"{orders_api} mode requires the {stream_id} stream"},
+            )
         cred = _credential_dict(context)
         raw_domain = _raw_shop_domain(context)
         # The validated host (allowlisted *.myshopify.com) — never a raw tenant value.
@@ -186,7 +224,9 @@ class ShopifyPullAdapter:
                 retryable=False,
                 data={"detail": "shop_domain is not a valid *.myshopify.com host"},
             )
-        missing = [name for name in ("api_key", "password") if not str(cred.get(name) or "").strip()]
+        missing = [
+            name for name in ("api_key", "password") if not str(cred.get(name) or "").strip()
+        ]
         if missing and not cred.get("shop_access_token"):
             return AdapterResult(
                 success=False,
@@ -256,6 +296,7 @@ class ShopifyPullAdapter:
                 provider_identity=self.provider_identity,
                 provider_record_id=str(order["id"]),
                 provider_record_type="order",
+                stream_id=stream_id,
                 provider_occurred_at=order.get("updated_at"),
                 payload=order,
                 acquisition_mode="poll",
@@ -268,7 +309,9 @@ class ShopifyPullAdapter:
             if isinstance(order, dict) and order.get("id") is not None
         ]
         next_cursor = _next_cursor_from_headers(response.headers)
-        batch = ReadBatch(records=records, next_cursor=next_cursor, has_more=next_cursor is not None)
+        batch = ReadBatch(
+            records=records, next_cursor=next_cursor, has_more=next_cursor is not None
+        )
         return AdapterResult.ok(batch, rate_limit=_rate_limit_from_headers(response.headers))
 
 

@@ -10,7 +10,7 @@ source_files: [services/backend/alembic/versions/20260627_canonical_activity.py,
 source_hashes:
   "services/backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
   "services/backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
-  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:53c760d1ef1a8c9efdd63665039287f033904f4c29e665341ffc6e5efdd40b4e"
+  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:8727689ddad81c0b06586c538e445d1dafb0cb27ba1cd5e7b3a6c1b3c69ecf7b"
   "services/backend/services/measurement/repositories/activity_repo.py": "sha256:8ef772fda45e4364b7529e4c4f12724a88116fdc9f9021727c6e9cd91ae6ab06"
   "services/backend/services/measurement/repositories/journey_step_repo.py": "sha256:b5ded116782e70397b8e3009c15ec8cd30490ecdf52bd7c580f0a81806804ec6"
 ---
@@ -54,7 +54,9 @@ the unique-active-run constraint used by atomic attribution completion.
 
 Both `ActivityRepository` and `JourneyStepRepository` fall back to an in-memory dict store when no database pool is provided. This is intended for unit testing and local development only.
 
-**In staging and production:** the database pool must be configured. Missing configuration produces `not_provisioned` quality status on journeys — it does not silently report success.
+The listed repository/compiler path does not emit a `not_provisioned` quality
+status when the pool is missing; it uses the in-memory stores instead. Production
+deployment must configure the database pool to avoid non-durable journey state.
 
 ## Feature Flag Dependencies
 
@@ -68,8 +70,8 @@ The `SilverDispatcher` runs an ordered projector list per event type (multi-proj
 
 | Dimension | Limit | Notes |
 |---|---|---|
-| Steps per journey compile | 2 000 | Configurable via `_MAX_STEPS` in `journey_compiler.py` |
-| Steps per API page | 200 | Hard cap via `_MAX_STEPS_PAGE` |
+| Steps per journey compile | 2 000 | Hard cap via `_MAX_JOURNEY_STEPS` in `journey_compiler.py`; long journeys use windowing |
+| Steps per repository page | 200 default | `JourneyStepRepository.list_by_version()` accepts a caller-supplied `limit` |
 | `canonical_activity` rows | Unbounded | Partition by `occurred_at` recommended at >100M rows/tenant |
 | Rebuild concurrency | Unbounded | Add a semaphore in `rebuild_affected_by_web3_status_change` at scale |
 | Source repair batch | Operator-selected | Monitor repair progress and attribution recompute load per tenant |

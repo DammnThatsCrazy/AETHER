@@ -128,9 +128,9 @@ All commerce events published under `aether.commerce.*` topic namespace on the e
 | Flag | Default | Purpose |
 |---|---|---|
 | `COMMERCE_CONTROL_PLANE_ENABLED` | `true` | Master flag |
-| `COMMERCE_APPROVAL_REQUIRED_ALL` | `true` | Mandatory approval (locked at GA) |
-| `COMMERCE_V2_PROTOCOL` | `true` | x402 v2 for new challenges |
 | `IG_X402_LAYER` | `true` | Underlying x402 L3b |
+
+Mandatory approval is not a flag: `PolicyEngine` enforces it for every spend class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in `services/x402/policies.py`); only the engine's `set_mandatory_approval()` setter, which no production code calls, can change it.
 
 ## 9. SDK / API entry points
 

@@ -240,31 +240,3 @@ async def compare_models(request: Request, body: ModelComparisonRequest):
         body.conversion_ids,
     )
     return APIResponse(data=result).to_dict()
-
-
-@router.get("/models")
-async def list_available_models(request: Request):
-    _require_tenant(request)
-    models = []
-    for name in sorted(_SUPPORTED_MODELS):
-        is_algorithmic = name in ("markov", "shapley_heuristic")
-        models.append({
-            "name": name,
-            "type": "algorithmic" if is_algorithmic else "heuristic",
-            "description": _MODEL_DESCRIPTIONS.get(name, ""),
-        })
-    return APIResponse(data=models).to_dict()
-
-
-_MODEL_DESCRIPTIONS: dict[str, str] = {
-    "first_touch": "100% credit to the first touchpoint in the journey.",
-    "last_touch": "100% credit to the last touchpoint before conversion.",
-    "linear": "Equal credit distributed across all touchpoints.",
-    "time_decay": "Exponential decay — more recent touchpoints receive more credit.",
-    "position_based": "40% first, 40% last, 20% distributed across middle touchpoints.",
-    "data_driven": "Shapley-value approximation using heuristic coalition values.",
-    "actor_weighted": "U-shaped with human/agent actor splitting per touchpoint.",
-    "exposure_aware": "View-through weighted by viewability and dwell time.",
-    "markov": "Removal-effect Markov chain — trained on historical journey paths.",
-    "shapley_heuristic": "Honest alias for data_driven (Shapley heuristic).",
-}

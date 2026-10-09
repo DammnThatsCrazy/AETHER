@@ -7,19 +7,19 @@ audience: [architect, dev-senior, ops]
 status: beta
 since_version: 0.1.0
 source_files: [services/backend/services/intelligence/decision_models.py, services/backend/services/intelligence/ooda_engine.py, services/backend/services/intelligence/recommendation_families.py, services/backend/services/intelligence/outcome_ledger.py, services/backend/services/intelligence/routes.py, services/backend/services/intelligence/repositories.py, services/backend/config/settings.py]
-flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED, AETHER_PLAYBOOKS_ENABLED, KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED, AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD]
+flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED, AETHER_PLAYBOOKS_ENABLED, AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD]
 related: [architecture/intelligence-graph, ai/recommendation-families, ai/investigation-workspace, operations/cicd]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:2fd39d4ff1bb287b3ea68d6b86281c7b8c0e2de0278784fa8bdde15163c995e8"
+  "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
   "services/backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
   "services/backend/services/intelligence/ooda_engine.py": "sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486"
   "services/backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "services/backend/services/intelligence/recommendation_families.py": "sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43"
   "services/backend/services/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
-  "services/backend/services/intelligence/routes.py": "sha256:f2099965fdde739456283916f2ab1db647f880ba7031794aa571a22e9b280a6a"
+  "services/backend/services/intelligence/routes.py": "sha256:60c27b7e09cf778e716f13414dd12157c6ac2cde5ccaccdde7f4d407051cdfc5"
 ---
 # Decision & Outcome Intelligence
 
@@ -111,7 +111,6 @@ Decision and outcome intelligence flags default to disabled so tenants and opera
 - `AETHER_DECISION_RECORDS_ENABLED`
 - `AETHER_OUTCOME_FEEDBACK_ENABLED`
 - `AETHER_PLAYBOOKS_ENABLED`
-- `KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED`
 - `AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD`
 
 ## Migration notes
@@ -147,9 +146,6 @@ the server. The compatibility request field cannot override audit identity.
 | `FEATURE_FRAUD_NETWORKS` | `False` | Enable fraud network clustering service |
 | `FEATURE_FLOW_TRACE` | `False` | Enable flow-of-funds BFS traversal |
 | `FEATURE_RISK_OVERLAYS` | `False` | Enable Cytoscape risk overlay generation |
-| `FEATURE_KYBER_FRAUD_WORKSPACE` | `False` | Enable Kyber fraud workspace pages |
-| `FEATURE_TENANT_FRAUD_INTELLIGENCE` | `False` | Enable tenant-facing fraud intelligence |
-| `FRAUD_ALERT_RISK_THRESHOLD` | `70.0` | Minimum cluster risk score for auto-alert |
 | `FRAUD_NETWORK_MAX_DEPTH` | `4` | Maximum graph traversal depth for clustering |
 | `FLOW_TRACE_MAX_HOPS` | `10` | Maximum BFS hops for flow-of-funds trace |
 

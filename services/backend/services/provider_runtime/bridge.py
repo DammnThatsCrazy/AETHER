@@ -1,106 +1,124 @@
-"""Event bridge — canonical AetherEvent → Bronze ingest + bus publish.
+"""Provider canonical events enter the shared Bronze and outbox transaction.
 
-The bridge is the runtime's outbound seam: normalized
-:class:`~shared.integration_contracts.events.AetherEvent` objects become durable
-Bronze rows first, then an ``SDK_EVENTS_VALIDATED`` publish. Ordering and the
-publish helper mirror ``services/comms/ingest.py::_ingest_communication``
-EXACTLY (same topic enum, same ``get_registry().producer.publish`` helper, same
-Bronze-before-publish ordering).
-
-A publish failure NEVER fails ingestion: Bronze is durable, and a replay of the
-Bronze range recovers the publish (same rationale as comms ingest).
+Pull and webhook ingress persist ``RawProviderRecord`` before calling this
+bridge. For each consent-admitted canonical event, ``ingest_many`` commits a
+typed Bronze row and an ``SDK_EVENTS_VALIDATED`` outbox row together. The
+existing supervised relay retries delivery when ``OUTBOX_RELAY_ENABLED`` is
+active. The Bronze row retains the canonical payload for governed replay.
+This bridge does not assign graph or Silver fact authority: tenant
+connector route admission and downstream writer fencing are separate gates.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
+from shared.events.events import Topic
+from shared.integration_contracts.events import (
+    AetherEvent,
+    deterministic_v1_event_id_for_source_record,
+)
 from shared.logger.logger import get_logger, metrics
-from shared.integration_contracts.events import AetherEvent
+from services.ingestion.bronze_bulk import BronzeSDKEvent, OutboxEvent, ingest_many
 
 logger = get_logger("aether.provider_runtime.bridge")
 
-# Module-level import is safe (lake.py constructs only in-memory singletons).
-from repositories.lake import BronzeRepository
-
-
-async def _publish_event(tenant_id: str, event: AetherEvent) -> None:
-    """Publish one canonical event to SDK_EVENTS_VALIDATED (mirrors comms)."""
-    from dependencies.providers import get_registry
-    from shared.events.events import Event, Topic
-
-    registry = get_registry()
-    await registry.producer.publish(Event(
-        topic=Topic.SDK_EVENTS_VALIDATED,
-        tenant_id=tenant_id,
-        source_service="provider_runtime.bridge",
-        payload=event.model_dump(),
-    ))
-
 
 class EventBridge:
-    """Canonical AetherEvent → Bronze ingest + bus publish (Bronze-before-publish)."""
-
-    def __init__(self, bronze=None) -> None:
-        # Default mirrors the lake.py convenience instance bronze_connectors.
-        self.bronze = bronze if bronze is not None else BronzeRepository("connector_events")
+    """Consent-gated provider event writer using the shared durable outbox."""
 
     async def ingest_events(self, tenant_id: str, events: Iterable[AetherEvent]) -> int:
-        """Persist each event to Bronze, then publish it; returns count ingested.
+        """Return the count of newly persisted canonical events.
 
-        Per-event: ``bronze.ingest(source=event.provider, ...,
-        provider_record_id=event.event_id, payload=event.model_dump(),
-        tenant_id=tenant_id)`` followed by an ``SDK_EVENTS_VALIDATED`` publish.
-        Publish exceptions are caught and logged; they never fail ingestion.
-
-        WS-B3 (C class): when ``provider_runtime_consent_enforcement_enabled``,
-        each event is scrubbed (in place, before the durable dump) and gated by
-        the shared ingress decision — fingerprint/data-policy removal always,
-        and a per-subject (S) server-receipt check when the event type resolves
-        a purpose AND a subject is present AND the authoritative flag is on. A
-        denied event is rejected (no Bronze, no publish, metric + warning) while
-        the provider RAW record stays intact for replay; the delivery is never
-        silently failed wholesale.
+        Provider raw records have already been stored by the caller. A denied
+        canonical event leaves that raw input available for governed replay.
+        Any Bronze/outbox failure propagates so pull cursors and webhook inbox
+        receipts cannot advance past a missing canonical event. A duplicate
+        event keeps its original outbox row and is not queued twice.
         """
-        count = 0
-        for event in events:
+        if not tenant_id.strip():
+            raise ValueError("tenant_id is required")
+
+        bronze_rows: list[BronzeSDKEvent] = []
+        outbox_rows: list[OutboxEvent] = []
+        for candidate in events:
+            event = candidate
+            if event.schema_version == "2":
+                # Event models are mutable. Revalidate at the durable boundary
+                # so an in-memory mutation cannot break event_id == revision_id.
+                event = AetherEvent.model_validate(event.model_dump())
+            elif event.schema_version == "1" and event.event_id_needs_stable_fallback:
+                event = event.model_copy(
+                    update={
+                        "event_id": deterministic_v1_event_id_for_source_record(
+                            tenant_id=event.tenant_id,
+                            provider_identity=event.provider_identity,
+                            event_type=event.event_type,
+                            source_record_id=event.source_record_id,
+                        )
+                    }
+                )
+            if event.tenant_id != tenant_id:
+                raise ValueError("provider event tenant does not match ingress tenant")
+            if not event.event_id or not event.source_record_id:
+                raise ValueError("provider event requires replay-stable identity")
             if await self._consent_allows(tenant_id, event) is False:
                 continue
-            await self.bronze.ingest(
-                source=event.provider,
-                source_tag=f"provider:{event.provider}:{tenant_id}",
-                provider_record_id=event.event_id,
-                payload=event.model_dump(),
-                tenant_id=tenant_id,
+
+            # The outbox transports the original AetherEvent envelope. Both
+            # Bronze and outbox apply the shared acquisition sanitizer again;
+            # the ingress scrub below runs before this durable dump.
+            payload = event.model_dump()
+            payload["source"] = event.provider
+            payload["source_type"] = "provider"
+            bronze_rows.append(
+                BronzeSDKEvent(
+                    tenant_id=tenant_id,
+                    event_id=event.event_id,
+                    schema_version=event.schema_version,
+                    batch_id=f"provider:{event.provider_identity}",
+                    event_type=event.event_type,
+                    event_family=event.event_family,
+                    event_timestamp=event.occurred_at,
+                    received_at=event.observed_at,
+                    session_id="",
+                    anonymous_id="",
+                    user_id=None,
+                    entity_id=event.source_record_id,
+                    payload=payload,
+                    source=event.provider,
+                    source_tag=f"provider:{event.provider_identity}:{event.account_id}",
+                )
             )
-            try:
-                await _publish_event(tenant_id, event)
-            except Exception as exc:
-                # Bronze is durable; a replay of the Bronze range recovers the
-                # publish. Never let a bus outage lose ingestion.
-                logger.warning(
-                    "provider_runtime_bridge_publish_failed event=%s: %s",
-                    event.event_id, exc,
+            outbox_rows.append(
+                OutboxEvent(
+                    tenant_id=tenant_id,
+                    event_id=event.event_id,
+                    topic=Topic.SDK_EVENTS_VALIDATED.value,
+                    partition_key=event.account_id or tenant_id,
+                    payload=payload,
                 )
-                metrics.increment(
-                    "provider_runtime_bridge_publish_failures_total",
-                    labels={"tenant_id": tenant_id},
-                )
-            count += 1
-        return count
+            )
+
+        if not bronze_rows:
+            return 0
+        result = await ingest_many(bronze_rows, outbox_rows)
+        metrics.increment(
+            "provider_runtime_bridge_accepted_total",
+            value=result.accepted_count,
+        )
+        if result.duplicate_count:
+            metrics.increment(
+                "provider_runtime_bridge_duplicate_total",
+                value=result.duplicate_count,
+            )
+        return result.accepted_count
 
     async def _consent_allows(self, tenant_id: str, event: AetherEvent) -> bool:
-        """WS-B3 ingress consent gate for one canonical event (scrub + decide).
+        """Scrub every event and apply the existing provider ingress decision.
 
-        Returns True when the event may be ingested. Scrub redacts sensitive
-        values in ``data``/``context`` in place so the Bronze dump and the
-        publish both carry only scrubbed payloads. Scrubbing is the MANDATORY
-        minimization layer and runs UNCONDITIONALLY — it is never gated by the
-        per-path flag (redaction never rejects). The shared ingress decision
-        runs for every event: tenant data-policy removal of fingerprinting
-        always, and the per-subject (S) server-receipt rejection only when the
-        provider S-gate is enabled AND the event resolves a purpose + a subject
-        under the authoritative flag. Never raises.
+        The per-subject receipt check remains flag-gated; the unconditional
+        scrub and tenant data-policy decision are never flag-gated.
         """
         from config.settings import settings
         from services.ingestion.generated_registry import EVENT_CONSENT_PURPOSE
@@ -114,10 +132,6 @@ class EventBridge:
         subject = str(event.subject_id or "").strip() or None
         purpose = EVENT_CONSENT_PURPOSE.get(event.event_type)
         if not settings.ingress_consent.provider_runtime_consent_enforcement_enabled:
-            # S-class server-receipt escalation disabled for the provider-runtime
-            # path: fall back to the unconditional scrub + data-policy decision
-            # (no per-subject lookup or purpose gate; the event is processed
-            # under C/T minimization).
             subject = purpose = None
         allowed, reason_code, _decisions = await evaluate_ingress_decision(
             tenant_id=tenant_id,
@@ -129,11 +143,14 @@ class EventBridge:
         if not allowed:
             logger.warning(
                 "provider_runtime_consent_denied event=%s tenant=%s type=%s reason=%s",
-                event.event_id, tenant_id, event.event_type, reason_code,
+                event.event_id,
+                tenant_id,
+                event.event_type,
+                reason_code,
             )
             metrics.increment(
                 "provider_runtime_consent_blocked_total",
-                labels={"reason": reason_code or "unknown", "tenant_id": tenant_id},
+                labels={"reason": reason_code or "unknown"},
             )
             return False
         return True

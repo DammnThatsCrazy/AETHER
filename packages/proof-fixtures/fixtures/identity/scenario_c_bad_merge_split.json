@@ -2,15 +2,15 @@
   "_fixture_version": 1,
   "scenario": "C \u2014 Bad merge split repair",
   "blueprint_ref": "\u00a710, \u00a75.6",
-  "description": "A bad auto-merge is split without deleting raw records; graph version increments and projections restate.",
+  "description": "A real merge event is repaired through fragment-aware split: the pre-merge subject is restored, the alias moves with lineage, the split event is append-only, and projection restatement is durably queued.",
   "tenant_id": "tenant_bad_merge_split",
   "steps": [
     {
       "order": 1,
-      "action": "auto_merge",
-      "from": "person_a",
-      "into": "person_merged_bad",
-      "graph_version": "v1"
+      "action": "resolver_operator_merge",
+      "primary": "person_a",
+      "secondary": "person_b",
+      "expected_secondary_status": "merged"
     },
     {
       "order": 2,
@@ -19,23 +19,26 @@
     },
     {
       "order": 3,
-      "action": "create_split_candidate",
-      "source": "person_merged_bad",
-      "targets": [
-        "person_a",
-        "person_b"
-      ]
+      "action": "fragment_split_restore_pre_merge_entity",
+      "source": "person_a",
+      "source_merge_event_required": true,
+      "fragment_members": ["alias_ids", "observation_ids"]
     },
     {
       "order": 4,
-      "action": "approve_split",
-      "graph_version_after": "v2"
+      "action": "assert_split_recovery",
+      "restored_subject_status": "active",
+      "restatement_status": "queued"
     }
   ],
   "expected": {
-    "split_candidate_created": true,
-    "graph_version_incremented": true,
-    "raw_records_preserved": true
+    "fragment_split_executed": true,
+    "pre_merge_subject_restored": true,
+    "alias_lineage_preserved": true,
+    "split_event_append_only": true,
+    "restatement_job_durable": true,
+    "raw_records_preserved": true,
+    "exactly_one_active_fragment_alias": true
   },
   "invariant": "split_repairs_bad_merge_without_deleting_raw"
 }

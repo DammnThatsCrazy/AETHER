@@ -59,7 +59,7 @@ locally.
 ## Feature flags default safe
 
 Every new system is flagged off by default — data quality, intelligence quality,
-external/Stripe billing, provider sync, and the partner-ecosystem future flags.
+external/Stripe billing, and provider sync.
 Optional integrations (Stripe, providers, email) do not break startup when their
 env vars are absent; they are simply inactive.
 
@@ -78,7 +78,7 @@ service/pipeline/queue health remains operator-only under
   `DATABASE_URL` in staging/production.
 - Frontends build per environment with `VITE_*` config.
 - Local and production config are separated via `.env` files and `VITE_*` envs.
-- Feature flags default safe; partner ecosystem is future-flagged off.
+- Feature flags default safe. There is no partner ecosystem, marketplace or developer platform in the product and no flag for one.
 - Frontend data-truth source and production-bundle scans are required CI gates.
 
 See [Local Development](LOCAL-DEVELOPMENT.md) and

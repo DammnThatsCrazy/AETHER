@@ -31,7 +31,7 @@ blueprint captured in
 > zero-pending clean, the seven §71 fidelity metrics are absorbed into the
 > metric registry, and the read-only `/v1/communication360` route surface is
 > classified (`config/route_registry.yaml`) but not mounted in `main.py`
-> (`AETHER_COMMUNICATION360_ENABLED`, default OFF). The canonical
+> (no mount flag exists; the surface is listed in `config/backend_reachability.yaml`). The canonical
 > `make release-gate` runs post-merge (program decision #8); the authoritative
 > per-phase record is the
 > [program ledger](../plans/COMMUNICATION_360_PHASES.md).

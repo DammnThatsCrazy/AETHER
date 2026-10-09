@@ -69,6 +69,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
           REQUESTED: ${{ inputs.transition }}
+          WAKE_HOLD: ${{ vars.STAGING_WAKE_HOLD }}
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = workflow_dispatch ]; then
@@ -81,6 +82,14 @@ jobs:
               "0 21 * * 1-5|-0400"|"0 22 * * 1-5|-0500") transition=sleep ;;
               *) transition=skip ;;
             esac
+          fi
+          # While the repository variable STAGING_WAKE_HOLD is "true", the
+          # scheduled wake is skipped, so a new release on main is not deployed
+          # to staging by the timer. Sleep is never held, and an operator's
+          # manual wake is never held.
+          if [ "$transition" = wake ] && [ "$EVENT_NAME" = schedule ] && [ "${WAKE_HOLD:-}" = true ]; then
+            echo "::notice title=Staging wake held::STAGING_WAKE_HOLD is true, so the scheduled wake was skipped. Sleep is unaffected."
+            transition=skip
           fi
           case "$transition" in
             wake|sleep|skip) ;;

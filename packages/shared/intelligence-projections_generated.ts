@@ -888,7 +888,7 @@ export const intelligenceProjectionDefinitions: Record<
       costClassRefs: []
     },
     legacyBindings: {
-      routes: ['/v1/attribution', '/v1/conversions', '/v1/journeys', '/v1/measurement', '/v1/resolution', '/v1/spend'],
+      routes: ['/v1/attribution', '/v1/conversions', '/v1/journeys', '/v1/measurement', '/v1/spend'],
       surfaceIds: ['campaign360', 'outcome360'],
       services: ['services/backend/services/measurement'],
       migrationMode: 'converged',
@@ -1190,7 +1190,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/profile'],
       surfaceIds: ['profile360'],
-      services: ['services/backend/services/social'],
+      services: ['services/backend/services/profile'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/social360.md'
     },

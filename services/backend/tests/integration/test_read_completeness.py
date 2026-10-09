@@ -61,7 +61,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from repositories.lake import bronze_market, gold_identity  # noqa: E402
+from repositories.lake import (  # noqa: E402
+    SOURCE_TAG_ROLLBACK_CAP,
+    bronze_market,
+    gold_identity,
+    silver_market,
+)
 from repositories.repos import (  # noqa: E402
     AgentConfigRepository,
     DelegationRepository,
@@ -148,9 +153,10 @@ async def test_lake_audit_source_tag_exact_truncation():
     (its own default limit=100), so audit_source_tag()'s completeness is
     exact, not a guess."""
     tag = _unique("audit-over")
-    await bronze_market.ingest_batch(records=[{} for _ in range(51)], source="test", source_tag=tag)
+    tenant_id = _unique("tenant")
+    await bronze_market.ingest_batch(records=[{} for _ in range(51)], source="test", source_tag=tag, tenant_id=tenant_id)
 
-    resp = await lake_routes.audit_source_tag("market", tag, _req(_unique("tenant")))
+    resp = await lake_routes.audit_source_tag("market", tag, _req(tenant_id))
     meta = resp["meta"]
     assert meta["limit"] == 50
     assert meta["returned"] == 50
@@ -159,13 +165,64 @@ async def test_lake_audit_source_tag_exact_truncation():
     assert len(resp["data"]["records"]) == 50  # data shape/size unchanged
 
     tag = _unique("audit-under")
-    await bronze_market.ingest_batch(records=[{} for _ in range(10)], source="test", source_tag=tag)
+    tenant_id = _unique("tenant")
+    await bronze_market.ingest_batch(records=[{} for _ in range(10)], source="test", source_tag=tag, tenant_id=tenant_id)
 
-    resp = await lake_routes.audit_source_tag("market", tag, _req(_unique("tenant")))
+    resp = await lake_routes.audit_source_tag("market", tag, _req(tenant_id))
     meta = resp["meta"]
     assert meta["returned"] == 10
     assert meta["truncated"] is False
     assert meta["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_lake_audit_and_rollback_source_tag_are_tenant_scoped():
+    from services.lake.routes import RollbackRequest
+
+    tag = _unique("shared-tag")
+    await bronze_market.ingest_batch(records=[{"owner": "a"}], source="test", source_tag=tag, tenant_id="tenant-a")
+    await bronze_market.ingest_batch(records=[{"owner": "b"}], source="test", source_tag=tag, tenant_id="tenant-b")
+
+    audited = await lake_routes.audit_source_tag("market", tag, _req("tenant-a"))
+    assert [row["tenant_id"] for row in audited["data"]["records"]] == ["tenant-a"]
+
+    request = _req("tenant-a")
+    result = await lake_routes.rollback_by_source_tag(
+        RollbackRequest(domain="market", source_tag=tag, tiers=["bronze"]), request
+    )
+    assert result["data"]["deleted"]["bronze"] == 1
+    assert [row["tenant_id"] for row in await bronze_market.query_by_source_tag(tag, tenant_id="tenant-b")] == ["tenant-b"]
+
+
+@pytest.mark.asyncio
+async def test_lake_rollback_preflights_all_tiers_before_deleting():
+    from services.lake.routes import RollbackRequest
+
+    tenant_id = _unique("tenant")
+    tag = _unique("cross-tier-cap")
+    await bronze_market.ingest_batch(
+        records=[{"owner": "safe-to-delete"}],
+        source="test", source_tag=tag, tenant_id=tenant_id,
+    )
+    for i in range(SOURCE_TAG_ROLLBACK_CAP + 1):
+        row_id = f"silver-over-cap-{i}"
+        await silver_market.insert(row_id, {
+            "id": row_id, "source_tag": tag, "tenant_id": tenant_id,
+        })
+
+    with pytest.raises(ValueError, match="exceeds safety cap"):
+        await lake_routes.rollback_by_source_tag(
+            RollbackRequest(domain="market", source_tag=tag, tiers=["bronze", "silver"]),
+            _req(tenant_id),
+        )
+
+    bronze_rows = await bronze_market.query_by_source_tag(tag, tenant_id=tenant_id)
+    silver_rows = await silver_market.find_many(
+        filters={"source_tag": tag, "tenant_id": tenant_id},
+        limit=SOURCE_TAG_ROLLBACK_CAP + 1,
+    )
+    assert len(bronze_rows) == 1
+    assert len(silver_rows) == SOURCE_TAG_ROLLBACK_CAP + 1
 
 
 @pytest.mark.asyncio

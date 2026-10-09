@@ -30,6 +30,9 @@ class IdentityAuditWriter:
         source_event_ids: list[str],
         policy_result: str,
         consent_snapshot: Optional[dict] = None,
+        resolution_revision_before: Optional[int] = None,
+        resolution_revision_after: Optional[int] = None,
+        audit_id: Optional[str] = None,
     ) -> str:
         """Create an audit record and return the audit_id."""
         record = await self._repo.create_audit_record(
@@ -43,6 +46,9 @@ class IdentityAuditWriter:
             source_event_ids=source_event_ids,
             policy_result=policy_result,
             consent_snapshot=consent_snapshot,
+            resolution_revision_before=resolution_revision_before,
+            resolution_revision_after=resolution_revision_after,
+            audit_id=audit_id,
         )
         return record["id"]
 
@@ -58,6 +64,7 @@ class IdentityAuditWriter:
         source_event_ids: list[str],
         actor_type: str = "system",
         actor_id: str = "",
+        merge_event_id: Optional[str] = None,
     ) -> str:
         record = await self._repo.create_merge_event(
             tenant_id=tenant_id,
@@ -70,6 +77,7 @@ class IdentityAuditWriter:
             source_event_ids=source_event_ids,
             actor_type=actor_type,
             actor_id=actor_id,
+            merge_event_id=merge_event_id,
         )
         return record["id"]
 

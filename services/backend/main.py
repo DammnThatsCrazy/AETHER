@@ -313,9 +313,7 @@ from services.recommendations.routes import router as recommendations_router
 # migrated into notification_intelligence (with SSRF protection). See the route-
 # conflict ratchet in tests/unit/test_route_conflicts.py.
 from services.pnl.routes import router as pnl_router
-from services.resolution.routes import router as resolution_router
 from services.signals.routes import router as signals_router
-from services.social.routes import router as social_router
 from services.geo.routes import router as geo_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
@@ -453,6 +451,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if settings.env in (Environment.STAGING, Environment.PRODUCTION):
             raise RuntimeError(f"fail-closed: {_spine_msg}")
         logger.warning(_spine_msg)
+
+    # Provider ingress now commits canonical Bronze + event_outbox together.
+    # Its public webhook and authenticated sync routes are mounted under the
+    # provider-runtime master flag, so a non-local deployment needs the relay
+    # before it can acknowledge new provider events.
+    from services.provider_runtime.outbox_guard import validate_provider_outbox_delivery
+
+    validate_provider_outbox_delivery(settings, logger=logger)
 
     # Runtime-role gating (PR 4 / FT-4). With WORKER_ROLES_ENABLED off, both
     # gates are True → this lifespan is byte-identical to before. With it on, a
@@ -920,11 +926,7 @@ def create_app() -> FastAPI:
     app.include_router(customer_success_admin_router)
     app.include_router(value_review_router)
     app.include_router(extraction_intel_router)
-    # pnl_router and social_router define /v1/profile/{id}/pnl and
-    # /v1/profile/{id}/social-intelligence with richer responses than
-    # profile_router's handlers; mount them first so FastAPI matches them.
     app.include_router(pnl_router)
-    app.include_router(social_router)
     app.include_router(profile_router)
     app.include_router(profile360_router)
     app.include_router(sdk_coverage_router)
@@ -959,7 +961,6 @@ def create_app() -> FastAPI:
     _mount_demo_seed_routes(app, settings.env.value)
     app.include_router(contact_router)
     app.include_router(recommendations_router)
-    app.include_router(resolution_router)
     app.include_router(signals_router)
     app.include_router(geo_router)
 

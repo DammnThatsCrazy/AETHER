@@ -19,10 +19,10 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/backend/services/provider_runtime/": "sha256:b2a3e39e1032cbb1b93e8e546f6ce97541c978d183f96460afcc08aead164154"
-  "services/backend/services/providers/shopify/": "sha256:45f4980bfcd718f18a7e17806771102c20431d356244325b58ad1a0a6ba430ca"
+  "services/backend/services/provider_runtime/": "sha256:820b6205b2a4f776a622c28a74e73f0d056161fa3b758ed6e7493cd42c469d24"
+  "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
   "services/backend/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
-  "services/backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
+  "services/backend/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
   "services/backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
   "services/backend/shared/integration_contracts/normalization.py": "sha256:65fe57419a11f1a4c6a14225a024af6d74425261a7b27296798142abca9d3aeb"
   "services/backend/shared/integration_contracts/plugin.py": "sha256:b4cfa2d84da2a47a43f96564d55d4ad63fdad3027feb08e1747cc0788030988c"
@@ -79,6 +79,13 @@ actually exposes. It is produced by `capability_set(plugin)` from the adapter
 accessors (non-`None` ⇒ `True`) and must agree with what the manifest claims.
 A mismatch is a certification failure, never silently reconciled.
 
+An optional `manifest().streams` inventory declares independently named
+source-object streams. Registration validates each descriptor against the
+manifest and installed `pull()`, `webhook()`, `report()`, or `stream()` adapters;
+`ProviderRegistry.streams_for(identity_key)` exposes the validated declarations.
+The plugin ABI remains v1: a declaration does not by itself dispatch a
+per-stream worker or prove live provider behavior.
+
 ### Identity rules
 
 - The canonical string form is `family.product.capability` — lowercase
@@ -132,9 +139,17 @@ class ReadBatch(BaseModel):
 - **`has_more=True` requires a non-empty `next_cursor`.** The orchestrator
   loops `fetch` until `has_more=False`, so a batch that claims more pages must
   say where the next page starts.
-- Idempotency is guaranteed by `RawProviderRecord.idempotency_key`
-  (`sha256(tenant|provider_identity|provider_record_id|version)`), so a
-  replayed page never double-ingests.
+- The v1 raw idempotency key includes tenant, provider identity, provider
+  record ID, and envelope version. It dedupes retries of one immutable source
+  record. Mutable objects need an explicit v2 source revision; otherwise a
+  later state with the same native object ID can be collapsed. The raw store
+  now accepts a complete source account/live-or-test-realm/object/raw-revision
+  tuple for v2 records,
+  returns the persisted raw lineage ID on duplicate, and rejects partial v2
+  identity. Providers must establish a verified account and complete revision
+  before opting into this path. Raw acquisition revisions can differ while a
+  PII-free logical fact revision and canonical event ID remain the same; the
+  raw-to-fact mapping still needs source-authority review before graph writes.
 
 ## 4. Webhook verify / parse contract
 
@@ -150,21 +165,55 @@ A `WebhookAdapter` has two methods:
   normalizer (never a bare record).
 
 The `/v1/provider-webhooks/` route is in `PUBLIC_PATH_PREFIXES` — it is
-unauthenticated by API key by design, so **the plugin's `verify()` is the only
-barrier** and the gateway is **fail-closed** (`services/backend/services/provider_runtime/webhook.py`):
+unauthenticated by API key by design, so the gateway is **fail-closed**
+(`services/backend/services/provider_runtime/webhook.py`). The plugin's
+`verify()` proves provider-specific authenticity; the runtime also resolves
+and rechecks tenant, connection, and selected-account binding before it
+persists tenant-scoped evidence:
 
 - A signature scheme (e.g. `shopify_hmac`) requires a configured webhook
   secret to verify the delivery. A missing secret is a misconfiguration: the
-  delivery is **DENIED** with a closed 4xx and an auditable metadata-only
-  denial record — never silently trusted.
+  delivery is **DENIED** with a closed 4xx — never silently trusted. Until
+  signature verification proves connection ownership, the public response is
+  generic. The gateway records only a bounded-reason tenantless metric
+  internally; it creates no tenant-scoped Bronze denial row or inbox entry.
 - The `endpoint_secret` scheme requires a caller-presented per-connection
   token (header `X-Aether-Webhook-Endpoint-Token`) that constant-time-matches
   the connection's configured webhook secret; a missing/mismatched token is
-  likewise **DENIED**.
+  likewise **DENIED** with tenantless bounded-reason telemetry until the
+  token verifies. The public response does not reveal the internal reason or
+  tenant/account routing result.
 
 There is **no "no secret ⇒ trust" path**: this endpoint is public, so trust
 must come from cryptographic proof the caller holds the connection's secret.
 Never process an unverified delivery.
+
+After successful verification, the gateway rechecks the candidate binding and
+then binds each parsed raw record to the resolved connection's tenant,
+connection, and selected account. The full request body is retained in the
+webhook inbox only after this binding succeeds and raw rights admission allows
+retention. A rights denial therefore creates no retained request body or
+tenant-scoped raw denial record. Later binding, parse, persistence, or
+normalization failures may retain only tenant-scoped metadata evidence if raw
+rights admission for that evidence succeeds; they never include an
+unauthenticated body. A conflicting claim is denied; an unscoped record on a
+multi-account connection is ambiguous and denied. A raw-persistence failure
+occurs before inbox creation and retains no inbox body. Normalization or event
+persistence failures leave an already-retained verified inbox unprocessed and
+return a retryable server error through the HTTP route. Pre-verification public
+responses remain generic even though bounded internal metrics retain a safe
+reason label.
+
+The raw-rights decision must resolve exactly one effective tenant/source grant.
+All use permissions default to false. The canonical Data Rights service stores
+grants and append-only lifecycle events in the migration-owned repository;
+staging/production admission also requires the durable schema to be available.
+Missing, ambiguous, revoked, expired, or cross-tenant grants deny before raw
+payload or webhook-body persistence.
+A revocation that commits after admission but before the write also denies: the
+store holds the admitting grant (shared lock; revocation takes it exclusively)
+across the final grant re-read and the Bronze insert, so a revoked grant never
+leaves a retained record.
 
 Even after a delivery is verified and parsed, its normalized events are not
 immediately durable. The provider-runtime event bridge
@@ -176,6 +225,16 @@ consent-denied event is skipped — no Bronze row, no publish, a metric and a
 warning — so individual events inside a verified delivery can be dropped by
 tenant data-policy or consent independently of `verify()`; the delivery itself
 is never silently failed wholesale.
+
+Pull sync uses the same tenant rights gate as webhooks: before any raw payload is
+written, `ProviderRawRightsAdmission` resolves an allowed `RightsDecision` and an
+active `tenant_byod_data` grant for `provider-account:{connection_id}:{account_id}`,
+and after the Bronze write it re-verifies the persisted evidence. A record that
+fails either step raises `ProviderRawRightsDenied`: nothing is retained, no
+identity evidence, normalized event, or bridge output is created, the run is
+marked failed with `provider_raw_persist_failed`, and the cursor and connection
+last-success time do not advance. Technical plugin certification and provider
+payload fields cannot supply or infer these rights.
 
 ## 5. Normalization contract
 
@@ -223,12 +282,16 @@ Registration is additive and does not touch central type unions:
 
 - `auth.py` — `AuthAdapter`: credential validation + live connectivity test;
   no secret material ever appears in an error message or result `detail`.
-- `account.py` — `AccountAdapter`: one account per shop, discovered as
-  `shop:{shop_domain}`; structural discovery is deterministic and
-  network-free when no credential is present.
-- `pull.py` — `PullAdapter`: orders with `page_info` (opaque next-page token)
-  or `since_id` (legacy incremental id) cursors; batches honor `has_more ⇒
-  next_cursor`.
+- `account.py` — `AccountAdapter`: one selected account per shop. The opt-in
+  GraphQL path discovers immutable Shop GID and explicit live/test realm with
+  brokered credentials; domain-only structural discovery is insufficient for
+  v2 source-object mapping.
+- `pull.py` — `PullAdapter`: REST orders with `page_info` or `since_id`
+  compatibility cursors; batches honor `has_more ⇒ next_cursor`.
+- `graphql_pull.py` — opt-in, version-pinned GraphQL Admin order snapshots with
+  scoped updated-at cursors, complete line items, explicit realm and scope
+  checks, and separate raw acquisition and economic fact revisions. This
+  slice does not implement Shopify bulk historical export or live certification.
 - `webhook.py` — `WebhookAdapter`: constant-time `base64(HMAC-SHA256(secret,
   raw_body)) == X-Shopify-Hmac-SHA256` verification computed over the RAW
   body; on a missing secret it returns `False` (never auto-verifies), and the
@@ -237,8 +300,10 @@ Registration is additive and does not touch central type unions:
   declared `shopify_hmac` scheme is actually verifiable; without it the
   gateway would deny every delivery (no secret ⇒ cannot prove ownership).
 - `normalizer.py` — `EventNormalizer`: deterministic, network-free mapping of
-  a Shopify order record to one canonical `commerce.order.*` `AetherEvent`;
-  `dropped` is populated for records it cannot translate — never silent.
+  a Shopify order record to one canonical `commerce.order.*` `AetherEvent`.
+  GraphQL v2 keeps the full source payload in protected raw Bronze and emits
+  opaque lineage; REST v1 retains its historical context shape. `dropped` is
+  populated for records it cannot translate — never silent.
 - `payloads.py` — strict (`extra="forbid"`) Shopify REST payload models, with
   `ShopifyOrder.from_api_dict` as the tolerance seam that selects known
   fields and ignores unknown keys.

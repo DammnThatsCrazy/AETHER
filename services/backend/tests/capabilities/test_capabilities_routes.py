@@ -69,3 +69,28 @@ def test_capabilities_feature_flags_mirror_settings_data_exchange_enabled(
     monkeypatch.setattr(settings, "data_exchange", DataExchangeConfig(enabled=True))
     flags = _get_feature_flags(client)
     assert flags["data_exchange_enabled"] is True
+
+
+@pytest.mark.parametrize(
+    ("manual_review", "activation_dashboard"),
+    [(False, False), (True, True)],
+)
+def test_capabilities_identity_flags_mirror_settings(
+    client, monkeypatch, manual_review, activation_dashboard
+):
+    from dataclasses import replace
+    from config.settings import settings
+
+    monkeypatch.setattr(
+        settings,
+        "identity_continuity",
+        replace(
+            settings.identity_continuity,
+            manual_review_enabled=manual_review,
+            activation_dashboard_enabled=activation_dashboard,
+        ),
+    )
+
+    flags = _get_feature_flags(client)
+    assert flags["identity_manual_review_enabled"] is manual_review
+    assert flags["tenant_identity_activation_dashboard_enabled"] is activation_dashboard

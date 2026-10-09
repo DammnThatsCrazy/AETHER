@@ -9,9 +9,17 @@ status: beta
 
 # Identity Continuity — Current State Inventory
 
+> Implementation status update — 2026-10-02: runtime and proof-pack paths are
+> built and locally exercised, but staging connector/UI proof and confidence
+> evaluation are not complete until real staging credentials and a
+> representative human-adjudicated sample are available. Syndicates merge
+> restatement and evidence-attributed split handling are implemented for
+> explicitly opted-in groups; split memberships with missing or conflicting
+> attribution remain unchanged and report an unsupported result.
+
 **Blueprint:** Identity Continuity & Late Binding Runtime (blueprint §21, PR 9/Iota)
 **Companion to:** `implementation-plan.md` in this directory
-**Last inventoried:** 2026-09-16 (branch `feature/functionality-proof-spine`)
+**Last updated:** 2026-10-02 (current implementation checkout)
 **Scope:** What is built, what is pending, and mapping to the implementation-plan agent table (Alpha–Iota).
 
 ---
@@ -58,7 +66,7 @@ Source: `implementation-plan.md` §0 plus on-disk verification on 2026-09-16.
 | Split service | `services/backend/services/identity/split_service.py` | candidate/approve/execute/move/reverse + history |
 | Identity routes | `services/backend/services/identity/routes.py` | resolve, entity, graph, conflicts, merge, split, health, explainability, admin |
 | Identity schemas | `services/backend/services/identity/schemas.py` | Pydantic request/response |
-| Projection orchestrator | `services/backend/services/projections/projection_restatement_orchestrator.py` | queue/run for 7 projection types |
+| Projection orchestrator | `services/backend/services/projections/projection_restatement_orchestrator.py` | durable tenant-scoped jobs; implemented executors report outcomes, unsupported surfaces retain explicit reasons |
 | Profile 360 composer | `services/backend/services/profile/composer.py` | aggregation, graph_version-aware |
 | SDK routes | `services/backend/services/sdk/routes.py` | heartbeat/identify/alias/reset + source identity creation |
 | Ingestion envelope | `services/backend/services/ingestion/observation_envelope.py` + adapters | CanonicalObservationEnvelope + SDK/replay adapters |
@@ -78,14 +86,14 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 | Agent | Workstream (PR) | Deliverables in plan | On-disk | Status | Notes |
 |---|---|---|---|---|---|
 | **Alpha** | Contract Spine (PR 1) | 10 JSON contracts + `index.json` + TS types + Python model alignment (§5, §11) | `packages/shared/contracts/identity/*.json` (9 files + `index.json` + `sdk-contract.json`), `packages/shared/contracts/identity/canonical-entity.json` etc. | **Done** | Contracts exist; `packages/shared/src/identity/types.ts` generated via contract generator; `models.py` has confidence_band, decision_type vocab, graph version fields. |
-| **Beta** | Source Identity Registry (PR 2) | `source_identity_registry.py`, `claim_normalizer.py`, ingestion wiring, idempotency | `source_identity_registry.py` (360 LOC), `claim_normalizer.py` (129 LOC), wiring in `ingestion/adapters/sdk.py`, `providers/shopify/`, `sdk/routes.py` | **Done** | All source kinds covered: CSV row, Shopify/Stripe customer, SDK anon/user, mobile install, API subject, agent ID. `source_record_id + idempotency_key` dedup verified. |
+| **Beta** | Source Identity Registry (PR 2) | `source_identity_registry.py`, `claim_normalizer.py`, ingestion wiring, idempotency | `source_identity_registry.py` (360 LOC), `claim_normalizer.py` (129 LOC), wiring in `ingestion/adapters/sdk.py`, provider runtime webhook/pull, `sdk/routes.py` | **Partial** | CSV and Shopify/WooCommerce provider paths persist unresolved source identities with hashed email/phone claims and provider-record provenance. Provider claims become SDK candidate evidence only when a newly persisted raw record is anchored to a completed sync run or verified-and-processed webhook inbox; failed, pending, rolled-back, mismatched, or cross-tenant anchors are ignored. Candidate status still requires person-level identity-link consent before resolution. Stripe and other provider runtime paths are not proven here. |
 | **Gamma** | Resolution Engine & Policy Hardening (PR 3) | `veto_engine.py`, confidence_band, merge_policy extensions, resolver wiring | `veto_engine.py` (244 LOC), `confidence.py` (band mapping), `merge_policy.py` (entity-type + verified-email + shared-device vetoes), `resolver.py` veto invocation | **Done** | Every observation → resolved/provisional/review_required/conflicted/suppressed/rejected. High score cannot override hard veto. |
 | **Delta** | Merge Ledger & Graph Versioning (PR 4) | `merge_ledger.py`, `graph_versioner.py`, model extensions, graph_writer hooks | `merge_ledger.py` (293 LOC), `graph_versioner.py` (98 LOC), `models.py` IdentityDecision/IdentityGraphVersion, `graph_writer.py` decision+version+restatement queue | **Done** | Every merge creates decision + edge + version increment + restatement job. |
 | **Epsilon** | Split/Unmerge Engine (PR 5) | `split_service.py`, split_policy, graph_writer reversal | `split_service.py` (295 LOC), `split_policy.py`, `graph_writer.py` edge reversal + reassignment | **Done** | Split preserves raw records, moves source identities, reverses edges, increments version, queues restatement, audit preserved. |
-| **Zeta** | Projection Restatement Orchestrator (PR 6) | `projection_restatement_orchestrator.py`, job repository, composer wiring, events | `services/backend/services/projections/projection_restatement_orchestrator.py`, `merge_ledger`/`split_service` → `queue_restatement`, `profile/composer.py` graph_version param, `TOPIC_IDENTITY_SPLIT` + `TOPIC_PROJECTION_RESTATEMENT_QUEUED` | **Done** | Profile 360 / Journey / Campaign / Communications / Value (no duplicate revenue) / Signals / Syndicates all restate; retryable; raw data never rewritten. |
+| **Zeta** | Projection Restatement Orchestrator (PR 6) | `projection_restatement_orchestrator.py`, durable jobs-platform queue, worker registration, merge/split/resolver wiring | `services/backend/services/projections/projection_restatement_orchestrator.py`, `services/backend/services/projections/syndicates_restatement.py`, `main.py`, `merge_ledger.py`, `split_service.py`, `resolver.py` | **Partial; staging proof pending** | Merge/split decisions and resolver decisions enqueue idempotent tenant-scoped jobs. Syndicates merge restatement uses explicitly tagged Population 360 groups; split moves only memberships whose full alias/observation evidence resolves to one fragment. Unattributed memberships remain unchanged with structured per-membership reasons. |
 | **Eta** | SDK Late Binding & Contract Parity (PR 7) | SDK routes, ingestion adapter, `sdk-contract.json`, fixture apps, `test_sdk_late_binding.py` | `sdk/routes.py` (heartbeat/identify/alias/reset/consent), `ingestion/adapters/sdk.py` (anon/user/session/device/installation/traits/consent → claims), `packages/shared/contracts/identity/sdk-contract.json`, `services/backend/tests/identity/test_sdk_late_binding.py` (11 tests) | **Done** | Import-first SDK-later + anonymous-to-known tests pass; web SDK exercised; iOS/Android/React-Native stubs scaffolded. |
-| **Theta** | Tenant UX & Explainability (PR 8) | `explainability.py`, route extensions, 6 frontend components, flag wiring | `explainability.py` (681 LOC), `routes.py` (`/profiles/{id}/identity/explanation`, `/admin/identity/{merge,split,reconcile,review-queue,activation-status}`), `frontend/aether/src/features/identity/` (6 components) | **Done (backend+gated routes + frontend); flag wiring pending** | Explainability gated by `identity_explainability_enabled`; activation dashboard gated by `tenant_identity_activation_dashboard_enabled`; UI renders behind flags. |
-| **Iota** | Proof Harness, Observability & Release Gates (PR 9) | Fixtures, observability, flags, CI gates (§17–§22), docs (§21) | See §4 breakdown | **Partial → Done after this doc set** | Observability + fixtures land; flag wiring + CI gates are the final Iota slice. |
+| **Theta** | Tenant UX & Explainability (PR 8) | `explainability.py`, route extensions, tenant activation and review surfaces | `explainability.py`, `routes.py`, `frontend/aether/src/features/identity/` | **Implemented; local proof present** | Gated activation and review routes are wired to tenant-scoped capability and identity APIs. Fixture-backed UI tests are separate from authenticated staging UI evidence. |
+| **Iota** | Proof Harness, Observability & Release Gates (PR 9) | Fixtures, observability, flags, CI gates (§17–§22), docs (§21) | `packages/proof-reporting/`, `scripts/identity_staging_capture.py`, `.github/workflows/identity-continuity-gates.yml`, staging lifecycle workflow | **Implemented; staging proof pending** | Capture, validation, redaction, and pack generation fail closed and are wired into staging. Real connector sync and authenticated live UI evidence have not been captured because required provider secrets are not configured. |
 
 ---
 
@@ -93,11 +101,11 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 
 | Item | Location | Status |
 |---|---|---|
-| Identity fixtures (TS) | `packages/proof-fixtures/fixtures/identity/` (`raw_input.json`, `expected_normalized.json`) | **Done (minimal)** — expand breadth per `fixtures.md` |
-| Backend identity tests | `services/backend/tests/identity/` (9 files: decision_evidence, resolution_replay, sdk_late_binding, import_first_sdk_later, anonymous_to_known, multi_sdk_same_user, source_precedence, verification, verified_email_resolution) | **Done** |
+| Identity fixtures | `packages/proof-fixtures/fixtures/identity/` | **Expanded** — includes import-first/SDK-later, shared-device no-merge, bad-merge/split, reimport idempotency, cross-tenant, deletion suppression, and multi-SDK cases |
+| Backend identity tests | `services/backend/tests/identity/` | **Expanded** — focused modules cover resolver policy, tenant/consent boundaries, recovery, provider candidate evidence, SDK lifecycle, projections, staging capture, and calibration evaluation |
 | Observability service | `services/backend/services/identity/observability.py` + `metrics.py` | **Done** — metrics `identity.source_identity.created`, `identity.resolve.*`, `identity.merge.*`, `identity.split.*`, `identity.veto.*`, `identity.cross_tenant_block.*`, `identity.projection_restatement.*`; traces ingestion→…→profile_360.update; logs per §19.1 |
-| Feature-flag wiring | `config/release/feature_flags/` + `services/backend/config/settings.py` | **Pending** — 17 identity flags defined in plan (§15) not yet in `staging.yaml`/`production-lean.yaml`; see `rollout-plan.md` for flag list and progression |
-| CI gates 1–7 | `.github/workflows/repo-consistency.yml` + sibling workflows | **Pending** — gates defined in `proof-plan.md` §5, workflow wiring is final Iota step |
+| Feature-flag wiring | `config/release/feature_flags/` + backend settings and routes | **Wired and locally exercised** — retain runtime confidence as uncalibrated |
+| CI gates 1–7 | `.github/workflows/identity-continuity-gates.yml` plus staging lifecycle capture | **Wired as supplementary finalization evidence** — the canonical repository disposition remains the normal-PR readiness authority |
 | Docs (§21) | `docs/blueprints/identity-continuity/` | **This set** — `implementation-plan.md` (existing), `current-state-inventory.md` (this file), `proof-plan.md`, `fixtures.md`, `rollout-plan.md` |
 
 ---
@@ -106,12 +114,13 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 
 | Gap | Blueprint ref | Owner | Current | Next action |
 |---|---|---|---|---|
-| Feature-flag wiring (17 identity flags) | §15 | Iota | Not in `staging.yaml` / `production-lean.yaml` | Add flags per `rollout-plan.md`; gate routes + orchestrator + SDK late binding behind them |
-| CI gates 1–7 | §22 | Iota | Defined in `proof-plan.md`, not wired in workflows | Wire to `repo-consistency.yml` / `functionality-proof.yml` |
-| Fixture breadth | §17–§18 | Iota | Minimal identity fixtures (1 workspace, 2 users) | Expand per `fixtures.md` (scenarios A–D + cross-tenant + suppressed + idempotency) |
-| Staging proof-pack automation | §18 | Iota | Manual `proof-pack` shape defined | Automate `packages/proof-reporting` generation on staging |
-| Frontend e2e for review queue / activation dashboard | §12 | Theta/Iota | Components exist, no Kyber e2e | Add `kyber-e2e.yml` coverage gated by dashboard flag |
-| Calibration of confidence scores | §8.2 | Gamma | `calibrated=False` | Measure against labeled pairs before tuning thresholds |
+| Feature-flag wiring | §15 | Iota | Routes, SDK lifecycle, and tenant activation surfaces have flag checks and focused tests | Review the complete flag map during final architecture review; runtime confidence remains uncalibrated |
+| CI gates 1–7 | §22 | Iota | Supplementary identity continuity workflow is wired to finalization; repository disposition remains the sole normal-PR authority | Run supplementary evidence on a fully configured staging run; do not substitute it for final disposition |
+| Fixture breadth | §17–§18 | Iota | Fixtures cover import-first, shared-device, split/recovery, connector idempotency, cross-tenant, suppression, and multi-SDK scenarios | Review fixture claims against the final behavior and captured staging transcripts |
+| Staging proof-pack automation | §18 | Iota | Collector, schemas, capture CLI, and staging workflow are implemented; collector requires both live UI surfaces | Configure `IDENTITY_STAGING_PROVIDER_IDENTITY`, `IDENTITY_STAGING_PROVIDER_CONFIG_JSON`, and `IDENTITY_STAGING_PROVIDER_CREDENTIAL_JSON`, then run staging workflow and inspect uploaded pack |
+| Authenticated live UI evidence | §12 | Theta/Iota | Activation and Review Queue Playwright path uses deployed Aether UI and real backend; fixture suite is supplemental | Run with deployed UI URL and staging API credential; inspect successful API observations and both screenshot artifacts |
+| Confidence evaluation | §8.2 | Gamma | Evaluator requires independent adjudication and pseudonymous tenant/source/reviewer/time provenance; production `calibrated=False` | Supply representative independently reviewed data meeting sample, source, tenant, score-band, and holdout gates; no qualifying label dataset is present |
+| Syndicates restatement | §11 | Zeta | Governed merge union and evidence-attributed split paths are implemented for groups tagged `syndicates_group: true`; untagged groups and Cluster360 are excluded | Add accepted alias/observation evidence references when creating membership rows; keep unattributed or mixed split memberships unchanged and investigate those evidence gaps |
 
 ---
 
@@ -139,8 +148,5 @@ pytest services/backend/tests/identity/ -v            # run on finalization
 
 ## 8. Doc maintenance
 
-This inventory is a point-in-time view. Update it when:
-- a flag is wired (move Iota flag row to Done),
-- a CI gate is wired (move gate row),
-- fixture breadth expands (update §4),
-- calibration flips `calibrated=True`.
+This inventory is a point-in-time view. Update it when new implementation
+slices land or real staging and reviewed-label evidence become available.

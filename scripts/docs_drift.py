@@ -619,6 +619,57 @@ def head_sha() -> str | None:
     return sha or None
 
 
+def docs_for_update(requested: list[str]) -> tuple[list[Path] | None, str | None]:
+    """Select source-linked tracked docs, optionally restricted by path.
+
+    An explicit allowlist is useful after reviewing only a subset of stale
+    docs. Fail closed when a requested path is outside ``docs/``, untracked,
+    or does not declare ``source_files``; otherwise a typo could silently
+    broaden an update or make a requested review appear complete.
+    """
+    docs = tracked_docs()
+    if not requested:
+        return docs, None
+
+    by_relative = {path.relative_to(ROOT).as_posix(): path for path in docs}
+    selected: list[Path] = []
+    missing: list[str] = []
+    invalid: list[str] = []
+    for item in requested:
+        candidate = Path(item)
+        if candidate.is_absolute():
+            try:
+                relative = candidate.resolve().relative_to(ROOT.resolve()).as_posix()
+            except ValueError:
+                invalid.append(item)
+                continue
+        else:
+            relative = candidate.as_posix()
+        if relative.startswith("../") or not relative.startswith("docs/"):
+            invalid.append(item)
+            continue
+        path = by_relative.get(relative)
+        if path is None:
+            missing.append(relative)
+            continue
+        fm = extract_frontmatter(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(fm.get("source_files"), list) or not fm.get("source_files"):
+            invalid.append(relative)
+            continue
+        selected.append(path)
+
+    if invalid or missing:
+        parts = []
+        if invalid:
+            parts.append(
+                "not a tracked source-linked docs path: " + ", ".join(sorted(set(invalid)))
+            )
+        if missing:
+            parts.append("not tracked: " + ", ".join(sorted(set(missing))))
+        return None, "; ".join(parts)
+    return sorted(set(selected)), None
+
+
 def stamp_doc(path: Path, sha: str) -> bool:
     """Write ``last_synced_commit: <sha>`` into the frontmatter of one doc.
 
@@ -758,6 +809,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--path",
+        action="append",
+        default=[],
+        help=(
+            "With --update, restrict changes to this tracked source-linked doc "
+            "(repeat for multiple docs). Paths are repo-relative by default."
+        ),
+    )
+    parser.add_argument(
         "--migrate-to-content-hashes",
         action="store_true",
         help=(
@@ -769,6 +829,8 @@ def main() -> int:
 
     if args.update and args.migrate_to_content_hashes:
         parser.error("--update and --migrate-to-content-hashes are mutually exclusive")
+    if args.path and not args.update:
+        parser.error("--path may only be used with --update")
 
     if args.migrate_to_content_hashes:
         backlog = load_review_backlog()
@@ -822,7 +884,12 @@ def main() -> int:
         updated = 0
         skipped = 0
         backlogged = 0
-        for path in tracked_docs():
+        docs, selection_error = docs_for_update(args.path)
+        if selection_error:
+            print(f"error: {selection_error}", file=sys.stderr)
+            return 1
+        assert docs is not None
+        for path in docs:
             report = check_doc(path)
             if report["stale"]:
                 if report["path"] in backlog:

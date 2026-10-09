@@ -26,12 +26,12 @@ source_hashes:
   "services/backend/services/integrations/adapter.py": "sha256:92065c9a6c459302d05241379d1bc92fbc96a25596c767bfcd7d29671ee4eb7e"
   "services/backend/services/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
   "services/backend/services/integrations/connectors/registry.py": "sha256:cbd62d89ef255fbe7097d9778d1adc2f728f7ff98bfade29a98d0620d86238f8"
-  "services/backend/services/providers/amazon/": "sha256:47421acb9e29d0fd5d8f6414edb2c86b03c35ccfd226b6027abe0ecc31e6c882"
-  "services/backend/services/providers/ebay/": "sha256:7b1986d902e2fe6e488798464e95abadc2f6a78838e1bb53798a6b1244c1d318"
-  "services/backend/services/providers/etsy/": "sha256:a554214cb6b6058580328f5d94a0ad59d382ed14c27be1a42b2d330c2d170026"
-  "services/backend/services/providers/shopify/": "sha256:45f4980bfcd718f18a7e17806771102c20431d356244325b58ad1a0a6ba430ca"
-  "services/backend/services/providers/tiktok/": "sha256:7c3e216b87d697b8c9b977cab6fc97a1fc338a529da59686c68c4836327af306"
-  "services/backend/services/providers/walmart/": "sha256:46b1e19cd84c539069b862d86299e45e2af952a0140fa8234e07fad3f3673bc1"
+  "services/backend/services/providers/amazon/": "sha256:775e061ac0c1344aa5ab76585467a510afc063ae6bec1d9fe2f58a32043c75dc"
+  "services/backend/services/providers/ebay/": "sha256:36a36b484077e6e4d833ce553a7f80a1f3dab7fefa0b0fc79b143bf19405ec1f"
+  "services/backend/services/providers/etsy/": "sha256:3f62869a8e5f1fbdc0e9e3f5d2037a1a2be6539f4b30584176e50f5c8fb7d2d1"
+  "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
+  "services/backend/services/providers/tiktok/": "sha256:081c927e0d3bd7ad9dc4610a79005b01949fca195fced6fa8ad7a933f1fb04b3"
+  "services/backend/services/providers/walmart/": "sha256:aa3ea9aa3af1b60f59a3e789398e53a89a92c3719e8d32d8b52fc1b6dcb0c186"
   "services/backend/services/providers/woocommerce/": "sha256:2fa57e2e7e797edffe9083feb1462cefb2307de233feed57e60352719805fe4f"
   "services/backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
   "services/backend/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
@@ -47,8 +47,8 @@ untouched and working throughout; nothing in this migration is core-first.
 
 | | **Path (a) — `LegacyConnectorPlugin`** | **Path (b) — native plugin** |
 |---|---|---|
-| When | **Today, zero code** | **Tomorrow, per-provider** |
-| What | Every existing connector is automatically exposed as a plugin | A provider writes a real plugin package |
+| When | With UPR enabled; no per-connector porting | Per-provider as native capabilities are built |
+| What | Existing `BaseConnector` entries are exposed through the compatibility wrapper | A provider is implemented as a native plugin package |
 | Identity | `(connector_type, "ingestion", "connector")` — **byte-identical** to the catalog-derived manifest | `family.product.capability`, e.g. `shopify.admin.orders_read` |
 | Event types | Legacy namespaced types preserved | Canonical `commerce.*` events |
 | Lifecycle | Delegated to `IntegrationAdapter` / `ConnectorIntegrationAdapter` | Native adapters + normalizer |
@@ -73,10 +73,12 @@ with **zero provider code**:
 - Legacy namespaced event types are preserved — downstream consumers see no
   change.
 
-### Path (b) — tomorrow: a native plugin
+### Path (b) — native plugin, per provider
 
-For a provider that wants canonical `commerce.*` events, real capability
-adapters, and UPR-native operation:
+For a provider that needs canonical `commerce.*` events, native capability
+adapters, or UPR-native operation, implement and certify its native plugin.
+Six native provider packages already exist in this build; the Shopify package
+is the reference for continuing this path:
 
 1. Write a plugin package under `services/backend/services/providers/<family>/` following
    [PROVIDER-PLUGIN-SPEC](PROVIDER-PLUGIN-SPEC.md).
@@ -95,8 +97,10 @@ same shape:
 1. **Expose** — Shopify is already exposed via `LegacyConnectorPlugin` today
    (`shopify.ingestion.connector`); legacy `shopify.*` namespaced events keep
    flowing.
-2. **Build** — create `services/backend/services/providers/shopify/` (plugin, adapters,
-   normalizer, fixtures) per the plugin spec.
+2. **Build** — the native Shopify package already exists at
+   `services/backend/services/providers/shopify/` (plugin, adapters, normalizer,
+   fixtures); use it as the reference while keeping it alongside the legacy
+   connector until cutover gates pass.
 3. **Map events** — the normalizer maps Shopify order status → canonical
    `commerce.order.*` types and `CommerceOrder` → `OrderSnapshot`.
 4. **Certify** — `certify_provider(ShopifyPlugin(), environment=...)`; fix any
@@ -153,6 +157,7 @@ per-provider decommission, plus the config/secret projection engine (WS6).
 | eBay | none | native plugin only — no legacy decommission |
 | Walmart | none | native plugin only — no legacy decommission |
 | TikTok | none | native plugin only — no legacy decommission |
+| Shopify | legacy `shopify.ingestion.connector` | Native UPR stream foundation and opt-in GraphQL reader exist alongside the legacy path; no tenant cutover or environment enablement is claimed. |
 
 Because these six ship **no legacy `BaseConnector`**, there is no legacy path
 to decommission: they land directly as native plugins (path b). Each lives at
@@ -169,7 +174,12 @@ offline fixture-replay determinism, not live verification; live steps remain
 certification-level follow-ons and are not claimed as build facts.
 
 Shopify is the one provider in this build that carries a legacy connector to
-decommission. The decommission procedure uses the retire helper in
+decommission. In this branch the native plugin declares REST, REST-plus-webhook,
+and opt-in GraphQL modes. REST remains the default compatibility path;
+GraphQL uses API version `2026-07` and remains credential-waiting with every
+environment disabled. Shopify REST/webhook revision parity, sandbox evidence,
+source authority, graph projection, durable tenant writer routing, and rollback
+are not complete, so no tenant has cut over. The decommission procedure uses the retire helper in
 `services/backend/services/integrations/connectors/registry.py`:
 `retire_connector_type(registry_state, connector_type)` returns a typed
 `RetireResult` (`retired` / `already_retired` / `unknown` /
@@ -181,11 +191,44 @@ explicit per-provider set — never core-first.
 **Projection engine (WS6):** the config/secret migration projections live in
 `shared/integration_contracts/migration.py`. `MigrationProjection` is one
 fully-mapped legacy connector — target native identity, config/secret field
-maps, target credential ref (`provider:{tenant}:{identity}`), and a confidence
-verdict. `ProjectionCandidate` is the lighter pre-projection snapshot with
+maps, a compatibility projection ref (`provider:{tenant}:{identity}`), and a
+confidence verdict. That projection field is not the ref stored on a newly
+created connection: the migration executor stores credentials under a
+tenant/provider/connection-scoped ref (including a SHA-256 digest of the new
+connection ID). Existing legacy `provider:{tenant}:{identity}` refs remain
+resolvable for persisted connections and are not rewritten by this change.
+`ProjectionCandidate` is the lighter pre-projection snapshot with
 `native_identity=None` until a native counterpart exists and
 `requires_manual_mapping` flagging fields that need a human decision. Both
 models are strict (`extra="forbid"`).
+
+## 6. Universal connector migration foundation in this branch
+
+The [universal connector blueprint](blueprints/universal-connector-runtime/README.md)
+extends this per-provider sequence with stream-scoped raw revisions,
+non-identity source-object mappings, and a durable tenant route ledger. The
+route key includes tenant, environment, managed integration, provider,
+account, stream, and fact family. A compare-and-swap transition increments
+its writer generation and writes an audit receipt in the same transaction.
+Route proposals require a governance admission callback and fail closed
+without one.
+
+The route ledger is not a cutover switch by itself. No tenant route API is
+mounted, and the existing legacy and native graph writers are not yet both
+fenced through it. A connector graph writer wrapper can hold a route lock
+through one governed graph mutation, but promotion remains disabled until
+every affected writer uses that seam, shadow output is isolated, projection
+diffs pass, and rollback is rehearsed. Do not retire a legacy connector from
+the registry merely because its native plugin registered or its route record
+exists.
+
+The event bridge now commits consent-admitted provider events to typed Bronze
+and the transactional event outbox. In staging and production, enabling UPR
+ingress without the existing event-outbox relay fails startup. Historical raw
+rows and legacy canonical outputs need a scoped replay/diff migration; the
+bridge does not backfill them automatically. See the
+[provider outbox rollout](blueprints/universal-connector-runtime/provider-outbox-rollout.md)
+for the delivery gate and operational checks.
 
 ## Related docs
 

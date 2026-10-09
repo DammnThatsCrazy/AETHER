@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   cn,
-  Badge,
   Button,
   DemoTenantBanner,
   Icon,
@@ -21,33 +20,46 @@ import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
 import { useDemoSeedStatus } from '@aether-app/features/demo-seed/use-demo-seed-status';
 import { persistLastWorkspace } from '@aether-app/features/workspace/last-workspace';
 
-interface NavEntry {
+type RouteNavEntry = {
+  readonly kind: 'route';
   readonly label: string;
-  /** A real current route for an enabled tenant-facing destination. */
-  readonly to?: string;
-  readonly destination?: NavigationIconProps['destination'];
-  /** Icon name for truthful not-ready entries without a brand route mapping. */
-  readonly icon?: IconName;
+  /** Existing tenant route. Navigation does not create or grant this route. */
+  readonly to: string;
   /** Backend capability required; excluded domain / off flag hides the link. */
   readonly requirement?: CapabilityRequirement;
-  /** The product surface is named, but has no current tenant route/capability. */
-  readonly notReady?: boolean;
+} & (
+  | { readonly destination: NavigationIconProps['destination']; readonly icon?: never }
+  | { readonly icon: IconName; readonly destination?: never }
+);
+
+interface PendingNavEntry {
+  readonly kind: 'not_ready';
+  readonly label: string;
+  readonly icon: IconName;
 }
 
+type NavEntry = RouteNavEntry | PendingNavEntry;
+
+/** Target customer navigation, followed by existing capability-gated identity entry points. */
 const NAV_ITEMS: readonly NavEntry[] = [
-  { to: '/explore', label: 'Explore', destination: 'aether-graph' },
-  { label: 'Findings', icon: 'search-check', notReady: true },
-  { label: 'Investigations', icon: 'search', notReady: true },
-  { label: 'Outcomes', icon: 'chart-no-axes-combined', notReady: true },
-  { label: 'Reports', icon: 'file-check-2', notReady: true },
-  { to: '/settings/integrations', label: 'Sources', destination: 'aether-integrations', requirement: { flag: 'connectors_enabled' } },
-  { to: '/settings', label: 'Settings', destination: 'aether-settings' },
+  { kind: 'not_ready', label: 'Snapshot', icon: 'activity-square' },
+  { kind: 'route', to: '/explore', label: 'Graph', destination: 'aether-graph' },
+  { kind: 'route', to: '/users', label: 'Profiles', destination: 'aether-users' },
+  { kind: 'not_ready', label: 'Journeys', icon: 'route' },
+  { kind: 'not_ready', label: 'Signals', icon: 'bell' },
+  { kind: 'not_ready', label: 'Lenses', icon: 'network' },
+  { kind: 'not_ready', label: 'Value', icon: 'chart-no-axes-combined' },
+  { kind: 'route', to: '/settings/integrations', label: 'Connectors', destination: 'aether-integrations', requirement: { flag: 'connectors_enabled' } },
+  { kind: 'route', to: '/settings', label: 'Settings', destination: 'aether-settings' },
+  { kind: 'route', to: '/identity/activation', label: 'Identity status', icon: 'fingerprint', requirement: { flag: 'tenant_identity_activation_dashboard_enabled' } },
+  { kind: 'route', to: '/identity/reviews', label: 'Identity reviews', icon: 'list-checks', requirement: { flag: 'identity_manual_review_enabled' } },
 ];
 
-function NavItem({ to, label, destination }: Required<Pick<NavEntry, 'to' | 'label' | 'destination'>>) {
+function NavItem({ to, label, destination, icon }: RouteNavEntry) {
   return (
     <NavLink
       to={to}
+      end={to === '/settings'}
       className={({ isActive }) =>
         cn(
           'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
@@ -57,18 +69,22 @@ function NavItem({ to, label, destination }: Required<Pick<NavEntry, 'to' | 'lab
         )
       }
     >
-      <NavigationIcon destination={destination} decorative size="md" className="text-current" />
+      {destination ? (
+        <NavigationIcon destination={destination} decorative size="md" className="text-current" />
+      ) : icon ? (
+        <Icon name={icon} decorative size="md" className="text-current" />
+      ) : null}
       <span>{label}</span>
     </NavLink>
   );
 }
 
-function NotReadyNavItem({ label, icon = 'circle-off' }: Pick<NavEntry, 'label' | 'icon'>) {
+function NotReadyNavItem({ label, icon }: PendingNavEntry) {
   return (
     <div
       aria-disabled="true"
       aria-label={`${label} (not ready)`}
-      title="Not ready — no current tenant route or capability"
+      title="Not ready as a standalone destination"
       className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-text-muted opacity-60 cursor-not-allowed"
     >
       <Icon name={icon} decorative size="md" className="text-current" />
@@ -156,17 +172,18 @@ export function AppShell({ children }: AppShellProps) {
         {/* Navigation — capability-gated: excluded domains / off flags hide links */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {NAV_ITEMS.map(item => {
-            if (item.notReady) {
-              return <NotReadyNavItem key={item.label} label={item.label} icon={item.icon ?? 'circle-off'} />;
+            if (item.kind === 'not_ready') {
+              return <NotReadyNavItem key={item.label} {...item} />;
             }
-            if (
-              !item.to ||
-              !item.destination ||
-              resolveDestinationAvailability(capabilities, item.requirement) !== 'available'
-            ) {
+            if (resolveDestinationAvailability(capabilities, item.requirement) !== 'available') {
               return null;
             }
-            return <NavItem key={item.to} to={item.to} label={item.label} destination={item.destination} />;
+            return (
+              <NavItem
+                key={item.label}
+                {...item}
+              />
+            );
           })}
         </nav>
 

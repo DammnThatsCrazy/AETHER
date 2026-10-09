@@ -172,6 +172,7 @@ class VetoType(str, Enum):
     PROVIDER_NAMESPACE_COLLISION = "provider_namespace_collision"
     SIMULTANEOUS_CONTRADICTORY_SESSIONS = "simultaneous_contradictory_sessions"
     MANUAL_DO_NOT_MERGE = "manual_do_not_merge"
+    CANDIDATE_STATE_UNAVAILABLE = "candidate_state_unavailable"
 
 
 class ProjectionType(str, Enum):
@@ -345,6 +346,12 @@ class IdentityResolutionDecision:
     blocked_reason: Optional[str] = None
     audit_id: Optional[str] = None
     is_new_entity: bool = False
+    resolution_revision_before: Optional[int] = None
+    resolution_revision_after: Optional[int] = None
+    restatement_status: str = "not_required"
+    restatement_job_id: Optional[str] = None
+    restatement_error: Optional[str] = None
+    policy_version: str = "1.0.0"
 
 
 @dataclass
@@ -445,6 +452,7 @@ class SourceIdentityRecord:
     account_id: Optional[str] = None
     agent_id: Optional[str] = None
     runtime_id: Optional[str] = None
+    source_record_id: Optional[str] = None
     canonical_entity_id: Optional[str] = None
     status: str = "unresolved"
     first_seen_at: str = ""
@@ -461,6 +469,9 @@ class IdentityClaimRecord:
     source_identity_id: str
     claim_type: str
     normalized_value: str
+    source_record_id: Optional[str] = None
+    import_id: Optional[str] = None
+    import_commit_id: Optional[str] = None
     raw_value: Optional[str] = None
     verification_status: str = "unknown"
     confidence_hint: Optional[float] = None
@@ -470,6 +481,7 @@ class IdentityClaimRecord:
     pii_classification: str = "none"
     status: str = "active"
     created_at: str = ""
+    updated_at: str = ""
 
 
 @dataclass
@@ -524,6 +536,8 @@ class IdentityDecisionRecord:
     explanation: str = ""
     decided_by: str = "system"
     decided_at: str = ""
+    resolution_revision_before: Optional[int] = None
+    resolution_revision_after: Optional[int] = None
 
 
 @dataclass
@@ -568,6 +582,8 @@ class ProjectionRestatementJobRecord:
     created_at: str = ""
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
+    resolution_revision_before: Optional[int] = None
+    resolution_revision_after: Optional[int] = None
 
 # ── Identity assurance / verification records ──────────────────────────────────
 

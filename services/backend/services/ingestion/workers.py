@@ -1,7 +1,7 @@
 """
 Aether Service — Ingestion Workers
 
-Kafka consumers that drive the Bronze → Silver → identity signal pipeline
+Kafka consumers that drive the Bronze → Silver → identity pipeline
 for SDK events.  Workers are attached to the shared EventConsumer during
 app startup via attach_ingestion_workers().
 
@@ -12,10 +12,11 @@ Worker topology:
                          silver fact tables (+ canonical activity, graph queue)
                        → analytics_event_recorder → events + sessions (the
                          tenant analytics store AnalyticsRepository reads)
-                       → identity_signal_emitter → publishes IDENTITY_RESOLVED
+                       → identity resolver → registers source identity and
+                         publishes IDENTITY_RESOLVED after a real decision
 
-These workers never mutate graph/profile directly; they emit signals that
-the Profile360 and identity-resolution services consume.
+Projection workers do not mutate graph/profile directly; the identity worker
+owns source registration and invokes the canonical resolver.
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
 from services.ingestion.ingestion_observability import record_stage
 from services.ingestion.spine import (
     ObservationView,
+    is_provider_delivery,
     normalization_spine_enabled,
     to_observation_view,
 )
@@ -47,6 +49,22 @@ _bronze = BronzeRepository("sdk_events")
 _silver = SilverRepository("sdk_events")
 
 SCHEMA_VERSION = "1.0.0"
+
+
+def _defer_provider_canonical(event: Event, consumer: str) -> bool:
+    """Keep AetherEvent transport out of SDK-only projections until mapped.
+
+    Provider order/payment facts need their own source-authority adapter and
+    route fence. The canonical payload remains in Bronze and event_outbox for
+    a governed replay; a metric makes this intentional deferral observable.
+    """
+    if not is_provider_delivery(event.payload, event.source_service):
+        return False
+    metrics.increment(
+        "ingestion_provider_projection_deferred_total",
+        labels={"consumer": consumer},
+    )
+    return True
 
 
 async def sdk_bronze_writer(event: Event) -> None:
@@ -120,6 +138,8 @@ async def silver_normalizer(event: Event) -> None:
     envelope or an AetherEvent ``subject_id`` is reachable); when OFF every
     read is the legacy flat-key read (byte/row parity).
     """
+    if _defer_provider_canonical(event, "silver_normalizer"):
+        return
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_id = payload.get("event_id", event.event_id)
@@ -365,6 +385,8 @@ async def analytics_event_recorder(event: Event) -> None:
     covers is skipped (``services.consent.erasure_fence``). Failures raise so
     the consumer retries / dead-letters the message.
     """
+    if _defer_provider_canonical(event, "analytics_event_recorder"):
+        return
     payload = event.payload or {}
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_id = payload.get("event_id") or event.event_id
@@ -526,6 +548,8 @@ async def silver_fact_projector(event: Event) -> None:
     Projection failures never raise: Bronze is already durable, and replaying
     the Bronze range recovers any missed facts.
     """
+    if _defer_provider_canonical(event, "silver_fact_projector"):
+        return
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_type = payload.get("event_type", "")
@@ -646,73 +670,39 @@ def _comms_ingestion_enabled() -> bool:
 
 
 async def identity_signal_emitter(event: Event, producer: EventProducer) -> None:
+    """Deprecated signal-only helper retained for compatibility tests.
+
+    It is not registered by the production consumer topology. Production
+    identity resolution is owned by ``services.identity.ingestion_worker``.
     """
-    Emit an identity resolution signal for identify/user events.
-
-    Only emits for event types that carry strong identity signals:
-    - identify: user_id + anonymous_id → IDENTITY_RESOLVED
-    - wallet: wallet address → IDENTITY_RESOLVED
-
-    Fingerprint-only signals are never used as high-confidence identity anchors.
-
-    WS-B5: when the normalization-spine flag is ON the identity reads go
-    through :func:`to_observation_view`, so an AetherEvent ``subject_id`` (or an
-    additive envelope user subject) becomes reachable; when OFF every read is
-    the legacy flat-key read.
-    """
-    payload = event.payload
-    tenant_id = event.tenant_id or payload.get("tenant_id", "")
-    event_type = payload.get("event_type", "")
-
-    if event_type not in {"identify", "wallet"}:
+    if _defer_provider_canonical(event, "identity_signal_emitter"):
         return
-
+    payload = event.payload
+    if payload.get("event_type") != "identify":
+        return
     view = to_observation_view(payload) if normalization_spine_enabled() else None
     user_id = payload.get("user_id")
     anonymous_id = payload.get("anonymous_id", "")
     session_id = payload.get("session_id", "")
     if view is not None:
-        if view.user_id is not None:
-            user_id = view.user_id
-        if view.anonymous_id is not None:
-            anonymous_id = view.anonymous_id
-        if view.session_id is not None:
-            session_id = view.session_id
-
-    signal: dict = {
-        "tenant_id": tenant_id,
-        "anonymous_id": anonymous_id,
-        "session_id": session_id,
-        "source": "sdk",
-        "confidence": 0.0,
-    }
-
-    if event_type == "identify" and user_id:
-        signal["user_id"] = user_id
-        signal["confidence"] = 0.95  # strong signal: explicit identification
-
-    if event_type == "wallet":
-        props = dict(payload.get("properties") or {})
-        if not props and view is not None and view.payload_dict:
-            props = dict(view.payload_dict)
-        wallet_addr = props.get("address") or props.get("wallet_address", "")
-        if wallet_addr:
-            signal["wallet_address"] = wallet_addr
-            signal["confidence"] = 0.85
-
-    if signal["confidence"] == 0.0:
+        user_id = view.user_id or user_id
+        anonymous_id = view.anonymous_id or anonymous_id
+        session_id = view.session_id or session_id
+    if not user_id:
         return
-
-    try:
-        await producer.publish(Event(
-            topic=Topic.IDENTITY_RESOLVED,
-            tenant_id=tenant_id,
-            source_service="ingestion.workers",
-            payload=signal,
-        ))
-    except Exception as exc:
-        logger.warning("identity_signal_emitter publish failed: %s", exc)
-        # Not a critical failure — identity resolution will catch up on replay
+    await producer.publish(Event(
+        topic=Topic.IDENTITY_RESOLVED,
+        tenant_id=event.tenant_id or payload.get("tenant_id", ""),
+        source_service="ingestion.workers.compatibility",
+        payload={
+            "tenant_id": event.tenant_id or payload.get("tenant_id", ""),
+            "anonymous_id": anonymous_id,
+            "session_id": session_id,
+            "user_id": user_id,
+            "source": "sdk",
+            "confidence": 0.95,
+        },
+    ))
 
 
 def attach_ingestion_workers(consumer: EventConsumer, producer: EventProducer) -> None:
@@ -738,7 +728,10 @@ def attach_ingestion_workers(consumer: EventConsumer, producer: EventProducer) -
     consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, analytics_event_recorder)
     logger.info("Ingestion worker attached: analytics_event_recorder → SDK_EVENTS_VALIDATED")
 
-    # Identity signal emitter (needs producer reference via partial)
-    identity_handler = functools.partial(identity_signal_emitter, producer=producer)
+    # Legacy local wiring follows the same durable handler as the production
+    # role registry. The old signal-only helper remains unregistered.
+    from services.identity.ingestion_worker import resolve_sdk_observation
+
+    identity_handler = functools.partial(resolve_sdk_observation, producer=producer)
     consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, identity_handler)
-    logger.info("Ingestion worker attached: identity_signal_emitter → SDK_EVENTS_VALIDATED")
+    logger.info("Ingestion worker attached: identity resolver → SDK_EVENTS_VALIDATED")

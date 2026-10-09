@@ -2,7 +2,7 @@
 
 Maps reconciliation variances and unrecovered stream gaps to OODA
 suggestions. Suggestions only — Aether never places, modifies, or cancels
-orders. Gated by settings.suggestions.derivatives_adapter_enabled.
+orders. Not wired yet: nothing registers this adapter (see config/backend_reachability.yaml).
 """
 
 from __future__ import annotations

@@ -18,7 +18,7 @@ from repositories.repos import CampaignRepository, EntityRepository
 from .models import SubjectType
 
 # Below this confidence a resolution enters the review queue instead of asserting
-# a canonical subject. Mirrors settings.semantic.subject_confidence_threshold.
+# a canonical subject.
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
 
 # Event properties that carry the subject, in precedence order, with their type.

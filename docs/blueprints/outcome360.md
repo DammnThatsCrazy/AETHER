@@ -162,8 +162,8 @@ The registry row declares `projectionDependencies: [temporal360]`. Until a
   holds at `in_flight`).
 * **`implemented`** — the row flips `implementationState` to `implemented` and
   `legacyBindings.migrationMode` to `converged`; the legacy `/v1/measurement`,
-  `/v1/journeys`, `/v1/conversions`, `/v1/attribution`, `/v1/spend`,
-  `/v1/resolution` bindings resolve to the existing measurement service.
+  `/v1/journeys`, `/v1/conversions`, `/v1/attribution`, `/v1/spend`
+  bindings resolve to the existing measurement service.
 * Flipping to `implemented` makes **no** `production_ready` claim.
 
 ## Files

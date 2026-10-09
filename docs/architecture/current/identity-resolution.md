@@ -32,6 +32,20 @@ raw observations → Bronze normalization → identity keys extraction
   candidate entities should be merged vs. kept separate.
 - **Split recovery**: mechanism to undo an incorrect merge when new
   evidence arrives.
+- **Source namespace**: the scope in which source identifiers are unique.
+  Registry idempotency is tenant- and namespace-scoped; equal raw IDs from a
+  CSV upload, connector, or SDK remain separate evidence until the resolver
+  evaluates their claims.
+
+## Import-First, SDK-Later Continuity
+
+Historical imports and later SDK observations enter the same identity
+resolution service through distinct source identities. Repeated observations
+of one identifier within the same source namespace are idempotent. A matching
+identifier from another namespace creates a separate source identity, while
+shared claims (for example, an email) may still provide evidence for the
+backend resolver to link or merge compatible identities. The SDK does not
+assign a canonical entity.
 
 ## Invariants
 

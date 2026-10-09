@@ -6,11 +6,12 @@ visibility: I
 audience: [dev-senior, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/economic/routes.py, packages/shared/economic-metrics.ts]
+source_files: [services/backend/services/economic/routes.py, services/backend/services/profile/routes.py, packages/shared/economic-metrics.ts]
 related: [concepts/economic-value-framing, concepts/unified-economic-graph]
 source_hashes:
   "packages/shared/economic-metrics.ts": "sha256:99f596fa31534999e24ec96ec72eef3a8a87c1a18396831105d2e8c88d5a86c3"
-  "services/backend/services/economic/routes.py": "sha256:e01e6487d9825b57736b4d523483523698fa47fbd8fc3fd28be5b09c96a58cbc"
+  "services/backend/services/economic/routes.py": "sha256:a5540341f8b6486f5f3ad65a068d7dc8bb81ed534c0845e605e301ac589b1ee0"
+  "services/backend/services/profile/routes.py": "sha256:80823d4e97c98e5a5899557f5fccfd4fecdb3271c5501490d31342992a9a3305"
 ---
 
 # Aether — Kyber Economic Observability
@@ -65,13 +66,18 @@ The Kyber operator console surfaces economic observability for platform operator
 ```
 GET /v1/economic/overview                    → Tenant economic overview
 GET /v1/economic/warnings                    → Tenant-wide warnings
-GET /v1/profile/{id}/economic                → Entity economic breakdown
-GET /v1/profile/{id}/economic/web2           → Web2 GMV / revenue / payment volume
-GET /v1/profile/{id}/economic/web3           → Web3 TVL / protocol exposure
+GET /v1/profile/{id}/economic                → Economic profile: financials and on-chain asset composition (profile service)
+GET /v1/profile/{id}/economic/web2           → TradFi signals; requires `credit` consent, 403 without it (profile service)
+GET /v1/profile/{id}/economic/web3           → Asset composition, PNL and trading profile (profile service)
 GET /v1/profile/{id}/economic/agentic        → Agentic/x402 spend, service calls, settlement success rate
 GET /v1/profile/{id}/economic/campaigns      → Campaign-attributed value
-GET /v1/profile/{id}/economic/warnings       → Entity-level data-quality warnings
+GET /v1/profile/{id}/economic/warnings       → Missing, stale and contradicting dimensions (profile service)
 ```
+
+Every route requires the `read` permission. `/economic/agentic`, `/economic/campaigns`
+and the two `/v1/economic` routes are served by `services/economic/routes.py`; the
+other four profile routes are served by `services/profile/routes.py`. Each URL has
+exactly one handler (`tests/unit/test_route_conflicts.py`).
 
 The `/economic/agentic` breakdown is composed live from payment intents and
 settlement events (`AgentProfile360EconomicComposer`); it returns an empty
@@ -79,7 +85,7 @@ envelope rather than failing when composition errors occur.
 
 ## Implementation
 
-- Backend: `services/backend/services/economic/routes.py`
+- Backend: `services/backend/services/economic/routes.py` and `services/backend/services/profile/routes.py`
 - Shared types: `packages/shared/economic-metrics.ts`
 - Profile360 integration: `packages/shared/profile360-contract.ts`
 

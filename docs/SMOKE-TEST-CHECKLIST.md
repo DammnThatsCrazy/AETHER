@@ -173,14 +173,22 @@ curl -sf ${BASE_URL}/v1/lake/bronze?source=smoke_test \
 
 ### 9. Identity Resolution
 
+Identity resolution is `/v1/identity/*`. The legacy `/v1/resolution/*` routes are
+removed: they answer 404 locally and 403 `ROUTE_POLICY_UNKNOWN_ROUTE` where route-registry
+enforcement is on (staging, production), because an unregistered route is refused before
+routing.
+
 ```bash
-# Check identity cluster (if test user exists)
-curl -sf ${BASE_URL}/v1/resolution/cluster/smoke-test-user \
-  -H "Authorization: Bearer ${API_KEY}" | jq .
+# Confirm the identity service answers and the retired legacy route is gone.
+curl -sf ${BASE_URL}/v1/identity/health -H "Authorization: Bearer ${API_KEY}" > /dev/null
+status=$(curl -s -o /dev/null -w '%{http_code}' \
+  ${BASE_URL}/v1/resolution/cluster/smoke-test-user \
+  -H "Authorization: Bearer ${API_KEY}")
+[ "$status" = "404" ] || [ "$status" = "403" ]
 ```
 
-- [ ] Identity resolution endpoint responds
-- [ ] Cluster data is consistent (no orphaned nodes)
+- [ ] `GET /v1/identity/health` returns HTTP 200
+- [ ] Retired `/v1/resolution/cluster/{id}` returns HTTP 404 (403 where route-registry enforcement is on)
 
 ### 10. Agent Layer
 

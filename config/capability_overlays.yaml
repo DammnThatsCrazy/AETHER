@@ -1,0 +1,67 @@
+# Capability overlays — profiles describe environments, flags describe capabilities.
+#
+# A capability (communications, campaigns, an agent beta, an experiment) is a set
+# of runtime flags switched per environment. It is never a deployment profile:
+# adding a profile per capability multiplies Terraform state, cost policy and
+# workflow inputs by the number of capabilities. Each overlay below names the
+# flags that realize it today. `status: unbound` means the overlay name is
+# reserved but no runtime flag exists yet; binding it is a separate change.
+#
+# Enforced by scripts/validate_capability_overlays.py (run by repo-doctor):
+# overlay names start with `enable-`, never equal a deployment profile name, and
+# every bound flag must appear in services/backend/config/settings.py. A flag in
+# settings that nothing reads cannot stay there (scripts/validate_settings_flags.py),
+# so a bound flag is always one the runtime consults.
+
+schema_version: 1
+authority: capability-overlays
+flags_source: services/backend/config/settings.py
+
+overlays:
+  enable-communications:
+    class: beta
+    status: bound
+    flags:
+      - AETHER_COMMS_INGESTION_ENABLED
+  enable-campaigns:
+    class: beta
+    status: unbound
+    note: campaign projection and the Campaign 360 messages surface have no runtime flag; the AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED and AETHER_COMMS_CAMPAIGN360_ENABLED settings that claimed to gate them were never read and are retired.
+    flags: []
+  enable-agent-beta:
+    class: experimental
+    status: bound
+    flags:
+      - AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED
+      - AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED
+      - AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED
+      - AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED
+      - AETHER_AGENT_RUNTIME_DURABLE_ENABLED
+      - AETHER_AGENT_WORKER_BRIDGE_ENABLED
+  enable-x402-experimental:
+    class: experimental
+    status: unbound
+    note: x402 observation routes are mounted without a dedicated runtime flag today.
+    flags: []
+  enable-kyber-internal:
+    class: internal
+    status: bound
+    note: partial; Kyber is otherwise gated by operator authentication, not a flag.
+    flags:
+      - AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED
+  enable-gcp-oauth:
+    class: beta
+    status: unbound
+    note: the staging pilot lane defers Kyber, GCP and Google identity gates; no runtime flag exists yet.
+    flags: []
+  enable-advanced-value:
+    class: beta
+    status: bound
+    flags:
+      - AETHER_VALUATION_API_ENABLED
+      - AETHER_VALUATION_INGESTION_ENABLED
+  enable-sovereign-controls:
+    class: experimental
+    status: unbound
+    note: sovereign and Omega deployment assumptions are not implemented as a flag.
+    flags: []

@@ -66,6 +66,7 @@ class SdkIngressAdapter(UniversalIngressAdapter):
             trace = IdentityTrace(
                 tenant_id=str(normalized.get("tenant_id", "")),
                 source_system_id=str(normalized.get("source_system_id", "sdk")),
+                correlation_id=str(normalized.get("event_id") or "") or None,
             )
             trace.ingestion_receive()
         except Exception:

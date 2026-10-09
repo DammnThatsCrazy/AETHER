@@ -474,25 +474,6 @@ class TestEconomicSubRoutes:
         assert "asset_composition" in result["data"]
 
     @pytest.mark.asyncio
-    async def test_economic_agentic_returns_envelope(self):
-        from services.profile.routes import get_economic_agentic
-        agg = make_agg()
-        req = make_request()
-        result = await get_economic_agentic(ENTITY_ID, req, agg=agg)
-        assert result["data"]["entity_id"] == ENTITY_ID
-
-    @pytest.mark.asyncio
-    async def test_economic_campaigns_returns_envelope(self):
-        from services.profile.routes import get_economic_campaigns
-        agg = make_agg()
-        req = make_request()
-        mock_intel = MagicMock()
-        mock_intel.journey_economics = AsyncMock(return_value={"items": [], "count": 0})
-        result = await get_economic_campaigns(ENTITY_ID, req, agg, window="30d", intel=mock_intel)
-        assert result["data"]["entity_id"] == ENTITY_ID
-        assert "campaigns" in result["data"]
-
-    @pytest.mark.asyncio
     async def test_economic_invalid_window(self):
         from services.profile.routes import get_economic_web3
         from shared.common.common import BadRequestError

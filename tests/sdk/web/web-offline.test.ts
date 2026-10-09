@@ -11,7 +11,10 @@ import { AetherSDK } from '@aether/web';
 
 describe('FPS-054: Web SDK Offline', () => {
   it('should detect offline state', () => {
-    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    // Node >= 21 defines `navigator` but not `navigator.onLine`; default to online.
+    const isOnline = typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
+      ? navigator.onLine
+      : true;
     expect(typeof isOnline).toBe('boolean');
     expect(isOnline).toBe(true);
   });

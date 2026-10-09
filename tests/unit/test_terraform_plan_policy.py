@@ -110,15 +110,29 @@ def test_valid_production_scale_plan_passes(tmp_path):
 def test_staging_awake_plan_passes(tmp_path):
     code, result, _ = run("staging", "staging-awake.json", tmp_path)
     assert code == 0, f"awake staging plan rejected: {failed_checks(result)}"
+    capacity = next(
+        item for item in result["results"]
+        if item["check"] == "staging.autoscaling_capacity_state"
+    )
+    assert capacity["status"] == "pass"
 
 
 def test_staging_asleep_plan_passes(tmp_path):
-    """An asleep environment owns the same services with zero desired tasks."""
+    """An asleep environment owns the same services and zero scaling bounds."""
     code, result, inventory = run("staging", "staging-asleep.json", tmp_path)
     assert code == 0, f"asleep staging plan rejected: {failed_checks(result)}"
     services = [r for r in inventory["resources"] if r["type"] == "aws_ecs_service"]
     assert services
     assert all(r["values"]["desired_count"] == 0 for r in services)
+    targets = [
+        r for r in inventory["resources"]
+        if r["type"] == "aws_appautoscaling_target"
+        and r["values"].get("service_namespace") == "ecs"
+        and r["values"].get("scalable_dimension") == "ecs:service:DesiredCount"
+    ]
+    assert len(targets) == 2
+    assert all(r["values"]["min_capacity"] == r["values"]["max_capacity"] == 0
+               for r in targets)
 
 
 def test_staging_plans_carry_delegated_zone_records_and_no_zone(tmp_path):
@@ -1036,9 +1050,7 @@ def test_pilot_plan_tripwires_replacements_tag_drift_and_deferred_auth0_mutation
         "pilot.autoscaling_target_replacement": [
             "module.ecs.aws_appautoscaling_target.backend"
         ],
-        "pilot.autoscaling_target_shape_drift": [
-            "module.ecs.aws_appautoscaling_target.backend (max_capacity)"
-        ],
+        "pilot.autoscaling_target_shape_drift": [],
         "pilot.autoscaling_tag_drift": [
             "module.ecs.aws_appautoscaling_target.backend (tags, tags_all)"
         ],
@@ -1135,7 +1147,7 @@ def test_pilot_plan_allows_wake_min_capacity_change_with_stable_target_shape():
         "tags": {"Environment": "staging"},
         "tags_all": {"Environment": "staging"},
     }
-    after = {**target, "min_capacity": 1}
+    after = {**target, "min_capacity": 1, "max_capacity": 0}
     findings = MODULE.pilot_plan_safety_violations({
         "resource_changes": [{
             "address": "module.ecs.aws_appautoscaling_target.backend",
@@ -1145,6 +1157,49 @@ def test_pilot_plan_allows_wake_min_capacity_change_with_stable_target_shape():
         }]
     })
     assert all(not addresses for addresses in findings.values())
+
+
+@pytest.mark.parametrize(
+    ("fixture", "defect"),
+    [
+        ("staging-asleep.json", "nonzero_max"),
+        ("staging-awake.json", "zero_max"),
+        ("staging-asleep.json", "wrong_desired_count"),
+        ("staging-awake.json", "missing_target"),
+        ("staging-asleep.json", "extra_target"),
+    ],
+)
+def test_staging_autoscaling_capacity_contract_rejects_incomplete_or_unsafe_shapes(
+    fixture, defect,
+):
+    plan = json.loads((FIXTURES / fixture).read_text())
+    ecs = next(
+        module for module in plan["planned_values"]["root_module"]["child_modules"]
+        if module.get("address") == "module.ecs"
+    )
+    targets = [
+        resource for resource in ecs["resources"]
+        if resource.get("type") == "aws_appautoscaling_target"
+    ]
+    services = [
+        resource for resource in ecs["resources"]
+        if resource.get("type") == "aws_ecs_service"
+    ]
+    if defect == "nonzero_max":
+        targets[0]["values"]["max_capacity"] = 2
+    elif defect == "zero_max":
+        targets[0]["values"]["max_capacity"] = 0
+    elif defect == "wrong_desired_count":
+        services[0]["values"]["desired_count"] = 1
+    elif defect == "missing_target":
+        ecs["resources"].remove(targets[0])
+    elif defect == "extra_target":
+        extra = json.loads(json.dumps(targets[0]))
+        extra["values"]["resource_id"] = "service/aether-staging/aether-staging-unexpected"
+        ecs["resources"].append(extra)
+
+    violations = MODULE.staging_autoscaling_capacity_violations(plan, RUNTIME)
+    assert violations, f"expected staging capacity defect {defect!r} to fail closed"
 
 
 # ---------------------------------------------------------------------------

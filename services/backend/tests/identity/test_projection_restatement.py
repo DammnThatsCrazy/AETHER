@@ -50,22 +50,19 @@ async def test_queue_restatement_covers_all_projections(orchestrator):
     assert required.issubset(set(job.projections))
 
 @pytest.mark.asyncio
-async def test_run_restatement_success(orchestrator):
+async def test_queue_inspection_does_not_claim_restatement_success(orchestrator):
     job = await orchestrator.queue_restatement(_decision())
     result = await orchestrator.run_restatement(job.id)
-    # run_restatement should mark completed or return same job with status
-    assert result is not None
+    assert result.status == "queued"
     assert result.tenant_id == TENANT
 
 @pytest.mark.asyncio
-async def test_value_no_duplicate_on_restatement(orchestrator):
-    # Value restatement must not duplicate revenue — orchestrator tracks checksum/job id
+async def test_restatement_enqueue_is_idempotent_for_decision_version(orchestrator):
+    # Queue deduplication is proven here; this does not assert a value rebuild.
     d = _decision()
     j1 = await orchestrator.queue_restatement(d)
-    # Idempotent: same decision id should not duplicate job or value
     j2 = await orchestrator.queue_restatement(d)
-    # either same job or second job with distinct id but same semantic version
-    assert j1.tenant_id == j2.tenant_id
+    assert j1.id == j2.id
 
 @pytest.mark.asyncio
 async def test_split_queues_restatement(orchestrator):

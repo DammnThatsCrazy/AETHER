@@ -12,7 +12,7 @@ toc_depth: 2
 source_files: [services/backend/repositories/lake.py, scripts/gold_tenant_backfill.py]
 source_hashes:
   "scripts/gold_tenant_backfill.py": "sha256:8205ae133daf9871ab07bb884a32ed9f78f9d4cb42ac25a06c2fa24f90930f2a"
-  "services/backend/repositories/lake.py": "sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd"
+  "services/backend/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
 ---
 
 # Runbook — Gold Tenant Backfill

@@ -57,11 +57,11 @@ def _attach_stream_ingestion(registry: Any) -> None:
 
 def _attach_identity(registry: Any) -> None:
     from functools import partial
-    from services.ingestion.workers import identity_signal_emitter
+    from services.identity.ingestion_worker import resolve_sdk_observation
 
     registry.consumer.subscribe(
         Topic.SDK_EVENTS_VALIDATED,
-        partial(identity_signal_emitter, producer=registry.producer),
+        partial(resolve_sdk_observation, producer=registry.producer),
     )
 
 
@@ -174,7 +174,7 @@ CONSUMER_SPECS: tuple[ConsumerSpec, ...] = (
         handler_factory=_attach_notifications,
     ),
     ConsumerSpec(
-        name="identity-signal-emission",
+        name="identity-resolution",
         role="identity-worker",
         topics=(Topic.SDK_EVENTS_VALIDATED,),
         group_id="aether-identity",

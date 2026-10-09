@@ -55,9 +55,9 @@ permitted uses. Field names below match `models.py`.
 | `data_category` | string | High-level category of the data |
 | `data_sensitivity` | string | Sensitivity classification (default `unclassified`) |
 | `raw_data_owner` | string | Principal that owns the contributed raw data |
-| `tenant_lake_allowed` | boolean | May data be written to the tenant lake? (default `true`) |
-| `tenant_graph_allowed` | boolean | May data produce edges in the tenant graph? (default `true`) |
-| `tenant_insights_allowed` | boolean | May data feed tenant-scoped insights/computation? (default `true`) |
+| `tenant_lake_allowed` | boolean | May data be written to the tenant lake? (default `false`) |
+| `tenant_graph_allowed` | boolean | May data produce edges in the tenant graph? (default `false`) |
+| `tenant_insights_allowed` | boolean | May data feed tenant-scoped insights/computation? (default `false`) |
 | `olympus_baseline_allowed` | boolean | May data enter the Olympus shared baseline? (default `false`) |
 | `cross_tenant_aggregate_allowed` | boolean | May data be used in cross-tenant aggregates? (default `false`) |
 | `model_training_allowed` | boolean | May data be used for model training? (default `false`) |
@@ -69,15 +69,29 @@ permitted uses. Field names below match `models.py`.
 | `expires_at` | timestamp or null | Null means no expiry; explicit expiry preferred |
 | `revoked_at` | timestamp or null | If set, grant is revoked as of this timestamp |
 | `revocation_reason` | string or null | Human-readable reason for revocation |
+| `revoked_by_user_id` | string or null | Principal who revoked the grant |
+| `revocation_event_id` | string or null | Immutable lifecycle event reference for revocation |
 | `status` | enum | `active` / `revoked` / `expired` / `pending_review` / `suspended` |
-| `audit_event_id` | string | Append-only audit reference for the grant's lifecycle |
+| `audit_event_id` | string | Immutable audit reference for grant creation |
 
-> Every boolean defaults to `false` except the tenant-partition uses
-> (`tenant_lake_allowed`, `tenant_graph_allowed`, `tenant_insights_allowed`,
-> which default `true` so tenant BYOD data is usable in the tenant's own
-> partition). All cross-boundary uses (`olympus_baseline`,
+> Every permission boolean defaults to `false`, including tenant-partition uses.
+> A tenant BYOD grant must explicitly authorize each intended use. All
+> cross-boundary uses (`olympus_baseline`,
 > `cross_tenant_aggregate`, `model_training`, `commercial_reuse`) default
 > `false` — an explicit grant is required.
+
+## Durable grant storage
+
+`DataRightsService` remains the sole grant authority. In non-local deployments,
+`DataRightsGrantRepository` persists canonical grants in the migration-owned
+`data_rights_grants` table and creation/revocation events in
+`data_rights_grant_events`; each lifecycle update writes its event in the same
+database transaction. Tenant-scoped reads and revocations include the tenant
+key in repository queries. Local development and unit tests retain an isolated
+in-memory store. Provider raw admission in staging/production checks that the
+database and required migration schema are available; any missing schema or
+database error denies admission. This storage change does not enable the
+provider runtime or change environment flags.
 
 ---
 
@@ -99,16 +113,16 @@ form; the legacy booleans above remain authoritative and the migration must
 | `termination_authority: TerminationAuthority` | (today's hard-delete assumption) | Rights-aware lifecycle treatment per artifact kind on termination — contributed data, derived data, exports, audit records, generalized derivatives, model weights, benchmarks, ontology, security signatures (§3.5) |
 
 Blueprint §3 defaults, in plain terms: a tenant's contributed data is usable in
-its own partition; the **Olympus baseline is not** a default; **cross-tenant
-aggregation is not** a default; **model training is not** a default. Aether
+its own partition only when each use is explicitly granted; the **Olympus
+baseline is not** a default; **cross-tenant aggregation is not** a default;
+**model training is not** a default. Aether
 retains proprietary rights in the Aether-generated computational artifact while
 the tenant receives broad governed rights to use the result for its own business.
 Tenant ownership of contributed information does **not** automatically create
 ownership of every intelligence artifact Aether generates (blueprint §1.2).
 
-The structured contracts are implementing in this session per the blueprint —
-treat the nested components above as the planned canonical form until they land
-in the model; the legacy surface is what is enforced today.
+The structured contracts are implemented in the model; the legacy booleans
+remain authoritative for their existing policy checks.
 
 ---
 
@@ -197,6 +211,10 @@ The platform enforces grants at pipeline entry points. The rules are:
 2. **Expired grants = deny.** A grant past its `expires_at` is treated as absent.
 3. **Revoked grants = deny immediately.** Revocation takes effect at `revoked_at`,
    retroactively flagging records that entered the lake under the revoked grant.
+   Provider raw-record writes hold the admitting grant across their final grant
+   re-read and the Bronze insert, and revocation takes the same per-grant lock
+   exclusively: a revocation cannot commit between a writer's last check and its
+   insert, so either the write is refused or the revocation waits for it.
 4. **Partial grants are respected.** A grant with `tenant_lake_allowed=true` and
    `model_training_allowed=false` permits tenant-lake writes but blocks training
    pipelines. The structured contracts keep this rule: e.g. a `LearningAuthority`

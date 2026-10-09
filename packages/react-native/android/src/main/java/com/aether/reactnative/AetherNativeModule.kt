@@ -41,7 +41,15 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
             privacy = PrivacyConfig(
                 gdprMode = privacy?.getBoolean("gdprMode") ?: false,
                 anonymizeIP = privacy?.getBoolean("anonymizeIP") ?: true
-            )
+            ),
+            onJourneyResumed = { anonymousId, userId ->
+                reactContext.runOnUiQueueThread {
+                    sendEvent("AetherJourneyResumed", Arguments.createMap().apply {
+                        putString("anonymousId", anonymousId)
+                        putString("userId", userId)
+                    })
+                }
+            }
         )
 
         Aether.initialize(application, aetherConfig)
@@ -78,6 +86,27 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
             putString("anonymousId", Aether.getAnonymousId())
             putString("userId", Aether.getUserId())
         })
+    }
+
+    @ReactMethod
+    fun alias(previousId: String, userId: String, promise: Promise) {
+        if (previousId.isBlank() || userId.isBlank()) {
+            promise.reject("aether_alias_invalid", "alias requires non-empty previousId and userId")
+            return
+        }
+        if (Aether.getAnonymousId() != previousId) {
+            promise.reject("aether_alias_identity_mismatch", "alias previousId must match the current native anonymous ID")
+            return
+        }
+        if (!Aether.aliasIdentity(previousId, userId)) {
+            promise.reject("aether_alias_identity_mismatch", "alias previousId must match the current native anonymous ID")
+            return
+        }
+        sendEvent("AetherIdentityChanged", Arguments.createMap().apply {
+            putString("anonymousId", Aether.getAnonymousId())
+            putString("userId", Aether.getUserId())
+        })
+        promise.resolve(null)
     }
 
 

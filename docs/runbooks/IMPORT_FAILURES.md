@@ -11,11 +11,11 @@ estimated_read_minutes: 6
 toc_depth: 2
 source_files: [services/backend/services/imports/service.py, services/backend/services/imports/commit.py, services/backend/services/imports/kyber_routes.py, services/backend/repositories/imports_repo.py, services/backend/shared/graph/graph.py]
 source_hashes:
-  services/backend/repositories/imports_repo.py: sha256:d483f6e353ed70f170ff3738f4b3ac5eed1086722b2fc1c58e48df6315490b37
-  services/backend/services/imports/commit.py: sha256:f0932350e4d6d214d67b02488ddd4d64dce83df571c6c39365095719f6375c5d
-  services/backend/services/imports/kyber_routes.py: sha256:5dda769c5213f881a57bb19c87078cd45cfcb62c9f54192c9216e70928074dff
-  services/backend/services/imports/service.py: sha256:f687a509ed815ba121efb5d806a65b76a2cee6d5384ffdf6564b76979e0f8d3d
-  services/backend/shared/graph/graph.py: sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428
+  "services/backend/repositories/imports_repo.py": "sha256:d483f6e353ed70f170ff3738f4b3ac5eed1086722b2fc1c58e48df6315490b37"
+  "services/backend/services/imports/commit.py": "sha256:7eb27dcd26da5c758b6ef6ceb46bcd413bcdca9d4381621c712962cd606104d9"
+  "services/backend/services/imports/kyber_routes.py": "sha256:5dda769c5213f881a57bb19c87078cd45cfcb62c9f54192c9216e70928074dff"
+  "services/backend/services/imports/service.py": "sha256:f687a509ed815ba121efb5d806a65b76a2cee6d5384ffdf6564b76979e0f8d3d"
+  "services/backend/shared/graph/graph.py": "sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428"
 ---
 
 # Runbook — Tenant Import Failures
@@ -34,6 +34,23 @@ committed | partially_committed`. Terminal: `committed`, `partially_committed`,
 commit stages every row to Bronze (`BronzeRepository("tenant_import")`, tagged by
 commit id) and to the graph (entity/identifier/resource vertices + relationship
 edges, each carrying `import_commit_id`).
+
+Mapped email and phone identifiers are additionally persisted as observed claims
+under tenant- and upload-scoped CSV source identities. Claims retain stable
+import/file/row provenance and stay unresolved until the identity resolver has
+independent person-level link authorization. The candidate adapter requires the
+claim's exact commit to be the import's current, completed commit and excludes
+rolled-back, failed, and in-progress commits. Tenant import approval alone does
+not authorize identity stitching. Email and phone claim values are stored as
+tenant/type-scoped HMAC digests only; their raw values are not persisted in
+identity-claim rows. Failure to persist this evidence fails the commit, and
+retry uses the same source namespace and row keys to avoid duplicates.
+
+An interrupted replay preserves its replacement `active_commit_id` and marks
+the session `FAILED`. Requeue resumes that replay under the same commit ID.
+The superseded commit is already marked rolled back, and candidate lookup keeps
+both the prior evidence and the incomplete replacement hidden until the resumed
+commit row is durable and the session returns to `COMPLETED`.
 
 If a staging rehearsal is being torn down after an import-related probe, do
 not use the import rollback path as a substitute for tenant deletion. The
@@ -141,8 +158,15 @@ tenant-side) which revokes the prior commit's edges and re-stages.
 
 ### Tenant reports wrong/duplicated data after an import
 **Roll it back:** `POST /v1/imports/{id}/rollback` (tenant admin) revokes exactly
-the commit's graph edges and deletes its Bronze rows — the uploaded file bytes are
-never touched, so the import can be corrected and re-committed via **replay**.
+the commit's graph edges and deletes its Bronze rows for the authenticated
+tenant — the uploaded file bytes are never touched, so the import can be
+corrected and re-committed via **replay**. A commit with more than 10,000
+matching Bronze rows is refused before graph or Bronze mutation; escalate the
+case for an approved recovery plan rather than deleting rows directly.
+This import rollback does not remove the commit's best-effort
+`silver_import_facts` projection; do not treat rollback success as proof of
+Silver cleanup. Escalate any required Silver cleanup for an approved recovery
+plan.
 Upserted vertices are never force-deleted: rollback garbage-collects only vertices
 the backend proves orphaned and owned by this commit (see below) — shared or
 historically foreign vertices persist, and revoking the edges disconnects the

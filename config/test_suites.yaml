@@ -1083,6 +1083,7 @@ suites:
     runner: [
       "python",
       "scripts/run_pytest_files.py",
+      "tests/unit/test_context_has_no_identity_merge_path.py",
       "tests/unit/test_cors_preflight_bypass.py",
       "tests/unit/test_ml_security_fixes.py",
       "tests/unit/test_model_governance.py",
@@ -1169,16 +1170,20 @@ suites:
       "tests/unit/test_agent_web_crawler_wrapper.py",
       "tests/unit/test_artifact_builder_defaults.py",
       "tests/unit/test_backend_inmemory_guards.py",
+      "tests/unit/test_backend_reachability.py",
       "tests/unit/test_canonical_activity.py",
+      "tests/unit/test_canonical_environments.py",
       "tests/unit/test_capability_matrix_join.py",
       "tests/unit/test_card_linked_payments.py",
       "tests/unit/test_connectors.py",
       "tests/unit/test_consistency_ownership.py",
       "tests/unit/test_cost_model.py",
+      "tests/unit/test_debt_retirement_ledger.py",
       "tests/unit/test_decision_outcome_intelligence.py",
       "tests/unit/test_derivatives_intelligence.py",
       "tests/unit/test_derivatives_product.py",
       "tests/unit/test_dimension_status.py",
+      "tests/unit/test_frontend_reachability.py",
       "tests/unit/test_dsr_coverage.py",
       "tests/unit/test_dune_feeder.py",
       "tests/unit/test_dune_promotion.py",
@@ -1212,6 +1217,8 @@ suites:
       "tests/unit/test_runtime_readiness_gate.py",
       "tests/unit/test_runtime_roles.py",
       "tests/unit/test_runtime_topology.py",
+      "tests/unit/test_service_classification.py",
+      "tests/unit/test_settings_flags.py",
       "tests/unit/test_stablecoin_intelligence_foundation.py",
       "tests/unit/test_stablecoin_intelligence_polling_scheduler.py",
       "tests/unit/test_stablecoin_intelligence_pr2_pipeline.py",
@@ -1406,6 +1413,29 @@ suites:
     skip_policy: never
     release_class: pr_gate
     evidence_artifact: "ci-evidence/suites/sdk-react-native.json"
+    quarantine: null
+
+  - id: functionality-proof-ts
+    suite_role: component
+    subsystem: functionality-proof
+    owner: quality
+    components: [verification-and-documentation]
+    contracts: [shared-sdk]
+    dependencies: [node]
+    dependency_profile: node-sdk
+    runtime_class: small
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 120
+    paths: ["tests/contracts", "tests/sdk", "tests/connectors", "tests/identity", "tests/journeys", "tests/campaigns", "tests/value", "tests/lenses", "tests/e2e", "tests/graph", "tests/mocks", "sdk-fixtures", "vitest.config.fps.ts"]
+    runner: ["npx", "vitest", "run", "--config", "vitest.config.fps.ts"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/functionality-proof-ts.json"
     quarantine: null
 
   - id: frontend-aether

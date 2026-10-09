@@ -30,15 +30,18 @@ TENANT = "tenant_replay"
 class FakeProducer:
     """In-memory producer capturing every published Event."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, mode: str = "in-memory") -> None:
         self.events = []
+        self.mode = mode
 
     async def publish(self, event) -> None:  # noqa: ANN001
         self.events.append(event)
 
 
 @pytest.fixture(autouse=True)
-def _isolate():
+def _isolate(monkeypatch):  # noqa: ANN001
+    monkeypatch.setenv("AETHER_ENV", "local")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     reset_in_memory_stores()
     reset_run_journal()
     yield
@@ -116,6 +119,48 @@ async def test_iter_bronze_observations_filters() -> None:
 
     limited = await iter_bronze_observations(TENANT, limit=2)
     assert len(limited) == 2
+
+
+async def test_occurrence_window_compares_utc_instants_and_excludes_unknown_times() -> None:
+    _seed("before", occurred="2026-09-05T01:30:00+02:00")
+    _seed("inside", occurred="2026-09-04T20:30:00-04:00")
+    _seed("after", occurred="2026-09-05T03:00:00+00:00")
+    _seed("invalid", occurred="not-an-instant")
+    _seed("missing", occurred="")
+
+    rows = await iter_bronze_observations(
+        TENANT,
+        occurred_from="2026-09-05T00:00:00Z",
+        occurred_to="2026-09-05T02:00:00+00:00",
+    )
+    assert [row["event_id"] for row in rows] == ["inside"]
+
+
+@pytest.mark.parametrize(
+    ("occurred_from", "occurred_to"),
+    [
+        ("2026-09-05", None),
+        ("2026-09-05T00:00:00", None),
+        (None, "not-an-instant"),
+        ("2026-09-05T02:00:00Z", "2026-09-05T01:00:00Z"),
+    ],
+)
+async def test_invalid_occurrence_window_is_rejected_before_publish(
+    occurred_from: str | None, occurred_to: str | None,
+) -> None:
+    from shared.common.common import BadRequestError
+
+    _seed("e0")
+    producer = FakeProducer()
+    with pytest.raises(BadRequestError):
+        await replay_events(
+            TENANT,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+            producer=producer,
+            replay_run_id="invalid-window",
+        )
+    assert producer.events == []
 
 
 # ── Dry run ───────────────────────────────────────────────────────────────────
@@ -271,6 +316,117 @@ async def test_repeated_replay_run_id_is_a_no_op() -> None:
     second = await replay_events(TENANT, dry_run=False, producer=producer, replay_run_id="same")
     assert second == first
     assert len(producer.events) == 1  # published once only
+
+
+async def test_partial_publish_run_id_does_not_retry_published_rows() -> None:
+    _seed("e0", received="2026-09-05T00:00:00.100Z")
+    _seed("e1", received="2026-09-05T00:00:00.200Z")
+
+    class FailsOnSecondEvent(FakeProducer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.attempted: list[str] = []
+
+        async def publish(self, event) -> None:  # noqa: ANN001
+            self.attempted.append(event.event_id)
+            if event.event_id == "e1":
+                raise RuntimeError("injected publish failure")
+            await super().publish(event)
+
+    producer = FailsOnSecondEvent()
+    first = await replay_events(
+        TENANT, producer=producer, replay_run_id="partial-run",
+    )
+    assert first["status"] == "partial"
+    assert first["published"] == 1
+    assert producer.attempted == ["e0", "e1"]
+
+    retry = await replay_events(
+        TENANT, producer=producer, replay_run_id="partial-run",
+    )
+    assert retry == first
+    assert producer.attempted == ["e0", "e1"]
+    assert [event.event_id for event in producer.events] == ["e0"]
+
+
+async def test_equivalent_timezone_bounds_share_the_same_run_scope() -> None:
+    _seed("e0")
+    producer = FakeProducer()
+    first = await replay_events(
+        TENANT,
+        occurred_from="2026-09-05T00:00:00Z",
+        producer=producer,
+        replay_run_id="same-window",
+    )
+    second = await replay_events(
+        TENANT,
+        occurred_from="2026-09-04T20:00:00-04:00",
+        producer=producer,
+        replay_run_id="same-window",
+    )
+    assert second == first
+    assert len(producer.events) == 1
+
+
+async def test_run_id_scope_and_tenant_are_isolated() -> None:
+    _seed("e0")
+    producer = FakeProducer()
+    await replay_events(TENANT, producer=producer, replay_run_id="scoped")
+    from shared.common.common import ConflictError
+
+    with pytest.raises(ConflictError):
+        await replay_events(TENANT, event_types=["track"], producer=producer, replay_run_id="scoped")
+    _seed("other", tenant="tenant_other")
+    separate = await replay_events("tenant_other", producer=producer, replay_run_id="scoped")
+    assert separate["replayed_event_ids"] == ["other"]
+
+
+async def test_hosted_live_replay_fails_closed(monkeypatch) -> None:  # noqa: ANN001
+    from shared.common.common import ServiceUnavailableError
+
+    monkeypatch.setenv("AETHER_ENV", "production")
+    producer = FakeProducer()
+    with pytest.raises(ServiceUnavailableError):
+        await replay_events(TENANT, producer=producer, replay_run_id="hosted")
+    assert producer.events == []
+
+
+@pytest.mark.parametrize("mode", ["kafka", "sqs", "uninitialized"])
+async def test_local_live_replay_fails_closed_for_external_or_unknown_bus(mode: str) -> None:
+    from shared.common.common import ServiceUnavailableError
+
+    _seed("e0")
+    producer = FakeProducer(mode=mode)
+    with pytest.raises(ServiceUnavailableError):
+        await replay_events(TENANT, producer=producer, replay_run_id=f"external-{mode}")
+    assert producer.events == []
+
+
+async def test_in_flight_same_run_id_is_rejected() -> None:
+    import asyncio
+
+    from shared.common.common import ConflictError
+
+    _seed("e0")
+
+    class BlockingProducer(FakeProducer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def publish(self, event) -> None:  # noqa: ANN001
+            self.started.set()
+            await self.release.wait()
+            await super().publish(event)
+
+    producer = BlockingProducer()
+    first = asyncio.create_task(replay_events(TENANT, producer=producer, replay_run_id="busy"))
+    await producer.started.wait()
+    with pytest.raises(ConflictError):
+        await replay_events(TENANT, producer=producer, replay_run_id="busy")
+    producer.release.set()
+    assert (await first)["published"] == 1
 
 
 # ── Operator route wiring ─────────────────────────────────────────────────────

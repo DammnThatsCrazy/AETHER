@@ -1,0 +1,971 @@
+# Technical-debt retirement ledger — the enforceable cutover registry for the
+# architecture reset (docs/blueprints/architecture-reset/technical-debt-retirement.md).
+#
+# One row per duplicated authority. A cutover is finished when the replaced path
+# is gone, not when the new path works. `scripts/validate_debt_retirement_ledger.py`
+# enforces this file (run by `make repo-doctor`); `--report` prints repository size
+# against the baseline below.
+#
+# Fields
+#   id               stable slug
+#   domain           runtime-spine stage or control-plane area
+#   classification   core | beta | experimental | internal | deprecated | archived | removed
+#   state            retain | converge | deprecated | deletion-ready | removed
+#   authority        the single canonical owner after the cutover
+#   current          paths that implement the authority today (must exist until removed)
+#   duplicates       whole paths that disappear at cutover (must exist until removed;
+#                    must be gone when state is removed)
+#   retire           what is retired when it is not a whole path (a function, a table, a flag)
+#   consumers        paths that keep the duplicate alive today; deletion-ready needs []
+#   compatibility    API / SDK / data compatibility that must survive
+#   mechanism        adapter | dual-write | dual-read | alias | migration | delete | none
+#   parity_evidence  what shows the new path behaves the same (required to delete)
+#   usage_evidence   what shows the old path is unused (required to delete)
+#   rollback         what happens if the new authority fails
+#   removal_pr       the PR that physically deletes it (required when removed)
+#   deadline         ISO date; converge / deprecated / deletion-ready rows must have one,
+#                    and an expired deadline fails validation so a compatibility layer
+#                    cannot become permanent
+#
+# Source of the structural claims: docs/blueprints/architecture-reset/
+# {runtime-authority-map,delivery-authority-map,cutover-inventory}.md.
+
+schema_version: 1
+authority: debt-retirement
+
+baseline:
+  date: 2026-10-09
+  commit: e41a801
+  note: >-
+    Measured with `scripts/validate_debt_retirement_ledger.py --report --json` on
+    Development after #734. Counts come from `git ls-files`, so they are
+    reproducible. These are measurements, not targets.
+  metrics:
+    tracked_files: 8429
+    files_services: 3137
+    files_frontend: 1713
+    files_tests: 770
+    files_docs: 1107
+    files_docs_archive: 219
+    files_packages: 710
+    files_scripts: 284
+    files_deploy: 165
+    files_config: 93
+    python_test_files: 1434
+    ts_test_files: 443
+    validator_scripts: 72
+    workflows: 27
+    workflows_on_ready_for_review: 11
+    deployment_profile_registry_lines: 1295
+    backend_service_dirs: 142
+
+entries:
+  # ── Source + intake ────────────────────────────────────────────────────────
+  - id: intake-sdk-batch-v1-v2
+    domain: intake
+    classification: core
+    state: converge
+    authority: >-
+      V2 typed Bronze plus transactional outbox
+      (services/backend/services/ingestion/bronze_bulk.py)
+    current:
+      - services/backend/services/ingestion/bronze_bulk.py
+      - services/backend/services/ingestion/batch.py
+    duplicates: []
+    retire: >-
+      V1 BronzeRepository("sdk_events") writes and the post-Bronze Redis
+      idempotency claim; the flat-event fallback in the ingestion gateway
+    consumers:
+      - services/backend/services/ingestion/workers.py
+      - services/backend/services/activation/service.py
+      - services/backend/services/comms/ingest.py
+      - services/backend/services/auth/routes.py
+    compatibility: >-
+      /v1/batch response shape, accepted/rejected event IDs, privacy scrub,
+      and reads of existing sdk_events rows by activation and backfill
+    mechanism: dual-read
+    parity_evidence: null
+    usage_evidence: null
+    rollback: switch the affected tenant/source back to the V1 write path; admitted evidence is never deleted
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: intake-provider-runtime-vs-legacy-connectors
+    domain: intake
+    classification: core
+    state: converge
+    authority: Universal Provider Runtime (services/backend/services/provider_runtime)
+    current:
+      - services/backend/services/provider_runtime
+      - services/backend/services/providers
+    duplicates: []
+    retire: >-
+      the legacy BaseConnector pull/webhook path, one capability at a time, after
+      native UPR cutover evidence; LegacyConnectorPlugin is the transition adapter
+    consumers:
+      - services/backend/services/integrations/connectors
+      - services/backend/services/managed_integrations
+    compatibility: existing connector routes, tenant configuration, cursors and webhook URLs
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: route the capability back through LegacyConnectorPlugin
+    removal_pr: null
+    deadline: 2027-06-30
+
+  - id: evidence-single-admission-and-replay
+    domain: evidence
+    classification: core
+    state: converge
+    authority: >-
+      ProviderRawRightsAdmission for provider raw evidence; one append-only L0
+      record per tenant + source namespace + object/delivery/revision
+    current:
+      - services/backend/services/provider_runtime/raw_store.py
+      - services/backend/services/provider_runtime/rights_admission.py
+      - services/backend/repositories/lake.py
+    duplicates: []
+    retire: >-
+      per-path idempotency and retention behaviour in SDK V1/V2, import and feed
+      persistence; Bronze rollback by hard delete (replace with governed revocation)
+    consumers:
+      - services/backend/services/ingestion/replay.py
+      - services/backend/services/data_exchange
+    compatibility: raw record IDs and lineage for rows already persisted
+    mechanism: dual-write
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep per-path persistence authoritative until parity is shown per source
+    removal_pr: null
+    deadline: 2027-03-31
+
+  # ── Normalization ──────────────────────────────────────────────────────────
+  - id: normalization-one-fact-authority
+    domain: normalization
+    classification: core
+    state: converge
+    authority: >-
+      the registry-routed Silver dispatcher with versioned deterministic
+      source-to-fact adapters (services/backend/services/silver)
+    current:
+      - services/backend/services/silver
+      - services/backend/services/provider_runtime/normalization.py
+    duplicates: []
+    retire: >-
+      SDK-only flat Silver reads and the flag-gated normalization spine bypass;
+      provider events get Silver projectors instead of being deferred
+    consumers:
+      - services/backend/services/ingestion/spine.py
+      - services/backend/services/ingestion/validation.py
+    compatibility: event registry versions and existing Silver fact IDs
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep the flat read behind the spine flag until fact IDs match on fixtures
+    removal_pr: null
+    deadline: 2027-03-31
+
+  # ── Resolution ─────────────────────────────────────────────────────────────
+  - id: identity-single-resolver
+    domain: identity
+    classification: core
+    state: retain
+    authority: services/backend/services/identity (resolver, source identity registry, merge policy)
+    current:
+      - services/backend/services/identity
+    duplicates: []
+    retire: >-
+      none: import_candidate_adapter.py and data_exchange/identity_preview.py are
+      evidence and preview adapters, not resolvers. They must never write a
+      canonical entity ID.
+    consumers:
+      - services/backend/services/identity/import_candidate_adapter.py
+      - services/backend/services/data_exchange/identity_preview.py
+    compatibility: import and SDK identify APIs, aliases, reviewed decisions, split and restatement
+    mechanism: none
+    parity_evidence: null
+    usage_evidence: null
+    rollback: n/a (retained authority)
+    removal_pr: null
+    deadline: null
+
+  - id: identity-legacy-resolution-engine
+    domain: identity
+    classification: removed
+    state: removed
+    authority: services/backend/services/identity
+    current:
+      - services/backend/services/identity
+    duplicates:
+      - services/backend/services/resolution/engine.py
+      - services/backend/services/resolution/consumer.py
+      - services/backend/services/resolution/rules.py
+      - services/backend/services/resolution/signals.py
+      - services/backend/services/resolution/tasks.py
+      - services/backend/services/resolution/repository.py
+      - services/backend/services/resolution/models.py
+    retire: >-
+      the legacy resolution engine, event consumer, rules, signals, repository and
+      models (1,353 lines), and the pending, audit, reject and config routes they
+      backed. The engine's graph entry points already raised ServiceUnavailableError
+      and nothing registered the consumer, so none of it ever produced data.
+    consumers: []
+    compatibility: >-
+      GET /v1/resolution/pending, POST /v1/resolution/pending/{id}/reject,
+      GET /v1/resolution/audit/{id} and GET/PUT /v1/resolution/config now answer 404;
+      they returned no data because the engine never ran. Pending merge review is
+      /v1/admin/identity/review-queue.
+    mechanism: delete
+    parity_evidence: >-
+      the same SDK identify gate (resolution_enabled, sdk_late_binding_enabled,
+      anonymous_to_known_binding_enabled) is enforced by the live path in
+      services/ingestion/batch.py and services/identity and covered by
+      tests/identity (batch identify idempotency, SDK alias and late-binding,
+      legacy resolve late-binding); provider-delivery deferral is covered by
+      workers tests in test_provider_consumer_defer.py
+    usage_evidence: >-
+      no code outside tests imports or instantiates ResolutionEventConsumer,
+      IdentityResolutionEngine, ResolutionRepository or the rules and signals
+      (searched services, scripts, tests); the normalization-spine test's own
+      comment records that the consumer is unregistered; no reachable frontend code
+      calls the removed routes (Kyber's callers were unreachable hooks deleted in
+      #745)
+    rollback: restore from git history; the module held no data
+    removal_pr: "#747"
+    deadline: null
+
+  - id: identity-legacy-resolution-module
+    domain: identity
+    classification: removed
+    state: removed
+    authority: services/backend/services/identity
+    current:
+      - services/backend/services/identity
+    duplicates:
+      - services/backend/services/resolution
+    retire: >-
+      the three fail-closed tombstone routes that remained in
+      services/backend/services/resolution (cluster read, merge approval, batch), the
+      package and its mount in main.py, and the Aether user-profile page's
+      "Identity cluster" section, which requested the cluster read, always got 503 and
+      always rendered "No identity-cluster evidence was returned". The page now shows
+      Profile360IdentityPanel (GET /v1/identity/profiles/{id}/identity/explanation,
+      behind the identity_explainability_enabled flag), which was built and unmounted.
+    consumers: []
+    compatibility: >-
+      GET /v1/resolution/cluster/{id}, POST /v1/resolution/pending/{id}/approve and
+      POST /v1/resolution/batch answered 503 and now answer 404. The "Identity
+      Resolution" entry in shared/plans/service_catalog.py (endpoint /v1/resolution/*)
+      is a priced catalog line for a prefix with no routes; it is left as is because
+      removing or re-pointing it is a commercial decision, not a code change.
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: the routes never returned data; the page section rendered its
+      empty state on every request
+    usage_evidence: >-
+      the only caller was frontend/aether api.graph.cluster behind useUserCluster,
+      used by the profile page's Relationships tab; Kyber and the SDKs never called
+      it (2026-10-09)
+    rollback: restore the package, its mount and the page section from git history
+    removal_pr: "#751"
+    deadline: null
+
+  - id: product-legacy-social-route
+    domain: product
+    classification: removed
+    state: removed
+    authority: Profile360 IntelligenceAggregator.social_intelligence (services/backend/services/profile)
+    current:
+      - services/backend/services/profile
+    duplicates:
+      - services/backend/services/social
+    retire: >-
+      the services/social compatibility wrapper for /v1/profile/{entity_id}/social-intelligence.
+      It called the same aggregator as the profile handler it shadowed, so the
+      URL, body and permission check are unchanged and no client had to migrate.
+    consumers: []
+    compatibility: none; the profile handler serves the same URL with the same body
+    mechanism: delete
+    parity_evidence: >-
+      services/backend/tests/social/test_legacy_social_honesty.py now runs against
+      the profile handler
+    usage_evidence: >-
+      the wrapper and the profile handler both call IntelligenceAggregator.social_intelligence
+      with the same permission and window checks; both build the aggregator with
+      the same constructor (2026-10-09)
+    rollback: restore the wrapper package and its mount from git history
+    removal_pr: "#750"
+    deadline: null
+
+  # ── Graph ──────────────────────────────────────────────────────────────────
+  - id: graph-single-mutation-gateway
+    domain: graph
+    classification: core
+    state: converge
+    authority: MutationIntent to GraphMutationGateway.apply (services/backend/shared/graph)
+    current:
+      - services/backend/shared/graph/mutation_gateway.py
+      - services/backend/shared/graph/mutation_intents.py
+      - scripts/validate_graph_write_paths.py
+    duplicates: []
+    retire: >-
+      the gateway "off" and "shadow" rollout modes once every writer is on
+      enforce; any remaining producer that builds graph writes outside an intent
+    consumers:
+      - services/backend/services/identity/graph_writer.py
+      - services/backend/services/silver/projectors/silver_graph_projector.py
+      - services/backend/services/semantic_intelligence/graph_projector.py
+      - services/backend/services/onchain/action_recorder.py
+    compatibility: graph vertex and edge IDs; ledger and projection recovery
+    mechanism: dual-write
+    parity_evidence: null
+    usage_evidence: null
+    rollback: set the gateway mode back to shadow for the affected writer
+    removal_pr: null
+    deadline: 2027-03-31
+
+  # ── Intelligence / action ──────────────────────────────────────────────────
+  - id: intelligence-journey-and-value-composition
+    domain: intelligence
+    classification: core
+    state: converge
+    authority: services/backend/services/measurement/engine/journey_compiler.py
+    current:
+      - services/backend/services/measurement/engine/journey_compiler.py
+    duplicates:
+      - services/backend/services/journeys/stitching.py
+    retire: overlapping journey, value and outcome read compositions behind versioned projections
+    consumers: []
+    compatibility: existing journey and value route shapes
+    mechanism: dual-read
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep the previous composer as the read path until tenant-visible output matches
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: action-single-delivery-authority
+    domain: action
+    classification: core
+    state: converge
+    authority: >-
+      DeliveryIntent / DeliveryJob / ProviderReceipt with approval and policy
+      before effect (services/backend/services/delivery)
+    current:
+      - services/backend/services/delivery
+    duplicates:
+      - services/backend/services/recommendations/executor.py
+      - services/backend/services/suggestions/adapters/recommendation_adapter.py
+    retire: >-
+      parallel recommendation execution seams, and direct dispatch from
+      intelligence routes and agent/mutation_commit.py, in bounded slices
+    consumers:
+      - services/backend/services/agent/mutation_commit.py
+      - services/backend/services/intelligence/routes.py
+    compatibility: action log, receipts, approvals and idempotency reservations
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: switch the caller back to its direct dispatch; no effect may repeat
+    removal_pr: null
+    deadline: 2027-06-30
+
+  # ── Product surface ────────────────────────────────────────────────────────
+  - id: product-shared-360-primitives
+    domain: product
+    classification: core
+    state: converge
+    authority: >-
+      one set of 360 presentation primitives (EntityHeader, SummaryCards,
+      EvidenceTimeline, RelationshipGraph, JourneyPanel, CommunicationPanel,
+      ValuePanel, LensPanel, ConfidencePanel, ExplanationDrawer, ActionPanel)
+      composed per entity by thin adapters
+    current:
+      - frontend/kyber/src/components/profile360
+      - frontend/kyber/src/features/profile360
+    duplicates: []
+    retire: >-
+      remaining per-entity 360 presentation (the campaign360 overview, the
+      risk360 and fraud360 views, the Aether app's profile360 panels) once each
+      composes the shared primitives. Done: the second Profile360 implementation
+      in Kyber (Entity360View and the files only it used, 1,439 lines, with a
+      second Profile360DrillStack) was deleted; it was exported but never
+      rendered. Not deleted: components/entities/agent-profile.tsx is wired to
+      the agent APIs but nothing renders it; the Agent 360 owner decides whether
+      to mount it or remove it.
+    consumers: []
+    compatibility: existing routes and URLs; domain-specific data semantics stay per entity
+    mechanism: adapter
+    parity_evidence: >-
+      not applicable to the deleted code: pages/entities/entity-360.tsx and
+      pages/profile360.tsx already mount Profile360View from components/profile360
+    usage_evidence: >-
+      before deletion, repository-wide search found no importer of Entity360View,
+      profile360-surfaces, profile360-utils, the entities Profile360DrillStack,
+      NeedsHelpPanel or EntityScoreCard outside the deleted files and
+      entities/index.ts; Kyber typecheck shows no new errors, 607 unit and 433
+      component tests pass, and vite build succeeds (2026-10-09)
+    rollback: keep the old view mounted behind its route until the primitive view matches
+    removal_pr: null
+    deadline: 2027-02-28
+
+  - id: product-kyber-unmounted-code
+    domain: product
+    classification: removed
+    state: removed
+    authority: >-
+      the import graph of frontend/kyber/src/app/main.tsx; code no route mounts
+      is not product surface
+    current:
+      - config/frontend_reachability.yaml
+      - scripts/validate_frontend_reachability.py
+    duplicates:
+      - frontend/kyber/src/components/approvals
+      - frontend/kyber/src/components/charts
+      - frontend/kyber/src/components/diagnostics
+      - frontend/kyber/src/components/economics
+      - frontend/kyber/src/components/entitlements
+      - frontend/kyber/src/components/notifications
+      - frontend/kyber/src/features/agent
+      - frontend/kyber/src/features/attribution
+      - frontend/kyber/src/features/automation
+      - frontend/kyber/src/features/behavior
+      - frontend/kyber/src/features/behavioral
+      - frontend/kyber/src/features/brief
+      - frontend/kyber/src/features/campaigns
+      - frontend/kyber/src/features/commerce
+      - frontend/kyber/src/features/consent
+      - frontend/kyber/src/features/consent-governance
+      - frontend/kyber/src/features/crossdomain
+      - frontend/kyber/src/features/data-pipeline
+      - frontend/kyber/src/features/delegation
+      - frontend/kyber/src/features/entitlements
+      - frontend/kyber/src/features/facilitators
+      - frontend/kyber/src/features/flows
+      - frontend/kyber/src/features/governance
+      - frontend/kyber/src/features/identity
+      - frontend/kyber/src/features/intelligence
+      - frontend/kyber/src/features/investigation
+      - frontend/kyber/src/features/lab
+      - frontend/kyber/src/features/lake
+      - frontend/kyber/src/features/onchain
+      - frontend/kyber/src/features/operator
+      - frontend/kyber/src/features/oracle
+      - frontend/kyber/src/features/policies
+      - frontend/kyber/src/features/population
+      - frontend/kyber/src/features/profile
+      - frontend/kyber/src/features/providers
+      - frontend/kyber/src/features/resolution
+      - frontend/kyber/src/features/resources
+      - frontend/kyber/src/features/rewards
+      - frontend/kyber/src/features/rwa
+      - frontend/kyber/src/features/scoring
+      - frontend/kyber/src/features/settlement
+      - frontend/kyber/src/features/traffic
+      - frontend/kyber/src/features/web3
+      - frontend/kyber/src/features/x402
+      - frontend/kyber/src/lib/query
+      - frontend/kyber/src/lib/replay
+    retire: >-
+      139 Kyber source files (5,433 lines) that no entry point reaches: 85
+      feature hooks, 38 components, 16 lib files across the approvals,
+      entitlements, economics, settlement, policies, facilitators, resources,
+      x402, web3, rwa and similar sets, plus unused barrels. The backend
+      endpoints they called are unchanged.
+    consumers: []
+    compatibility: none; nothing imported these files, so no route, URL, API or build output changes
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: unreachable code has no behavior to preserve; Kyber
+      typecheck is unchanged, 607 unit + 433 component + 6 integration tests
+      pass, and the bundle builds (2026-10-09)
+    usage_evidence: >-
+      import-graph reachability from src/app/main.tsx and the package.json
+      "health" script found no importer for any removed file; only five tests
+      imported unreachable files, and those files were kept (see
+      product-kyber-unmounted-code-pending)
+    rollback: restore from git history
+    removal_pr: "#745"
+    deadline: null
+
+  - id: product-kyber-unmounted-code-pending
+    domain: product
+    classification: experimental
+    state: converge
+    authority: >-
+      a Kyber route that mounts the surface, or deletion; the allowlist in
+      config/frontend_reachability.yaml can only shrink
+    current:
+      - config/frontend_reachability.yaml
+      - frontend/kyber/src/components/entities/agent-profile.tsx
+      - frontend/kyber/src/pages/fraud/fraud-decisions-page.tsx
+      - frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx
+      - frontend/kyber/src/pages/customer-success/index.ts
+      - frontend/kyber/src/components/graph/path-inspector.tsx
+      - frontend/kyber/src/features/graph/use-graph-health.ts
+      - frontend/kyber/src/lib/schemas/index.ts
+      - frontend/kyber/src/components/commerce/lifecycle-trace-view.tsx
+    duplicates: []
+    retire: >-
+      eight Kyber files no entry point reaches, kept because deleting them is a
+      product call: three unrouted pages (fraud decisions, campaign registry
+      health, which docs/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness
+      scorecard name, and customer success), an unrendered agent profile, and
+      four modules kept alive only by their own tests. Each is mounted in a
+      route or deleted with its test.
+    consumers: []
+    compatibility: none; none is reachable from the app today
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      reachability report (scripts/validate_frontend_reachability.py --report)
+      lists no other unreachable file in Kyber (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2026-12-31
+
+  - id: product-aether-unmounted-code
+    domain: product
+    classification: removed
+    state: removed
+    authority: >-
+      the import graph of frontend/aether/src/app/main.tsx; code no route mounts
+      is not product surface
+    current:
+      - config/frontend_reachability.yaml
+      - scripts/validate_frontend_reachability.py
+    duplicates:
+      - frontend/aether/src/features/account-health
+      - frontend/aether/src/features/analytics
+      - frontend/aether/src/features/attribution
+      - frontend/aether/src/features/automation
+      - frontend/aether/src/features/behavioral
+      - frontend/aether/src/features/consent
+      - frontend/aether/src/features/data-quality
+      - frontend/aether/src/features/experience-friction
+      - frontend/aether/src/features/flows
+      - frontend/aether/src/features/governance
+      - frontend/aether/src/features/ingest
+      - frontend/aether/src/features/investigation
+      - frontend/aether/src/features/oracle
+      - frontend/aether/src/features/providers
+      - frontend/aether/src/features/realtime
+      - frontend/aether/src/features/revenue-intelligence
+      - frontend/aether/src/features/web3
+      - frontend/aether/src/features/x402
+    retire: >-
+      50 Aether app source files (1,704 lines) that no entry point reaches:
+      feature hooks for graph, web3, behavioral, investigation, governance, x402 and
+      similar sets, the unused auth client and hook, a playbook panel, and unused
+      barrels. The backend endpoints they called are unchanged.
+    consumers: []
+    compatibility: none; nothing imported these files, so no route, URL, API or build output changes
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: unreachable code has no behavior to preserve; Aether typecheck
+      is unchanged and the app bundles (2026-10-09)
+    usage_evidence: >-
+      import-graph reachability from src/app/main.tsx found no importer for any
+      removed file; the files kept because tests or the identity-continuity-gates
+      workflow depend on them are listed under product-aether-unmounted-code-pending
+    rollback: restore from git history
+    removal_pr: "#746"
+    deadline: null
+
+  - id: product-aether-unmounted-code-pending
+    domain: product
+    classification: experimental
+    state: converge
+    authority: >-
+      an Aether route that mounts the surface, or deletion; the allowlist in
+      config/frontend_reachability.yaml can only shrink
+    current:
+      - config/frontend_reachability.yaml
+      - frontend/aether/src/features/identity/index.ts
+      - frontend/aether/src/pages/connectors/index.ts
+      - frontend/aether/src/pages/graph/index.ts
+    duplicates: []
+    retire: >-
+      three Aether barrels no entry point reaches. The identity barrel exports the
+      identity panels (conflict detail, merge and split audit, SDK health, Profile 360
+      identity panel) that the identity-continuity-gates workflow requires to exist
+      and a harness test imports, so they are mounted in a route or retired together
+      with that gate. The connectors and graph barrels exist only for component
+      tests; the tests are pointed at the page files and the barrels deleted.
+    consumers: []
+    compatibility: none; none is reachable from the app today
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      reachability report (scripts/validate_frontend_reachability.py --report)
+      lists no other unreachable file in the Aether app (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2026-12-31
+
+  # ── Delivery + governance ──────────────────────────────────────────────────
+  - id: delivery-pr-workflows-into-one-plan
+    domain: delivery
+    classification: core
+    state: converge
+    authority: >-
+      .github/workflows/repo-consistency.yml (verification / disposition) with
+      workers selected by config/test_suites.yaml
+    current:
+      - .github/workflows/repo-consistency.yml
+      - config/test_suites.yaml
+      - config/verification_policy.yaml
+    duplicates: []
+    retire: >-
+      ready_for_review as an independent trigger on the other ten workflows:
+      each becomes a worker of the canonical plan or moves to staging, nightly or
+      release. #734's R5 audit found no safe removal yet, so each needs selection
+      and evidence parity first (for example Hardhat contract-path selection).
+    consumers:
+      - .github/workflows/aether-test.yml
+      - .github/workflows/kyber-e2e.yml
+      - .github/workflows/frontend-preview.yml
+      - .github/workflows/production-equivalent-ci.yml
+      - .github/workflows/smart-contract-analysis.yml
+      - .github/workflows/sdk-release-validation.yml
+      - .github/workflows/repo-health.yml
+      - .github/workflows/infrastructure.yml
+      - .github/workflows/identity-continuity-gates.yml
+      - .github/workflows/functionality-proof.yml
+    compatibility: the stable "verification / disposition" check name; unique security evidence (Slither/SARIF, coverage thresholds)
+    mechanism: adapter
+    parity_evidence: null
+    usage_evidence: null
+    rollback: restore the workflow trigger
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: delivery-profile-registries
+    domain: delivery
+    classification: core
+    state: converge
+    authority: config/deployment_profiles.yaml (canonical profile and environment mapping)
+    current:
+      - config/deployment_profiles.yaml
+    duplicates: []
+    retire: >-
+      repeated profile names across the other registries and workflow inputs;
+      derive them from the canonical mapping (environment = production,
+      posture = lean | scale | isolated; staging capability = pilot | full).
+      Each facet that enforces a different invariant stays.
+    consumers:
+      - config/deploy_profile.yaml
+      - config/deployment_profile_compatibility.yaml
+      - config/runtime_deployment.yaml
+      - config/environment_requirements.yaml
+      - config/dependency_profiles.yaml
+      - config/readiness_model.yaml
+    compatibility: Terraform state keys and profile names are not renamed
+    mechanism: alias
+    parity_evidence: null
+    usage_evidence: null
+    rollback: keep the existing per-registry names
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: delivery-legacy-staging-compose
+    domain: delivery
+    classification: deprecated
+    state: deprecated
+    authority: deploy/aws/terraform/profiles/staging.tfvars via staging-lifecycle.yml
+    current:
+      - deploy/aws/terraform
+    duplicates:
+      - deploy/legacy-staging
+    retire: >-
+      the quarantined Redis + Kafka + Prometheus local stack that contradicts
+      the canonical staging profile
+    consumers:
+      - docker-compose.yml
+      - docs/DEPLOYMENT-RUNBOOK.md
+      - docs/SMOKE-TEST-CHECKLIST.md
+      - scripts/release/check_delivery_compose_parity.py
+    compatibility: local development harness only
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: null
+    rollback: restore the directory from git
+    removal_pr: null
+    deadline: 2027-03-31
+
+  # ── Verification ───────────────────────────────────────────────────────────
+  - id: delivery-unread-settings-flags
+    domain: delivery
+    classification: removed
+    state: removed
+    authority: >-
+      services/backend/config/settings.py: a settings field exists only if
+      production Python reads it (scripts/validate_settings_flags.py)
+    current:
+      - scripts/validate_settings_flags.py
+      - config/unread_settings_flags.yaml
+    duplicates: []
+    retire: >-
+      100 backend settings fields (and the PasswordAuthConfig, PartnerEcosystemConfig and
+      Communication360Config classes) that read an environment variable nothing
+      consults, or that duplicate a live field's variable: reserved partner,
+      marketplace and developer-platform flags, per-engine extraction-mesh
+      switches, comms campaign, journey, reply, graph, Profile360 and Noesis
+      switches (settings.comms is never read), suggestion adapter and
+      auto-delivery switches, stablecoin, derivatives, interop, context-capsule,
+      AI-economics and agent-telemetry sub-flags, provider-corpus and Dune
+      access-mode flags, product-intelligence and temporal-observatory master
+      switches, the unmounted Communication360 router's gate, the raw-IP and
+      identity-merge "safety" flags, pool sizes and ports (including the
+      OpenSearch endpoint and port), Jira credentials, a duplicate stablecoin
+      Profile360 flag, and five tuning thresholds the code hardcodes. Their lines are removed from
+      .env.example, .env.local.example, .env.staging.example,
+      .env.production.example and the production-lean and staging release flag
+      lists, and the capability overlays no longer bind them.
+    consumers: []
+    compatibility: >-
+      none at runtime: no production code read any of these variables, so setting
+      one changed nothing. An operator who set one now sees it ignored, as before.
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: a field nothing reads has no behavior to preserve; the
+      guarantees two of them claimed hold structurally (mandatory commerce
+      approval is DEFAULT_APPROVAL_REQUIRED_ALL in services/x402/policies.py;
+      context never merges identities, pinned by
+      tests/unit/test_context_has_no_identity_merge_path.py)
+    usage_evidence: >-
+      token search of every production Python file (tests, docs and docs/archive
+      excluded) found neither the attribute name nor the variable name for any
+      removed field; no Terraform, Helm, compose, shell or TypeScript source mentions
+      them either; the two dynamic getattr readers (scripts/ops_readiness.py and
+      the provider sync worker) read other config classes (2026-10-09)
+    rollback: restore the field from git history; nothing depended on it
+    removal_pr: "#749"
+    deadline: null
+
+  - id: delivery-unread-settings-flags-pending
+    domain: delivery
+    classification: deprecated
+    state: converge
+    authority: >-
+      the deployment profile contract (config/deployment_profiles.yaml): either a
+      runtime reads ML_MODE or the profile dimension goes
+    current:
+      - config/unread_settings_flags.yaml
+      - tests/unit/test_release_profile_enforcement.py
+    duplicates: []
+    retire: >-
+      RuntimeConfig.ml_mode (ML_MODE). No production code reads it, but each
+      release profile pins it in its environment file and the profile enforcement
+      test checks the pin, so deleting it is a change to the profile contract and
+      is kept out of the settings cleanup.
+    consumers:
+      - tests/unit/test_release_profile_enforcement.py
+    compatibility: .env.production.example and .env.staging.example keep ML_MODE until the profile dimension is retired
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      scripts/validate_settings_flags.py --report lists it as the only unread
+      settings field (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2027-03-31
+
+  - id: product-backend-unmounted-code
+    domain: product
+    classification: removed
+    state: removed
+    authority: >-
+      the import graph of services/backend/main.py plus the packages loaded by
+      name; code no route, worker or import mounts is not product surface
+    current:
+      - config/backend_reachability.yaml
+      - scripts/validate_backend_reachability.py
+    duplicates:
+      - services/backend/repositories/idempotency.py
+      - services/backend/services/cis/engines/drift_engine.py
+      - services/backend/services/cis/engines/retrieval_engine.py
+      - services/backend/services/expectations/signal_builder.py
+      - services/backend/services/external_account_observability/portfolio_models.py
+      - services/backend/shared/cis/cache_provenance.py
+      - services/backend/shared/computation/temporal.py
+      - services/backend/shared/privacy/pii_masking.py
+      - services/backend/shared/scoring/anomaly_config.py
+    retire: >-
+      nine backend modules (940 lines) that no import, string reference, script,
+      workflow, registry, test or document names. Their packages keep their live
+      modules. Deleting the CIS drift engine left CISConfig.drift_threshold with
+      no reader, so that setting is deleted too (scripts/validate_settings_flags.py
+      caught it).
+    consumers: []
+    compatibility: none; nothing imported these modules, so no route, worker or schema changes
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: unreachable code has no behavior to preserve; the backend
+      test suite fails the same 18 tests before and after
+    usage_evidence: >-
+      scripts/validate_backend_reachability.py found no static import, dotted
+      string constant, path reference or outside caller for any of them, and a
+      repository search for each module path and name found no test, document
+      or registry mention (2026-10-09)
+    rollback: restore from git history
+    removal_pr: "#750"
+    deadline: null
+
+  - id: product-backend-unmounted-code-pending
+    domain: product
+    classification: experimental
+    state: converge
+    authority: >-
+      a route, worker or caller that mounts the module, or deletion together
+      with its tests; the allowlist in config/backend_reachability.yaml can only
+      shrink
+    current:
+      - config/backend_reachability.yaml
+      - services/backend/services/communication360
+      - services/backend/services/managed_integrations
+      - services/backend/services/derivatives
+      - services/backend/services/integrations
+      - services/backend/services/provider_runtime
+      - services/backend/services/suggestions/adapters
+      - services/backend/services/geo
+      - services/backend/shared/relationship_spine
+    duplicates: []
+    retire: >-
+      133 backend modules (about 32,700 lines) that nothing reaches from the
+      application. Most are implemented and tested but never mounted
+      (Communication360, managed integrations, derivatives runtime, OAuth broker,
+      provider tenant routes, identity calibration and split services, geo, the
+      relationship spine); some are documented as shipped but never wired (seven
+      suggestion adapters, commerce workers, x402 approvals routes); a few are
+      named only by a design spec. Deleting any of them is a product call because
+      each is a feature that was built and not connected. Each is mounted in a
+      route or worker, or deleted with its tests and documentation.
+    consumers: []
+    compatibility: none; none is reachable from the application today
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      reachability report (scripts/validate_backend_reachability.py --report)
+      lists exactly these modules (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2026-12-31
+
+  - id: intelligence-duplicate-route-handlers
+    domain: intelligence
+    classification: removed
+    state: removed
+    authority: >-
+      one handler per method and path (tests/unit/test_route_conflicts.py, which
+      ignores path-parameter names and include prefixes and pins the owner of each
+      URL below)
+    current:
+      - tests/unit/test_route_conflicts.py
+    duplicates:
+      - services/backend/services/social
+    retire: >-
+      ten shadowed handlers, each behind a handler of the same URL that FastAPI
+      matches first. Owners chosen: POST /v1/admin/billing/stripe/webhook is
+      served by admin/webhook_routes.py (the async-payment events, metrics and
+      billing-disabled guard that handler adds were never running; the inline
+      copy in admin/routes.py also took invoice.payment_succeeded and
+      invoice.created, which are now dispatched too, and its API-key cache refresh
+      is redundant because APIKeyValidator reads the billing account's plan tier on
+      every request). GET /v1/attribution/models stays with attribution/routes.py
+      (the Aether and Kyber clients read it); the measurement router's catalog was
+      never reachable. GET /v1/profile/{id}/pnl stays with services/pnl (the Aether
+      profile page reads it). GET /v1/profile/{id}/economic, /web2, /web3 and
+      /warnings are now served by profile/routes.py: the services/economic copies
+      returned empty models with no read-permission check and, for web2, no
+      credit-consent check, while the profile handlers aggregate real data and are
+      the ones the tests and Profile 360 docs describe. /economic/agentic and
+      /economic/campaigns stay with services/economic (the profile copies returned
+      delegation lists, not spend or ROAS) and now require the read permission, as
+      do the tenant-level /v1/economic routes. GET /v1/profile/{id}/social-intelligence
+      is served by profile/routes.py; the services/social wrapper called the same
+      aggregator and is deleted with its mount.
+    consumers: []
+    compatibility: >-
+      the response bodies of the four re-pointed economic routes change from empty
+      models to the aggregated data (web2 now returns 403 without credit consent);
+      every other URL keeps the body it served
+    mechanism: delete
+    parity_evidence: >-
+      tests/unit/test_route_conflicts.py::test_each_formerly_duplicated_url_is_served_by_its_chosen_owner;
+      the social-intelligence honesty tests now run against the profile handler
+    usage_evidence: >-
+      the Kyber economic client methods have no callers; the Aether profile page
+      reads /pnl and /social-intelligence, which keep their bodies (2026-10-09)
+    rollback: >-
+      restore the deleted handler from git history; for the economic routes the
+      restored stub would shadow the profile handler again
+    removal_pr: "#750"
+    deadline: null
+
+  - id: verification-unrun-typescript-test-estate
+    domain: verification
+    classification: internal
+    state: converge
+    authority: the functionality-proof-ts suite in config/test_suites.yaml
+    current:
+      - vitest.config.fps.ts
+      - config/test_suites.yaml
+    duplicates: []
+    retire: >-
+      any of the 93 TypeScript test files under tests/ whose invariant is already
+      covered by a proof-* package test or a Python suite, and the 9 files
+      skipped by describe.skip once an owner decides to fix or delete them. The
+      suite now runs the config in the PR lane (84 files, 666 tests green, 9
+      files skipped); before #741 nothing ran it.
+    consumers: []
+    compatibility: none; the suite is a PR-lane gate selected only by the paths it imports
+    mechanism: none
+    parity_evidence: null
+    usage_evidence: >-
+      before #741, grep for vitest.config.fps across workflows, Makefile,
+      package.json, scripts and config returned no references (2026-10-09)
+    rollback: remove the suite entry; the tests return to their previous, unrun state
+    removal_pr: null
+    deadline: 2026-12-31
+
+  # ── Repository ─────────────────────────────────────────────────────────────
+  - id: repository-skeleton-crew-package
+    domain: repository
+    classification: removed
+    state: removed
+    authority: none (abandoned proof of concept)
+    current: []
+    duplicates:
+      - packages/skeleton-crew
+    retire: >-
+      packages/skeleton-crew: a README with no source, no package.json, and
+      committed merge-conflict markers
+    consumers: []
+    compatibility: none
+    mechanism: delete
+    parity_evidence: not applicable; the package contains no code
+    usage_evidence: >-
+      packages/skeleton-crew contains only README.md; no workspace, import, CI,
+      config or doc references it (2026-10-09)
+    rollback: restore from git
+    removal_pr: "#740"
+    deadline: null
+
+  - id: repository-historical-docs
+    domain: repository
+    classification: archived
+    state: retain
+    authority: docs/archive (historical, outside the active authority graph)
+    current:
+      - docs/archive
+    duplicates: []
+    retire: none; keep the design history out of runtime and architecture authority
+    consumers: []
+    compatibility: none
+    mechanism: none
+    parity_evidence: null
+    usage_evidence: null
+    rollback: n/a
+    removal_pr: null
+    deadline: null

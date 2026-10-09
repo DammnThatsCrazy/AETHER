@@ -13,8 +13,8 @@ toc_depth: 3
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
-  "services/backend/repositories/lake.py": "sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd"
-  "services/backend/repositories/repos.py": "sha256:2555cbee6fe1d8a93c02e2b8c0b4d5cc8a0e041b248f7aa02f915bb112af4e20"
+  "services/backend/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
+  "services/backend/repositories/repos.py": "sha256:17d4283f64dd84fdc4f26b1e73b7e1d8d7678a77b7fc3f1a318139c94c068235"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -152,13 +152,17 @@ table and caches it. Writes and filters are then bound to the migrated types:
 - **Queries:** `query_events(tenant_id, params, limit)` always binds the
   request tenant (a `tenant_id` in `params` is ignored; an empty tenant returns
   nothing), matches `event_type` / `user_id` / `session_id` / ... by equality,
-  and bounds `occurred_at` with `start_date` / `end_date` (inclusive; a
+  and accepts `canonical_entity_id` to resolve event IDs through identity
+  observations and reverse merge lineage. This exposes anonymous history on
+  the current canonical profile without rewriting the event row. It bounds
+  `occurred_at` with `start_date` / `end_date` (inclusive; a
   date-only bound covers the whole day). `limit` is never a row predicate.
   Non-empty results are cached for up to 5 minutes under the tenant's query
   generation (`CacheKey.analytics_query_generation`), a token folded into every
   cached key. Each newly recorded event (and `record_event`) replaces the
-  token after its write commits, so the next read of any query misses and sees
-  the event; old entries age out under their TTL. The replacement is
+  token after its write commits; the identity worker also retires the token
+  after assigning event ownership. The next read misses and sees the event or
+  updated identity mapping; old entries age out under their TTL. The replacement is
   best-effort (a cache outage never fails a committed write; staleness is then
   TTL-bounded), and a missing token reads as `"0"`, never as a token a write
   issued. Concurrent identical misses in one process share a single store read.
@@ -239,7 +243,30 @@ table and caches it. Writes and filters are then bound to the migrated types:
 
 `BronzeRepository.ingest()` returns `(record, is_new: bool)` — callers use the boolean to distinguish new inserts from duplicates without a separate read. Bronze records carry a provenance envelope: `provenance_status`, `license_status`, `terms_status`, `commercial_use_status`, `model_training_status`, `quarantine_status`, and `raw_payload_hash` (SHA-256 of raw payload). Records with `license_status="missing"` or `provenance_status` not equal to `VALID` are automatically set to `quarantine_status="quarantined"`. Cleared license statuses (`valid`, `public_api`, `open_license`, `enterprise_contract`) combined with cleared terms statuses (`approved`, `public_api`, `open_license`, `enterprise_contract`, `valid`) yield `provenance_status=VALID` and bypass quarantine.
 
+The `provider_records` domain has an additional raw-retention boundary:
+`RawProviderRecordStore` resolves a current tenant-lake rights decision before
+the Bronze insert. An admitted row uses `provenance_status="valid"`,
+`license_status="tenant_rights_granted"`, and `terms_status="active_grant"`;
+these two status values record Aether's tenant grant decision and do not claim
+that the provider's API or payload carries an external license. Missing or
+revoked rights prevent the full payload from being written. In staging and
+production the current in-memory grant authority also fails closed until a
+durable grant store is available.
+
+`BronzeRepository.update()` keeps `provider_records` immutable after insert.
+The sole supported update appends nonempty, unique values to
+`payload.metadata.confirmed_signal_ids` for commerce confirmation replay
+detection. It cannot alter the provider payload, identity, rights evidence, or
+provenance/quarantine markers. Other Bronze domains retain their existing
+repository update behavior.
+
 `SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions. `SilverRepository.check_promotion_eligibility(bronze_record)` enforces the promotion gate: quarantined Bronze records cannot be promoted to Silver (returns `(False, reason)` with the blocking reason).
+
+Source-tag audit and rollback require a non-empty tenant ID and filter records
+by both `tenant_id` and `source_tag`. The lake API supplies the authenticated
+tenant. Bronze and Silver rollback refuse more than 10,000 matching rows before
+deletion instead of silently truncating the selection. Rollback remains a hard
+delete; it does not create a durable correction or erasure receipt.
 
 Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)` with optional `lineage_id`, `source_manifest_ids`, and `model_training_eligible` parameters that attach enrichment lineage to Gold artifacts.
 The `IntelligenceAggregator` queries via `get_metrics(entity_id)` and applies

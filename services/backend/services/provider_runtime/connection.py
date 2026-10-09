@@ -29,8 +29,22 @@ from services.provider_runtime.errors import (
     ConnectionStateViolation,
     PluginIncompatible,
     ProviderNotInstalled,
+    ProviderRuntimeError,
 )
 from services.provider_runtime.credential_broker import credential_broker
+
+SYNC_ELIGIBLE_STATES: frozenset[str] = frozenset(
+    {
+        ConnectionState.INITIAL_SYNC_PENDING.value,
+        ConnectionState.INITIAL_SYNC_RUNNING.value,
+        ConnectionState.CONNECTED.value,
+        ConnectionState.DEGRADED.value,
+        ConnectionState.SYNC_FAILED.value,
+    }
+)
+SCHEDULED_SYNC_STATES: frozenset[str] = SYNC_ELIGIBLE_STATES - {
+    ConnectionState.INITIAL_SYNC_RUNNING.value
+}
 
 
 def _now_iso() -> str:
@@ -75,7 +89,9 @@ class ProviderConnectionRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("provider_connections")
 
-    async def list_for_tenant(self, tenant_id: str, *, limit: int = 100) -> list[ProviderConnection]:
+    async def list_for_tenant(
+        self, tenant_id: str, *, limit: int = 100
+    ) -> list[ProviderConnection]:
         rows = await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
         return [_connection_from_row(r) for r in rows if _connection_from_row(r) is not None]
 
@@ -106,7 +122,9 @@ class ConnectionOrchestrator:
     """Lifecycle operations with ConnectionState transitions guarded by can_transition."""
 
     def __init__(self, *, connections=None, broker=None) -> None:
-        self.connections = connections if connections is not None else ProviderConnectionRepository()
+        self.connections = (
+            connections if connections is not None else ProviderConnectionRepository()
+        )
         self.broker = broker if broker is not None else credential_broker
 
     async def create_connection(
@@ -138,18 +156,52 @@ class ConnectionOrchestrator:
     ) -> ProviderConnection:
         """Store a structured credential behind a ref; advance to CREDENTIALS_RECEIVED.
 
-        Ref = ``broker.provider_ref(tenant, provider_identity)``. The state move is
-        only performed when the transition table allows it from the connection's
-        current state (see seam note: ``CREDENTIAL_WAITING → CREDENTIALS_RECEIVED``
-        is not a single legal hop; the legal path is via ``AVAILABLE``).
+        New refs are scoped to this connection. Existing rows with a legacy
+        tenant/provider ref remain readable because this method does not revoke,
+        delete, or rewrite the prior credential. The state move is only performed
+        when the transition table allows it from the connection's current state
+        (see seam note: ``CREDENTIAL_WAITING → CREDENTIALS_RECEIVED`` is not a
+        single legal hop; the legal path is via ``AVAILABLE``).
         """
-        ref = self.broker.provider_ref(connection.tenant_id, connection.provider_identity)
+        ref = self.broker.provider_ref(
+            connection.tenant_id,
+            connection.provider_identity,
+            connection_id=connection.connection_id,
+        )
         await self.broker.store(connection.tenant_id, ref, credential)
         connection.credential_ref = ref
         if can_transition(connection.state, ConnectionState.CREDENTIALS_RECEIVED):
             connection = self.transition(connection, ConnectionState.CREDENTIALS_RECEIVED)
         await self.connections.upsert(connection)
         return connection
+
+    async def delete_credential(self, connection: ProviderConnection) -> bool:
+        """Hard-delete the tenant/provider broker secret and clear its ref.
+
+        Provider refs are tenant + identity scoped and may be shared by multiple
+        connection rows. Refuse deletion while another row still points at the
+        same secret. If the current row lost its ref during a failed store
+        upsert, derive the deterministic broker ref so cleanup can still remove
+        the partially-created secret.
+        """
+        ref = str(connection.credential_ref or self.broker.provider_ref(
+            connection.tenant_id, connection.provider_identity
+        ))
+        rows = await self.connections.list_for_tenant(connection.tenant_id)
+        if any(
+            other.connection_id != connection.connection_id
+            and str(other.credential_ref or "") == ref
+            for other in rows
+        ):
+            raise ProviderRuntimeError("provider credential is shared with another connection")
+        deleted = await self.broker.delete(connection.tenant_id, ref)
+        # CredentialBackend.delete is idempotent: true means removed and false
+        # means the tenant-scoped ref was already absent. Exceptions preserve
+        # the row's ref so failed external deletion remains retryable.
+        connection.credential_ref = ""
+        connection.updated_at = _now_iso()
+        await self.connections.upsert(connection)
+        return deleted
 
     async def test_connection(
         self,
@@ -209,7 +261,14 @@ class ConnectionOrchestrator:
         await self.connections.upsert(connection)
         return result
 
-    async def run_sync(self, connection: ProviderConnection, *, since: str | None = None):
+    async def run_sync(
+        self,
+        connection: ProviderConnection,
+        *,
+        since: str | None = None,
+        stream_id: str | None = None,
+        stream_ids: Optional[list[str]] = None,
+    ):
         """Delegate a sync to Team E's PullScheduler.
 
         The scheduler is imported lazily inside the method to avoid the D↔E
@@ -218,7 +277,16 @@ class ConnectionOrchestrator:
         from services.provider_runtime.scheduler import PullScheduler  # type: ignore[import-not-found]
 
         scheduler = PullScheduler()
-        return await scheduler.run(connection=connection, since=since)
+        if stream_ids is not None:
+            return await scheduler.run(
+                connection=connection,
+                since=since,
+                stream_id=stream_id,
+                stream_ids=stream_ids,
+            )
+        if stream_id is None:
+            return await scheduler.run(connection=connection, since=since)
+        return await scheduler.run(connection=connection, since=since, stream_id=stream_id)
 
     def transition(
         self,
@@ -244,4 +312,6 @@ __all__ = [
     "ConnectionOrchestrator",
     "ProviderConnection",
     "ProviderConnectionRepository",
+    "SCHEDULED_SYNC_STATES",
+    "SYNC_ELIGIBLE_STATES",
 ]

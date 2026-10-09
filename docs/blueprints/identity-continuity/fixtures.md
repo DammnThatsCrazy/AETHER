@@ -28,9 +28,11 @@ status: beta
 | `test_agent_human_no_merge.py` | D — agent/person | `entity_type=agent` vs `person` → veto `entity_type_mismatch`, blocked even at high score |
 | `test_cross_tenant_block.py` | E — cross-tenant | same email across tenants → hard veto `cross_tenant_candidate`, no cross-tenant entity |
 | `test_deleted_identity_suppression.py` | F — suppressed | `is_deleted`/`is_suppressed` → `suppressed` outcome, veto blocks merge |
-| `test_projection_restatement.py` | G — projections | merge/split → `ProjectionRestatementOrchestrator` queues 7 projection jobs; value has no duplicate |
+| `test_projection_restatement.py` | G — legacy projection scenario | verifies the restatement projection set; it does not prove execution |
+| `test_projection_restatement_jobs.py` | G — durable restatement | jobs-platform persistence/idempotency, tenant-scoped status, real resolver merge/link enqueue from persisted decision + subject revision, Profile 360 + journey execution, and explicit unsupported-surface partial status |
 | `test_connector_reimport_idempotency.py` | H — idempotency | same `source_record_id` / `idempotency_key` → no duplicate source identity / decision |
-| `test_sdk_late_binding.py` | E2E — SDK lifecycle | heartbeat → anon event → identify → alias → reset → idempotent retry; covers §14.3 |
+| `test_sdk_late_binding.py` | Resolver-level SDK scenarios | heartbeat/anonymous/identify evidence is assembled around resolver tests; it does not drive the `/sdk/identify` HTTP handler or prove request retry deduplication |
+| `test_sdk_identify_route_resolution.py` | `POST /sdk/identify` route | The route invokes the canonical resolver, ignores client `user_id` and consent as merge authority, withholds canonical IDs for candidate/blocked/pending/failure outcomes, and emits evaluation vs. resolved events truthfully |
 | `test_verified_email_resolution.py` | deterministic email | oldest entity wins on verified email merge |
 | `test_resolution_replay.py` | idempotent replay | `ResolutionReplayService` dedup |
 | `test_decision_evidence.py` | audit | `IdentityDecisionEvidenceService` evidence shape |
@@ -39,6 +41,12 @@ status: beta
 | `computation/test_identity_restatement.py` | restatement semantics | merge/split → `IDENTITY_MERGED` event + value checksum |
 
 All fixtures use `reset_in_memory_stores` (from `repositories.repos`) and are deterministic — no network, no wall clock beyond `utc_now`.
+
+The identify route creates a fresh resolver `event_id` for each request because
+the canonical signal-observation repository inserts new rows and does not
+deduplicate on `source_event_id`. Source identity and claim registration may be
+idempotent, but retrying `POST /sdk/identify` can still duplicate resolver
+observations; the route fixture does not claim exactly-once retry behavior.
 
 ### Run
 
@@ -94,4 +102,3 @@ All apps assert SDK contract field parity against `packages/shared/contracts/ide
 - `ConfidenceBand.blocked` when any veto present.
 - Cross-tenant leakage is impossible (hard boundary).
 - Value projection never duplicates revenue (checksum).
-

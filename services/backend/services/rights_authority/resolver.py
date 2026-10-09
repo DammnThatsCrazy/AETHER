@@ -523,24 +523,13 @@ class EffectiveRightsResolver:
     async def _default_grant_loader(
         self, tenant_id: str, source_id: str,
     ) -> Optional[DataRightsGrant]:
-        """Load the governing grant for (tenant, source).
+        """Load the sole effective grant for a tenant/source pair.
 
-        ``DataRightsService`` keys grants by grant id; summaries expose source_id.
-        ``get_grant`` returns the pydantic ``DataRightsGrant`` (which carries any
-        P-A structured components); ``get_grant_structured`` returns only the dict
-        view and is therefore not used for authority reads.
+        The service performs an indexed tenant/source query and returns ``None``
+        on missing or ambiguous active authority; choosing the first grant would
+        make the decision depend on storage order.
         """
-        summaries = await data_rights_service.list_grants(tenant_id=tenant_id)
-        for summary in summaries:
-            if str(getattr(summary, "source_id", "") or "") != source_id:
-                continue
-            grant_id = str(getattr(summary, "data_rights_grant_id", "") or "")
-            if not grant_id:
-                continue
-            grant = await data_rights_service.get_grant(grant_id)
-            if grant is not None and str(getattr(grant, "tenant_id", "") or "") == tenant_id:
-                return grant
-        return None
+        return await data_rights_service.get_effective_grant(tenant_id, source_id)
 
     # ── Grant-state gates (fail closed) ─────────────────────────────────────
 

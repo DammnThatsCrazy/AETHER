@@ -8,19 +8,31 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/backend/services/identity/
+  - services/backend/services/ingestion/batch.py
+  - services/backend/services/runtime/consumer_specs.py
+  - services/backend/repositories/repos.py
+  - services/backend/services/analytics/routes.py
+  - services/backend/services/profile/composer.py
+  - services/backend/services/profile/aggregator.py
   - packages/shared/identity.ts
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
-  "services/backend/services/identity/": "sha256:657064df36794615baf613ca32958f3ef7d57adf1a4dc1b598fb4767cff39b32"
+  "services/backend/repositories/repos.py": "sha256:17d4283f64dd84fdc4f26b1e73b7e1d8d7678a77b7fc3f1a318139c94c068235"
+  "services/backend/services/analytics/routes.py": "sha256:58d556a9dcc74c50a5dd2bec6c779b61c87a01dda11c57471f9ca45539accb2d"
+  "services/backend/services/identity/": "sha256:cbcbf74d4a2f99478180737e8f98e322147cd813dbb9fc3f476c753733ad3019"
+  "services/backend/services/ingestion/batch.py": "sha256:5aa58d2e5bfb018adb76ab74bb49b971bf6f21cbec58b604018da13d44e26ba2"
+  "services/backend/services/profile/aggregator.py": "sha256:1a8495842ba83117735baddfbe24ec265dd93a0baec1d91307fb62f210a2ea0c"
+  "services/backend/services/profile/composer.py": "sha256:672ed8a1653a7ebe76e4ee38742c7079b36f0ed7c9a291509b62a9cee8083220"
+  "services/backend/services/runtime/consumer_specs.py": "sha256:0bd54fe2c7dd031759f31f312b068428e11958169066764b3bb00792f4e82dac"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
 ## Overview
 
-Aether's Identity Resolution system unifies user profiles across devices, browsers, wallets, and sessions into a single **Identity Cluster**. It uses a hybrid approach: **deterministic signals** (exact identifier matches) auto-merge immediately, while **probabilistic signals** (fingerprint similarity, IP clustering, behavioral patterns) flag candidate merges for review.
+Aether's Identity Resolution system unifies user profiles across devices, browsers, wallets, and sessions into a single **Identity Cluster**. It uses a hybrid approach: **deterministic signals** (exact identifier matches) can auto-merge when rollout policy allows, while **probabilistic signals** (fingerprint similarity, IP clustering, behavioral patterns) flag candidate merges for review. Resolution is disabled by default (`IDENTITY_RESOLUTION_ENABLED=false`); auto-merge and manual review are separately gated and also default off. Identity-link consent is required before identifiers are resolved.
 
 > **Staging/production default:** strong (probabilistic) auto-linking is **off by default** in `staging`/`production` — only deterministic signals auto-merge; strong matches go to candidate/conflict review. Set `AETHER_IDENTITY_STRONG_AUTOLINK=1` to re-enable strong auto-link under explicit tenant policy. Fingerprint-only and cross-tenant matches never auto-link in any environment.
 
@@ -51,53 +63,89 @@ runtime-created JSONB store.
 
 The graph writer's graph mirror routes through the canonical **Graph Mutation Gateway** (`shared/graph/mutation_gateway.py`): merge edges are expressed as `identity_merged` mutations (other identity edges as `edge_created`, split revokes as `identity_split`), each carrying the decision's reason codes, source-event evidence, and confidence as ledger metadata. At `AETHER_MUTATION_GATEWAY_MODE=off` the gateway delegates straight to the GraphClient (pre-gateway behavior); in `shadow`/`enforce` modes every mirror write is also recorded in the append-only `graph_mutation_ledger`. Repo-backed identity edges remain the source of truth — mirror failures stay non-fatal.
 
+SDK identity resolution is owned by the `identity-worker` consumer on
+`SDK_EVENTS_VALIDATED`. The V1 batch path writes Bronze and publishes the
+validated event; V2 writes Bronze plus its outbox row transactionally and the
+relay publishes it. The worker registers a source identity before invoking the
+resolver, and retries use stable tenant/event/policy identities. It publishes
+`IDENTITY_RESOLVED` only after an accepted canonical decision.
+
+The batch backend stamps `context.identity_namespace` from the authenticated
+site binding. The SDK cannot select its own namespace. This lets profile and
+analytics reads ask for a canonical entity and resolve its event IDs through
+signal observations and merge lineage, so anonymous activity remains visible
+after a later identity bind.
+
+### Source identities and late binding
+
+`SourceIdentityRegistry` records external identifiers before they are resolved
+to canonical entities. Registration is tenant- and `source_namespace`-scoped:
+repeated IDs within one namespace are idempotent, while equal raw IDs from a
+CSV upload, connector, or SDK in different namespaces remain distinct source
+identities. Candidate comparison is also tenant-scoped and follows the
+eligibility, freshness, and consent checks for its source; a shared claim alone
+does not authorize a link or merge. This lets historical imports precede SDK
+installation without making a CSV row ID or provider ID canonical identity.
+SDK `identify` observations add evidence and are resolved by the backend; SDKs
+do not assign canonical entities.
+
+Provider sync and webhook ingestion can add customer evidence after a raw
+provider record has been durably accepted. Provider-specific extractors select
+customer fields; order, receipt, seller, and store identifiers are not treated
+as person identifiers. Connector identities use a tenant-scoped namespace
+containing the provider, account, and connection, so the same provider ID from
+different accounts or connections remains distinct. Email and phone claims are
+normalized and persisted as tenant-scoped HMAC hashes; provider customer IDs
+remain source-scoped identifiers and are not canonical entity IDs.
+
+Each connector claim is tied to the accepted raw record's checksum and schema
+version and to its owning sync-run or verified-webhook lifecycle. The evidence
+stays pending until that durable lifecycle completes, and candidate lookup
+rechecks the current lifecycle anchor and raw fingerprint. SDK late-binding
+and connector evidence are both disabled by default
+(`SDK_LATE_BINDING_ENABLED=false` and
+`CONNECTOR_BACKFILL_IDENTITY_RESOLUTION_ENABLED=false`). When both are enabled,
+connector evidence may be considered through the tenant-scoped late-binding
+flow; a claim match does not merge profiles by itself, and approval revalidates
+the evidence and requires server-verified identity-link consent.
+
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
 
 ```
-SDK Event (with fingerprint + identifiers)
+SDK event
     |
     v
-Ingestion Service
-    |-- IP Enrichment (MaxMind GeoLite2)
-    |-- Normalize & validate
-    |-- Publish SDK_EVENTS_VALIDATED
+POST /v1/batch
+    |-- validate, consent and privacy gates
+    |-- V1: persist Bronze, then publish SDK_EVENTS_VALIDATED
+    |-- V2: commit Bronze + event_outbox together; relay publishes later
     |
     v
-Resolution Consumer (real-time)
+identity-worker consumes SDK_EVENTS_VALIDATED
+    |-- stamp/consume the server-authenticated app namespace
+    |-- register source identity and observed claims
+    |-- run IdentityResolutionService
+    |-- record canonical ownership on the source identity
+    |-- publish IDENTITY_RESOLVED only after an actual decision
     |
-    +-- 1. Extract identifiers from event:
-    |      anonymousId, userId, email, phone,
-    |      wallets[], fingerprintId, ip_hash
-    |
-    +-- 2. Upsert graph vertices:
-    |      DeviceFingerprint, IPAddress, Location,
-    |      Email, Phone, Wallet
-    |
-    +-- 3. Create/update edges:
-    |      HAS_FINGERPRINT, SEEN_FROM_IP,
-    |      LOCATED_IN, HAS_EMAIL, HAS_PHONE,
-    |      OWNS_WALLET
-    |
-    +-- 4. Find candidate profiles
-    |      (other Users linked to same vertices)
-    |
-    +-- 5. Run deterministic signals
-    |      |
-    |      +-- Match found? --> AUTO MERGE (publishes IDENTITY_MERGED)
-    |      |
-    |      +-- No match --> Queue for batch
-    |
-    v
-Batch Resolution Job (hourly)
-    |
-    +-- Run probabilistic signals on candidates
-    +-- Compute weighted composite score
-    +-- Apply rules engine:
-        |
-        +-- >= 0.95 confidence --> auto_merge (if configured)
-        +-- >= 0.70 confidence --> flag_for_review
-        +-- < 0.70 confidence  --> reject
+    +-- CREATE / LINK / MERGE → canonical entity and graph policy
+    +-- ambiguous evidence → candidate/conflict review
+    +-- insufficient evidence → source-scoped provisional identity
 ```
+
+V1 and V2 now share the same asynchronous consumer. V1 no longer starts a
+process-local resolver task from the request handler. At-least-once delivery
+uses the source event ID for idempotent source registration, signal observations,
+and provisional entity IDs. The raw Bronze event remains unchanged. An
+identity-bearing anonymous page or heartbeat can create a provisional entity;
+conversion is not required. Later evidence can resolve that same source history
+to a known canonical entity.
+
+The SDK batch path stamps `context.identity_namespace` from the authenticated
+`X-Aether-Site` binding. Caller-provided identity namespace values are ignored.
+Tenant-wide secret credentials use a tenant-local namespace. This keeps equal
+SDK user IDs from separately bound sites from being treated as the same app
+identity by default.
 
 ## Identity Graph Schema
 
@@ -155,9 +203,12 @@ An event that carries a `userId` **together with** its `anonymousId` (the SDK
 `identify` call, and every event the SDK sends after it) is the SDK asserting
 that this anonymous visitor *is* that user. The resolver treats that
 co-occurrence as **deterministic** evidence (`authenticated_user_binding`
-reason code): the anonymous profile and the user's profile are merged
-immediately — `MERGE` with `DETERMINISTIC` tier, collapsing every compatible
-candidate into the oldest surviving entity. The binding applies only when:
+reason code). When the relevant resolution and auto-merge rollout flags and
+server-authoritative consent permit it, the anonymous profile and user's
+profile can merge at the `DETERMINISTIC` tier, collapsing every compatible
+candidate into the oldest surviving entity. With auto-merge off, the result is
+a review candidate when manual review is enabled, or blocked. The binding
+applies only when:
 
 - the event carries exactly one `userId` and its `anonymousId` matched an
   existing profile;
@@ -166,21 +217,25 @@ candidate into the oldest surviving entity. The binding applies only when:
 - no candidate — including fragments already merged into it — holds a
   **different** `userId`, `external_id`, or verified wallet.
 
-A contradiction (a shared device whose anonymous id already belongs to another
-user) never merges: the event resolves to its own profile and a
-`conflicting_user_binding` conflict is opened for review. A plain returning
+When a different tenant/app-scoped `userId` is presented with only a shared
+device, browser, installation, session, or anonymous signal, the resolver
+creates a separate profile and does not attach the shared signal as an alias.
+This prevents a fingerprint or shared device from joining the people. If the
+event binds an `anonymousId` already associated with a different `userId`, it
+never merges: it resolves to its own profile and opens a
+`conflicting_user_binding` conflict for review. A plain returning
 anonymous visitor (same `anonymousId`, no `userId`) stays `PROBABLE` →
 `CANDIDATE`, and a session-only match stays `WEAK` → `REJECT`
 (`insufficient_evidence`): probabilistic evidence still needs corroboration.
 Matches follow merge tombstones, so an alias left on a merged fragment resolves
 to the surviving profile.
 
-**First sighting.** An event whose identifiers match nothing yet creates a new
-profile (`CREATE`, scored on the event's own signals) and links its aliases, so
-the next event can match. It is `BLOCKED` only when its own signals are
-unusable (fingerprint-only, or only consent-gated signals without consent).
-Previously the empty match set was scored as `insufficient_evidence`, no alias
-was ever written, and no profile could ever merge.
+**First sighting.** A consented, tenant/app-scoped `userId` can anchor a new
+profile when there are no existing candidates. That narrow fallback links
+deterministic user, external, and anonymous identifiers; it does not turn a
+device fingerprint, observed email/phone, or wallet into a profile alias just
+because the profile was created. Other first sightings follow the regular
+policy and consent checks.
 
 **Consent.** Identity-stitching consent (`analytics`, `identity`, or
 `marketing`) is read from both snapshot shapes: the nested
@@ -188,6 +243,10 @@ was ever written, and no profile could ever merge.
 in `context.consent` (`{"analytics": true, ...}`). Consent-gated identifiers
 (email/phone hash, installation/browser id, fingerprint) are neither scored nor
 stored as aliases without it.
+The direct `POST /v1/identity/resolve` route requires a server-side identity-link
+consent receipt for the authenticated tenant and request `anonymous_id`; a
+caller-supplied `consent_snapshot` is not authorization. Missing receipts or
+consent lookup failures return a blocked decision.
 
 **Where identifiers are read from.** `userId`, `anonymousId`, `sessionId` from
 the event; email/phone from `properties`, `properties.traits` (the web SDK
@@ -265,7 +324,7 @@ Delegates to native module: `NativeModules.AetherNative.getFingerprint()`.
 }
 ```
 
-Update via `PUT /v1/resolution/config`.
+The legacy `PUT /v1/resolution/config` route was removed with the unregistered resolution engine; these thresholds are not tenant-configurable through the API.
 
 ## API Endpoints
 
@@ -353,7 +412,7 @@ Every resolution decision is recorded in TimescaleDB with:
 - Full signal snapshot (all signal results at decision time)
 - Timestamp and who decided (system or admin)
 
-Query via: `GET /v1/resolution/audit/{decision_id}`
+Query via: `GET /v1/identity/entities/{entity_id}/audit` (the legacy `GET /v1/resolution/audit/{decision_id}` route was removed).
 
 ## Event Topics
 

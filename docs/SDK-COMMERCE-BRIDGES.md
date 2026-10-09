@@ -18,7 +18,7 @@ source_hashes:
   "packages/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
   "services/backend/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"
   "services/backend/shared/integration_contracts/commerce_bridge.py": "sha256:bc2dd396267ac6902568ad055c633d2de906c7cdd83f7020c0fe100caa67c9e8"
-  "services/backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
+  "services/backend/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
 ---
 
 # SDK Commerce Bridges
@@ -55,6 +55,13 @@ they are NOT merged into the SDK event registry
 `packages/shared/contracts/event-registry.json`), mirroring the `comms`
 precedent. The web SDK therefore cannot yet observe or re-emit these events.
 Bridges close that gap without touching the registry.
+
+The universal connector branch adds raw v2 revision fields and a stable
+logical event-ID helper to the provider runtime. These are server-side source
+lineage changes. They do not expand the four SDK bridge pairs, add dotted
+`commerce.*` types to the SDK registry, or make an SDK observation authoritative
+for an order or payment. A raw revision and a logical economic fact revision
+may differ; confirmation must continue to use verified server lineage.
 
 ## 2. What shipped
 

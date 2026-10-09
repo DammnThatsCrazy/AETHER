@@ -111,10 +111,13 @@ def to_commerce_order(order: AmazonOrder, *, account_id: str = "default") -> Com
         for item in order.line_items
     ]
     customer: OrderCustomer | None = None
-    if order.buyer.buyer_email or order.buyer.buyer_name:
+    # BuyerName is not a stable identifier and must never be promoted to a
+    # profile/customer key. Amazon's Orders projection exposes no stable buyer
+    # ID, so only the actual BuyerEmail can populate this field.
+    if order.buyer.buyer_email:
         customer = OrderCustomer(
-            customer_id=order.buyer.buyer_email or order.buyer.buyer_name,
-            email=order.buyer.buyer_email or None,
+            customer_id=order.buyer.buyer_email,
+            email=order.buyer.buyer_email,
             phone=None,
         )
     return CommerceOrder(

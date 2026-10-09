@@ -16,9 +16,9 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
-  "services/backend/config/settings.py": "sha256:2fd39d4ff1bb287b3ea68d6b86281c7b8c0e2de0278784fa8bdde15163c995e8"
-  "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
-  "services/backend/services/provider_runtime/": "sha256:b2a3e39e1032cbb1b93e8e546f6ce97541c978d183f96460afcc08aead164154"
+  "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
+  "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
+  "services/backend/services/provider_runtime/": "sha256:820b6205b2a4f776a622c28a74e73f0d056161fa3b758ed6e7493cd42c469d24"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -134,7 +134,6 @@ All extraction mesh keys use prefix `aether:exbudget:`:
 | `KAFKA_BROKERS` | `localhost:9092` | Event bus |
 | `ENABLE_EXTRACTION_DEFENSE` | `false` | ML Serving |
 | `PRICING_OPTION` | `B` | Backend (A/B/C — Market Entry / Ideal / Premium) |
-| `QUOTA_REDIS_TTL_DAYS` | `35` | Backend (retention for `rl:quota:*` and `rl:overage:*`) |
 | `QUOTA_FLUSH_INTERVAL_S` | `60` | Backend (Redis → `tenant_usage` flush cadence) |
 
 ---
@@ -321,7 +320,13 @@ All 135 Kafka topics are provisioned by `deploy/legacy-staging/kafka_topics.sh`,
 ### No-auth endpoints (registration & recovery)
 
 These endpoints intentionally bypass API-key auth — operators should monitor them
-for abuse and ensure IP rate-limiting is active:
+for abuse. The email/password endpoints under `/v1/auth` carry their own small
+limits (`shared/rate_limit/auth_throttle.py`: per client IP per minute, and per
+address for failed logins, wrong verification codes and codes mailed), keyed on the
+load-balancer-appended `X-Forwarded-For` hop and held in Redis, or per process
+when Redis is down. A user locked out by repeated failures waits out the window
+(15 minutes); there is no operator reset. Other public endpoints still depend on an
+edge or IP rate limit:
 
 | Endpoint | Purpose |
 |---|---|
@@ -329,7 +334,7 @@ for abuse and ensure IP rate-limiting is active:
 | `POST /v1/auth/register` | Email sign-up step 1 (send OTP) |
 | `POST /v1/auth/verify-email` | Email sign-up step 2 (verify OTP, create tenant) |
 | `POST /v1/auth/resend-verification` | Resend OTP |
-| `POST /v1/auth/login` | Email + password → API key |
+| `POST /v1/auth/login` | Email + password → API key (429 after 10 attempts/min per IP or 5 failures/15 min per address) |
 | `POST /v1/auth/sso/callback` | SSO via Auth0 JWT → API key |
 | `GET  /v1/auth/sso/providers` | List configured SSO providers |
 | `POST /v1/auth/recover` | Recover lost API key via email |
@@ -428,7 +433,7 @@ Services **unaffected** (Neptune is not in the hot path):
 
 | State | Action |
 |-------|--------|
-| Circuit breaker `"open"` | Self-heals after `PROVIDER_CB_TIMEOUT_S` (default 30s) recovery check — no action required |
+| Circuit breaker `"open"` | Self-heals after the breaker's fixed 30s recovery window — no action required |
 | Neptune cluster stopped | Start cluster via AWS Console; graph client reconnects automatically on next request |
 | Neptune cluster unreachable (VPC issue) | Check security group rules — port 8182 must be open from ECS task SG to Neptune SG |
 | Half-open, single request fails | Breaker re-opens; wait another 30s cycle |
@@ -560,8 +565,44 @@ distribution entry points. Disable by clearing the flags and restarting;
 stored provider connections/raw records are preserved. Webhook delivery is
 fail-closed: a signature scheme without a configured secret denies the
 delivery, and `endpoint_secret` providers require a constant-time-matching
-presented token. See
+presented token. In staging and production, `AETHER_PROVIDER_RUNTIME_ENABLED`
+also requires `OUTBOX_RELAY_ENABLED=true`; API and split worker startup refuse
+provider ingress without the relay flag. Start the `outbox-relay` role and
+verify its independent readiness, pending-row age, publish/retry/dead-letter
+metrics, and a scoped test delivery before enabling tenant traffic. The flag
+alone cannot prove delivery health. Provider events remain deferred by
+SDK-only projections until source authority and graph admission are wired.
+See the [provider outbox rollout](blueprints/universal-connector-runtime/provider-outbox-rollout.md)
+and
 `docs/UNIVERSAL-PROVIDER-RUNTIME.md` for the full runtime guide.
+
+### Provider raw-retention rights gate
+
+Raw provider payloads are retained only after the canonical Effective Rights
+Resolver allows `tenant_lake` use for purpose `provider_raw_ingestion` and
+destination `tenant_lake`. The grant must be active, tenant-scoped, use the
+`tenant_byod_data` connector class, and match the provider identity and account
+source `provider-account:{connection_id}:{account_id}`. BYOK credential access
+does not supply this data-retention grant.
+
+The canonical Data Rights grant service persists grants and append-only
+create/revoke events in the migration-owned tenant-scoped repository. Raw
+provider retention remains fail-closed in staging and production unless the
+database and required schema are available; do not enable tenant provider
+ingestion until the migration is applied and readiness is confirmed. Missing,
+ambiguous, expired, revoked, or cross-tenant grants deny admission. Investigate
+`provider_raw_rights_denials_total` using its bounded `reason` label. A denied
+grant or invalid source does not create a Bronze raw payload or retain the
+webhook body. A webhook inbox body is written only after signature verification,
+connection/account binding, stream validation, and raw rights admission succeed.
+
+Provider replay is internal and has no public/operator route. It reads only
+Bronze rows with valid provenance and no quarantine marker, requires the
+original persisted RightsDecision, then resolves current rights again against
+the same grant before normalization. Revoked/missing grants and historical
+rows without admission evidence are not replayed; there is no automatic
+re-admission path for those rows. Provider raw updates are immutable except
+for appending confirmation IDs used by commerce confirmation replay checks.
 
 ### Follow-on program flags
 
@@ -570,10 +611,11 @@ the runtime stays additive until activated:
 
 ```
 AETHER_PROVIDER_SYNC_SCHEDULER_ENABLED=true   → starts the `provider_sync_scheduler`
-                                                 WorkerSpec (WS5): a periodic loop
-                                                 that pulls due provider connections
-                                                 on their schedules and writes sync
-                                                 runs to the same durable ledger as
+                                                 WorkerSpec (WS5): a periodic sweep
+                                                 that syncs credentialed, sync-eligible
+                                                 connections that have never completed
+                                                 a sync or are past the global interval;
+                                                 runs use the same durable ledger as
                                                  manual syncs
 AETHER_PROVIDER_MIGRATIONS_ENABLED=true       → gates the config/secret migration
                                                  projection + apply routes (WS6)
@@ -585,8 +627,7 @@ KYBER_PROVIDER_RUNTIME_UI_ENABLED=true        → enables the Kyber manifest-dri
 
 Cadence for the scheduler is set by `AETHER_PROVIDER_SYNC_INTERVAL_SECONDS`
 (default 3600s) and is re-read each pass, so a runtime toggle takes effect
-without a restart. `AETHER_PROVIDER_SYNC_CRON` remains reserved (unimplemented)
-— this build is interval-driven only.
+without a restart. There is no cron setting — this build is interval-driven only.
 
 **Scheduler role:** the `provider_sync_scheduler` loop rides the existing
 **`materializer`** role (exact precedent: `payment_rail_sync`,
@@ -596,6 +637,22 @@ deploy-profile/compose/Terraform/topology-validator fan-out; running under
 `materializer` keeps scheduled sync on the same durable ledger without a new
 deploy artifact. Because it runs as the `materializer` principal (not a tenant
 principal), scheduled sync never elevates a tenant principal's rights.
+
+### Provider raw-rights denial
+
+Pull sync resolves tenant raw-data rights before writing any provider payload.
+A record without an allowed `RightsDecision` and an active `tenant_byod_data`
+grant for its connection and account — or any record in staging/production
+while the grant store is not durable — is not retained. The sync run closes as
+`failed` with `error_code=provider_raw_persist_failed` (detail
+`ProviderRawRightsDenied`); the provider cursor and connection last-success
+timestamp remain unchanged. Inspect `provider_raw_rights_denials_total` by
+`reason` (`rights_denied`, `grant_scope_mismatch`, `grant_store_not_durable`,
+`authority_unavailable`, `admission_evidence_mismatch`, `grant_lookup_failed`,
+`grant_revoked_before_write`; the last means the grant was revoked between
+admission and the write, and nothing was retained). Retrying does not
+help until the tenant grants the account's rights; then the next sync resumes
+from the unchanged cursor.
 
 ### Reconciled Control Plane reconcile scheduler (flag-gated OFF)
 
@@ -632,7 +689,15 @@ universal ingestion gateway with **original occurrence times preserved**
 
 - `POST /v1/kyber/ingest/replay/events` — Kyber-operator run/preview.
   `dry_run` defaults to **true** (counts only, zero publishes). A real run
-  (`dry_run=false`) is refused with HTTP 403 until the flag is ON.
+  (`dry_run=false`) is refused with HTTP 403 until the flag is ON. When enabled,
+  live publishing is still restricted to an explicitly local, in-memory
+  backend with no database URL or initialized database pool; hosted and durable
+  backends fail closed as unavailable. The process-local `replay_run_id`
+  journal is not durable delivery identity or a downstream idempotency guarantee.
+  Optional `occurred_from` and `occurred_to` are inclusive original-occurrence
+  bounds with required timezones. Malformed or reversed bounds fail before
+  publishing; rows with no valid original occurrence are excluded from a
+  bounded run. Preview the same bounds before a local live run.
 - `GET /v1/kyber/ingest/replay/status` — kill-switch state and the
   `source_service` replayed events carry.
 

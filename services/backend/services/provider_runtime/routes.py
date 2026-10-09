@@ -18,13 +18,14 @@ Routers are importable WITHOUT the feature flag (the flag only controls mounting
 in main.py). Orchestrators/gateways are constructor-injected singletons resolved
 lazily so tests can inject fakes by patching the accessors below.
 """
+
 from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from shared.common.common import (
     AetherError,
@@ -57,6 +58,8 @@ webhook_public_router = APIRouter(
 )
 
 _MAX_LIST_LIMIT = 200
+_MAX_SYNC_STREAM_IDS = 32
+_MAX_SYNC_STREAM_ID_LENGTH = 128
 
 
 # ── Dependency seam (module singletons; tests inject fakes) ────────────────
@@ -75,7 +78,8 @@ def _get_registry() -> Any:
         from services.provider_runtime import registry as _registry_module
 
         _REGISTRY = getattr(
-            _registry_module, "provider_registry",
+            _registry_module,
+            "provider_registry",
             getattr(_registry_module, "registry", None),
         )
         if _REGISTRY is None:
@@ -150,8 +154,7 @@ def _provider_migrations_available() -> bool:
     from config.settings import settings
 
     return bool(
-        settings.provider_runtime.enabled
-        and settings.provider_runtime.provider_migrations_enabled
+        settings.provider_runtime.enabled and settings.provider_runtime.provider_migrations_enabled
     )
 
 
@@ -162,8 +165,7 @@ def _legacy_decommission_available() -> bool:
     from config.settings import settings
 
     return bool(
-        settings.provider_runtime.enabled
-        and settings.provider_runtime.provider_legacy_decommission
+        settings.provider_runtime.enabled and settings.provider_runtime.provider_legacy_decommission
     )
 
 
@@ -306,6 +308,19 @@ class SyncTriggerBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     since: Optional[str] = None
+    stream_ids: list[str] = Field(default_factory=list, max_length=_MAX_SYNC_STREAM_IDS)
+
+    @field_validator("stream_ids")
+    @classmethod
+    def _validate_stream_ids(cls, value: list[str]) -> list[str]:
+        if any(
+            not stream_id.strip() or len(stream_id) > _MAX_SYNC_STREAM_ID_LENGTH
+            for stream_id in value
+        ):
+            raise ValueError("stream IDs must be non-empty and at most 128 characters")
+        if len(set(value)) != len(value):
+            raise ValueError("stream_ids must not contain duplicates")
+        return value
 
 
 class CertifyBody(BaseModel):
@@ -416,9 +431,7 @@ def _admin_provider_item(plugin: Any, source: str) -> dict[str, Any]:
             "state": _stringify(getattr(readiness, "state", "")),
         },
         "availability": {
-            "environments": _environment_flags(
-                getattr(availability, "environments", None)
-            ),
+            "environments": _environment_flags(getattr(availability, "environments", None)),
         },
         "authentication": {
             "type": _stringify(getattr(auth, "type", "") or ""),
@@ -463,9 +476,7 @@ def _merged_manifests(reg: Any) -> list[Any]:
         # registry (tests) is honored, not the global one.
         merged = dict(ManifestService(reg).merged_manifests())
     except Exception as exc:
-        logger.warning(
-            "provider merged_manifests() unavailable (%s); falling back", exc
-        )
+        logger.warning("provider merged_manifests() unavailable (%s); falling back", exc)
 
     if not merged:
         manifests_fn = getattr(reg, "manifests", None)
@@ -475,13 +486,9 @@ def _merged_manifests(reg: Any) -> list[Any]:
                 if isinstance(raw, dict):
                     merged = dict(raw)
                 else:
-                    merged = {
-                        _entry_identity(entry): entry for entry in raw
-                    }
+                    merged = {_entry_identity(entry): entry for entry in raw}
             except Exception as exc:
-                logger.warning(
-                    "provider registry manifests() failed (%s); falling back", exc
-                )
+                logger.warning("provider registry manifests() failed (%s); falling back", exc)
 
     if not merged:
         for entry in reg.list():
@@ -622,6 +629,19 @@ async def store_credential(connection_id: str, body: dict[str, Any], request: Re
     return APIResponse(data=_as_dict(stored)).to_dict()
 
 
+@router.delete("/{connection_id}/credentials")
+async def delete_credential(connection_id: str, request: Request):
+    """Hard-delete this connection's broker credential for explicit cleanup."""
+    tenant_id = _tenant_id(request, "write")
+    orchestrator = _get_orchestrator()
+    connection = await _load_connection(orchestrator, connection_id, tenant_id)
+    await _await_or_error(orchestrator.delete_credential(connection))
+    # A successful response means the ref is absent. The underlying backend's
+    # boolean distinguishes newly deleted from already absent; both are safe
+    # idempotent cleanup outcomes.
+    return APIResponse(data={"connection_id": connection_id, "credential_deleted": True}).to_dict()
+
+
 @router.post("/{connection_id}/test")
 async def test_connection(connection_id: str, request: Request):
     tenant_id = _tenant_id(request, "write")
@@ -641,12 +661,31 @@ async def list_accounts(connection_id: str, request: Request):
     orchestrator = _get_orchestrator()
     connection = await _load_connection(orchestrator, connection_id, tenant_id)
     plugin = _get_registry().get(connection.provider_identity)
+    credential = None
+    if (
+        connection.provider_identity == "shopify.admin.orders_read"
+        and str((connection.config or {}).get("orders_api") or "rest").lower() == "graphql"
+    ):
+        from services.provider_runtime.errors import CredentialMissing
+
+        if not connection.credential_ref or not getattr(orchestrator, "broker", None):
+            _raise_runtime_error(
+                CredentialMissing("Shopify GraphQL account discovery requires a stored credential")
+            )
+        credential = await _await_or_error(
+            orchestrator.broker.reveal(connection.tenant_id, connection.credential_ref)
+        )
+        if credential is None:
+            _raise_runtime_error(
+                CredentialMissing("Shopify GraphQL account discovery requires a stored credential")
+            )
     result = await _await_or_error(
-        _get_coordinator().discover_accounts(connection, plugin=plugin)
+        _get_coordinator().discover_accounts(connection, plugin=plugin, credential=credential)
     )
+    accounts = result.data if isinstance(result.data, list) else []
     return APIResponse(
         data={
-            "items": [account.model_dump() for account in (result.data or [])],
+            "items": [_as_dict(account) for account in accounts],
             "adapter": _as_dict(result),
         }
     ).to_dict()
@@ -659,9 +698,7 @@ async def select_account(connection_id: str, body: AccountSelectBody, request: R
     connection = await _load_connection(orchestrator, connection_id, tenant_id)
     plugin = _get_registry().get(connection.provider_identity)
     connection = await _await_or_error(
-        _get_coordinator().select_account(
-            connection, account_id=body.account_id, plugin=plugin
-        )
+        _get_coordinator().select_account(connection, account_id=body.account_id, plugin=plugin)
     )
     await _await_or_error(orchestrator.connections.upsert(connection))
     return APIResponse(data=_as_dict(connection)).to_dict()
@@ -675,7 +712,13 @@ async def trigger_sync(connection_id: str, body: SyncTriggerBody, request: Reque
     tenant_id = _tenant_id(request, "write")
     orchestrator = _get_orchestrator()
     connection = await _load_connection(orchestrator, connection_id, tenant_id)
-    result = await _await_or_error(orchestrator.run_sync(connection, since=body.since))
+    result = await _await_or_error(
+        orchestrator.run_sync(
+            connection,
+            since=body.since,
+            stream_ids=body.stream_ids,
+        )
+    )
     return APIResponse(data=_as_dict(result)).to_dict()
 
 
@@ -943,7 +986,9 @@ async def provider_runtime_tenant_view(tenant_id: str, request: Request):
         except Exception as exc:
             safe = getattr(exc, "safe_message", None)
             item["health"] = None
-            item["health_error"] = safe if isinstance(safe, str) and safe.strip() else "health unavailable"
+            item["health_error"] = (
+                safe if isinstance(safe, str) and safe.strip() else "health unavailable"
+            )
         items.append(item)
     return APIResponse(data={"tenant_id": tenant_id, "items": items}).to_dict()
 
@@ -998,13 +1043,15 @@ async def provider_webhook_ingest(identity_key: str, request: Request):
     cryptographic proof that the caller holds the connection's webhook secret:
     a signature scheme requires a verifying signature, and ``endpoint_secret``
     requires a caller-presented per-connection endpoint token. A delivery that
-    cannot be proven is DENIED with an auditable denial record and a closed
-    4xx — never silently accepted.
+    cannot be proven is DENIED with tenantless bounded-reason telemetry and a
+    generic 4xx — never silently accepted or written into a tenant's Bronze
+    store. Pre-auth lookup outcomes are not exposed to the caller.
 
     ``X-Aether-Tenant-ID`` is only a routing hint to locate the connection to
-    verify against; it is NOT an authorization signal. A delivery is only
-    persisted after the connection's secret proves the caller owns it, so the
-    header cannot be forged to inject into another tenant.
+    verify against; it is NOT an authorization signal. Tenant-scoped delivery
+    evidence is persisted only after the connection's secret proves the caller
+    owns it and the canonical tenant rights authority admits raw storage, so
+    the header cannot be forged to inject into another tenant.
 
     Headers:
       X-Aether-Tenant-ID: <tenant_id>            (routing hint, required)
@@ -1014,9 +1061,10 @@ async def provider_webhook_ingest(identity_key: str, request: Request):
     tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
     if not tenant_id:
         raise BadRequestError("X-Aether-Tenant-ID header is required")
-    signature = request.headers.get("X-Signature", "").strip() or request.headers.get(
-        "X-Aether-Signature", ""
-    ).strip()
+    signature = (
+        request.headers.get("X-Signature", "").strip()
+        or request.headers.get("X-Aether-Signature", "").strip()
+    )
     raw_body = await request.body()
     try:
         result = await _get_gateway().ingest(
@@ -1028,8 +1076,15 @@ async def provider_webhook_ingest(identity_key: str, request: Request):
         )
     except Exception as exc:
         _raise_runtime_error(exc)
-    # A verification/payload denial surfaces as a closed 4xx, never a 200.
+    # Transient persistence/processing failures are retryable by the provider;
+    # permanent mode/trust/scope denials stay closed 4xx responses.
     if not result.get("accepted", False):
         reason = str(result.get("reason") or "webhook_rejected")
+        if reason in {
+            "raw_persist_failed",
+            "normalization_failed",
+            "event_persist_failed",
+        }:
+            raise AetherError(ErrorCode.INTERNAL, f"webhook processing failed: {reason}")
         raise ForbiddenError(f"webhook rejected: {reason}")  # noqa: B904
     return APIResponse(data=_as_dict(result)).to_dict()

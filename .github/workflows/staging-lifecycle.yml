@@ -548,6 +548,14 @@ jobs:
           python-version: "3.11"
       - name: Install contract validation dependency
         run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate identity provider inputs before wake planning
+        env:
+          AETHER_STAGING_PROVIDER_IDENTITY: ${{ secrets.IDENTITY_STAGING_PROVIDER_IDENTITY }}
+          AETHER_STAGING_PROVIDER_CONFIG_JSON: ${{ secrets.IDENTITY_STAGING_PROVIDER_CONFIG_JSON }}
+          AETHER_STAGING_PROVIDER_CREDENTIAL_JSON: ${{ secrets.IDENTITY_STAGING_PROVIDER_CREDENTIAL_JSON }}
+        run: |
+          set -euo pipefail
+          python scripts/identity_staging_provider_bootstrap.py --validate-inputs-only
       - name: Validate runtime, delivery policy, and all delivery credentials before wake planning
         env:
           AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
@@ -1188,6 +1196,16 @@ jobs:
 
           expected = {ecs_name(k): int(v.get("desired_count", 0)) * int(multiplier)
                       for k, v in services.items()}
+          expected_autoscaling = {}
+          for key, service in services.items():
+              scaling = service.get("autoscaling") or {}
+              if "min_capacity" not in scaling or "max_capacity" not in scaling:
+                  sys.exit(f"::error::runtime service {key} has incomplete autoscaling bounds")
+              target_id = f"service/{os.environ['STAGING_CLUSTER']}/{ecs_name(key)}"
+              expected_autoscaling[target_id] = {
+                  "min_capacity": int(scaling["min_capacity"]) * int(multiplier),
+                  "max_capacity": int(scaling["max_capacity"]) * int(multiplier),
+              }
 
           plan = json.load(open(os.environ["PLAN_JSON"]))
 
@@ -1203,16 +1221,19 @@ jobs:
               values = res.get("values") or {}
               if res.get("type") == "aws_ecs_service":
                   actual[values.get("name")] = values.get("desired_count")
-              if res.get("type") == "aws_appautoscaling_target":
-                  autoscaling[values.get("resource_id")] = values.get("min_capacity")
+              if (res.get("type") == "aws_appautoscaling_target"
+                      and values.get("service_namespace") == "ecs"
+                      and values.get("scalable_dimension") == "ecs:service:DesiredCount"):
+                  autoscaling[values.get("resource_id")] = {
+                      "min_capacity": values.get("min_capacity"),
+                      "max_capacity": values.get("max_capacity"),
+                  }
 
           if actual != expected:
               sys.exit(f"::error::planned ECS desired counts {actual} != pinned {state} shape {expected}")
-          if state == "asleep":
-              for target, minimum in autoscaling.items():
-                  if minimum not in (0, None):
-                      sys.exit(f"::error::asleep plan leaves autoscaling floor {minimum} on {target}")
-          print(f"{state} shape confirmed: {actual}")
+          if autoscaling != expected_autoscaling:
+              sys.exit(f"::error::planned ECS autoscaling bounds {autoscaling} != pinned {state} bounds {expected_autoscaling}")
+          print(f"{state} shape confirmed: services={actual}; autoscaling={autoscaling}")
           PY
 
       - uses: actions/upload-artifact@v4
@@ -1572,6 +1593,23 @@ jobs:
             pyyaml \
             boto3 \
             'locust>=2.31,<3'
+      - name: Set up pnpm for identity UI evidence
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.2
+          run_install: false
+      - name: Set up Node.js for identity UI evidence
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install identity UI E2E workspace dependencies
+        id: identity_ui_dependencies
+        run: pnpm install --frozen-lockfile --filter '@aether/aether...' --filter '@aether/proof-reporting...'
+      - name: Install Playwright Chromium for identity UI evidence
+        id: identity_ui_browser
+        run: pnpm --filter @aether/aether exec playwright install --with-deps chromium
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
@@ -1921,11 +1959,11 @@ jobs:
               with open(marker_path, "w", encoding="utf-8") as handle:
                   json.dump(marker, handle, indent=2)
 
-          def call(method, path, body=None, expect=None):
+          def call(method, path, body=None, expect=None, api_key=None):
               data = json.dumps(body).encode() if body is not None else None
               request = urllib.request.Request(base + path, data=data, method=method)
               request.add_header("Accept", "application/json")
-              request.add_header("X-API-Key", os.environ["STAGING_ADMIN_API_KEY"])
+              request.add_header("X-API-Key", api_key or os.environ["STAGING_ADMIN_API_KEY"])
               if data:
                   request.add_header("Content-Type", "application/json")
               try:
@@ -1989,15 +2027,57 @@ jobs:
               "read", "write", "ingest", "analytics", "analytics:export",
               "consent:manage", "billing",
           ], "enterprise")
+          # Identity capture and scenario evidence use a short-lived admin key
+          # scoped to this disposable rehearsal tenant. The workflow masks it
+          # and deletes the tenant during unconditional cleanup.
+          identity_capture_key = create_key(mine_id, "Identity Evidence", ["admin"], "enterprise")
           peer_id = create_tenant("Isolation", "free")
-          peer_key = create_key(peer_id, "Isolation", ["read"], "free")
+          peer_key = create_key(peer_id, "Isolation", ["read", "write"], "free")
           if mine_id == peer_id:
               sys.exit("::error::run-scoped rehearsal tenants must be distinct")
+
+          # Mint a real publishable SDK key through tenant self-service. Its
+          # single site binding is unique to this disposable workflow run.
+          sdk_site_id = f"staging-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+          _, sdk_payload = call("POST", "/v1/me/api-keys", body={
+              "name": f"identity-continuity-{os.environ['GITHUB_RUN_ID']}",
+              "key_class": "publishable", "site_ids": [sdk_site_id], "platform": "web",
+          }, expect={200, 201}, api_key=mine_key)
+          sdk_app_key = extract(sdk_payload, "api_key")
+          if not isinstance(sdk_app_key, str) or not sdk_app_key:
+              sys.exit("::error::tenant self-service did not issue the run-scoped publishable SDK key")
+          print(f"::add-mask::{sdk_app_key}")
+
+          # Create an actual peer-tenant entity for the cross-tenant read
+          # assertion. Consent and identity resolution run under that peer's
+          # credential; only the opaque entity reference crosses tenants.
+          foreign_anon = f"staging-isolation-{os.environ['GITHUB_RUN_ID']}-{uuid.uuid4().hex}"
+          _, consent_payload = call("POST", "/v1/consent/records", body={
+              "anonymous_id": foreign_anon, "purposes": ["analytics"], "granted": True,
+              "source": "staging-identity-continuity", "mode": "opt_in",
+              "idempotency_key": f"staging-isolation:{os.environ['GITHUB_RUN_ID']}:consent",
+          }, expect={200}, api_key=peer_key)
+          if not extract(consent_payload, "receipt_id", "id", "consent_id"):
+              sys.exit("::error::peer tenant did not return a durable consent receipt")
+          _, identity_payload = call("POST", "/v1/identity/resolve", body={
+              "event_id": f"staging-isolation-{os.environ['GITHUB_RUN_ID']}",
+              "anonymous_id": foreign_anon,
+              "user_id": f"staging-isolation-user-{os.environ['GITHUB_RUN_ID']}",
+              "email": f"staging-isolation-{os.environ['GITHUB_RUN_ID']}@example.invalid",
+              "context": {"source": "staging-identity-continuity"},
+          }, expect={200}, api_key=peer_key)
+          foreign_entity_id = extract(identity_payload, "canonical_entity_id")
+          if not isinstance(foreign_entity_id, str) or not foreign_entity_id:
+              sys.exit("::error::peer identity resolution did not create a canonical entity")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
               env.write(f"REHEARSAL_TENANT_API_KEY={mine_key}\n")
+              env.write(f"IDENTITY_STAGING_CAPTURE_API_KEY={identity_capture_key}\n")
               env.write(f"ISOLATION_PEER_API_KEY={peer_key}\n")
               env.write(f"REHEARSAL_TENANT_ID={mine_id}\n")
               env.write(f"ISOLATION_PEER_TENANT_ID={peer_id}\n")
+              env.write(f"AETHER_STAGING_TENANT_APP_KEY={sdk_site_id}\n")
+              env.write(f"AETHER_STAGING_SDK_API_KEY={sdk_app_key}\n")
+              env.write(f"AETHER_STAGING_FOREIGN_ENTITY_ID={foreign_entity_id}\n")
           print(f"bootstrapped run-scoped tenants {mine_id} and {peer_id}")
           PY
 
@@ -2370,6 +2450,137 @@ jobs:
           print(f"failure/retry checks passed (malformed={status}, retry={first}/{second})")
           PY
 
+      - name: Bootstrap run-scoped provider connection for identity reimport
+        env:
+          AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
+          AETHER_STAGING_TENANT_WRITE_KEY: ${{ env.REHEARSAL_TENANT_API_KEY }}
+          AETHER_STAGING_TENANT_ADMIN_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}
+          AETHER_STAGING_PROVIDER_IDENTITY: ${{ secrets.IDENTITY_STAGING_PROVIDER_IDENTITY }}
+          AETHER_STAGING_PROVIDER_CONFIG_JSON: ${{ secrets.IDENTITY_STAGING_PROVIDER_CONFIG_JSON }}
+          AETHER_STAGING_PROVIDER_CREDENTIAL_JSON: ${{ secrets.IDENTITY_STAGING_PROVIDER_CREDENTIAL_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "${AETHER_STAGING_PROVIDER_IDENTITY:-}" \
+            || { echo '::error::staging provider identity secret is missing'; exit 1; }
+          test -n "${AETHER_STAGING_PROVIDER_CONFIG_JSON:-}" \
+            || { echo '::error::staging provider config secret is missing'; exit 1; }
+          test -n "${AETHER_STAGING_PROVIDER_CREDENTIAL_JSON:-}" \
+            || { echo '::error::staging provider credential secret is missing'; exit 1; }
+          python scripts/identity_staging_provider_bootstrap.py
+
+      - name: Run live identity continuity scenarios
+        env:
+          AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
+          AETHER_STAGING_SCENARIO_API_KEY: ${{ env.REHEARSAL_TENANT_API_KEY }}
+          AETHER_STAGING_CONNECTOR_CONNECTION_ID: ${{ env.AETHER_STAGING_PROVIDER_CONNECTION_ID }}
+          AETHER_STAGING_TENANT_ID: ${{ env.REHEARSAL_TENANT_ID }}
+          AETHER_STAGING_TENANT_APP_KEY: ${{ env.AETHER_STAGING_TENANT_APP_KEY }}
+          AETHER_STAGING_SDK_API_KEY: ${{ env.AETHER_STAGING_SDK_API_KEY }}
+          AETHER_STAGING_FOREIGN_ENTITY_ID: ${{ env.AETHER_STAGING_FOREIGN_ENTITY_ID }}
+          AETHER_STAGING_ADMIN_API_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${AETHER_STAGING_SCENARIO_API_KEY:-}" \
+            || { echo '::error::run-scoped identity scenario API key is missing'; exit 1; }
+          test -n "${AETHER_STAGING_TENANT_APP_KEY:-}" \
+            || { echo '::error::run-scoped SDK site scope is missing'; exit 1; }
+          test -n "${AETHER_STAGING_SDK_API_KEY:-}" \
+            || { echo '::error::run-scoped SDK publishable credential is missing'; exit 1; }
+          test -n "${AETHER_STAGING_FOREIGN_ENTITY_ID:-}" \
+            || { echo '::error::isolated foreign-tenant entity was not provisioned'; exit 1; }
+          test -n "${AETHER_STAGING_ADMIN_API_KEY:-}" \
+            || { echo '::error::run-scoped identity evidence credential is missing'; exit 1; }
+          execution_id="$(python -c 'import uuid; print(uuid.uuid4())')"
+          python scripts/identity_continuity_staging_scenarios.py \
+            --execution-id "$execution_id" \
+            --output-directory artifacts/rehearsal/identity-continuity-scenarios
+
+      - name: Run identity UI evidence with fixture API
+        id: identity_ui_e2e
+        if: always() && steps.identity_ui_dependencies.outcome == 'success' && steps.identity_ui_browser.outcome == 'success'
+        env:
+          PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/rehearsal/identity-continuity-ui
+        run: pnpm --filter @aether/aether run e2e -- --reporter=line src/test/e2e/identity-continuity.spec.ts
+
+      - name: Run authenticated live staging identity UI evidence
+        id: identity_ui_live_e2e
+        if: always() && steps.identity_ui_dependencies.outcome == 'success' && steps.identity_ui_browser.outcome == 'success'
+        env:
+          IDENTITY_STAGING_UI_BASE_URL: ${{ secrets.TF_AETHER_APP_URL }}
+          AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
+          IDENTITY_STAGING_CAPTURE_API_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}
+          PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/rehearsal/identity-continuity-ui-live
+        run: |
+          set -euo pipefail
+          test -n "${IDENTITY_STAGING_UI_BASE_URL:-}" \
+            || { echo '::error::deployed AETHER application URL secret is missing'; exit 1; }
+          pnpm --filter @aether/aether run e2e -- --reporter=line src/test/e2e/identity-continuity-live.spec.ts
+
+      - name: Capture identity continuity evidence
+        if: always() && env.IDENTITY_STAGING_CAPTURE_API_KEY != '' && env.ALB_DNS_NAME != ''
+        env:
+          AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
+          AETHER_STAGING_CAPTURE_API_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}
+        run: |
+          set -euo pipefail
+          python scripts/identity_staging_capture.py \
+            --output artifacts/rehearsal/identity-continuity-capture.json \
+            --ui-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui" \
+            --ui-live-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui-live" \
+            --commit-sha "$GITHUB_SHA" \
+            --branch "$GITHUB_REF_NAME"
+
+      - name: Build identity continuity proof pack collector
+        if: always() && steps.identity_ui_dependencies.outcome == 'success'
+        run: pnpm --filter @aether/proof-reporting build
+
+      - name: Collect and validate identity continuity staging proof pack
+        if: always() && steps.identity_ui_dependencies.outcome == 'success' && hashFiles('artifacts/rehearsal/identity-continuity-capture.json') != ''
+        run: |
+          set -euo pipefail
+          pnpm --filter @aether/proof-reporting proof-pack -- collect \
+            artifacts/rehearsal/identity-continuity-capture.json \
+            artifacts/rehearsal/identity-continuity-proof-pack
+
+      - uses: actions/upload-artifact@v4
+        name: Upload identity UI artifacts on E2E failure
+        if: always() && steps.identity_ui_e2e.outcome == 'failure'
+        with:
+          name: identity-continuity-ui-failure-${{ github.run_id }}
+          path: artifacts/rehearsal/identity-continuity-ui
+          if-no-files-found: warn
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        name: Upload identity continuity staging proof pack
+        if: always()
+        with:
+          name: identity-continuity-proof-pack-${{ github.run_id }}
+          path: artifacts/rehearsal/identity-continuity-proof-pack
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Delete run-scoped provider credential
+        if: always() && env.AETHER_STAGING_PROVIDER_CONNECTION_ID != '' && env.REHEARSAL_TENANT_API_KEY != '' && env.IDENTITY_STAGING_CAPTURE_API_KEY != '' && env.ALB_DNS_NAME != ''
+        env:
+          AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
+          AETHER_STAGING_TENANT_WRITE_KEY: ${{ env.REHEARSAL_TENANT_API_KEY }}
+          AETHER_STAGING_TENANT_ADMIN_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}
+          AETHER_STAGING_PROVIDER_CONNECTION_ID: ${{ env.AETHER_STAGING_PROVIDER_CONNECTION_ID }}
+        run: |
+          set -euo pipefail
+          python scripts/identity_staging_provider_bootstrap.py --cleanup
+
+      # Preserve the exact scenario transcripts before the unconditional tenant
+      # deletion step erases their durable server-side evidence rows.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: identity-continuity-scenarios-${{ github.run_id }}
+          path: artifacts/rehearsal/identity-continuity-scenarios
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Rollback rehearsal
         run: |
           set -euo pipefail
@@ -2636,7 +2847,7 @@ jobs:
           # status -- `pipefail` does not reach into a process substitution --
           # so an API error, a throttle or an expired credential used to yield an
           # empty array that read as "already asleep", skipping the reviewed
-          # sleep plan, the sleep apply AND the last-resort cost stop. The step
+          # sleep plan, the sleep apply AND bounded convergence. The step
           # is called "provably at zero": unprovable must never be proven. The
           # AWS call is therefore run on its own, its status checked, and its
           # stderr kept.
@@ -2647,13 +2858,38 @@ jobs:
             exit 1
           fi
           mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          if [ "${#services[@]}" -eq 1 ] && [ "${services[0]}" = None ]; then
+            services=()
+          fi
           if [ "${#services[@]}" -eq 0 ]; then
             nonzero=0
+            services_match=false
             echo 'staging exposes no ECS services; checking for standalone ECS tasks before declaring zero'
           else
-            if ! nonzero="$(aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
-              --query 'length(services[?desiredCount>`0`])' --output text)"; then
+            if ! aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+              --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
+              --output json > "${RUNNER_TEMP}/staging-services-before-sleep.json"; then
               echo '::error::could not describe staging ECS services; staging state is UNKNOWN and must not be treated as asleep'
+              echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            if service_state="$(LISTED_SERVICES="$services_raw" python - <<'PY'
+          import json, os, yaml
+          rows = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "staging-services-before-sleep.json")))
+          services = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get(
+              "profiles", {}).get("staging", {}).get("services", {})
+          cluster = os.environ["STAGING_CLUSTER"]
+          expected = {f"{cluster}-{'backend' if key == 'api' else key}" for key in services}
+          listed = {arn.rsplit("/", 1)[-1] for arn in os.environ["LISTED_SERVICES"].split()}
+          observed = {row["name"] for row in rows}
+          matches = bool(expected) and observed == expected == listed and len(rows) == len(listed)
+          nonzero = sum(1 for row in rows if row["desired"] or row["running"] or row["pending"])
+          print(nonzero, "true" if matches else "false")
+          PY
+            )"; then
+              read -r nonzero services_match <<< "$service_state"
+            else
+              echo '::error::could not verify the staging ECS service set and counts; staging state is UNKNOWN and must not be treated as asleep'
               echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
               exit 1
             fi
@@ -2664,28 +2900,105 @@ jobs:
               echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
               exit 1 ;;
           esac
-          if [ "$nonzero" = 0 ]; then
-            if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
-              --query 'taskArns[]' --output json > "${RUNNER_TEMP}/staging-running-tasks.json"; then
-              echo '::error::could not enumerate standalone staging tasks; staging state is UNKNOWN and must not be treated as asleep'
+          if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
+            --query 'taskArns[]' --output json > "${RUNNER_TEMP}/staging-running-tasks.json"; then
+            echo '::error::could not enumerate staging tasks; staging state is UNKNOWN and must not be treated as asleep'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if running_tasks="$(jq 'length' "${RUNNER_TEMP}/staging-running-tasks.json")"; then
+            :
+          else
+            echo '::error::could not parse the staging task list; staging state is UNKNOWN and must not be treated as asleep'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          # ListTasks RUNNING is a desired-status filter: a task whose desired
+          # state is STOPPED can still have lastStatus RUNNING or STOPPING.
+          if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status STOPPED \
+            --query 'taskArns[]' --output json > "${RUNNER_TEMP}/staging-stopped-desired-tasks.json"; then
+            echo '::error::could not enumerate stopping staging tasks; staging state is UNKNOWN'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! jq -e 'type == "array"' "${RUNNER_TEMP}/staging-stopped-desired-tasks.json" >/dev/null; then
+            echo '::error::could not parse stopping staging tasks; staging state is UNKNOWN'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          mapfile -t stopping_arns < <(jq -r '.[]' "${RUNNER_TEMP}/staging-stopped-desired-tasks.json")
+          still_stopping=0
+          for ((offset=0; offset<${#stopping_arns[@]}; offset+=100)); do
+            chunk=("${stopping_arns[@]:offset:100}")
+            if ! aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "${chunk[@]}" \
+              --output json > "${RUNNER_TEMP}/staging-stopping-${offset}.json"; then
+              echo '::error::could not describe stopping staging tasks; staging state is UNKNOWN'
               echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
               exit 1
             fi
-            running_tasks="$(jq 'length' "${RUNNER_TEMP}/staging-running-tasks.json")"
-            if [ "$running_tasks" = 0 ]; then
-              echo 'asleep=true' >> "$GITHUB_OUTPUT"
-            else
-              echo 'asleep=false' >> "$GITHUB_OUTPUT"
-              echo "staging has ${running_tasks} running or pending task(s); a reviewed sleep path is required"
+            if ! jq -e --argjson expected "${#chunk[@]}" \
+              '(.failures | length) == 0 and (.tasks | length) == $expected and all(.tasks[]; has("lastStatus"))' \
+              "${RUNNER_TEMP}/staging-stopping-${offset}.json" >/dev/null; then
+              echo '::error::incomplete stopping task description; staging state is UNKNOWN'
+              echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+              exit 1
             fi
+            still_stopping=$((still_stopping + $(jq '[.tasks[] | select(.lastStatus != "STOPPED")] | length' \
+              "${RUNNER_TEMP}/staging-stopping-${offset}.json")))
+          done
+          if ! autoscaling_raw="$(aws application-autoscaling describe-scalable-targets \
+            --service-namespace ecs \
+            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity,max:MaxCapacity}" \
+            --output json)"; then
+            echo '::error::could not read staging autoscaling targets; staging state is UNKNOWN and must not be treated as asleep'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if AUTOSCALING_JSON="$autoscaling_raw" python - <<'PY' > "${RUNNER_TEMP}/staging-autoscaling-asleep.txt"
+          import json, os, sys, yaml
+          runtime = yaml.safe_load(open("config/runtime_deployment.yaml")) or {}
+          services = runtime.get("profiles", {}).get("staging", {}).get("services", {})
+          cluster = os.environ["STAGING_CLUSTER"]
+          expected = {
+              f"service/{cluster}/{cluster}-{'backend' if key == 'api' else key}"
+              for key in services
+          }
+          actual_rows = json.loads(os.environ["AUTOSCALING_JSON"])
+          actual = {row.get("id"): row for row in actual_rows}
+          ok = bool(expected) and set(actual) == expected and all(
+              row.get("min") == 0 and row.get("max") == 0 for row in actual.values()
+          )
+          print("true" if ok else "false")
+          if not ok:
+              print(f"expected exact zero-bound targets {sorted(expected)}, observed {actual_rows!r}", file=sys.stderr)
+          PY
+          then
+            :
+          else
+            echo '::error::could not parse staging autoscaling state; staging state is UNKNOWN and must not be treated as asleep'
+            echo 'asleep=unknown' >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          targets_asleep="$(tail -n 1 "${RUNNER_TEMP}/staging-autoscaling-asleep.txt")"
+          services_asleep=false
+          if [ "$nonzero" = 0 ] && [ "$services_match" = true ] \
+            && [ "$running_tasks" = 0 ] && [ "$still_stopping" = 0 ] \
+            && [ "$targets_asleep" = true ]; then
+            services_asleep=true
+          fi
+          if [ "$services_asleep" = true ]; then
+            echo 'asleep=true' >> "$GITHUB_OUTPUT"
           else
             echo 'asleep=false' >> "$GITHUB_OUTPUT"
+            echo "staging is not fully asleep: nonzero services=${nonzero}, exact service set=${services_match}, desired-running tasks=${running_tasks}, stopping tasks=${still_stopping}, zero-bound autoscaling=${targets_asleep}"
           fi
-          echo "services with a non-zero desired count: ${nonzero}"
+          echo "services with non-zero desired/running/pending counts: ${nonzero}"
 
       - name: Generate the reviewed sleep plan
         id: sleep-plan
-        if: steps.already.outputs.asleep != 'true'
+        # A live zero envelope can still have an awake Terraform state after a
+        # direct cost stop. An apply-sleep must reconcile the reviewed state.
+        if: steps.already.outputs.asleep != 'true' || needs.select-profile.outputs.apply_sleep == 'true'
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
@@ -2699,6 +3012,8 @@ jobs:
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
             || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
+          [[ "$BACKEND_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] \
+            || { echo '::error::apply-sleep requires an approved backend_image_digest (sha256: followed by 64 lowercase hex characters) before state reconciliation'; exit 1; }
           reconcile_staging_state() {
             local secret_names="$1"
             local reconcile_workflow=staging-state-reconcile.yml
@@ -2881,6 +3196,16 @@ jobs:
                       for k, v in services.items()}
           if any(expected.values()):
               sys.exit(f"::error::the asleep shape is not all-zero: {expected}")
+          expected_autoscaling = {}
+          for key, service in services.items():
+              scaling = service.get("autoscaling") or {}
+              if "min_capacity" not in scaling or "max_capacity" not in scaling:
+                  sys.exit(f"::error::runtime service {key} has incomplete autoscaling bounds")
+              target_id = f"service/{os.environ['STAGING_CLUSTER']}/{ecs_name(key)}"
+              expected_autoscaling[target_id] = {
+                  "min_capacity": int(scaling["min_capacity"]) * int(multiplier),
+                  "max_capacity": int(scaling["max_capacity"]) * int(multiplier),
+              }
 
           plan = json.load(open(os.environ["PLAN_JSON"]))
 
@@ -2896,18 +3221,24 @@ jobs:
               values = res.get("values") or {}
               if res.get("type") == "aws_ecs_service":
                   actual[values.get("name")] = values.get("desired_count")
-              if res.get("type") == "aws_appautoscaling_target":
-                  autoscaling[values.get("resource_id")] = values.get("min_capacity")
+              if (res.get("type") == "aws_appautoscaling_target"
+                      and values.get("service_namespace") == "ecs"
+                      and values.get("scalable_dimension") == "ecs:service:DesiredCount"):
+                  autoscaling[values.get("resource_id")] = {
+                      "min_capacity": values.get("min_capacity"),
+                      "max_capacity": values.get("max_capacity"),
+                  }
               if res.get("type") in ("aws_scheduler_schedule", "aws_cloudwatch_event_rule"):
                   if values.get("state") not in ("DISABLED",) and values.get("is_enabled") is not False:
                       scheduled.append(values.get("name"))
 
           if actual != expected:
               sys.exit(f"::error::planned ECS desired counts {actual} != pinned {state} shape {expected}")
-          for target, minimum in autoscaling.items():
-              if minimum not in (0, None):
-                  sys.exit(f"::error::asleep plan leaves an autoscaling floor of {minimum} on {target}")
-          print(f"asleep shape confirmed: {actual}; scheduled rules still enabled: {scheduled}")
+          if autoscaling != expected_autoscaling:
+              sys.exit(f"::error::planned ECS autoscaling bounds {autoscaling} != pinned asleep bounds {expected_autoscaling}")
+          if scheduled:
+              sys.exit(f"::error::asleep plan leaves staging schedules enabled: {scheduled}")
+          print(f"asleep shape confirmed: services={actual}; autoscaling={autoscaling}; no enabled staging schedules")
           PY
           printf 'plan_checksum=%s\n' "$checksum" >> "$GITHUB_OUTPUT"
 
@@ -2957,44 +3288,320 @@ jobs:
           done
           printf 'conclusion=%s\n' "$conclusion" >> "$GITHUB_OUTPUT"
           if [ "$conclusion" != success ]; then
-            echo "::warning::reviewed sleep apply ${run_id} concluded ${conclusion}; the last-resort cost stop will run"
+            echo "::warning::reviewed sleep apply ${run_id} concluded ${conclusion}; bounded sleep convergence will run"
           fi
 
-      # Last resort, and only when the reviewed sleep did not land: scale the
-      # staging services to zero directly so cost stops now. This is a reduction
-      # only — it can never provision anything — and the next reviewed sleep plan
-      # reconciles Terraform state to the same zero.
-      - name: Last-resort cost stop (scale staging to zero)
-        id: last-resort
+      # Reconcile the exact sleep envelope even after a successful Terraform
+      # apply, then wait for ECS to drain. Target max=0 is applied before task
+      # counts so the still-attached target-tracking policies cannot revive the
+      # service while a deployment or task is stopping.
+      - name: Enforce zero capacity bounds and wait for staging to drain
+        id: enforce-sleep
         if: >-
           always()
           && needs.select-profile.outputs.apply_sleep == 'true'
           && steps.already.outputs.asleep != 'true'
-          && steps.sleep-apply.outputs.conclusion != 'success'
         run: |
           set -euo pipefail
           test "$STAGING_CLUSTER" = "AETHER-staging" \
-            || { echo '::error::last-resort cost stop refused outside the staging cluster'; exit 1; }
-          # Fail closed: an unreadable service list means the cost stop did not
-          # happen, and a green step here would claim it did.
-          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
-            --query 'serviceArns[]' --output text)"; then
-            echo '::error::could not enumerate staging ECS services; the last-resort cost stop did not run'
-            exit 1
+            || { echo '::error::sleep enforcement refused outside the staging cluster'; exit 1; }
+          mkdir -p artifacts/sleep
+          failure=0
+          scaled=0
+          targets_clamped=0
+          tasks_stopped=0
+          outside_actions=0
+          drain_ok=false
+          expected_services_file="${RUNNER_TEMP}/staging-expected-services.txt"
+          expected_targets_file="${RUNNER_TEMP}/staging-expected-targets.txt"
+          if EXPECTED_CLUSTER="$STAGING_CLUSTER" python - <<'PY' > "$expected_services_file"
+          import os, sys, yaml
+          runtime = yaml.safe_load(open("config/runtime_deployment.yaml")) or {}
+          services = runtime.get("profiles", {}).get("staging", {}).get("services", {})
+          if not services:
+              sys.exit("::error::staging runtime service matrix is empty")
+          cluster = os.environ["EXPECTED_CLUSTER"]
+          for key in sorted(services):
+              print(f"{cluster}-{'backend' if key == 'api' else key}")
+          PY
+          then
+            :
+          else
+            failure=1
+            : > "$expected_services_file"
           fi
-          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
-          stopped=0
-          for service in "${services[@]:-}"; do
-            test -n "$service" || continue
-            aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
-              --desired-count 0 >/dev/null
-            stopped=$((stopped + 1))
-            echo "::warning::scaled ${service} to 0 outside Terraform; state must be reconciled"
-          done
-          task_stop_count=0
+          if EXPECTED_CLUSTER="$STAGING_CLUSTER" python - <<'PY' > "$expected_targets_file"
+          import os, sys, yaml
+          runtime = yaml.safe_load(open("config/runtime_deployment.yaml")) or {}
+          services = runtime.get("profiles", {}).get("staging", {}).get("services", {})
+          if not services:
+              sys.exit("::error::staging runtime service matrix is empty")
+          cluster = os.environ["EXPECTED_CLUSTER"]
+          for key in sorted(services):
+              service = f"{cluster}-{'backend' if key == 'api' else key}"
+              print(f"service/{cluster}/{service}")
+          PY
+          then
+            :
+          else
+            failure=1
+            : > "$expected_targets_file"
+          fi
+          # Clamp every target in this exact staging cluster before updating
+          # services. An unexpected target is still staging-owned live capacity:
+          # report the matrix drift, but never leave an autoscaler able to
+          # recreate the resource while cleanup is running.
+          if ! targets_raw="$(aws application-autoscaling describe-scalable-targets \
+            --service-namespace ecs \
+            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity,max:MaxCapacity}" \
+            --output json)"; then
+            echo '::error::could not enumerate staging autoscaling targets; scale-down will continue but the sleep envelope is unverified'
+            failure=1
+            targets_raw='[]'
+          fi
+          printf '%s' "$targets_raw" > artifacts/sleep/autoscaling-before.json
+          if TARGETS_JSON="$targets_raw" EXPECTED_TARGETS="$expected_targets_file" python - <<'PY' > "$RUNNER_TEMP/staging-targets-to-clamp.tsv"
+          import json, os, sys
+          expected = {line.strip() for line in open(os.environ["EXPECTED_TARGETS"]) if line.strip()}
+          rows = json.loads(os.environ["TARGETS_JSON"])
+          actual = {row.get("id"): row for row in rows}
+          if set(actual) != expected:
+              print("::error::staging autoscaling target set differs from the runtime matrix: "
+                    f"missing={sorted(expected - set(actual))}, extra={sorted(set(actual) - expected)}",
+                    file=sys.stderr)
+              result = 1
+          else:
+              result = 0
+          for target in sorted(actual):
+              row = actual[target]
+              print(f"{target}\t{row.get('min')}\t{row.get('max')}")
+          raise SystemExit(result)
+          PY
+          then
+            :
+          else
+            failure=1
+          fi
+          while IFS=$'\t' read -r target minimum maximum; do
+            test -n "$target" || continue
+            if [ "$minimum" != 0 ] || [ "$maximum" != 0 ]; then
+              if aws application-autoscaling register-scalable-target --service-namespace ecs \
+                --scalable-dimension ecs:service:DesiredCount --resource-id "$target" \
+                --min-capacity 0 --max-capacity 0 >/dev/null; then
+                targets_clamped=$((targets_clamped + 1))
+                outside_actions=$((outside_actions + 1))
+                printf 'autoscaling_bounds_zeroed=%s at=%s\n' \
+                  "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/sleep/actions.log
+              else
+                echo "::error::could not clamp autoscaling target ${target} to [0,0]"
+                failure=1
+              fi
+            fi
+          done < "$RUNNER_TEMP/staging-targets-to-clamp.tsv"
+
+          # Scale every service in this exact staging cluster down. Unexpected
+          # services are still reduced for safety, but their presence fails the
+          # canonical topology check and cannot be hidden by the cleanup.
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output json)"; then
+            echo '::error::could not enumerate staging ECS services; task stop will still be attempted'
+            failure=1
+            services_raw='[]'
+          fi
+          printf '%s' "$services_raw" > artifacts/sleep/service-arns-before.json
+          mapfile -t services < <(jq -r '.[]?' artifacts/sleep/service-arns-before.json)
+          if [ "${#services[@]}" -gt 10 ]; then
+            echo '::error::staging service count exceeds the safe single-call describe limit'
+            failure=1
+          elif [ "${#services[@]}" -gt 0 ]; then
+            if aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+              --query 'services[].{arn:serviceArn,name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
+              --output json > artifacts/sleep/services-before.json; then
+              if SERVICE_ROWS=artifacts/sleep/services-before.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY' > "$RUNNER_TEMP/staging-services-to-scale.tsv"
+          import json, os, sys
+          rows = json.load(open(os.environ["SERVICE_ROWS"]))
+          expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
+          actual = {row.get("name") for row in rows}
+          if actual != expected:
+              print("::error::staging service set differs from runtime matrix: "
+                    f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}",
+                    file=sys.stderr)
+              result = 1
+          else:
+              result = 0
+          for row in rows:
+              if row.get("desired", 0) != 0:
+                  print(f"{row.get('arn')}\t{row.get('name')}\t{row.get('desired')}")
+          raise SystemExit(result)
+          PY
+              then
+                :
+              else
+                failure=1
+              fi
+              while IFS=$'\t' read -r service service_name desired; do
+                test -n "$service" || continue
+                if aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
+                  --desired-count 0 >/dev/null; then
+                  scaled=$((scaled + 1))
+                  outside_actions=$((outside_actions + 1))
+                  printf 'scaled_to_zero=%s at=%s\n' "$service_name" \
+                    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/sleep/actions.log
+                else
+                  echo "::error::could not set staging service ${service_name} to desired-count 0"
+                  failure=1
+                fi
+              done < "$RUNNER_TEMP/staging-services-to-scale.tsv"
+            else
+              echo '::error::could not describe staging ECS services; task stop will still be attempted'
+              failure=1
+            fi
+          fi
+
+          # Stop service stragglers and standalone tasks; every requested ARN
+          # is retained so the poll must observe lastStatus=STOPPED before the
+          # drain is considered complete.
           if ! task_arns_raw="$(aws ecs list-tasks --cluster "$STAGING_CLUSTER" \
-            --desired-status RUNNING --query 'taskArns[]' --output text)"; then
-            echo '::error::could not enumerate staging ECS tasks; the last-resort cost stop did not complete'
+            --desired-status RUNNING --query 'taskArns[]' --output json)"; then
+            echo '::error::could not enumerate staging tasks; bounded drain cannot be proven'
+            failure=1
+            task_arns_raw='[]'
+          fi
+          printf '%s' "$task_arns_raw" > artifacts/sleep/tasks-before.json
+          mapfile -t requested_tasks < <(jq -r '.[]?' artifacts/sleep/tasks-before.json)
+          for task_arn in "${requested_tasks[@]:-}"; do
+            test -n "$task_arn" || continue
+            if aws ecs stop-task --cluster "$STAGING_CLUSTER" --task "$task_arn" \
+              --reason 'staging lifecycle sleep convergence' >/dev/null; then
+              tasks_stopped=$((tasks_stopped + 1))
+              outside_actions=$((outside_actions + 1))
+              printf 'stop_requested=%s at=%s\n' "$task_arn" \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/sleep/actions.log
+            else
+              echo "::error::could not stop staging task ${task_arn}"
+              failure=1
+            fi
+          done
+
+          printf '%s\n' "${requested_tasks[@]:-}" | sed '/^$/d' > "$RUNNER_TEMP/staging-stop-requested.txt"
+          deadline=$(( $(date -u +%s) + 600 ))
+          while [ "$(date -u +%s)" -lt "$deadline" ]; do
+            poll_ready=true
+            if services_now="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+              --query 'serviceArns[]' --output json)"; then
+              printf '%s' "$services_now" > artifacts/sleep/service-arns-after.json
+              mapfile -t services_now_list < <(jq -r '.[]?' artifacts/sleep/service-arns-after.json)
+              if [ "${#services_now_list[@]}" -eq 0 ] || [ "${#services_now_list[@]}" -gt 10 ]; then
+                poll_ready=false
+              elif aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services_now_list[@]}" \
+                --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
+                --output json > artifacts/sleep/services-after.json; then
+                if SERVICE_ROWS=artifacts/sleep/services-after.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
+          import json, os, sys
+          rows = json.load(open(os.environ["SERVICE_ROWS"]))
+          expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
+          actual = {row.get("name") for row in rows}
+          ok = bool(expected) and actual == expected and all(
+              row.get("desired") == 0 and row.get("running") == 0 and row.get("pending") == 0
+              for row in rows
+          )
+          raise SystemExit(0 if ok else 1)
+          PY
+                then :; else poll_ready=false; fi
+              else
+                poll_ready=false
+              fi
+            else
+              poll_ready=false
+            fi
+
+            if targets_now="$(aws application-autoscaling describe-scalable-targets \
+              --service-namespace ecs \
+              --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity,max:MaxCapacity}" \
+              --output json)"; then
+              printf '%s' "$targets_now" > artifacts/sleep/autoscaling-after.json
+              if TARGETS_JSON="$targets_now" EXPECTED_TARGETS="$expected_targets_file" python - <<'PY'
+          import json, os, sys
+          expected = {line.strip() for line in open(os.environ["EXPECTED_TARGETS"]) if line.strip()}
+          rows = json.loads(os.environ["TARGETS_JSON"])
+          actual = {row.get("id"): row for row in rows}
+          ok = bool(expected) and set(actual) == expected and all(
+              row.get("min") == 0 and row.get("max") == 0 for row in actual.values()
+          )
+          raise SystemExit(0 if ok else 1)
+          PY
+              then :; else poll_ready=false; fi
+            else
+              poll_ready=false
+            fi
+
+            if tasks_now="$(aws ecs list-tasks --cluster "$STAGING_CLUSTER" \
+              --desired-status RUNNING --query 'taskArns[]' --output json)"; then
+              printf '%s' "$tasks_now" > artifacts/sleep/tasks-after.json
+              if [ "$(jq 'length' artifacts/sleep/tasks-after.json)" -ne 0 ]; then
+                poll_ready=false
+              fi
+            else
+              poll_ready=false
+            fi
+            if stopped_now="$(aws ecs list-tasks --cluster "$STAGING_CLUSTER" \
+              --desired-status STOPPED --query 'taskArns[]' --output json)" \
+              && printf '%s' "$stopped_now" | jq -e 'type == "array"' >/dev/null; then
+              mapfile -t stopping_now < <(printf '%s' "$stopped_now" | jq -r '.[]')
+              for ((offset=0; offset<${#stopping_now[@]}; offset+=100)); do
+                chunk=("${stopping_now[@]:offset:100}")
+                if aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "${chunk[@]}" \
+                  --output json > "${RUNNER_TEMP}/stopping-tasks-${offset}.json"; then
+                  if ! jq -e --argjson expected "${#chunk[@]}" \
+                    '(.failures | length) == 0 and (.tasks | length) == $expected and all(.tasks[]; .lastStatus == "STOPPED")' \
+                    "${RUNNER_TEMP}/stopping-tasks-${offset}.json" >/dev/null; then
+                    poll_ready=false
+                  fi
+                else
+                  poll_ready=false
+                fi
+              done
+            else
+              poll_ready=false
+            fi
+
+            mapfile -t stopped_arns < "$RUNNER_TEMP/staging-stop-requested.txt"
+            if [ "${#stopped_arns[@]}" -gt 0 ]; then
+              stopped_complete=true
+              for ((offset=0; offset<${#stopped_arns[@]}; offset+=100)); do
+                chunk=("${stopped_arns[@]:offset:100}")
+                if aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "${chunk[@]}" \
+                  --output json > "${RUNNER_TEMP}/stopped-tasks-${offset}.json"; then
+                  if ! jq -e '(.failures | length) == 0 and (.tasks | length) > 0 and all(.tasks[]; .lastStatus == "STOPPED")' \
+                    "${RUNNER_TEMP}/stopped-tasks-${offset}.json" >/dev/null; then
+                    stopped_complete=false
+                  fi
+                else
+                  stopped_complete=false
+                fi
+              done
+              if [ "$stopped_complete" != true ]; then poll_ready=false; fi
+            fi
+
+            if [ "$poll_ready" = true ]; then
+              drain_ok=true
+              break
+            fi
+            sleep 10
+          done
+          if [ "$drain_ok" != true ]; then
+            echo '::error::staging did not reach exact zero services, tasks, and autoscaling bounds within 600 seconds'
+            failure=1
+          fi
+          {
+            printf 'scaled_to_zero=%s\n' "$scaled"
+            printf 'targets_clamped=%s\n' "$targets_clamped"
+            printf 'tasks_stopped=%s\n' "$tasks_stopped"
+            printf 'outside_terraform_actions=%s\n' "$outside_actions"
+            printf 'drain_ok=%s\n' "$drain_ok"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$failure" -ne 0 ]; then
+            echo '::error::sleep convergence encountered one or more AWS, topology, or drain failures; the lease remains open unless final verification proves zero'
             exit 1
           fi
           mapfile -t task_arns < <(printf '%s' "$task_arns_raw" | tr '\t' '\n' | sed '/^$/d')
@@ -3041,19 +3648,80 @@ jobs:
           # the autoscaling query may fail silently. This step does NOT exit
           # early: it must reach the report step so the run ends red with the
           # reason on the summary, rather than red with no disclosure.
+          expected_services_file="${RUNNER_TEMP}/staging-expected-services.txt"
+          expected_targets_file="${RUNNER_TEMP}/staging-expected-targets.txt"
+          if EXPECTED_CLUSTER="$STAGING_CLUSTER" python - <<'PY' > "$expected_services_file"
+          import os, sys, yaml
+          services = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get(
+              "profiles", {}).get("staging", {}).get("services", {})
+          if not services:
+              sys.exit("staging runtime service matrix is empty")
+          cluster = os.environ["EXPECTED_CLUSTER"]
+          for key in sorted(services):
+              print(f"{cluster}-{'backend' if key == 'api' else key}")
+          PY
+          then
+            :
+          else
+            zero_ok=false
+            : > "$expected_services_file"
+            echo '::error::could not resolve the staging service matrix'
+          fi
+          if EXPECTED_CLUSTER="$STAGING_CLUSTER" python - <<'PY' > "$expected_targets_file"
+          import os, sys, yaml
+          services = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get(
+              "profiles", {}).get("staging", {}).get("services", {})
+          if not services:
+              sys.exit("staging runtime service matrix is empty")
+          cluster = os.environ["EXPECTED_CLUSTER"]
+          for key in sorted(services):
+              name = f"{cluster}-{'backend' if key == 'api' else key}"
+              print(f"service/{cluster}/{name}")
+          PY
+          then
+            :
+          else
+            zero_ok=false
+            : > "$expected_targets_file"
+            echo '::error::could not resolve the staging autoscaling target matrix'
+          fi
           if services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
-            --query 'serviceArns[]' --output text)"; then
-            mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+            --query 'serviceArns[]' --output json)"; then
+            printf '%s' "$services_raw" > artifacts/sleep/service-arns-after.json
+            mapfile -t services < <(jq -r '.[]?' artifacts/sleep/service-arns-after.json)
             residual_tasks=0
             if [ "${#services[@]}" -gt 0 ]; then
               if aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
                 --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
                 --output json > artifacts/sleep/desired-counts.json; then
-                nonzero="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(1 for s in d if s['desired'] or s['running'] or s['pending']))")"
-                residual_tasks="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(s['running']+s['pending'] for s in d))")"
-                if [ "$nonzero" != 0 ]; then
+                if SERVICE_ROWS=artifacts/sleep/desired-counts.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
+          import json, os, sys
+          rows = json.load(open(os.environ["SERVICE_ROWS"]))
+          expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
+          actual = {row.get("name") for row in rows}
+          if actual != expected or any(
+              row.get("desired") != 0 or row.get("running") != 0 or row.get("pending") != 0
+              for row in rows
+          ):
+              print(f"service state mismatch: expected={sorted(expected)}, observed={rows!r}", file=sys.stderr)
+              raise SystemExit(1)
+          PY
+                then
+                  :
+                else
                   zero_ok=false
-                  echo "::error::${nonzero} staging service(s) are still non-zero after sleep"
+                  echo '::error::staging service set or desired/running/pending counts do not match the exact asleep contract'
+                fi
+                if counts="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(1 for s in d if s['desired'] or s['running'] or s['pending']), sum(s['running']+s['pending'] for s in d))")"; then
+                  read -r nonzero residual_tasks <<< "$counts"
+                  if [ "$nonzero" != 0 ]; then
+                    zero_ok=false
+                    echo "::error::${nonzero} staging service(s) are still non-zero after sleep"
+                  fi
+                else
+                  zero_ok=false
+                  residual_tasks=unknown
+                  echo '::error::could not count residual staging service state'
                 fi
               else
                 zero_ok=false
@@ -3061,27 +3729,42 @@ jobs:
                 echo '[]' > artifacts/sleep/desired-counts.json
                 echo '::error::could not describe staging ECS services; residual staging compute is UNKNOWN and must not be reported as zero'
               fi
+            else
+              zero_ok=false
+              residual_tasks=unknown
+              echo '::error::staging has no ECS services; the canonical asleep service set is missing'
             fi
           else
             zero_ok=false
             echo '::error::could not enumerate staging ECS services; residual staging compute is UNKNOWN and must not be reported as zero'
           fi
-          # Nothing may be left scheduled or autoscaled back up either. The
-          # ResourceId is matched on the EXACT cluster: `contains()` would match
-          # any cluster in the account-wide ECS autoscaling namespace whose name
-          # merely contains this one.
+          # Nothing may be left autoscaled back up either. Assert the exact
+          # runtime target set and both bounds, not just the minimum floor.
           if aws application-autoscaling describe-scalable-targets --service-namespace ecs \
-            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity}" \
+            --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity,max:MaxCapacity}" \
             --output json > artifacts/sleep/autoscaling.json; then
-            floors="$(python -c "import json;d=json.load(open('artifacts/sleep/autoscaling.json'));print(sum(1 for t in d if t.get('min',0)))")"
-            if [ "$floors" != 0 ]; then
+            if TARGETS_JSON=artifacts/sleep/autoscaling.json EXPECTED_TARGETS="$expected_targets_file" python - <<'PY'
+          import json, os, sys
+          expected = {line.strip() for line in open(os.environ["EXPECTED_TARGETS"]) if line.strip()}
+          rows = json.load(open(os.environ["TARGETS_JSON"]))
+          actual = {row.get("id"): row for row in rows}
+          ok = bool(expected) and set(actual) == expected and all(
+              row.get("min") == 0 and row.get("max") == 0 for row in actual.values()
+          )
+          if not ok:
+              print(f"autoscaling state mismatch: expected={sorted(expected)}, observed={rows!r}", file=sys.stderr)
+          raise SystemExit(0 if ok else 1)
+          PY
+            then
+              :
+            else
               zero_ok=false
-              echo "::error::${floors} staging autoscaling target(s) still hold a non-zero floor"
+              echo '::error::staging autoscaling targets are missing, extra, or do not have exact [0,0] bounds'
             fi
           else
             zero_ok=false
             echo '[]' > artifacts/sleep/autoscaling.json
-            echo '::error::could not read staging autoscaling targets; an autoscaling floor could revive staging and cannot be ruled out'
+            echo '::error::could not read staging autoscaling targets; a target policy could revive staging and cannot be ruled out'
           fi
           residual_task_arns=unknown
           standalone_tasks=unknown
@@ -3108,6 +3791,31 @@ jobs:
             zero_ok=false
             echo '[]' > artifacts/sleep/running-task-arns.json
             echo '::error::could not enumerate residual ECS tasks; staging compute is UNKNOWN and must not be reported as zero'
+          fi
+          # A stop request changes desiredStatus before lastStatus reaches
+          # STOPPED, so the RUNNING-filtered list above is not sufficient.
+          if aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status STOPPED \
+            --query 'taskArns[]' --output json > artifacts/sleep/stopped-desired-task-arns.json \
+            && jq -e 'type == "array"' artifacts/sleep/stopped-desired-task-arns.json >/dev/null; then
+            mapfile -t stopping_arns < <(jq -r '.[]' artifacts/sleep/stopped-desired-task-arns.json)
+            for ((offset=0; offset<${#stopping_arns[@]}; offset+=100)); do
+              chunk=("${stopping_arns[@]:offset:100}")
+              if aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "${chunk[@]}" \
+                --output json > "artifacts/sleep/stopped-desired-tasks-${offset}.json"; then
+                if ! jq -e --argjson expected "${#chunk[@]}" \
+                  '(.failures | length) == 0 and (.tasks | length) == $expected and all(.tasks[]; .lastStatus == "STOPPED")' \
+                  "artifacts/sleep/stopped-desired-tasks-${offset}.json" >/dev/null; then
+                  zero_ok=false
+                  echo '::error::a desired-stopped ECS task has not reached lastStatus STOPPED'
+                fi
+              else
+                zero_ok=false
+                echo '::error::could not describe desired-stopped ECS tasks; staging compute is UNKNOWN'
+              fi
+            done
+          else
+            zero_ok=false
+            echo '::error::could not enumerate desired-stopped ECS tasks; staging compute is UNKNOWN'
           fi
           # Residual cost, priced from the canonical price book rather than a guess.
           RESIDUAL_JSON=artifacts/sleep/desired-counts.json python - <<'PY'
@@ -3139,7 +3847,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Close the awake lease
-        if: always() && needs.select-profile.outputs.apply_sleep == 'true'
+        if: >-
+          always()
+          && needs.select-profile.outputs.apply_sleep == 'true'
+          && steps.residual.outputs.zero_ok == 'true'
         run: |
           set -euo pipefail
           # Only an explicit ParameterNotFound is a benign already-closed
@@ -3166,7 +3877,12 @@ jobs:
           APPLY_SLEEP: ${{ needs.select-profile.outputs.apply_sleep }}
           ALREADY_ASLEEP: ${{ steps.already.outputs.asleep }}
           SLEEP_APPLY_CONCLUSION: ${{ steps.sleep-apply.outputs.conclusion }}
-          SCALED_TO_ZERO: ${{ steps.last-resort.outputs.scaled_to_zero }}
+          ENFORCE_RESULT: ${{ steps.enforce-sleep.outcome }}
+          DRAIN_OK: ${{ steps.enforce-sleep.outputs.drain_ok }}
+          SCALED_TO_ZERO: ${{ steps.enforce-sleep.outputs.scaled_to_zero }}
+          TARGETS_CLAMPED: ${{ steps.enforce-sleep.outputs.targets_clamped }}
+          TASKS_STOPPED: ${{ steps.enforce-sleep.outputs.tasks_stopped }}
+          OUTSIDE_TERRAFORM_ACTIONS: ${{ steps.enforce-sleep.outputs.outside_terraform_actions }}
           RESIDUAL_TASKS: ${{ steps.residual.outputs.residual_tasks }}
           RESIDUAL_TASK_ARNS: ${{ steps.residual.outputs.residual_task_arns }}
           STANDALONE_TASKS: ${{ steps.residual.outputs.standalone_tasks }}
@@ -3193,11 +3909,37 @@ jobs:
             manual=true
             echo '::error::staging was never proven to be at zero before the sleep phase ran'
           fi
-          if [ "${APPLY_SLEEP:-false}" = true ] && [ "${ALREADY_ASLEEP:-false}" != true ] && [ "${SLEEP_APPLY_CONCLUSION:-}" != success ]; then
+          if [ "${APPLY_SLEEP:-false}" = true ] \
+            && [ "$cleanup_result" != failure ] \
+            && [ "${ALREADY_ASLEEP:-false}" != true ] \
+            && [ "${SLEEP_APPLY_CONCLUSION:-}" != success ]; then
             cleanup_result=degraded
             manual=true
           fi
-          if [ "${APPLY_SLEEP:-false}" = true ] && [ -n "${SCALED_TO_ZERO:-}" ] && [ "${SCALED_TO_ZERO:-0}" -gt 0 ]; then
+          if [ "${APPLY_SLEEP:-false}" = true ] \
+            && [ "${ALREADY_ASLEEP:-false}" = true ] \
+            && [ "${SLEEP_APPLY_CONCLUSION:-}" != success ]; then
+            cleanup_result=failure
+            manual=true
+            echo '::error::live staging was asleep but the reviewed Terraform sleep state was not reconciled'
+          fi
+          if [ "${APPLY_SLEEP:-false}" = true ] \
+            && [ "${ALREADY_ASLEEP:-false}" != true ] \
+            && [ "${ENFORCE_RESULT:-skipped}" != success ]; then
+            cleanup_result=failure
+            manual=true
+          fi
+          if [ "${APPLY_SLEEP:-false}" = true ] \
+            && [ "${ALREADY_ASLEEP:-false}" != true ] \
+            && [ "${DRAIN_OK:-false}" != true ]; then
+            cleanup_result=failure
+            manual=true
+          fi
+          if [ "${APPLY_SLEEP:-false}" = true ] \
+            && [ "$cleanup_result" != failure ] \
+            && [ -n "${OUTSIDE_TERRAFORM_ACTIONS:-}" ] \
+            && [ "${OUTSIDE_TERRAFORM_ACTIONS:-0}" -gt 0 ]; then
+            cleanup_result=degraded
             manual=true
           fi
           {
@@ -3211,7 +3953,11 @@ jobs:
             echo "| staging state before sleep | ${ALREADY_ASLEEP:-unknown} |"
             echo "| staging proven at zero after sleep | ${ZERO_OK:-false} |"
             echo "| reviewed sleep apply | ${SLEEP_APPLY_CONCLUSION:-not-dispatched} |"
+            echo "| bounded drain | ${DRAIN_OK:-not-required} |"
             echo "| services force-scaled to zero | ${SCALED_TO_ZERO:-0} |"
+            echo "| autoscaling targets clamped | ${TARGETS_CLAMPED:-0} |"
+            echo "| standalone/service tasks stopped | ${TASKS_STOPPED:-0} |"
+            echo "| out-of-Terraform actions | ${OUTSIDE_TERRAFORM_ACTIONS:-0} |"
             echo "| residual running/pending tasks | ${RESIDUAL_TASKS:-unknown} |"
             echo "| residual ECS task ARNs | ${RESIDUAL_TASK_ARNS:-not-run} |"
             echo "| residual standalone tasks | ${STANDALONE_TASKS:-not-run} |"

@@ -138,8 +138,7 @@ A running checklist of the productization surfaces and their readiness. See
 ## Partner ecosystem / marketplace / developer platform
 
 Partner ecosystem, marketplace, and developer-platform functionality are
-**future-flagged and intentionally not implemented in this pass**. The flags
-`AETHER_PARTNER_ECOSYSTEM_ENABLED`, `AETHER_MARKETPLACE_ENABLED`,
-`AETHER_DEVELOPER_PLATFORM_ENABLED`, and `KYBER_PARTNER_ECOSYSTEM_ENABLED` exist,
-default off, and gate nothing yet. No partner models, routes, UI, or external
-partner APIs are shipped. This can be built later without a config migration.
+**intentionally not implemented in this pass**. No partner models, routes, UI, or
+external partner APIs are shipped, and there are no flags for them: reserved flags
+that gate nothing were retired because a flag nothing reads is not a control. Build
+the capability with its own flag when it is implemented.

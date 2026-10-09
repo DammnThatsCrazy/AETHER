@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [packages/shared/acquisition-evidence.ts, packages/web/src/types.ts, packages/web/src/index.ts, packages/web/src/tracking/traffic-source-tracker.ts]
 source_hashes:
   "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
-  "packages/web/src/index.ts": "sha256:ab8e89f8d3bd62e4059cf4cb14e643933bbef51d928fe4bc8bf40cd4d42fa1b7"
+  "packages/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
   "packages/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/web/src/types.ts": "sha256:d124245b75221272b787f67b08000fb6d4ddf4db5d61f0ccc45d91ffc779585b"
 ---
@@ -107,7 +107,10 @@ The standard web SDK does not emit a separate `context.acquisitionEvidence` fiel
 
 ## Deprecated fields
 
-`name` (replaced by `utmCampaign`) and `campaignId` (replaced by `externalCampaignId`) are forwarded for one SDK release window and then removed. Do not use them in new integrations.
+`name` and `campaignId` remain deprecated compatibility fields on the shared
+`AcquisitionEvidence` type. Use `utmCampaign` and `externalCampaignId` in new
+integrations. The standard web SDK's `context.trafficSource` payload does not
+emit these deprecated fields.
 
 ## SPA navigation
 

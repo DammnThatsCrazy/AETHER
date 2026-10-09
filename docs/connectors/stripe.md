@@ -12,34 +12,37 @@ since_version: "0.1.0"
 
 ## Overview
 
-The Stripe connector integrates payment and subscription data from
-Stripe into the Aether intelligence graph.
+The repository contains a legacy `StripeConnector` under
+`services/backend/services/integrations/connectors/adapters.py`. It accepts
+Stripe webhook events and verifies signatures through the legacy webhook
+integration path. It is not a native UPR provider plugin and does not currently
+poll Stripe for orders, transactions, or subscriptions.
 
 ## Data Flow
 
 ```
-Stripe account → webhook events + API polling
-→ Stripe normalizer
-→ canonical observation envelopes
-→ /v1/batch ingestion
-→ graph projection (value edges)
+Stripe webhook → legacy connector parser
+→ legacy normalized event and connector persistence path
 ```
 
 ## Supported Events
 
 | Event Category | Stripe Event | Aether Observation |
 |---|---|---|
-| Payments | payment_intent.succeeded | payment_completed |
-| Subscriptions | customer.subscription.created | subscription_start |
-| Refunds | charge.refunded | refund_processed |
-| Disputes | charge.dispute.created | dispute_opened |
+The legacy parser wraps the Stripe event type as `stripe.<type>` and retains
+limited object metadata. It does not implement the richer per-event mapping
+shown in older drafts, settlement reconciliation, or canonical payment
+authority.
 
 ## Value Attribution
 
-Stripe payment data flows through the canonical value architecture,
-ensuring that monetary amounts are correctly attributed with explicit
-basis and FX handling.
+The parser is not evidence that payment data has been reconciled into the
+canonical Value architecture. Payment truth, settlement, refunds, payouts,
+fees, and FX treatment must use the existing payment and ledger authorities.
 
 ## Status
 
-Planned. Not yet implemented.
+Implemented as a legacy webhook-only connector (`supports_webhook=True`,
+`supports_pull=False`). Native UPR migration, provider-backed tests, downstream
+payment reconciliation, and graph projection remain incomplete. A registered
+legacy connector is not a live-certification or production-readiness claim.

@@ -160,7 +160,11 @@ class CredentialBackend(abc.ABC):
 
     @abc.abstractmethod
     async def delete(self, tenant_id: str, ref: str) -> bool:
-        """Hard-delete the credential."""
+        """Hard-delete a credential; false means the tenant-scoped ref is absent.
+
+        Implementations must treat not-found as an idempotent absence result.
+        Backend errors raise, allowing callers to retain the ref and retry.
+        """
 
     @abc.abstractmethod
     async def metadata(self, tenant_id: str, ref: str) -> Optional[CredentialMetadata]:

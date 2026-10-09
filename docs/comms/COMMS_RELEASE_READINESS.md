@@ -8,7 +8,7 @@ status: experimental
 since_version: 0.1.0
 source_files: [services/backend/config/settings.py, tests/integration/test_comms_golden_scenario.py]
 source_hashes:
-  "services/backend/config/settings.py": "sha256:2fd39d4ff1bb287b3ea68d6b86281c7b8c0e2de0278784fa8bdde15163c995e8"
+  "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
   "tests/integration/test_comms_golden_scenario.py": "sha256:a26db2d8632f089933adf8df5d15d2a20756b33e6f4f3e082d384e8d5dd831ff"
 ---
 
@@ -19,14 +19,9 @@ source_hashes:
 | Flag | Default | Gates |
 |---|---|---|
 | `AETHER_COMMS_INGESTION_ENABLED` | true | Silver projection of comm events (Bronze always accepts) |
-| `AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED` | true | Touchpoint fan-out for comm events |
-| `AETHER_COMMS_JOURNEYS_ENABLED` | true | Journey inclusion of comm activities |
-| `AETHER_COMMS_GRAPH_ENABLED` | true | Aggregated relationship emission |
-| `AETHER_COMMS_PROFILE360_ENABLED` | true | Profile360 comms surfaces |
-| `AETHER_COMMS_CAMPAIGN360_ENABLED` | true | Campaign 360 Messages surfaces |
-| `AETHER_COMMS_NOESIS_ENABLED` | true | `communications_insight` intent |
 | `AETHER_COMMS_OPENS_VIEW_THROUGH` | false | Reported opens as low-confidence view-through |
-| `AETHER_COMMS_REPLIES_ELIGIBLE` | true | Replies as attribution-eligible touchpoints |
+
+Campaign projection, journey inclusion, Campaign 360 and reply attribution are not separately flag-gated. Flags for them (`AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED`, `AETHER_COMMS_JOURNEYS_ENABLED`, `AETHER_COMMS_CAMPAIGN360_ENABLED`, `AETHER_COMMS_REPLIES_ELIGIBLE`), and for graph emission, Profile360 surfaces and the Noesis intent (`AETHER_COMMS_GRAPH_ENABLED`, `AETHER_COMMS_PROFILE360_ENABLED`, `AETHER_COMMS_NOESIS_ENABLED`), were documented here but no code read them, so they were retired.
 
 ## Rollout sequence
 
@@ -55,10 +50,10 @@ source_hashes:
 | Failure | Action |
 |---|---|
 | Bad projections | `AETHER_COMMS_INGESTION_ENABLED=false`, fix, replay Bronze range |
-| Graph pressure | `AETHER_COMMS_GRAPH_ENABLED=false` (facts unaffected) |
+| Graph pressure | Disable the connector (graph emission has no switch of its own); facts stay in Bronze and replay later |
 | Provider flood | Disable connector; webhook inbox retains raw payloads |
 | Schema issue | `alembic downgrade 20260702_fraud_decisions` (additive-only drop) |
-| Attribution dispute | Toggle `AETHER_COMMS_REPLIES_ELIGIBLE` / `AETHER_COMMS_OPENS_VIEW_THROUGH`; rerun attribution |
+| Attribution dispute | Toggle `AETHER_COMMS_OPENS_VIEW_THROUGH`; rerun attribution |
 
 ## Operator remediation surface
 

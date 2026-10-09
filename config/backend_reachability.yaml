@@ -1,0 +1,182 @@
+schema_version: 1
+authority: backend-reachability
+root: services/backend
+entries:
+  - main
+dynamic_packages:
+  - path: alembic
+    reason: alembic loads every revision from the versions directory by file
+  - path: services.providers
+    reason: provider modules are imported by provider id (services/identity/provider_evidence.py)
+  - path: services.measurement.connectors
+    reason: connector modules are imported by name (services/measurement/connectors/ad_accounts.py)
+generated_globs:
+  - '(^|/)generated_[^/]*\.py$'
+allow_unreachable:
+  - package: services
+    modules: [communication360, unique_signals]
+    ledger: product-backend-unmounted-code-pending
+    reason: no test or document uses it and no route, worker or import path reaches it; it sits in a package with live code, so removing it is an owner decision
+  - package: services.agentic_observability
+    modules: [governance, outbox_worker, release_readiness]
+    ledger: product-backend-unmounted-code-pending
+    reason: documented, but no route, worker or import path reaches it
+  - package: services.commerce
+    modules: [reconciliation, workers]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: services.communication360
+    modules: [authority, contracts, fidelity, knowledge, provider, reader, registry, repository, resolution, routes]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: services.crossdomain
+    modules: [models]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.data_exchange
+    modules: [events]
+    ledger: product-backend-unmounted-code-pending
+    reason: documented, but no route, worker or import path reaches it
+  - package: services.derivatives
+    modules: [connectors.generic_import, counters, graph_mutations, guards, meter, ml_release, pnl, position_engine, reconciliation, replay, runtime_reconciliation, state_machines, topic_contract]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: services.exploration
+    modules: [adapters.social360]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.geo
+    modules: [geocoding, geodesy, location_edges, spatial_cells]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.identity
+    modules: [calibration_evaluation, calibration_intake, source_precedence, split_service, staging_capture, staging_capture_routes]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.integrations
+    modules: [adapter, dune_feeder.worker, oauth, oauth.broker, oauth.pkce, oauth.provider_config, oauth.state, payment_adapter]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: services.kyber
+    modules: [aggregate]
+    ledger: product-backend-unmounted-code-pending
+    reason: documented, but no route, worker or import path reaches it
+  - package: services.managed_integrations
+    modules: [fleet_controller, fleet_controller_repository, rollout, rollout_repository, schema_mapping, schema_mapping_repository, simulation, simulation_repository, source_authority, source_authority_repository]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.measurement
+    modules: [episodes, episodes.engine, episodes.provider, metrics]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: services.metering_evidence
+    modules: [reconciliation]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.model_runtime
+    modules: [adapters.compatible, pipeline]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.noesis
+    modules: [adapters.projection_intelligence_adapter, conversations]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.agent
+    modules: [lifecycle_mapper]
+    ledger: product-backend-unmounted-code-pending
+    reason: only the production-status checklist names it; no route, worker or import path reaches it
+  - package: services.campaign
+    modules: [metrics]
+    ledger: product-backend-unmounted-code-pending
+    reason: no route, worker or import path reaches it; owner decides whether to mount or delete
+  - package: services.lake
+    modules: [drift_monitor, model_registry]
+    ledger: product-backend-unmounted-code-pending
+    reason: only a compliance evidence list names drift_monitor; no route, worker or import path reaches either
+  - path: services.notification
+    ledger: product-backend-unmounted-code-pending
+    reason: no test or document uses it and no route, worker or import path reaches the package; deleting it is an owner decision
+  - package: services.product_catalog
+    modules: [mapping]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.provider_runtime
+    modules: [connector_graph_writer, object_refs, reconciliation, tenant_route_repository, tenant_route_service]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.recommendations
+    modules: [engine]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.responsiveness
+    modules: [routes]
+    ledger: product-backend-unmounted-code-pending
+    reason: documented, but no route, worker or import path reaches it
+  - package: services.stablecoin
+    modules: [graph_mutations, reconciliation]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.stablecoins
+    modules: [price_persistence]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.suggestions
+    modules: [adapters.ai_efficiency_adapter, adapters.data_quality_adapter, adapters.derivatives_adapter, adapters.governance_adapter, adapters.graph_adapter, adapters.interop_adapter, adapters.profile360_adapter, adapters.reliability_adapter, adapters.sdk_drift_adapter, adapters.sdk_health_adapter, adapters.stablecoin_adapter, dispatcher, outcome]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: services.targeting_intelligence
+    modules: [journey_delta, noesis_adapter, suggestion_adapter]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: services.unique_signals
+    modules: [models, service]
+    ledger: product-backend-unmounted-code-pending
+    reason: documented, but no route, worker or import path reaches it
+  - package: services.value
+    modules: [account_rules, ltv_rules, portfolio_rules, reconciliation, tvl_rules]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.web3
+    modules: [models]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: services.x402
+    modules: [approvals_routes, lifecycle_mapper]
+    ledger: product-backend-unmounted-code-pending
+    reason: documented, but no route, worker or import path reaches it
+  - package: shared
+    modules: [mobile, semantic_context]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: shared.backend_interpretation
+    modules: [dedupe, facts]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: shared.contracts_models
+    modules: [epistemic_communication]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: shared.events
+    modules: [economic_schemas, economic_topics, validators]
+    ledger: product-backend-unmounted-code-pending
+    reason: no test or document uses it and no route, worker or import path reaches it; it sits in a package with live code, so removing it is an owner decision
+  - package: shared.graph
+    modules: [economic_schema, extraction_graph, graph_contract]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: shared.mobile
+    modules: [models]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: shared.privacy
+    modules: [access_control, retention]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: shared.product
+    modules: [models]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented and tested, but no route, worker or import path reaches it
+  - package: shared.relationship_spine
+    modules: [evidence, motif_indicators, motifs, promotion]
+    ledger: product-backend-unmounted-code-pending
+    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither

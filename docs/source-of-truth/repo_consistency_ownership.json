@@ -696,8 +696,7 @@
         "services/backend/services/ingestion/replay_routes.py",
         "services/backend/services/ingestion/spine.py",
         "services/backend/services/ingestion/workers.py",
-        "services/backend/services/semantic_intelligence/consumer.py",
-        "services/backend/services/resolution/consumer.py"
+        "services/backend/services/semantic_intelligence/consumer.py"
       ],
       "required_changed_globs": [
         "docs/source-of-truth/**",
@@ -831,6 +830,112 @@
         "python -m pytest tests/unit/test_ci_execution_contracts.py -q"
       ],
       "remediation": "Keep Impact Graph selection, dependency profiles, suite role/lane metadata, typed execution-plan and evidence schemas, timing telemetry, and the repo-consistency DAG synchronized. Ordinary PRs must use component workers; root/backend aggregates remain regression/release-only. Review source-linked CI docs before updating hashes, and do not claim latency SLO attainment until 20 representative samples exist."
+    },
+    {
+      "id": "debt_retirement_ledger",
+      "name": "technical-debt retirement ledger or its validator changed",
+      "source_globs": [
+        "config/debt_retirement_ledger.yaml",
+        "scripts/validate_debt_retirement_ledger.py"
+      ],
+      "required_changed_globs": [
+        "tests/unit/test_debt_retirement_ledger.py",
+        "docs/blueprints/architecture-reset/technical-debt-retirement.md"
+      ],
+      "required_commands": [
+        "python scripts/validate_debt_retirement_ledger.py",
+        "python -m pytest tests/unit/test_debt_retirement_ledger.py -q"
+      ],
+      "remediation": "Update the ledger's unit test or the technical-debt retirement page with the change, then run python scripts/validate_debt_retirement_ledger.py."
+    },
+    {
+      "id": "environment_capability_registry",
+      "name": "canonical environment mapping or capability overlay registry changed",
+      "source_globs": [
+        "config/deployment_profiles.yaml",
+        "config/capability_overlays.yaml",
+        "scripts/release/check_profile_config.py",
+        "scripts/validate_capability_overlays.py"
+      ],
+      "required_changed_globs": [
+        "tests/unit/test_canonical_environments.py",
+        "docs/DEPLOYMENT-PROFILES.md"
+      ],
+      "required_commands": [
+        "python scripts/release/check_profile_config.py",
+        "python scripts/validate_capability_overlays.py",
+        "python -m pytest tests/unit/test_canonical_environments.py -q"
+      ],
+      "remediation": "Profiles describe environments and flags describe capabilities: update the canonical-environment test or docs/DEPLOYMENT-PROFILES.md with the change, then run both validators."
+    },
+    {
+      "id": "service_classification",
+      "name": "backend service classification registry or its validator changed",
+      "source_globs": [
+        "config/service_classification.yaml",
+        "scripts/validate_service_classification.py"
+      ],
+      "required_changed_globs": [
+        "tests/unit/test_service_classification.py",
+        "docs/blueprints/architecture-reset/technical-debt-retirement.md"
+      ],
+      "required_commands": [
+        "python scripts/validate_service_classification.py",
+        "python -m pytest tests/unit/test_service_classification.py -q"
+      ],
+      "remediation": "Update the registry's unit test or the technical-debt retirement page with the change, then run python scripts/validate_service_classification.py."
+    },
+    {
+      "id": "frontend_reachability",
+      "name": "frontend reachability config or its validator changed",
+      "source_globs": [
+        "config/frontend_reachability.yaml",
+        "scripts/validate_frontend_reachability.py"
+      ],
+      "required_changed_globs": [
+        "tests/unit/test_frontend_reachability.py",
+        "docs/blueprints/architecture-reset/technical-debt-retirement.md"
+      ],
+      "required_commands": [
+        "python scripts/validate_frontend_reachability.py",
+        "python -m pytest tests/unit/test_frontend_reachability.py -q"
+      ],
+      "remediation": "Update the reachability test or the technical-debt retirement page with the change, then run python scripts/validate_frontend_reachability.py."
+    },
+    {
+      "id": "settings_flags",
+      "name": "backend settings, the unread-field allowlist or its validator changed",
+      "source_globs": [
+        "services/backend/config/settings.py",
+        "config/unread_settings_flags.yaml",
+        "scripts/validate_settings_flags.py"
+      ],
+      "required_changed_globs": [
+        "tests/unit/test_settings_flags.py",
+        "docs/blueprints/architecture-reset/technical-debt-retirement.md"
+      ],
+      "required_commands": [
+        "python scripts/validate_settings_flags.py",
+        "python -m pytest tests/unit/test_settings_flags.py -q"
+      ],
+      "remediation": "Update the validator's unit test or the technical-debt retirement page with the change, then run python scripts/validate_settings_flags.py."
+    },
+    {
+      "id": "backend_reachability",
+      "name": "backend reachability config or its validator changed",
+      "source_globs": [
+        "config/backend_reachability.yaml",
+        "scripts/validate_backend_reachability.py"
+      ],
+      "required_changed_globs": [
+        "tests/unit/test_backend_reachability.py",
+        "docs/blueprints/architecture-reset/technical-debt-retirement.md"
+      ],
+      "required_commands": [
+        "python scripts/validate_backend_reachability.py",
+        "python -m pytest tests/unit/test_backend_reachability.py -q"
+      ],
+      "remediation": "Update the reachability test or the technical-debt retirement page with the change, then run python scripts/validate_backend_reachability.py."
     }
   ]
 }

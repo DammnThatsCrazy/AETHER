@@ -43,7 +43,9 @@ needed and report it separately from the PR disposition.
 
 If source-linked docs are reported stale, update the actual docs against their
 declared `source_files`, then run `make docs-generate-changed` to refresh only
-the affected `source_hashes`. Hash updates without review are not allowed.
+the affected `source_hashes`. Set `DOCS_CHANGED="docs/a.md docs/b.md"` to
+restrict a refresh to reviewed repo-relative paths; unknown or unlinked paths
+are rejected. Hash updates without review are not allowed.
 
 For release readiness, also run `make release-gate` when the PR claims release
 readiness.
@@ -74,7 +76,7 @@ Docs with `source_files:` frontmatter must be reviewed when their linked
 source content changes. `source_hashes` are updated **after** review:
 
 ```bash
-make docs-generate-changed
+make docs-generate-changed DOCS_CHANGED="docs/a.md docs/b.md"
 ```
 
 Never blindly restamp all docs to silence CI. A squash merge must not require a

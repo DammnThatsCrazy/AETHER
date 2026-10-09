@@ -25,5 +25,4 @@ export const DECISION_OUTCOME_FEATURE_FLAGS = {
   decisionRecords: 'AETHER_DECISION_RECORDS_ENABLED',
   outcomeFeedback: 'AETHER_OUTCOME_FEEDBACK_ENABLED',
   playbooks: 'AETHER_PLAYBOOKS_ENABLED',
-  kyberRecommendationObservability: 'KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED',
 } as const;

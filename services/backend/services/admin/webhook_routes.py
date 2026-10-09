@@ -22,8 +22,10 @@ Events handled:
     customer.subscription.updated   — Plan changed, status changed, renewal
     customer.subscription.deleted   — Subscription ended → downgrade to P1
     invoice.paid                    — Payment succeeded; upsert invoice, confirm active
+    invoice.payment_succeeded       — Same handler as invoice.paid
     invoice.payment_failed          — Payment failed → mark subscription past_due
     invoice.finalized               — Invoice finalized → upsert invoice record
+    invoice.created                 — Draft invoice created → upsert invoice record
 
 Idempotency:
     Each event is claimed in stripe_webhook_events (unique on event_id) before
@@ -58,6 +60,10 @@ router = APIRouter(tags=["Admin — Stripe Webhook"])
 
 # Plan tier used when a subscription is deleted / payment lapses beyond recovery.
 _FALLBACK_TIER = PlanTier.ALPHA
+# Subscription statuses that grant the tier of the subscribed price, and statuses where
+# access drops to the fallback tier.
+_ACTIVE_STATUSES = frozenset({"active", "trialing"})
+_DOWNGRADE_STATUSES = frozenset({"canceled", "unpaid", "incomplete_expired"})
 
 
 # ---------------------------------------------------------------------------
@@ -454,8 +460,17 @@ async def _apply_subscription_state(sub: dict[str, Any], *, event_name: str) -> 
         current_period_end=current_period_end,
     )
 
-    if plan_tier:
+    # Only a paying subscription grants the price's tier; a terminal one drops to the
+    # fallback tier; any other status (incomplete, past_due) leaves the tier alone.
+    if status in _DOWNGRADE_STATUSES:
+        await stripe_repository.update_plan_tier(tenant_id, _FALLBACK_TIER.value)
+        plan_tier = None
+    elif status in _ACTIVE_STATUSES and plan_tier:
         await stripe_repository.update_plan_tier(tenant_id, plan_tier.value)
+    else:
+        plan_tier = None
+
+    if plan_tier:
         metrics.increment(
             f"stripe_webhook_{event_name.replace('.', '_').replace('customer_', '')}",
             labels={"plan_tier": plan_tier.value, "status": status},
@@ -637,8 +652,10 @@ _HANDLERS = {
     "customer.subscription.updated": _handle_subscription_updated,
     "customer.subscription.deleted": _handle_subscription_deleted,
     "invoice.paid": _handle_invoice_paid,
+    "invoice.payment_succeeded": _handle_invoice_paid,
     "invoice.payment_failed": _handle_invoice_payment_failed,
     "invoice.finalized": _handle_invoice_finalized,
+    "invoice.created": _handle_invoice_finalized,
 }
 
 

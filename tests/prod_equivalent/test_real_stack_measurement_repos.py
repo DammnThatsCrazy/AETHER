@@ -601,7 +601,7 @@ def test_attribution_run_repo_single_active_run_invariant():
                     )
                     active = await repo.get_active_run(tenant, conv)
                     assert active is not None
-                    assert str(active["attribution_run_id"]) == run_a
+                    assert str(active["attribution_run_id"]) == str(run_a)
                     assert await _active_count(conn) == 1
 
                     # Create run B, deactivate prior (A), activate B.
@@ -619,7 +619,7 @@ def test_attribution_run_repo_single_active_run_invariant():
                         tenant_id=tenant,
                     )
                     active = await repo.get_active_run(tenant, conv)
-                    assert str(active["attribution_run_id"]) == run_b
+                    assert str(active["attribution_run_id"]) == str(run_b)
                     assert await _active_count(conn) == 1
 
                     # 3. Re-attribution invariant: activating A again while B is
@@ -639,7 +639,7 @@ def test_attribution_run_repo_single_active_run_invariant():
                     # State unharmed: still exactly one active run, still B.
                     assert await _active_count(conn) == 1
                     active = await repo.get_active_run(tenant, conv)
-                    assert str(active["attribution_run_id"]) == run_b
+                    assert str(active["attribution_run_id"]) == str(run_b)
                 finally:
                     await conn.close()
 

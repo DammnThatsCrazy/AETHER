@@ -400,19 +400,3 @@ def test_alert_policy_rows_exist_for_new_topics():
         assert severity in ("P0", "P1", "P2", "P3")
         assert notification_class == "alert"
         assert title and why
-
-
-def test_suggestions_config_has_economic_adapter_flags_default_off(monkeypatch):
-    for var in (
-        "AETHER_SUGGESTIONS_STABLECOIN_ADAPTER_ENABLED",
-        "AETHER_SUGGESTIONS_DERIVATIVES_ADAPTER_ENABLED",
-        "AETHER_SUGGESTIONS_INTEROP_ADAPTER_ENABLED",
-    ):
-        monkeypatch.delenv(var, raising=False)
-
-    from config.settings import SuggestionsConfig
-
-    config = SuggestionsConfig()
-    assert config.stablecoin_adapter_enabled is False
-    assert config.derivatives_adapter_enabled is False
-    assert config.interop_adapter_enabled is False

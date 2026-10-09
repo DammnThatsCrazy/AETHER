@@ -44,6 +44,7 @@ from shared.common.common import (
     utc_now,
 )
 from shared.logger.logger import get_logger, metrics
+from shared.rate_limit import auth_throttle as throttle
 from repositories.repos import (
     AdminRepository,
     APIKeyRepository,
@@ -128,6 +129,14 @@ def _get_redis():
         return getattr(getattr(registry, "cache", None), "_redis", None)
     except Exception:
         return None
+
+
+async def _throttle_ip(request: Optional[Request], counter, limit: int, redis) -> None:
+    """Per-IP request cap. A direct call without a request (tests) has no caller to count."""
+    if request is None:
+        return
+    peer = request.client.host if request.client else None
+    await throttle.enforce_rate(counter, throttle.client_ip(request.headers, peer), limit, redis)
 
 
 async def _issue_api_key(tenant_id: str, plan_tier_value: str, label: str) -> str:
@@ -429,12 +438,14 @@ async def _erase_tenant_scoped_rehearsal_data(tenant_id: str) -> dict[str, int]:
     the admin DELETE used by a short-lived rehearsal needs an immediate,
     idempotent path.  Keep its surface list explicit so a new rehearsal write
     cannot silently become an orphan: it must be added here (and covered by a
-    test) before the cleanup endpoint can report success.  Immutable billing
-    and security-audit evidence is retained by policy and is not included in
-    this operational-data erasure set.
+    test) before the cleanup endpoint can report success. Scenario proof rows
+    are immutable during their retention window but erased with their owning
+    tenant. Billing and security-audit evidence is retained by policy and is
+    not included in this operational-data erasure set.
     """
     from repositories.lake import BronzeRepository, GoldRepository, SilverRepository
     from repositories.repos import BaseRepository, ConsentRepository
+    from services.identity.scenario_evidence import IdentityScenarioEvidenceRepository
 
     stores = (
         ("consent_records", ConsentRepository()),
@@ -458,6 +469,12 @@ async def _erase_tenant_scoped_rehearsal_data(tenant_id: str) -> dict[str, int]:
             counts[name] = await repository.delete_by_entity("tenant_id", tenant_id)
         except Exception as exc:
             failures.append(f"{name}: {exc}")
+    try:
+        counts["identity_scenario_execution_evidence"] = (
+            await IdentityScenarioEvidenceRepository().delete_for_tenant(tenant_id)
+        )
+    except Exception as exc:
+        failures.append(f"identity_scenario_execution_evidence: {exc}")
     if failures:
         raise RuntimeError(
             "tenant-scoped rehearsal erasure failed before tenant deletion: "
@@ -555,7 +572,7 @@ class RegisterRequest(BaseModel):
 
 
 @router.post("/v1/auth/register")
-async def register(body: RegisterRequest):
+async def register(body: RegisterRequest, request: Request = None):
     """Step 1 of email sign-up: store pending registration and send OTP.
 
     A tenant is NOT created until /v1/auth/verify-email succeeds, ensuring
@@ -563,6 +580,11 @@ async def register(body: RegisterRequest):
     """
     if "@" not in body.email:
         raise BadRequestError("email must be a valid email address")
+    redis = _get_redis()
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    await throttle.enforce_rate(
+        throttle.otp_sends, throttle.email_digest(body.email), throttle.OTP_SENDS_PER_EMAIL, redis,
+    )
     try:
         PlanTier(body.plan_tier)
     except ValueError:
@@ -598,7 +620,6 @@ async def register(body: RegisterRequest):
     except Exception as e:
         logger.warning(f"Pending user store failed: email={email!r} error={e}")
 
-    redis = _get_redis()
     otp = generate_otp()
     await store_otp(email, otp, redis)
 
@@ -620,7 +641,7 @@ class VerifyEmailRequest(BaseModel):
 
 
 @router.post("/v1/auth/verify-email")
-async def verify_email(body: VerifyEmailRequest, response: Response = None):
+async def verify_email(body: VerifyEmailRequest, response: Response = None, request: Request = None):
     """Step 2 of email sign-up: verify OTP, create tenant.
 
     Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this starts a
@@ -634,8 +655,15 @@ async def verify_email(body: VerifyEmailRequest, response: Response = None):
     email = body.email.lower()
     redis = _get_redis()
 
+    # A 6-digit code is only safe with a cap on wrong guesses: per IP, and per address.
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    email_key = throttle.email_digest(email)
+    await throttle.enforce_budget(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
+
     if not await verify_otp(email, body.code, redis):
+        await throttle.verify_failures.hit(email_key, redis)
         raise BadRequestError("Invalid or expired verification code.")
+    await throttle.verify_failures.clear(email_key, redis)
 
     # Retrieve pending registration (graceful if missing — re-verify after restart)
     pending: dict = {}
@@ -747,12 +775,16 @@ class ResendRequest(BaseModel):
 
 
 @router.post("/v1/auth/resend-verification")
-async def resend_verification(body: ResendRequest):
+async def resend_verification(body: ResendRequest, request: Request = None):
     """Resend a fresh OTP. Always returns the same response (anti-enumeration)."""
     from shared.auth.verification import generate_otp, store_otp
 
     email = body.email.lower()
     redis = _get_redis()
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    await throttle.enforce_rate(
+        throttle.otp_sends, throttle.email_digest(email), throttle.OTP_SENDS_PER_EMAIL, redis,
+    )
 
     # Peek at the pending record for the name (best-effort — not required)
     name = ""
@@ -788,8 +820,11 @@ _LOGIN_ERROR = "Invalid email or password."
 
 
 @router.post("/v1/auth/login")
-async def login(body: LoginRequest, response: Response = None):
+async def login(body: LoginRequest, response: Response = None, request: Request = None):
     """Authenticate with email + password.
+
+    Throttled: 10 attempts per minute per client IP, and 5 failed attempts per
+    15 minutes per address (cleared by a successful login). Both answer 429.
 
     Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this issues a
     durable, revocable session — never a reusable API key. When the flag is off
@@ -798,6 +833,10 @@ async def login(body: LoginRequest, response: Response = None):
     from shared.auth.password import verify_password
 
     email = body.email.lower()
+    redis = _get_redis()
+    await _throttle_ip(request, throttle.login_ip, throttle.LOGIN_ATTEMPTS_PER_IP_PER_MINUTE, redis)
+    email_key = throttle.email_digest(email)
+    await throttle.enforce_budget(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
 
     user_rec: dict = {}
     try:
@@ -813,11 +852,14 @@ async def login(body: LoginRequest, response: Response = None):
     # Always run verify_password to avoid timing-based user enumeration
     stored_hash = user_rec.get("password_hash", "")
     if not stored_hash or not verify_password(body.password, stored_hash):
+        await throttle.login_failures.hit(email_key, redis)
         raise BadRequestError(_LOGIN_ERROR)
 
     tenant_id = user_rec.get("tenant_id", "")
     if not tenant_id:
+        await throttle.login_failures.hit(email_key, redis)
         raise BadRequestError(_LOGIN_ERROR)
+    await throttle.login_failures.clear(email_key, redis)
 
     # Confirm tenant is active
     plan_tier_value = "alpha"

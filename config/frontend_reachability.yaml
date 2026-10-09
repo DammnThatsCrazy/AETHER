@@ -1,0 +1,80 @@
+# Frontend reachability — no unmounted code accumulates in a frontend app.
+#
+# For each app, every non-test source file must be reachable through the import
+# graph from the app's entry points (the index.html script and any package.json
+# script that runs a source file). A file nothing reaches is dead weight that
+# still has to be typechecked, linted, reviewed and documented, and it can make
+# documentation claim a feature exists when no route mounts it.
+#
+# `allow_unreachable` records the unreachable files that are deliberately kept
+# for now. Each names the debt-ledger row that owns the decision (mount it or
+# delete it) and why it is kept. An entry is an error once the file is deleted,
+# becomes reachable, or its ledger row disappears, so the list can only shrink.
+#
+# Enforced by scripts/validate_frontend_reachability.py (run by repo-doctor and
+# as the `frontend_reachability` router check in every PR-lane plan).
+# Imports are resolved statically (static, dynamic `import()` and re-exports);
+# `import.meta.glob` and computed import paths are not supported and are
+# rejected if they appear, rather than silently hiding files from the graph.
+
+schema_version: 1
+authority: frontend-reachability
+
+apps:
+  kyber:
+    root: frontend/kyber
+    alias: "@kyber"
+    entries:
+      - src/app/main.tsx            # index.html <script type="module">
+      - src/lib/health/startup-check.ts   # package.json "health" script
+    allow_unreachable:
+      - path: src/components/entities/agent-profile.tsx
+        ledger: product-kyber-unmounted-code-pending
+        reason: wired to the agent APIs; the Agent 360 owner decides whether to mount it
+      - path: src/pages/fraud/fraud-decisions-page.tsx
+        ledger: product-kyber-unmounted-code-pending
+        reason: unrouted page; mount a route or delete it
+      - path: src/pages/measurement/campaign-registry-health-page.tsx
+        ledger: product-kyber-unmounted-code-pending
+        reason: unrouted page that docs/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness scorecard name; mount it or correct both
+      - path: src/pages/customer-success/index.ts
+        ledger: product-kyber-unmounted-code-pending
+        reason: unrouted page kept only for its component test; mount a route or delete both
+      - path: src/components/graph/path-inspector.tsx
+        ledger: product-kyber-unmounted-code-pending
+        reason: kept only for its component test; mount it or delete both
+      - path: src/features/graph/use-graph-health.ts
+        ledger: product-kyber-unmounted-code-pending
+        reason: kept only for its component test; mount it or delete both
+      - path: src/lib/schemas/index.ts
+        ledger: product-kyber-unmounted-code-pending
+        reason: kept only for its unit test; delete both unless a consumer appears
+      - path: src/components/commerce/lifecycle-trace-view.tsx
+        ledger: product-kyber-unmounted-code-pending
+        reason: kept only for its component test; mount it or delete both
+  aether:
+    root: frontend/aether
+    alias: "@aether-app"
+    entries:
+      - src/app/main.tsx            # index.html <script type="module">
+    allow_unreachable:
+      - path: src/features/identity/index.ts
+        ledger: product-aether-unmounted-code-pending
+        reason: >-
+          barrel imported only by the identity-continuity-gates harness test; point the
+          harness at the files and delete the barrel, or retire the gate
+      - path: src/features/identity/ConflictDetail.tsx
+        ledger: product-aether-unmounted-code-pending
+        reason: built but no route or page mounts it; mount it in the identity review flow or delete it
+      - path: src/features/identity/MergeSplitAudit.tsx
+        ledger: product-aether-unmounted-code-pending
+        reason: built but no route or page mounts it; mount it in the identity review flow or delete it
+      - path: src/features/identity/SdkHealth.tsx
+        ledger: product-aether-unmounted-code-pending
+        reason: built but no route or page mounts it; mount it in the identity review flow or delete it
+      - path: src/pages/connectors/index.ts
+        ledger: product-aether-unmounted-code-pending
+        reason: barrel kept only for component tests; point the tests at the page and delete it
+      - path: src/pages/graph/index.ts
+        ledger: product-aether-unmounted-code-pending
+        reason: barrel kept only for a component test; point the test at the page and delete it

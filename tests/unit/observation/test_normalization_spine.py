@@ -27,7 +27,6 @@ from services.ingestion.spine import (
     normalization_spine_enabled,
     to_observation_view,
 )
-from services.resolution.consumer import ResolutionEventConsumer
 from services.semantic_intelligence.consumer import _to_semantic_payload
 from services.silver.dispatcher import ProjectionOutcome
 from shared.events.events import Event, Topic
@@ -546,30 +545,3 @@ def test_semantic_to_semantic_payload_aether_subject_flag_on(monkeypatch) -> Non
     assert sem["actor_ref"] == "u-9"
     assert sem["occurred_at"] == "2026-09-05T00:00:00.000Z"
     assert sem["source_type"] == "commerce.order.created"
-
-
-# ── resolution consumer ──────────────────────────────────────────────────────
-
-
-async def test_resolution_consumer_aether_subject_flag_on(monkeypatch) -> None:
-    engine = SimpleNamespace(resolve_event=AsyncMock(return_value=None))
-    producer = SimpleNamespace(publish=AsyncMock())
-    consumer = ResolutionEventConsumer(engine=engine, producer=producer)  # type: ignore[arg-type]
-    payload = _aether_event_dump()
-
-    _set_spine(monkeypatch, False)
-    await consumer.on_event_validated(_validated_event(deepcopy(payload)))
-    assert engine.resolve_event.await_count == 0  # legacy gate skips (no user_id)
-    assert producer.publish.await_count == 0
-
-    _set_spine(monkeypatch, True)
-    await consumer.on_event_validated(_validated_event(deepcopy(payload)))
-    assert engine.resolve_event.await_count == 1
-    called_tenant, called_payload = engine.resolve_event.await_args.args
-    assert called_tenant == "t1"
-    # the engine receives a shallow copy whose user_id is the subject_id
-    assert called_payload["user_id"] == "u-9"
-    assert called_payload["subject_id"] == "u-9"
-    assert producer.publish.await_count == 1
-    resolution: Event = producer.publish.await_args.args[0]
-    assert resolution.payload["user_id"] == "u-9"
