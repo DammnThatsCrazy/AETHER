@@ -293,7 +293,6 @@
         ],
         "services": [
           "services/backend/services/identity",
-          "services/backend/services/resolution",
           "docs/source-of-truth/IDENTITY_RESOLUTION.md"
         ],
         "migrationMode": "formalize_existing"

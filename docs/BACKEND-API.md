@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:d28b605a135397d19067f347ce991efdafc04a200564763da901af68f512b990"
+  "services/backend/services/": "sha256:18d59fc5638bfb1f25623ed50c781de163c231d9bf681002e068fa46a8733ab0"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1252,21 +1252,9 @@ requests are rejected). All are GET-only and never mutate reward state:
 
 ## Identity Resolution
 
-Identity resolution is served by `/v1/identity/*` (`services/backend/services/identity/routes.py`). The legacy `/v1/resolution/*` surface is retired; three fail-closed routes remain until the last caller is removed.
+Identity resolution is served by `/v1/identity/*` (`services/backend/services/identity/routes.py`); pending merge review is `/v1/admin/identity/review-queue`.
 
-### GET /v1/resolution/cluster/{user_id}
-
-**Unavailable (HTTP 503).** The legacy graph read route was retired because it lacks tenant isolation. It returns `Legacy identity graph resolution is unavailable`; no tenant-scoped compatibility path currently serves identity-cluster data through this endpoint.
-
-### POST /v1/resolution/pending/{id}/approve
-
-Unavailable (HTTP 503). The legacy graph mutation route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not approve or apply a merge, and no replacement compatibility path is implemented. Pending merge review is `/v1/admin/identity/review-queue`.
-
-### POST /v1/resolution/batch
-
-Unavailable (HTTP 503). The legacy graph batch route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not start a batch matching job, and no replacement compatibility path is implemented.
-
-**Removed:** `GET /v1/resolution/pending`, `POST /v1/resolution/pending/{id}/reject`, `GET /v1/resolution/audit/{decision_id}` and `GET`/`PUT /v1/resolution/config`. They were backed by an engine and event consumer that were never registered, so they never returned data, and they now answer 404.
+**Removed:** the whole `/v1/resolution/*` surface (`GET /v1/resolution/cluster/{user_id}`, `POST /v1/resolution/pending/{id}/approve`, `POST /v1/resolution/batch`, `GET /v1/resolution/pending`, `POST /v1/resolution/pending/{id}/reject`, `GET /v1/resolution/audit/{decision_id}` and `GET`/`PUT /v1/resolution/config`). It was backed by an engine and event consumer that were never registered, so it never returned data; the last three routes answered 503 and now, like the rest, answer 404 (403 `ROUTE_POLICY_UNKNOWN_ROUTE` where route-registry enforcement is on). The Aether profile page shows the canonical identity panel (`GET /v1/identity/profiles/{id}/identity/explanation`) instead of the cluster read.
 
 ---
 

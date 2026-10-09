@@ -236,36 +236,39 @@ entries:
 
   - id: identity-legacy-resolution-module
     domain: identity
-    classification: deprecated
-    state: deprecated
+    classification: removed
+    state: removed
     authority: services/backend/services/identity
     current:
       - services/backend/services/identity
     duplicates:
       - services/backend/services/resolution
     retire: >-
-      the three fail-closed tombstone routes that remain in
-      services/backend/services/resolution/routes.py (cluster read, merge approval,
-      batch), and the router mount in main.py, once the Aether user-profile page
-      stops requesting GET /v1/resolution/cluster/{id}
-    consumers:
-      - services/backend/main.py
-      - services/backend/tests/resolution/test_legacy_routes_fail_closed.py
-      - frontend/aether/src/pages/user-profile/user-profile-page.tsx
-      - frontend/aether/src/features/users/use-user-profile.ts
+      the three fail-closed tombstone routes that remained in
+      services/backend/services/resolution (cluster read, merge approval, batch), the
+      package and its mount in main.py, and the Aether user-profile page's
+      "Identity cluster" section, which requested the cluster read, always got 503 and
+      always rendered "No identity-cluster evidence was returned". The page now shows
+      Profile360IdentityPanel (GET /v1/identity/profiles/{id}/identity/explanation,
+      behind the identity_explainability_enabled flag), which was built and unmounted.
+    consumers: []
     compatibility: >-
-      the Aether profile page's "Identity cluster" section already renders its empty
-      state because the cluster route answers 503; decide whether to remove the
-      section or serve it from a tenant-scoped canonical read before deleting the
-      route. The "Identity Resolution" entry in shared/plans/service_catalog.py
-      (endpoint /v1/resolution/*) is a priced catalog line and needs a commercial
-      decision, not a code change alone.
+      GET /v1/resolution/cluster/{id}, POST /v1/resolution/pending/{id}/approve and
+      POST /v1/resolution/batch answered 503 and now answer 404. The "Identity
+      Resolution" entry in shared/plans/service_catalog.py (endpoint /v1/resolution/*)
+      is a priced catalog line for a prefix with no routes; it is left as is because
+      removing or re-pointing it is a commercial decision, not a code change.
     mechanism: delete
-    parity_evidence: null
-    usage_evidence: null
-    rollback: restore the router mount; the module holds no data
-    removal_pr: null
-    deadline: 2027-02-28
+    parity_evidence: >-
+      not applicable: the routes never returned data; the page section rendered its
+      empty state on every request
+    usage_evidence: >-
+      the only caller was frontend/aether api.graph.cluster behind useUserCluster,
+      used by the profile page's Relationships tab; Kyber and the SDKs never called
+      it (2026-10-09)
+    rollback: restore the package, its mount and the page section from git history
+    removal_pr: "#751"
+    deadline: null
 
   - id: product-legacy-social-route
     domain: product

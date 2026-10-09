@@ -19,7 +19,7 @@ toc_depth: 3
 reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
-  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:428718d8303f7ca60fe4c93519f068d3f8e4a22ee27b2ce6091ffb3f4c5585a0"
+  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:ce5b0adf5540b1db84a211caed88e356cb0603237923ef6c5ba98277addef24c"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:1a4fae607b1eccdee38ec5bac42ebbcd57d28cb9ef0dfabe3d7a70bdbfcae91d"
   "services/backend/services/web3/classifier.py": "sha256:ab4186e37c2e058401d4303559ca66db49659f93d60389729933777c6fca6061"
@@ -36,7 +36,7 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 - **Feature-flagged** — every layer activates independently via environment variables (all default to `false`)
 - **Privacy-aware** — consent-aware identity and tenant-scoped graph erasure are implemented; this page does not assert formal compliance or certification
 - **Graph-native** — 6 new node types, 19 new edge types layered onto the existing Identity Graph
-- **Governed writes** — active on-chain action graph writes use `GraphMutationGateway`; legacy identity resolution graph mutations are retired and its cluster, approval, and batch routes fail closed
+- **Governed writes** — active on-chain action graph writes use `GraphMutationGateway`; legacy identity resolution graph mutations are retired and the `/v1/resolution/*` routes are removed
 
 > **Infrastructure:** `GraphClient` auto-selects a backend at `connect()`: Neptune (via gremlinpython) when `NEPTUNE_ENDPOINT` is set; in-memory in `AETHER_ENV=local`; otherwise, in a non-local environment with no Neptune endpoint and `GRAPH_BACKEND=postgres` (the staging / production-lean default), the Postgres backend — `_PostgresGraphBackend` over the `graph_vertices` / `graph_edges` tables, whose observable semantics match the in-memory backend. A non-local environment with no usable backend (no Neptune, and no database pool for the declared Postgres backend) still fails closed with `RuntimeError`.
 
@@ -105,9 +105,9 @@ the projection and attempts a ledger append; `enforce` runs gateway validation
 and the ledger-backed write path. The graph write-path validator now reports
 zero direct writers outside its sanctioned gateway internals. The on-chain
 action recorder uses the gateway, and the legacy resolution repository and
-engine, with their tenantless mutation methods, have been deleted. Only the
-cluster, merge-approval, and batch routes remain, as fail-closed tombstones,
-while a tenant-safe compatibility path is designed. Zero direct writers does not prove
+engine, with their tenantless mutation methods, have been deleted, and so have
+the cluster, merge-approval and batch routes that remained as fail-closed
+tombstones. Zero direct writers does not prove
 that every gateway caller runs in `enforce` mode or that ledger and projection
 writes are atomic.
 

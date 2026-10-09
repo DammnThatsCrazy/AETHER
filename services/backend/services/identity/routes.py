@@ -62,6 +62,7 @@ from .schemas import (
     IdentityFragmentSplitRequest,
     IdentityFragmentSplitResponse,
     IdentityGraphResponse,
+    IdentityExplanationEnvelope,
     IdentityHealthEnvelope,
     IdentityHealthResponse,
     IdentityMergeRequest,
@@ -704,7 +705,7 @@ def _get_admin_identity_service() -> AdminIdentityService:
     )
 
 
-@router.get("/profiles/{pid}/identity/explanation", response_model=IdentityExplanationResponse)
+@router.get("/profiles/{pid}/identity/explanation", response_model=IdentityExplanationEnvelope)
 async def get_profile_identity_explanation(
     pid: str,
     request: Request,

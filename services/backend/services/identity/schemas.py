@@ -372,6 +372,20 @@ class IdentityExplanationResponse(BaseModel):
     resolution_decision_summary: str
 
 
+class IdentityExplanationEnvelope(BaseModel):
+    """The standard ``APIResponse`` envelope around :class:`IdentityExplanationResponse`.
+
+    The explanation route returns ``APIResponse(...).to_dict()``, so its ``response_model``
+    must describe the envelope, as for :class:`IdentityHealthEnvelope`; declaring the bare
+    payload made FastAPI validate the envelope's top-level keys against it and answer 500.
+    """
+
+    data: IdentityExplanationResponse
+    status: Literal["success"] = "success"
+    timestamp: str
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class IdentityDecisionDetailsResponse(BaseModel):
     decision_id: str
     found: bool

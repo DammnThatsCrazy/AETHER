@@ -10,7 +10,7 @@ source_files: [services/backend/main.py, services/backend/config/settings.py]
 canonical_owner: platform@aether
 source_hashes:
   "services/backend/config/settings.py": "sha256:e48a92c6e3f93be8e406e267d412249c630e3cc21f26d38c49a28e7a4f32a9d4"
-  "services/backend/main.py": "sha256:24d7fe17de44c99f70ff72b6460176b731b272e050e3fd49b088a81c4d15601b"
+  "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
 ---
 
 # Target Architecture
