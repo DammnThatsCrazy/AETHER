@@ -11,8 +11,8 @@ Honesty invariants enforced here:
 * the identity parses and all three segments are non-empty;
 * the manifest passes §32 ``validate_manifest``;
 * the capability set is honest (``services.provider_runtime.validation.capability_violations``);
-* the credential schema never declares a *secret* field as optional, and every
-  field has a non-empty name;
+* an optional secret is covered by a complete, explicit credential profile;
+  without profiles the original required-secret rule remains unchanged;
 * ``webhooks.supported`` implies a verification scheme AND a webhook adapter;
 * the normalizer never raises on an opaque record (events or dropped);
 * auth/pull adapters (when present) return an ``AdapterResult`` — never raise —
@@ -44,6 +44,7 @@ from shared.integration_contracts.certification import (
 from shared.integration_contracts.identity import IdentityError, parse_identity
 from shared.integration_contracts.manifest import (
     ManifestValidationError,
+    credential_profile_violations,
     validate_manifest,
 )
 from shared.integration_contracts.normalization import NormalizationResult
@@ -221,26 +222,32 @@ async def _capability_honest(plugin: Any) -> CertificationCheck:
 
 async def _credential_schema_honest(plugin: Any) -> CertificationCheck:
     try:
-        schema = plugin.manifest().authentication.credential_schema  # type: ignore[attr-defined]
+        manifest = plugin.manifest()  # type: ignore[attr-defined]
+        schema = manifest.authentication.credential_schema
+        profiles = manifest.authentication.credential_profiles
     except Exception as exc:
         return _check_failed(
             "credential_schema_honest",
             _safe_failure_detail(exc, fallback="credential schema unavailable"),
         )
     violations: list[str] = []
+    violations.extend(credential_profile_violations(manifest))
+    profiled_fields = {
+        field for profile in profiles for field in profile.required_fields
+    }
     for field in schema:
         name = str(getattr(field, "name", "") or "").strip()
         if not name:
             violations.append("a credential field has an empty name")
         secret = bool(getattr(field, "secret", False))
         required = bool(getattr(field, "required", False))
-        if secret and not required:
+        if secret and not required and name not in profiled_fields:
             violations.append(f"secret field {name!r} is declared optional (required=False)")
     if violations:
         return _check_failed("credential_schema_honest", "; ".join(violations))
     return _check_passed(
         "credential_schema_honest",
-        "every secret credential field is required and all field names are non-empty",
+        "each optional secret is required by an explicit mode profile; field names are non-empty",
     )
 
 

@@ -8,6 +8,7 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/backend/shared/integration_contracts/manifest.py
+  - services/backend/shared/integration_contracts/streams.py
   - services/backend/shared/integration_contracts/catalog.py
   - services/backend/shared/integration_contracts/identity.py
   - services/backend/shared/certification/readiness.py
@@ -18,7 +19,8 @@ source_hashes:
   "services/backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
   "services/backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
   "services/backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
-  "services/backend/shared/integration_contracts/manifest.py": "sha256:8c78fa334a6c4e6a58f869f81fad103273d8f42c1023eeb5bb6e856fc26b4f34"
+  "services/backend/shared/integration_contracts/manifest.py": "sha256:88f1a5c8f3a8fa5d6b0e53d9277c26dab7e6ef1681caa4ef1a52085e9e038658"
+  "services/backend/shared/integration_contracts/streams.py": "sha256:b3258eda634a1fab93ea43b924f0261447cae7fa63bd8c3bedfad79b0db5d676"
 ---
 
 # Provider Manifest Spec
@@ -56,7 +58,7 @@ vocabulary) plus a coarse 1–5 level:
 | `scaffolded` | 1 | Descriptor only |
 | `disabled` / `degraded` | ≤2 | Off-ramp states, visible nowhere |
 | `replay_validated` | 3 | Verified against replay fixtures, no live creds |
-| `credential_waiting` | — | Replay-validated material awaiting real credentials |
+| `credential_waiting` | ≤2 | Credential or external evidence pending; no replay/sandbox claim |
 | `sandbox_validated` | 4 | Verified in a sandbox environment |
 | `partner_live` | 5 | Production |
 
@@ -79,11 +81,20 @@ declares and fails the plugin when the evidence is weaker (see
 |---|---|
 | `type` | `oauth2` / `api_key` / `composite` / `webhook_only` / `none` |
 | `credential_schema` | List of `CredentialFieldSpec` — field **shape**, never values |
+| `credential_profiles` | Optional mode-selected alternative secret shapes; every mode is declared and complete |
 | `oauth` | `OAuthSpec` — `pkce`, `scopes`, `refresh_supported` |
 
 `CredentialFieldSpec` fields: `name`, `type` (`string`/`secret`/`oauth_token`/
 `json`/`number`/`boolean`/`url`), `required`, `secret`. **A manifest never
 carries a credential value.**
+
+An optional `CredentialProfileSpec` names a non-secret enumerated config
+`mode_field`, one `mode_value`, and the secret fields required in that mode.
+The manifest validator requires one profile for every allowed mode value and
+rejects an optional secret that belongs to no profile. The certification
+harness checks those structural claims. The selected adapter still validates
+the actual supplied credentials and fails closed when its mode's required
+secret is absent.
 
 ## 5. Configuration
 
@@ -104,7 +115,26 @@ capability can discover accounts and whether account selection is required.
 
 `Sync` = `initial_backfill`, `incremental`, `reconciliation`, and `cursor`
 (the field/strategy an incremental sync advances, e.g. `"updated_at"`).
-`cursor` is **mandatory whenever `incremental` is true** (§32).
+`cursor` is **mandatory for legacy capability-level incremental sync** (§32).
+When `streams` is non-empty, each incremental stream declares its own
+`cursor_scheme` instead.
+
+### Explicit stream declarations
+
+`streams: list[StreamDescriptor]` is an additive, versioned inventory within
+one provider capability. Existing v1 plugins leave it empty and retain their
+capability-level behavior. A descriptor (`schema_version="1"`) names a stable
+`stream_id`, `object_kind`, `domain_pack`, `output_contract`,
+`source_authority_class`, `data_classification`, acquisition modes, required
+OAuth scopes, optional cursor scheme and webhook topics, and backfill and
+incremental flags. Its output must appear in the parent manifest's
+`data_outputs`.
+
+Registration validates unique stream IDs/topics, cursor and webhook claims,
+OAuth scope coverage, aggregate sync/webhook flags, and whether the plugin
+exposes the adapters it declares. `ProviderRegistry.streams_for(identity_key)`
+returns the validated declarations. A descriptor is **capability metadata**;
+it does not certify per-stream execution, replay, or provider API behavior.
 
 ## 9. Data outputs & destinations
 
@@ -132,7 +162,8 @@ verbatim:
 | 2 | **`staging=True` requires `level >= 4`** (sandbox-validated is a higher bar than mere visibility). |
 | 3 | **`authentication.type == "oauth2"` requires non-empty `oauth.scopes`** — a manifest cannot request OAuth without declaring the scopes it will request. |
 | 4 | **`webhooks.supported=True` requires a non-empty `verification_scheme`** — a supported webhook must declare how inbound calls are verified. |
-| 5 | **`sync.incremental=True` requires a non-empty `sync.cursor`** — an incremental sync must declare the cursor it advances. |
+| 5 | **Capability-level `sync.incremental=True` requires `sync.cursor` when `streams` is empty.** With explicit streams, every incremental stream requires `cursor_scheme`. |
+| 6 | Explicit streams require unique IDs and unambiguous webhook topics; each mode, required scope, output, and aggregate sync/webhook flag must match the parent manifest. |
 
 The structure (`ProviderManifest`) and the honesty gate are kept apart so a
 test can build a structurally-valid-but-dishonest manifest and assert the gate
@@ -147,7 +178,7 @@ directions**:
 
 | Direction | Rule |
 |---|---|
-| Overclaim | manifest claims ⇒ a non-`None` adapter must exist: `authentication.type != "none"` ⇒ `auth()`; `webhooks.supported` ⇒ `webhook()`; `sync.incremental` ⇒ `pull()` **and** a `sync.cursor`; `accounts.discovery_supported` ⇒ `account()`; `sync.reconciliation` ⇒ `reconciliation()` |
+| Overclaim | manifest claims ⇒ a non-`None` adapter must exist: `authentication.type != "none"` ⇒ `auth()`; `webhooks.supported` ⇒ `webhook()`; legacy `sync.incremental` ⇒ `pull()` and `sync.cursor`; `accounts.discovery_supported` ⇒ `account()`; `sync.reconciliation` ⇒ `reconciliation()`. Explicit stream `pull`/`report`/`stream` modes require their corresponding adapters. |
 | Underclaim | an adapter accessor returns non-`None` ⇒ the manifest must claim that capability |
 
 The gate also folds in the manifest-level invariants (`validate_manifest`) and
@@ -188,25 +219,25 @@ ProviderManifest(
     display_name="Shopify Orders",
     category="commerce",
     readiness=ManifestReadiness(
-        state=CredentialReadiness.CREDENTIAL_WAITING, level=3
+        state=CredentialReadiness.CREDENTIAL_WAITING, level=2
     ),
     availability=Availability(
         tenant_self_service=False,
-        environments=EnvironmentAvailability(
-            local=True, integration=True, staging=False, production=False
-        ),
+        environments=EnvironmentAvailability(),
     ),
     authentication=Authentication(
         type="api_key",
         credential_schema=[
-            CredentialFieldSpec(name="api_key", type="secret", required=True, secret=True),
-            CredentialFieldSpec(name="password", type="secret", required=True, secret=True),
-            CredentialFieldSpec(name="shop_domain", type="string", required=True, secret=False),
+            CredentialFieldSpec(name="api_key", type="secret", required=False, secret=True),
+            CredentialFieldSpec(name="password", type="secret", required=False, secret=True),
+            CredentialFieldSpec(name="shop_domain", type="string", required=False, secret=False),
             CredentialFieldSpec(name="shop_access_token", type="secret", required=False, secret=True),
-            # Webhook HMAC secret for X-Shopify-Hmac-SHA256 verification. Required
-            # to make the declared shopify_hmac scheme verifiable — the gateway is
-            # fail-closed and would deny every delivery without it.
-            CredentialFieldSpec(name="webhook_secret", type="secret", required=True, secret=True),
+            CredentialFieldSpec(name="webhook_secret", type="secret", required=False, secret=True),
+        ],
+        credential_profiles=[
+            CredentialProfileSpec(name="rest_basic", mode_field="orders_api", mode_value="rest", required_fields=["api_key", "password"]),
+            CredentialProfileSpec(name="rest_hmac_webhooks", mode_field="orders_api", mode_value="rest_webhook", required_fields=["api_key", "password", "webhook_secret"]),
+            CredentialProfileSpec(name="graphql_token", mode_field="orders_api", mode_value="graphql", required_fields=["shop_access_token"]),
         ],
     ),
     webhooks=Webhooks(supported=True, registration_supported=False, verification_scheme="shopify_hmac"),
@@ -216,15 +247,16 @@ ProviderManifest(
 )
 ```
 
-Observe the honesty in practice: `api_key` (not `oauth2` — no real scopes are
-declared, so no `oauth2` claim), visible in `local`/`integration` only
-(§32 rule 1: level ≥ 3 holds; rule 2 not triggered because `staging=False`),
-`webhooks.supported` with a concrete `verification_scheme="shopify_hmac"` and
-a matching `webhook_secret` credential (rule 4 — the gateway is fail-closed
-and would deny every delivery without it), and `sync.incremental` with
-`cursor="updated_at"` (rule 5). Every capability claim maps to a real adapter
-(`auth`, `account`, `pull`, `webhook`, `normalizer`), so the
-capability-honesty gate passes at registration and certification.
+The excerpt shows the current structural claims; the actual manifest also
+declares the stream and configuration fields. REST Basic, REST plus signed
+webhooks, and GraphQL token credentials are alternatives selected by
+`orders_api`. `webhook_secret` is optional in the base schema and required by
+the `rest_webhook` profile only. GraphQL also requires an explicit
+`source_account_realm` at runtime. The capability remains
+`credential_waiting` at level 2 and unavailable in every environment until
+provider replay and sandbox evidence is recorded. Registration checks that
+the declared auth, account, pull, webhook, and normalizer adapters exist;
+offline certification does not promote availability.
 
 ## Related docs
 

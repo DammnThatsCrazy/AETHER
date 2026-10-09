@@ -252,7 +252,12 @@ async def apply_projection(
         )
 
     native_credential = _build_native_credential(mapping.credential_type, secret_values)
-    ref = broker.provider_ref(tenant_id, projection.native_identity)
+    connection_id = f"conn_{uuid.uuid4().hex}"
+    ref = broker.provider_ref(
+        tenant_id,
+        projection.native_identity,
+        connection_id=connection_id,
+    )
     await broker.store(tenant_id, ref, native_credential)
 
     config: dict[str, Any] = {}
@@ -261,7 +266,7 @@ async def apply_projection(
 
     now = _now_iso()
     connection = ProviderConnection(
-        connection_id=f"conn_{uuid.uuid4().hex}",
+        connection_id=connection_id,
         tenant_id=tenant_id,
         provider_identity=projection.native_identity,
         display_name=f"{connector_type} (migrated)",

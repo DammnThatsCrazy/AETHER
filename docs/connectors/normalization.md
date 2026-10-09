@@ -16,22 +16,21 @@ Normalizers translate provider-specific payloads into canonical Aether event con
 
 ## Canonical contract
 
-The single canonical normalization contract — for connector subsystems and
-provider plugins alike — is `shared/integration_contracts/normalization.py`
-(`EventNormalizer`, `NormalizationResult`). There is no deprecated or
-alternate normalization contract path; connector-subsystem normalizers and
-provider-plugin normalizers both implement this same `EventNormalizer`
-protocol. See [Provider Normalization](./provider-normalization.md) for the
-provider-plugin path in detail, including the `AetherEvent` envelope and
-determinism rules.
+UPR provider plugins use `shared/integration_contracts/normalization.py`
+(`EventNormalizer`, `NormalizationResult`) to translate raw provider records
+to `AetherEvent`. Legacy integration, measurement, communications, import, and
+specialized financial connectors still have their own execution and storage
+contracts. This document does not claim they all implement the UPR protocol.
+See [Provider Normalization](./provider-normalization.md) for the native
+provider-plugin path and its compatibility boundaries.
 
 ## Process
 
-1. Receive validated provider payload
-2. Map provider fields to canonical contract fields
-3. Resolve entity references
-4. Emit canonical event envelope
-5. Route to graph projection pipeline
+1. Receive a tenant/account-scoped `RawProviderRecord` after acquisition checks
+2. Map supported provider fields to a canonical `AetherEvent` or return an explicit drop
+3. Persist consent-admitted provider events to typed Bronze and the durable outbox
+4. Defer provider events from SDK-only consumers until a provider-aware authority and projector exists
+5. Submit any eventual graph mutation through an authorized domain projector and the graph mutation gateway
 
 ## Rules
 

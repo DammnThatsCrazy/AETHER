@@ -18,10 +18,10 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
-  "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
+  "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
   "services/backend/services/runtime/consumer_specs.py": "sha256:122f290376b080e67d990e6f3a8655addb000f72a9980896e49b9e6c43216266"
   "services/backend/services/runtime/roles.py": "sha256:9d1787f19ddc91d640098ff3e992b4cc1cfaf410bcc49c79e41ed3c5810dc48a"
-  "services/backend/services/runtime/run_role.py": "sha256:a7442987d86a0d2b649884821b9575c442363228617e9ffde1c62e1b29afde6d"
+  "services/backend/services/runtime/run_role.py": "sha256:4b78f8c38ffa1e805ba8e910d2c960e5f37262e7d4b24a5fa6e5a2d1a2b06d9e"
   "services/backend/services/runtime/specs.py": "sha256:999c9da733093cce92d1af9192ea112ffdbbb9307c9698b80a18f2c1700f3a06"
 ---
 
@@ -118,6 +118,12 @@ in every profile, and ClickHouse is reached through `CLICKHOUSE_HOST`
 
 The `/v1/batch` V2 path (FT-5) writes typed Bronze rows plus a transactional
 `event_outbox` row in one transaction and never publishes in-request. The
+Universal Provider Runtime now uses that same typed Bronze/outbox transaction
+after preserving a verified provider raw record and normalizing it. In
+staging/production, enabling provider ingress without `OUTBOX_RELAY_ENABLED`
+fails both API and split worker startup; local/dev/integration warn. This
+configuration check does not prove that a separate relay process is healthy.
+The
 **event-outbox relay** (`services/backend/services/ingestion/outbox_relay.py`, WorkerSpec
 `event_outbox_relay`, owned by the `outbox-relay` role, gated by
 `OUTBOX_RELAY_ENABLED`) drains that table and publishes each row to the event
@@ -137,6 +143,12 @@ downstream work becomes replayable instead of riding the request.
 - **Delivery:** at-least-once. Relay-published events carry
   `source_service="ingestion.outbox_relay"`; the Bronze-writer consumer skips
   them because the V2 ingest transaction already persisted the typed Bronze row.
+
+Provider `AetherEvent` payloads share the transport topic but are deliberately
+deferred by SDK-only Silver, analytics, and identity consumers. That deferral
+is metered and leaves the canonical Bronze/outbox evidence available for a
+provider-aware authority/projector path. A relay publish does not itself
+create order, payment, or graph truth.
 
 Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
 `OUTBOX_RELAY_POLL_INTERVAL_S` (2), `OUTBOX_RELAY_LEASE_SECONDS` (60),

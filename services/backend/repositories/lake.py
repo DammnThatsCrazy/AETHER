@@ -19,7 +19,9 @@ Provenance policy:
 
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
+import json
 import uuid
 from enum import Enum
 from typing import Any, Optional
@@ -208,6 +210,121 @@ class BronzeRepository(BaseRepository):
     def __init__(self, domain: str = "default") -> None:
         super().__init__(f"bronze_{domain}")
         self._domain = domain
+
+    async def update(self, record_id: str, data: dict) -> dict:
+        """Keep provider raw records immutable except for confirmation stamps.
+
+        ``provider_records`` stores raw provider evidence and provenance. Its
+        only supported mutation is an append to
+        ``payload.metadata.confirmed_signal_ids`` used by commerce confirmation
+        replay detection. Other Bronze domains retain the base repository's
+        existing update behavior.
+        """
+        if self._domain != "provider_records":
+            return await super().update(record_id, data)
+
+        if not isinstance(data, dict):
+            raise ValueError("provider raw Bronze updates must be mappings")
+
+        pool = await self._ensure_pool()
+        existing = await self.find_by_id_or_fail(record_id)
+        additions = self._confirmation_id_additions(existing, data)
+
+        if pool is None:
+            # No await occurs between reading/validating this row and replacing
+            # it, so local callers cannot interleave a stale full-row update.
+            updated = deepcopy(existing)
+            payload = updated["payload"]
+            metadata = payload["metadata"]
+            metadata["confirmed_signal_ids"] = sorted(
+                set(metadata.get("confirmed_signal_ids", [])) | set(additions)
+            )
+            updated["updated_at"] = utc_now().isoformat()
+            self._store[record_id] = updated
+            return updated
+
+        if not self._jsonb_mode:
+            raise ValueError("provider raw Bronze updates require the JSONB schema")
+
+        # Merge additions against the row as it exists at UPDATE time. This
+        # preserves stamps appended concurrently by another confirmation worker
+        # while touching no other raw or provenance fields.
+        await self._ensure_table()
+        updated_at = utc_now().isoformat()
+        await pool.execute(
+            f"""UPDATE {self.table_name}
+                SET data = jsonb_set(
+                    jsonb_set(
+                        data,
+                        '{{payload,metadata,confirmed_signal_ids}}',
+                        (
+                            SELECT COALESCE(jsonb_agg(value ORDER BY value), '[]'::jsonb)
+                            FROM (
+                                SELECT DISTINCT value
+                                FROM jsonb_array_elements_text(
+                                    COALESCE(
+                                        data #> '{{payload,metadata,confirmed_signal_ids}}',
+                                        '[]'::jsonb
+                                    ) || $2::jsonb
+                                ) AS ids(value)
+                            ) AS merged_ids
+                        ),
+                        true
+                    ),
+                    '{{updated_at}}', to_jsonb($3::text), true
+                ), updated_at = NOW()
+                WHERE id = $1""",
+            record_id,
+            json.dumps(additions),
+            updated_at,
+        )
+        return await self.find_by_id_or_fail(record_id)
+
+    @staticmethod
+    def _confirmation_id_additions(existing: dict, data: dict) -> list[str]:
+        """Validate one provider-record update and return only newly added IDs."""
+        if not isinstance(existing, dict):
+            raise ValueError("provider raw Bronze record is invalid")
+
+        proposed = deepcopy(existing)
+        proposed.update(deepcopy(data))
+        old_payload = existing.get("payload")
+        new_payload = proposed.get("payload")
+        old_metadata = old_payload.get("metadata") if isinstance(old_payload, dict) else None
+        new_metadata = new_payload.get("metadata") if isinstance(new_payload, dict) else None
+        if not isinstance(old_metadata, dict) or not isinstance(new_metadata, dict):
+            raise ValueError("provider raw Bronze confirmation metadata is invalid")
+
+        old_ids = old_metadata.get("confirmed_signal_ids", [])
+        new_ids = new_metadata.get("confirmed_signal_ids", [])
+        if (
+            not isinstance(old_ids, list)
+            or not isinstance(new_ids, list)
+            or any(not isinstance(value, str) or not value.strip() for value in old_ids + new_ids)
+            or len(old_ids) != len(set(old_ids))
+            or len(new_ids) != len(set(new_ids))
+        ):
+            raise ValueError("provider raw Bronze confirmation IDs are invalid")
+
+        old_set = set(old_ids)
+        new_set = set(new_ids)
+        additions = new_set - old_set
+
+        # Ignore the single allowed field while comparing the complete proposed
+        # row to the stored row. This rejects changes to the provider payload,
+        # provenance, rights/admission metadata, identity and idempotency fields,
+        # as well as unexpected top-level fields.
+        old_comparable = deepcopy(existing)
+        new_comparable = deepcopy(proposed)
+        old_comparable["payload"]["metadata"].pop("confirmed_signal_ids", None)
+        new_comparable["payload"]["metadata"].pop("confirmed_signal_ids", None)
+        if old_comparable != new_comparable:
+            raise ValueError(
+                "provider raw Bronze records are immutable except for confirmation IDs"
+            )
+        if not old_set.issubset(new_set) or not additions:
+            raise ValueError("provider raw Bronze confirmation IDs must only be appended")
+        return sorted(additions)
 
     async def ingest(
         self,

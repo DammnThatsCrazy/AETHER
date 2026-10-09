@@ -23,7 +23,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/": "sha256:4f07a7d9517381b954610c79ba1615e1e6d4ced456dcd48df83a77172c9fd02a"
   "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
-  "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
+  "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
   "services/backend/services/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
   "services/backend/services/ingestion/replay_routes.py": "sha256:44e6e89117a8cbbebe2cd45bac315e616e87b2cf823e82c5af3f503de44eea56"
@@ -706,8 +706,8 @@ seam admits. See `BACKEND-API.md` ("Data Exchange Plane") and
 
 The Universal Provider Runtime (UPR) makes provider integrations pluggable: a
 new provider is a self-contained plugin (manifest + capability adapters +
-normalizer + fixtures + registration) that registers at runtime with **zero
-core-system edits**. The legacy `BaseConnector` system, `/v1/integrations/
+normalizer + fixtures + registration) that registers through shared runtime
+interfaces. The legacy `BaseConnector` system, `/v1/integrations/
 connectors/*` routes, credential service, Bronze ingestion, sync-run ledger,
 and webhook inbox are untouched and remain authoritative; legacy connectors
 are re-exposed through the runtime by a compatibility plugin. The design
@@ -724,26 +724,35 @@ acquisition, health, reconciliation, certification) and `shared/commerce_contrac
 
 | Layer | Modules |
 |---|---|
-| Contract plane | `shared/integration_contracts/{plugin,capabilities,events,normalization,acquisition,health,reconciliation,certification}.py`; `shared/commerce_contracts/{money,order,events}.py` |
-| Runtime service | `services/backend/services/provider_runtime/` — registry, validation (capability honesty), legacy compat plugin, credential broker, raw store, normalization engine, event bridge, connection orchestrator, scheduler, webhook gateway, rate-limit/retry coordinators, reconciliation, health, certification, routes |
-| Reference plugin | `services/backend/services/providers/shopify/` — `shopify.admin.orders_read`, SSRF-safe `shop_domain` allowlist, HMAC webhook verify, order normalizer, incremental pull with page-info cursor |
+| Contract plane | `shared/integration_contracts/` — plugin, stream, source-object, raw/event, normalization, acquisition, health, reconciliation, and certification contracts; `shared/commerce_contracts/{money,order,events}.py` |
+| Runtime service | `services/backend/services/provider_runtime/` — registry, validation, legacy compatibility, credential broker, raw store, event bridge, pull/webhook ingress, source-object mapping, tenant route ledger and opt-in graph writer fence, health, and certification |
+| Reference plugin | `services/backend/services/providers/shopify/` — `shopify.admin.orders_read`, SSRF-safe shop domain, HMAC webhook verify, order normalizer, REST compatibility pull and opt-in pinned GraphQL order snapshots |
 
 Data flow is **raw-before-canonical**: `RawProviderRecord`s are persisted
-idempotently to `bronze` (`provider_records`, dedup key
-`tenant:provider_identity:provider_record_id:schema_version`) before
-normalization; canonical `AetherEvent`s are written to `bronze_connectors`
-before the event-bus publish (bronze-before-publish, mirroring the comms
-pattern). Publish failure never fails ingestion.
+idempotently in protected provider Bronze before normalization. V1 retains
+native provider-record deduplication; v2 keys raw revisions by tenant,
+provider, verified source account and realm, object, and source revision.
+Consent-admitted canonical `AetherEvent`s enter typed Bronze and the
+transactional event outbox together, then the supervised relay publishes them
+at least once. Raw or canonical persistence failure leaves a pull cursor or
+webhook inbox unadvanced. The outbox is transport evidence, not source
+authority or graph projection.
 
 Feature gating: all UPR routes are off by default
 (`AETHER_PROVIDER_RUNTIME_ENABLED=False`); the operator plane additionally
 requires `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED`; `AETHER_PROVIDER_ENTRY_POINTS_ENABLED`
 controls `importlib.metadata` entry-point discovery. Legacy paths are
-unaffected regardless.
+unaffected regardless. Staging and production startup rejects enabled UPR
+ingress when `OUTBOX_RELAY_ENABLED` is false. Tenant route records and the
+guarded graph writer are not yet called by all legacy and native writers, so
+tenant cutover remains disabled.
 
-Binding security invariants: credentials only via `credential_service` refs
-(never plaintext); the webhook gateway is **fail-closed** — a signature scheme
-without a secret denies, and `endpoint_secret` providers require a
+Binding security invariants: provider credential writes use opaque refs scoped
+to tenant, provider identity, and connection; persisted legacy tenant/provider
+refs remain resolvable for existing connections. Secrets pass only through
+`credential_service` refs (never plaintext). The webhook gateway is
+**fail-closed**: a signature scheme without a secret denies, and
+`endpoint_secret` providers require a
 constant-time-matching presented token; `X-Aether-Tenant-ID` is a routing hint
 only, not auth; connection loads enforce tenant ownership (cross-tenant id →
 404); `shop_domain` is allowlisted to `*.myshopify.com` (SSRF gate); errors

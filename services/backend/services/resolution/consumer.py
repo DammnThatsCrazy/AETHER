@@ -11,8 +11,12 @@ from __future__ import annotations
 from typing import Any
 
 from shared.events.events import Event, EventProducer, Topic
-from shared.logger.logger import get_logger
-from services.ingestion.spine import normalization_spine_enabled, to_observation_view
+from shared.logger.logger import get_logger, metrics
+from services.ingestion.spine import (
+    is_provider_delivery,
+    normalization_spine_enabled,
+    to_observation_view,
+)
 
 from .engine import IdentityResolutionEngine
 
@@ -74,6 +78,14 @@ class ResolutionEventConsumer:
 
         if not payload:
             logger.warning(f"Empty payload in event {event.event_id}, skipping")
+            return
+        if is_provider_delivery(payload, event.source_service):
+            # Provider-local subject IDs are not SDK user IDs. Identity graph
+            # admission requires explicit source aliases and route fencing.
+            metrics.increment(
+                "ingestion_provider_projection_deferred_total",
+                labels={"consumer": "identity_resolution"},
+            )
             return
 
         view = to_observation_view(payload) if normalization_spine_enabled() else None

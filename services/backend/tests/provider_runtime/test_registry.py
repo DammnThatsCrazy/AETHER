@@ -8,6 +8,8 @@ from __future__ import annotations
 import pytest
 
 from shared.integration_contracts.plugin import PluginValidationError
+from shared.integration_contracts.streams import StreamDescriptor
+from shared.privacy.classification import DataClassification
 
 from services.provider_runtime.errors import ProviderNotInstalled
 from services.provider_runtime.legacy import LegacyConnectorPlugin
@@ -43,6 +45,44 @@ def test_register_get_list_manifests_sources(_isolated_registry) -> None:
 def test_require_missing_raises(_isolated_registry) -> None:
     with pytest.raises(ProviderNotInstalled):
         _isolated_registry.require("ghost.product.cap")
+
+
+def test_registry_exposes_registration_time_stream_declarations(_isolated_registry) -> None:
+    descriptor = StreamDescriptor(
+        stream_id="orders",
+        object_kind="order",
+        domain_pack="commerce",
+        acquisition_modes=("pull", "webhook"),
+        output_contract="bronze.provider_events",
+        source_authority_class="commerce_order",
+        data_classification=DataClassification.SENSITIVE_PII,
+        cursor_scheme="updated_at_and_id",
+        webhook_topics=("orders/create",),
+        initial_backfill=True,
+        incremental=True,
+    )
+
+    class DeclaredShopify(ShopifyOrdersPlugin):
+        def manifest(self):
+            return super().manifest().model_copy(update={"streams": [descriptor]})
+
+    registry = _isolated_registry
+    key = registry.register(DeclaredShopify())
+    assert registry.streams_for(key) == (descriptor,)
+    assert isinstance(registry.streams_for(key), tuple)
+    with pytest.raises(ProviderNotInstalled):
+        registry.streams_for("ghost.product.cap")
+
+
+def test_shopify_plugin_declares_mode_scoped_streams(_isolated_registry) -> None:
+    key = _isolated_registry.register(ShopifyOrdersPlugin())
+    streams = _isolated_registry.streams_for(key)
+    assert {stream.stream_id for stream in streams} == {
+        "orders_rest",
+        "orders_rest_webhook",
+        "orders",
+        "orders_webhook",
+    }
 
 
 def test_register_dishonest_plugin_raises(_isolated_registry) -> None:

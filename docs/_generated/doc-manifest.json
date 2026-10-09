@@ -4917,6 +4917,105 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/universal-connector-runtime/README.md",
+      "title": "Universal Connector Runtime Implementation Blueprint",
+      "slug": "blueprints/universal-connector-runtime",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/universal-connector-runtime/canonical-contracts.md",
+      "title": "Universal Connector Runtime Canonical Contracts",
+      "slug": "blueprints/universal-connector-runtime/canonical-contracts",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/universal-connector-runtime/commerce-reference-slice.md",
+      "title": "Commerce Reference Slice for the Universal Connector Runtime",
+      "slug": "blueprints/universal-connector-runtime/commerce-reference-slice",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 20,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/universal-connector-runtime/migration-and-delivery.md",
+      "title": "Universal Connector Runtime Migration and Delivery Blueprint",
+      "slug": "blueprints/universal-connector-runtime/migration-and-delivery",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 25,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/universal-connector-runtime/provider-outbox-rollout.md",
+      "title": "Provider Canonical Outbox Rollout",
+      "slug": "blueprints/universal-connector-runtime/provider-outbox-rollout",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/universal-connector-runtime/runtime-architecture.md",
+      "title": "Universal Connector Runtime — Runtime Architecture",
+      "slug": "blueprints/universal-connector-runtime/runtime-architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 30,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/brand-system/README.md",
       "title": "Olympus Labs / Aether / Kyber Brand System",
       "slug": "architecture/brand-system",

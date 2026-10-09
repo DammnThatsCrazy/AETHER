@@ -37,6 +37,7 @@ from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
 from services.ingestion.ingestion_observability import record_stage
 from services.ingestion.spine import (
     ObservationView,
+    is_provider_delivery,
     normalization_spine_enabled,
     to_observation_view,
 )
@@ -47,6 +48,22 @@ _bronze = BronzeRepository("sdk_events")
 _silver = SilverRepository("sdk_events")
 
 SCHEMA_VERSION = "1.0.0"
+
+
+def _defer_provider_canonical(event: Event, consumer: str) -> bool:
+    """Keep AetherEvent transport out of SDK-only projections until mapped.
+
+    Provider order/payment facts need their own source-authority adapter and
+    route fence. The canonical payload remains in Bronze and event_outbox for
+    a governed replay; a metric makes this intentional deferral observable.
+    """
+    if not is_provider_delivery(event.payload, event.source_service):
+        return False
+    metrics.increment(
+        "ingestion_provider_projection_deferred_total",
+        labels={"consumer": consumer},
+    )
+    return True
 
 
 async def sdk_bronze_writer(event: Event) -> None:
@@ -120,6 +137,8 @@ async def silver_normalizer(event: Event) -> None:
     envelope or an AetherEvent ``subject_id`` is reachable); when OFF every
     read is the legacy flat-key read (byte/row parity).
     """
+    if _defer_provider_canonical(event, "silver_normalizer"):
+        return
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_id = payload.get("event_id", event.event_id)
@@ -365,6 +384,8 @@ async def analytics_event_recorder(event: Event) -> None:
     covers is skipped (``services.consent.erasure_fence``). Failures raise so
     the consumer retries / dead-letters the message.
     """
+    if _defer_provider_canonical(event, "analytics_event_recorder"):
+        return
     payload = event.payload or {}
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_id = payload.get("event_id") or event.event_id
@@ -526,6 +547,8 @@ async def silver_fact_projector(event: Event) -> None:
     Projection failures never raise: Bronze is already durable, and replaying
     the Bronze range recovers any missed facts.
     """
+    if _defer_provider_canonical(event, "silver_fact_projector"):
+        return
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_type = payload.get("event_type", "")
@@ -660,6 +683,8 @@ async def identity_signal_emitter(event: Event, producer: EventProducer) -> None
     additive envelope user subject) becomes reachable; when OFF every read is
     the legacy flat-key read.
     """
+    if _defer_provider_canonical(event, "identity_signal_emitter"):
+        return
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_type = payload.get("event_type", "")

@@ -89,6 +89,18 @@ def _clean_stores(monkeypatch):
     reset_in_memory_stores()
 
 
+@pytest.fixture(autouse=True)
+def _enable_manual_split_for_positive_paths(monkeypatch):
+    """Opt into the operator split behavior these tests exercise."""
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "identity_continuity", replace(
+        settings.identity_continuity,
+        split_enabled=True,
+        manual_split_enabled=True,
+    ))
+
+
 def _build_resolver() -> tuple[IdentityResolutionService, IdentityResolutionRepository]:
     repo = IdentityResolutionRepository()
     metrics = IdentityMetrics()
@@ -478,6 +490,34 @@ async def test_non_operator_actor_rejected():
     )
     assert result["allowed"] is False
     assert result["rejection_reason"] == "split_policy_denied"
+
+
+@pytest.mark.asyncio
+async def test_fragment_split_fails_closed_when_manual_split_is_disabled(monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "identity_continuity", replace(
+        settings.identity_continuity,
+        split_enabled=True,
+        manual_split_enabled=False,
+    ))
+    resolver, repo = _build_resolver()
+    source = "entity-src"
+    await repo.create_subject(TENANT, source, EntityType.HUMAN)
+    alias = await _seed_alias(repo, source)
+
+    result = await resolver.fragment_split(
+        tenant_id=TENANT,
+        entity_id=source,
+        fragments={"alias_ids": [alias["id"]]},
+        mode="create_new_entity",
+        actor_id=ACTOR,
+        reason="must remain disabled by default",
+    )
+
+    assert result["allowed"] is False
+    assert result["rejection_reason"] == "manual_split_disabled"
+    assert await _active_alias_ids(repo, source) == [alias["id"]]
 
 
 # ---------------------------------------------------------------------------

@@ -501,10 +501,11 @@ A dedicated `aether-ml-serving` service, its ALB target group and its
 `enterprise-isolated`. On the cost-capped profiles there is no rule and ML runs
 inline in the backend process.
 
-`staging_state = "asleep"` multiplies every desired count, every autoscaling
-floor and every capacity-provider base count by zero, so a sleeping staging
-environment owns exactly the same services as an awake one. `max_capacity` is
-deliberately not scaled.
+`staging_state = "asleep"` multiplies every desired count, both autoscaling
+bounds, and every capacity-provider base count by zero, so target-tracking
+policies cannot bring a sleeping service back up. The service and role
+topology stays the same; waking restores the matrix's declared capacity
+envelope, including `max_capacity`.
 
 ### Data stores
 

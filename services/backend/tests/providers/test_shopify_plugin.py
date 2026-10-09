@@ -39,10 +39,7 @@ from services.providers.shopify import install_shopify_providers
 from services.providers.shopify.webhook import ShopifyWebhookAdapter
 
 FIXTURE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "provider_payloads"
-    / "shopify_orders.json"
+    Path(__file__).resolve().parents[1] / "fixtures" / "provider_payloads" / "shopify_orders.json"
 )
 
 SHOP_DOMAIN = "synth-demo.myshopify.com"
@@ -51,8 +48,7 @@ CREDENTIAL = {
     "password": "synth-password",
     "shop_domain": SHOP_DOMAIN,
 }
-# Full credential shape the manifest now declares: API fields + the webhook HMAC
-# secret required by the declared shopify_hmac verification scheme.
+# Full webhook-enabled credential shape: API fields plus the webhook HMAC secret.
 FULL_CREDENTIAL = {**CREDENTIAL, "webhook_secret": "synth-webhook-secret"}
 
 # Synthetic order id -> expected provider-neutral event type.
@@ -160,8 +156,40 @@ def test_manifest_passes_validate_manifest(plugin: ShopifyOrdersPlugin) -> None:
     manifest = plugin.manifest()
     validate_manifest(manifest)
     assert manifest.identity_key == "shopify.admin.orders_read"
-    assert manifest.readiness.level >= 3  # env-visible capability
+    assert manifest.readiness.level == 2  # credential waiting, not replay certified
+    assert manifest.availability.environments.any_enabled() is False
     assert manifest.category == "commerce"
+    assert len(manifest.streams) == 4
+    streams = {stream.stream_id: stream for stream in manifest.streams}
+    config_fields = {field.name: field for field in manifest.configuration.fields}
+    assert config_fields["orders_api"].default_value == "rest"
+    rest = streams["orders_rest"]
+    assert rest.acquisition_modes == ("pull",)
+    assert rest.cursor_scheme == "shopify-rest-v1"
+    assert rest.enabled_by_default is False
+    assert rest.activation_config_field == "orders_api"
+    assert rest.activation_config_value == "rest"
+    rest_webhook_pull = streams["orders_rest_webhook"]
+    assert rest_webhook_pull.acquisition_modes == ("pull",)
+    assert rest_webhook_pull.enabled_by_default is False
+    assert rest_webhook_pull.activation_config_field == "orders_api"
+    assert rest_webhook_pull.activation_config_value == "rest_webhook"
+    orders = streams["orders"]
+    assert orders.object_kind == "order"
+    assert orders.domain_pack == "commerce"
+    assert orders.source_authority_class == "commerce.store_order"
+    assert orders.acquisition_modes == ("pull",)
+    assert orders.cursor_scheme == "shopify-gql-v1"
+    assert orders.initial_backfill and orders.incremental
+    assert orders.enabled_by_default is False
+    assert orders.activation_config_field == "orders_api"
+    assert orders.activation_config_value == "graphql"
+    webhook = streams["orders_webhook"]
+    assert webhook.acquisition_modes == ("webhook",)
+    assert webhook.webhook_topics == ("orders/create", "orders/update", "orders/cancelled")
+    assert webhook.enabled_by_default is False
+    assert webhook.activation_config_field == "orders_api"
+    assert webhook.activation_config_value == "rest_webhook"
 
 
 def test_capability_set_is_honest(plugin: ShopifyOrdersPlugin) -> None:
@@ -184,13 +212,20 @@ def test_plugin_version(plugin: ShopifyOrdersPlugin) -> None:
 
 
 def test_manifest_declares_webhook_secret(plugin: ShopifyOrdersPlugin) -> None:
-    """The shopify_hmac scheme must be backed by a declared webhook secret."""
+    """Webhook HMAC is optional globally and required only in webhook mode."""
     manifest = plugin.manifest()
     assert manifest.webhooks.verification_scheme == "shopify_hmac"
     fields = {f.name: f for f in manifest.authentication.credential_schema}
     assert "webhook_secret" in fields
-    assert fields["webhook_secret"].required is True
+    assert fields["webhook_secret"].required is False
     assert fields["webhook_secret"].secret is True
+    profiles = {
+        profile.mode_value: set(profile.required_fields)
+        for profile in manifest.authentication.credential_profiles
+    }
+    assert "webhook_secret" not in profiles["rest"]
+    assert "webhook_secret" not in profiles["graphql"]
+    assert "webhook_secret" in profiles["rest_webhook"]
 
 
 def test_install_shopify_providers_matches_runtime_registry(plugin: ShopifyOrdersPlugin) -> None:
@@ -381,14 +416,118 @@ def test_webhook_parse_emits_order_record(orders: list[dict]) -> None:
         "created_at": "2026-08-01T10:00:00Z",
         "body": orders[0],
     }
-    records = _webhook_adapter().parse(envelope, headers={})
+    headers = {
+        "X-Shopify-Webhook-Id": "delivery-create-1",
+        "X-Shopify-Shop-Domain": SHOP_DOMAIN,
+    }
+    records = _webhook_adapter().parse(envelope, headers=headers)
     assert len(records) == 1
     record = records[0]
     assert record.provider_record_type == "order"
+    assert record.stream_id == "orders_webhook"
     assert record.acquisition_mode == "webhook"
-    assert record.webhook_delivery_id == "7000100001"
-    assert record.provider_record_id == str(orders[0]["id"])
+    assert record.webhook_delivery_id == "delivery-create-1"
+    assert record.metadata["shopify_webhook_topic"] == "orders/create"
+    assert record.metadata["shopify_shop_domain"] == SHOP_DOMAIN
+    assert record.metadata["shopify_order_id"] == str(orders[0]["id"])
+    assert record.provider_record_id.startswith("shopify-webhook-delivery-v1:")
     assert record.payload == orders[0]
+
+
+def test_webhook_parse_accepts_a_manifest_topic_from_the_header(orders: list[dict]) -> None:
+    envelope = {
+        "id": 7000100001,
+        "domain": SHOP_DOMAIN,
+        "body": orders[0],
+    }
+
+    record = _webhook_adapter().parse(
+        envelope,
+        headers={
+            "x-shopify-topic": "orders/create",
+            "x-shopify-webhook-id": "delivery-header-topic",
+        },
+    )[0]
+
+    assert record.metadata["shopify_webhook_topic"] == "orders/create"
+    assert record.stream_id == "orders_webhook"
+
+
+@pytest.mark.parametrize(
+    "envelope_topic,header_topic",
+    [
+        ("orders/unknown", None),
+        ("", "orders/unknown"),
+        ("orders/create", "orders/update"),
+        ("", ""),
+    ],
+)
+def test_webhook_parse_rejects_unknown_or_conflicting_topics(
+    orders: list[dict],
+    envelope_topic: str,
+    header_topic: str | None,
+) -> None:
+    envelope = {
+        "id": 7000100001,
+        "domain": SHOP_DOMAIN,
+        "topic": envelope_topic,
+        "body": orders[0],
+    }
+    headers = {
+        "X-Shopify-Webhook-Id": "delivery-topic-test",
+        **({"X-Shopify-Topic": header_topic} if header_topic is not None else {}),
+    }
+
+    with pytest.raises(ValueError, match="topic"):
+        _webhook_adapter().parse(envelope, headers=headers)
+
+
+def test_webhook_parse_requires_delivery_id_header(orders: list[dict]) -> None:
+    envelope = {
+        "id": 7000100001,
+        "domain": SHOP_DOMAIN,
+        "topic": "orders/update",
+        "body": orders[0],
+    }
+
+    with pytest.raises(ValueError, match="delivery ID"):
+        _webhook_adapter().parse(envelope, headers={})
+
+
+def test_webhook_delivery_identity_distinguishes_order_updates_and_retries(
+    orders: list[dict],
+) -> None:
+    first_order = dict(orders[0])
+    first_order["updated_at"] = "2026-08-01T10:00:00Z"
+    first_body = {
+        "id": 7000100001,
+        "domain": SHOP_DOMAIN,
+        "topic": "orders/update",
+        "body": first_order,
+    }
+    updated_order = {**first_order, "updated_at": "2026-08-01T11:00:00Z", "total_price": "52.00"}
+    updated_body = {**first_body, "id": 7000100002, "body": updated_order}
+
+    adapter = _webhook_adapter()
+    first = adapter.parse(
+        first_body,
+        headers={"X-Shopify-Webhook-Id": "delivery-update-1"},
+    )[0]
+    retry = adapter.parse(
+        first_body,
+        headers={"X-Shopify-Webhook-Id": "delivery-update-1"},
+    )[0]
+    updated = adapter.parse(
+        updated_body,
+        headers={"X-Shopify-Webhook-Id": "delivery-update-2"},
+    )[0]
+
+    assert first.payload["id"] == retry.payload["id"] == updated.payload["id"]
+    assert first.provider_record_id == retry.provider_record_id
+    assert first.idempotency_key == retry.idempotency_key
+    assert updated.provider_record_id != first.provider_record_id
+    assert updated.idempotency_key != first.idempotency_key
+    assert first.metadata["shopify_order_id"] == updated.metadata["shopify_order_id"]
 
 
 def test_webhook_parse_without_nested_body() -> None:
@@ -399,9 +538,12 @@ def test_webhook_parse_without_nested_body() -> None:
         "created_at": "2026-08-02T10:00:00Z",
         "order_id": 9000100002,
     }
-    records = _webhook_adapter().parse(envelope, headers={})
+    records = _webhook_adapter().parse(
+        envelope, headers={"X-Shopify-Webhook-Id": "delivery-no-body"}
+    )
     assert len(records) == 1
-    assert records[0].provider_record_id == "9000100002"
+    assert records[0].metadata["shopify_order_id"] == "9000100002"
+    assert records[0].stream_id == "orders_webhook"
     assert records[0].acquisition_mode == "webhook"
 
 
@@ -429,7 +571,7 @@ async def test_pull_link_pagination_and_rate_limit(monkeypatch: pytest.MonkeyPat
             200,
             headers={
                 "Link": (
-                    f'<https://{SHOP_DOMAIN}/admin/api/2024-10/orders.json'
+                    f"<https://{SHOP_DOMAIN}/admin/api/2024-10/orders.json"
                     '?page_info=opaque-page-token&limit=250>; rel="next"'
                 ),
                 "X-Shopify-Shop-Api-Call-Limit": "39/40",
@@ -447,12 +589,56 @@ async def test_pull_link_pagination_and_rate_limit(monkeypatch: pytest.MonkeyPat
     assert len(result.data.records) == 2
     assert result.data.records[0].provider_record_type == "order"
     assert result.data.records[0].provider_record_id == str(_load_orders()[0]["id"])
+    assert result.data.records[0].stream_id == "orders_rest"
     assert result.data.records[0].acquisition_mode == "poll"
     assert "status=any" in captured["url"]
     assert result.rate_limit is not None
     assert result.rate_limit.limit == 40
     assert result.rate_limit.remaining == 39
     assert result.rate_limit.retry_after_ms == 0
+
+
+@pytest.mark.asyncio
+async def test_rest_webhook_pull_uses_its_declared_poll_stream(
+    monkeypatch: pytest.MonkeyPatch,
+    orders: list[dict],
+) -> None:
+    import services.providers.shopify.pull as pull_mod
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"orders": orders[:1]})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(pull_mod, "_http_client", lambda: client)
+    context = _context(config={"orders_api": "rest_webhook"})
+
+    result = await ShopifyPullAdapter(provider_identity="shopify.admin.orders_read").fetch(
+        context, cursor=None
+    )
+
+    assert result.success is True
+    assert len(result.data.records) == 1
+    assert result.data.records[0].stream_id == "orders_rest_webhook"
+
+
+@pytest.mark.asyncio
+async def test_rest_pull_rejects_a_stream_for_a_different_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import services.providers.shopify.pull as pull_mod
+
+    monkeypatch.setattr(
+        pull_mod,
+        "_http_client",
+        lambda: pytest.fail("mode mismatch must fail before the provider request"),
+    )
+    context = _context().model_copy(update={"stream_id": "orders"})
+    result = await ShopifyPullAdapter(provider_identity="shopify.admin.orders_read").fetch(
+        context, cursor=None
+    )
+
+    assert result.status == AdapterStatus.PERMANENT_ERROR
+    assert result.error_code == "shopify_stream_mode_mismatch"
 
 
 @pytest.mark.asyncio
@@ -575,10 +761,25 @@ async def test_auth_validate_credentials() -> None:
     assert ok.success is True
     assert ok.status == AdapterStatus.OK
 
-    # The full manifest-declared shape (API fields + webhook_secret) validates.
+    # Pull-only REST credentials do not need an unused webhook secret.
+    assert "webhook_secret" not in CREDENTIAL
+
+    # The webhook-enabled REST profile requires and accepts the HMAC secret.
     full = await adapter.validate_credentials(_context(credential=dict(FULL_CREDENTIAL)))
     assert full.success is True
     assert full.status == AdapterStatus.OK
+
+    missing_webhook_secret = await adapter.validate_credentials(
+        _context(config={"orders_api": "rest_webhook"}, credential=dict(CREDENTIAL))
+    )
+    assert missing_webhook_secret.success is False
+    assert missing_webhook_secret.error_code == "credential_missing_fields"
+    assert "webhook_secret" in missing_webhook_secret.data["detail"]
+
+    configured_webhook = await adapter.validate_credentials(
+        _context(config={"orders_api": "rest_webhook"}, credential=dict(FULL_CREDENTIAL))
+    )
+    assert configured_webhook.success is True
 
     missing = await adapter.validate_credentials(
         _context(credential={"api_key": "k", "shop_domain": SHOP_DOMAIN})
@@ -641,9 +842,7 @@ async def test_auth_basic_auth_never_uses_webhook_secret(
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     monkeypatch.setattr(auth_mod, "_http_client", lambda: client)
-    result = await auth_mod.ShopifyAuthAdapter().test(
-        _context(credential=dict(FULL_CREDENTIAL))
-    )
+    result = await auth_mod.ShopifyAuthAdapter().test(_context(credential=dict(FULL_CREDENTIAL)))
     assert result.success is True
     assert result.status == AdapterStatus.OK
     basic = captured["authorization"].removeprefix("Basic ")
@@ -876,7 +1075,12 @@ def test_from_api_dict_tolerates_extra_fields(orders: list[dict]) -> None:
 
 def test_webhook_envelope_from_api_dict_tolerates_extra_fields(orders: list[dict]) -> None:
     envelope = ShopifyWebhookEnvelope.from_api_dict(
-        {"id": 7000100001, "topic": "orders/create", "extra_header_field": "ignored", "body": orders[0]}
+        {
+            "id": 7000100001,
+            "topic": "orders/create",
+            "extra_header_field": "ignored",
+            "body": orders[0],
+        }
     )
     assert envelope.id == 7000100001
     assert envelope.topic == "orders/create"

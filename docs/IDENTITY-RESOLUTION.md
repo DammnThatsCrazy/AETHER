@@ -14,7 +14,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
-  "services/backend/services/identity/": "sha256:c419c4b1509d9de2d0e8ba9751a0ad8f96d3411f8f0a0e35c243600c123f18e2"
+  "services/backend/services/identity/": "sha256:43a3558f62dc357d93dc4416668ea5fe2a0d5a7b42c6e5b9f4afde1362953288"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
@@ -57,11 +57,32 @@ The graph writer's graph mirror routes through the canonical **Graph Mutation Ga
 to canonical entities. Registration is tenant- and `source_namespace`-scoped:
 repeated IDs within one namespace are idempotent, while equal raw IDs from a
 CSV upload, connector, or SDK in different namespaces remain distinct source
-identities. Shared claims can still be compared by the resolver, which owns
-the eventual link or merge decision. This lets historical imports precede SDK
+identities. Candidate comparison is also tenant-scoped and follows the
+eligibility, freshness, and consent checks for its source; a shared claim alone
+does not authorize a link or merge. This lets historical imports precede SDK
 installation without making a CSV row ID or provider ID canonical identity.
 SDK `identify` observations add evidence and are resolved by the backend; SDKs
 do not assign canonical entities.
+
+Provider sync and webhook ingestion can add customer evidence after a raw
+provider record has been durably accepted. Provider-specific extractors select
+customer fields; order, receipt, seller, and store identifiers are not treated
+as person identifiers. Connector identities use a tenant-scoped namespace
+containing the provider, account, and connection, so the same provider ID from
+different accounts or connections remains distinct. Email and phone claims are
+normalized and persisted as tenant-scoped HMAC hashes; provider customer IDs
+remain source-scoped identifiers and are not canonical entity IDs.
+
+Each connector claim is tied to the accepted raw record's checksum and schema
+version and to its owning sync-run or verified-webhook lifecycle. The evidence
+stays pending until that durable lifecycle completes, and candidate lookup
+rechecks the current lifecycle anchor and raw fingerprint. SDK late-binding
+and connector evidence are both disabled by default
+(`SDK_LATE_BINDING_ENABLED=false` and
+`CONNECTOR_BACKFILL_IDENTITY_RESOLUTION_ENABLED=false`). When both are enabled,
+connector evidence may be considered through the tenant-scoped late-binding
+flow; a claim match does not merge profiles by itself, and approval revalidates
+the evidence and requires server-verified identity-link consent.
 
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
 

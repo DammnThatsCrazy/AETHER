@@ -14,7 +14,7 @@ estimated_read_minutes: 11
 toc_depth: 3
 source_hashes:
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
-  "services/backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
+  "services/backend/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
 ---
 
 # Commerce Event Contract
@@ -100,15 +100,23 @@ provider-neutral event handed to downstream consumers:
 namespaced event types during migration; only migrated plugins emit canonical
 `commerce.*` events.
 
-### 3.1 Idempotency keys
+### 3.1 Raw and canonical idempotency
 
-- `RawProviderRecord.idempotency_key` = `sha256(tenant_id | provider_identity |
-  provider_record_id | schema_version)` — dedups raw ingestion.
-- `AetherEvent.idempotency_key` = `sha256(tenant_id | event_type |
-  source_record_id | schema_version)` — dedups event publication.
+- Legacy raw v1 uses tenant, provider identity, native provider record ID,
+  and envelope version. It is safe for immutable deliveries but can collapse
+  updates if an adapter uses a mutable object ID alone.
+- Raw v2 uses the verified source account, live/test realm, object type and
+  native ID, and raw source revision. Bronze retains two changed acquisitions
+  of one order while a retry returns the original raw lineage ID.
+- `AetherEvent.idempotency_key` retains its legacy tenant/event type/raw
+  lineage/version formula for compatibility. The typed Bronze/outbox bridge
+  deduplicates on the producer's stable `event_id`. A provider mapping must
+  derive that ID from a reviewed logical fact revision and semantic slot, so
+  a contact-only raw change does not create a second economic fact.
 
-Both keys make ingestion and publication replay-safe: re-running a pull or
-replaying a webhook never double-persists or double-publishes.
+These keys prevent transport duplicates. They do not decide source authority,
+refund equivalence, or whether two providers describe one sale; those remain
+reconciliation decisions before graph or revenue projection.
 
 ## 4. The normalizer contract
 
@@ -127,10 +135,8 @@ or more `AetherEvent`s:
 
 ## 5. Current mapping — Shopify order → event_type
 
-The reference mapping (the Shopify plugin's normalizer,
-`services/backend/services/providers/shopify/normalizer.py`) is the pattern every commerce
-plugin follows. It determines the canonical status in order, then emits the
-event type:
+The historical REST v1 mapping in the Shopify normalizer determines status in
+order and emits the event type:
 
 | Shopify signal | Canonical status | `AetherEvent.event_type` |
 |---|---|---|
@@ -140,12 +146,21 @@ event type:
 | otherwise | `OrderStatus.updated` | `commerce.order.updated` |
 | unparseable payload / unknown record type | — | `dropped` (never silent) |
 
-Note: in this reference mapping, `paid` / `fulfilled` / `partially_refunded`
+In this REST v1 mapping, `paid` / `fulfilled` / `partially_refunded`
 orders fall through to `updated` — the canonical `OrderStatus` enum supports
 more values, but the reference normalizer emits exactly these four event types.
 The emitted `AetherEvent` carries `context.financial_status` and
 `context.fulfillment_status`, and `data.provider` preserves selected raw
 fields, so a more specific status is never lost in the fold.
+
+The opt-in GraphQL v2 pull reads complete order **snapshots**, not a creation
+or processor-settlement event stream. It emits `commerce.order.updated` for a
+non-cancelled snapshot and `commerce.order.cancelled` when Shopify records
+`cancelledAt`. Shopify's display financial status remains a labeled
+store-reported observation; it does not emit `commerce.order.paid` or a
+processor refund/settlement fact. Contact-only source edits retain distinct
+protected raw revisions but share one PII-free logical fact ID. REST v1 remains
+the default compatibility path until a reviewed tenant migration.
 
 ## 6. Dotted `commerce.*` vs the SDK registry
 

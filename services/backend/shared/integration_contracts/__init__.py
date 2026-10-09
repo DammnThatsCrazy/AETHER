@@ -8,6 +8,8 @@ built on:
 * :mod:`results` — the canonical adapter result + bridge mappers (§17)
 * :mod:`lifecycle` — the connection lifecycle state machine (§16)
 * :mod:`deployment` — the typed per-capability deployment contract (§14)
+* :mod:`streams` — versioned, declared source-object streams
+* :mod:`source_objects` — non-identity source refs and logical event keys
 
 It reuses (never re-defines) the existing readiness, connector, and provider
 types. This wave is purely additive: no existing registry or adapter is
@@ -59,6 +61,21 @@ from shared.integration_contracts.manifest import (
     Sync,
     Webhooks,
     validate_manifest,
+)
+from shared.integration_contracts.streams import (
+    STREAM_DESCRIPTOR_SCHEMA_VERSION,
+    StreamAcquisitionMode,
+    StreamDescriptor,
+)
+from shared.integration_contracts.source_objects import (
+    EVENT_REVISION_ID_VERSION,
+    LOGICAL_EVENT_ID_VERSION,
+    NON_IDENTITY_OBJECT_TYPES,
+    LogicalEventKey,
+    SourceAccountRef,
+    SourceObjectRef,
+    event_revision_id_for_parts,
+    logical_event_id_for_source_parts,
 )
 from shared.integration_contracts.results import (
     AdapterResult,
@@ -158,6 +175,19 @@ __all__ = [
     "Sync",
     "Webhooks",
     "validate_manifest",
+    # declared streams
+    "STREAM_DESCRIPTOR_SCHEMA_VERSION",
+    "StreamAcquisitionMode",
+    "StreamDescriptor",
+    # source-owned non-identity objects and logical provider facts
+    "LOGICAL_EVENT_ID_VERSION",
+    "EVENT_REVISION_ID_VERSION",
+    "NON_IDENTITY_OBJECT_TYPES",
+    "LogicalEventKey",
+    "SourceAccountRef",
+    "SourceObjectRef",
+    "event_revision_id_for_parts",
+    "logical_event_id_for_source_parts",
     # results
     "AdapterResult",
     "AdapterStatus",

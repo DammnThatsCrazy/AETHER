@@ -481,6 +481,43 @@ def test_head_sha_returns_string_in_real_repo(dd):
     assert all(c in "0123456789abcdef" for c in sha)
 
 
+def test_docs_for_update_restricts_to_explicit_source_linked_paths(dd, tmp_path, monkeypatch):
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    reviewed = docs_dir / "reviewed.md"
+    reviewed.write_text(
+        "---\ntitle: Reviewed\nsource_files:\n  - source.py\n---\nbody\n",
+        encoding="utf-8",
+    )
+    unrelated = docs_dir / "unrelated.md"
+    unrelated.write_text(
+        "---\ntitle: Unrelated\nsource_files:\n  - other.py\n---\nbody\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    monkeypatch.setattr(dd, "tracked_docs", lambda: [reviewed, unrelated])
+
+    selected, error = dd.docs_for_update(["docs/reviewed.md"])
+
+    assert selected == [reviewed]
+    assert error is None
+
+
+def test_docs_for_update_rejects_untracked_or_unlinked_paths(dd, tmp_path, monkeypatch):
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    unlinked = docs_dir / "unlinked.md"
+    unlinked.write_text("---\ntitle: No sources\n---\nbody\n", encoding="utf-8")
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    monkeypatch.setattr(dd, "tracked_docs", lambda: [unlinked])
+
+    selected, error = dd.docs_for_update(["docs/untracked.md", "docs/unlinked.md"])
+
+    assert selected is None
+    assert "not tracked" in error
+    assert "not a tracked source-linked docs path" in error
+
+
 # ── Review backlog registry + restamp-only heuristic ─────────────────────────
 
 

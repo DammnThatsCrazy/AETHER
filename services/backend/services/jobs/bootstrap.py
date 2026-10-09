@@ -42,6 +42,11 @@ def register_durable_job_handlers(settings: Optional[Any] = None) -> None:
     register_consent_erasure_handler()  # consent.erasure (durable DSR erasure)
     register_semantic_replay_handler()  # semantic.replay (flag-gated inside)
 
+    if settings.provider_runtime.enabled:
+        from services.provider_runtime.replay import register_provider_raw_replay_handler
+
+        register_provider_raw_replay_handler()  # provider.raw_replay (internal only)
+
     # Data Exchange Plane — durable jobs + canonical exporter registration
     # (flag-gated; the surfaces only exist when the matching flag is ON).
     dex = settings.data_exchange

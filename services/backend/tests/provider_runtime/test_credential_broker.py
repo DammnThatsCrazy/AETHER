@@ -29,16 +29,49 @@ def test_provider_ref_format(broker: CredentialBroker):
     assert "sk_" not in ref
 
 
-@pytest.mark.asyncio
-async def test_store_and_resolve_round_trip(broker: CredentialBroker):
-    ref = broker.provider_ref("tenant-1", "shopify.orders.catalog")
-    credential = ApiKeyCredential(api_key=SecretStr("sk_live_abc"))
-    await broker.store("tenant-1", ref, credential)
+def test_provider_ref_can_be_scoped_to_a_connection(broker: CredentialBroker):
+    ref_a = broker.provider_ref("tenant-1", "shopify.orders.catalog", connection_id="conn-a")
+    ref_b = broker.provider_ref("tenant-1", "shopify.orders.catalog", connection_id="conn-b")
 
-    resolved = await broker.resolve("tenant-1", ref)
+    assert ref_a != ref_b
+    assert ref_a.startswith("provider:tenant-1:shopify.orders.catalog:connection:v2:")
+    assert "conn-a" not in ref_a
+    assert broker.provider_ref("tenant-1", "shopify.orders.catalog") == (
+        "provider:tenant-1:shopify.orders.catalog"
+    )
+
+
+@pytest.mark.asyncio
+async def test_legacy_two_argument_provider_ref_still_resolves(broker: CredentialBroker):
+    legacy_ref = broker.provider_ref("tenant-1", "shopify.orders.catalog")
+    assert legacy_ref == "provider:tenant-1:shopify.orders.catalog"
+    credential = ApiKeyCredential(api_key=SecretStr("sk_live_abc"))
+    await broker.store("tenant-1", legacy_ref, credential)
+
+    resolved = await broker.resolve("tenant-1", legacy_ref)
     assert resolved is not None
     assert resolved.type == "api_key"
     assert resolved.api_key.get_secret_value() == "sk_live_abc"
+
+
+@pytest.mark.asyncio
+async def test_legacy_and_connection_scoped_refs_coexist(broker: CredentialBroker):
+    legacy_ref = broker.provider_ref("tenant-1", "shopify.orders.catalog")
+    connection_ref = broker.provider_ref(
+        "tenant-1", "shopify.orders.catalog", connection_id="connection-123"
+    )
+    legacy_credential = ApiKeyCredential(api_key=SecretStr("legacy-token"))
+    connection_credential = ApiKeyCredential(api_key=SecretStr("connection-token"))
+
+    await broker.store("tenant-1", legacy_ref, legacy_credential)
+    await broker.store("tenant-1", connection_ref, connection_credential)
+
+    resolved_legacy = await broker.resolve("tenant-1", legacy_ref)
+    resolved_connection = await broker.resolve("tenant-1", connection_ref)
+    assert resolved_legacy is not None
+    assert resolved_connection is not None
+    assert resolved_legacy.api_key.get_secret_value() == "legacy-token"
+    assert resolved_connection.api_key.get_secret_value() == "connection-token"
 
 
 @pytest.mark.asyncio

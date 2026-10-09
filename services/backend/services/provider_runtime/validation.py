@@ -2,9 +2,10 @@
 
 A plugin is dishonest when its manifest overclaims a capability its adapter
 surface does not provide, or underclaims a capability its adapter surface does
-provide. :func:`capability_violations` collects every violation across the five
-capability areas (auth, account, pull, webhook, reconciliation) in *both*
-directions, plus the manifest-level invariants from
+provide. :func:`capability_violations` collects every violation across the
+existing five capability areas (auth, account, pull, webhook, reconciliation)
+and, for manifests with explicit streams, report and stream acquisition in
+*both* directions, plus the manifest-level invariants from
 :func:`validate_manifest <shared.integration_contracts.manifest.validate_manifest>`
 and the identity cross-check from
 :func:`plugin_identity_key <shared.integration_contracts.plugin.plugin_identity_key>`.
@@ -35,6 +36,7 @@ from shared.integration_contracts.plugin import (
     capability_set,
     plugin_identity_key,
 )
+from shared.integration_contracts.streams import StreamDescriptor
 
 from services.provider_runtime.social_capability import social_capability_violations
 
@@ -46,7 +48,13 @@ _CAPABILITY_CLAIMS: tuple[tuple[str, Callable[[ProviderManifest], bool]], ...] =
         "account",
         lambda m: m.accounts.discovery_supported or m.accounts.selection_required,
     ),
-    ("pull", lambda m: m.sync.incremental or m.sync.initial_backfill),
+    (
+        "pull",
+        lambda m: any(
+            isinstance(s, StreamDescriptor) and "pull" in s.acquisition_modes
+            for s in m.streams
+        ) if m.streams else m.sync.incremental or m.sync.initial_backfill,
+    ),
     ("webhook", lambda m: m.webhooks.supported),
     ("reconciliation", lambda m: m.sync.reconciliation),
 )
@@ -59,8 +67,10 @@ def capability_violations(plugin: object) -> list[str]:
 
     1. the manifest passes :func:`validate_manifest` (manifest-level §32 rules);
     2. ``manifest().identity_key`` equals ``identity().key``;
-    3. for each of the five capability areas, the manifest claims it iff the
-       plugin exposes a non-``None`` adapter for it (both directions).
+    3. for each of the five existing capability areas, the manifest claims it
+       iff the plugin exposes a non-``None`` adapter for it (both directions);
+    4. explicit stream report/stream modes match installed adapters in both
+       directions. This checks declared capability, not provider behavior.
 
     A plugin whose accessors raise is itself a violation — never a silent pass.
     """
@@ -106,6 +116,24 @@ def capability_violations(plugin: object) -> list[str]:
             violations.append(
                 f"plugin exposes a {cap}() adapter but the manifest does not claim it"
             )
+
+    if manifest.streams:
+        declared = [
+            s for s in manifest.streams if isinstance(s, StreamDescriptor)
+        ]
+        for mode in ("report", "stream"):
+            claiming = [s.stream_id for s in declared if mode in s.acquisition_modes]
+            present = getattr(caps, mode)
+            if claiming and not present:
+                violations.append(
+                    f"streams {claiming!r} claim {mode} acquisition but "
+                    f"the plugin exposes no {mode}() adapter"
+                )
+            elif present and not claiming:
+                violations.append(
+                    f"plugin exposes a {mode}() adapter but no declared stream "
+                    f"claims {mode} acquisition"
+                )
 
     # 4. UPR social capability vocabulary honesty (M2-A) — an ADDITIONAL
     #    social-scoped check. It runs for EVERY plugin on registry.register, but

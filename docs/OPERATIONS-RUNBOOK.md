@@ -17,8 +17,8 @@ toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
   "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
-  "services/backend/main.py": "sha256:53407f2fe1a3fee759acfe4404776086a6f1f95661d7c394fe8e303927519c0b"
-  "services/backend/services/provider_runtime/": "sha256:24f5445f73434daf958f26f6548f51f4ed22ed196812088898a8e2195eb094a1"
+  "services/backend/main.py": "sha256:b52515d9eda1a3262b5b766fb5cc46368ad6c2a1998f9ee32c66f8574353f583"
+  "services/backend/services/provider_runtime/": "sha256:654c952f050f9122a6ed5323cc74c5ba84436344c3f4c812b5d1ade715ad0f17"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -560,8 +560,44 @@ distribution entry points. Disable by clearing the flags and restarting;
 stored provider connections/raw records are preserved. Webhook delivery is
 fail-closed: a signature scheme without a configured secret denies the
 delivery, and `endpoint_secret` providers require a constant-time-matching
-presented token. See
+presented token. In staging and production, `AETHER_PROVIDER_RUNTIME_ENABLED`
+also requires `OUTBOX_RELAY_ENABLED=true`; API and split worker startup refuse
+provider ingress without the relay flag. Start the `outbox-relay` role and
+verify its independent readiness, pending-row age, publish/retry/dead-letter
+metrics, and a scoped test delivery before enabling tenant traffic. The flag
+alone cannot prove delivery health. Provider events remain deferred by
+SDK-only projections until source authority and graph admission are wired.
+See the [provider outbox rollout](blueprints/universal-connector-runtime/provider-outbox-rollout.md)
+and
 `docs/UNIVERSAL-PROVIDER-RUNTIME.md` for the full runtime guide.
+
+### Provider raw-retention rights gate
+
+Raw provider payloads are retained only after the canonical Effective Rights
+Resolver allows `tenant_lake` use for purpose `provider_raw_ingestion` and
+destination `tenant_lake`. The grant must be active, tenant-scoped, use the
+`tenant_byod_data` connector class, and match the provider identity and account
+source `provider-account:{connection_id}:{account_id}`. BYOK credential access
+does not supply this data-retention grant.
+
+The canonical Data Rights grant service persists grants and append-only
+create/revoke events in the migration-owned tenant-scoped repository. Raw
+provider retention remains fail-closed in staging and production unless the
+database and required schema are available; do not enable tenant provider
+ingestion until the migration is applied and readiness is confirmed. Missing,
+ambiguous, expired, revoked, or cross-tenant grants deny admission. Investigate
+`provider_raw_rights_denials_total` using its bounded `reason` label. A denied
+grant or invalid source does not create a Bronze raw payload or retain the
+webhook body. A webhook inbox body is written only after signature verification,
+connection/account binding, stream validation, and raw rights admission succeed.
+
+Provider replay is internal and has no public/operator route. It reads only
+Bronze rows with valid provenance and no quarantine marker, requires the
+original persisted RightsDecision, then resolves current rights again against
+the same grant before normalization. Revoked/missing grants and historical
+rows without admission evidence are not replayed; there is no automatic
+re-admission path for those rows. Provider raw updates are immutable except
+for appending confirmation IDs used by commerce confirmation replay checks.
 
 ### Follow-on program flags
 
@@ -570,10 +606,11 @@ the runtime stays additive until activated:
 
 ```
 AETHER_PROVIDER_SYNC_SCHEDULER_ENABLED=true   → starts the `provider_sync_scheduler`
-                                                 WorkerSpec (WS5): a periodic loop
-                                                 that pulls due provider connections
-                                                 on their schedules and writes sync
-                                                 runs to the same durable ledger as
+                                                 WorkerSpec (WS5): a periodic sweep
+                                                 that syncs credentialed, sync-eligible
+                                                 connections that have never completed
+                                                 a sync or are past the global interval;
+                                                 runs use the same durable ledger as
                                                  manual syncs
 AETHER_PROVIDER_MIGRATIONS_ENABLED=true       → gates the config/secret migration
                                                  projection + apply routes (WS6)
@@ -597,18 +634,19 @@ deploy-profile/compose/Terraform/topology-validator fan-out; running under
 deploy artifact. Because it runs as the `materializer` principal (not a tenant
 principal), scheduled sync never elevates a tenant principal's rights.
 
-### Provider source-rights quarantine
+### Provider raw-rights denial
 
-Pull sync retains raw provider rows in Bronze before processing. A persisted
-row without valid provenance, license, approved terms, approved commercial
-use, or a clear quarantine state is not promoted to identity evidence,
-normalization, or event publication. The sync run closes as `partial` with
-`safe_error_code=source_rights_rejected`; the provider cursor and connection's
-last-success timestamp remain unchanged. Inspect the sync-run counts and the
-Bronze provenance fields. Do not retry expecting the same missing evidence to
-clear: the current provider pull path does not yet populate rights grants from
-the authoritative rights workflow, so an unknown status remains quarantined.
-This is a deliberate stop condition until that integration is implemented.
+Pull sync resolves tenant raw-data rights before writing any provider payload.
+A record without an allowed `RightsDecision` and an active `tenant_byod_data`
+grant for its connection and account — or any record in staging/production
+while the grant store is not durable — is not retained. The sync run closes as
+`failed` with `error_code=provider_raw_persist_failed` (detail
+`ProviderRawRightsDenied`); the provider cursor and connection last-success
+timestamp remain unchanged. Inspect `provider_raw_rights_denials_total` by
+`reason` (`rights_denied`, `grant_scope_mismatch`, `grant_store_not_durable`,
+`authority_unavailable`, `admission_evidence_mismatch`). Retrying does not
+help until the tenant grants the account's rights; then the next sync resumes
+from the unchanged cursor.
 
 ### Reconciled Control Plane reconcile scheduler (flag-gated OFF)
 

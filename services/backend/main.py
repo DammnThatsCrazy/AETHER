@@ -454,6 +454,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             raise RuntimeError(f"fail-closed: {_spine_msg}")
         logger.warning(_spine_msg)
 
+    # Provider ingress now commits canonical Bronze + event_outbox together.
+    # Its public webhook and authenticated sync routes are mounted under the
+    # provider-runtime master flag, so a non-local deployment needs the relay
+    # before it can acknowledge new provider events.
+    from services.provider_runtime.outbox_guard import validate_provider_outbox_delivery
+
+    validate_provider_outbox_delivery(settings, logger=logger)
+
     # Runtime-role gating (PR 4 / FT-4). With WORKER_ROLES_ENABLED off, both
     # gates are True → this lifespan is byte-identical to before. With it on, a
     # pure "api" process starts neither the stream consumers nor the supervised

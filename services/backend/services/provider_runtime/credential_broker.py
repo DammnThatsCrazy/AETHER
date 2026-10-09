@@ -1,9 +1,12 @@
 """Credential broker — the runtime's single seam onto the credential platform.
 
 Wraps the existing :class:`~shared.credentials.service.CredentialService`
-singleton so the runtime only ever manipulates **refs**, never plaintext. A ref
-is an opaque, tenant-namespaced string (``provider:{tenant_id}:{identity_key}``)
-that names a stored :class:`~shared.credentials.types.StructuredCredential`.
+singleton so the runtime only ever manipulates **refs**, never plaintext.
+Legacy refs are tenant/provider strings
+(``provider:{tenant_id}:{identity_key}``). New provider connections append a
+versioned digest of their connection ID so same-tenant connections cannot
+overwrite each other's credentials. Refs name stored
+:class:`~shared.credentials.types.StructuredCredential` values.
 
 Secret reads are explicit and auditable: ``resolve`` returns the structured
 credential (masked ``SecretStr`` fields) for trusted resolvers; ``reveal``
@@ -14,6 +17,7 @@ connection ``config``, or ``ProviderConnection`` records.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Optional
 
 from shared.credentials.types import StructuredCredential
@@ -30,9 +34,27 @@ class CredentialBroker:
         # Defaults to the process-wide credential_service singleton.
         self._service = service if service is not None else _default_service
 
-    def provider_ref(self, tenant_id: str, identity_key: str) -> str:
-        """``provider:{tenant_id}:{identity_key}`` — a ref, never a secret."""
-        return f"provider:{tenant_id}:{identity_key}"
+    def provider_ref(
+        self,
+        tenant_id: str,
+        identity_key: str,
+        *,
+        connection_id: Optional[str] = None,
+    ) -> str:
+        """Return a provider credential ref, scoped to a connection when supplied.
+
+        The two-argument form preserves the legacy tenant/provider ref for
+        callers and persisted connections that still use it. New connection
+        credentials must pass ``connection_id``; its digest keeps the ref
+        opaque while separating same-tenant connections to the same provider.
+        """
+        legacy_ref = f"provider:{tenant_id}:{identity_key}"
+        if connection_id is None:
+            return legacy_ref
+        if not isinstance(connection_id, str) or not connection_id.strip():
+            raise ValueError("connection_id must be non-empty for a scoped provider ref")
+        connection_digest = hashlib.sha256(connection_id.encode("utf-8")).hexdigest()
+        return f"{legacy_ref}:connection:v2:{connection_digest}"
 
     async def store(
         self,

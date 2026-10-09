@@ -30,7 +30,30 @@ from shared.integration_contracts.results import AdapterResult
 from repositories.repos import BaseRepository
 
 from services.provider_runtime.connection import ProviderConnection
-from services.provider_runtime.errors import PluginIncompatible, ProviderNotInstalled
+from services.provider_runtime.errors import (
+    PluginIncompatible,
+    ProviderConfigurationInvalid,
+    ProviderNotInstalled,
+)
+
+
+def _shopify_graphql(connection: ProviderConnection) -> bool:
+    """Only the opt-in Shopify v2 path requires immutable shop evidence."""
+    return (
+        connection.provider_identity == "shopify.admin.orders_read"
+        and str(connection.config.get("orders_api") or "rest").lower() == "graphql"
+    )
+
+
+def _verified_shop_account(connection: ProviderConnection, account: ProviderAccountRecord | ProviderAccount) -> bool:
+    metadata = account.metadata
+    return all((
+        bool(account.external_id),
+        isinstance(account.external_id, str),
+        account.external_id == metadata.get("shop_gid"),
+        metadata.get("source_account_realm") in ("live", "test"),
+        metadata.get("source_account_realm") == connection.config.get("source_account_realm"),
+    ))
 
 
 def _now_iso() -> str:
@@ -169,6 +192,18 @@ class AcquisitionCoordinator:
         result = await account.discover_accounts(context)
         if result.success and result.data:
             for account in result.data:
+                if _shopify_graphql(connection):
+                    if not _verified_shop_account(connection, account):
+                        raise ProviderConfigurationInvalid(
+                            "Shopify GraphQL account discovery lacks immutable shop identity"
+                        )
+                    previous = await self.accounts.find(
+                        f"{connection.connection_id}:{account.account_id}"
+                    )
+                    if previous is not None and previous.external_id and previous.external_id != account.external_id:
+                        raise ProviderConfigurationInvalid(
+                            "Selected Shopify shop identity changed; reconnect the account"
+                        )
                 await self.accounts.upsert(
                     ProviderAccountRecord(
                         account_id=f"{connection.connection_id}:{account.account_id}",
@@ -195,16 +230,35 @@ class AcquisitionCoordinator:
     ) -> ProviderConnection:
         """Run ``plugin.account().select_account(ctx, account_id=...)``.
 
-        On success the account is appended to ``selected_accounts`` and the
-        connection advances ``ACCOUNT_SELECTION_REQUIRED → next`` (legal
-        transition only). The mutated connection is returned; persistence is the
-        caller's responsibility (the coordinator owns no connection repo).
+        On success the account is appended to ``selected_accounts``. When that
+        satisfies the provider manifest's account-selection requirement, the
+        connection advances to ``INITIAL_SYNC_PENDING`` through a legal
+        lifecycle transition. The mutated connection is returned; persistence
+        is the caller's responsibility (the coordinator owns no connection repo).
         """
         if plugin is None:
             raise ProviderNotInstalled(
                 f"provider plugin not installed for {connection.provider_identity}",
                 details={"connection_id": connection.connection_id},
             )
+        manifest_fn = getattr(plugin, "manifest", None)
+        manifest = manifest_fn() if callable(manifest_fn) else None
+        accounts_spec = getattr(manifest, "accounts", None)
+        manifest_requires_selection = bool(
+            getattr(accounts_spec, "selection_required", False)
+        )
+        if _shopify_graphql(connection):
+            selected = await self.accounts.find(f"{connection.connection_id}:{account_id}")
+            if (
+                selected is None
+                or selected.tenant_id != connection.tenant_id
+                or selected.connection_id != connection.connection_id
+                or selected.provider_identity != connection.provider_identity
+                or not _verified_shop_account(connection, selected)
+            ):
+                raise ProviderConfigurationInvalid(
+                    "Verified Shopify GraphQL account discovery is required before selection"
+                )
         account = plugin.account()
         if account is None:
             # Registered plugin without the account capability — typed
@@ -220,9 +274,16 @@ class AcquisitionCoordinator:
             return connection
         if account_id not in connection.selected_accounts:
             connection.selected_accounts.append(account_id)
-        # ACCOUNT_SELECTION_REQUIRED advances toward CONNECTED via the machine.
-        if (
+        # A connection already in ACCOUNT_SELECTION_REQUIRED represents an
+        # outstanding selection requirement. A manifest can also require
+        # selection while the connection is still VERIFIED; in that case the
+        # first successful choice satisfies the requirement directly.
+        selection_satisfied = bool(connection.selected_accounts) and (
             connection.state == ConnectionState.ACCOUNT_SELECTION_REQUIRED
+            or manifest_requires_selection
+        )
+        if (
+            selection_satisfied
             and can_transition(connection.state, ConnectionState.INITIAL_SYNC_PENDING)
         ):
             connection.state = ConnectionState.INITIAL_SYNC_PENDING

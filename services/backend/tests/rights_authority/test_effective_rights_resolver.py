@@ -18,11 +18,13 @@ from repositories.repos import reset_in_memory_stores
 
 from services.integrations.data_rights.models import (
     DataRightsGrant,
+    DataRightsGrantCreate,
     GrantStatus,
     LearningAuthority,
     RightsDecisionDisposition,
 )
 from services.integrations.data_rights.service import (
+    DataRightsService,
     default_disclosure_authority,
     default_generated_output_rights,
 )
@@ -86,6 +88,33 @@ async def test_no_grant_denied_fail_closed():
         "tenant_abc", "src_missing", None, "actor_1",
         "export", "analytics", "tenant",
     )
+    assert decision.allowed is False
+    assert decision.disposition == RightsDecisionDisposition.DENIED
+    assert "no_grant" in decision.reason_codes
+    assert decision.source_grant_refs == []
+
+
+async def test_ambiguous_active_grants_are_denied_instead_of_selecting_first():
+    service = DataRightsService()
+    body = {
+        "tenant_id": "tenant_abc",
+        "source_id": "provider-account:connection:account",
+        "connector_id": "shopify.orders.catalog",
+        "connector_class": "tenant_byod_data",
+        "data_category": "customer",
+        "data_sensitivity": "sensitive_pii",
+        "raw_data_owner": "tenant_abc",
+        "tenant_lake_allowed": True,
+    }
+    await service.create_grant(DataRightsGrantCreate(**body), granted_by_user_id="admin_1")
+    await service.create_grant(DataRightsGrantCreate(**body), granted_by_user_id="admin_2")
+    resolver = EffectiveRightsResolver(grant_loader=service.get_effective_grant)
+
+    decision = await resolver.resolve(
+        "tenant_abc", body["source_id"], None, "provider_runtime",
+        "tenant_lake", "provider_raw_ingestion", "tenant_lake",
+    )
+
     assert decision.allowed is False
     assert decision.disposition == RightsDecisionDisposition.DENIED
     assert "no_grant" in decision.reason_codes

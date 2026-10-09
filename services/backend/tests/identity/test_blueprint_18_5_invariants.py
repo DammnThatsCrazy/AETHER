@@ -227,7 +227,12 @@ async def test_split_execution_preserves_raw_provider_records(monkeypatch):
     from services.identity.models import IdentityConflictRecord
     from services.identity.split_service import SplitService
     from services.provider_runtime.raw_store import RawProviderRecordStore
-    from shared.integration_contracts.events import RawProviderRecord
+    from services.provider_runtime.rights_admission import (
+        PROVIDER_RAW_RIGHTS_METADATA_KEY,
+        ProviderRawRightsEvidence,
+        provider_account_source_id,
+    )
+    from shared.integration_contracts.events import make_raw_record
     from shared.common.common import utc_now
 
     monkeypatch.setattr(settings_module.settings, "identity_continuity", replace(
@@ -236,15 +241,39 @@ async def test_split_execution_preserves_raw_provider_records(monkeypatch):
         split_enabled=True,
         manual_split_enabled=True,
     ))
-    raw_store = RawProviderRecordStore(BronzeRepository("provider_records"))
-    record = RawProviderRecord(
+    payload = {"order_id": "raw-order-1", "buyer": {"email": "raw@example.com"}}
+    record = make_raw_record(
         provider_identity="test.orders.read",
         tenant_id=TENANT,
         connection_id="connection-1",
         account_id="account-1",
         provider_record_type="order",
         provider_record_id="raw-order-1",
-        payload={"order_id": "raw-order-1", "buyer": {"email": "raw@example.com"}},
+        payload=payload,
+    )
+    assert record.checksum
+
+    class _TestRightsAdmission:
+        async def admit(self, admitted_record):
+            return ProviderRawRightsEvidence(
+                tenant_id=admitted_record.tenant_id,
+                source_id=provider_account_source_id(
+                    admitted_record.connection_id, admitted_record.account_id
+                ),
+                source_grant_ref="drg_split_invariant_test",
+                rights_decision_ref=f"rdec_{admitted_record.idempotency_key}",
+                decision_identity=f"rdid_{admitted_record.idempotency_key}",
+                policy_version="irrl-2",
+                evaluated_at=utc_now().isoformat(),
+            )
+
+        async def verify_persisted(self, admitted_record, *, current_admission):
+            stored = admitted_record.metadata[PROVIDER_RAW_RIGHTS_METADATA_KEY]
+            assert stored["source_grant_ref"] == current_admission.source_grant_ref
+
+    raw_store = RawProviderRecordStore(
+        BronzeRepository("provider_records"),
+        rights_admission=_TestRightsAdmission(),
     )
     assert (await raw_store.ingest([record]))[0][1] is True
     count_before = await raw_store.count(tenant_id=TENANT, provider_identity="test.orders.read")
