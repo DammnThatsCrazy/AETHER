@@ -45,6 +45,16 @@ REQUIRED = (
 TEXT_FIELDS = ("authority", "compatibility", "rollback", "retire")
 # A row may only be deleted once it can show both of these.
 DELETION_EVIDENCE = ("parity_evidence", "usage_evidence")
+# Every metric ``measure()`` reports needs a baseline value, so ``--report`` can
+# always show a delta. ``test_measure_reports_exactly_the_baseline_metrics``
+# keeps this tuple and ``measure()`` in step.
+METRIC_KEYS = (
+    "tracked_files", "files_services", "files_frontend", "files_tests", "files_docs",
+    "files_docs_archive", "files_packages", "files_scripts", "files_deploy",
+    "files_config", "python_test_files", "ts_test_files", "validator_scripts",
+    "workflows", "workflows_on_ready_for_review", "deployment_profile_registry_lines",
+    "backend_service_dirs",
+)
 
 
 def _tracked_files(root: Path = ROOT) -> list[str]:
@@ -80,6 +90,29 @@ def _paths(value: Any) -> list[str]:
     return [item for item in value] if isinstance(value, list) else []
 
 
+def _baseline_errors(baseline: Any) -> list[str]:
+    """The recorded measurements ``--report`` compares against must stay complete."""
+    if not isinstance(baseline, dict):
+        return ["baseline must be a mapping"]
+    errors: list[str] = []
+    if not isinstance(baseline.get("date"), dt.date):
+        errors.append("baseline.date must be an ISO date")
+    commit = baseline.get("commit")
+    if not (isinstance(commit, str) and commit.strip()):
+        errors.append("baseline.commit must be a non-empty string")
+    metrics = baseline.get("metrics")
+    if not isinstance(metrics, dict):
+        return errors + ["baseline.metrics must be a mapping"]
+    for key in METRIC_KEYS:
+        value = metrics.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            errors.append(f"baseline.metrics.{key} must be a non-negative integer")
+    extra = sorted(set(metrics) - set(METRIC_KEYS))
+    if extra:
+        errors.append(f"baseline.metrics has metrics measure() does not report: {extra}")
+    return errors
+
+
 def validate(
     path: Path = LEDGER, *, today: dt.date | None = None, root: Path = ROOT
 ) -> list[str]:
@@ -95,6 +128,7 @@ def validate(
         errors.append("schema_version must be 1")
     if raw.get("authority") != "debt-retirement":
         errors.append("authority must be debt-retirement")
+    errors.extend(_baseline_errors(raw.get("baseline")))
     entries = raw.get("entries")
     if not isinstance(entries, list) or not entries:
         return errors + ["entries must be a non-empty list"]
@@ -166,20 +200,21 @@ def validate(
             if _paths(entry.get("consumers")):
                 errors.append(f"{where}: {state} cannot still list consumers")
         if state == "removed":
-            if not entry.get("removal_pr"):
+            removal_pr = entry.get("removal_pr")
+            if not (isinstance(removal_pr, str) and removal_pr.strip()):
                 errors.append(f"{where}: removed requires removal_pr")
-            for dup in _paths(entry.get("duplicates")):
-                if _exists(dup, root):
-                    errors.append(f"{where}: removed but {dup} still exists")
-        else:
-            # Drift check: every named path must exist until the row is removed.
-            for key in ("current", "duplicates", "consumers"):
-                for item in _paths(entry.get(key)):
-                    problem = _repo_path_problem(item, root)
-                    if problem:
-                        errors.append(f"{where}: {key} path {item!r} {problem}")
-                    elif not _exists(item, root):
-                        errors.append(f"{where}: {key} path does not exist: {item}")
+        # Every named path must be a repository path, whatever the state: an
+        # absolute or traversing value must not count as proof of absence either.
+        for key in ("current", "duplicates", "consumers"):
+            for item in _paths(entry.get(key)):
+                problem = _repo_path_problem(item, root)
+                if problem:
+                    errors.append(f"{where}: {key} path {item!r} {problem}")
+                elif state == "removed" and key == "duplicates":
+                    if _exists(item, root):
+                        errors.append(f"{where}: removed but {item} still exists")
+                elif state != "removed" and not _exists(item, root):
+                    errors.append(f"{where}: {key} path does not exist: {item}")
     return errors
 
 

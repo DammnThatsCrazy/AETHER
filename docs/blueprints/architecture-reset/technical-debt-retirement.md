@@ -21,7 +21,7 @@ say how everything outside that authority disappears. The rule is:
 `scripts/validate_debt_retirement_ledger.py` enforces the registry. It runs in
 `make repo-doctor` and, as the `debt_retirement_ledger` router check, in every
 PR-lane plan, because any change can delete a path a row names. It fails when a
-row has no string id or repeats one, is missing a required field, leaves
+row has no string id or repeats one, is missing a required field, drops or malforms the recorded baseline that `--report` compares against, leaves
 `authority`, `compatibility`, `rollback` or `retire` blank, names a path that is
 empty, absolute, outside the repository or no longer exists, is `deletion-ready`
 or `removed` while a consumer remains or without parity and usage evidence, is

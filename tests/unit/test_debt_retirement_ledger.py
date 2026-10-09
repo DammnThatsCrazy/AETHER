@@ -40,14 +40,25 @@ def _entry(**overrides):
     return entry
 
 
-def _check(tmp_path, *entries, today=TODAY):
+def _baseline(**overrides):
+    baseline = {
+        "date": dt.date(2026, 10, 9),
+        "commit": "abc1234",
+        "metrics": {key: 1 for key in ledger.METRIC_KEYS},
+    }
+    baseline.update(overrides)
+    return baseline
+
+
+def _check(tmp_path, *entries, today=TODAY, baseline=None):
     path = tmp_path / "ledger.yaml"
-    path.write_text(
-        yaml.safe_dump(
-            {"schema_version": 1, "authority": "debt-retirement", "entries": list(entries)}
-        ),
-        encoding="utf-8",
-    )
+    document = {
+        "schema_version": 1,
+        "authority": "debt-retirement",
+        "baseline": _baseline() if baseline is None else baseline,
+        "entries": list(entries),
+    }
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
     return ledger.validate(path, today=today, root=ROOT)
 
 
@@ -182,3 +193,66 @@ def test_report_measures_the_tracked_tree():
     assert metrics["tracked_files"] > 0
     assert metrics["workflows"] >= metrics["workflows_on_ready_for_review"] > 0
 
+
+
+def test_removed_duplicates_must_be_repository_paths_before_absence_counts(tmp_path):
+    # An absolute or traversing duplicate is trivially "absent"; it must not be
+    # accepted as proof that a repository artifact was deleted.
+    for bad in ("../../etc/no-such-path", "/no/such/absolute/path", "", 7):
+        row = _entry(
+            state="removed",
+            removal_pr="#1",
+            duplicates=[bad],
+            deadline=None,
+            parity_evidence="n/a",
+            usage_evidence="no references",
+        )
+        errors = _check(tmp_path, row)
+        assert any("duplicates path" in e for e in errors), bad
+
+
+def test_removed_rows_require_a_real_removal_pr(tmp_path):
+    for bad in (None, "", "  ", 7):
+        row = _entry(
+            state="removed",
+            removal_pr=bad,
+            duplicates=["config/gone-for-good.yaml"],
+            deadline=None,
+            parity_evidence="n/a",
+            usage_evidence="no references",
+        )
+        assert any("removed requires removal_pr" in e for e in _check(tmp_path, row)), bad
+
+
+def test_the_committed_baseline_covers_every_measured_metric():
+    raw = yaml.safe_load(ledger.LEDGER.read_text(encoding="utf-8"))
+    assert set(raw["baseline"]["metrics"]) == set(ledger.METRIC_KEYS)
+
+
+def test_measure_reports_exactly_the_baseline_metrics():
+    assert set(ledger.measure()) == set(ledger.METRIC_KEYS)
+
+
+def test_a_missing_or_malformed_baseline_fails_the_gate(tmp_path):
+    assert any("baseline must be a mapping" in e for e in _check(tmp_path, _entry(), baseline=[]))
+    assert any("baseline must be a mapping" in e for e in _check(tmp_path, _entry(), baseline="none"))
+
+    errors = _check(tmp_path, _entry(), baseline=_baseline(metrics=None))
+    assert any("baseline.metrics must be a mapping" in e for e in errors)
+
+    metrics = {key: 1 for key in ledger.METRIC_KEYS}
+    del metrics["tracked_files"]
+    metrics["workflows"] = "27"
+    metrics["files_docs"] = True
+    metrics["files_config"] = -1
+    metrics["made_up_metric"] = 3
+    errors = _check(tmp_path, _entry(), baseline=_baseline(metrics=metrics))
+    assert any("baseline.metrics.tracked_files" in e for e in errors)
+    assert any("baseline.metrics.workflows" in e for e in errors)
+    assert any("baseline.metrics.files_docs" in e for e in errors)
+    assert any("baseline.metrics.files_config" in e for e in errors)
+    assert any("made_up_metric" in e for e in errors)
+
+    errors = _check(tmp_path, _entry(), baseline=_baseline(date="2026-10-09", commit=""))
+    assert any("baseline.date" in e for e in errors)
+    assert any("baseline.commit" in e for e in errors)
