@@ -2,7 +2,7 @@
 
 Maps reconciliation variances and unrecovered stream gaps to OODA
 suggestions. Suggestions only — Aether never places, modifies, or cancels
-orders. Not wired yet: nothing registers this adapter (see config/backend_reachability.yaml).
+orders. Not wired yet: nothing registers this adapter.
 """
 
 from __future__ import annotations

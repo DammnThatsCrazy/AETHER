@@ -2,7 +2,7 @@
 
 Maps observed depeg valuation snapshots to OODA suggestions. Suggestions
 only — Aether never executes trades, rebalances, or on-chain actions in
-response. Not wired yet: nothing registers this adapter (see config/backend_reachability.yaml).
+response. Not wired yet: nothing registers this adapter.
 """
 
 from __future__ import annotations
