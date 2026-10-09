@@ -231,7 +231,7 @@ entries:
       calls the removed routes (Kyber's callers were unreachable hooks deleted in
       #745)
     rollback: restore from git history; the module held no data
-    removal_pr: "#PR"
+    removal_pr: "#747"
     deadline: null
 
   - id: identity-legacy-resolution-module
