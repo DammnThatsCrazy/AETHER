@@ -11,8 +11,8 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
-  "services/backend/services/commerce/": "sha256:0fc4a8ace5ad1402e43d9a6be46c0798e1c15f13c2121a4ad5e6727cffd991ec"
-  "services/backend/services/x402/": "sha256:f0116634f9a42ebd3db6d0257a379bccdedbd048fb6a9d2543297fa83ee8353d"
+  "services/backend/services/commerce/": "sha256:c2f218555f68084b9d5248ba874d4a55bea4ab8a5c5c02e144cf583faa7d2437"
+  "services/backend/services/x402/": "sha256:a359d4e6f9e54722c053f8b4b7be789bc5748371ecef4ef2f5843cd48ee93d60"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 

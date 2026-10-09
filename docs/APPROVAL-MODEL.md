@@ -11,7 +11,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  services/backend/services/x402/commerce_routes.py: sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f
+  "services/backend/services/x402/commerce_routes.py": "sha256:c6090fda076b98e183e90eb250150010b23832dc66a341d1d8f480063166be8a"
 ---
 # Agentic Commerce — Approval Model
 

@@ -11,9 +11,9 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  services/backend/services/x402/approvals.py: sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24
-  services/backend/services/x402/commerce_routes.py: sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f
-  services/backend/services/x402/control_plane.py: sha256:df8956842b85a3bbac67a711dfda005a80858a51fa71973c3a8106e9bb16b8df
+  "services/backend/services/x402/approvals.py": "sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24"
+  "services/backend/services/x402/commerce_routes.py": "sha256:c6090fda076b98e183e90eb250150010b23832dc66a341d1d8f480063166be8a"
+  "services/backend/services/x402/control_plane.py": "sha256:df8956842b85a3bbac67a711dfda005a80858a51fa71973c3a8106e9bb16b8df"
 ---
 # Aether Agentic Commerce — Control Plane
 

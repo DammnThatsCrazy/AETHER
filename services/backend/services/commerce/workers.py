@@ -2,9 +2,11 @@
 Aether Service — Supervised Commerce Worker Builders
 
 Builders for the supervised background workers that keep the commerce control
-plane convergent. Each builder returns an async loop coroutine that the
-integration pass registers as an ``asyncio.Task`` (see wiringNeeds in the
-delivery note for the exact main.py registration).
+plane convergent. The approval sweeper, entitlement sweeper and reconciliation
+loop are registered as ``WorkerSpec`` entries in ``services/runtime/specs.py``
+(gated on the commerce control plane). ``settlement_sweeper`` is deliberately
+not registered: ``x402_settlement_reconciliation`` already advances settlements
+and this one would also auto-retry FAILED ones.
 
 Workers:
     settlement_sweeper
@@ -81,13 +83,10 @@ def build_settlement_sweeper(
         while True:
             try:
                 if tenant_id == ALL_TENANTS:
-                    # Tenant-agnostic sweep: operate per-tenant via the store's
-                    # known tenant list (best-effort; store exposes all_tenants
-                    # on in-memory collections and no-ops otherwise).
+                    # Tenant-agnostic sweep: operate per tenant the store knows.
                     from services.x402.commerce_store import get_commerce_store
                     store = get_commerce_store()
-                    tenants = getattr(store.receipts, "all_tenants", lambda: [])()
-                    for tid in tenants or []:
+                    for tid in await store.known_tenant_ids():
                         try:
                             await _settlement_sweep_iteration(tid)
                         except Exception as exc:  # noqa: BLE001
@@ -117,8 +116,7 @@ def build_approval_sweeper(
             try:
                 if tenant_id == ALL_TENANTS:
                     store = get_commerce_store()
-                    tenants = getattr(store.receipts, "all_tenants", lambda: [])()
-                    for tid in tenants or []:
+                    for tid in await store.known_tenant_ids():
                         try:
                             await get_approval_service().sweep_expired(tid)
                         except Exception as exc:  # noqa: BLE001
@@ -150,7 +148,7 @@ def build_stale_entitlement_sweeper(
                 store = get_commerce_store()
                 tenants = (
                     [tenant_id] if tenant_id != ALL_TENANTS
-                    else getattr(store.receipts, "all_tenants", lambda: [])() or []
+                    else await store.known_tenant_ids()
                 )
                 for tid in tenants:
                     try:
@@ -191,8 +189,7 @@ def build_reconciliation_loop(
                 if tenant_id == ALL_TENANTS:
                     from services.x402.commerce_store import get_commerce_store
                     store = get_commerce_store()
-                    tenants = getattr(store.receipts, "all_tenants", lambda: [])()
-                    for tid in tenants or []:
+                    for tid in await store.known_tenant_ids():
                         try:
                             report = await get_commerce_reconciler().reconcile_commerce(tid)
                             _log_reconciliation_report(tid, report)

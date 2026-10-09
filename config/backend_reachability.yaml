@@ -17,10 +17,6 @@ allow_unreachable:
     modules: [communication360]
     ledger: product-backend-unmounted-code-pending
     reason: no test or document uses it and no route, worker or import path reaches it; it sits in a package with live code, so removing it is an owner decision
-  - package: services.commerce
-    modules: [reconciliation, workers]
-    ledger: product-backend-unmounted-code-pending
-    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: services.communication360
     modules: [authority, contracts, fidelity, knowledge, provider, reader, registry, repository, resolution, routes]
     ledger: product-backend-unmounted-code-pending

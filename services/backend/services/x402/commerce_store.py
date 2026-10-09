@@ -92,6 +92,10 @@ class TenantCollection:
     def all_tenants(self) -> list[str]:
         return list(self._data.keys())
 
+    async def tenants(self) -> list[str]:
+        """Tenants holding at least one row (same async API as the durable collection)."""
+        return sorted(t for t, bucket in self._data.items() if bucket)
+
 
 # ── Postgres-backed collection ────────────────────────────────────────────────
 
@@ -131,6 +135,10 @@ class _RepoCollection:
             return False
         await self._repo.delete(obj_id)
         return True
+
+    async def tenants(self) -> list[str]:
+        """Tenants holding at least one row, read from the durable table."""
+        return await self._repo.distinct_tenant_ids()
 
 
 # ── Factory helpers ───────────────────────────────────────────────────────────
@@ -331,6 +339,20 @@ class CommerceStore:
 
     async def list_settlements(self, tenant_id: str, state: Optional[SettlementState] = None) -> list[Settlement]:
         return await self.settlements.list(tenant_id, state=state)
+
+    async def known_tenant_ids(self) -> list[str]:
+        """Every tenant with commerce state, across the collections the sweeps care about.
+
+        The supervised commerce loops need this on both backends: the in-memory
+        collections expose it directly and the Postgres-backed ones read the
+        distinct tenant ids of their tables. (They used to call
+        ``receipts.all_tenants``, which the durable collection does not have, so
+        against Postgres they found no tenants and did nothing.)
+        """
+        tenants: set[str] = set()
+        for collection in (self.approvals, self.entitlements, self.receipts, self.settlements):
+            tenants.update(await collection.tenants())
+        return sorted(tenants)
 
     async def tenants_with_pending_settlements(self) -> list[str]:
         """Distinct tenant ids holding at least one PENDING settlement.
