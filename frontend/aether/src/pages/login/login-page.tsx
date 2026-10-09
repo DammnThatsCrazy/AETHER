@@ -5,7 +5,7 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { Button, SocialProviderIcon } from "@aether/ui";
 import { AetherLogo } from "@aether-app/components/aether-logo";
 import type { SocialProvider } from "@aether/ui";
-import { useAuth, resolveAuthGrant } from "@aether-app/features/auth";
+import { useAuth, resolveAuthGrant, describeAuthRateLimit } from "@aether-app/features/auth";
 import { rememberPostAuthDestination, resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
 import { api } from "@aether-app/lib/api/endpoints";
 import { env } from "@aether-app/lib/env";
@@ -70,8 +70,8 @@ export function LoginPage() {
         await apiKeyLogin(grant.apiKey);
       }
       void navigate(redirectTo, { replace: true });
-    } catch {
-      setError("Incorrect email or password");
+    } catch (err) {
+      setError(describeAuthRateLimit(err) ?? "Incorrect email or password");
     } finally {
       setLoading(false);
     }

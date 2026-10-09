@@ -194,13 +194,31 @@ def _login(auth, email, password, request=None):
     return _run(auth.login(auth.LoginRequest(email=email, password=password), None, request))
 
 
-def test_the_sixth_wrong_password_for_an_address_is_refused_even_with_the_right_one(auth):
+def test_the_sixth_wrong_password_from_one_client_is_refused_even_with_the_right_one(auth):
     _run(_seed("a@x.io"))
     for _ in range(5):
         with pytest.raises(BadRequestError):
             _login(auth, "a@x.io", "wrong-password", _request(peer="192.0.2.1"))
     with pytest.raises(RateLimitedError):
-        _login(auth, "a@x.io", PASSWORD, _request(peer="192.0.2.2"))
+        _login(auth, "a@x.io", PASSWORD, _request(peer="192.0.2.1"))
+
+
+def test_one_clients_failures_do_not_lock_the_account_holder_out(auth):
+    _run(_seed("h@x.io"))
+    for _ in range(5):
+        with pytest.raises(BadRequestError):
+            _login(auth, "h@x.io", "wrong-password", _request(peer="192.0.2.1"))
+    assert "data" in _login(auth, "h@x.io", PASSWORD, _request(peer="192.0.2.2"))
+
+
+def test_guessing_spread_over_many_clients_is_stopped_by_the_per_address_ceiling(auth):
+    _run(_seed("s@x.io"))
+    for client in range(5):  # five clients, each within its own budget of five
+        for _ in range(5):
+            with pytest.raises(BadRequestError):
+                _login(auth, "s@x.io", "wrong-password", _request(peer=f"198.51.100.{client}"))
+    with pytest.raises(RateLimitedError):
+        _login(auth, "s@x.io", PASSWORD, _request(peer="198.51.100.99"))
 
 
 def test_an_unknown_address_is_throttled_the_same_way(auth):

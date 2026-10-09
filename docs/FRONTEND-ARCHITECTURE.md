@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:f15f5a03480623fe3907b6f683f1f0cbb950f0331d5c5c9ba46d5fc1b4644b8b"
+  "frontend/aether/src/": "sha256:66e2601ccf2974dfd700c8b894741ba30046e3c034dd8d40b4b05d2b4e2c16ea"
   "frontend/kyber/src/": "sha256:93032585bc97ec9eadcb73298fbec30da3543d9a6dfa1eb51be8107b9cae22b5"
   "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
 ---
@@ -77,7 +77,10 @@ the root.
   sent as `Authorization: Bearer`; see `features/auth/grant.ts` and
   `sessionLogin` in `features/auth/auth-context.tsx`) and fall back to the
   legacy `api_key` response shape only when the backend trust-plane flag is
-  off; signup skips the API-key reveal step when a session is issued. When the
+  off; signup skips the API-key reveal step when a session is issued. A `429` from
+  login, register or verify-email (the backend throttles those public endpoints)
+  is shown as a wait message built from `retry_after_seconds`
+  (`features/auth/rate-limit.ts`) rather than as a wrong password or code. When the
   build carries Auth0 settings, login offers **Continue with Olympus sign-in**
   (Auth0 Universal Login); `/callback` exchanges the Auth0 token through
   `/v1/auth/sso/callback`, which links a verified email to its existing user or

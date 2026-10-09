@@ -333,11 +333,11 @@ Production routes are served under `/v1/identity/` by `services/backend/services
 | Endpoint | Method | Description |
 |---|---|---|
 | `/v1/identity/resolve` | POST | Resolve identity from event payload + signals (15-step pipeline via `IdentityResolutionService`) |
-| `/v1/identity/entities/{entity_id}` | GET | Get canonical entity |
-| `/v1/identity/entities/{entity_id}/aliases` | GET | Entity aliases (redacted PII) |
-| `/v1/identity/entities/{entity_id}/graph` | GET | Identity graph neighborhood |
-| `/v1/identity/entities/{entity_id}/audit` | GET | Audit / history for entity |
-| `/v1/identity/conflicts` | GET | Conflict / candidate queue |
+| `/v1/identity/entities/{entity_id}` | GET | Get canonical entity (`read`) |
+| `/v1/identity/entities/{entity_id}/aliases` | GET | Entity aliases (redacted PII) (`read`) |
+| `/v1/identity/entities/{entity_id}/graph` | GET | Identity graph neighborhood (`read`) |
+| `/v1/identity/entities/{entity_id}/audit` | GET | Audit / history for entity (`read`) |
+| `/v1/identity/conflicts` | GET | Conflict / candidate queue (`read`) |
 | `/v1/identity/merge` | POST | Operator merge (requires operator scope) |
 | `/v1/identity/split` | POST | Operator split / rollback |
 | `/v1/identity/split/preview` | POST | Non-mutating fragment-split impact analysis: aliases to reassign, observations to relink, edges to revoke, risk notes; blocked splits return `allowed:false` + a typed `rejection_reason` (`read`) |
@@ -349,7 +349,7 @@ Production routes are served under `/v1/identity/` by `services/backend/services
 | `/v1/identity/suppress` | POST | Suppress an identifier hash — revokes matching aliases + blocks future resolution (`write` permission) |
 | `/v1/identity/suppress/{suppression_id}` | DELETE | Revoke a suppression rule (`write` permission) |
 | `/v1/identity/suppressions` | GET | List active suppression rules for tenant |
-| `/v1/identity/profiles/{user_id}` | GET/PUT | Legacy profile read/write (backwards-compatible) |
+| `/v1/identity/profiles/{user_id}` | GET/PUT | Legacy profile read/write (backwards-compatible; `read` / `write` permission) |
 | `/v1/identity/profiles/{user_id}/graph` | GET | Legacy profile graph (backwards-compatible) |
 | `/v1/identity/siwx/bind` | POST | SIWX session binding |
 | `/v1/identity/siwx/status/{session_id}` | GET | SIWX session status |

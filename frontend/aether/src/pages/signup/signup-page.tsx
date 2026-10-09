@@ -13,7 +13,7 @@ import {
   useToast,
 } from "@aether/ui";
 import type { SocialProvider } from "@aether/ui";
-import { useAuth, resolveAuthGrant } from "@aether-app/features/auth";
+import { useAuth, resolveAuthGrant, describeAuthRateLimit } from "@aether-app/features/auth";
 import { useAuth0 } from "@auth0/auth0-react";
 import {
   parseBillingInterval,
@@ -212,7 +212,14 @@ export function EmailSignupPage() {
       });
       setStep(2);
       setResendCooldown(RESEND_COOLDOWN);
-    } catch {
+    } catch (err) {
+      // A rate-limited request was not processed (no code was sent), so say so
+      // rather than advancing to a code step nothing will fill.
+      const limited = describeAuthRateLimit(err);
+      if (limited) {
+        setRegisterError(limited);
+        return;
+      }
       // Anti-enumeration: always advance to OTP step even if email already registered
       setStep(2);
       setResendCooldown(RESEND_COOLDOWN);
@@ -240,7 +247,12 @@ export function EmailSignupPage() {
         setStep(2 as Step);
         // Keep on step 2 to show key reveal; advance to 3 after user saves key
       }
-    } catch {
+    } catch (err) {
+      const limited = describeAuthRateLimit(err);
+      if (limited) {
+        setOtpError(limited);
+        return;
+      }
       setOtpError("Invalid or expired code — try again or request a new one");
       setResendHighlighted(true);
       setOtp("");
@@ -261,8 +273,10 @@ export function EmailSignupPage() {
         password: password || "resend",
         plan_tier: planTier,
       });
-    } catch {
-      /* silent — anti-enumeration */
+    } catch (err) {
+      const limited = describeAuthRateLimit(err);
+      if (limited) setOtpError(limited);
+      // Anything else stays silent — anti-enumeration.
     }
   }
 

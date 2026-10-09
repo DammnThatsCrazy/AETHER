@@ -13,6 +13,12 @@ Two kinds of counter, both keyed without storing the email address (a digest):
   wrong, checked *before* the credential is verified, and cleared on success
   (``enforce_budget`` / ``AttemptCounter.hit`` / ``AttemptCounter.clear``).
 
+Password failures are budgeted twice. A small budget per (address, client IP) means
+one caller who fails five times locks only themselves out, never the account holder
+on another network; a larger ceiling per address bounds guessing spread across many
+addresses. Verification codes keep a single small per-address budget: a 6-digit code
+is only safe with a hard cap on guesses, whoever makes them.
+
 Counters live in Redis when it is reachable and in bounded process memory
 otherwise (the in-memory fallback is per process, so it is a floor, not a
 guarantee, when several replicas run without Redis).
@@ -27,7 +33,8 @@ from typing import Any, Callable, Mapping, Optional
 from shared.common.common import RateLimitedError
 
 LOGIN_ATTEMPTS_PER_IP_PER_MINUTE = 10
-LOGIN_FAILURES_PER_EMAIL = 5
+LOGIN_FAILURES_PER_EMAIL_AND_IP = 5
+LOGIN_FAILURES_PER_EMAIL = 25
 VERIFY_FAILURES_PER_EMAIL = 5
 OTP_SENDS_PER_EMAIL = 5
 PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE = 20
@@ -52,6 +59,11 @@ def client_ip(headers: Mapping[str, str], peer: Optional[str]) -> str:
 def email_digest(email: str) -> str:
     """A stable key for an address that does not put the address in Redis."""
     return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:32]
+
+
+def email_ip_digest(email: str, ip: str) -> str:
+    """A stable key for one address as seen from one client, without either in Redis."""
+    return hashlib.sha256(f"{email.strip().lower()}|{ip}".encode("utf-8")).hexdigest()[:32]
 
 
 class AttemptCounter:
@@ -153,8 +165,9 @@ async def enforce_budget(counter: AttemptCounter, key: str, limit: int, redis: A
 
 login_ip = AttemptCounter("login-ip", MINUTE_SECONDS)
 login_failures = AttemptCounter("login-failures", FAILURE_WINDOW_SECONDS)
+login_failures_by_ip = AttemptCounter("login-failures-ip", FAILURE_WINDOW_SECONDS)
 verify_failures = AttemptCounter("verify-failures", FAILURE_WINDOW_SECONDS)
 otp_sends = AttemptCounter("otp-sends", FAILURE_WINDOW_SECONDS)
 public_auth_ip = AttemptCounter("public-auth-ip", MINUTE_SECONDS)
 
-ALL_COUNTERS = (login_ip, login_failures, verify_failures, otp_sends, public_auth_ip)
+ALL_COUNTERS = (login_ip, login_failures, login_failures_by_ip, verify_failures, otp_sends, public_auth_ip)
