@@ -1246,6 +1246,7 @@ async def admin_approve_conflict(
                 # Merge is committed but its restatement enqueue failed. Retry
                 # through the same resolver idempotency key to recover the job.
                 claim_expected_status = "merge_committed"
+                recovering_approval = True
             else:
                 return APIResponse(data={
                     "conflict_id": conflict_id,
