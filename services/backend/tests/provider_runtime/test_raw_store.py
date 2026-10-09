@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import pytest
 
 from repositories.lake import BronzeRepository
@@ -32,6 +34,10 @@ class _TestRightsAdmission:
             policy_version="irrl-2",
             evaluated_at="2026-10-03T00:00:00+00:00",
         )
+
+    @asynccontextmanager
+    async def hold_grant(self, record, admission):
+        yield
 
     async def verify_persisted(self, record, *, current_admission):
         assert record.metadata[PROVIDER_RAW_RIGHTS_METADATA_KEY]["source_grant_ref"] == (

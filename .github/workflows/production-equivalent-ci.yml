@@ -197,6 +197,9 @@ jobs:
       - name: Run real-stack measurement/attribution repo tests (M4)
         run: python -m pytest tests/prod_equivalent/test_real_stack_measurement_repos.py -v -n0
 
+      - name: Run real-stack provider rights revocation fence tests
+        run: python -m pytest tests/prod_equivalent/test_real_stack_rights_revocation_fence.py -v -n0
+
       - name: Diagnostics on failure
         if: failure()
         working-directory: ${{ env.BACKEND_DIR }}

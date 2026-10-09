@@ -85,21 +85,19 @@ sequence. Continue this same PR for the remaining slices and use the
 repository's one normal PR authority at finalization; the current ready-for-
 review state was set by the user during accumulation.
 
-PR #733 remains a separate universal connector runtime PR, per the user's
-explicit direction. The selected landing order is **#734 first, then #733 and
-#732**. After #734 lands on `Development`, rebase #733 onto the updated branch,
-review its source/intake, evidence, identity, graph, and durable-rights
-behavior against the accepted reset authorities. Before #733 is finalized or
-lands, close the reviewed P1 race between provider-rights admission/revocation
-and raw-record Bronze persistence with a shared transaction/lock boundary and
-PostgreSQL concurrency evidence; the current repositories do not yet provide
-that boundary. Preserve provider certification and staging proof gaps as
-explicit limits. Do not fold #733 into #734 or create intermediate PRs for
-work that belongs in the consolidated reset stack. PR #732 remains the
-`Development` to `main` release promotion. After #734 and #733 land on
-`Development`, rebase/update the #732 release diff against the current `main`
-and hold its merge until the architecture/runtime cutovers and required
-staging evidence are complete or explicitly dispositioned.
+PR #734 landed on `Development` first, then #733. #732 was a
+`Development` to `main` promotion PR; it was closed on 2026-10-09 because its
+commits are already on `Development`, and `Development` is the working branch
+until it is promoted deliberately. #733's provider-rights admission is the single
+raw-admission authority (#734's Bronze-field gate was retired). The reviewed P1
+race between rights admission/revocation and raw-record Bronze persistence is
+closed by a per-grant lock shared between raw-record writers and revocation, with
+PostgreSQL concurrency evidence recorded in the
+[proof ledger](proof-ledger.md). Preserve provider certification and staging
+proof gaps as explicit limits. The merge to `main` is held until the
+architecture/runtime cutovers and required staging evidence are complete or
+explicitly dispositioned; use a merge commit, not a squash, so `main` stays an
+ancestor of `Development`.
 
 ## Baseline inventories and authority decisions
 

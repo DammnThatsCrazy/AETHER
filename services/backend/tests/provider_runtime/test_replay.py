@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
@@ -74,6 +76,10 @@ class _TestRightsAdmission:
             policy_version="irrl-2",
             evaluated_at="2026-10-03T00:00:00+00:00",
         )
+
+    @asynccontextmanager
+    async def hold_grant(self, record, admission):
+        yield
 
     async def verify_persisted(self, record, *, current_admission):
         stored = (record.metadata or {}).get(PROVIDER_RAW_RIGHTS_METADATA_KEY, {})

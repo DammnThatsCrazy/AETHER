@@ -97,67 +97,70 @@ class RawProviderRecordStore:
             metadata["aether_rights_admission"] = admission.model_dump(mode="json")
             record = record.model_copy(update={"metadata": metadata})
             source = record.provider_identity
-            try:
-                stored, was_new = await self._repository.ingest(
-                    source=source,
-                    source_tag=f"provider:{source}:{effective_tenant}",
-                    provider_record_id=record.bronze_provider_record_id,
-                    payload=record.model_dump(),
-                    schema_version=record.schema_version,  # envelope version
-                    entity_id=record.provider_record_id,
-                    entity_type=record.provider_record_type or "",
-                    tenant_id=effective_tenant,
-                    provenance_status="valid",
-                    license_status="tenant_rights_granted",
-                    terms_status="active_grant",
-                )
-            except Exception as exc:
-                # Two workers can pass BronzeRepository's read-before-insert
-                # simultaneously. The v2 partial unique index rejects the
-                # loser; read the winner and return its lineage. Never treat an
-                # unrelated database error as a duplicate.
+            # Hold the admitting grant unrevoked across the write and its
+            # verification, so a concurrent revocation cannot commit in between.
+            async with self._rights_admission.hold_grant(record, admission):
+                try:
+                    stored, was_new = await self._repository.ingest(
+                        source=source,
+                        source_tag=f"provider:{source}:{effective_tenant}",
+                        provider_record_id=record.bronze_provider_record_id,
+                        payload=record.model_dump(),
+                        schema_version=record.schema_version,  # envelope version
+                        entity_id=record.provider_record_id,
+                        entity_type=record.provider_record_type or "",
+                        tenant_id=effective_tenant,
+                        provenance_status="valid",
+                        license_status="tenant_rights_granted",
+                        terms_status="active_grant",
+                    )
+                except Exception as exc:
+                    # Two workers can pass BronzeRepository's read-before-insert
+                    # simultaneously. The v2 partial unique index rejects the
+                    # loser; read the winner and return its lineage. Never treat an
+                    # unrelated database error as a duplicate.
+                    if (
+                        record.schema_version != "2"
+                        or getattr(exc, "constraint_name", None)
+                        != "ux_bronze_provider_raw_v2_revision"
+                    ):
+                        raise
+                    matches = await self._repository.find_many(
+                        filters={
+                            "tenant_id": effective_tenant,
+                            "idempotency_key": record.idempotency_key,
+                        },
+                        limit=1,
+                    )
+                    if not matches:
+                        raise
+                    stored, was_new = matches[0], False
+                # Bronze is the authority for persisted provenance. Never allow
+                # adapter metadata or the in-memory RawProviderRecord to override
+                # this result. Missing or inconsistent fields fail closed too.
                 if (
-                    record.schema_version != "2"
-                    or getattr(exc, "constraint_name", None)
-                    != "ux_bronze_provider_raw_v2_revision"
+                    not isinstance(stored, dict)
+                    or stored.get("quarantine_status") != "not_quarantined"
+                    or stored.get("provenance_status") != "valid"
                 ):
-                    raise
-                matches = await self._repository.find_many(
-                    filters={
-                        "tenant_id": effective_tenant,
-                        "idempotency_key": record.idempotency_key,
-                    },
-                    limit=1,
+                    raise ProviderRawRecordQuarantined()
+                persisted_payload = stored.get("payload") if isinstance(stored, dict) else None
+                if not isinstance(persisted_payload, dict):
+                    raise ValueError("Bronze did not return a persisted provider raw envelope")
+                persisted_record = RawProviderRecord.model_validate(persisted_payload)
+                if (
+                    persisted_record.tenant_id != effective_tenant
+                    or persisted_record.provider_identity != source
+                    or persisted_record.bronze_provider_record_id
+                    != record.bronze_provider_record_id
+                ):
+                    raise ValueError("Bronze returned a raw record outside the requested source revision")
+                if not verify_checksum(persisted_record):
+                    raise ValueError("Bronze returned a raw record with an invalid checksum")
+                await self._rights_admission.verify_persisted(
+                    persisted_record,
+                    current_admission=admission,
                 )
-                if not matches:
-                    raise
-                stored, was_new = matches[0], False
-            # Bronze is the authority for persisted provenance. Never allow
-            # adapter metadata or the in-memory RawProviderRecord to override
-            # this result. Missing or inconsistent fields fail closed too.
-            if (
-                not isinstance(stored, dict)
-                or stored.get("quarantine_status") != "not_quarantined"
-                or stored.get("provenance_status") != "valid"
-            ):
-                raise ProviderRawRecordQuarantined()
-            persisted_payload = stored.get("payload") if isinstance(stored, dict) else None
-            if not isinstance(persisted_payload, dict):
-                raise ValueError("Bronze did not return a persisted provider raw envelope")
-            persisted_record = RawProviderRecord.model_validate(persisted_payload)
-            if (
-                persisted_record.tenant_id != effective_tenant
-                or persisted_record.provider_identity != source
-                or persisted_record.bronze_provider_record_id
-                != record.bronze_provider_record_id
-            ):
-                raise ValueError("Bronze returned a raw record outside the requested source revision")
-            if not verify_checksum(persisted_record):
-                raise ValueError("Bronze returned a raw record with an invalid checksum")
-            await self._rights_admission.verify_persisted(
-                persisted_record,
-                current_admission=admission,
-            )
             outcomes.append((persisted_record, was_new))
         return outcomes
 

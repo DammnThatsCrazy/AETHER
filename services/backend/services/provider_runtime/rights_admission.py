@@ -7,7 +7,8 @@ canonical Effective Rights Resolver and an active tenant BYOD grant.
 
 from __future__ import annotations
 
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -109,13 +110,25 @@ class ProviderRawRightsAdmission:
     seam never accepts a caller-provided allow boolean or provider metadata.
     """
 
-    def __init__(self, *, resolver: Any = None, grant_lookup: Any = None) -> None:
+    def __init__(
+        self, *, resolver: Any = None, grant_lookup: Any = None, grant_service: Any = None,
+    ) -> None:
         self._resolver = resolver
         self._grant_lookup = grant_lookup
+        # Defaults to the process-wide data-rights service; tests inject their own.
+        self._grant_service = grant_service
+
+    def _service(self) -> Any:
+        if self._grant_service is not None:
+            return self._grant_service
+        from services.integrations.data_rights.service import data_rights_service
+
+        return data_rights_service
 
     async def _authority(self) -> tuple[Any, Any]:
         from config.settings import Environment, settings
-        from services.integrations.data_rights.service import data_rights_service
+
+        data_rights_service = self._service()
 
         # This deployment invariant applies even when a host injects resolver
         # adapters: production must use the canonical durable grant service.
@@ -178,6 +191,36 @@ class ProviderRawRightsAdmission:
             policy_version=str(getattr(decision, "policy_version", "") or ""),
             evaluated_at=str(getattr(decision, "evaluated_at", "") or ""),
         )
+
+    @asynccontextmanager
+    async def hold_grant(
+        self,
+        record: RawProviderRecord,
+        admission: ProviderRawRightsEvidence,
+    ) -> AsyncIterator[None]:
+        """Keep the admitting grant unrevoked while the raw record is written.
+
+        ``admit`` decides at one instant; the Bronze write happens later. A
+        revocation could commit in between and leave a record retained after
+        its grant was revoked. This takes the grant's shared hold (revocation
+        takes the same lock exclusively), then re-reads the grant under it:
+        a revocation that already committed denies the write, and one that
+        arrives later waits until the write has committed.
+        """
+        service = self._service()
+        grant_lookup = self._grant_lookup or service.get_grant
+        async with service.hold_grant_unrevoked(
+            admission.source_grant_ref, tenant_id=record.tenant_id,
+        ):
+            try:
+                grant = await grant_lookup(
+                    admission.source_grant_ref, tenant_id=record.tenant_id,
+                )
+            except Exception:
+                self._deny("grant_lookup_failed")
+            if not _active_tenant_byod_grant(grant, record, admission.source_id):
+                self._deny("grant_revoked_before_write")
+            yield
 
     async def verify_persisted(
         self,
