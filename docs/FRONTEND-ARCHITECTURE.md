@@ -44,7 +44,7 @@ reviewed_source_commits:
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
   "frontend/aether/src/": "sha256:ad7db035ad1e2e124e967ed3a49c2697b2a63ab2b3efbd769efe59a5f5981a5d"
-  "frontend/kyber/src/": "sha256:31dbcbd6f7c39c07ac734b305abc582d6e930d2d0a45716d011ff5453db002d1"
+  "frontend/kyber/src/": "sha256:9b513125eff2913a2ea2c32f3c28963d8fa4ce47062896a524f62af21c70e44d"
   "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
 ---
 
@@ -813,29 +813,29 @@ Type contracts for all new sub-resources are in `packages/shared/`. The frontend
 
 ## Agentic Commerce Components (Kyber, v8.9.0)
 
-Commerce control plane components in `frontend/kyber/src/`:
+Commerce control plane code in `frontend/kyber/src/`:
 
-**Feature modules** (`src/features/`): `settlement`, `policies`, `facilitators`,
-`resources` (new, v8.9.0) alongside existing `commerce`, `approvals`, `entitlements`.
+**Mounted:** the Review page renders `components/commerce/approval-queue.tsx`
+(`ApprovalQueue`) from `features/approvals`, using the consolidated API adapter
+`lib/api/commerce.ts` and schemas in `lib/schemas/commerce.ts`.
 
-**API adapters** (`src/lib/api/`): `commerce.ts` (consolidated), plus modular
-`approvals.ts`, `entitlements.ts`, `resources.ts`, `settlement.ts`, `policies.ts`,
-`facilitators.ts`.
+**Removed as unmounted:** the modular feature hooks (`settlement`, `policies`,
+`facilitators`, `resources`, `entitlements`), their API adapters and schemas, and
+the component suites `components/approvals/`, `components/entitlements/`,
+`components/economics/` and the rest of `components/commerce/` (SpendTimeline,
+RevenueCard, TreasuryPanel, RailBreakdown, FeeEliminationGauge) had no importer
+reachable from the app entry and were deleted. They are recoverable from git
+history, and the design intent for these surfaces stays in
+`AGENTIC_COMMERCE_BUILD_SPEC.md`; rebuild any of them on the shared 360
+primitives and mount it in a route when it is productized. Tracked as ledger row
+`product-kyber-unmounted-code`.
 
-**Zod schemas** (`src/lib/schemas/`): `commerce.ts` (consolidated), plus modular
-domain re-exports.
+`components/commerce/lifecycle-trace-view.tsx` is kept only because a component
+test covers it; nothing mounts it.
 
-**Component suites:**
-| Directory | Components | Owner pages |
-|---|---|---|
-| `components/commerce/` | SpendTimeline, RevenueCard, TreasuryPanel, RailBreakdown, FeeEliminationGauge | Mission, Live |
-| `components/approvals/` | ApprovalQueue, ApprovalCard, DecisionForm, EvidencePanel, EscalationRouter, GraphImpactPreview | Review |
-| `components/entitlements/` | EntitlementList, EntitlementDetail, ReuseHistory, RevokeDialog | Entities |
-| `components/economics/` | ClusterEconomicsView, FacilitatorPerformance, SettlementStatusStrip | Live, Diagnostics |
-
-All commerce modules call their API adapters in normal runtime. Reusable
-synthetic records, when needed by unit/component tests, live only in test-only
-paths and cannot be imported by a production entrypoint.
+The commerce modules that remain call their API adapters in normal runtime.
+Reusable synthetic records, when needed by unit/component tests, live only in
+test-only paths and cannot be imported by a production entrypoint.
 
 ## Reward Enablement Components (A6, v8.10.0)
 
