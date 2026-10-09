@@ -9,7 +9,6 @@ since_version: "0.1.0"
 source_files:
   - services/backend/services/integrations/connectors/base.py
   - services/backend/services/integrations/connectors/registry.py
-  - services/backend/services/integrations/adapter.py
   - services/backend/shared/integration_contracts/catalog.py
   - services/backend/shared/integration_contracts/migration.py
   - services/backend/services/providers/shopify/
@@ -23,7 +22,6 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/backend/services/integrations/adapter.py": "sha256:92065c9a6c459302d05241379d1bc92fbc96a25596c767bfcd7d29671ee4eb7e"
   "services/backend/services/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
   "services/backend/services/integrations/connectors/registry.py": "sha256:cbd62d89ef255fbe7097d9778d1adc2f728f7ff98bfade29a98d0620d86238f8"
   "services/backend/services/providers/amazon/": "sha256:775e061ac0c1344aa5ab76585467a510afc063ae6bec1d9fe2f58a32043c75dc"
@@ -51,7 +49,7 @@ untouched and working throughout; nothing in this migration is core-first.
 | What | Existing `BaseConnector` entries are exposed through the compatibility wrapper | A provider is implemented as a native plugin package |
 | Identity | `(connector_type, "ingestion", "connector")` — **byte-identical** to the catalog-derived manifest | `family.product.capability`, e.g. `shopify.admin.orders_read` |
 | Event types | Legacy namespaced types preserved | Canonical `commerce.*` events |
-| Lifecycle | Delegated to `IntegrationAdapter` / `ConnectorIntegrationAdapter` | Native adapters + normalizer |
+| Lifecycle | Delegated straight to the legacy `BaseConnector` | Native adapters + normalizer |
 | Certification | Catalog-derived manifest is honest by construction | `certify_provider` required |
 
 ### Path (a) — today: every connector is already exposed
@@ -65,11 +63,12 @@ with **zero provider code**:
   `provider_family = connector_type`, `product_id = "ingestion"`,
   `capability_id = "connector"`. The manifest is derived from the
   `ConnectorDescriptor`, so **the plugin and the catalog cannot drift**.
-- Lifecycle operations delegate to the authoritative
-  `IntegrationAdapter` / `ConnectorIntegrationAdapter`
-  (`services/backend/services/integrations/adapter.py`), which in turn delegate to
-  `BaseConnector`, resolve secrets through the credential platform, and map
-  legacy results onto `AdapterResult`.
+- Lifecycle operations delegate directly to the legacy `BaseConnector`
+  (`test_connection`, `pull`, `parse_webhook`), resolve secrets through the
+  credential platform, and map legacy results onto `AdapterResult`
+  (`provider_runtime/legacy.py`). There is no separate adapter facade; the
+  earlier `IntegrationAdapter` / `ConnectorIntegrationAdapter` layer was never
+  wired in and was removed.
 - Legacy namespaced event types are preserved — downstream consumers see no
   change.
 

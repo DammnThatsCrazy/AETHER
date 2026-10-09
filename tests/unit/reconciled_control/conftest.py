@@ -32,8 +32,8 @@ _RCP_FLAG_NAMES = (
 def _reset_rcp_stores():
     """Empty the module-local managed-integration / reconcile-run / change-set
     stores (managed_integrations.repository + change_sets_repository) and the
-    Phase-3 engine stores (admission / simulation / schema-mapping /
-    source-authority) plus the Phase-4 stores (rollout + fleet controller)."""
+    Phase-3 engine stores (admission / simulation / source-authority) plus the
+    Phase-4 rollout stores."""
     from services.managed_integrations.admission_repository import (
         reset_admission_record_stores,
     )
@@ -43,17 +43,11 @@ def _reset_rcp_stores():
     from services.managed_integrations.execution_records_repository import (
         reset_execution_record_stores,
     )
-    from services.managed_integrations.fleet_controller_repository import (
-        reset_fleet_controller_stores,
-    )
     from services.managed_integrations.repository import (
         reset_managed_integration_in_memory_store,
     )
     from services.managed_integrations.rollout_repository import (
         reset_rollout_stores,
-    )
-    from services.managed_integrations.schema_mapping_repository import (
-        reset_schema_mapping_stores,
     )
     from services.managed_integrations.simulation_repository import (
         reset_simulation_stores,
@@ -67,20 +61,16 @@ def _reset_rcp_stores():
     reset_execution_record_stores()
     reset_admission_record_stores()
     reset_simulation_stores()
-    reset_schema_mapping_stores()
     reset_source_authority_stores()
     reset_rollout_stores()
-    reset_fleet_controller_stores()
     yield
     reset_managed_integration_in_memory_store()
     reset_change_set_in_memory_store()
     reset_execution_record_stores()
     reset_admission_record_stores()
     reset_simulation_stores()
-    reset_schema_mapping_stores()
     reset_source_authority_stores()
     reset_rollout_stores()
-    reset_fleet_controller_stores()
 
 
 @pytest.fixture

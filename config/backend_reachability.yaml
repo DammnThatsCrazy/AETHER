@@ -54,7 +54,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.integrations
-    modules: [adapter, dune_feeder.worker, oauth, oauth.broker, oauth.pkce, oauth.provider_config, oauth.state, payment_adapter]
+    modules: [oauth, oauth.broker, oauth.pkce, oauth.provider_config, oauth.state]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: services.kyber
@@ -62,7 +62,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: documented, but no route, worker or import path reaches it
   - package: services.managed_integrations
-    modules: [fleet_controller, fleet_controller_repository, rollout, rollout_repository, schema_mapping, schema_mapping_repository, simulation, simulation_repository, source_authority, source_authority_repository]
+    modules: [rollout, rollout_repository, simulation, simulation_repository, source_authority, source_authority_repository]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.measurement
@@ -98,7 +98,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.provider_runtime
-    modules: [connector_graph_writer, object_refs, reconciliation, tenant_route_repository, tenant_route_service]
+    modules: [connector_graph_writer, object_refs, tenant_route_repository, tenant_route_service]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.recommendations

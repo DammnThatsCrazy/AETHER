@@ -21,7 +21,7 @@ toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:1b10df67cb8ad212c22f162f3c98f044fe8452f7709cb1531e35ae50a6ccd664"
   "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
-  "services/backend/services/provider_runtime/": "sha256:820b6205b2a4f776a622c28a74e73f0d056161fa3b758ed6e7493cd42c469d24"
+  "services/backend/services/provider_runtime/": "sha256:4d2b5f1bae274fe1f369d4c294ce936dd917c44b72ef13333c6097fa3285daf3"
   "services/backend/services/providers/": "sha256:c5f185eb1a96f4c9c081c70a930cddd1ab1cc183308663b0256944fca5fdf70e"
   "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
@@ -139,7 +139,6 @@ services/backend/
 │   │   ├── tenant_route_repository.py  #   audited route ledger and writer fence
 │   │   ├── tenant_route_service.py     #   governed route transitions
 │   │   ├── connector_graph_writer.py  #   opt-in guarded graph mutation seam
-│   │   ├── reconciliation.py           #   reconciliation
 │   │   ├── registry.py                 #   ProviderRegistry — register/load_all, entry points
 │   │   ├── retry.py                    #   retry policy
 │   │   ├── routes.py                   #   /v1/provider-connections, /v1/admin/kyber/

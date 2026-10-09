@@ -83,7 +83,7 @@ scheduler.
 |---|---|
 | Admission lifecycle engine + repo (durational states, suspension/revocation, no forced exit) | `admission.py` + `test_admission.py` (22 tests) |
 | Simulation + shadow plane (`compare_paths`, ten axes, shadow never mutates canonical state) | `simulation.py` + `test_simulation.py` (18 tests) |
-| Schema fingerprinting + §38 promotion gates (fail closed on missing gates) | `schema_mapping.py` + 36 unit + 12 backend tests |
+| Schema fingerprinting + §38 promotion gates (fail closed on missing gates) | Removed: the engine (`schema_mapping.py`) was never mounted or reached by any route or worker. The §38 gate vocabulary remains in `contracts.py` and its TS twin; the `schema_mapping_*` tables remain (additive migration) |
 | Source-authority rules + equivalence keys (longest-prefix, equal-specificity rejected) | `source_authority.py` + 29 tests |
 | Scheduler pass (freshness window, only planned + automation_allowed executes) + maintenance-role worker spec | `scheduler.py` + `services/backend/services/runtime/specs.py`/`roles.py` (single periodic loop, rides `maintenance`) |
 | Operator review surface: approvals + action-required GETs | `routes.py` (6 GETs total) + `test_routes_review_surface.py` (7 tests) |
@@ -101,7 +101,7 @@ caveat).
 |---|---|
 | Rollout engine + durable `rollouts` rows (ring order is law: one ring at a time; percentage always tracks stage; paused/terminal columns are the durable §12.9 auto-pause + end state) | alembic `20260906_rcp_rollouts.py`; `rollout.py` + `test_rollout.py` (22 tests) + backend `test_rollout_repository.py` (13 tests) |
 | §12.9 health-gate evaluation over `HealthSnapshotView` (numeric operators; missing evidence = `not_observable` violation; CP-12 availability pass-set) | `evaluate_health_gates` + gate-breach/rollback-condition tests |
-| Fleet controller: tenant update policies (one per channel, §40 ring ceilings), composed `fleet_upgrade_plans` with deterministic 6-gate eligibility + execution path (`automatic`/`review`/`action`) | alembic `20260906_rcp_fleet_update.py`; `fleet_controller.py` + `test_fleet_controller.py` (33 tests) + backend repo tests (14 tests) |
+| Fleet controller: tenant update policies (one per channel, §40 ring ceilings), composed `fleet_upgrade_plans` with deterministic 6-gate eligibility + execution path | Removed: `fleet_controller.py` and its repository were never mounted or reached by any route or worker. alembic `20260906_rcp_fleet_update.py` and the channel vocabulary remain; rebuild the planner when the fleet-update surface is wired |
 | Channel semantics: `pinned` → nothing; `security_auto`/`patch_auto`/`compatible_auto`/`managed_stable` deliver exactly the classes their names promise; `latest` rejected on **every** channel; no-policy → review | `CHANNEL_ELIGIBLE_CLASSES` + `reject_latest` + policy-absence tests |
 | §30 platform-behavior mapping (kind → key only where evidenced; unmapped kinds → review, never guessed) + host-mediated rows resolve to `action` (no hidden promise) | `_KIND_TO_PLATFORM` mapping table + behavior-routing tests |
 | Console surfacing: `kyber.reconciled_control.read` capability (D4 evidence), rides `_READ_EVIDENCE` with `kyber.audit.read`, six `kyber_routes` declarations | `capabilities.py`/`roles.py`/`config/route_registry.yaml`; `tests/unit/reconciled_control/test_console_vocabulary.py` (4 tests) |
