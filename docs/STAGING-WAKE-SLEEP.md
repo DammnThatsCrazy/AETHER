@@ -50,7 +50,7 @@ source_hashes:
   ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-business-hours.yml": "sha256:1c98e9019319d685635b04c4131abb01020700719cedd8e82342d27103bc660a"
+  ".github/workflows/staging-business-hours.yml": "sha256:952bc0b2d3b975491df69df71000d04988fc6a087a3f98896f59052b19848247"
   ".github/workflows/staging-lifecycle.yml": "sha256:b935d4f5544e47011da16bed427fb47b423189e8e4236e76b6d17dd3df4b6fca"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6db80a1a80262cc60923789c40b233659f495dd026d54585bf20c61db36ddcb2"
@@ -420,6 +420,15 @@ guard still scales staging to zero if a sleep is missed.
 
 For a demo outside these hours, dispatch the workflow with
 `transition=wake`, and later `transition=sleep`.
+
+**Holding the scheduled wake.** While the repository variable
+`STAGING_WAKE_HOLD` is `true`, the 08:15 timer skips its wake and reports a
+notice, so a new release on `main` is not deployed to staging by the schedule.
+The 17:00 sleep is never held, and a manual dispatch with `transition=wake` is
+never held. Unset the variable or set it to anything other than `true` to
+resume the weekday wake. Separately, `deploy.yml` only mutates ECS on a push to
+`main` when `STAGING_RUNTIME_ENABLED` is `true`; a push otherwise builds the
+release without rolling it out.
 
 ## The TTL guard
 

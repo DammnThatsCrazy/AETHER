@@ -1605,6 +1605,34 @@ def test_business_hours_follow_new_york_time_on_weekdays():
     assert int(doc["env"]["MAX_AWAKE_HOURS"]) <= 8
 
 
+def test_scheduled_wake_can_be_held_without_holding_sleep_or_manual_wake():
+    """STAGING_WAKE_HOLD pauses only the timer's wake.
+
+    Sleep is a cost and safety control, and an operator's manual dispatch is an
+    explicit decision, so neither may be held by the variable.
+    """
+    doc = _workflow_yaml(BUSINESS_HOURS)
+    step = next(
+        step
+        for job in doc["jobs"].values()
+        for step in job["steps"]
+        if step.get("name") == "Choose the transition"
+    )
+    assert step["env"]["WAKE_HOLD"] == "${{ vars.STAGING_WAKE_HOLD }}"
+    run = step["run"]
+    assert "${{" not in run
+    hold = (
+        'if [ "$transition" = wake ] && [ "$EVENT_NAME" = schedule ] '
+        '&& [ "${WAKE_HOLD:-}" = true ]; then'
+    )
+    assert hold in run
+    # The hold runs after the transition is chosen and before it is validated.
+    assert run.index('transition="$REQUESTED"') < run.index(hold) < run.index(
+        "wake|sleep|skip) ;;"
+    )
+    assert "transition=skip" in run[run.index(hold):]
+
+
 # ---------------------------------------------------------------------------
 # Shell hygiene
 # ---------------------------------------------------------------------------
