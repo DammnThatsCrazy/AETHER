@@ -18,7 +18,7 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:f2b594293edb54f1ecd03b5294b1bc0aec3665445fdca0a250afda2e212aca9c"
-  "Makefile": "sha256:1ac92aff2d1bfe44eb4cd2c8a00a63241e20d3fa6af80020c8c55b3443f773c5"
+  "Makefile": "sha256:027d381861be2a02e19cdadb1b8fbb122734f64425f945be872fa32c48486312"
   "config/unread_settings_flags.yaml": "sha256:a2ec165b3a23032bd06e67ce315f694509ead642f7fc7dd6e4c5ad9c61b974b8"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:6e64f14b86dafb2b0b63ef06b763a8580a3c2cce7b76ef1e58eadcbc0734f245"
   "scripts/repo_doctor.py": "sha256:10f8b54040fac6e71500ccdbfdcd343d7dd816544e2a651baad2dec6b1affc19"
