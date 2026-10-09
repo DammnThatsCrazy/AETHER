@@ -2,4 +2,4 @@ export { AuthProvider, useAuth, getAccessToken, SESSION_KEY, SESSION_TOKEN_KEY, 
 export { RequireAuth } from './require-auth';
 export { resolveAuthGrant } from './grant';
 export type { AuthGrantResponse, HumanSessionGrant, ResolvedAuthGrant } from './grant';
-export { describeAuthRateLimit, retryAfterSeconds } from './rate-limit';
+export { describeAuthRateLimit, rateLimiter, retryAfterSeconds } from './rate-limit';

@@ -33,6 +33,18 @@ export function retryAfterSeconds(error: unknown): number | null {
     : 0;
 }
 
+/**
+ * Which limit refused a rate-limited request (`verify-failures` is the 15-minute
+ * per-address code lockout; the `*-ip` limits last one minute). `null` when the error
+ * is not a 429 or the backend did not say.
+ */
+export function rateLimiter(error: unknown): string | null {
+  if (!isRateLimited(error)) return null;
+  const nested = (error.problem?.errors?.[0] as { limiter?: unknown } | undefined)?.limiter;
+  const limiter = typeof error.problem?.limiter === 'string' ? error.problem.limiter : nested;
+  return typeof limiter === 'string' && limiter ? limiter : null;
+}
+
 /** A readable message for a rate-limited auth request, or `null` for any other error. */
 export function describeAuthRateLimit(error: unknown): string | null {
   const seconds = retryAfterSeconds(error);

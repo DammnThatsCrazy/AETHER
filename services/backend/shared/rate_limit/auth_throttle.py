@@ -65,6 +65,13 @@ def email_ip_digest(email: str, ip: str) -> str:
     return hashlib.sha256(f"{email.strip().lower()}|{ip}".encode("utf-8")).hexdigest()[:32]
 
 
+_REFUND_SCRIPT = (
+    "local v = redis.call('GET', KEYS[1]) "
+    "if v and tonumber(v) > 0 then return redis.call('DECR', KEYS[1]) end "
+    "return 0"
+)
+
+
 class AttemptCounter:
     """Counts events per key in a window that opens at the first event."""
 
@@ -75,6 +82,10 @@ class AttemptCounter:
         self._window = window_seconds
         self._clock = clock
         self._memory: dict[str, list[float]] = {}  # key -> [count, window closes at]
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     def _redis_key(self, key: str) -> str:
         return f"auththrottle:{self._name}:{key}"
@@ -115,7 +126,9 @@ class AttemptCounter:
         """Give back one counted event, for a request refused by a different limit."""
         if redis is not None:
             try:
-                await redis.decr(self._redis_key(key))
+                # Only ever decrement an existing positive count: a plain DECR on a key that a
+                # concurrent success just cleared would create -1 and admit one extra attempt.
+                await redis.eval(_REFUND_SCRIPT, 1, self._redis_key(key))
             except Exception:  # noqa: BLE001
                 pass
         entry = self._memory.get(key)
@@ -146,7 +159,7 @@ async def enforce_rate(counter: AttemptCounter, key: str, limit: int, redis: Any
     """Count one request and refuse it once ``key`` is over ``limit`` in the window."""
     count, retry_after = await counter.hit(key, redis)
     if count > limit:
-        raise RateLimitedError(retry_after=retry_after)
+        raise RateLimitedError(retry_after=retry_after, limiter=counter.name)
 
 
 login_ip = AttemptCounter("login-ip", MINUTE_SECONDS)

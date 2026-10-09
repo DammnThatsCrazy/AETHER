@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeAuthRateLimit, retryAfterSeconds } from './rate-limit';
+import { describeAuthRateLimit, rateLimiter, retryAfterSeconds } from './rate-limit';
 
 function limited(problem: Record<string, unknown> | undefined, status = 429) {
   return Object.assign(new Error('Rate limit exceeded'), { status, problem });
@@ -36,5 +36,14 @@ describe('auth rate-limit messages', () => {
     expect(describeAuthRateLimit(new Error('network'))).toBeNull();
     expect(describeAuthRateLimit(null)).toBeNull();
     expect(describeAuthRateLimit('429')).toBeNull();
+  });
+
+  it('reads which limit refused the request', () => {
+    expect(rateLimiter(limited({ errors: [{ retry_after_seconds: 60, limiter: 'public-auth-ip' }] }))).toBe(
+      'public-auth-ip',
+    );
+    expect(rateLimiter(limited({ limiter: 'verify-failures', retry_after_seconds: 30 }))).toBe('verify-failures');
+    expect(rateLimiter(limited({ retry_after_seconds: 60 }))).toBeNull();
+    expect(rateLimiter(limited({ limiter: 'x' }, 400))).toBeNull();
   });
 });

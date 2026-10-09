@@ -13,7 +13,7 @@ import {
   useToast,
 } from "@aether/ui";
 import type { SocialProvider } from "@aether/ui";
-import { useAuth, resolveAuthGrant, describeAuthRateLimit, retryAfterSeconds } from "@aether-app/features/auth";
+import { useAuth, resolveAuthGrant, describeAuthRateLimit, rateLimiter } from "@aether-app/features/auth";
 import { useAuth0 } from "@auth0/auth0-react";
 import {
   parseBillingInterval,
@@ -39,8 +39,8 @@ const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
 ];
 
 const RESEND_COOLDOWN = 30;
-/** A rate-limit wait up to this long is the per-minute request throttle, not the 15-minute lockout. */
-const SHORT_THROTTLE_SECONDS = 120;
+/** The limiter that locks code checks for an address for 15 minutes, longer than a code lives. */
+const VERIFICATION_LOCKOUT = "verify-failures";
 const SDK_VERSIONS = {
   web: "8.9.0",
   ios: "8.3.1",
@@ -252,15 +252,17 @@ export function EmailSignupPage() {
     } catch (err) {
       const limited = describeAuthRateLimit(err);
       if (limited) {
-        if ((retryAfterSeconds(err) ?? 0) > SHORT_THROTTLE_SECONDS) {
+        const limiter = rateLimiter(err);
+        if (limiter === null || limiter === VERIFICATION_LOCKOUT) {
           // The per-address lockout outlasts the code (codes expire after 10
           // minutes, the lockout after 15), so this code cannot be retried later.
+          // An unnamed limit is treated the same, the safe way round.
           setOtpError(`${limited} Request a new code once the wait is over.`);
           setResendHighlighted(true);
           setOtp("");
         } else {
-          // A one-minute request throttle (many people behind one address): the
-          // code is still good, so keep it for the retry.
+          // A one-minute per-client request throttle (many people behind one
+          // address): the code is still good, so keep it for the retry.
           setOtpError(limited);
         }
         return;

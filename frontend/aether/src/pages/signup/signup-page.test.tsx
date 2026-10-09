@@ -194,10 +194,10 @@ describe("SignupPage post-auth target (marketing provider handoff)", () => {
 });
 
 describe("SignupPage rate-limited requests", () => {
-  const limited = (seconds: number) =>
+  const limited = (seconds: number, limiter?: string) =>
     Object.assign(new Error("Rate limit exceeded"), {
       status: 429,
-      problem: { errors: [{ retry_after_seconds: seconds }] },
+      problem: { errors: [{ retry_after_seconds: seconds, ...(limiter ? { limiter } : {}) }] },
     });
 
   beforeEach(() => {
@@ -226,7 +226,7 @@ describe("SignupPage rate-limited requests", () => {
   });
 
   it("keeps a still-valid code when the code check hits only the short request throttle", async () => {
-    authApi.verifyEmail.mockRejectedValue(limited(30));
+    authApi.verifyEmail.mockRejectedValue(limited(30, "public-auth-ip"));
     renderSignup("/signup");
     fillStepOne();
     await userEvent.click(screen.getByRole("button", { name: "Continue →" }));
@@ -244,8 +244,29 @@ describe("SignupPage rate-limited requests", () => {
     expect(screen.getByLabelText("Digit 1 of 6")).toHaveValue("1");
   });
 
+  it("asks for a fresh code even in the last seconds of the code lockout", async () => {
+    // The wait is short, but it is the 15-minute lockout, whose code is long expired.
+    authApi.verifyEmail.mockRejectedValue(limited(45, "verify-failures"));
+    renderSignup("/signup");
+    fillStepOne();
+    await userEvent.click(screen.getByRole("button", { name: "Continue →" }));
+    await screen.findByText("Check your email");
+
+    fireEvent.paste(screen.getByLabelText("Digit 1 of 6"), {
+      clipboardData: { getData: () => "123456" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: /verify.*continue/i }));
+
+    expect(
+      await screen.findByText(
+        "Too many attempts. Try again in 45 seconds. Request a new code once the wait is over.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Digit 1 of 6")).toHaveValue("");
+  });
+
   it("asks for a fresh code, not a retry, when the code check is rate limited", async () => {
-    authApi.verifyEmail.mockRejectedValue(limited(900));
+    authApi.verifyEmail.mockRejectedValue(limited(900, "verify-failures"));
     renderSignup("/signup");
     fillStepOne();
     await userEvent.click(screen.getByRole("button", { name: "Continue →" }));

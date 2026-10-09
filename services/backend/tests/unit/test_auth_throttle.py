@@ -44,9 +44,12 @@ class FakeRedis:
         self.values[key] = self.values.get(key, 0) + 1
         return self.values[key]
 
-    async def decr(self, key):
-        self.values[key] = self.values.get(key, 0) - 1
-        return self.values[key]
+    async def eval(self, script, numkeys, key):
+        # The refund script: decrement only an existing positive count.
+        if self.values.get(key, 0) > 0:
+            self.values[key] -= 1
+            return self.values[key]
+        return 0
 
     async def expire(self, key, seconds):
         self.ttls[key] = seconds
@@ -66,7 +69,7 @@ class BrokenRedis:
     async def incr(self, key):
         raise ConnectionError("redis down")
 
-    get = delete = expire = ttl = decr = incr
+    get = delete = expire = ttl = eval = incr
 
 
 # ── the counter ──────────────────────────────────────────────────────────
@@ -134,6 +137,7 @@ def test_a_rate_refuses_the_request_after_the_limit_with_a_retry_hint():
     with pytest.raises(RateLimitedError) as caught:
         _run(at.enforce_rate(counter, "ip", 3))
     assert caught.value.details["retry_after_seconds"] == 60
+    assert caught.value.details["limiter"] == "t"  # the kind of limit that refused the request
     _run(at.enforce_rate(counter, "other-ip", 3))
 
 
@@ -163,9 +167,13 @@ def test_a_refunded_event_no_longer_counts():
     _run(counter.hit("r", redis))
     _run(counter.refund("r", redis))
     assert _run(counter.hit("r", redis))[0] == 2
-    _run(counter.refund("never-hit", redis))  # a refund can only undo, never go below zero in memory
+    # A refund can only undo a counted event: never below zero, in memory or in Redis (a plain
+    # DECR on a key a concurrent success just cleared would create -1 and admit an extra attempt).
+    _run(counter.refund("never-hit", redis))
     _run(counter.refund("never-hit"))
+    assert "auththrottle:t:never-hit" not in redis.values
     assert _run(counter.hit("never-hit"))[0] == 1
+    assert _run(counter.hit("never-hit", redis))[0] == 1
 
 
 def test_the_client_ip_is_the_address_the_load_balancer_appended():
