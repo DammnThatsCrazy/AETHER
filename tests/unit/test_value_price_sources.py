@@ -25,7 +25,7 @@ import os  # noqa: E402
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from services.value import ownership_rules, price_sources, reconciliation  # noqa: E402
+from services.value import ownership_rules, price_sources  # noqa: E402
 from services.value.models import to_decimal  # noqa: E402
 
 
@@ -87,12 +87,3 @@ def test_counterparty_excluded_from_owned_portfolio():
 def test_owned_asset_included():
     ok, reason = ownership_rules.rollup_inclusion({"currency": "USD"})
     assert ok is True and reason is None
-
-
-# --- reconciliation --- #
-def test_reconciliation_states():
-    assert reconciliation.reconcile(sdk_present=True, provider_present=True, amounts_match=True) == "matched"
-    assert reconciliation.reconcile(sdk_present=True, provider_present=True, amounts_match=False) == "conflict"
-    assert reconciliation.reconcile(sdk_present=True, provider_present=False) == "sdk_only"
-    assert reconciliation.reconcile(sdk_present=False, provider_present=True) == "provider_only"
-    assert reconciliation.reconcile(sdk_present=True, provider_present=True, stale=True) == "stale"

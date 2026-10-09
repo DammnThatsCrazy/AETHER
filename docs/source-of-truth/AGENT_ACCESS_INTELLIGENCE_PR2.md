@@ -258,9 +258,8 @@ authority ever needs one it routes through that service. Phase B does **not** cl
 **not** define a `pending` state that nothing produces. Authorization state is derived from the
 row — `active` / `revoked` / `expired` — never stored as a field that can disagree with it.
 
-⚠️ Do **not** add endpoints to `services/backend/services/x402/approvals_routes.py`: it declares
-`prefix="/v1/approvals"` but is never mounted in `main.py`. The live approvals router is the
-one in `services/backend/services/x402/commerce_routes.py`.
+The live approvals router is `approvals_router` in `services/backend/services/x402/commerce_routes.py`
+(an earlier duplicate, `approvals_routes.py`, was never mounted and has been removed).
 
 ### B1.2 — Capability-aware policy decisions **extend** `PolicyEngine`
 

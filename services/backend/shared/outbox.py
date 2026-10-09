@@ -2,7 +2,7 @@
 Aether Shared — Generic Durable Delivery Outbox Worker.
 
 Generalizes the agentic-observability graph projection outbox pattern
-(services/agentic_observability/outbox_worker.py) into a reusable worker
+(since removed) into a reusable worker
 over any BaseRepository-shaped table (id, data JSONB, tenant_id,
 created_at, updated_at).
 

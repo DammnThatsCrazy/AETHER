@@ -975,7 +975,7 @@ items:
     severity: P2
     release_class: general_availability_blocker
     customer_impact: Downstream Silver/graph work for agentic observations rides the same replayable relay as the rest of the platform rather than a bespoke worker.
-    current_behavior: Graph projection for agentic observations rides AgenticProjectionOutbox + AgenticGraphOutboxWorker (services/agentic_observability/outbox_worker.py); the platform event_outbox relay is separate.
+    current_behavior: Agentic observations are written through the platform event_outbox relay (services/agentic_observability/pipeline.py); the bespoke AgenticProjectionOutbox worker was removed and its table is no longer written.
     required_behavior: When delegating, agentic observations are relayed by the existing event_outbox relay (services/ingestion/outbox_relay.py, FT-6) and its Silver/graph workers; no net-new relay is built.
     affected_paths:
       - services/backend/services/ingestion/outbox_relay.py

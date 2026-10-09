@@ -11,7 +11,7 @@ source_hashes:
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
   "services/backend/services/agent/": "sha256:f256a85e04a557c38202158cdc1766ddd5da63f7221fcbd80701efe151fac799"
-  "services/backend/services/x402/": "sha256:2c0d22c36af95a3f6e2bc5da01fb55a68f0be36bfac9a1bf0e87df2bc95dd87c"
+  "services/backend/services/x402/": "sha256:f0116634f9a42ebd3db6d0257a379bccdedbd048fb6a9d2543297fa83ee8353d"
 ---
 
 # Agentic Observability Audit

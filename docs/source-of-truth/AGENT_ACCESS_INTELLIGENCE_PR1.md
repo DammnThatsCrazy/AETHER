@@ -128,10 +128,9 @@ provider-neutral event types are introduced in this PR (that work is deferred �
 | Durable handoff | in-request synchronous pipeline (`AgenticIngestionPipeline`) | `event_outbox` + `outbox_relay` |
 | Silver facts | bespoke `silver_agent_tool_invocation_facts`, `silver_mcp_connection_facts`, `silver_agent_risk_facts`, `silver_agent_activity_facts` via `SilverAgent*FactRepository` | `silver_agent_execution_facts` via `AgentExecutionProjector` |
 | Canonical activity | `ActivityRepository` write inside the pipeline | `AgentExecutionProjector._emit_to_canonical_activity` |
-| Graph projection | `AgenticProjectionOutbox` + `AgenticGraphOutboxWorker` (`services/backend/services/agentic_observability/outbox_worker.py`) | `SilverGraphProjector` |
+| Graph projection | none (the `agentic_projection_outbox` table is no longer written; the worker that drained it was removed) | `SilverGraphProjector` |
 
 Pipeline sources: `services/backend/services/agentic_observability/pipeline.py`,
-`services/backend/services/agentic_observability/outbox_worker.py`,
 `repositories/agentic_observability_repos.py`.
 
 ---
@@ -162,8 +161,8 @@ Pipeline sources: `services/backend/services/agentic_observability/pipeline.py`,
 **No removals this release.**
 
 - The compatibility routes in §2 are retained with unchanged contracts.
-- The dormant parallel pipeline — `AgenticProjectionOutbox` / `AgenticGraphOutboxWorker` and
-  the bespoke `silver_agent_*` fact repositories — is **left in place**. When the flag is OFF
+- The dormant parallel pipeline — the bespoke `silver_agent_*` fact repositories (the
+  `AgenticProjectionOutbox` graph worker has since been removed) — is **left in place**. When the flag is OFF
   it remains the live path; when the flag is ON it is dormant but not deleted.
 - Decommissioning the bespoke pipeline (and any `obs_`-table consolidation) is explicitly
   deferred to a later cleanup PR, gated on canonical-path rollout evidence. It is tracked as

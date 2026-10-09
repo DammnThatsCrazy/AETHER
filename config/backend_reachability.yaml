@@ -17,10 +17,6 @@ allow_unreachable:
     modules: [communication360]
     ledger: product-backend-unmounted-code-pending
     reason: no test or document uses it and no route, worker or import path reaches it; it sits in a package with live code, so removing it is an owner decision
-  - package: services.agentic_observability
-    modules: [governance, outbox_worker, release_readiness]
-    ledger: product-backend-unmounted-code-pending
-    reason: documented, but no route, worker or import path reaches it
   - package: services.commerce
     modules: [reconciliation, workers]
     ledger: product-backend-unmounted-code-pending
@@ -38,7 +34,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: documented, but no route, worker or import path reaches it
   - package: services.derivatives
-    modules: [connectors.generic_import, counters, graph_mutations, guards, meter, ml_release, pnl, position_engine, reconciliation, replay, runtime_reconciliation, state_machines, topic_contract]
+    modules: [connectors.generic_import, counters, graph_mutations, guards, meter, pnl, position_engine, reconciliation, replay, runtime_reconciliation, state_machines, topic_contract]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: services.exploration
@@ -122,7 +118,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: services.value
-    modules: [account_rules, ltv_rules, portfolio_rules, reconciliation, tvl_rules]
+    modules: [account_rules, ltv_rules, portfolio_rules, tvl_rules]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.web3
@@ -130,7 +126,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: services.x402
-    modules: [approvals_routes, lifecycle_mapper]
+    modules: [lifecycle_mapper]
     ledger: product-backend-unmounted-code-pending
     reason: documented, but no route, worker or import path reaches it
   - package: shared
@@ -145,10 +141,6 @@ allow_unreachable:
     modules: [epistemic_communication]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
-  - package: shared.events
-    modules: [economic_schemas, economic_topics]
-    ledger: product-backend-unmounted-code-pending
-    reason: only docs/AGENTIC_COMMERCE_BUILD_SPEC.md names them (the commerce event layer it describes); no route, worker or import path reaches them, so the owner decides whether that layer is built or dropped
   - package: shared.graph
     modules: [economic_schema, extraction_graph, graph_contract]
     ledger: product-backend-unmounted-code-pending
