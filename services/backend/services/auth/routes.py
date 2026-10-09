@@ -665,10 +665,11 @@ async def verify_email(body: VerifyEmailRequest, response: Response = None, requ
     # A 6-digit code is only safe with a cap on wrong guesses: per IP, and per address.
     await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
     email_key = throttle.email_digest(email)
-    await throttle.enforce_budget(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
+    # Counted before the code is checked (one atomic increment), so parallel
+    # guesses cannot all pass a check-then-record gap; success clears it below.
+    await throttle.enforce_rate(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
 
     if not await verify_otp(email, body.code, redis):
-        await throttle.verify_failures.hit(email_key, redis)
         raise BadRequestError("Invalid or expired verification code.")
     await throttle.verify_failures.clear(email_key, redis)
 
@@ -847,14 +848,13 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
     await _throttle_ip(request, throttle.login_ip, throttle.LOGIN_ATTEMPTS_PER_IP_PER_MINUTE, redis)
     email_key = throttle.email_digest(email)
     pair_key = throttle.email_ip_digest(email, _caller_ip(request) or "direct")
-    await throttle.enforce_budget(
+    # Each attempt is counted before the password is checked, in one atomic
+    # increment, so parallel guesses cannot all pass a check-then-record gap. A
+    # successful login clears both counts, so only a run of failures reaches a limit.
+    await throttle.enforce_rate(
         throttle.login_failures_by_ip, pair_key, throttle.LOGIN_FAILURES_PER_EMAIL_AND_IP, redis,
     )
-    await throttle.enforce_budget(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
-
-    async def _count_failure() -> None:
-        await throttle.login_failures_by_ip.hit(pair_key, redis)
-        await throttle.login_failures.hit(email_key, redis)
+    await throttle.enforce_rate(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
 
     user_rec: dict = {}
     try:
@@ -870,12 +870,10 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
     # Always run verify_password to avoid timing-based user enumeration
     stored_hash = user_rec.get("password_hash", "")
     if not stored_hash or not verify_password(body.password, stored_hash):
-        await _count_failure()
         raise BadRequestError(_LOGIN_ERROR)
 
     tenant_id = user_rec.get("tenant_id", "")
     if not tenant_id:
-        await _count_failure()
         raise BadRequestError(_LOGIN_ERROR)
     await throttle.login_failures_by_ip.clear(pair_key, redis)
     await throttle.login_failures.clear(email_key, redis)

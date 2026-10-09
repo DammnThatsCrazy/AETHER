@@ -250,7 +250,11 @@ export function EmailSignupPage() {
     } catch (err) {
       const limited = describeAuthRateLimit(err);
       if (limited) {
-        setOtpError(limited);
+        // The lockout outlasts the code (codes expire after 10 minutes, the
+        // lockout after 15), so the code entered now cannot be retried later.
+        setOtpError(`${limited} Request a new code once the wait is over.`);
+        setResendHighlighted(true);
+        setOtp("");
         return;
       }
       setOtpError("Invalid or expired code — try again or request a new one");

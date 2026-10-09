@@ -6,14 +6,13 @@ a caller can guess passwords, brute-force the 6-digit verification code, or use
 the endpoints to mail codes to arbitrary addresses. These limits are deliberately
 small and are constants, not settings: nothing about them needs an operator lever.
 
-Two kinds of counter, both keyed without storing the email address (a digest):
+Counters are keyed without storing the email address (a digest) and count an attempt
+*before* the credential is checked (``enforce_rate``). The count is one atomic increment,
+so parallel guesses cannot all slip under the cap, and a successful login or
+verification clears it (``AttemptCounter.clear``). Each limit is therefore a cap on
+consecutive attempts: the first N get through, the next is refused.
 
-* a **rate** per client IP, counted on every request (``enforce_rate``);
-* a **failure budget** per email, counted only when a credential or code is
-  wrong, checked *before* the credential is verified, and cleared on success
-  (``enforce_budget`` / ``AttemptCounter.hit`` / ``AttemptCounter.clear``).
-
-Password failures are budgeted twice. A small budget per (address, client IP) means
+Password attempts are budgeted twice. A small budget per (address, client IP) means
 one caller who fails five times locks only themselves out, never the account holder
 on another network; a larger ceiling per address bounds guessing spread across many
 addresses. Verification codes keep a single small per-address budget: a 6-digit code
@@ -112,23 +111,6 @@ class AttemptCounter:
         entry[0] += 1
         return int(entry[0]), max(1, int(entry[1] - now))
 
-    async def peek(self, key: str, redis: Any = None) -> tuple[int, int]:
-        """Events so far in the window, without counting one."""
-        if redis is not None:
-            try:
-                rkey = self._redis_key(key)
-                raw = await redis.get(rkey)
-                if raw is None:
-                    return 0, 0
-                return int(raw), await self._ttl(redis, rkey)
-            except Exception:  # noqa: BLE001
-                pass
-        now = self._clock()
-        entry = self._live(key, now)
-        if entry is None:
-            return 0, 0
-        return int(entry[0]), max(1, int(entry[1] - now))
-
     async def clear(self, key: str, redis: Any = None) -> None:
         if redis is not None:
             try:
@@ -156,14 +138,8 @@ async def enforce_rate(counter: AttemptCounter, key: str, limit: int, redis: Any
         raise RateLimitedError(retry_after=retry_after)
 
 
-async def enforce_budget(counter: AttemptCounter, key: str, limit: int, redis: Any = None) -> None:
-    """Refuse the request when ``key`` has already used up ``limit`` failures (nothing is counted)."""
-    count, retry_after = await counter.peek(key, redis)
-    if count >= limit:
-        raise RateLimitedError(retry_after=retry_after)
-
-
 login_ip = AttemptCounter("login-ip", MINUTE_SECONDS)
+# The next four count attempts since the last success, i.e. a run of failures.
 login_failures = AttemptCounter("login-failures", FAILURE_WINDOW_SECONDS)
 login_failures_by_ip = AttemptCounter("login-failures-ip", FAILURE_WINDOW_SECONDS)
 verify_failures = AttemptCounter("verify-failures", FAILURE_WINDOW_SECONDS)

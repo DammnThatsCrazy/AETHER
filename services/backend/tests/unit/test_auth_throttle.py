@@ -78,14 +78,11 @@ def test_a_window_opens_at_the_first_event_and_closes_after_its_length():
     assert _run(counter.hit("k")) == (1, 60)  # a fresh window
 
 
-def test_peek_does_not_count_and_clear_forgets():
+def test_clear_forgets_the_count():
     counter = at.AttemptCounter("t", 60, clock=Clock())
-    assert _run(counter.peek("k")) == (0, 0)
     _run(counter.hit("k"))
-    assert _run(counter.peek("k"))[0] == 1
-    assert _run(counter.peek("k"))[0] == 1
     _run(counter.clear("k"))
-    assert _run(counter.peek("k")) == (0, 0)
+    assert _run(counter.hit("k")) == (1, 60)
 
 
 def test_memory_fallback_is_bounded_and_drops_the_window_closing_soonest():
@@ -105,9 +102,8 @@ def test_redis_counts_expires_and_clears():
     counter = at.AttemptCounter("t", 900, clock=Clock())
     assert _run(counter.hit("k", redis)) == (1, 900)
     assert _run(counter.hit("k", redis))[0] == 2
-    assert _run(counter.peek("k", redis))[0] == 2
     _run(counter.clear("k", redis))
-    assert _run(counter.peek("k", redis)) == (0, 0)
+    assert _run(counter.hit("k", redis)) == (1, 900)
 
 
 def test_a_redis_key_without_an_expiry_is_repaired_not_kept_forever():
@@ -122,7 +118,6 @@ def test_a_redis_outage_falls_back_to_the_local_window():
     counter = at.AttemptCounter("t", 60, clock=Clock())
     assert _run(counter.hit("k", BrokenRedis()))[0] == 1
     assert _run(counter.hit("k", BrokenRedis()))[0] == 2
-    assert _run(counter.peek("k", BrokenRedis()))[0] == 2
 
 
 # ── the limits ───────────────────────────────────────────────────────────
@@ -138,13 +133,19 @@ def test_a_rate_refuses_the_request_after_the_limit_with_a_retry_hint():
     _run(at.enforce_rate(counter, "other-ip", 3))
 
 
-def test_a_failure_budget_refuses_only_once_it_is_used_up():
+def test_parallel_attempts_cannot_all_slip_under_the_cap():
+    # Each attempt is one atomic increment, so six simultaneous attempts against a
+    # cap of five admit exactly five, however they interleave.
     counter = at.AttemptCounter("t", 900, clock=Clock())
-    for _ in range(2):
-        _run(at.enforce_budget(counter, "e", 2))
-        _run(counter.hit("e"))
-    with pytest.raises(RateLimitedError):
-        _run(at.enforce_budget(counter, "e", 2))
+
+    async def burst():
+        results = await asyncio.gather(
+            *[at.enforce_rate(counter, "e", 5) for _ in range(6)], return_exceptions=True
+        )
+        return [isinstance(r, RateLimitedError) for r in results]
+
+    refused = _run(burst())
+    assert refused.count(True) == 1 and refused.count(False) == 5
 
 
 def test_the_client_ip_is_the_address_the_load_balancer_appended():
@@ -192,6 +193,37 @@ async def _seed(email: str, tenant: str = "t-1") -> None:
 
 def _login(auth, email, password, request=None):
     return _run(auth.login(auth.LoginRequest(email=email, password=password), None, request))
+
+
+class SlowRedis(FakeRedis):
+    """A Redis whose every call yields to other requests first, as a network round trip does."""
+
+    async def incr(self, key):
+        await asyncio.sleep(0)
+        return await super().incr(key)
+
+    async def get(self, key):
+        await asyncio.sleep(0)
+        return await super().get(key)
+
+
+def test_parallel_wrong_passwords_cannot_all_be_checked_past_the_cap(auth, monkeypatch):
+    _run(_seed("p@x.io"))
+    redis = SlowRedis()  # one shared store, as every worker sees in production
+    monkeypatch.setattr(auth, "_get_redis", lambda: redis)
+
+    async def burst():
+        return await asyncio.gather(
+            *[
+                auth.login(auth.LoginRequest(email="p@x.io", password="wrong-password"), None, _request(peer="192.0.2.5"))
+                for _ in range(6)
+            ],
+            return_exceptions=True,
+        )
+
+    outcomes = _run(burst())
+    assert sum(isinstance(o, RateLimitedError) for o in outcomes) == 1
+    assert sum(isinstance(o, BadRequestError) for o in outcomes) == 5
 
 
 def test_the_sixth_wrong_password_from_one_client_is_refused_even_with_the_right_one(auth):

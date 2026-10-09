@@ -192,3 +192,56 @@ describe("SignupPage post-auth target (marketing provider handoff)", () => {
     );
   });
 });
+
+describe("SignupPage rate-limited requests", () => {
+  const limited = (seconds: number) =>
+    Object.assign(new Error("Rate limit exceeded"), {
+      status: 429,
+      problem: { errors: [{ retry_after_seconds: seconds }] },
+    });
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    authApi.register.mockReset().mockResolvedValue({} as never);
+    authApi.verifyEmail.mockReset();
+  });
+
+  function fillStepOne() {
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Ada Lovelace" } });
+    fireEvent.change(screen.getByLabelText("Work email"), { target: { value: "ada@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+  }
+
+  it("stays on the form with the wait when register is rate limited", async () => {
+    authApi.register.mockRejectedValue(limited(600));
+    renderSignup("/signup");
+    fillStepOne();
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue →" }));
+
+    expect(
+      await screen.findByText("Too many attempts. Try again in about 10 minutes."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Check your email")).not.toBeInTheDocument();
+  });
+
+  it("asks for a fresh code, not a retry, when the code check is rate limited", async () => {
+    authApi.verifyEmail.mockRejectedValue(limited(900));
+    renderSignup("/signup");
+    fillStepOne();
+    await userEvent.click(screen.getByRole("button", { name: "Continue →" }));
+    await screen.findByText("Check your email");
+
+    fireEvent.paste(screen.getByLabelText("Digit 1 of 6"), {
+      clipboardData: { getData: () => "123456" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: /verify.*continue/i }));
+
+    expect(
+      await screen.findByText(
+        "Too many attempts. Try again in about 15 minutes. Request a new code once the wait is over.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Digit 1 of 6")).toHaveValue("");
+  });
+});
