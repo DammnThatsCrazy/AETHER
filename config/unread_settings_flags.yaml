@@ -16,3 +16,19 @@ allow:
       tests/unit/test_release_profile_enforcement.py checks the pin, so retiring
       it is a change to the deployment profile contract; retire it together with
       that profile dimension
+  - field: TrustPlaneConfig.trust_plane_enabled
+    ledger: delivery-unread-settings-flags-pending
+    reason: >-
+      the release gate (scripts/release/check_resolved_feature_flags.py) requires
+      TRUST_PLANE_ENABLED on and the posture file and production environment
+      example pin it, yet nothing branches on it: the trust plane is its parts
+      (HUMAN_SESSIONS_ENABLED and the other flags), not one switch. Retire it
+      together with the release gate's requirement.
+  - field: KyberWorkforceConfig.session_cookie_secure
+    ledger: delivery-unread-settings-flags-pending
+    reason: >-
+      Terraform and the environment examples pass KYBER_SESSION_COOKIE_SECURE and
+      the Kyber access-control document lists it, but the session cookie's Secure
+      attribute follows AETHER_ENV (on everywhere except local, dev and test;
+      services/backend/services/kyber/sessions/cookies.py). Retire it together with the
+      Terraform variable and the document row.

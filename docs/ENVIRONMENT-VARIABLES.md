@@ -48,7 +48,7 @@ production reject `AETHER_ROLE=all` and, in production, in-memory `CACHE_BACKEND
   non-local; off = single-process, byte-identical to before).
 - `DEPLOYMENT_PROFILE` (default `local`), `ML_MODE` (`inline`/`remote`).
 - Backend selectors: `DATABASE_BACKEND` (`postgres`), `CACHE_BACKEND` (`memory`),
-  `EVENT_BACKEND` (`sns_sqs`), `GRAPH_BACKEND` (`postgres`),
+  `EVENT_BACKEND` (`sns_sqs`; a profile selector, the backend itself reads `EVENT_BROKER`), `GRAPH_BACKEND` (`postgres`),
   `ANALYTICS_BACKEND` (`postgres`), `OBJECT_BACKEND` (`s3`).
 
 ## Ingestion V2 + event-outbox relay (PR 5–6 / FT-5–6, default off)

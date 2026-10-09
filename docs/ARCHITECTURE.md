@@ -733,8 +733,9 @@ authority or graph projection.
 
 Feature gating: all UPR routes are off by default
 (`AETHER_PROVIDER_RUNTIME_ENABLED=False`); the operator plane additionally
-requires `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED`; `AETHER_PROVIDER_ENTRY_POINTS_ENABLED`
-controls `importlib.metadata` entry-point discovery. Legacy paths are
+requires `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED`; `importlib.metadata` entry-point
+discovery is off unless code constructs the registry with `entry_points_enabled=True`
+(no environment variable sets it). Legacy paths are
 unaffected regardless. Staging and production startup rejects enabled UPR
 ingress when `OUTBOX_RELAY_ENABLED` is false. Tenant route records and the
 guarded graph writer are not yet called by all legacy and native writers, so

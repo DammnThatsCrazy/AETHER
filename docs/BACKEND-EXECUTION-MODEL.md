@@ -99,7 +99,7 @@ Each subsystem binds an explicit backend, declared via env and surfaced on
 | --- | --- | --- |
 | `DATABASE_BACKEND` | `postgres` | `memory` rejected in production. |
 | `CACHE_BACKEND` | `memory` | Local convenience; `memory` rejected in production. |
-| `EVENT_BACKEND` | `sns_sqs` | e.g. `sns_sqs`, `kafka`. |
+| `EVENT_BACKEND` | `sns_sqs` | Deployment-profile selector read by the release profile tooling, not by the backend; the bus the backend uses is `EVENT_BROKER` (`sns_sqs`, `kafka`). |
 | `GRAPH_BACKEND` | `postgres` | |
 | `OBJECT_BACKEND` | `s3` | |
 | `ML_MODE` | `inline` | `inline` or `remote`. |

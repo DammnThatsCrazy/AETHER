@@ -38,6 +38,8 @@ The feature flags defined by this registry are default-off and support a control
 - `AETHER_CHECKOUT_HARDENING_V1`
 - `AETHER_CONSENT_LIFECYCLE_ENFORCEMENT`
 
+The backend reads `AETHER_CONSENT_CONTROL_PLANE_V2`, `AETHER_CONNECTOR_POLICY_GATE` and `AETHER_INTEGRATION_DISCOVERY` from its environment. `AETHER_PREFERENCE_CENTER_V1`, `AETHER_CHECKOUT_HARDENING_V1` and `AETHER_CONSENT_LIFECYCLE_ENFORCEMENT` are names in the generated contract only: the backend settings fields for them were removed because nothing read them, so setting them in a backend environment changes nothing.
+
 Discovery or automatic recommendation may propose policy defaults, but it must not create affirmative consent receipts or automatically enable explicit-opt-in purposes. Unknown schemas, providers, fields, or purposes must fail closed or remain quarantine-only.
 
 When both `AETHER_CONSENT_CONTROL_PLANE_V2` and `AETHER_INTEGRATION_DISCOVERY` are enabled, tenant connector configuration metadata can be scanned through `POST /v1/integrations/connectors/discovery/scan`. Discovery persists registry-versioned, tenant-scoped records in `detected_integrations`; it copies only connector type, provider, supported capability, enabled state, secret-presence state, and a non-secret configuration reference. It never reads or copies vault references or credentials. `GET /v1/integrations/connectors/discovery/detections` returns only the authenticated tenant's detections.

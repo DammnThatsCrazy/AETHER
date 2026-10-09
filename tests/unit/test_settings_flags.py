@@ -36,6 +36,12 @@ SETTINGS = textwrap.dedent(
 
         def on(self) -> bool:
             return self.method_flag
+
+    @dataclass(frozen=True)
+    class Settings:
+        widget: WidgetConfig = field(default_factory=WidgetConfig)
+
+    settings = Settings()
     '''
 )
 
@@ -104,8 +110,13 @@ def test_a_field_defined_on_several_lines_is_not_read_by_its_own_definition(tmp_
 
 
 def test_a_reader_outside_the_backend_counts(tmp_path):
-    errors = _errors(tmp_path, files={"scripts/other.py": 'x = "WIDGET_DEAD"\n'})
+    errors = _errors(tmp_path, files={"scripts/other.py": 'import os\nx = os.environ.get("WIDGET_DEAD")\n'})
     assert not any("dead_flag" in e for e in errors)
+
+
+def test_a_variable_name_merely_written_as_a_string_is_not_a_read(tmp_path):
+    errors = _errors(tmp_path, files={"scripts/other.py": 'x = "WIDGET_DEAD"\nNAMES = ("WIDGET_DEAD",)\n'})
+    assert any("dead_flag" in e for e in errors)
 
 
 def test_documentation_and_examples_are_not_readers(tmp_path):
@@ -165,7 +176,7 @@ def test_the_committed_settings_have_no_unread_field_outside_the_allowlist():
 
 def test_every_committed_allowlist_entry_is_exercised():
     raw = yaml.safe_load(flags.ALLOWLIST.read_text(encoding="utf-8"))
-    assert [e["field"] for e in raw["allow"]] == [f"{f.cls}.{f.field}" for f in flags.unread_flags()]
+    assert sorted(e["field"] for e in raw["allow"]) == sorted(f"{f.cls}.{f.field}" for f in flags.unread_flags())
 
 
 SHARED = textwrap.dedent(
@@ -257,9 +268,77 @@ def test_comments_docstrings_and_prose_are_not_reads(tmp_path):
 
 
 def test_an_exact_string_constant_is_a_read_of_its_field_or_variable(tmp_path):
-    reader = 'import os\ngetattr(cfg, "dead_flag", False)\nos.environ.get("WIDGET_WRAPPED")\n'
+    reader = (
+        'import os\nfrom config.settings import settings\n'
+        'cfg = settings.widget\ngetattr(cfg, "dead_flag", False)\nos.environ.get("WIDGET_WRAPPED")\n'
+    )
     errors = _errors(tmp_path, files={"services/backend/dyn.py": reader})
     assert not any("dead_flag" in e or "wrapped" in e for e in errors)
+
+
+def test_a_getattr_on_an_object_that_is_not_the_section_proves_nothing(tmp_path):
+    reader = 'getattr(args, "dead_flag", False)\n'
+    errors = _errors(tmp_path, files={"services/backend/dyn.py": reader})
+    assert any("dead_flag" in e for e in errors)
+
+
+def test_a_helper_that_hands_back_its_argument_or_the_section_stands_for_the_section(tmp_path):
+    reader = textwrap.dedent(
+        '''
+        from config.settings import settings
+
+        def resolve(cfg=None):
+            if cfg is not None:
+                return cfg
+            return settings.widget
+
+        def build(cfg=None):
+            cfg = resolve(cfg)
+            return getattr(cfg, "dead_flag", False)
+        '''
+    )
+    errors = _errors(tmp_path, files={"services/backend/factory.py": reader})
+    assert not any("dead_flag" in e for e in errors)
+
+
+def test_a_helper_that_returns_something_else_is_not_the_section(tmp_path):
+    reader = textwrap.dedent(
+        '''
+        from config.settings import settings
+
+        def resolve(cfg=None):
+            return other_object()
+
+        def build(cfg=None):
+            cfg = resolve(cfg)
+            return getattr(cfg, "dead_flag", False)
+        '''
+    )
+    errors = _errors(tmp_path, files={"services/backend/factory.py": reader})
+    assert any("dead_flag" in e for e in errors)
+
+
+def test_names_in_an_imported_tuple_are_read_by_a_module_that_getattrs_each_name(tmp_path):
+    inventory = 'REQUIRED = ("dead_flag", "wrapped")\nUNRELATED = ("listed",)\n'
+    consumer = textwrap.dedent(
+        '''
+        from config.settings import settings
+        from inventory import REQUIRED
+
+        def values():
+            flags = settings.widget
+            return {name: getattr(flags, name) for name in REQUIRED}
+        '''
+    )
+    errors = _errors(tmp_path, files={"services/backend/inventory.py": inventory, "services/backend/consumer.py": consumer})
+    assert not any("dead_flag" in e or "wrapped" in e for e in errors)
+
+
+def test_an_imported_tuple_is_not_a_read_without_a_dynamic_getattr(tmp_path):
+    inventory = 'REQUIRED = ("dead_flag",)\n'
+    consumer = "from inventory import REQUIRED\nprint(REQUIRED)\n"
+    errors = _errors(tmp_path, files={"services/backend/inventory.py": inventory, "services/backend/consumer.py": consumer})
+    assert any("dead_flag" in e for e in errors)
 
 
 def test_an_alias_bound_in_one_function_does_not_credit_another(tmp_path):

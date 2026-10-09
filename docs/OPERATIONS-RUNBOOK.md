@@ -131,7 +131,7 @@ All extraction mesh keys use prefix `aether:exbudget:`:
 |----------|---------|---------|
 | `ML_SERVING_URL` | `http://localhost:8080` | Backend ML proxy |
 | `REDIS_HOST` | `localhost` | All caching |
-| `KAFKA_BROKERS` | `localhost:9092` | Event bus |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Event bus |
 | `ENABLE_EXTRACTION_DEFENSE` | `false` | ML Serving |
 | `PRICING_OPTION` | `B` | Backend (A/B/C — Market Entry / Ideal / Premium) |
 | `QUOTA_FLUSH_INTERVAL_S` | `60` | Backend (Redis → `tenant_usage` flush cadence) |
@@ -558,7 +558,6 @@ AETHER_PROVIDER_RUNTIME_ENABLED=true       → mounts provider_runtime router at
                                               + webhook gateway at /v1/provider-webhooks
 KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED=true → additionally mounts the operator plane at
                                               /v1/admin/kyber/provider-connections
-AETHER_PROVIDER_ENTRY_POINTS_ENABLED=true  → enable importlib.metadata entry-point plugin discovery
 ```
 
 Enable by setting the flags and restarting; provider registries auto-populate

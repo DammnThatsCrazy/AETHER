@@ -166,7 +166,7 @@ All configuration is supplied via environment variables:
 | `PORT` | `3001` | HTTP listener port |
 | `MAX_BATCH_SIZE` | `500` | Maximum events per `/v1/batch` call |
 | `MAX_EVENT_SIZE_BYTES` | `32768` | Maximum bytes for a single serialised event (32 KB) |
-| `KAFKA_BROKERS` | — | Comma-separated Kafka broker URLs |
+| `KAFKA_BOOTSTRAP_SERVERS` | — | Comma-separated Kafka broker URLs |
 | `KAFKA_TOPIC_PREFIX` | `aether.` | Prefix for all Kafka topic names |
 | `S3_BUCKET` | — | S3 bucket for raw event archive |
 | `CLICKHOUSE_URL` | — | ClickHouse HTTP endpoint |
