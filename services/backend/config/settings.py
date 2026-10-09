@@ -1439,10 +1439,8 @@ class AgenticObservabilityConfig:
     enabled: bool = _env_bool("AGENTIC_OBSERVABILITY_ENABLED", True)
     mcp_enabled: bool = _env_bool("AGENTIC_MCP_OBSERVABILITY_ENABLED", True)
     external_accounts_enabled: bool = _env_bool("AGENTIC_EXTERNAL_ACCOUNTS_ENABLED", True)
-    provider_verification_enabled: bool = _env_bool("AGENTIC_PROVIDER_VERIFICATION_ENABLED", False)
     communication_enabled: bool = _env_bool("AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED", True)
     protocol_enabled: bool = _env_bool("AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED", True)
-    kyber_enabled: bool = _env_bool("KYBER_AGENTIC_OBSERVABILITY_ENABLED", True)
 
 
 @dataclass(frozen=True)
