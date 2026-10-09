@@ -467,6 +467,85 @@ entries:
     removal_pr: null
     deadline: 2026-12-31
 
+  - id: product-aether-unmounted-code
+    domain: product
+    classification: removed
+    state: removed
+    authority: >-
+      the import graph of frontend/aether/src/app/main.tsx; code no route mounts
+      is not product surface
+    current:
+      - config/frontend_reachability.yaml
+      - scripts/validate_frontend_reachability.py
+    duplicates:
+      - frontend/aether/src/features/account-health
+      - frontend/aether/src/features/analytics
+      - frontend/aether/src/features/attribution
+      - frontend/aether/src/features/automation
+      - frontend/aether/src/features/behavioral
+      - frontend/aether/src/features/consent
+      - frontend/aether/src/features/data-quality
+      - frontend/aether/src/features/experience-friction
+      - frontend/aether/src/features/flows
+      - frontend/aether/src/features/governance
+      - frontend/aether/src/features/ingest
+      - frontend/aether/src/features/investigation
+      - frontend/aether/src/features/oracle
+      - frontend/aether/src/features/providers
+      - frontend/aether/src/features/realtime
+      - frontend/aether/src/features/revenue-intelligence
+      - frontend/aether/src/features/web3
+      - frontend/aether/src/features/x402
+    retire: >-
+      50 Aether app source files (1,704 lines) that no entry point reaches:
+      feature hooks for graph, web3, behavioral, investigation, governance, x402 and
+      similar sets, the unused auth client and hook, a playbook panel, and unused
+      barrels. The backend endpoints they called are unchanged.
+    consumers: []
+    compatibility: none; nothing imported these files, so no route, URL, API or build output changes
+    mechanism: delete
+    parity_evidence: >-
+      not applicable: unreachable code has no behavior to preserve; Aether typecheck
+      is unchanged and the app bundles (2026-10-09)
+    usage_evidence: >-
+      import-graph reachability from src/app/main.tsx found no importer for any
+      removed file; the files kept because tests or the identity-continuity-gates
+      workflow depend on them are listed under product-aether-unmounted-code-pending
+    rollback: restore from git history
+    removal_pr: "#746"
+    deadline: null
+
+  - id: product-aether-unmounted-code-pending
+    domain: product
+    classification: experimental
+    state: converge
+    authority: >-
+      an Aether route that mounts the surface, or deletion; the allowlist in
+      config/frontend_reachability.yaml can only shrink
+    current:
+      - config/frontend_reachability.yaml
+      - frontend/aether/src/features/identity/index.ts
+      - frontend/aether/src/pages/connectors/index.ts
+      - frontend/aether/src/pages/graph/index.ts
+    duplicates: []
+    retire: >-
+      three Aether barrels no entry point reaches. The identity barrel exports the
+      identity panels (conflict detail, merge and split audit, SDK health, Profile 360
+      identity panel) that the identity-continuity-gates workflow requires to exist
+      and a harness test imports, so they are mounted in a route or retired together
+      with that gate. The connectors and graph barrels exist only for component
+      tests; the tests are pointed at the page files and the barrels deleted.
+    consumers: []
+    compatibility: none; none is reachable from the app today
+    mechanism: delete
+    parity_evidence: null
+    usage_evidence: >-
+      reachability report (scripts/validate_frontend_reachability.py --report)
+      lists no other unreachable file in the Aether app (2026-10-09)
+    rollback: n/a
+    removal_pr: null
+    deadline: 2026-12-31
+
   # ── Delivery + governance ──────────────────────────────────────────────────
   - id: delivery-pr-workflows-into-one-plan
     domain: delivery
