@@ -131,8 +131,12 @@ These are measurements, each tied to a ledger row.
   engine, consumer, rules, signals and repository that nothing registered and
   whose graph entry points already failed closed. Those seven files (1,353
   lines) and the pending, audit, reject and config routes they backed are
-  deleted; three fail-closed tombstone routes remain until the Aether
-  user-profile page stops requesting the cluster read. Rows
+  deleted. The three fail-closed tombstone routes that remained are deleted too,
+  with the package and its mount: the Aether profile page's "Identity cluster"
+  section requested the cluster read, always got 503 and always rendered "no
+  evidence", so it is replaced by the canonical identity panel
+  (`Profile360IdentityPanel`, `GET /v1/identity/profiles/{id}/identity/explanation`),
+  which also stops being unmounted code. Rows
   `identity-legacy-resolution-engine` and `identity-legacy-resolution-module`.
 - **Settings flags that gate nothing.** 100 fields in
   `services/backend/config/settings.py` read an environment variable that no
@@ -345,9 +349,9 @@ Each step is its own PR on `Development` and states what it makes deletable.
    the 10 unresolved imports fixed); map invariants and retire duplicates.
 3. Provider cutover: finish R1 for providers, then SDK V1 and V2 dual-read
    parity per tenant, then the V1 write path.
-4. Retire `services/backend/services/resolution`: the unregistered engine and
-   its routes are deleted; the three tombstone routes go with the Aether
-   identity-cluster section.
+4. Retire `services/backend/services/resolution` (done: the engine, its routes and
+   the three tombstones are deleted, and the Aether profile page shows the
+   canonical identity panel).
 5. Kyber Profile360: one implementation (done: the orphaned second one is
    deleted), then shared primitives for the other 360 views.
 6. Delivery: make each `ready_for_review` workflow a worker of the canonical

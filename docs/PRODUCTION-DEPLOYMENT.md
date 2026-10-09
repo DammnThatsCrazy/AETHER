@@ -91,7 +91,7 @@ application through `deploy.yml` (immutable digests, no rebuild on promotion).
 
 - Optional integrations (Stripe, connectors, email, providers) do not block
   startup when disabled.
-- Partner ecosystem/marketplace/developer-platform remain future-flagged off.
+- Partner ecosystem, marketplace and developer platform are not built and have no flags.
 - No compliance certification is implied — see
   [Security Readiness](SECURITY-READINESS.md) when available.
 - On AWS, no environment has been applied, billed, load-tested or rolled back.

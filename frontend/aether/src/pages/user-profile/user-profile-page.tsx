@@ -13,7 +13,7 @@ import {
   useUserProfile, useUserSessions, useUserDevices, useUserPlatforms,
   useUserJourneys, useUserWallets, useUserFinancials, useUserRewards,
   useUserIdentifiers, useUserIntelligence, useUserBehavioral,
-  useUserWhyExplain, useUserGraph, useUserCluster, useUserSemantic,
+  useUserWhyExplain, useUserGraph, useUserSemantic,
   useUserSocialIntelligence, useUserRecommendations,
   useUserTier, useUserAssetComposition, useUserPnl, useUserTradingProfile,
   useUserFunnel, useUserTimeToConvert, useUserJourneyEconomics, useUserDevicePerformance,
@@ -21,6 +21,7 @@ import {
   useUserQuality, useUserDataFreshness, useUserWeb2Profile,
 } from '@aether-app/features/users/use-user-profile';
 import { useUnifiedJourney, TouchpointEvidenceInspector } from '@aether-app/features/journey';
+import { Profile360IdentityPanel } from '@aether-app/features/identity/Profile360IdentityPanel';
 import { api } from '@aether-app/lib/api/endpoints';
 import {
   sourceClassLabel,
@@ -919,13 +920,10 @@ function AttributionTab({ userId }: { userId: string }) {
 function RelationshipsTab({ userId }: { userId: string }) {
   const timeCtx = useTimeContext();
   const { data: graphData, isLoading: gl, error: ge } = useUserGraph(userId);
-  const { data: clusterData, isLoading: cl } = useUserCluster(userId);
 
   const g = asRecord(graphData);
   const edges = asList(g.edges);
   const nodes = asList(g.nodes);
-  const cluster = asRecord(clusterData);
-  const clusterMembers = asList(cluster.members);
 
   type Row = Record<string, unknown>;
 
@@ -939,42 +937,8 @@ function RelationshipsTab({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Identity cluster */}
-      <Section title="Identity cluster (same real-world actor)" loading={cl}>
-        {clusterMembers.length === 0
-          ? <p className="text-xs text-text-muted">No identity-cluster evidence was returned.</p>
-          : (
-            <>
-              <div className="grid grid-cols-3 gap-3 mb-3">
-                <Stat label="Cluster size" value={fmt(cluster.cluster_size)} />
-                <Stat label="Behavioral similarity" value={cluster.behavioral_similarity !== undefined ? `${Math.round(Number(cluster.behavioral_similarity) * 100)}%` : '—'} />
-                <Stat label="Confidence" value={cluster.confidence !== undefined ? `${Math.round(Number(cluster.confidence) * 100)}%` : '—'} />
-              </div>
-              <DataTable<Row>
-                keyExtractor={m => String(m.entity_id ?? 'member')}
-                data={clusterMembers as Row[]}
-                columns={[
-                  { key: 'entity', header: 'Entity', render: m => <code className="text-xs text-text-primary">{fmt(m.entity_id)}</code> },
-                  { key: 'kind', header: 'Kind', render: m => <Badge variant="default" size="sm">{fmt(m.kind)}</Badge> },
-                  { key: 'links', header: 'Link types', render: m => (
-                    <div className="flex gap-1 flex-wrap">
-                      {asList(m.link_types).slice(0, 3).map((l, i) => <Badge key={i} variant="default" size="sm">{fmt(l)}</Badge>)}
-                    </div>
-                  )},
-                  { key: 'conf', header: 'Membership', render: m => fmtPct(m.membership_confidence) },
-                ]}
-              />
-              {/* Formation signals */}
-              {asList(cluster.formation_signals).length > 0 && (
-                <div className="flex gap-1 flex-wrap mt-2">
-                  <span className="text-xs text-text-secondary">Linked by:</span>
-                  {asList(cluster.formation_signals).map((s, i) => <Badge key={i} variant="default" size="sm">{fmt(s)}</Badge>)}
-                </div>
-              )}
-            </>
-          )
-        }
-      </Section>
+      {/* Identity: the canonical entity, confidence and the evidence behind it */}
+      <Profile360IdentityPanel userId={userId} />
 
       {/* Relationship edges */}
       <Section title="Relationship edges (H2H / H2A / A2H / A2A)" loading={gl} error={ge}>

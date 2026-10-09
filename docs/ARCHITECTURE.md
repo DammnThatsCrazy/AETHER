@@ -320,9 +320,6 @@ replacement compatibility path is implemented and proves tenant scope.
 | `/v1/rewards/rails` | POST/GET | Tenant delivery rail config |
 | `/v1/track/traffic-source` | POST | Traffic source classification |
 | `/v1/onchain/contracts/{address}` | GET | Tenant-scoped contract metadata; optional `chain_id` disambiguates same-address contracts across chains |
-| `/v1/resolution/cluster/{user_id}` | GET | Unavailable (503); the legacy graph read route is retired and has no tenant-scoped compatibility path |
-| `/v1/resolution/pending/{id}/approve` | POST | Unavailable (503); the legacy graph mutation route is retired; `write` permission is still checked |
-| `/v1/resolution/batch` | POST | Unavailable (503); the legacy graph batch route is retired; `write` permission is still checked |
 | `/v1/agent/deployments` | POST/GET/PATCH | External agent deployment registry (flag-gated, observation-only) |
 | `/v1/providers/keys` | POST/GET/DELETE | BYOK key management (encrypted at rest) |
 | `/v1/providers/usage` | GET | Per-tenant provider usage stats |

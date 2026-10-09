@@ -361,7 +361,6 @@ vi.mock('@aether-app/features/users/use-user-profile', () => {
     useUserBehavioral: query,
     useUserWhyExplain: query,
     useUserGraph: query,
-    useUserCluster: query,
     useUserSemantic: query,
     useUserSocialIntelligence: query,
     useUserRecommendations: query,
@@ -383,6 +382,10 @@ vi.mock('@aether-app/features/users/use-user-profile', () => {
 
 vi.mock('@aether-app/features/profile360', () => ({
   ProfileExplorationPanel: () => null,
+}));
+
+vi.mock('@aether-app/features/identity/Profile360IdentityPanel', () => ({
+  Profile360IdentityPanel: () => null,
 }));
 
 vi.mock('@aether-app/features/journey', () => ({

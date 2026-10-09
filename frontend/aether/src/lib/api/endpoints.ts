@@ -724,13 +724,6 @@ export const api = {
       restClient.get(`/v1/entities/${entityId}/graph`, wrap(unknownSchema)).then(r => r.data as EntityGraph),
 
     /**
-     * Identity cluster — entities probabilistically resolved to the same
-     * real-world actor, with shared tissue (devices, IPs, wallets, campaigns).
-     */
-    cluster: (entityId: string) =>
-      restClient.get(`/v1/resolution/cluster/${entityId}`, wrap(unknownSchema)).then(r => r.data as EntityCluster),
-
-    /**
      * Identity links for an entity — H2H same-person, shares_device, shares_wallet.
      * Each link has interaction_class, weight, and confidence.
      */

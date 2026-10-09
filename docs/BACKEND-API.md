@@ -1252,21 +1252,9 @@ requests are rejected). All are GET-only and never mutate reward state:
 
 ## Identity Resolution
 
-Identity resolution is served by `/v1/identity/*` (`services/backend/services/identity/routes.py`). The legacy `/v1/resolution/*` surface is retired; three fail-closed routes remain until the last caller is removed.
+Identity resolution is served by `/v1/identity/*` (`services/backend/services/identity/routes.py`); pending merge review is `/v1/admin/identity/review-queue`.
 
-### GET /v1/resolution/cluster/{user_id}
-
-**Unavailable (HTTP 503).** The legacy graph read route was retired because it lacks tenant isolation. It returns `Legacy identity graph resolution is unavailable`; no tenant-scoped compatibility path currently serves identity-cluster data through this endpoint.
-
-### POST /v1/resolution/pending/{id}/approve
-
-Unavailable (HTTP 503). The legacy graph mutation route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not approve or apply a merge, and no replacement compatibility path is implemented. Pending merge review is `/v1/admin/identity/review-queue`.
-
-### POST /v1/resolution/batch
-
-Unavailable (HTTP 503). The legacy graph batch route was retired. The route checks tenant `write` permission before returning `Legacy identity graph resolution is unavailable`; it does not start a batch matching job, and no replacement compatibility path is implemented.
-
-**Removed:** `GET /v1/resolution/pending`, `POST /v1/resolution/pending/{id}/reject`, `GET /v1/resolution/audit/{decision_id}` and `GET`/`PUT /v1/resolution/config`. They were backed by an engine and event consumer that were never registered, so they never returned data, and they now answer 404.
+**Removed:** the whole `/v1/resolution/*` surface (`GET /v1/resolution/cluster/{user_id}`, `POST /v1/resolution/pending/{id}/approve`, `POST /v1/resolution/batch`, `GET /v1/resolution/pending`, `POST /v1/resolution/pending/{id}/reject`, `GET /v1/resolution/audit/{decision_id}` and `GET`/`PUT /v1/resolution/config`). It was backed by an engine and event consumer that were never registered, so it never returned data; the last three routes answered 503 and now, like the rest, answer 404. The Aether profile page shows the canonical identity panel (`GET /v1/identity/profiles/{id}/identity/explanation`) instead of the cluster read.
 
 ---
 

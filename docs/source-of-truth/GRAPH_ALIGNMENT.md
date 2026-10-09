@@ -13,7 +13,6 @@ source_files:
   - services/backend/shared/graph/edge_properties.py
   - services/backend/shared/graph/mutation_gateway.py
   - services/backend/services/onchain/action_recorder.py
-  - services/backend/services/resolution/routes.py
 canonical_owner: graph@aether
 last_synced_commit: 401f9bd
 ---

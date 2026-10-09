@@ -1354,8 +1354,7 @@
           "/v1/attribution",
           "/v1/spend",
           "/v1/journeys",
-          "/v1/measurement",
-          "/v1/resolution"
+          "/v1/measurement"
         ],
         "surfaceIds": [
           "campaign360",

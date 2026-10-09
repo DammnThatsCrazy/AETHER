@@ -61,9 +61,9 @@ apps:
       - path: src/features/identity/index.ts
         ledger: product-aether-unmounted-code-pending
         reason: >-
-          the identity-continuity-gates workflow requires the identity panels to exist and
-          a harness test imports this barrel; mount the panels in a route or retire the
-          gate and delete them together
+          every identity panel is mounted from its own file (the profile page, the router);
+          only the identity-continuity-gates harness test imports this barrel. Point the
+          harness at the files and delete the barrel, or retire the gate
       - path: src/pages/connectors/index.ts
         ledger: product-aether-unmounted-code-pending
         reason: barrel kept only for component tests; point the tests at the page and delete it

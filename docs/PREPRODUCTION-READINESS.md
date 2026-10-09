@@ -28,8 +28,8 @@ is a readiness gate, not a certification.
 - [ ] **Security**: no secrets in logs/exports/UI; webhook signing on; rate limits
       active; secret scan + dependency audit run (see
       [Security Readiness](SECURITY-READINESS.md) when available).
-- [ ] **Flags**: new systems default off; enable intentionally; partner ecosystem
-      stays future-flagged off.
+- [ ] **Flags**: new systems default off; enable intentionally. There is no
+      partner ecosystem, marketplace or developer platform flag to check.
 - [ ] **Frontends**: Aether/Kyber/Demo build with explicit env-driven API URLs;
       live-empty startup and loading/empty/populated/unavailable states pass;
       production bundles contain no runtime fixtures or browser MSW worker.

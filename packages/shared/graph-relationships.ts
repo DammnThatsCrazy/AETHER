@@ -268,8 +268,7 @@ export interface ClusterMember {
 
 /**
  * A cluster of entities connected by shared identifiers, behaviours, or flows.
- * Returned by GET /v1/intelligence/entity/{id}/cluster
- * and GET /v1/resolution/cluster/{id}.
+ * Returned by GET /v1/intelligence/entity/{id}/cluster.
  */
 export interface EntityCluster {
   readonly cluster_id: string;
