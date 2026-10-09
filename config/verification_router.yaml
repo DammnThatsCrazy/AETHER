@@ -104,7 +104,7 @@ domains:
     paths: [services/backend/**, services/agents/**, services/compliance/**, docs/archive/legacy-architecture/backend/**, tests/**]
     # Component suites are the ordinary-PR authority. The aggregate backend
     # suite remains registered for regression/release lanes only.
-    checks: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
+    checks: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform, functionality-proof-ts]
     path_checks:
       services/backend/services/identity/**: [backend-identity]
       services/backend/services/ingestion/**: [backend-ingestion]
@@ -123,6 +123,16 @@ domains:
       services/compliance/**: [compliance]
       docs/archive/legacy-architecture/backend/services/journey-service/**: [journey-service]
       tests/**: [root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
+      tests/contracts/**: [functionality-proof-ts]
+      tests/sdk/**: [functionality-proof-ts]
+      tests/connectors/**: [functionality-proof-ts]
+      tests/identity/**: [functionality-proof-ts]
+      tests/journeys/**: [functionality-proof-ts]
+      tests/campaigns/**: [functionality-proof-ts]
+      tests/value/**: [functionality-proof-ts]
+      tests/lenses/**: [functionality-proof-ts]
+      tests/e2e/**: [functionality-proof-ts]
+      tests/graph/**: [functionality-proof-ts]
     minimum_lane: pr
   frontend:
     owner: frontend
@@ -142,13 +152,16 @@ domains:
     minimum_lane: pr
   sdk:
     owner: sdk
-    paths: [packages/**]
-    checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, contracts]
+    paths: [packages/**, vitest.config.fps.ts]
+    checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, functionality-proof-ts, contracts]
     path_checks:
-      packages/shared/**: [sdk-shared]
-      packages/web/**: [sdk-web]
+      packages/shared/**: [sdk-shared, functionality-proof-ts]
+      packages/web/**: [sdk-web, functionality-proof-ts]
       packages/server/**: [sdk-server]
-      packages/react-native/**: [sdk-react-native]
+      packages/react-native/**: [sdk-react-native, functionality-proof-ts]
+      vitest.config.fps.ts: [functionality-proof-ts]
+      packages/proof-contracts/**: [functionality-proof-ts]
+      packages/proof-fixtures/**: [functionality-proof-ts]
     minimum_lane: pr
   machine_learning:
     owner: ml
