@@ -30,7 +30,7 @@ source_hashes:
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
   "scripts/docs_schema.json": "sha256:1a062b35ae5b18e85a10efedaa56708de3d9a332808cac699456ce6bb112fc74"
   "scripts/sync_docs.py": "sha256:e427b9e6ba4448313e11c93635e66f05a823d4bd4cd13eb542a6d9027009d152"
-  "scripts/validate_contracts.py": "sha256:ac0064013672d682cf4b3b060742dda16042a679faa01c7a8fe0afe41eaf1dbc"
+  "scripts/validate_contracts.py": "sha256:1c7768cabc38a9a51b4ccf1513e9b1169e17d005ec17aeb16422ade36e4f6a23"
   "scripts/validate_docs.py": "sha256:5c9efbc3c95a75267ccf69b353c6112a93bde9e16a8dc36c939d2b1d75c99d63"
   "scripts/validate_frontmatter.py": "sha256:1b4ba24575565584f7fc5e01c01a245ee4702f5220c85aa701bc86af2bdaa0c4"
 ---

@@ -235,6 +235,16 @@ def check_graph_contracts() -> list[str]:
     backend = str(Path(__file__).resolve().parent.parent / "services" / "backend")
     if backend not in sys.path:
         sys.path.insert(0, backend)
+    # This check runs in the dependency-free control profile. ``shared/__init__``
+    # imports fastapi, but the graph modules below are standard-library only, so
+    # when the package is not already loaded expose it as a bare namespace and
+    # let the submodules load from its path without running its __init__.
+    if "shared" not in sys.modules:
+        import types
+
+        stub = types.ModuleType("shared")
+        stub.__path__ = [str(Path(backend) / "shared")]
+        sys.modules["shared"] = stub
     from shared.graph import economic_schema, graph_contract
     from shared.graph.graph import EdgeType, VertexType
 
