@@ -1635,12 +1635,12 @@ Unified economic observability across Web2, Web3, agentic (x402), and campaign r
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v1/profile/{entity_id}/economic` | Full economic breakdown for an entity (Web2 + Web3 + agentic + campaign) |
-| GET | `/v1/profile/{entity_id}/economic/web2` | Web2 GMV / revenue / payment volume |
-| GET | `/v1/profile/{entity_id}/economic/web3` | Web3 TVL / protocol exposure |
+| GET | `/v1/profile/{entity_id}/economic` | Economic profile: financials (PNL) and on-chain asset composition (served by the profile service) |
+| GET | `/v1/profile/{entity_id}/economic/web2` | TradFi signals; `403` without `credit` consent (profile service) |
+| GET | `/v1/profile/{entity_id}/economic/web3` | Asset composition, PNL and trading profile (profile service) |
 | GET | `/v1/profile/{entity_id}/economic/agentic` | Agentic / x402 spend, service calls, settlement success rate |
 | GET | `/v1/profile/{entity_id}/economic/campaigns` | Campaign-attributed economic value |
-| GET | `/v1/profile/{entity_id}/economic/warnings` | Entity-level data-quality warnings (mixed currency, stale prices) |
+| GET | `/v1/profile/{entity_id}/economic/warnings` | Missing, stale and contradicting dimensions for the entity (profile service) |
 | GET | `/v1/economic/overview` | Tenant economic overview (Total Value Observed, domain split) |
 | GET | `/v1/economic/warnings` | Tenant-wide economic data-quality warnings |
 

@@ -15,7 +15,7 @@ related:
   - concepts/kyber-economic-observability
 source_hashes:
   "packages/shared/economic-metrics.ts": "sha256:99f596fa31534999e24ec96ec72eef3a8a87c1a18396831105d2e8c88d5a86c3"
-  "services/backend/services/economic/routes.py": "sha256:e01e6487d9825b57736b4d523483523698fa47fbd8fc3fd28be5b09c96a58cbc"
+  "services/backend/services/economic/routes.py": "sha256:a5540341f8b6486f5f3ad65a068d7dc8bb81ed534c0845e605e301ac589b1ee0"
 ---
 
 # Aether — Economic Value Framing
@@ -135,8 +135,7 @@ Operators see economic observability including mixed-currency warnings, stale-pr
 See `packages/shared/economic-metrics.ts` for the canonical TypeScript types.
 
 Key endpoints:
-- `GET /v1/profile/{id}/economic` — Unified economic breakdown for any entity
-- `GET /v1/profile/{id}/economic/breakdown` — Detailed domain decomposition
+- `GET /v1/profile/{id}/economic` — Economic profile for an entity (financials and asset composition; sub-routes `/web2`, `/web3`, `/agentic`, `/campaigns`, `/warnings`)
 - `GET /v1/economic/overview` — Tenant-level economic overview
 
 ## Examples

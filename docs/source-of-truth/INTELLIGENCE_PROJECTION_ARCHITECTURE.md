@@ -86,7 +86,7 @@ adapters/pages are legal; `infrastructure360` additionally owns the read-only
 | profile360 | entity_360 | `/v1/profile360`, `/v1/profile`; `services/backend/services/profile/` aggregator/composer; `profile360` surface + tenant & Kyber pages | profile360 | — |
 | agent360 | agentic_360 | `/v1/agent`, `/v1/agents`, `/v1/profile360/{type}/{id}` (AgentProfile360Composer); `services/backend/services/agent/`, `agentic_observability` | profile360 | — |
 | relationship360 | relationship_360 | `/v1/graph` (relationship paths, H2H/A2A layers), `/v1/semantic` (`gold_relationship_semantic_state`), `/v1/entities` | graph, profile360 | — |
-| social360 | relationship_360 | `/v1/profile/{id}/social-intelligence` (single endpoint); `services/backend/services/social/` | profile360 | thin — folded into profile |
+| social360 | relationship_360 | `/v1/profile/{id}/social-intelligence` (single endpoint, served by the profile handler) | profile360 | thin — folded into profile |
 | episode360 | sequence_360 | `/v1/journeys`, `/v1/events`; journey/timeline surfaces | journeys, timeline | spine `journey_continuity` |
 | communication360 | sequence_360 | `/v1/comms`, `/v1/contact`, `/v1/delivery`, `/v1/notifications`; `services/backend/services/comms/repository` feeds profile summary | timeline, profile360 | metricRefs: `email_open_rate`/`click`/`reply` resolve |
 | execution360 | sequence_360 | `/v1/agents/{id}/execute`, `/v1/agent/runs`, `/v1/jobs`, `/v1/flows`, `/v1/computations` | timeline | — |

@@ -269,28 +269,30 @@ entries:
 
   - id: product-legacy-social-route
     domain: product
-    classification: deprecated
-    state: deprecated
+    classification: removed
+    state: removed
     authority: Profile360 IntelligenceAggregator.social_intelligence (services/backend/services/profile)
     current:
       - services/backend/services/profile
     duplicates:
       - services/backend/services/social
     retire: >-
-      the legacy compatibility route /v1/profile/{entity_id}/social-intelligence,
-      once Aether and Kyber call the canonical Profile360 path
-    consumers:
-      - services/backend/main.py
-      - services/backend/tests/social/test_legacy_social_honesty.py
-      - frontend/kyber/src/lib/api/endpoints.ts
-      - frontend/aether/src/lib/api/endpoints.ts
-    compatibility: the route stays mounted until both frontends migrate
-    mechanism: alias
-    parity_evidence: null
-    usage_evidence: null
-    rollback: keep the compatibility wrapper mounted
-    removal_pr: null
-    deadline: 2027-02-28
+      the services/social compatibility wrapper for /v1/profile/{entity_id}/social-intelligence.
+      It called the same aggregator as the profile handler it shadowed, so the
+      URL, body and permission check are unchanged and no client had to migrate.
+    consumers: []
+    compatibility: none; the profile handler serves the same URL with the same body
+    mechanism: delete
+    parity_evidence: >-
+      services/backend/tests/social/test_legacy_social_honesty.py now runs against
+      the profile handler
+    usage_evidence: >-
+      the wrapper and the profile handler both call IntelligenceAggregator.social_intelligence
+      with the same permission and window checks; both build the aggregator with
+      the same constructor (2026-10-09)
+    rollback: restore the wrapper package and its mount from git history
+    removal_pr: "#750"
+    deadline: null
 
   # ── Graph ──────────────────────────────────────────────────────────────────
   - id: graph-single-mutation-gateway
@@ -849,48 +851,54 @@ entries:
 
   - id: intelligence-duplicate-route-handlers
     domain: intelligence
-    classification: experimental
-    state: converge
+    classification: removed
+    state: removed
     authority: >-
-      one handler per method and path (tests/unit/test_route_conflicts.py,
-      which ignores path-parameter names and include prefixes)
+      one handler per method and path (tests/unit/test_route_conflicts.py, which
+      ignores path-parameter names and include prefixes and pins the owner of each
+      URL below)
     current:
       - tests/unit/test_route_conflicts.py
-    duplicates: []
+    duplicates:
+      - services/backend/services/social
     retire: >-
       ten shadowed handlers, each behind a handler of the same URL that FastAPI
-      matches first. POST /v1/admin/billing/stripe/webhook: admin/routes.py serves
-      and admin/webhook_routes.py (fuller, with signature-failure and duplicate
-      metrics and async-payment and finalized-invoice events) is dead. GET
-      /v1/attribution/models: attribution/routes.py serves, the measurement
-      router's catalog is dead, and the two list different model sets. GET
-      /v1/profile/{id}/pnl: services/pnl serves a PNLCalculator result while
-      profile/routes.py computes PNL from IntelligenceAggregator. GET
-      /v1/profile/{id}/economic and /web2, /web3, /warnings: services/economic
-      serves empty response models, with no read-permission check and, for web2,
-      no credit-consent check, while profile/routes.py holds the real aggregation
-      (agentic and campaigns are implemented in both). GET
-      /v1/profile/{id}/social-intelligence: services/social serves a wrapper
-      over the handler it shadows. Each is resolved by choosing the authority,
-      deleting the other and pointing the tests at it.
-    consumers:
-      - services/backend/main.py
-      - services/backend/services/admin/webhook_routes.py
-      - services/backend/services/profile/routes.py
-      - services/backend/services/measurement/routes/attribution.py
+      matches first. Owners chosen: POST /v1/admin/billing/stripe/webhook is
+      served by admin/webhook_routes.py (the async-payment events, metrics and
+      billing-disabled guard that handler adds were never running; the inline
+      copy in admin/routes.py also took invoice.payment_succeeded and
+      invoice.created, which are now dispatched too, and its API-key cache refresh
+      is redundant because APIKeyValidator reads the billing account's plan tier on
+      every request). GET /v1/attribution/models stays with attribution/routes.py
+      (the Aether and Kyber clients read it); the measurement router's catalog was
+      never reachable. GET /v1/profile/{id}/pnl stays with services/pnl (the Aether
+      profile page reads it). GET /v1/profile/{id}/economic, /web2, /web3 and
+      /warnings are now served by profile/routes.py: the services/economic copies
+      returned empty models with no read-permission check and, for web2, no
+      credit-consent check, while the profile handlers aggregate real data and are
+      the ones the tests and Profile 360 docs describe. /economic/agentic and
+      /economic/campaigns stay with services/economic (the profile copies returned
+      delegation lists, not spend or ROAS) and now require the read permission, as
+      do the tenant-level /v1/economic routes. GET /v1/profile/{id}/social-intelligence
+      is served by profile/routes.py; the services/social wrapper called the same
+      aggregator and is deleted with its mount.
+    consumers: []
     compatibility: >-
-      the URLs keep their served behavior until the authority is chosen; the
-      choice changes response bodies for the pnl, economic and attribution routes
+      the response bodies of the four re-pointed economic routes change from empty
+      models to the aggregated data (web2 now returns 403 without credit consent);
+      every other URL keeps the body it served
     mechanism: delete
-    parity_evidence: null
+    parity_evidence: >-
+      tests/unit/test_route_conflicts.py::test_each_formerly_duplicated_url_is_served_by_its_chosen_owner;
+      the social-intelligence honesty tests now run against the profile handler
     usage_evidence: >-
-      the five /v1/admin/kyber/* handlers in intelligence/routes.py were the same
-      class of duplicate and are deleted in this change: admin/routes.py served
-      them and the Kyber hook calls its shape, with a window parameter the
-      deleted copy did not accept
-    rollback: keep the served handler; the shadowed one never ran
-    removal_pr: null
-    deadline: 2027-02-28
+      the Kyber economic client methods have no callers; the Aether profile page
+      reads /pnl and /social-intelligence, which keep their bodies (2026-10-09)
+    rollback: >-
+      restore the deleted handler from git history; for the economic routes the
+      restored stub would shadow the profile handler again
+    removal_pr: "#750"
+    deadline: null
 
   - id: verification-unrun-typescript-test-estate
     domain: verification

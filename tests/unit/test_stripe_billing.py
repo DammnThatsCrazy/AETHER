@@ -630,6 +630,16 @@ class TestWebhookHandling:
             assert invoices[0]["stripe_invoice_id"] == "in_1"
             assert invoices[0]["status"] == "paid"
 
+    def test_every_invoice_event_the_inline_handler_accepted_is_dispatched(self, monkeypatch):
+        # The inline handler in admin/routes.py (deleted: it was shadowed by this
+        # module's route) also took invoice.payment_succeeded and invoice.created.
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            wh = importlib.import_module("services.admin.webhook_routes")
+            assert wh._HANDLERS["invoice.payment_succeeded"] is wh._handle_invoice_paid
+            assert wh._HANDLERS["invoice.created"] is wh._handle_invoice_finalized
+
     def test_invoice_payment_failed_does_not_downgrade(self, monkeypatch):
         self._setup(monkeypatch)
         with backend_path():

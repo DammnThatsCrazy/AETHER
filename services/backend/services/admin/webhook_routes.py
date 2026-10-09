@@ -22,8 +22,10 @@ Events handled:
     customer.subscription.updated   — Plan changed, status changed, renewal
     customer.subscription.deleted   — Subscription ended → downgrade to P1
     invoice.paid                    — Payment succeeded; upsert invoice, confirm active
+    invoice.payment_succeeded       — Same handler as invoice.paid
     invoice.payment_failed          — Payment failed → mark subscription past_due
     invoice.finalized               — Invoice finalized → upsert invoice record
+    invoice.created                 — Draft invoice created → upsert invoice record
 
 Idempotency:
     Each event is claimed in stripe_webhook_events (unique on event_id) before
@@ -637,8 +639,10 @@ _HANDLERS = {
     "customer.subscription.updated": _handle_subscription_updated,
     "customer.subscription.deleted": _handle_subscription_deleted,
     "invoice.paid": _handle_invoice_paid,
+    "invoice.payment_succeeded": _handle_invoice_paid,
     "invoice.payment_failed": _handle_invoice_payment_failed,
     "invoice.finalized": _handle_invoice_finalized,
+    "invoice.created": _handle_invoice_finalized,
 }
 
 

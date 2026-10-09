@@ -153,7 +153,6 @@ services:
   semantic_intelligence: {class: beta, stage: intelligence, reason: "semantic and sentiment classification engine"}
   signals: {class: core, stage: intelligence, reason: "signal translation from model features to human-readable signals"}
   silver: {class: core, stage: normalization, reason: "Bronze to typed Silver fact normalization"}
-  social: {class: deprecated, stage: product, reason: "legacy Social360 compatibility route"}
   stablecoin: {class: experimental, stage: intake, reason: "bounded stablecoin observation domain"}
   stablecoins: {class: experimental, stage: intake, reason: "canonical stablecoin intelligence domain"}
   storage_lifecycle: {class: core, stage: control-plane, reason: "object-backed Bronze storage lifecycle workers"}

@@ -486,7 +486,7 @@
           "profile360"
         ],
         "services": [
-          "services/backend/services/social"
+          "services/backend/services/profile"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/social360.md"

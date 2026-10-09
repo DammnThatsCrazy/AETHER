@@ -15,7 +15,7 @@ source_hashes:
   "services/backend/services/profile/aggregator.py": "sha256:1a8495842ba83117735baddfbe24ec265dd93a0baec1d91307fb62f210a2ea0c"
   "services/backend/services/profile/intelligence.py": "sha256:c11ffbb5a409e612e7aa40958526b9e9f22c41b5ec9d03c9576c4328646b6d14"
   "services/backend/services/profile/read_result.py": "sha256:be38b15f1b60afa0743471e48ac1e9dfddfddd42880b4f78e6e848761b72d056"
-  "services/backend/services/profile/routes.py": "sha256:4113de6d0b849835183bfad6de4bbaafe18fc9828c412d4767835b7bde01d718"
+  "services/backend/services/profile/routes.py": "sha256:80823d4e97c98e5a5899557f5fccfd4fecdb3271c5501490d31342992a9a3305"
   "services/backend/services/reconciliation/coverage.py": "sha256:118ba12380fe87fc788ae747f190e0438d3a8be5e7a610021dab50447a67298f"
   "services/backend/services/reconciliation/expectations.py": "sha256:ccc747594faf8575f23c9726c02a3f50a9370715950c4a801926b2eaaa999c00"
 ---
@@ -176,8 +176,8 @@ All economic sub-routes accept `?window=30d|60d|90d|lifetime`:
 | GET    | `/v1/profile/{id}/economic`                         | Unified economic breakdown (Web2 + Web3 + Agentic)        |
 | GET    | `/v1/profile/{id}/economic/web2`                    | TradFi economic breakdown                                 |
 | GET    | `/v1/profile/{id}/economic/web3`                    | On-chain economic breakdown                               |
-| GET    | `/v1/profile/{id}/economic/agentic`                 | Agentic economy breakdown (fees, x402 payments, rewards)  |
-| GET    | `/v1/profile/{id}/economic/campaigns`               | Campaign-level economic attribution                       |
+| GET    | `/v1/profile/{id}/economic/agentic`                 | Agentic spend, service calls, settlement success (served by `services/economic`) |
+| GET    | `/v1/profile/{id}/economic/campaigns`               | Campaign spend, attributed revenue, ROAS (served by `services/economic`) |
 | GET    | `/v1/profile/{id}/economic/warnings`                | Economic risk flags for this entity                       |
 
 Sensitive economic surfaces are consent-gated. The web2/credit surface

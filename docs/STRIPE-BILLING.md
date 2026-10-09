@@ -17,7 +17,7 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "scripts/validate_stripe.py": "sha256:8f4cb22ddd72665bab55def524d5575dcc3dd7c2396baada9b8027dd21384f1c"
-  "services/backend/services/admin/webhook_routes.py": "sha256:3aba83f48123dd7b459cfb03b4727e3fe6707036dac99487c24fb67a68e01096"
+  "services/backend/services/admin/webhook_routes.py": "sha256:5c344020960750d88d05db9b06438889b46976d28df55404781b56394af9ad32"
   "services/backend/services/billing/routes.py": "sha256:884dbaac1268d2ff9eebb30553d2a4c1079dfae946532544e7e94acb61f1d4a3"
   "services/backend/shared/billing/stripe_client.py": "sha256:036625098e863c9bf5ee488da84d755212494243a427a6a47d638cee8c0494d5"
   "services/backend/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
@@ -189,11 +189,12 @@ event (`customer.subscription.updated`). Specifically:
 | `invoice.payment_failed` | Upsert invoice. **Does not** trigger downgrade by itself. |
 | `invoice.finalized` / `invoice.created` | Upsert invoice metadata. |
 
-After updating `plan_tier`, the webhook handler refreshes any cached API-key
-entries for the tenant so that `BurstRateLimiter`, `QuotaEngine`, and
-`FeatureGate` immediately see the new plan. `APIKeyValidator.validate_async`
-also overlays the `tenant_billing_accounts.plan_tier` on each authentication
-as a backstop for stale cache entries.
+The webhook handler does not rewrite cached API-key entries. `APIKeyValidator.validate_async`
+overlays `tenant_billing_accounts.plan_tier` on every authentication, so
+`BurstRateLimiter`, `QuotaEngine`, and `FeatureGate` see the new plan on the
+tenant's next request. One handler serves the route
+(`services/admin/webhook_routes.py`); an earlier inline copy in `admin/routes.py`
+was shadowed by it and is deleted.
 
 Webhook idempotency: every `event_id` is recorded in `stripe_webhook_events`
 on first receipt; duplicate deliveries return 200 with `duplicate: true`.

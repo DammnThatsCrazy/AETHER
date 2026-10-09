@@ -1028,20 +1028,6 @@ async def get_asset_composition(
     return APIResponse(data=await intel.asset_composition(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
-@router.get("/{user_id}/pnl")
-async def get_pnl(
-    user_id: str,
-    request: Request,
-    window: str = Query(default="30d"),
-    intel: IntelligenceAggregator = Depends(_get_intel_agg),
-):
-    """Realized + unrealized PNL and TVL delta. FIFO cost basis from silver_web3_events + CoinGecko prices."""
-    tenant = request.state.tenant
-    tenant.require_permission("read")
-    _validate_window(window)
-    return APIResponse(data=await intel.pnl(user_id, tenant.tenant_id, window=window)).to_dict()
-
-
 @router.get("/{user_id}/trading-profile")
 async def get_trading_profile(
     user_id: str,
@@ -1717,6 +1703,8 @@ async def get_profile_reconciliation(
 
 
 # ── Economic Sub-Routes ────────────────────────────────────────────
+# /economic/agentic and /economic/campaigns are served by services/economic/routes.py;
+# /pnl by services/pnl/routes.py.
 
 @router.get("/{user_id}/economic")
 async def get_profile_economic(
@@ -1779,46 +1767,6 @@ async def get_economic_web3(
         "asset_composition": asset_comp,
         "pnl": pnl,
         "trading_profile": trading,
-    }).to_dict()
-
-
-@router.get("/{user_id}/economic/agentic")
-async def get_economic_agentic(
-    user_id: str,
-    request: Request,
-    agg: Profile360Aggregator = Depends(_get_aggregator),
-):
-    """Agentic economic identity: delegations, agent spend, settlement summary."""
-    tenant = request.state.tenant
-    tenant.require_permission("read")
-    delegations = await agg.delegations(user_id, tenant.tenant_id)
-    agents = await agg.agents(user_id, tenant.tenant_id)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "delegations": delegations,
-        "agents": agents,
-    }).to_dict()
-
-
-@router.get("/{user_id}/economic/campaigns")
-async def get_economic_campaigns(
-    user_id: str,
-    request: Request,
-    agg: Profile360Aggregator = Depends(_get_aggregator),
-    window: str = Query(default="30d"),
-    intel: IntelligenceAggregator = Depends(_get_intel_agg),
-):
-    """Campaign-level economic attribution: ROAS, CPA, LTV per campaign."""
-    tenant = request.state.tenant
-    tenant.require_permission("read")
-    _validate_window(window)
-    campaigns = await agg.campaigns(user_id, tenant.tenant_id)
-    economics = await intel.journey_economics(user_id, tenant.tenant_id, window=window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "window": window,
-        "campaigns": campaigns,
-        "journey_economics": economics,
     }).to_dict()
 
 

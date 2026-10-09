@@ -7,10 +7,9 @@ differ only in a parameter name (``/profile/{user_id}/pnl`` and
 parameter names erased, and a router included with a prefix is compared by its
 full path.
 
-The conflicts below are frozen against the debt-ledger row
-``intelligence-duplicate-route-handlers``: this test fails on any NEW conflict and
-also fails when a frozen conflict is fixed (remove it from the allowlist so the
-ratchet only tightens).
+Every conflict this gate once froze has been resolved by choosing one handler and
+deleting the other, so the allowlist is gone and any duplicate fails the PR that
+adds it.
 """
 from __future__ import annotations
 
@@ -20,8 +19,6 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "services" / "backend"
 sys.path.insert(0, str(BACKEND))
@@ -29,29 +26,6 @@ os.environ.setdefault("AETHER_ENV", "local")
 
 from fastapi.routing import APIRoute  # noqa: E402
 
-LEDGER_ROW = "intelligence-duplicate-route-handlers"
-
-# Duplicate registrations (first-mounted wins at runtime), path parameters written
-# as ``{}``. Do NOT add entries here: fix the duplicate instead. Entries may only
-# be REMOVED, when the underlying duplication is resolved.
-KNOWN_CONFLICTS: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("/v1/admin/billing/stripe/webhook", "POST"),
-        ("/v1/attribution/models", "GET"),
-        ("/v1/profile/{}/economic", "GET"),
-        ("/v1/profile/{}/economic/agentic", "GET"),
-        ("/v1/profile/{}/economic/campaigns", "GET"),
-        ("/v1/profile/{}/economic/warnings", "GET"),
-        ("/v1/profile/{}/economic/web2", "GET"),
-        ("/v1/profile/{}/economic/web3", "GET"),
-        ("/v1/profile/{}/pnl", "GET"),
-        ("/v1/profile/{}/social-intelligence", "GET"),
-        # Resolved since the ratchet was introduced: the 5 /v1/notifications
-        # conflicts (the legacy notification router was retired) and the 5
-        # /v1/admin/kyber/{tenant-value-health,...} conflicts (the shadowed copies in
-        # services/intelligence/routes.py were deleted).
-    }
-)
 
 _PARAM = re.compile(r"\{[^}]*\}")
 
@@ -90,22 +64,11 @@ def _current_conflicts() -> dict[tuple[str, str], list[str]]:
     }
 
 
-def test_no_new_route_conflicts():
+def test_no_two_handlers_claim_the_same_method_and_path():
     conflicts = _current_conflicts()
-    new = {k: v for k, v in conflicts.items() if k not in KNOWN_CONFLICTS}
-    assert not new, (
-        "NEW duplicate route registrations detected (the later mount is "
-        f"silently shadowed):\n{new}\nDeduplicate the routers instead of "
-        "extending KNOWN_CONFLICTS."
-    )
-
-
-def test_conflict_allowlist_is_not_stale():
-    conflicts = set(_current_conflicts())
-    fixed = KNOWN_CONFLICTS - conflicts
-    assert not fixed, (
-        f"These allowlisted conflicts no longer exist — remove them from "
-        f"KNOWN_CONFLICTS so the ratchet tightens: {sorted(fixed)}"
+    assert not conflicts, (
+        "duplicate route registrations (the later mount is silently shadowed); "
+        f"keep one handler and delete the other:\n{conflicts}"
     )
 
 
@@ -126,7 +89,27 @@ def test_parameter_names_and_include_prefixes_do_not_hide_a_conflict():
     assert len([1 for path, _ in iter_api_routes(app) if normalize(path) == "/v1/profile/{}/pnl"]) == 2
 
 
-def test_frozen_conflicts_are_recorded_in_the_debt_ledger():
-    ledger = yaml.safe_load((ROOT / "config/debt_retirement_ledger.yaml").read_text(encoding="utf-8"))
-    ids = {entry["id"] for entry in ledger["entries"]}
-    assert not KNOWN_CONFLICTS or LEDGER_ROW in ids, f"ledger row {LEDGER_ROW} must record the frozen conflicts"
+# The handler that owns each URL that used to have a second, shadowed handler.
+RESOLVED_OWNERS = {
+    ("/v1/admin/billing/stripe/webhook", "POST"): "services.admin.webhook_routes",
+    ("/v1/attribution/models", "GET"): "services.attribution.routes",
+    ("/v1/profile/{}/economic", "GET"): "services.profile.routes",
+    ("/v1/profile/{}/economic/web2", "GET"): "services.profile.routes",
+    ("/v1/profile/{}/economic/web3", "GET"): "services.profile.routes",
+    ("/v1/profile/{}/economic/warnings", "GET"): "services.profile.routes",
+    ("/v1/profile/{}/economic/agentic", "GET"): "services.economic.routes",
+    ("/v1/profile/{}/economic/campaigns", "GET"): "services.economic.routes",
+    ("/v1/profile/{}/pnl", "GET"): "services.pnl.routes",
+    ("/v1/profile/{}/social-intelligence", "GET"): "services.profile.routes",
+}
+
+
+def test_each_formerly_duplicated_url_is_served_by_its_chosen_owner():
+    import main
+
+    owners: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for path, route in iter_api_routes(main.app):
+        for method in route.methods or []:
+            owners[(normalize(path), method)].add(route.endpoint.__module__)
+    wrong = {key: owners.get(key) for key, owner in RESOLVED_OWNERS.items() if owners.get(key) != {owner}}
+    assert not wrong, f"these URLs are not served by the handler chosen for them: {wrong}"
