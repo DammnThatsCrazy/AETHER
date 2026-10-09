@@ -512,7 +512,7 @@ entries:
       removed file; the files kept because tests or the identity-continuity-gates
       workflow depend on them are listed under product-aether-unmounted-code-pending
     rollback: restore from git history
-    removal_pr: "#PR"
+    removal_pr: "#746"
     deadline: null
 
   - id: product-aether-unmounted-code-pending
