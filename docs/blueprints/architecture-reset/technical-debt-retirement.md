@@ -18,13 +18,17 @@ say how everything outside that authority disappears. The rule is:
 
 > A cutover is finished when the replaced path is gone, not when the new path works.
 
-`scripts/validate_debt_retirement_ledger.py` enforces the registry (it runs in
-`make repo-doctor`). It fails when a row is missing a required field, names a
-path that no longer exists, is `deletion-ready` while a consumer remains or
-without parity and usage evidence, is `removed` while its duplicate still
-exists, or keeps a `converge`/`deprecated` row past its deadline. The deadline
-is what stops a compatibility layer from becoming permanent. Re-deciding a row
-means writing a new date in a reviewed change.
+`scripts/validate_debt_retirement_ledger.py` enforces the registry. It runs in
+`make repo-doctor` and, as the `debt_retirement_ledger` router check, in every
+PR-lane plan, because any change can delete a path a row names. It fails when a
+row has no string id or repeats one, is missing a required field, leaves
+`authority`, `compatibility`, `rollback` or `retire` blank, names a path that is
+empty, absolute, outside the repository or no longer exists, is `deletion-ready`
+or `removed` while a consumer remains or without parity and usage evidence, is
+`removed` while its duplicate still exists, or keeps a
+`converge`/`deprecated` row past its deadline. The deadline is what stops a
+compatibility layer from becoming permanent. Re-deciding a row means writing a
+new date in a reviewed change.
 
 This page records measurements and decisions as of `Development` `e41a801`
 (2026-10-09). It is not a readiness claim: nothing here makes a path

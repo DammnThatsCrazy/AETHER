@@ -40,6 +40,9 @@ REQUIRED = (
     "id", "domain", "classification", "state", "authority", "current", "duplicates",
     "consumers", "compatibility", "mechanism", "rollback", "deadline", "retire",
 )
+# Policy-bearing fields: a row with a null or blank value has no owner, no
+# compatibility promise or no way back, which is what the ledger exists to force.
+TEXT_FIELDS = ("authority", "compatibility", "rollback", "retire")
 # A row may only be deleted once it can show both of these.
 DELETION_EVIDENCE = ("parity_evidence", "usage_evidence")
 
@@ -51,8 +54,26 @@ def _tracked_files(root: Path = ROOT) -> list[str]:
     return [line for line in out.stdout.splitlines() if line]
 
 
-def _exists(path: str, root: Path = ROOT) -> bool:
-    return (root / path).exists()
+def _repo_path_problem(path: Any, root: Path = ROOT) -> str | None:
+    """Why ``path`` cannot name an entry inside the repository, or None.
+
+    ``root / ""`` is the repository root and ``root / "/tmp"`` discards ``root``,
+    so unchecked values could satisfy an existence test without naming anything.
+    """
+    if not isinstance(path, str) or not path.strip():
+        return "must be a non-empty string"
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return "must be relative to the repository root"
+    resolved = (root / candidate).resolve()
+    base = root.resolve()
+    if resolved == base or base not in resolved.parents:
+        return "must stay inside the repository"
+    return None
+
+
+def _exists(path: Any, root: Path = ROOT) -> bool:
+    return _repo_path_problem(path, root) is None and (root / path).exists()
 
 
 def _paths(value: Any) -> list[str]:
@@ -85,13 +106,22 @@ def validate(
             errors.append(f"{where} must be a mapping")
             continue
         ident = entry.get("id")
-        where = f"entry {ident!r}" if ident else where
+        if isinstance(ident, str) and ident.strip():
+            where = f"entry {ident!r}"
+        else:
+            errors.append(f"{where}: id must be a non-empty string")
+            ident = None
         for key in REQUIRED:
             if key not in entry:
                 errors.append(f"{where}: missing {key}")
-        if ident in seen:
-            errors.append(f"{where}: duplicate id")
-        seen.add(str(ident))
+        if ident is not None:
+            if ident in seen:
+                errors.append(f"{where}: duplicate id")
+            seen.add(ident)
+        for key in TEXT_FIELDS:
+            value = entry.get(key)
+            if key in entry and not (isinstance(value, str) and value.strip()):
+                errors.append(f"{where}: {key} must be a non-empty string")
         if entry.get("domain") not in DOMAINS:
             errors.append(f"{where}: domain must be one of {sorted(DOMAINS)}")
         if entry.get("classification") not in CLASSIFICATIONS:
@@ -126,12 +156,15 @@ def validate(
         ):
             errors.append(f"{where}: {state} must name what is retired (duplicates or retire)")
 
-        if state == "deletion-ready":
+        # A removed row may be recorded straight from a cutover PR, so it must
+        # show the same prerequisites as deletion-ready rather than assume it
+        # passed through that state.
+        if state in {"deletion-ready", "removed"}:
             for key in DELETION_EVIDENCE:
                 if not entry.get(key):
-                    errors.append(f"{where}: deletion-ready requires {key}")
+                    errors.append(f"{where}: {state} requires {key}")
             if _paths(entry.get("consumers")):
-                errors.append(f"{where}: deletion-ready cannot still list consumers")
+                errors.append(f"{where}: {state} cannot still list consumers")
         if state == "removed":
             if not entry.get("removal_pr"):
                 errors.append(f"{where}: removed requires removal_pr")
@@ -142,7 +175,10 @@ def validate(
             # Drift check: every named path must exist until the row is removed.
             for key in ("current", "duplicates", "consumers"):
                 for item in _paths(entry.get(key)):
-                    if not isinstance(item, str) or not _exists(item, root):
+                    problem = _repo_path_problem(item, root)
+                    if problem:
+                        errors.append(f"{where}: {key} path {item!r} {problem}")
+                    elif not _exists(item, root):
                         errors.append(f"{where}: {key} path does not exist: {item}")
     return errors
 

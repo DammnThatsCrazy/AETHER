@@ -1175,6 +1175,7 @@ suites:
       "tests/unit/test_connectors.py",
       "tests/unit/test_consistency_ownership.py",
       "tests/unit/test_cost_model.py",
+      "tests/unit/test_debt_retirement_ledger.py",
       "tests/unit/test_decision_outcome_intelligence.py",
       "tests/unit/test_derivatives_intelligence.py",
       "tests/unit/test_derivatives_product.py",

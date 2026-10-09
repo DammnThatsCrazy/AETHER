@@ -110,8 +110,66 @@ def test_removed_requires_a_removal_pr_and_a_deleted_duplicate(tmp_path):
     errors = _check(tmp_path, _entry(state="removed"))
     assert any("removed requires removal_pr" in e for e in errors)
     assert any("removed but config/debt_retirement_ledger.yaml still exists" in e for e in errors)
-    gone = _entry(state="removed", removal_pr="#1", duplicates=["config/gone-for-good.yaml"], deadline=None)
+    gone = _entry(
+        state="removed",
+        removal_pr="#1",
+        duplicates=["config/gone-for-good.yaml"],
+        deadline=None,
+        parity_evidence="n/a",
+        usage_evidence="no references",
+    )
     assert _check(tmp_path, gone) == []
+
+
+def test_removed_rows_keep_the_deletion_prerequisites(tmp_path):
+    # A cutover PR can record `removed` directly; the validator cannot assume the
+    # row passed through deletion-ready, so the same evidence rules apply.
+    premature = _entry(
+        state="removed",
+        removal_pr="#1",
+        duplicates=["config/gone-for-good.yaml"],
+        consumers=["scripts/repo_doctor.py"],
+        deadline=None,
+    )
+    errors = _check(tmp_path, premature)
+    assert any("removed requires parity_evidence" in e for e in errors)
+    assert any("removed requires usage_evidence" in e for e in errors)
+    assert any("removed cannot still list consumers" in e for e in errors)
+
+
+@pytest.mark.parametrize("ident", [123, None, "", ["a"], {"a": 1}])
+def test_ids_must_be_non_empty_strings(tmp_path, ident):
+    # Two unquoted numeric ids used to pass the uniqueness check; an unhashable
+    # id used to crash the validator instead of failing it.
+    errors = _check(tmp_path, _entry(id=ident), _entry(id=ident))
+    assert any("id must be a non-empty string" in e for e in errors)
+
+
+@pytest.mark.parametrize("key", ["authority", "compatibility", "rollback", "retire"])
+@pytest.mark.parametrize("value", [None, "", "   ", 7, []])
+def test_policy_fields_must_be_non_empty_text(tmp_path, key, value):
+    errors = _check(tmp_path, _entry(**{key: value}))
+    assert any(f"{key} must be a non-empty string" in e for e in errors)
+
+
+@pytest.mark.parametrize(
+    "path,reason",
+    [
+        ("", "non-empty string"),
+        ("   ", "non-empty string"),
+        (".", "stay inside the repository"),
+        ("/tmp", "relative to the repository root"),
+        ("../outside", "stay inside the repository"),
+        ("scripts/../../outside", "stay inside the repository"),
+        (7, "non-empty string"),
+    ],
+)
+def test_paths_must_name_an_entry_inside_the_repository(tmp_path, path, reason):
+    # root / "" is the repository root and root / "/tmp" discards root, so these
+    # used to satisfy the existence check without naming a repository artifact.
+    for key in ("current", "consumers"):
+        errors = _check(tmp_path, _entry(**{key: [path]}))
+        assert any(f"{key} path" in e and reason in e for e in errors), errors
 
 
 def test_a_retained_authority_cannot_list_duplicates(tmp_path):
