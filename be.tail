@@ -1,5 +1,0 @@
-=========================== short test summary info ============================
-ERROR tests/unit/test_derivatives_faults.py - ImportError while importing tes...
-!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!!!!!!!!!! xdist.dsession.Interrupted: stopping after 1 failures !!!!!!!!!!!!!
-16 warnings, 1 error in 34.23s
