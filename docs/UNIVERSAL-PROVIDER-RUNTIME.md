@@ -139,7 +139,6 @@ services/backend/
 │   │   ├── tenant_route_repository.py  #   audited route ledger and writer fence
 │   │   ├── tenant_route_service.py     #   governed route transitions
 │   │   ├── connector_graph_writer.py  #   opt-in guarded graph mutation seam
-│   │   ├── reconciliation.py           #   reconciliation
 │   │   ├── registry.py                 #   ProviderRegistry — register/load_all, entry points
 │   │   ├── retry.py                    #   retry policy
 │   │   ├── routes.py                   #   /v1/provider-connections, /v1/admin/kyber/
