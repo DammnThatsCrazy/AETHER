@@ -23,6 +23,7 @@ from shared.auth.auth import PlanTier
 from shared.billing import stripe_client, stripe_repository
 from shared.common.common import APIResponse, BadRequestError, RateLimitedError
 from shared.logger.logger import get_logger, metrics
+from shared.rate_limit.auth_throttle import client_ip
 from repositories.repos import AdminRepository, APIKeyRepository
 
 logger = get_logger("aether.service.registration")
@@ -73,8 +74,9 @@ _key_repo = APIKeyRepository()
 
 
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    return forwarded.split(",")[0].strip() or request.client.host if request.client else "unknown"
+    # The right-most X-Forwarded-For hop is the one the load balancer appended; the
+    # left-most is whatever the caller sent, so keying a limit on it is bypassable.
+    return client_ip(request.headers, request.client.host if request.client else None)
 
 
 async def _contained_registration(body: "TenantRegistration") -> dict:

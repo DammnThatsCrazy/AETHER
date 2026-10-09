@@ -58,6 +58,7 @@ from services.gateway.status_history_repository import (
     StatusHistoryRepository,
 )
 from shared.common.common import utc_now
+from shared.rate_limit.auth_throttle import client_ip  # noqa: F401  (re-exported: gateway/routes.py)
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.gateway.status_history")
@@ -381,20 +382,6 @@ class PublicIpRateLimiter:
         if bucket[1] > self._limit:
             return max(1, int(bucket[0] - now))
         return None
-
-
-def client_ip(headers: Mapping[str, str], peer: Optional[str]) -> str:
-    """The caller's address as the load balancer saw it.
-
-    The ALB *appends* the connecting address to ``X-Forwarded-For``, so the
-    right-most entry is the one a client cannot forge; left-most entries are
-    whatever the client sent.
-    """
-    forwarded = headers.get("x-forwarded-for", "")
-    hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
-    if hops:
-        return hops[-1]
-    return peer or "unknown"
 
 
 # Process-wide instances used by the gateway routes.
