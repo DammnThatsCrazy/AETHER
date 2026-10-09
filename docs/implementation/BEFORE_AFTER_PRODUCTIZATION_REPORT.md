@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:a614110aed3992dbd96ea685a62113c8f72f58ec0f475eb952b8e886cbb77586"
+  "scripts/production_status.py": "sha256:ac55a24a6cd96fd145a3c6d754890762bd5eaf077e34d2aad8c1bd025d87f4e3"
 ---
 
 # Before / After Productization Report

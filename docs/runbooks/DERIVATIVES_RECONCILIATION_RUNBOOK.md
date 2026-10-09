@@ -33,7 +33,9 @@ The fleet and conformance endpoints surface the real read-only venue adapters
 2. Check stream gaps first — an open gap on the account's markets is
    the most common cause (missed fills → stale projection).
 3. If a gap explains it: trigger backfill for the gap window, wait for
-   recovery, re-run reconciliation; the variance should not reappear.
+   recovery, then confirm the variance list. Note: no worker runs
+   snapshot-vs-projection reconciliation yet, so a cleared variance must be
+   verified against the venue statement rather than assumed from a re-run.
 4. If no gap: run adapter conformance (`POST /conformance/{adapter_id}`).
    A conformance failure is an adapter bug — file it, don't touch data.
 5. Venue-side restatements arrive as corrections (new rows); confirm

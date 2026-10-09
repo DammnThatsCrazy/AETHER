@@ -344,13 +344,18 @@ AREAS: list[Area] = [
     ),
     Area(
         "agentic_x402_productization",
-        4,
-        "Full x402 lifecycle (14 events + legacy normalization) and agent lifecycle "
-        "(19 events + legacy normalization) implemented end-to-end: SDK emitters, "
-        "shared contracts, backend lifecycle mappers, tenant-scoped repositories, "
-        "graph mutations, AgentProfile360Composer, Kyber operator observability, "
-        "and comprehensive test suites. Tenant isolation enforced — all repository "
-        "reads require explicit tenant_id.",
+        3,
+        "x402 lifecycle (14 events + legacy normalization) and agent lifecycle "
+        "(19 events + legacy normalization): SDK emitters, shared contracts, "
+        "tenant-scoped repositories, AgentProfile360Composer and Kyber operator "
+        "observability are implemented and tested, with tenant isolation enforced "
+        "(all repository reads require explicit tenant_id). "
+        "Not end-to-end: the backend lifecycle mappers (x402/lifecycle_mapper.py, "
+        "agent/lifecycle_mapper.py) are tested but no event consumer calls them, so "
+        "the tables only they write (payment_intents, settlement_events, "
+        "economic_resources, facilitators, agent_economic_identity, delegation "
+        "rows) stay empty in a running system; agent execution facts reach Silver "
+        "through the separate AgentExecutionProjector path.",
         [
             "packages/shared/events.ts",
             "packages/shared/agent.ts",
@@ -602,7 +607,10 @@ AREAS: list[Area] = [
         "credentialless certification matrix; credentialless reorg/finality-recovery "
         "behaviour is pinned by tests/chaos. "
         "Not production: live chain finality tracking and price feeds are "
-        "credential-gated (CREDENTIAL_WAITING, not live); no staging validation has run.",
+        "credential-gated (CREDENTIAL_WAITING, not live); no staging validation has run. "
+        "The domain-stack graph_mutations module is not invoked (the live graph path "
+        "is the observer-stack outbox projector); one of the two graph designs has "
+        "to be chosen before either is claimed.",
         [
             "services/backend/services/stablecoin/",
             "services/backend/services/stablecoins/rpc_observer.py",
@@ -617,10 +625,14 @@ AREAS: list[Area] = [
         "derivatives intelligence",
         3,
         "Runtime for the PR1 contract foundation: read-only adapter framework with "
-        "deterministic simulator (MOCKED_LOCAL) + conformance suite, order/position "
-        "FSMs with out-of-order tolerance and append-only corrections, bounded "
-        "stream sequence tracking with gap detection/recovery, snapshot-vs-projection "
-        "reconciliation, Decimal-only P&L. Alembic adoption of the PR1 raw-SQL DDL. "
+        "deterministic simulator (MOCKED_LOCAL) + conformance suite, bounded "
+        "stream sequence tracking with gap detection/recovery, raw intake "
+        "(orders, fills, positions) and read-only lists, a cursor-only venue sweep. "
+        "Alembic adoption of the PR1 raw-SQL DDL. "
+        "The position engine, order/position FSMs, Decimal-only P&L and "
+        "snapshot-vs-projection reconciliation exist as tested library code that no "
+        "worker runs yet, so the P&L, reconciliation-variance and position-epoch "
+        "tables stay empty. "
         "All four venue adapters (Hyperliquid, dYdX, GMX, Drift) resolve to "
         "CREDENTIAL_WAITING in the credentialless matrix; stream gap/disconnect/"
         "reorder/rate-limit/timeout recovery is pinned by tests/chaos. "
@@ -806,6 +818,26 @@ BLOCKERS: list[Blocker] = [
         "Integrate the OpenTelemetry SDK behind the existing seam (span creation at "
         "ingestion/jobs/outbox hops, OTLP exporter), provision a collector in staging, "
         "and validate trace continuity across enqueue -> worker -> bus",
+    ),
+    Blocker(
+        "pre-production-blocker",
+        "x402 and agent lifecycle mappers are implemented and tested but no event "
+        "consumer calls them, so payment_intents, settlement_events, "
+        "economic_resources, facilitators, agent_economic_identity and the agent "
+        "delegation rows are never populated",
+        "agentic_x402_productization",
+        "Add a graph-writer ConsumerSpec on the validated SDK event topic that "
+        "dispatches x402_* and agent lifecycle events to the two mappers, and decide "
+        "its overlap with the AgentExecutionProjector Silver path",
+    ),
+    Blocker(
+        "pre-production-blocker",
+        "Derivatives position engine, FSMs, P&L and reconciliation are library code "
+        "that no worker runs: the P&L, reconciliation-variance and position-epoch "
+        "tables stay empty",
+        "derivatives intelligence",
+        "Add a materializer WorkerSpec that applies fills to positions, writes P&L "
+        "snapshots and reconciliation variances, and wire the entitlement guard",
     ),
     Blocker(
         "pre-production-blocker",

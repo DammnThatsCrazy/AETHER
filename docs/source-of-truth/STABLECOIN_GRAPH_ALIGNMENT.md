@@ -31,5 +31,7 @@ Every edge is registered in `relationship_layers.py::_EDGE_LAYER_MAP`
 (exhaustiveness enforced by `assert_contract_valid()` and the parity
 tests); mutations flow through `graph_mutations.py` using
 `build_edge_properties` (tenant, provenance, idempotency key,
-`source_event_id`) and are persisted via `foundation.persist_mutations`,
-gated by `settings.stablecoin.graph_enabled`.
+`source_event_id`) and are persisted via `foundation.persist_mutations`.
+This module is not invoked by any worker yet and the `graph_enabled` flag it
+refers to does not exist in settings; the live graph path today is the
+observer-stack outbox projector (`stablecoins/graph_projector.py`).

@@ -66,7 +66,7 @@ The following subsystems are implemented, tested, and CI-verified:
 - ✅ 6 ML models trained: identity resolution, churn prediction, LTV prediction, anomaly detection, campaign attribution, campaign optimization
 - ✅ Signal translator: 20 behavioral signal templates (universal + social + financial + onchain)
 - ✅ PNL calculator service
-- ✅ Retarget recommendation engine (score → recommendation → review → execute)
+- ⚠️ Retarget recommendations (review → execute): the review and ad-platform execute path is live (`write`-gated); no service code creates retarget recommendations (the scoring engine was removed as unused), so the list is empty until a producer is built
 
 ### OODA Suggestion Intelligence
 - ✅ Canonical `Suggestion` entity with 15 lifecycle statuses across 8 OODA phases (observe → orient → suggest → review → act → measure → learn → closed)

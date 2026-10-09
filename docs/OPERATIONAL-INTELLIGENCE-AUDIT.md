@@ -113,8 +113,8 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **AgentEconomicIdentityRepository** | `repos.py` | `upsert_identity`, `find_for_agent(agent_id, tenant_id)` — tenant-scoped key: `{tenant_id}:{agent_id}:economic_identity` |
 | **EconomicResourceRepository** | `repos.py` | `upsert_resource`, `list_for_tenant(tenant_id)` — tenant-isolated purchasable capabilities |
 | **FacilitatorRepository** | `repos.py` | `upsert_facilitator`, `list_active(tenant_id)` — x402 facilitator/trust-broker registry |
-| **X402LifecycleMapper** | `services/backend/services/x402/lifecycle_mapper.py` | Routes 14 canonical x402 events to repositories; idempotent via event_id; full tenant isolation |
-| **AgentLifecycleMapper** | `services/backend/services/agent/lifecycle_mapper.py` | Routes 19 canonical agent lifecycle events to graph mutations + repos; all vertex IDs use `{tenant_id}:agent:{id}` format |
+| **X402LifecycleMapper** | `services/backend/services/x402/lifecycle_mapper.py` | Routes 14 canonical x402 events to repositories; idempotent via event_id; full tenant isolation. Not yet called by any event consumer |
+| **AgentLifecycleMapper** | `services/backend/services/agent/lifecycle_mapper.py` | Routes 19 canonical agent lifecycle events to graph mutations + repos; all vertex IDs use `{tenant_id}:agent:{id}` format. Not yet called by any event consumer |
 | **Four-layer graph coverage** | `/v1/graph/*` + `shared/graph-contract.ts` | All four interaction layers implemented: H2H (human↔human), H2A (human→agent), A2H (agent→human), A2A (agent↔agent). `classifyEdgeType` routes each edge type to its layer; `countEdgesByLayer` aggregates per-layer stats exposed via `/v1/graph/health`. |
 
 ---
