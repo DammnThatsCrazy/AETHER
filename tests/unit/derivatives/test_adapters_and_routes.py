@@ -19,12 +19,12 @@ TENANT = "t-deriv-a"
 OTHER_TENANT = "t-deriv-b"
 
 _FLAGS_ON = SimpleNamespace(
-    runtime_enabled=True, adapters_enabled=True, streams_enabled=True,
+    runtime_enabled=True, adapters_enabled=True,
     reconciliation_enabled=True, pnl_enabled=True, graph_enabled=True,
     profile360_enabled=True, api_enabled=True, noesis_enabled=True, kyber_enabled=True,
 )
 _FLAGS_OFF = SimpleNamespace(
-    runtime_enabled=False, adapters_enabled=False, streams_enabled=False,
+    runtime_enabled=False, adapters_enabled=False,
     reconciliation_enabled=False, pnl_enabled=False, graph_enabled=False,
     profile360_enabled=False, api_enabled=False, noesis_enabled=False, kyber_enabled=False,
 )

@@ -2,7 +2,7 @@
 
 Maps observed depeg valuation snapshots to OODA suggestions. Suggestions
 only — Aether never executes trades, rebalances, or on-chain actions in
-response. Gated by settings.suggestions.stablecoin_adapter_enabled.
+response. Not wired yet: nothing registers this adapter.
 """
 
 from __future__ import annotations

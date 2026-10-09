@@ -30,9 +30,10 @@ source_hashes:
    `provider + provider_account + provider_event_id + event_type`; overlap
    between backfill and realtime webhooks is safe.
 4. **Downstream** — comm state rebuilds are coalesced per entity by the
-   worker; journey rebuilds trigger from touchpoints as usual. For a large
-   backfill, temporarily set `AETHER_COMMS_GRAPH_ENABLED=false` to defer
-   graph emission, then re-enable and re-project.
+   worker; journey rebuilds trigger from touchpoints as usual. Graph emission
+   has no switch of its own (an `AETHER_COMMS_GRAPH_ENABLED` setting used to be
+   documented here; nothing read it). To relieve graph pressure during a large
+   backfill, pause the backfill (step 6) and resume it later.
 5. **Progress/errors** — watch `comms_events_ingested_total`,
    `silver_projector_failures_total`, `comms_catalog_failures_total`, and
    the connector health card in Kyber → Measurement Operations.

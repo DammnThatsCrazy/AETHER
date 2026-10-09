@@ -43,7 +43,6 @@ def ai_flags_on(monkeypatch):
         settings.ai_economics,
         enabled=True,
         execution_facts_enabled=True,
-        economics_enabled=True,
         recommendations_enabled=True,
         kyber_enabled=True,
     )
@@ -58,7 +57,6 @@ def ai_flags_off(monkeypatch):
         settings.ai_economics,
         enabled=False,
         execution_facts_enabled=False,
-        economics_enabled=False,
         recommendations_enabled=False,
         kyber_enabled=False,
     )

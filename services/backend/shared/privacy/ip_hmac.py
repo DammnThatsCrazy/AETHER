@@ -1,6 +1,6 @@
 """Tenant-scoped rotating IP HMAC — the only permitted transform of a client IP.
 
-Raw IPs must never persist (safety default ``AETHER_RAW_IP_PERSISTENCE_BLOCKED``).
+Raw IPs must never persist (guarded by tests/security/test_no_raw_ip_persistence.py).
 Where short-term correlation/deduplication is legitimately needed (abuse
 review, audit trails), persist this HMAC instead:
 

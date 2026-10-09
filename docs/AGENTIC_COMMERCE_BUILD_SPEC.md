@@ -175,7 +175,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - `challenges_repo.py`, `approvals_repo.py`, `entitlements_repo.py`, `settlements_repo.py`, `resources_repo.py`, `policies_repo.py`, `facilitators_repo.py`. All Postgres-backed with tenant isolation.
 
 **`config/` (extend)**
-- `settings.py` — ADD: `commerce_approval_required_all`, `commerce_default_facilitator`, `commerce_base_rpc`, `commerce_solana_rpc`, `commerce_enable_v2`, `commerce_feature_flag`.
+- `settings.py` — ADD: `commerce_base_rpc`, `commerce_solana_rpc`. (`commerce_approval_required_all`, `commerce_default_facilitator`, `commerce_enable_v2` and `commerce_feature_flag` were specified here but no code ever read them; they are retired. Mandatory approval is the `DEFAULT_APPROVAL_REQUIRED_ALL` constant in `services/x402/policies.py`.)
 
 **`middleware/middleware.py` (extend)**
 - Wire `ChallengeMiddleware` as optional hook before route dispatch for registered protected resources.
@@ -504,7 +504,7 @@ This is exercised by the nightly reconciliation job and exposed via Diagnostics 
 
 ### 7.1 Mandatory approval at GA
 
-At launch, **every spend-bearing access path** passes through `ApprovalService`. The config flag `commerce_approval_required_all=true` is the Day-1 default and cannot be set to false by self-service. Per-tenant opt-down requires explicit admin action with audit record.
+At launch, **every spend-bearing access path** passes through `ApprovalService`. Mandatory approval is the Day-1 default (`DEFAULT_APPROVAL_REQUIRED_ALL` in `services/x402/policies.py`); it is not a config flag and cannot be set to false by self-service. Per-tenant opt-down requires explicit admin action with audit record.
 
 ### 7.2 States & transitions
 
@@ -1012,10 +1012,8 @@ All tests must pass in CI before merge. Contract tests block breaking changes. K
 
 - `COMMERCE_CONTROL_PLANE_ENABLED` (master flag, default off)
 - `COMMERCE_CHALLENGE_MIDDLEWARE_ENABLED` (per-tenant)
-- `COMMERCE_APPROVAL_REQUIRED_ALL` (default true, locked at GA)
 - `COMMERCE_FACILITATOR_VERIFY_ENABLED` (per-facilitator)
 - `COMMERCE_LOCAL_VERIFY_FALLBACK` (default true)
-- `COMMERCE_V2_PROTOCOL` (default true for new challenges)
 - `COMMERCE_KYBER_ACTIONS_ENABLED` (per-role, per-page)
 - `IG_X402_LAYER` (existing, kept on)
 

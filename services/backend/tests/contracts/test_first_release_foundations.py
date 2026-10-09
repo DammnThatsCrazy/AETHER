@@ -162,7 +162,6 @@ class TestFirstReleaseFlagsDefaultOff:
         assert cfg.enabled is False
         assert cfg.kyber_enabled is False
         assert cfg.registry_enabled is False
-        assert cfg.sdk_enabled is False
         assert cfg.graph_enabled is False
         assert cfg.profile360_enabled is False
 
@@ -188,7 +187,6 @@ class TestFirstReleaseFlagsDefaultOff:
         cfg = AIEconomicsConfig()
         assert cfg.enabled is False
         assert cfg.execution_facts_enabled is False
-        assert cfg.economics_enabled is False
         assert cfg.recommendations_enabled is False
         assert cfg.kyber_enabled is False
 
@@ -227,7 +225,6 @@ class TestFirstReleaseFlagsDefaultOff:
             "AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED",
             "KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED",
             "AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED",
-            "AETHER_AGENT_TELEMETRY_SDK_ENABLED",
             "AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED",
             "AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED",
             "AETHER_PAYMENT_RAILS_ENABLED",
@@ -239,7 +236,6 @@ class TestFirstReleaseFlagsDefaultOff:
             "KYBER_PAYMENT_RAILS_ENABLED",
             "AETHER_AI_OUTCOME_EFFICIENCY_ENABLED",
             "AETHER_AI_EXECUTION_FACTS_ENABLED",
-            "AETHER_AI_ECONOMICS_ENABLED",
             "AETHER_AI_EFFICIENCY_RECOMMENDATIONS_ENABLED",
             "KYBER_AI_EFFICIENCY_HEALTH_ENABLED",
             "AETHER_CLUSTER_TARGETING_INTELLIGENCE_ENABLED",
@@ -252,16 +248,5 @@ class TestFirstReleaseFlagsDefaultOff:
             "AETHER_CATALYST_CYCLE_AUTOMATION_ENABLED",
             "KYBER_AGENT_COMMAND_CENTER_ENABLED",
             "KYBER_ONE_PERSON_OPS_ENABLED",
-        ):
-            assert re.search(rf"^{flag}=false", env_example, re.M), flag
-
-    def test_untouched_future_marketplace_flags(self):
-        """The marketplace/partner flags remain future-flagged and OFF."""
-        env_example = _read(".env.example")
-        for flag in (
-            "AETHER_PARTNER_ECOSYSTEM_ENABLED",
-            "AETHER_MARKETPLACE_ENABLED",
-            "AETHER_DEVELOPER_PLATFORM_ENABLED",
-            "KYBER_PARTNER_ECOSYSTEM_ENABLED",
         ):
             assert re.search(rf"^{flag}=false", env_example, re.M), flag

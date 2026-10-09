@@ -175,7 +175,7 @@ pull, the enforce-flag flip and real SLO baselines remain release-gated residual
 (ledger D-07). **No release-readiness claim.**
 
 Rollout is flag-gated (`AETHER_SOCIAL360_ENABLED=false`,
-`AETHER_SOCIAL_UPR_ENABLED=false`, `AETHER_RELATIONSHIP_MOTIFS_ENABLED=false`,
+`AETHER_RELATIONSHIP_MOTIFS_ENABLED=false`,
 `AETHER_RELATIONSHIP_FIDELITY_MODE=off`, `AETHER_PATH_FIDELITY_ENABLED=false`,
 `AETHER_SOCIAL_LENSES_ENABLED=false`, `AETHER_RELATIONSHIP_SPINE_NOESIS_ENABLED=false`);
 new product behavior defaults OFF until

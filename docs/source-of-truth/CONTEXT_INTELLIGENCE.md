@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/context-capsule-registry.json, packages/shared/context-capsule.ts, services/backend/shared/context_capsule/models.py, services/backend/shared/context_capsule/generated_taxonomy.py, services/backend/services/ingestion/context_enricher.py, services/backend/services/ingestion/geo_provider.py, services/backend/shared/privacy/ip_hmac.py, tests/security/test_no_raw_ip_persistence.py]
+source_files: [packages/shared/contracts/context-capsule-registry.json, packages/shared/context-capsule.ts, services/backend/shared/context_capsule/models.py, services/backend/shared/context_capsule/generated_taxonomy.py, services/backend/services/ingestion/context_enricher.py, services/backend/services/ingestion/geo_provider.py, services/backend/shared/privacy/ip_hmac.py, tests/security/test_no_raw_ip_persistence.py, tests/unit/test_context_has_no_identity_merge_path.py]
 last_synced_commit: a500f1f
 ---
 
@@ -27,13 +27,19 @@ presence.
 | Geo/ASN lookup (local MaxMind fail-closed `not_provisioned`, deterministic test, honest null) | `services/backend/services/ingestion/geo_provider.py` |
 | The ONLY permitted IP transform: tenant-scoped rotating HMAC (windowed key derivation, one-way, no key table) | `shared/privacy/ip_hmac.py` |
 
-## Safety posture (defaults ON)
+## Safety posture
 
-- `AETHER_RAW_IP_PERSISTENCE_BLOCKED=true` — raw IPs exist transiently in
-  the enricher only; export/consent-audit routes persist the HMAC token;
-  guarded by `tests/security/test_no_raw_ip_persistence.py`.
-- `AETHER_LOCATION_IDENTITY_MERGE_BLOCKED=true` — context never merges
-  identities alone and never solely causes adverse action.
+- Raw IPs exist transiently in the enricher only; export/consent-audit routes
+  persist the HMAC token. This is structural, not a flag, and is guarded by
+  `tests/security/test_no_raw_ip_persistence.py`. (An
+  `AETHER_RAW_IP_PERSISTENCE_BLOCKED` setting used to claim it; nothing read it,
+  so it was retired.)
+- Context never merges identities alone and never solely causes adverse action.
+  This is structural, not a flag: context enrichment has no path into identity
+  resolution (guarded by
+  `tests/unit/test_context_has_no_identity_merge_path.py`). An
+  `AETHER_LOCATION_IDENTITY_MERGE_BLOCKED` setting used to claim this; nothing read
+  it, so it was retired.
 - Enrichment (`AETHER_CONTEXT_ENRICHMENT_ENABLED`, default off) never
   rejects a valid event; failures yield explicit states
   (`not_provisioned` / `private_address` / `provider_error` / …).

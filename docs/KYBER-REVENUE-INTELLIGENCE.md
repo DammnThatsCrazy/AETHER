@@ -7,7 +7,7 @@ audience: [architect, dev-senior, ops, buyer]
 status: beta
 since_version: 0.1.0
 source_files: [services/backend/services/admin/kyber_strategic.py, services/backend/services/admin/routes.py, frontend/kyber/src/components/recommendation-observability-panel.tsx]
-flags: [KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED]
+flags: []
 related: [ai/kyber-strategic-observability, ai/playbooks, ai/recommendation-families]
 source_hashes:
   services/backend/services/admin/kyber_strategic.py: sha256:53235e2711b40308c0fe42c96b4f442290c9c73c054931ad1c5683f69123151f

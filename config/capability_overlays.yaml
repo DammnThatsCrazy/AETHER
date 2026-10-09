@@ -9,7 +9,9 @@
 #
 # Enforced by scripts/validate_capability_overlays.py (run by repo-doctor):
 # overlay names start with `enable-`, never equal a deployment profile name, and
-# every bound flag must appear in services/backend/config/settings.py.
+# every bound flag must appear in services/backend/config/settings.py. A flag in
+# settings that nothing reads cannot stay there (scripts/validate_settings_flags.py),
+# so a bound flag is always one the runtime consults.
 
 schema_version: 1
 authority: capability-overlays
@@ -21,23 +23,16 @@ overlays:
     status: bound
     flags:
       - AETHER_COMMS_INGESTION_ENABLED
-      - AETHER_COMMS_JOURNEYS_ENABLED
-      - AETHER_COMMS_GRAPH_ENABLED
-      - AETHER_COMMS_PROFILE360_ENABLED
-      - AETHER_COMMS_NOESIS_ENABLED
-      - AETHER_COMMUNICATION360_ENABLED
   enable-campaigns:
     class: beta
-    status: bound
-    flags:
-      - AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED
-      - AETHER_COMMS_CAMPAIGN360_ENABLED
+    status: unbound
+    note: campaign projection and the Campaign 360 messages surface have no runtime flag; the AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED and AETHER_COMMS_CAMPAIGN360_ENABLED settings that claimed to gate them were never read and are retired.
+    flags: []
   enable-agent-beta:
     class: experimental
     status: bound
     flags:
       - AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED
-      - AETHER_AGENT_TELEMETRY_SDK_ENABLED
       - AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED
       - AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED
       - AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED

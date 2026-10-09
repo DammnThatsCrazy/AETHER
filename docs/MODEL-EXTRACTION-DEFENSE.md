@@ -194,17 +194,12 @@ Kafka events: `ML_EXTRACTION_REQUEST_SEEN`, `ML_EXTRACTION_SCORE_UPDATED`, `ML_E
 
 ```bash
 ENABLE_EXTRACTION_MESH=true
-EXTRACTION_BUDGET_ENABLED=true
-EXTRACTION_EXPECTATION_ENABLED=true
-EXTRACTION_POLICY_ENABLED=true
-EXTRACTION_ATTRIBUTION_ENABLED=true
-EXTRACTION_TELEMETRY_ENABLED=true
 EXTRACTION_PRIVILEGED_TENANTS=internal-service
 EXTRACTION_BATCH_INTERNAL_ONLY=true
 EXTRACTION_OUTPUT_PRECISION=2
-EXTRACTION_ALERT_ON_ORANGE=true
-EXTRACTION_ALERT_ON_RED=true
 ```
+
+The mesh's budget, expectation, policy, attribution and telemetry engines and its orange/red alerting always run when the mesh is enabled. Per-engine switches (`EXTRACTION_*_ENABLED`, `EXTRACTION_ALERT_ON_*`) used to be documented here; no code read them, so they were retired.
 
 ---
 

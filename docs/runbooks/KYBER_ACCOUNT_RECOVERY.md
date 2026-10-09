@@ -93,7 +93,7 @@ than granting a broader template.
 ## 7. Directory stale
 
 Privileged roles fail closed when directory reconciliation is older than
-`KYBER_DIRECTORY_MAX_STALE_HOURS`. Check whether the reconciliation worker is
+`KYBER_DIRECTORY_MAX_AGE_HOURS`. Check whether the reconciliation worker is
 running under the `maintenance` runtime role and whether the Admin SDK
 credentials are valid. Do not raise the staleness threshold to clear the alarm —
 that converts a working control into a decorative one.

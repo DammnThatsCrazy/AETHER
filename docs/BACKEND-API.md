@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:ed17c7ce61cf45fcd87ca4ed2c4fcafe71f7fd4587f3c971fc5b33408a5dd4f7"
+  "services/backend/services/": "sha256:d5204fe0b716fff4b7580bcf3cd21734ed5bc239d4d2baac509359ecee13f64c"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1671,8 +1671,8 @@ expose the same pattern behind their convergence flags (below):
 |--------|----------|-------------|
 | GET | `/v1/infrastructure/{subject_kind}/{subject_id}` | Run the infrastructure360 projection for the requesting tenant (summary / state / deployments / evidence / findings sections; `subject_kind` ∈ `deployment` \| `infrastructure`) |
 | GET | `/v1/infrastructure/health` | Plane probe: provider registered + contract-compatible (`availability()` only) |
-| GET | `/v1/communication360/{subject_kind}/{subject_id}` | Run the communication360 projection for the requesting tenant (information-fidelity / knowledge / authority / resolution engines over the comms canonical facts; read-only) |
-| GET | `/v1/communication360/health` | Plane probe: provider registered + contract-compatible (`availability()` only) |
+| GET | `/v1/communication360/{subject_kind}/{subject_id}` | **Not mounted in `main.py` today.** Run the communication360 projection for the requesting tenant (information-fidelity / knowledge / authority / resolution engines over the comms canonical facts; read-only) |
+| GET | `/v1/communication360/health` | **Not mounted in `main.py` today.** Plane probe: provider registered + contract-compatible (`availability()` only) |
 
 **Permissions:** `read` + the projection's `infrastructure360.read` / `communication360.read`
 capability key (fail-closed). The infrastructure360 provider reads the
@@ -3102,7 +3102,7 @@ All permission fields default to false, including tenant-lake, tenant-graph, and
 
 ### Tenant — BYOK Key Rotate / Revoke / Verify (`/v1/providers/keys/*`)
 
-Feature-flagged (`AETHER_CONNECTOR_BYOK_ENABLED`). Tenant API key required.
+Tenant API key required.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -3154,7 +3154,7 @@ Feature-flagged (`KYBER_PROVIDER_SOURCE_CATALOG_ENABLED`). Operator permission r
 
 ### Kyber Admin — Anti-Distillation (`/v1/admin/kyber/intelligence/*`)
 
-Feature-flagged (`KYBER_ANTI_DISTILLATION_ENABLED`). Operator permission required.
+Operator permission required.
 
 Anti-distillation enforcement on intelligence query endpoints is activated by `AETHER_ANTI_DISTILLATION_ENABLED=true`. When enabled, wallet risk and profile endpoints run pattern detection (rapid diverse-query, honeypot wallet, sequential enumeration) on every request and emit audit events on suspicious activity. Honeypot wallet queries return `403 Forbidden`. Score precision is binned by plan tier (`ALPHA=0.1`, `BETA=0.05`, `GAMMA=0.01`, `DELTA/EPSILON/OMICRON/OMEGA=0.001`).
 

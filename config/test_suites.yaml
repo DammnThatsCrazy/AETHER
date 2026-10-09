@@ -1083,6 +1083,7 @@ suites:
     runner: [
       "python",
       "scripts/run_pytest_files.py",
+      "tests/unit/test_context_has_no_identity_merge_path.py",
       "tests/unit/test_cors_preflight_bypass.py",
       "tests/unit/test_ml_security_fixes.py",
       "tests/unit/test_model_governance.py",
@@ -1216,6 +1217,7 @@ suites:
       "tests/unit/test_runtime_roles.py",
       "tests/unit/test_runtime_topology.py",
       "tests/unit/test_service_classification.py",
+      "tests/unit/test_settings_flags.py",
       "tests/unit/test_stablecoin_intelligence_foundation.py",
       "tests/unit/test_stablecoin_intelligence_polling_scheduler.py",
       "tests/unit/test_stablecoin_intelligence_pr2_pipeline.py",

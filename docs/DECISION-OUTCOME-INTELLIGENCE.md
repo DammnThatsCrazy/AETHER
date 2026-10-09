@@ -7,13 +7,13 @@ audience: [architect, dev-senior, ops]
 status: beta
 since_version: 0.1.0
 source_files: [services/backend/services/intelligence/decision_models.py, services/backend/services/intelligence/ooda_engine.py, services/backend/services/intelligence/recommendation_families.py, services/backend/services/intelligence/outcome_ledger.py, services/backend/services/intelligence/routes.py, services/backend/services/intelligence/repositories.py, services/backend/config/settings.py]
-flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED, AETHER_PLAYBOOKS_ENABLED, KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED, AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD]
+flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED, AETHER_PLAYBOOKS_ENABLED, AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD]
 related: [architecture/intelligence-graph, ai/recommendation-families, ai/investigation-workspace, operations/cicd]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:d015d3b2e4139cf1bb7df201f26b320c0836460605bbf527ad11298377a530db"
+  "services/backend/config/settings.py": "sha256:4c31fc9dd1fc2b5512d5207fa5ea61d8f961a37138912a924523856efdb6f4bf"
   "services/backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
   "services/backend/services/intelligence/ooda_engine.py": "sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486"
   "services/backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
@@ -111,7 +111,6 @@ Decision and outcome intelligence flags default to disabled so tenants and opera
 - `AETHER_DECISION_RECORDS_ENABLED`
 - `AETHER_OUTCOME_FEEDBACK_ENABLED`
 - `AETHER_PLAYBOOKS_ENABLED`
-- `KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED`
 - `AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD`
 
 ## Migration notes
@@ -147,9 +146,6 @@ the server. The compatibility request field cannot override audit identity.
 | `FEATURE_FRAUD_NETWORKS` | `False` | Enable fraud network clustering service |
 | `FEATURE_FLOW_TRACE` | `False` | Enable flow-of-funds BFS traversal |
 | `FEATURE_RISK_OVERLAYS` | `False` | Enable Cytoscape risk overlay generation |
-| `FEATURE_KYBER_FRAUD_WORKSPACE` | `False` | Enable Kyber fraud workspace pages |
-| `FEATURE_TENANT_FRAUD_INTELLIGENCE` | `False` | Enable tenant-facing fraud intelligence |
-| `FRAUD_ALERT_RISK_THRESHOLD` | `70.0` | Minimum cluster risk score for auto-alert |
 | `FRAUD_NETWORK_MAX_DEPTH` | `4` | Maximum graph traversal depth for clustering |
 | `FLOW_TRACE_MAX_HOPS` | `10` | Maximum BFS hops for flow-of-funds trace |
 

@@ -122,12 +122,12 @@ def test_a_bound_flag_must_exist_in_settings(tmp_path):
 
 
 def test_a_bound_flag_must_match_a_whole_setting_name(tmp_path):
-    # AETHER_COMMS_GRAPH is a prefix of AETHER_COMMS_GRAPH_ENABLED, which exists;
+    # AETHER_COMMS_INGESTION is a prefix of AETHER_COMMS_INGESTION_ENABLED, which exists;
     # a substring test would accept both of these.
-    for flag in ("AETHER_COMMS_GRAPH", "AETHER_COMMS_GRAPH_ENABLED_EXTRA", "COMMS_GRAPH_ENABLED"):
+    for flag in ("AETHER_COMMS_INGESTION", "AETHER_COMMS_INGESTION_ENABLED_EXTRA", "COMMS_INGESTION_ENABLED"):
         errors = _overlay_errors(tmp_path, {"class": "beta", "status": "bound", "flags": [flag]})
         assert any("not an environment variable read by" in e for e in errors), flag
-    ok = _overlay_errors(tmp_path, {"class": "beta", "status": "bound", "flags": ["AETHER_COMMS_GRAPH_ENABLED"]})
+    ok = _overlay_errors(tmp_path, {"class": "beta", "status": "bound", "flags": ["AETHER_COMMS_INGESTION_ENABLED"]})
     assert ok == []
 
 
@@ -154,7 +154,7 @@ def test_a_capability_cannot_hide_behind_the_enable_prefix(tmp_path):
             "schema_version": 1,
             "flags_source": "services/backend/config/settings.py",
             "overlays": {
-                "enable-communications": {"class": "beta", "status": "bound", "flags": ["AETHER_COMMS_GRAPH_ENABLED"]}
+                "enable-communications": {"class": "beta", "status": "bound", "flags": ["AETHER_COMMS_INGESTION_ENABLED"]}
             },
         }),
         encoding="utf-8",
@@ -164,6 +164,6 @@ def test_a_capability_cannot_hide_behind_the_enable_prefix(tmp_path):
 
 
 def test_an_unbound_overlay_cannot_list_flags_and_needs_a_note(tmp_path):
-    errors = _overlay_errors(tmp_path, {"class": "beta", "status": "unbound", "flags": ["AETHER_COMMS_GRAPH_ENABLED"]})
+    errors = _overlay_errors(tmp_path, {"class": "beta", "status": "unbound", "flags": ["AETHER_COMMS_INGESTION_ENABLED"]})
     assert any("must not list flags" in e for e in errors)
     assert any("needs a note" in e for e in errors)

@@ -79,7 +79,6 @@ def test_decision_outcome_feature_flags_default_to_gradual_rollout_disabled(monk
         "AETHER_DECISION_RECORDS_ENABLED",
         "AETHER_OUTCOME_FEEDBACK_ENABLED",
         "AETHER_PLAYBOOKS_ENABLED",
-        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -90,7 +89,6 @@ def test_decision_outcome_feature_flags_default_to_gradual_rollout_disabled(monk
     assert cfg.decision_records_enabled is False
     assert cfg.outcome_feedback_enabled is False
     assert cfg.playbooks_enabled is False
-    assert cfg.kyber_observability_enabled is False
 
 
 def test_recommendation_family_registry_selects_non_retention_family():

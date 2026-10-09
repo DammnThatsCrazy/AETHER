@@ -23,9 +23,9 @@ through the fail-isolated :class:`ProviderRegistry
 <shared.intelligence_projections.registry.ProviderRegistry>` (defaults to the
 plane's global ``projection_registry``; a registry may be injected via
 :func:`create_router` for tests / alternate wiring). There is NO write path —
-every route is a GET. The router is mounted flag-gated
-(``AETHER_COMMUNICATION360_ENABLED``, default OFF) so the surface costs nothing
-while disabled and is registered + reachable only when the plane is wired.
+every route is a GET. The router is not mounted in ``main.py`` yet. (An
+``AETHER_COMMUNICATION360_ENABLED`` setting used to claim to gate it; nothing
+read it, so it was retired.)
 """
 
 from __future__ import annotations

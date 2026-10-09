@@ -631,6 +631,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_settings_flags.py"],
+        name="Settings flags are read",
+        results=results,
+        stop_on_failure=stop,
+        remediation="delete the unread field from services/backend/config/settings.py (and its env example, release flag and doc lines), or wire it to the behavior it claims to gate",
+    )
+
+    run(
         [sys.executable, "scripts/validate_debt_retirement_ledger.py"],
         name="Technical-debt retirement ledger",
         results=results,

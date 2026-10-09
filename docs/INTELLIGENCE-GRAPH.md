@@ -64,8 +64,6 @@ IG_COMMERCE_LAYER=true    # L3a: Payment/hire tracking
 IG_ONCHAIN_LAYER=true     # L0: On-chain action ingestion
 IG_X402_LAYER=true        # L3b: x402 micropayment capture
 IG_TRUST_SCORING=true     # Composite trust scoring
-IG_BYTECODE_RISK=true     # Bytecode risk analysis
-IG_RPC_GATEWAY=true       # Shared RPC infrastructure
 
 # Required infrastructure
 NEPTUNE_ENDPOINT=your-neptune-cluster.region.neptune.amazonaws.com
@@ -407,8 +405,6 @@ All flags default to `false`. Enable progressively per layer.
 | `IG_X402_LAYER` | L3b | Enable x402 HTTP payment header interception |
 | `IG_ONCHAIN_LAYER` | L0 | Enable on-chain action ingestion and chain listener |
 | `IG_TRUST_SCORING` | L4 | Enable Trust Score composite computation |
-| `IG_BYTECODE_RISK` | L4 | Enable bytecode risk scoring on contract ingestion |
-| `IG_RPC_GATEWAY` | L6 | Route all RPC calls through shared QuickNode gateway |
 
 ### QuickNode Config
 

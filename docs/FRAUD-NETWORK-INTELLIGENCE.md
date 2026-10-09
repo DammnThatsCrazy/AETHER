@@ -176,7 +176,6 @@ All detectors are pure functions: no async, no I/O. They return `list[tuple[sign
 | Flag | Default | Purpose |
 |---|---|---|
 | `FEATURE_FRAUD_NETWORKS` | false | Enable `/v1/fraud/networks/*` endpoints |
-| `FRAUD_ALERT_RISK_THRESHOLD` | 70.0 | Alerting threshold held in `FraudIntelligenceConfig` (reserved — no automatic escalation is wired to it in the network service today) |
 | `FRAUD_NETWORK_MAX_DEPTH` | 4 | Max hop depth for member expansion |
 
 ---
