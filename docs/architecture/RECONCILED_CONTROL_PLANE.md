@@ -40,7 +40,7 @@ source_hashes:
   "services/backend/config/settings.py": "sha256:1b10df67cb8ad212c22f162f3c98f044fe8452f7709cb1531e35ae50a6ccd664"
   "services/backend/main.py": "sha256:b5634a31fe59be6d13f4fb99979ee2adafc09185b55121c470fdbce70545039b"
   "services/backend/services/kyber/access/": "sha256:518b962e1ac1c2d7a4edd9bcfc7882007ab2caf058dd85120946401cf9fbe841"
-  "services/backend/services/managed_integrations/": "sha256:2cd3baa469ef31e1e5e3c607d58578facf059d7089c49c4d027d92c1c05fcd24"
+  "services/backend/services/managed_integrations/": "sha256:41c1cab340da06d00003e77f96541660cecc732099cf696deeb1938a692d7bca"
   "services/backend/services/sdk_distribution/control_plane.py": "sha256:593c4d57a8d4370951b86034077150fec0018783c15ed3ac8afa3a3a28f008c1"
 ---
 
@@ -108,11 +108,9 @@ services/backend/services/
     executor.py          §34 state-machine executor: verify / commit / rollback / LKG-after-verify
     admission.py         §16 admission lifecycle (no forced exit)
     simulation.py        §37 compare-paths shadow plane (never mutates canonical state)
-    schema_mapping.py    §25 profile→diff→compile→candidate pipeline, §38 promotion gates
     source_authority.py  §19 authority rules + observation-equivalence keys
     scheduler.py         flag-gated periodic reconcile+plan+execute loop (rides `maintenance`)
     rollout.py           §12.8 rollout engine: rings, stage/percentage law, pause/resume
-    fleet_controller.py  §29 planner over §28 channels + §30 platform behavior (composes only)
     *_repository.py      one module-local store per engine (in-memory mirror of the tables)
     routes.py            read-only operator router (6 GETs, operator-gated)
   kyber/access/
@@ -123,6 +121,8 @@ services/backend/services/
   alembic/versions/      20260906_rcp_{managed_integrations,change_sets,execution,
                          admission,simulation,schema_mapping,source_authority,
                          rollouts,fleet_update}.py — additive tables
+                         (schema_mapping and fleet_update tables remain; the engines
+                         that wrote them were removed as never wired)
 config/route_registry.yaml     six kyber_routes declarations (D4, action_class 0)
 config/storage_policies.yaml   17-field rows for every RCP table
 tests/contracts/test_managed_integrations_parity.py   twin parity gate

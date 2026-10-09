@@ -65,7 +65,7 @@ Concretely:
 - **Legacy compatibility** via a `LegacyConnectorPlugin`
   (`services/backend/services/provider_runtime/legacy.py`) that exposes every existing
   connector with zero code changes, delegating lifecycle to the existing
-  `IntegrationAdapter` / `ConnectorIntegrationAdapter`.
+  `BaseConnector`.
 - **One sanctioned feature-gate change**: `/v1/provider-webhooks/` is added
   to `PUBLIC_PATH_PREFIXES` in `shared/rate_limit/feature_gate.py` (the route
   is unauthenticated by API key and HMAC-verified inside the handler, matching
@@ -107,9 +107,11 @@ validated, or a webhook scheme it does not verify.
 
 ### D4 — Reuse, not rewrite
 
-`IntegrationAdapter` / `ConnectorIntegrationAdapter`
-(`services/backend/services/integrations/adapter.py`) stay **authoritative** for the legacy
-lifecycle. The credential service (`shared/credentials/service.py`),
+The legacy `BaseConnector` hierarchy
+(`services/backend/services/integrations/connectors/base.py`) stays **authoritative** for the legacy
+lifecycle; the compat plugin delegates to it directly. (An intermediate
+`IntegrationAdapter` / `ConnectorIntegrationAdapter` facade was specified here but
+never wired in, and has since been removed.) The credential service (`shared/credentials/service.py`),
 `SyncRunService`, `WebhookInbox`, `BronzeRepository`, and
 `ingest_normalized_events` are all reused. The UPR composes these systems; it
 never re-implements them.
@@ -248,9 +250,6 @@ certification-level follow-on work, not a build claim.
 - `services/backend/services/integrations/connectors/base.py`
   — the legacy `ConnectorType` union and `BaseConnector` hierarchy this ADR
   layers on (untouched).
-- `services/backend/services/integrations/adapter.py` — the
-  authoritative `IntegrationAdapter` / `ConnectorIntegrationAdapter` lifecycle
-  facade reused by the compat plugin (D4).
 - `services/backend/shared/rate_limit/feature_gate.py` — the
   one sanctioned change: `/v1/provider-webhooks/` added to
   `PUBLIC_PATH_PREFIXES`.
