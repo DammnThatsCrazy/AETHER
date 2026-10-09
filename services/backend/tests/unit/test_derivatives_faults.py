@@ -82,9 +82,6 @@ from services.derivatives.meter import (
 )
 from services.derivatives.models import (
     DerivativesValidationError,
-    PositionEpochState,
-    PositionSide,
-    PositionStatus,
     ReadOnlyCredentialError,
     validate_read_only_scopes,
 )
@@ -93,7 +90,7 @@ from services.derivatives.multi_venue import (
     build_scaffolded_adapters,
     cross_venue_parity_report,
 )
-from services.derivatives.reconciliation import reconcile_position_size
+from services.derivatives.runtime_reconciliation import DerivativesReconciliation
 from services.derivatives.sequence import (
     SupervisedStreamWorker,
     parse_stream_cursor,
@@ -909,34 +906,32 @@ def test_product_kyber_fleet_surfaces_computed_not_zero():
 # 9. Snapshot / projection disagreement (stale snapshot, size mismatch)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def test_stale_snapshot_vs_projection_disagreement():
-    # Closed position (projection) but the venue snapshot still shows size != 0
+@pytest.mark.asyncio
+async def test_stale_snapshot_vs_projection_disagreement():
+    reconciliation = DerivativesReconciliation()
+
+    async def variance(projected_size, observed_size, market):
+        out = await reconciliation.reconcile_account(
+            "t1", "acct-1", {"size": observed_size}, {"size": projected_size}, scope=market,
+        )
+        rows = await ReconciliationVarianceRepo().find_many({"tenant_id": "t1"})
+        return [r for r in rows if r["reconciliation_variance_id"] in out["variances"]]
+
+    # Projection is flat (closed) but the venue snapshot still shows size != 0
     # -> critical disagreement.
-    closed = PositionEpochState(
-        tenant_id="t1", trading_account_id="acct-1", canonical_market_id="BTC",
-        epoch_id="e1", side=PositionSide.LONG, status=PositionStatus.CLOSED,
-        size=Decimal("0"), realized_pnl=Decimal("10"),
-        opened_at="2026-07-01T00:00:00Z", closed_at="2026-07-02T00:00:00Z",
-    )
-    fact = reconcile_position_size(computed=closed, observed_size=Decimal("5"), source_ref="venue-snapshot")
-    assert fact is not None
-    assert fact.variance_type == "position_size_mismatch"
-    assert fact.severity == "critical"
-    assert fact.observed_value == Decimal("5")
+    closed = await variance(Decimal("0"), Decimal("5"), "BTC")
+    assert len(closed) == 1
+    assert closed[0]["variance_type"] == "size_mismatch"
+    assert closed[0]["severity"] == "critical"
+    assert closed[0]["observed_value"] == Decimal("5")
 
     # Open position with a size drift -> high severity variance.
-    opened = PositionEpochState(
-        tenant_id="t1", trading_account_id="acct-1", canonical_market_id="BTC",
-        epoch_id="e2", side=PositionSide.LONG, status=PositionStatus.OPEN,
-        size=Decimal("2"), entry_notional=Decimal("100000"),
-    )
-    drift = reconcile_position_size(computed=opened, observed_size=Decimal("1.5"), source_ref="venue")
-    assert drift is not None
-    assert drift.severity == "high"
-    assert drift.difference == Decimal("0.5")
+    drift = await variance(Decimal("2"), Decimal("1.5"), "ETH")
+    assert len(drift) == 1 and drift[0]["severity"] == "high"
+    assert drift[0]["difference"] == Decimal("-0.5")
 
     # In-tolerance: no variance emitted.
-    assert reconcile_position_size(computed=opened, observed_size=Decimal("2"), source_ref="venue") is None
+    assert await variance(Decimal("2"), Decimal("2"), "SOL") == []
 
 
 # ═══════════════════════════════════════════════════════════════════════════

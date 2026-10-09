@@ -63,6 +63,9 @@ class DerivativesReconciliation:
                 if abs(difference) <= TOLERANCE:
                     continue
                 severity = "high" if abs(difference) > abs(expected or Decimal(1)) * Decimal("0.01") else "low"
+                if field == "size" and expected == 0:
+                    # The projection says flat but the venue still reports a position.
+                    severity = "critical"
 
             if scope is None:
                 basis = f"{trading_account_id}|{field}|{run_at}"
