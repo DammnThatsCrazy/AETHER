@@ -39,7 +39,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
 
-LOADER_HEARTBEAT = 'packages/web/src/loader/heartbeat.ts'
+LOADER_HEARTBEAT = 'packages/sdk/web/src/loader/heartbeat.ts'
 VERIFIER = 'services/backend/services/sdk_distribution/install_verifier.py'
 ROUTES = 'services/backend/services/sdk_distribution/routes.py'
 MIDDLEWARE = 'services/backend/middleware/middleware.py'

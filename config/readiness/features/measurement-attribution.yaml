@@ -106,7 +106,7 @@ operational_ownership:
   technical_owner: measurement
   operational_owner: platform-ops
   escalation: pagerduty:measurement
-  runbook: docs/runbooks/MEASUREMENT_RESTATEMENT.md
+  runbook: docs/operations/runbooks/MEASUREMENT_RESTATEMENT.md
   dashboards:
   - grafana:measurement
   alerts:

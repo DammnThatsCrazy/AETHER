@@ -121,7 +121,7 @@ def _resolve_canonical(name_or_alias: str) -> tuple[str, bool]:
         raise BadRequestError(
             f"Unknown model: '{name_or_alias}'. "
             f"Known model IDs: {known}. "
-            "See docs/ML-TRAINING-GUIDE.md for the full model list."
+            "See docs/operations/ML-TRAINING-GUIDE.md for the full model list."
         )
 
     return canonical, was_deprecated
@@ -615,7 +615,7 @@ async def predict(
             raise ServiceUnavailableError(
                 f"Model '{canonical_id}' is not yet available. "
                 "Training pipelines must be run before inference is possible. "
-                "See docs/ML-TRAINING-GUIDE.md for instructions."
+                "See docs/operations/ML-TRAINING-GUIDE.md for instructions."
             )
         logger.warning(
             "ML serving API returned %d for model %s",
@@ -726,7 +726,7 @@ async def predict_batch(
             raise ServiceUnavailableError(
                 f"Model '{canonical_id}' is not yet available. "
                 "Run training pipelines before serving batch inference. "
-                "See docs/ML-TRAINING-GUIDE.md."
+                "See docs/operations/ML-TRAINING-GUIDE.md."
             )
         raise ServiceUnavailableError(f"ML serving API returned {resp.status_code}")
 

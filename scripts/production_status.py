@@ -13,9 +13,9 @@ activated) into one scalar and is therefore NON-AUTHORITATIVE for release
 eligibility. It is preserved for continuity and comparison only. The
 authoritative readiness signal is the multidimensional model in
 config/readiness_model.yaml (per-dimension states + per-profile hard-gate
-disposition); see scripts/readiness_status.py and docs/readiness/READINESS-MODEL.md.
+disposition); see scripts/readiness_status.py and docs/operations/readiness/READINESS-MODEL.md.
 
-docs/productization/aether_productization_audit.md is the dated narrative
+docs/product/productization/aether_productization_audit.md is the dated narrative
 snapshot of the same data; when scores change, update BOTH (the audit doc
 review is enforced through its source_files link to this script).
 
@@ -116,8 +116,8 @@ AREAS: list[Area] = [
         "forwarding, heartbeats; iOS/Android native cores; release alignment enforced "
         "by validate_sdk_release_alignment.py and publish workflow.",
         [
-            "packages/web/",
-            "packages/react-native/",
+            "packages/sdk/web/",
+            "packages/sdk/react-native/",
             "packages/shared/",
             "scripts/validate_sdk_release_alignment.py",
         ],
@@ -189,7 +189,7 @@ AREAS: list[Area] = [
             "services/backend/services/intelligence/graph_mutations.py",
             "services/backend/services/x402/economic_mutations.py",
             "tests/chaos/test_agent_mutation.py",
-            "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
+            "docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
         ],
     ),
     Area(
@@ -216,7 +216,7 @@ AREAS: list[Area] = [
         "routes (/v1/admin/kyber, fleet, drift, intelligence quality), Playwright E2E "
         "in CI. Operator data never mounted on tenant-facing routers.",
         [
-            "apps/kyber/",
+            "apps/kyber-web/",
             ".github/workflows/kyber-e2e.yml",
             "services/backend/services/intelligence/routes.py",
         ],
@@ -231,7 +231,7 @@ AREAS: list[Area] = [
         "usage dashboard, and implementation checklist (/v1/onboarding/*). "
         "Playwright E2E suite added (5 scenarios covering root redirect, signup form, "
         "OTP verification, login fields, SSO/plan selector); CI-gated via e2e-tenant job.",
-        ["apps/aether/", "apps/aether/src/test/e2e/", "docs/PRODUCTIZATION.md"],
+        ["apps/aether-web/", "apps/aether-web/src/test/e2e/", "docs/product/PRODUCTIZATION.md"],
     ),
     Area(
         "connectors (BYOK / source)",
@@ -282,7 +282,7 @@ AREAS: list[Area] = [
             "services/backend/services/dune_feeder/service.py",
             "services/backend/services/dune_feeder/routes.py",
             "services/backend/services/dune_feeder/models.py",
-            "apps/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
+            "apps/kyber-web/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
     Area(
@@ -304,11 +304,11 @@ AREAS: list[Area] = [
         "persisted receipt; timeout->retry->dead-letter->operator-redeliver is pinned "
         "credentiallessly by tests/chaos. Deploy/emergency (pause, rotateOracle, "
         "upgrade-authority) documented in the EVM/SVM runbooks pointing at the audit "
-        "packages under contracts/smart-contracts/audit and programs/solana/audit. "
+        "packages under packages/contracts/smart-contracts/audit and programs/solana/audit. "
         "NO external certification yet — do not deploy to mainnet until external audit complete.",
         [
-            "contracts/smart-contracts/contracts/AnalyticsRewards.sol",
-            "contracts/smart-contracts/test/AnalyticsRewards.test.js",
+            "packages/contracts/smart-contracts/contracts/AnalyticsRewards.sol",
+            "packages/contracts/smart-contracts/test/AnalyticsRewards.test.js",
             ".github/workflows/smart-contract-analysis.yml",
             "services/backend/services/rewards/policy_engine.py",
             "services/backend/services/rewards/rails.py",
@@ -317,11 +317,11 @@ AREAS: list[Area] = [
             "services/backend/services/rewards/routes.py",
             "services/backend/alembic/versions/20260613_reward_enablement.py",
             "tests/chaos/test_reward_delivery.py",
-            "docs/runbooks/REWARD_DELIVERY_RUNBOOK.md",
-            "docs/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
-            "docs/runbooks/SVM_DEPLOY_EMERGENCY_RUNBOOK.md",
-            "docs/source-of-truth/REWARD_ENABLEMENT.md",
-            "docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
+            "docs/operations/runbooks/REWARD_DELIVERY_RUNBOOK.md",
+            "docs/operations/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+            "docs/operations/runbooks/SVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+            "docs/reference/source-of-truth/REWARD_ENABLEMENT.md",
+            "docs/reference/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
         ],
     ),
     Area(
@@ -360,7 +360,7 @@ AREAS: list[Area] = [
             "packages/shared/events.ts",
             "packages/shared/agent.ts",
             "packages/shared/x402-lifecycle.ts",
-            "packages/web/src/index.ts",
+            "packages/sdk/web/src/index.ts",
             "services/backend/services/x402/lifecycle_mapper.py",
             "services/backend/services/agent/lifecycle_mapper.py",
             "services/backend/services/profile/agent.py",
@@ -419,9 +419,9 @@ AREAS: list[Area] = [
             "services/backend/tests/e2e/test_b2b_account_flow.py",
             "services/backend/tests/e2e/test_privacy_consent_flow.py",
             "services/backend/tests/e2e/test_agent_web3_attribution_flow.py",
-            "apps/kyber/src/pages/measurement/",
-            "deploy/clickhouse/schemas/008_measurement_gold.sql",
-            "deploy/observability/grafana/dashboards/measurement-slos.json",
+            "apps/kyber-web/src/pages/measurement/",
+            "infra/clickhouse/schemas/008_measurement_gold.sql",
+            "infra/observability/grafana/dashboards/measurement-slos.json",
         ],
     ),
     Area(
@@ -451,7 +451,7 @@ AREAS: list[Area] = [
             "services/backend/repositories/measurement_results_repo.py",
             "services/backend/services/measurement/routes/integrity.py",
             "services/backend/alembic/versions/20260716_measurement_integrity.py",
-            "docs/source-of-truth/MEASUREMENT_INTEGRITY.md",
+            "docs/reference/source-of-truth/MEASUREMENT_INTEGRITY.md",
         ],
     ),
     Area(
@@ -480,8 +480,8 @@ AREAS: list[Area] = [
             "services/backend/services/imports/kyber_routes.py",
             "services/backend/repositories/import_files.py",
             "packages/shared/imports.ts",
-            "docs/source-of-truth/IMPORTS.md",
-            "docs/runbooks/IMPORT_FAILURES.md",
+            "docs/reference/source-of-truth/IMPORTS.md",
+            "docs/operations/runbooks/IMPORT_FAILURES.md",
         ],
     ),
     Area(
@@ -517,16 +517,16 @@ AREAS: list[Area] = [
             "services/backend/tests/e2e/test_campaign_registry_e2e.py",
             "services/backend/tests/security/test_campaign_registry_security.py",
             "packages/shared/acquisition-evidence.ts",
-            "apps/aether/src/pages/campaigns/campaign-sources-page.tsx",
-            "apps/aether/src/pages/campaigns/campaign-registry-page.tsx",
-            "apps/aether/src/pages/campaigns/mapping-review-page.tsx",
-            "apps/aether/src/pages/campaigns/campaign-quality-page.tsx",
-            "apps/kyber/src/pages/measurement/campaign-registry-health-page.tsx",
+            "apps/aether-web/src/pages/campaigns/campaign-sources-page.tsx",
+            "apps/aether-web/src/pages/campaigns/campaign-registry-page.tsx",
+            "apps/aether-web/src/pages/campaigns/mapping-review-page.tsx",
+            "apps/aether-web/src/pages/campaigns/campaign-quality-page.tsx",
+            "apps/kyber-web/src/pages/measurement/campaign-registry-health-page.tsx",
             "scripts/campaign/backfill_campaign_ids.py",
             "scripts/campaign/check_campaign_release_gate.py",
-            "docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
-            "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
-            "deploy/observability/prometheus/alert_rules.yml",
+            "docs/product/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
+            "docs/product/campaign/ADR_CAMPAIGN_IDENTITY.md",
+            "infra/observability/prometheus/alert_rules.yml",
         ],
     ),
     Area(
@@ -546,9 +546,9 @@ AREAS: list[Area] = [
         "remain: provisioned infra, production secrets, trained ML artifacts.",
         [
             "docs/archive/legacy-architecture/aws-deployment/",
-            "deploy/",
+            "infra/",
             ".github/workflows/deploy.yml",
-            "docs/PRODUCTION-READINESS.md",
+            "docs/operations/PRODUCTION-READINESS.md",
         ],
     ),
     Area(
@@ -558,10 +558,10 @@ AREAS: list[Area] = [
         "S3). Locust harness covers /v1/batch and /sdk/identity/resolve with per-endpoint "
         "thresholds; `make load-smoke` / `scripts/load_smoke.py` runs the local smoke gate; "
         "`make load-baselines` runs staging Locust run (50u/10rps/5m) writing CSV baselines. "
-        "docs/LOAD-BASELINES.md documents 5 SLA thresholds and baseline recording procedure. "
+        "docs/operations/LOAD-BASELINES.md documents 5 SLA thresholds and baseline recording procedure. "
         "Gaps: no recorded staging baselines yet; Neptune/identity-merge throughput "
         "unproven at scale.",
-        ["tests/load/", "scripts/load_smoke.py", "docs/LOAD-BASELINES.md", "docs/archive/legacy-architecture/data-lake-architecture/"],
+        ["tests/load/", "scripts/load_smoke.py", "docs/operations/LOAD-BASELINES.md", "docs/archive/legacy-architecture/data-lake-architecture/"],
     ),
     Area(
         "provider certification plane",
@@ -590,8 +590,8 @@ AREAS: list[Area] = [
             "services/backend/shared/certification/checks.py",
             "docs/_generated/adapter-certification-matrix.json",
             "scripts/credentialless_certification.py",
-            "docs/productization/staging-capstone/PROVIDER_CAPABILITY_MATRIX_GUIDE.md",
-            "docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md",
+            "docs/product/productization/staging-capstone/PROVIDER_CAPABILITY_MATRIX_GUIDE.md",
+            "docs/product/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md",
             "tests/chaos/test_certification_readiness.py",
         ],
     ),
@@ -617,8 +617,8 @@ AREAS: list[Area] = [
             "packages/shared/stablecoin.ts",
             "tests/unit/stablecoin/",
             "tests/chaos/test_chain_observers.py",
-            "docs/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
-            "docs/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
+            "docs/operations/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
+            "docs/product/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
         ],
     ),
     Area(
@@ -648,8 +648,8 @@ AREAS: list[Area] = [
             "tests/unit/derivatives/",
             "tests/chaos/test_stream_recovery.py",
             "tests/chaos/test_provider_faults.py",
-            "docs/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
-            "docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
+            "docs/operations/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
+            "docs/reference/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
         ],
     ),
     Area(
@@ -669,8 +669,8 @@ AREAS: list[Area] = [
             "packages/shared/interoperability.ts",
             "tests/unit/interop/",
             "tests/chaos/test_chain_observers.py",
-            "docs/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
-            "docs/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
+            "docs/operations/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
+            "docs/product/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
         ],
     ),
     Area(
@@ -696,8 +696,8 @@ AREAS: list[Area] = [
         [
             "services/backend/services/integrations/providers/payment_rails/",
             "services/backend/services/integrations/providers/payment_rails/sync_worker.py",
-            "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
-            "docs/runbooks/PAYMENT_RAILS_RUNBOOK.md",
+            "docs/reference/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
+            "docs/operations/runbooks/PAYMENT_RAILS_RUNBOOK.md",
             "tests/payment_rails/test_sync_worker.py",
             "tests/chaos/test_webhook_idempotency.py",
         ],
@@ -728,12 +728,12 @@ AREAS: list[Area] = [
             "services/backend/alembic/versions/20260702_semantic_sentiment.py",
             "services/backend/alembic/versions/20260732_semantic_replay.py",
             "services/backend/services/reliability/definitions.py",
-            "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
+            "docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
             "tests/integration/semantic/",
             "tests/chaos/test_semantic_pipeline.py",
             "tests/unit/test_semantic_observability_assets.py",
-            "deploy/observability/prometheus/alert_rules.yml",
-            "deploy/observability/grafana/dashboards/semantic-pipeline.json",
+            "infra/observability/prometheus/alert_rules.yml",
+            "infra/observability/grafana/dashboards/semantic-pipeline.json",
         ],
     ),
     Area(
@@ -750,8 +750,8 @@ AREAS: list[Area] = [
         "Operator triage documented in the card-linked runbook.",
         [
             "services/backend/services/card_linked_payments/",
-            "docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
-            "docs/runbooks/CARD_LINKED_RUNBOOK.md",
+            "docs/reference/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
+            "docs/operations/runbooks/CARD_LINKED_RUNBOOK.md",
             "tests/unit/card_linked/test_ingestion_wiring.py",
         ],
     ),
@@ -776,7 +776,7 @@ BLOCKERS: list[Blocker] = [
         "release-blocker",
         "Agent Layer hosted mode requires durable storage (Redis or equivalent)",
         "graph mutation safety",
-        "Enable hosted control-plane storage per docs/AGENT-LAYER-PRODUCTION.md",
+        "Enable hosted control-plane storage per docs/architecture/AGENT-LAYER-PRODUCTION.md",
     ),
     Blocker(
         "pre-production-blocker",
@@ -794,7 +794,7 @@ BLOCKERS: list[Blocker] = [
         "scale-blocker",
         "No staging load baselines recorded; run `make load-baselines` against staging to record",
         "scale readiness",
-        "Run `make load-baselines STAGING_URL=<url>` against staging; commit CSV results and update docs/LOAD-BASELINES.md",
+        "Run `make load-baselines STAGING_URL=<url>` against staging; commit CSV results and update docs/operations/LOAD-BASELINES.md",
     ),
     Blocker(
         "scale-blocker",
@@ -808,7 +808,7 @@ BLOCKERS: list[Blocker] = [
         "providers resolve to CREDENTIAL_WAITING (code-complete, infra-defined, "
         "credential-gated), none validated against a live endpoint",
         "provider certification plane",
-        "Follow docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md: "
+        "Follow docs/product/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md: "
         "supply per-provider credentials/RPC, replay -> sandbox -> partner_live validate, "
         "capture pilot evidence; `make credentialless-certification-strict` gates the floor",
     ),
@@ -907,7 +907,7 @@ def _check_agentic_x402_files() -> list[str]:
     """Return list of missing required agentic x402 productization files."""
     required = [
         "packages/shared/x402-lifecycle.ts",
-        "packages/web/src/index.ts",
+        "packages/sdk/web/src/index.ts",
         "services/backend/services/x402/lifecycle_mapper.py",
         "services/backend/services/agent/lifecycle_mapper.py",
         "services/backend/services/profile/agent.py",
@@ -930,11 +930,11 @@ TEST_CHECKS: list[LiveCheck] = [
 REQUIRED_ARTIFACTS = [
     ".github/pull_request_template.md",
     ".github/CODEOWNERS",
-    ".env.example",
+    "config/environments/.env.example",
     ".github/workflows/repo-consistency.yml",
     ".github/workflows/repo-health.yml",
     "scripts/repo_doctor.py",
-    "docs/productization/aether_productization_audit.md",
+    "docs/product/productization/aether_productization_audit.md",
 ]
 
 

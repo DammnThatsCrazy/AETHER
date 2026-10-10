@@ -225,7 +225,7 @@ def _coerce_value(table: str, column: str, data_type: str, value: Any) -> Any:
             if isinstance(value, Decimal):
                 return value
             # str() — never Decimal(float) — so 0.1 stays 0.1, not a binary
-            # float artefact (docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
+            # float artefact (docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
             return Decimal(str(value).strip())
         if data_type in _FLOAT_TYPES:
             if isinstance(value, bool):

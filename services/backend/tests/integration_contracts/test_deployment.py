@@ -13,7 +13,7 @@ from shared.integration_contracts.deployment import (
     load_capability,
 )
 
-_REL = Path("docs") / "integration-control-plane" / "DEPLOYMENT_CONTRACT.yaml"
+_REL = Path("docs") / "architecture" / "integration-control-plane" / "DEPLOYMENT_CONTRACT.yaml"
 
 
 def _find_contract_file() -> Path:

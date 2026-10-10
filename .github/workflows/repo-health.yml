@@ -50,10 +50,10 @@ jobs:
               - 'security/model_extraction_defense/**'
               - 'scripts/validate_ml_registry.py'
               - 'scripts/generate_ml_manifest.py'
-              - 'deploy/**'
+              - 'infra/**'
               - 'docs/archive/legacy-architecture/aws-deployment/**'
-              - 'apps/kyber/src/features/ml/**'
-              - 'apps/kyber/src/pages/ml/**'
+              - 'apps/kyber-web/src/features/ml/**'
+              - 'apps/kyber-web/src/pages/ml/**'
 
   pr-size:
     # Warn (non-blocking) when a PR exceeds 600 meaningful lines changed.
@@ -439,7 +439,7 @@ jobs:
         run: npm run build --workspace=packages/shared
 
       - name: Build web package
-        run: npm run build --workspace=packages/web
+        run: npm run build --workspace=packages/sdk/web
 
       # The workspace lint/typecheck commands run every workspace in a clean
       # checkout.  Proof packages and the proof mobile apps import sibling
@@ -451,12 +451,12 @@ jobs:
         run: |
           set -euo pipefail
           for workspace in \
-            packages/proof-contracts \
-            packages/proof-fixtures \
-            packages/proof-runner \
-            packages/proof-reporting \
-            packages/react-native \
-            packages/mobile-core; do
+            tests/e2e/proof/packages/contracts \
+            tests/e2e/proof/packages/fixtures \
+            tests/e2e/proof/packages/runner \
+            tests/e2e/proof/packages/reporting \
+            packages/sdk/react-native \
+            packages/sdk/mobile-core; do
             npm run build --workspace="$workspace"
           done
 
@@ -505,13 +505,13 @@ jobs:
       - name: Build workspace packages
         run: |
           npm run build --workspace=packages/shared
-          npm run build --workspace=packages/web
+          npm run build --workspace=packages/sdk/web
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run tenant onboarding E2E tests
-        run: cd apps/aether && npm run e2e
+        run: cd apps/aether-web && npm run e2e
         env:
           CI: true
 

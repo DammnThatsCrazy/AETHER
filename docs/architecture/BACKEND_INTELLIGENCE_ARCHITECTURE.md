@@ -19,7 +19,7 @@ based on the current repository state and deliberately preserves existing
 FastAPI routers, shared TypeScript contracts, SDK ingestion envelopes, graph
 mutations, Docker Compose infrastructure, and SDK source-of-truth documents.
 
-It intentionally lives outside `docs/source-of-truth/` because that directory is
+It intentionally lives outside `docs/reference/source-of-truth/` because that directory is
 reserved for SDK behavior derived from running code. This blueprint records the
 backend target state and compatibility rules for phased implementation.
 

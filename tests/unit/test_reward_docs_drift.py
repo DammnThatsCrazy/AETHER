@@ -13,11 +13,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 SOT_DOCS = [
-    "docs/source-of-truth/REWARD_ENABLEMENT.md",
-    "docs/source-of-truth/REWARD_RAILS.md",
-    "docs/source-of-truth/REWARD_POLICY_ENGINE.md",
-    "docs/source-of-truth/REWARD_PROOFS.md",
-    "docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
+    "docs/reference/source-of-truth/REWARD_ENABLEMENT.md",
+    "docs/reference/source-of-truth/REWARD_RAILS.md",
+    "docs/reference/source-of-truth/REWARD_POLICY_ENGINE.md",
+    "docs/reference/source-of-truth/REWARD_PROOFS.md",
+    "docs/reference/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
 ]
 
 FORBIDDEN_PHRASES = [
@@ -51,7 +51,7 @@ def test_all_sot_reward_docs_have_content():
 def test_sot_reward_docs_no_forbidden_language():
     # REWARD_NO_CUSTODY_MODEL.md explicitly documents forbidden phrases as anti-patterns;
     # skip it here and check all other reward docs instead.
-    skip = {"docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md"}
+    skip = {"docs/reference/source-of-truth/REWARD_NO_CUSTODY_MODEL.md"}
     for rel in SOT_DOCS:
         if rel in skip:
             continue
@@ -79,9 +79,9 @@ def test_reward_routes_no_forbidden_language():
 
 
 def test_productization_checklist_has_a6_section():
-    checklist = ROOT / "docs" / "PRODUCTIZATION-CHECKLIST.md"
-    assert checklist.exists(), "docs/PRODUCTIZATION-CHECKLIST.md missing"
+    checklist = ROOT / "docs" / "product" / "PRODUCTIZATION-CHECKLIST.md"
+    assert checklist.exists(), "docs/product/PRODUCTIZATION-CHECKLIST.md missing"
     text = checklist.read_text(encoding="utf-8")
     assert "Reward Enablement" in text, (
-        "docs/PRODUCTIZATION-CHECKLIST.md missing Reward Enablement (A6) section"
+        "docs/product/PRODUCTIZATION-CHECKLIST.md missing Reward Enablement (A6) section"
     )

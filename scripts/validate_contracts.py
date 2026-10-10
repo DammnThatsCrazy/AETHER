@@ -204,7 +204,7 @@ def check_no_api_key_in_query_params(events: dict) -> list[str]:
 
     errors: list[str] = []
     sdk_files = [
-        _Path(__file__).resolve().parent.parent / "packages" / "web" / "src" / "core" / "event-queue.ts",
+        _Path(__file__).resolve().parent.parent / "packages" / "sdk" / "web" / "src" / "core" / "event-queue.ts",
     ]
     for path in sdk_files:
         if not path.exists():

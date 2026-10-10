@@ -16,11 +16,11 @@ directions fail: an SDK file that NEWLY imports an internal target, and an
 allowlist entry that no longer references an internal target (remove it —
 shrink-only). Do not weaken the scanner to clear an offender.
 
-Scan surfaces (client SDKs only — ``packages/brand`` and ``packages/python`` are
+Scan surfaces (client SDKs only — ``packages/ui/brand`` and ``packages/sdk/python`` are
 not SDK client surfaces):
   packages/{web,server,react-native,mobile-core,mobile-ui}/src
-  packages/ios/Sources/AetherSDK
-  packages/android/src
+  packages/sdk/ios/Sources/AetherSDK
+  packages/sdk/android/src
 
 Forbidden internal targets are DERIVED at run time from the ``name`` fields of
 every ``package.json`` under ``docs/archive/legacy-architecture/backend/**``, ``Data Ingestion
@@ -46,13 +46,13 @@ ALLOWLIST = ROOT / "scripts" / "allowlists" / "sdk_internal_import_allowlist.jso
 
 # SDK client surfaces that must stay thin (src/ dirs + native SDK source dirs).
 _SDK_SURFACE_DIRS = (
-    "packages/web/src",
-    "packages/server/src",
-    "packages/react-native/src",
-    "packages/mobile-core/src",
-    "packages/mobile-ui/src",
-    "packages/ios/Sources/AetherSDK",
-    "packages/android/src",
+    "packages/sdk/web/src",
+    "packages/sdk/server/src",
+    "packages/sdk/react-native/src",
+    "packages/sdk/mobile-core/src",
+    "packages/ui/mobile/src",
+    "packages/sdk/ios/Sources/AetherSDK",
+    "packages/sdk/android/src",
 )
 
 # Internal trees whose package.json ``name`` fields become forbidden specifiers.

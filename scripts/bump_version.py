@@ -11,7 +11,7 @@ Usage:
 
 Files updated:
     - pyproject.toml (root)
-    - package.json (root, packages/web, packages/react-native, apps/kyber,
+    - package.json (root, packages/sdk/web, packages/sdk/react-native, apps/kyber-web,
       the archived ingestion and lake duplicates)
     - All docs/*.md headers containing version numbers
     - EXTRACTION_DEFENSE_AUDIT.md
@@ -33,19 +33,19 @@ ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_JSONS = [
     ROOT / "package.json",
     ROOT / "packages" / "shared" / "package.json",
-    ROOT / "packages" / "web" / "package.json",
-    ROOT / "packages" / "react-native" / "package.json",
-    ROOT / "packages" / "mobile-core" / "package.json",
+    ROOT / "packages" / "sdk" / "web" / "package.json",
+    ROOT / "packages" / "sdk" / "react-native" / "package.json",
+    ROOT / "packages" / "sdk" / "mobile-core" / "package.json",
     ROOT / "apps" / "aether-mobile" / "package.json",
     ROOT / "apps" / "kyber-mobile" / "package.json",
-    ROOT / "apps" / "aether" / "package.json",
-    ROOT / "apps" / "kyber" / "package.json",
-    ROOT / "apps" / "shared" / "package.json",
+    ROOT / "apps" / "aether-web" / "package.json",
+    ROOT / "apps" / "kyber-web" / "package.json",
+    ROOT / "packages" / "ui" / "core" / "package.json",
     ROOT / "apps" / "docs" / "package.json",
     ROOT / "apps" / "demo" / "package.json",
-    ROOT / "apps" / "olympus-marketing" / "package.json",
-    ROOT / "apps" / "aether-marketing" / "package.json",
-    ROOT / "apps" / "site" / "package.json",
+    ROOT / "apps" / "marketing-olympus" / "package.json",
+    ROOT / "apps" / "marketing-aether" / "package.json",
+    ROOT / "apps" / "public-site" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "common" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "auth" / "package.json",
@@ -61,31 +61,31 @@ PACKAGE_JSONS = [
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "logger" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "services" / "data-lake" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "services" / "ingestion" / "package.json",
-    ROOT / "packages" / "server" / "package.json",
-    ROOT / "packages" / "mobile-ui" / "package.json",
+    ROOT / "packages" / "sdk" / "server" / "package.json",
+    ROOT / "packages" / "ui" / "mobile" / "package.json",
 ]
 
 # Native SDK version files (different format than package.json)
-IOS_PACKAGE_SWIFT = ROOT / "packages" / "ios" / "Package.swift"
-ANDROID_BUILD_GRADLE = ROOT / "packages" / "android" / "build.gradle.kts"
+IOS_PACKAGE_SWIFT = ROOT / "packages" / "sdk" / "ios" / "Package.swift"
+ANDROID_BUILD_GRADLE = ROOT / "packages" / "sdk" / "android" / "build.gradle.kts"
 
 # Doc files where the FIRST heading contains a version like "v8.3.1" or "v8.3.0"
 DOC_HEADERS = [
-    ROOT / "docs" / "ARCHITECTURE.md",
-    ROOT / "docs" / "BACKEND-API.md",
-    ROOT / "docs" / "SDK-WEB.md",
-    ROOT / "docs" / "SDK-IOS.md",
-    ROOT / "docs" / "SDK-ANDROID.md",
-    ROOT / "docs" / "SDK-REACT-NATIVE.md",
-    ROOT / "docs" / "IDENTITY-RESOLUTION.md",
-    ROOT / "docs" / "INTELLIGENCE-GRAPH.md",
-    ROOT / "docs" / "MODEL-EXTRACTION-DEFENSE.md",
-    ROOT / "docs" / "AGENT-CONTROLLER.md",
-    ROOT / "docs" / "PRODUCTION-READINESS.md",
-    ROOT / "docs" / "OPERATIONS-RUNBOOK.md",
-    ROOT / "docs" / "ROLLBACK-RUNBOOK.md",
-    ROOT / "docs" / "MIGRATION-RUNBOOK.md",
-    ROOT / "docs" / "SMOKE-TEST-CHECKLIST.md",
+    ROOT / "docs" / "architecture" / "PLATFORM-ARCHITECTURE.md",
+    ROOT / "docs" / "reference" / "BACKEND-API.md",
+    ROOT / "docs" / "reference" / "SDK-WEB.md",
+    ROOT / "docs" / "reference" / "SDK-IOS.md",
+    ROOT / "docs" / "reference" / "SDK-ANDROID.md",
+    ROOT / "docs" / "reference" / "SDK-REACT-NATIVE.md",
+    ROOT / "docs" / "architecture" / "IDENTITY-RESOLUTION.md",
+    ROOT / "docs" / "architecture" / "INTELLIGENCE-GRAPH.md",
+    ROOT / "docs" / "architecture" / "MODEL-EXTRACTION-DEFENSE.md",
+    ROOT / "docs" / "architecture" / "AGENT-CONTROLLER.md",
+    ROOT / "docs" / "operations" / "PRODUCTION-READINESS.md",
+    ROOT / "docs" / "operations" / "OPERATIONS-RUNBOOK.md",
+    ROOT / "docs" / "operations" / "ROLLBACK-RUNBOOK.md",
+    ROOT / "docs" / "operations" / "MIGRATION-RUNBOOK.md",
+    ROOT / "docs" / "operations" / "SMOKE-TEST-CHECKLIST.md",
     ROOT / "EXTRACTION_DEFENSE_AUDIT.md",
 ]
 
@@ -95,8 +95,8 @@ README_HEADERS = [
     ROOT / "docs/archive/legacy-architecture/backend" / "README.md",
     ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "README.md",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "README.md",
-    ROOT / "deploy" / "aws" / "README.md",
-    ROOT / "cicd" / "aether-cicd" / "README.md",
+    ROOT / "infra" / "aws" / "README.md",
+    ROOT / "infra" / "cicd" / "aether-cicd" / "README.md",
     ROOT / "services/compliance" / "README.md",
 ]
 
@@ -106,8 +106,8 @@ VERSION_PATTERN = re.compile(r"v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?"
 # Packages with intentionally independent versioning. These are checked for
 # existence but are not forced to the pyproject.toml platform version.
 INDEPENDENT_PACKAGE_JSONS = {
-    ROOT / "contracts/smart-contracts" / "package.json",
-    ROOT / "playground" / "package.json",
+    ROOT / "packages/contracts/smart-contracts" / "package.json",
+    ROOT / "packages" / "sdk" / "playground" / "package.json",
 }
 
 
@@ -281,9 +281,9 @@ def check_version_alignment() -> int:
             errors.append(f"{_rel(doc)} heading version {found.group()!r} != {canonical!r}")
 
     native_expectations = {
-        ROOT / "packages" / "ios" / "AetherSDK.podspec": [f's.version      = "{canonical}"', f's.version         = "{canonical}"'],
-        ROOT / "packages" / "android" / "gradle.properties": [f"sdkVersion={canonical}"],
-        ROOT / "packages" / "web" / "src" / "index.ts": [f"SDK_VERSION = '{canonical}'"],
+        ROOT / "packages" / "sdk" / "ios" / "AetherSDK.podspec": [f's.version      = "{canonical}"', f's.version         = "{canonical}"'],
+        ROOT / "packages" / "sdk" / "android" / "gradle.properties": [f"sdkVersion={canonical}"],
+        ROOT / "packages" / "sdk" / "web" / "src" / "index.ts": [f"SDK_VERSION = '{canonical}'"],
         ROOT / "packages" / "shared" / "sdk-version.ts": [f"SDK_VERSION = '{canonical}'"],
         # The loader is bundled separately from the SDK and carries its own copy
         # of the version, for the same reason heartbeat.ts carries its own
@@ -291,7 +291,7 @@ def check_version_alignment() -> int:
         # back off an install signal and compares against the shipped one, so
         # drift here would not fail a build — it would quietly reclassify every
         # tenant's install.
-        ROOT / "packages" / "web" / "src" / "loader" / "bootstrap.ts": [f"LOADER_VERSION = '{canonical}'"],
+        ROOT / "packages" / "sdk" / "web" / "src" / "loader" / "bootstrap.ts": [f"LOADER_VERSION = '{canonical}'"],
         # The backend mirror of the same fact. Not a second version authority
         # (pyproject.toml remains the source); it is the copy the verifier
         # compares against, pinned here so it cannot drift from it.

@@ -120,7 +120,7 @@ def test_a_variable_name_merely_written_as_a_string_is_not_a_read(tmp_path):
 
 
 def test_documentation_and_examples_are_not_readers(tmp_path):
-    errors = _errors(tmp_path, files={"docs/guide.md": "WIDGET_DEAD", ".env.example": "WIDGET_DEAD=1"})
+    errors = _errors(tmp_path, files={"docs/guide.md": "WIDGET_DEAD", "config/environments/.env.example": "WIDGET_DEAD=1"})
     assert any("dead_flag" in e for e in errors)
 
 

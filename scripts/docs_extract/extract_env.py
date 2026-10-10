@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate ``docs/_generated/env.json`` from ``.env.example``.
+"""Generate ``docs/_generated/env.json`` from ``config/environments/.env.example``.
 
 The reference env-vars page in the docs site is the single most-requested
-piece by self-hosters. Keeping it in sync with ``.env.example`` by hand
+piece by self-hosters. Keeping it in sync with ``config/environments/.env.example`` by hand
 guarantees drift. This generator parses the example file's lightweight
 ``=== Section ===`` / ``VAR=value`` syntax and emits a structured JSON
 catalog.
@@ -11,7 +11,7 @@ Schema of the output::
 
     {
       "version": "8.9.0",
-      "generated_from": ".env.example",
+      "generated_from": "config/environments/.env.example",
       "categories": [
         {
           "name": "General",
@@ -42,7 +42,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-ENV_EXAMPLE = ROOT / ".env.example"
+ENV_EXAMPLE = ROOT / "config/environments/.env.example"
 OUTPUT = ROOT / "docs" / "_generated" / "env.json"
 
 SECTION_RE = re.compile(r"^#\s*===\s*(.+?)\s*===\s*$")
@@ -115,7 +115,7 @@ def main() -> int:
 
     payload = {
         "version": read_version(),
-        "generated_from": ".env.example",
+        "generated_from": "config/environments/.env.example",
         "categories": categories,
     }
 

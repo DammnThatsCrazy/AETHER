@@ -265,7 +265,7 @@ jobs:
         if: steps.check-armed.outputs.armed == 'true'
         run: |
           set -euo pipefail
-          mkdir -p artifacts/ttl-guard
+          mkdir -p .artifacts/ttl-guard
           # Live truth first: how much staging compute is actually running.
           # FAIL CLOSED. The exit status of every AWS call is checked, and stderr
           # is kept. A broken, throttled or unauthorised call used to produce an
@@ -279,7 +279,7 @@ jobs:
           fi
           mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
           if [ "${#services[@]}" -eq 0 ]; then
-            echo '[]' > artifacts/ttl-guard/services.json
+            echo '[]' > .artifacts/ttl-guard/services.json
           elif ! aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
               --query '{services:services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount},failures:failures}' \
               --output json > "$RUNNER_TEMP/ttl-services-state.json" \
@@ -290,18 +290,18 @@ jobs:
             echo '::error::could not describe staging ECS services; live staging state is UNKNOWN and will not be reported as asleep'
             exit 1
           else
-            jq '.services' "$RUNNER_TEMP/ttl-services-state.json" > artifacts/ttl-guard/services.json
+            jq '.services' "$RUNNER_TEMP/ttl-services-state.json" > .artifacts/ttl-guard/services.json
           fi
-          service_workload="$(python -c "import json;d=json.load(open('artifacts/ttl-guard/services.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
+          service_workload="$(python -c "import json;d=json.load(open('.artifacts/ttl-guard/services.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
           # Project the ARN list: the raw response is an object, and `jq length`
           # of {"taskArns": [...]} is its key count (always 1), not a task count.
           if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
-              --query 'taskArns[]' --output json > artifacts/ttl-guard/tasks.json; then
+              --query 'taskArns[]' --output json > .artifacts/ttl-guard/tasks.json; then
             echo 'state_known=false' >> "$GITHUB_OUTPUT"
             echo '::error::could not enumerate staging ECS tasks; live staging state is UNKNOWN and will not be reported as asleep'
             exit 1
           fi
-          task_workload="$(jq 'length' artifacts/ttl-guard/tasks.json)"
+          task_workload="$(jq 'length' .artifacts/ttl-guard/tasks.json)"
           if [ "$service_workload" -gt "$task_workload" ]; then
             awake_tasks="$service_workload"
           else
@@ -494,7 +494,7 @@ jobs:
           echo "::notice::staging awake lease extended to ${new_deadline} (extension ${extensions}; ceiling ${ceiling}; expires automatically)"
           printf 'extended_to=%s\nawake_since=%s\nextensions=%s\nceiling=%s\nreason=%s\nactor=%s\n' \
             "$new_deadline" "$LEASE_SINCE" "$extensions" "$ceiling" "$EXTEND_REASON" "$GITHUB_ACTOR" \
-            >> artifacts/ttl-guard/actions.log
+            >> .artifacts/ttl-guard/actions.log
 
       - name: Return staging to sleep (TTL exceeded)
         id: enforce
@@ -520,7 +520,7 @@ jobs:
           tasks_stopped=0
           changed=0
           converged=false
-          mkdir -p artifacts/ttl-guard
+          mkdir -p .artifacts/ttl-guard
           expected_services_file="${RUNNER_TEMP}/ttl-expected-services.txt"
           expected_targets_file="${RUNNER_TEMP}/ttl-expected-targets.txt"
           if EXPECTED_CLUSTER="$STAGING_CLUSTER" python - <<'PY' > "$expected_services_file"
@@ -564,7 +564,7 @@ jobs:
             --service-namespace ecs \
             --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity,max:MaxCapacity}" \
             --output json)"; then
-            printf '%s' "$targets_raw" > artifacts/ttl-guard/autoscaling-before.json
+            printf '%s' "$targets_raw" > .artifacts/ttl-guard/autoscaling-before.json
           else
             echo '::error::could not read staging autoscaling targets; continuing ECS reductions but the sleep bounds are unknown'
             failure=1
@@ -604,7 +604,7 @@ jobs:
                 targets_clamped=$((targets_clamped + 1))
                 changed=$((changed + 1))
                 printf 'autoscaling_bounds_zeroed=%s at=%s\n' \
-                  "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
+                  "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .artifacts/ttl-guard/actions.log
               else
                 echo "::error::could not clamp staging autoscaling target ${target} to [0,0]"
                 failure=1
@@ -615,8 +615,8 @@ jobs:
           # Read and reduce the exact staging cluster's ECS service set.
           if services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
             --query 'serviceArns[]' --output json)"; then
-            printf '%s' "$services_raw" > artifacts/ttl-guard/service-arns-before.json
-            mapfile -t services < <(jq -r '.[]?' artifacts/ttl-guard/service-arns-before.json)
+            printf '%s' "$services_raw" > .artifacts/ttl-guard/service-arns-before.json
+            mapfile -t services < <(jq -r '.[]?' .artifacts/ttl-guard/service-arns-before.json)
             if [ "${#services[@]}" -gt 10 ]; then
               echo '::error::staging service count exceeds the safe single-call describe limit'
               failure=1
@@ -627,8 +627,8 @@ jobs:
               && jq -e --argjson requested "${#services[@]}" \
                 '(.failures | length) == 0 and (.services | length) == $requested' \
                 "$RUNNER_TEMP/ttl-services-before.json" >/dev/null; then
-              jq '.services' "$RUNNER_TEMP/ttl-services-before.json" > artifacts/ttl-guard/services-before.json
-              if SERVICE_ROWS=artifacts/ttl-guard/services-before.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY' > "$RUNNER_TEMP/ttl-services-to-scale.tsv"
+              jq '.services' "$RUNNER_TEMP/ttl-services-before.json" > .artifacts/ttl-guard/services-before.json
+              if SERVICE_ROWS=.artifacts/ttl-guard/services-before.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY' > "$RUNNER_TEMP/ttl-services-to-scale.tsv"
           import json, os, sys
           rows = json.load(open(os.environ["SERVICE_ROWS"]))
           expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
@@ -657,7 +657,7 @@ jobs:
                   scaled=$((scaled + 1))
                   changed=$((changed + 1))
                   printf 'scaled_to_zero=%s lease=%s at=%s\n' \
-                    "$service_name" "$LEASE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
+                    "$service_name" "$LEASE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .artifacts/ttl-guard/actions.log
                   echo "::warning::scaled ${service_name} to desired-count 0 (awake TTL exceeded)"
                 else
                   echo "::error::could not set staging service ${service_name} to desired-count 0"
@@ -679,8 +679,8 @@ jobs:
             failure=1
             task_arns_raw='[]'
           fi
-          printf '%s' "$task_arns_raw" > artifacts/ttl-guard/tasks-before.json
-          mapfile -t requested_tasks < <(jq -r '.[]?' artifacts/ttl-guard/tasks-before.json)
+          printf '%s' "$task_arns_raw" > .artifacts/ttl-guard/tasks-before.json
+          mapfile -t requested_tasks < <(jq -r '.[]?' .artifacts/ttl-guard/tasks-before.json)
           for task_arn in "${requested_tasks[@]:-}"; do
             test -n "$task_arn" || continue
             if aws ecs stop-task --cluster "$STAGING_CLUSTER" --task "$task_arn" \
@@ -688,7 +688,7 @@ jobs:
               tasks_stopped=$((tasks_stopped + 1))
               changed=$((changed + 1))
               printf 'stopped_task=%s lease=%s at=%s\n' \
-                "$task_arn" "$LEASE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
+                "$task_arn" "$LEASE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .artifacts/ttl-guard/actions.log
             else
               echo "::error::could not stop staging task ${task_arn}"
               failure=1
@@ -700,8 +700,8 @@ jobs:
             poll_ready=true
             if services_now="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
               --query 'serviceArns[]' --output json)"; then
-              printf '%s' "$services_now" > artifacts/ttl-guard/service-arns-after.json
-              mapfile -t services_now_list < <(jq -r '.[]?' artifacts/ttl-guard/service-arns-after.json)
+              printf '%s' "$services_now" > .artifacts/ttl-guard/service-arns-after.json
+              mapfile -t services_now_list < <(jq -r '.[]?' .artifacts/ttl-guard/service-arns-after.json)
               if [ "${#services_now_list[@]}" -eq 0 ] || [ "${#services_now_list[@]}" -gt 10 ]; then
                 poll_ready=false
               elif aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services_now_list[@]}" \
@@ -710,8 +710,8 @@ jobs:
                 && jq -e --argjson requested "${#services_now_list[@]}" \
                   '(.failures | length) == 0 and (.services | length) == $requested' \
                   "$RUNNER_TEMP/ttl-services-poll.json" >/dev/null; then
-                jq '.services' "$RUNNER_TEMP/ttl-services-poll.json" > artifacts/ttl-guard/services-after.json
-                if SERVICE_ROWS=artifacts/ttl-guard/services-after.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
+                jq '.services' "$RUNNER_TEMP/ttl-services-poll.json" > .artifacts/ttl-guard/services-after.json
+                if SERVICE_ROWS=.artifacts/ttl-guard/services-after.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
           import json, os, sys
           rows = json.load(open(os.environ["SERVICE_ROWS"]))
           expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
@@ -789,10 +789,10 @@ jobs:
         if: always() && steps.check-armed.outputs.armed == 'true'
         run: |
           set -euo pipefail
-          mkdir -p artifacts/ttl-guard
-          echo '[]' > artifacts/ttl-guard/services-after.json
-          echo '[]' > artifacts/ttl-guard/tasks-after.json
-          echo '[]' > artifacts/ttl-guard/autoscaling-after.json
+          mkdir -p .artifacts/ttl-guard
+          echo '[]' > .artifacts/ttl-guard/services-after.json
+          echo '[]' > .artifacts/ttl-guard/tasks-after.json
+          echo '[]' > .artifacts/ttl-guard/autoscaling-after.json
           # UNKNOWN IS NOT ZERO. Verify exact service names/counts, exact target
           # IDs and both bounds, plus every task. The alert below decides whether
           # an unknown/awake result is actionable for the lease state.
@@ -839,8 +839,8 @@ jobs:
             --query 'serviceArns[]' --output json)"; then
             echo '::error::could not enumerate staging ECS services; residual staging compute is UNKNOWN'
           else
-            printf '%s' "$services_raw" > artifacts/ttl-guard/service-arns-after.json
-            mapfile -t services < <(jq -r '.[]?' artifacts/ttl-guard/service-arns-after.json)
+            printf '%s' "$services_raw" > .artifacts/ttl-guard/service-arns-after.json
+            mapfile -t services < <(jq -r '.[]?' .artifacts/ttl-guard/service-arns-after.json)
             if [ "${#services[@]}" -gt 0 ] && [ "${#services[@]}" -le 10 ] \
               && aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
               --query '{services:services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount},failures:failures}' \
@@ -848,10 +848,10 @@ jobs:
               && jq -e --argjson requested "${#services[@]}" \
                 '(.failures | length) == 0 and (.services | length) == $requested' \
                 "$RUNNER_TEMP/ttl-services-verify.json" >/dev/null; then
-              jq '.services' "$RUNNER_TEMP/ttl-services-verify.json" > artifacts/ttl-guard/services-after.json
-              service_workload="$(python -c "import json;d=json.load(open('artifacts/ttl-guard/services-after.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
+              jq '.services' "$RUNNER_TEMP/ttl-services-verify.json" > .artifacts/ttl-guard/services-after.json
+              service_workload="$(python -c "import json;d=json.load(open('.artifacts/ttl-guard/services-after.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
               residual="$service_workload"
-              if SERVICE_ROWS=artifacts/ttl-guard/services-after.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
+              if SERVICE_ROWS=.artifacts/ttl-guard/services-after.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
           import json, os, sys
           rows = json.load(open(os.environ["SERVICE_ROWS"]))
           expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
@@ -869,8 +869,8 @@ jobs:
           fi
           if aws application-autoscaling describe-scalable-targets --service-namespace ecs \
             --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity,max:MaxCapacity}" \
-            --output json > artifacts/ttl-guard/autoscaling-after.json; then
-            if TARGETS_JSON=artifacts/ttl-guard/autoscaling-after.json EXPECTED_TARGETS="$expected_targets_file" python - <<'PY'
+            --output json > .artifacts/ttl-guard/autoscaling-after.json; then
+            if TARGETS_JSON=.artifacts/ttl-guard/autoscaling-after.json EXPECTED_TARGETS="$expected_targets_file" python - <<'PY'
           import json, os, sys
           rows = json.load(open(os.environ["TARGETS_JSON"]))
           expected = {line.strip() for line in open(os.environ["EXPECTED_TARGETS"]) if line.strip()}
@@ -885,11 +885,11 @@ jobs:
             echo '::error::could not enumerate staging autoscaling targets; residual capacity envelope is UNKNOWN'
           fi
           if ! aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
-              --query 'taskArns[]' --output json > artifacts/ttl-guard/tasks-after.json; then
+              --query 'taskArns[]' --output json > .artifacts/ttl-guard/tasks-after.json; then
             residual=unknown
             echo '::error::could not enumerate staging ECS tasks; residual staging compute is UNKNOWN'
           else
-            task_arns="$(jq 'length' artifacts/ttl-guard/tasks-after.json)"
+            task_arns="$(jq 'length' .artifacts/ttl-guard/tasks-after.json)"
             if [ "$residual" = unknown ] || [ "$task_arns" -gt "$residual" ]; then residual="$task_arns"; fi
             if [ "$service_ok" = true ] && [ "$targets_ok" = true ] && [ "$task_arns" -eq 0 ]; then
               asleep=true
@@ -1042,6 +1042,6 @@ jobs:
         if: always()
         with:
           name: staging-ttl-guard-${{ github.run_id }}
-          path: artifacts/ttl-guard
+          path: .artifacts/ttl-guard
           if-no-files-found: warn
           retention-days: 30

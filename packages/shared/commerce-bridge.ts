@@ -10,7 +10,7 @@
 // this module converges on the exact same contract. SDK client surfaces must not
 // add NEW interpreter logic here — the web SDK consumes only the source-
 // observable signal types + schema version via the explicit subpath
-// '@aether/shared/commerce-bridge' (packages/web/src/modules/commerce-detection.ts).
+// '@aether/shared/commerce-bridge' (packages/sdk/web/src/modules/commerce-detection.ts).
 //
 // Vocabularies (DECISION 1):
 //   sdk_event_type       = BARE SDK signal name (product_view, cart_updated,

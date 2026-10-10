@@ -187,7 +187,7 @@ def main() -> int:
         print("Native build: externally_blocked — no macOS/Xcode, Android SDK, or Expo "
               "toolchain in this environment.")
         print("The iOS-simulator / Android-emulator compile runs in the hosted (macOS) CI; "
-              "see reports/mobile-productization/external-blockers.json.")
+              "see docs/reference/reports/mobile-productization/external-blockers.json.")
         print("Scaffolds are valid and the shared SDK typechecks in `make ci-check`. This is "
               "NOT a 'compiled' claim.")
     else:

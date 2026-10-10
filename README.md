@@ -27,38 +27,38 @@ tenant/access
   → action/outcome
 ```
 
-The architecture reset is in progress, so this target describes the intended shared authorities rather than a claim that every stage is already centralized. The [architecture reset plan](docs/blueprints/architecture-reset/README.md) tracks current authorities, cutovers, and required proof, including consistent replay, correction, evaluation, and recovery. A local fixture or passing focused check does not establish design-partner or production readiness.
+The architecture reset is in progress, so this target describes the intended shared authorities rather than a claim that every stage is already centralized. The [architecture reset plan](docs/architecture/blueprints/architecture-reset/README.md) tracks current authorities, cutovers, and required proof, including consistent replay, correction, evaluation, and recovery. A local fixture or passing focused check does not establish design-partner or production readiness.
 
 ## Repository map
 
 | Path | Purpose |
 |---|---|
-| `apps/aether/`, `apps/kyber/` | Aether customer app and Kyber operator console |
+| `apps/aether-web/`, `apps/kyber-web/` | Aether customer app and Kyber operator console |
 | `services/backend/` | Backend API, ingestion, identity, graph, and intelligence runtime |
 | `services/ml/`, `services/agents/`, `services/compliance/` | ML, internal workers, and compliance services |
 | `packages/` | Shared packages, clients, SDKs, and contracts |
 | `packages/shared/contracts/` | Canonical event, consent, observation, and other shared contracts |
 | `docs/` | Architecture, operating guidance, and source-of-truth documentation |
-| `scripts/`, `tests/`, `deploy/` | Repository tooling, tests, and deployment configuration |
+| `scripts/`, `tests/`, `infra/` | Repository tooling, tests, and deployment configuration |
 
 ## Start here
 
 **Understand the system**
 
-- [Current architecture and target direction](ARCHITECTURE.md)
+- [Current architecture and target direction](docs/architecture/ARCHITECTURE.md)
 - [Aether root architecture target](docs/architecture/AETHER_ROOT_ARCHITECTURE.md)
-- [Architecture reset plan and proof requirements](docs/blueprints/architecture-reset/README.md)
-- [Repository truth](docs/source-of-truth/repo-truth.md) and [architecture truth](docs/source-of-truth/architecture-truth.md)
+- [Architecture reset plan and proof requirements](docs/architecture/blueprints/architecture-reset/README.md)
+- [Repository truth](docs/reference/source-of-truth/repo-truth.md) and [architecture truth](docs/reference/source-of-truth/architecture-truth.md)
 
 **Work with contracts and intake**
 
 - Canonical contracts: [`packages/shared/contracts/`](packages/shared/contracts/)
-- Supported [ingestion paths](docs/DATA-INGESTION-PATHS.md)
-- Canonical behavior and ownership: [`docs/source-of-truth/`](docs/source-of-truth/)
+- Supported [ingestion paths](docs/reference/DATA-INGESTION-PATHS.md)
+- Canonical behavior and ownership: [`docs/reference/source-of-truth/`](docs/reference/source-of-truth/)
 
 **Develop**
 
-- [Local development setup](docs/LOCAL-DEVELOPMENT.md)
+- [Local development setup](docs/operations/LOCAL-DEVELOPMENT.md)
 - [Contribution guide](CONTRIBUTING.md)
 
 The repository's consistency system is `scripts/repo_doctor.py` and the root `Makefile`. Follow the relevant guidance above when changing code or documentation; a single focused check is not proof of PR merge-readiness.

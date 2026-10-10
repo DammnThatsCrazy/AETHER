@@ -17,7 +17,7 @@ integrations under the same headings the tenant sees. Invariants pinned here:
     lists them in no experience group.
 
 Namespaced (test_integration_catalog_*). Spec:
-docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md § experience categories.
+docs/reference/source-of-truth/AETHER_END_USER_LIFECYCLE.md § experience categories.
 """
 
 from __future__ import annotations

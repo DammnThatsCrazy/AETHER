@@ -2,7 +2,7 @@
 Aether Repository — Data Exchange Artifacts (``data_artifacts`` metadata)
 
 Durable, tenant-scoped **metadata** store for Data Exchange Plane artifacts
-(M1 of the Data Exchange program; see ``docs/plans/DATA_EXCHANGE_PHASES.md``).
+(M1 of the Data Exchange program; see ``docs/architecture/plans/DATA_EXCHANGE_PHASES.md``).
 Each row models the full ``DataArtifactContract`` envelope plus ``canonical_id``
 (the canonical engine's import/export id the artifact maps onto).  Bytes never
 touch Postgres on this path — the ``data_artifacts`` table is metadata only;

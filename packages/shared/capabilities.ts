@@ -1,7 +1,7 @@
 // =============================================================================
 // Aether SDK — Shared Capability Manifest
 // Returned by GET /v1/config so SDKs know which event families, purposes,
-// and rails the backend currently activates. See docs/source-of-truth/
+// and rails the backend currently activates. See docs/reference/source-of-truth/
 // CAPABILITY_MANIFEST.md.
 // =============================================================================
 

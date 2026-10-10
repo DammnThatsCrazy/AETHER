@@ -1,6 +1,6 @@
 """The loader's install signals must survive real ingestion validation.
 
-The CDN loader (packages/web/src/loader/heartbeat.ts) posts one event per
+The CDN loader (packages/sdk/web/src/loader/heartbeat.ts) posts one event per
 install milestone — `sdk_loaded`, `sdk_initialized`, `sdk_init_failed` — so a
 tenant can see whether their install actually worked instead of inferring it
 from an absence of traffic. Those types are all `core`-family, and `core` is
@@ -43,7 +43,7 @@ from services.ingestion.validation import (  # noqa: E402
 )
 
 ROOT = Path(__file__).resolve().parents[4]
-HEARTBEAT_TS = ROOT / "packages" / "web" / "src" / "loader" / "heartbeat.ts"
+HEARTBEAT_TS = ROOT / "packages" / "sdk" / "web" / "src" / "loader" / "heartbeat.ts"
 
 # Every signal the loader can emit. Kept as a literal list rather than parsed
 # from the TS union so a newly added signal type forces a deliberate edit here.

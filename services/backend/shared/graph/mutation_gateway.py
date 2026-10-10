@@ -37,7 +37,7 @@ surfaced both on the versioned fact payload annotation and on the typed
 edge/vertex — so a resolved rights decision can ride graph mutations while
 existing writers (which leave it ``None``) stay byte-identical. The producer
 that fills it is ``services/rights_authority/propagation.py``. See
-``docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md`` §11 / §17 Phase 3.
+``docs/reference/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md`` §11 / §17 Phase 3.
 """
 
 from __future__ import annotations
@@ -169,7 +169,7 @@ class MutationIntent:
     # ledger column ``rights_decision_ref``, which the propagation producer
     # (``services/rights_authority/propagation.py``) fills from the
     # authoritative resolver. See
-    # docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md §11 / §17 Phase 3.
+    # docs/reference/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md §11 / §17 Phase 3.
     rights_decision_ref: Optional[str] = None
 
 

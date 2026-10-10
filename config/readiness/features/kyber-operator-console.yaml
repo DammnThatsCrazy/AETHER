@@ -26,7 +26,7 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - apps/kyber/
+  - apps/kyber-web/
   - .github/workflows/kyber-e2e.yml
   - services/backend/services/intelligence/routes.py
 implementation:
@@ -102,7 +102,7 @@ operational_ownership:
   technical_owner: kyber
   operational_owner: platform-ops
   escalation: pagerduty:kyber
-  runbook: docs/runbooks/KYBER_ACCOUNT_RECOVERY.md
+  runbook: docs/operations/runbooks/KYBER_ACCOUNT_RECOVERY.md
   dashboards:
   - grafana:kyber
   alerts:
@@ -115,7 +115,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: apps/kyber/'
+  - 'repository evidence: apps/kyber-web/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

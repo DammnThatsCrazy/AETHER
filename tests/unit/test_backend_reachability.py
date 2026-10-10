@@ -104,7 +104,7 @@ def test_documents_registries_and_tests_do_not_keep_code_reachable(tmp_path):
         "docs/guide.md": "services.alpha.orphan",
         "config/inventory.yaml": "file: services/backend/services/alpha/orphan.py",
         "services/backend/tests/test_orphan.py": "from services.alpha.orphan import X\n",
-        "reports/state.json": '{"module": "services.alpha.orphan"}',
+        "docs/reference/reports/state.json": '{"module": "services.alpha.orphan"}',
     }
     assert _unreachable(tmp_path, TREE, outside=outside) == ["services.alpha.orphan"]
 

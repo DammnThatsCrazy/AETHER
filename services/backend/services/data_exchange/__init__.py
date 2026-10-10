@@ -14,7 +14,7 @@ surface + parquet + egress bridge (M4), the PDF reports plane (M5), the
 Settings → Data Exchange frontend surface (M6), and the expire / reconcile /
 cleanup / finalize-pending-egress ops sweeps + metrics (M7).  Routes, jobs,
 and table registrations are flag-gated behind ``DataExchangeConfig``.
-See ``docs/plans/DATA_EXCHANGE_PHASES.md`` for the full ledger.
+See ``docs/architecture/plans/DATA_EXCHANGE_PHASES.md`` for the full ledger.
 """
 
 from services.data_exchange.contracts import (

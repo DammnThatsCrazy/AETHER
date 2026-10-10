@@ -46,7 +46,7 @@ from scripts.lib.readiness_model import (  # noqa: E402
     load_model,
 )
 
-ARTIFACT_DIR = ROOT / "artifacts" / "readiness"
+ARTIFACT_DIR = ROOT / ".artifacts" / "readiness"
 FEATURE_DOC = ROOT / "docs" / "_generated" / "FEATURE-READINESS.md"
 PROFILE_DOC = ROOT / "docs" / "_generated" / "RELEASE-PROFILE-READINESS.md"
 
@@ -352,7 +352,7 @@ def emit_docs(features: list[FeatureRecord], model: ReadinessModel) -> None:
         "Each feature is measured across independent dimensions. Implementation "
         "completion is repository-controlled only — a missing credential, "
         "unprovisioned infrastructure, or an absent provider account never "
-        "reduces it. See `docs/readiness/READINESS-MODEL.md`."
+        "reduces it. See `docs/operations/readiness/READINESS-MODEL.md`."
     )
     fl.append("")
     fl.append("| Feature | Scope | Impl % | Prod % | Ceiling | Achieved | Activation | Confidence |")

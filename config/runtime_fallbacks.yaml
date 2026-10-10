@@ -16,7 +16,7 @@ fallbacks:
     implementation_paths:
       - services/agents/agent_controller/controller.py
       - services/agents/queue/celery_app.py
-      - packages/server/src/index.ts
+      - packages/sdk/server/src/index.ts
   - fallback_id: in_memory_cache
     owner: platform
     surfaces: [caches, rate_limiters]

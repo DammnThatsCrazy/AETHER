@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TERRAFORM_MAIN = REPO_ROOT / "deploy/aws/terraform/main.tf"
+TERRAFORM_MAIN = REPO_ROOT / "infra/aws/terraform/main.tf"
 
 
 def _branch_environment_variable_maps() -> tuple[str, str, str, str]:

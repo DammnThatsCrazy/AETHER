@@ -78,32 +78,32 @@ STRIPE_REQUIRED_RUNTIME_SECRET_NAMES = (
 REQUIRED_SURFACES: tuple[tuple[str, tuple[Path, ...], tuple[str, ...]], ...] = (
     (
         "AWS networking",
-        (ROOT / "deploy/aws/terraform/main.tf",),
+        (ROOT / "infra/aws/terraform/main.tf",),
         ('module "vpc"',),
     ),
     (
         "durable Aurora database",
-        (ROOT / "deploy/aws/terraform/main.tf",),
+        (ROOT / "infra/aws/terraform/main.tf",),
         ('module "aurora"',),
     ),
     (
         "AWS Secrets Manager",
-        (ROOT / "deploy/aws/terraform/main.tf", ROOT / "deploy/aws/terraform/modules/secrets/main.tf"),
+        (ROOT / "infra/aws/terraform/main.tf", ROOT / "infra/aws/terraform/modules/secrets/main.tf"),
         ('module "secrets"',),
     ),
     (
         "ECS backend runtime",
-        (ROOT / "deploy/aws/terraform/main.tf", ROOT / "deploy/aws/terraform/modules/ecs/main.tf"),
+        (ROOT / "infra/aws/terraform/main.tf", ROOT / "infra/aws/terraform/modules/ecs/main.tf"),
         ('module "ecs"',),
     ),
     (
         "ALB/HTTPS ingress",
-        (ROOT / "deploy/aws/terraform/main.tf", ROOT / "deploy/aws/terraform/modules/alb/main.tf"),
+        (ROOT / "infra/aws/terraform/main.tf", ROOT / "infra/aws/terraform/modules/alb/main.tf"),
         ("aws_lb_listener", "https"),
     ),
     (
         "Aether customer-facing static surface",
-        (ROOT / "deploy/aws/terraform/main.tf", ROOT / ".github/workflows/deploy.yml"),
+        (ROOT / "infra/aws/terraform/main.tf", ROOT / ".github/workflows/deploy.yml"),
         ("aws_amplify_app", "aether-spa"),
     ),
     (
@@ -113,7 +113,7 @@ REQUIRED_SURFACES: tuple[tuple[str, tuple[Path, ...], tuple[str, ...]], ...] = (
     ),
     (
         "observability",
-        (ROOT / "deploy/aws/terraform/main.tf", ROOT / ".github/workflows/staging-lifecycle.yml"),
+        (ROOT / "infra/aws/terraform/main.tf", ROOT / ".github/workflows/staging-lifecycle.yml"),
         ("cloudwatch", "metrics"),
     ),
     (
@@ -362,7 +362,7 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
         if forbidden in workflow_text:
             errors.append(f"pilot path must not activate deferred gate {forbidden}")
 
-    terraform_root = _combined((ROOT / "deploy/aws/terraform/variables.tf", ROOT / "deploy/aws/terraform/main.tf"))
+    terraform_root = _combined((ROOT / "infra/aws/terraform/variables.tf", ROOT / "infra/aws/terraform/main.tf"))
     if 'variable "deployment_lane"' not in terraform_root:
         errors.append("Terraform root has no deployment_lane variable; main integration must add it")
     elif not all(token in terraform_root for token in ('"full"', '"pilot"')):
@@ -378,7 +378,7 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
         if missing:
             errors.append(f"missing {label} contract evidence: {', '.join(missing)}")
 
-    secrets_source = _read(ROOT / "deploy/aws/terraform/modules/secrets/main.tf")
+    secrets_source = _read(ROOT / "infra/aws/terraform/modules/secrets/main.tf")
     missing_secret_names = _missing_all(secrets_source, STRIPE_SECRET_NAMES)
     if missing_secret_names:
         errors.append(
@@ -386,7 +386,7 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
             + ", ".join(missing_secret_names)
         )
 
-    ecs_source = _read(ROOT / "deploy/aws/terraform/modules/ecs/main.tf")
+    ecs_source = _read(ROOT / "infra/aws/terraform/modules/ecs/main.tf")
     missing_ecs = _missing_all(ecs_source, STRIPE_ENVIRONMENT)
     if missing_ecs:
         errors.append(

@@ -826,7 +826,7 @@ class EdgeType:
     #    PRICED_BY are declared above (stablecoin + derivatives domains);
     #    ISSUED_BY is the existing cross-domain edge. These members are additive
     #    to complete the universal financial reference edge surface (see
-    #    docs/source-of-truth/FINANCIAL_NORMALIZATION.md §9). ────────────────
+    #    docs/reference/source-of-truth/FINANCIAL_NORMALIZATION.md §9). ────────────────
     DENOMINATED_IN = "DENOMINATED_IN"        # Value leg/instrument → FiatCurrency|Asset
     PAID_WITH = "PAID_WITH"                  # Payment/leg → Asset|AssetDeployment
     SETTLED_IN = "SETTLED_IN"                # Settlement/leg → Asset|AssetDeployment|FiatCurrency

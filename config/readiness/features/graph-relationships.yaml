@@ -102,7 +102,7 @@ operational_ownership:
   technical_owner: graph
   operational_owner: platform-ops
   escalation: pagerduty:graph
-  runbook: docs/runbooks/CAMPAIGN-360-GRAPH-DISAGREES-WITH-TOTALS.md
+  runbook: docs/operations/runbooks/CAMPAIGN-360-GRAPH-DISAGREES-WITH-TOTALS.md
   dashboards:
   - grafana:graph
   alerts:

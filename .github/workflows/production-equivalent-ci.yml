@@ -82,7 +82,7 @@ jobs:
               "services/backend/services/ingestion/",
           )
           direct_production_path = any(
-              path == "docker-compose.yml"
+              path == "infra/local/docker-compose.yml"
               or path == "pyproject.toml"
               or path == ".github/workflows/production-equivalent-ci.yml"
               or path.startswith(production_prefix)

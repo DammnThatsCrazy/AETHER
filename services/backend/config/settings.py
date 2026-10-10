@@ -18,7 +18,7 @@ import yaml
 class Environment(str, Enum):
     LOCAL = "local"
     DEV = "dev"
-    # Hermetic CI/compose environment (deploy/integration/*): production-shaped
+    # Hermetic CI/compose environment (infra/integration/*): production-shaped
     # strictness — non-local fail-closed startup checks apply and explicit
     # integration-only secrets/backends must be provided — but never a deploy
     # target, so staging/production-only gates (e.g. mandatory route-policy
@@ -198,7 +198,7 @@ class CommsConfig:
 
     Recommended activation order: ingestion → campaign projection →
     journeys → graph → profile360 → campaign360 → noesis
-    (docs/comms/COMMS_RELEASE_READINESS.md).
+    (docs/product/comms/COMMS_RELEASE_READINESS.md).
     """
     ingestion_enabled: bool = _env_bool("AETHER_COMMS_INGESTION_ENABLED", True)
     # Provider suppression write-back is a separately-authorized capability
@@ -503,7 +503,7 @@ class SecurityGovernanceConfig:
 # staging/production and OFF in local/dev, so existing frontends and the
 # current test suite keep the legacy API-key path. Each flag may be explicitly
 # overridden by its env var. See config/posture/founding_tenant_production.yaml
-# and docs/FOUNDING-TENANT-PRODUCTION.md.
+# and docs/operations/FOUNDING-TENANT-PRODUCTION.md.
 # ---------------------------------------------------------------------------
 
 # Default-ON for non-local environments; explicit env var always wins.
@@ -664,7 +664,7 @@ class KyberWorkforceConfig:
 # Backend selectors declare which concrete backend each subsystem binds to;
 # PRODUCTION rejects in-memory backends (a memory cache/database is never a
 # correctness source in production). See services/runtime/roles.py for the
-# role → worker mapping and docs/BACKEND-EXECUTION-MODEL.md.
+# role → worker mapping and docs/architecture/BACKEND-EXECUTION-MODEL.md.
 # ---------------------------------------------------------------------------
 
 # Canonical set of runtime roles accepted by AETHER_ROLE / run_role. "all" is
@@ -1227,7 +1227,7 @@ class DataQualityConfig:
 # import/export engines and the shared ObjectStore — never a second ingestion
 # or storage path.  These flags gate *surface availability* only and default
 # OFF (declared-but-dark M0).  Rollout order is tracked in
-# docs/plans/DATA_EXCHANGE_PHASES.md: M1 object-store migration, M2 signed
+# docs/architecture/plans/DATA_EXCHANGE_PHASES.md: M1 object-store migration, M2 signed
 # transfers, M3 import control surface, M4 export control surface,
 # M5 reports.
 
@@ -1914,7 +1914,7 @@ class ComparisonConfig:
 
 # ---------------------------------------------------------------------------
 # Social360 + Relationship Fidelity — product-surface rollout flags
-# (docs/blueprints/social360.md §121-122 rollout_controls). The rollout_controls
+# (docs/architecture/blueprints/social360.md §121-122 rollout_controls). The rollout_controls
 # flags below mirror the blueprint verbatim (the trailing noesis gate is an
 # extra read-only NL surface knob, not a rollout_control); every flag defaults
 # OFF / "off" until the corresponding plane is implemented and verified. New
@@ -2469,7 +2469,7 @@ class Settings:
             raise RuntimeError(
                 "AETHER_ROLE=all is not allowed in staging/production. Run an "
                 "explicit role (api or a worker role) so the API process no "
-                "longer starts every worker. See docs/BACKEND-EXECUTION-MODEL.md."
+                "longer starts every worker. See docs/architecture/BACKEND-EXECUTION-MODEL.md."
             )
 
         # ── Backend selectors (PR 4) ──────────────────────────────────────────
@@ -2490,7 +2490,7 @@ class Settings:
                     "In-memory backends are not allowed in production: "
                     f"{', '.join(_memory_backends)}=memory. Configure a durable "
                     "backend (e.g. redis/postgres). See "
-                    "docs/BACKEND-EXECUTION-MODEL.md."
+                    "docs/architecture/BACKEND-EXECUTION-MODEL.md."
                 )
 
     @property

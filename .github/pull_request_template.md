@@ -24,7 +24,7 @@ Describe the change.
 
 ## Source-of-Truth Updates
 
-- [ ] `docs/source-of-truth/` updated where applicable
+- [ ] `docs/reference/source-of-truth/` updated where applicable
 - [ ] Not applicable — explained below
 
 Explanation:
@@ -104,7 +104,7 @@ _Describe only what changed:_
 - [ ] I committed regenerated `docs/_generated/` files
 - [ ] I committed synced docs: `docs/REPO-INDEX.md`, `docs/AUTOMATION.md`
 - [ ] I updated package/version surfaces if `pyproject.toml` changed
-- [ ] I updated the surfaces required by `docs/source-of-truth/repo_consistency_ownership.json`
+- [ ] I updated the surfaces required by `docs/reference/source-of-truth/repo_consistency_ownership.json`
 - [ ] I updated source-linked docs where behavior changed
 - [ ] I updated SDK public exports where package APIs changed
 - [ ] I updated contract/event/consent docs if schemas changed (consent is registry-derived — no hardcoded purpose count)
@@ -115,7 +115,7 @@ _Describe only what changed:_
 
 Follow-up 360 projection PRs must satisfy the vertical-slice Definition-of-Done
 before their registry row flips to `implemented`:
-`docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md`.
+`docs/reference/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md`.
 
 ## Known Risks
 

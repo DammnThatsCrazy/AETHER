@@ -1,7 +1,7 @@
 // =============================================================================
 // Aether SDK — Shared Provenance & Rail Metadata
 // Every canonical event may carry provenance so Web2, Web3, and hybrid flows
-// fit the same model. See docs/source-of-truth/EVENT_REGISTRY.md.
+// fit the same model. See docs/reference/source-of-truth/EVENT_REGISTRY.md.
 // =============================================================================
 
 /** Who or what performed the action. */

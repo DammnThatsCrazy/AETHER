@@ -33,11 +33,14 @@ DOCS_ROOT = ROOT / "docs"
 # Subtrees skipped entirely.
 SKIP_DIRS = {
     DOCS_ROOT / "archive",
+    # Evidence and audit reports (formerly the repo-root reports/ tree) are
+    # committed evidence, not published pages; they never carried frontmatter.
+    DOCS_ROOT / "reference" / "reports",
     DOCS_ROOT / "_generated",
     DOCS_ROOT / "_templates",
-    DOCS_ROOT / "diagrams",
-    DOCS_ROOT / "examples",
-    DOCS_ROOT / "source-of-truth",
+    DOCS_ROOT / "architecture" / "diagrams",
+    DOCS_ROOT / "reference" / "examples",
+    DOCS_ROOT / "reference" / "source-of-truth",
 }
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)

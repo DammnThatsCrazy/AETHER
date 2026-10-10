@@ -1,4 +1,4 @@
-"""Production lead intake (deploy/aws/lead-intake/template.yaml).
+"""Production lead intake (infra/aws/lead-intake/template.yaml).
 
 The handler lives inline in the CloudFormation template, so these tests run the
 exact code the stack deploys, with DynamoDB and SES replaced by recorders.
@@ -17,7 +17,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = ROOT / "deploy" / "aws" / "lead-intake" / "template.yaml"
+TEMPLATE = ROOT / "infra" / "aws" / "lead-intake" / "template.yaml"
 PRODUCTION_ORIGINS = {
     "https://www.olympuslabsml.com",
     "https://aether.olympuslabsml.com",
@@ -179,7 +179,7 @@ def test_topics_match_the_backend_and_the_site_form() -> None:
     backend = (ROOT / "services" / "backend" / "services" / "contact" / "routes.py").read_text()
     topics = _literal(backend, "_CONTACT_TOPICS")
     assert set(_literal(_code(), "LABELS")) == topics
-    site_api = (ROOT / "apps" / "site" / "src" / "site" / "api.ts").read_text()
+    site_api = (ROOT / "apps" / "public-site" / "src" / "site" / "api.ts").read_text()
     for topic in topics:
         assert f"'{topic}'" in site_api
 

@@ -24,14 +24,14 @@ import pytest
 config = pytest.importorskip("services.model_runtime.config")
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-# The backend's canonical env example is the repo-root `.env.example` — there
+# The backend's canonical env example is the repo-root `config/environments/.env.example` — there
 # is no per-service copy under aether-backend (verified during C15; the root
 # file owns the model-runtime section). Pointing here (rather than at a
 # non-existent backend copy) keeps the required-settings check RUNNING instead
 # of skipping, against the same canonical source the operator copies.
-_BACKEND_ENV_EXAMPLE = _REPO_ROOT / ".env.example"
-_DEPLOY_ENV_EXAMPLE = _REPO_ROOT / "deploy" / "model-runtime" / ".env.example"
-_DEPLOY_README = _REPO_ROOT / "deploy" / "model-runtime" / "README.md"
+_BACKEND_ENV_EXAMPLE = _REPO_ROOT / "config/environments/.env.example"
+_DEPLOY_ENV_EXAMPLE = _REPO_ROOT / "infra" / "model-runtime" / ".env.example"
+_DEPLOY_README = _REPO_ROOT / "infra" / "model-runtime" / "README.md"
 
 # The env prefix the settings layer is bound to (config.py SettingsConfigDict).
 _ENV_PREFIX = "MODEL_RUNTIME_"
@@ -120,12 +120,12 @@ def _assert_no_secret_shaped_values(pairs: dict[str, str], label: str) -> None:
 
 def test_backend_env_example_declares_required_settings() -> None:
     if not _BACKEND_ENV_EXAMPLE.exists():
-        pytest.skip(f"backend .env.example not present yet: {_BACKEND_ENV_EXAMPLE}")
+        pytest.skip(f"backend config/environments/.env.example not present yet: {_BACKEND_ENV_EXAMPLE}")
     required = _required_env_var_names()
     keys = _env_keys(_BACKEND_ENV_EXAMPLE.read_text(encoding="utf-8"))
     missing = sorted(required - keys)
     assert not missing, (
-        f"backend .env.example is missing required model-runtime settings: {missing}"
+        f"backend config/environments/.env.example is missing required model-runtime settings: {missing}"
     )
 
 
@@ -151,7 +151,7 @@ def test_deploy_readme_documents_required_settings() -> None:
 
 def test_no_secret_shaped_values_in_env_templates() -> None:
     files = [
-        (_BACKEND_ENV_EXAMPLE, "backend .env.example"),
+        (_BACKEND_ENV_EXAMPLE, "backend config/environments/.env.example"),
         (_DEPLOY_ENV_EXAMPLE, "deploy .env.example"),
     ]
     present = [(path, label) for path, label in files if path.exists()]

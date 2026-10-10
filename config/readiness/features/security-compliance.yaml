@@ -98,7 +98,7 @@ operational_ownership:
   technical_owner: security
   operational_owner: platform-ops
   escalation: pagerduty:security
-  runbook: docs/runbooks/CREDENTIAL-ROTATION.md
+  runbook: docs/operations/runbooks/CREDENTIAL-ROTATION.md
   dashboards:
   - grafana:security
   alerts:

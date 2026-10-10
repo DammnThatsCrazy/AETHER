@@ -216,12 +216,12 @@ def test_repo_health_builds_cross_workspace_dependencies_before_lint() -> None:
     assert dependency_step < lint_step
     dependency_run = steps[dependency_step]["run"]
     for workspace in (
-        "packages/proof-contracts",
-        "packages/proof-fixtures",
-        "packages/proof-runner",
-        "packages/proof-reporting",
-        "packages/react-native",
-        "packages/mobile-core",
+        "tests/e2e/proof/packages/contracts",
+        "tests/e2e/proof/packages/fixtures",
+        "tests/e2e/proof/packages/runner",
+        "tests/e2e/proof/packages/reporting",
+        "packages/sdk/react-native",
+        "packages/sdk/mobile-core",
     ):
         assert workspace in dependency_run
 

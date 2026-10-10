@@ -168,7 +168,7 @@ def test_sync_docs_generator_mentions_canonical_workflow() -> None:
     assert "make ci-check" in src
     assert "repo_doctor.py" in src
     # The stale narrative must be gone.
-    assert "cicd/aether-cicd/.github/workflows/" not in src
+    assert "infra/cicd/aether-cicd/.github/workflows/" not in src
 
 
 # --------------------------------------------------------------------------- #

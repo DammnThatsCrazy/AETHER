@@ -37,16 +37,16 @@ ERRORS: list[str] = []
 #: emits is what a customer pastes, so it is the authority here.
 SERVER_SNIPPET = 'services/backend/services/sdk_distribution/snippet.py'
 #: The SDK's own default endpoint.
-SDK_ENTRY = 'packages/web/src/index.ts'
+SDK_ENTRY = 'packages/sdk/web/src/index.ts'
 #: The loader's default endpoint, resolved for the one-tag install.
-LOADER_AUTO_INIT = 'packages/web/src/loader/auto-init.ts'
+LOADER_AUTO_INIT = 'packages/sdk/web/src/loader/auto-init.ts'
 
 #: Surfaces a developer copies an install from. Archives and the changelog are
 #: excluded on purpose: they are records of what was true when written, and
 #: rewriting history to satisfy a gate would destroy the only evidence of it.
 SCANNED_GLOBS = (
     'docs/**/*.md',
-    'packages/web/README.md',
+    'packages/sdk/web/README.md',
     'packages/*/README.md',
     'apps/*/src/pages/*.tsx',
     'apps/*/src/components/*.tsx',

@@ -124,7 +124,7 @@ traces back to that table being what it claims to be.
 
 The repository already contains proof that this problem is solvable
 cheaply: `services/backend/services/security/audit_ledger.py` (`AuditLedger`, documented in
-`docs/AUDIT-EVENT-LEDGER.md`) chains an `integrity_hash` per event to the
+`docs/architecture/AUDIT-EVENT-LEDGER.md`) chains an `integrity_hash` per event to the
 previous event **for the same tenant**, so `verify_chain()` can detect
 deletion or reordering of governance/security audit events. But that
 ledger's own "Planned controls" section is explicit about what is still
@@ -145,7 +145,7 @@ architectural intent, not a verifiable property.
 
 - `AuditLedger.compute_integrity_hash` / `AuditLedger.verify_chain` — a
   working, tested, per-tenant hash-chain implementation, scoped to
-  `SecurityAuditEvent` rows only (`docs/AUDIT-EVENT-LEDGER.md`).
+  `SecurityAuditEvent` rows only (`docs/architecture/AUDIT-EVENT-LEDGER.md`).
 - `bronze_sdk_events` and `event_outbox` — the two tables the V2 ingestion
   path (`services/backend/services/ingestion/bronze_bulk.py`) writes transactionally, with
   `ON CONFLICT ... DO NOTHING` idempotency, but no chaining or hash column.
@@ -185,7 +185,7 @@ primitive rather than reimplementing hash-chaining a second time:
    range (`tenant_id`, first/last `integrity_hash`) they were computed
    from, so a projection can cite its own provenance.
 6. Only after 1–5 are stable: deliver the external WORM export
-   `docs/AUDIT-EVENT-LEDGER.md` already lists as "planned" — e.g. an
+   `docs/architecture/AUDIT-EVENT-LEDGER.md` already lists as "planned" — e.g. an
    object-lock (Object Lock / Glacier Vault Lock–style) bucket that
    receives periodic, signed chain-segment exports — so integrity is
    provable even against a fully compromised database, not merely
@@ -278,7 +278,7 @@ tenant, on two independent feature flags, and on whether the relay worker
 described as a later deliverable has since been turned on.
 
 Separately, on the client side, the Node server SDK's queue
-(`packages/server/src/queue.ts`, `EventQueue`) is a bare in-process array:
+(`packages/sdk/server/src/queue.ts`, `EventQueue`) is a bare in-process array:
 
 ```
 private readonly queue: QueuedEvent[] = [];
@@ -299,9 +299,9 @@ transactional-outbox pattern in V2) but the reference server SDK has not.
   attempts are already configurable (`OUTBOX_RELAY_*` env vars), i.e. the
   relay's operational shape is designed, but its `enabled` default is
   `False`.
-- `packages/server/src/queue.ts` — bounded (`maxSize`, default 1000),
+- `packages/sdk/server/src/queue.ts` — bounded (`maxSize`, default 1000),
   exponential-backoff retry with jitter, but entirely in-process memory;
-  `packages/server/src/transport.ts` already parses structured
+  `packages/sdk/server/src/transport.ts` already parses structured
   accepted/duplicate/rejected counters from the V1/V2-compatible
   `BatchResponse`, so the transport layer already expects the durable
   backend contract — only the client-side queue is the gap.
@@ -338,7 +338,7 @@ implementations requires no change to `client.ts` or `transport.ts`:
 - **M2** — Expand `canary_tenants` to 100% of tenants once M1 is stable.
 - **M3** — Delete the V1 ingestion path and the `IngestionV2Config` flag
   surface entirely.
-- **M4** — Implement `DurableEventQueue` in `packages/server`, matching the
+- **M4** — Implement `DurableEventQueue` in `packages/sdk/server`, matching the
   existing `EventQueue` interface.
 - **M5** — Ship `DurableEventQueue` as opt-in, then default, in the Node
   SDK client, with startup replay and a documented disk-space bound.
@@ -359,7 +359,7 @@ by a full observation window — the canary flag is the rollback mechanism
 for M2, so V1 code cannot be deleted until that safety net is no longer
 needed. M4 is independent of the backend milestones and can ship on its
 own schedule. M5 depends on M4 plus the Node SDK's existing version/
-changelog process (`packages/server/package.json`).
+changelog process (`packages/sdk/server/package.json`).
 
 ### Risks
 
@@ -417,7 +417,7 @@ fraud takedown, or a bad-data correction) *and* records citable evidence of
 exactly what changed and why.
 
 Finally, there is no general "replay a corrected pipeline over historical
-data" capability. `docs/BACKFILL-JOBS.md` documents a generic,
+data" capability. `docs/operations/BACKFILL-JOBS.md` documents a generic,
 tenant-scoped, idempotent backfill *pattern*, but nothing today applies
 that pattern specifically to re-draining a Bronze range through
 `journey_compiler` and the attribution engine after a bug fix, a fraud
@@ -440,10 +440,10 @@ change — that is handled ad hoc today, not as a supported operation.
   `mobile_installations`, `client_sync_records` — see
   `services/backend/services/consent/erasure_jobs.py`), ready to record a new kind of step
   once one exists to record.
-- `docs/BACKFILL-JOBS.md` — the generic backfill pattern (scope,
+- `docs/operations/BACKFILL-JOBS.md` — the generic backfill pattern (scope,
   idempotency by `(tenant_id, resource_id)`, throttle, observe, verify)
   that a replay job type would extend rather than replace.
-- `services/backend/services/jobs` (documented in `docs/source-of-truth/JOBS_PLATFORM.md`)
+- `services/backend/services/jobs` (documented in `docs/reference/source-of-truth/JOBS_PLATFORM.md`)
   — the durable jobs platform (`FOR UPDATE SKIP LOCKED` leasing, retries,
   dead-letter, `HANDLER_REGISTRY`/`register_handler`) that already hosts
   `consent.erasure` and is the natural home for a new `replay.*` job type.
@@ -474,7 +474,7 @@ change — that is handled ad hoc today, not as a supported operation.
    jobs platform (`services/backend/services/jobs`, `register_handler`), that re-drains a
    bounded, verified Bronze range through the same Silver/Gold projectors
    and `journey_compiler` — idempotent by `(tenant_id, resource_id)` like
-   every other backfill in `docs/BACKFILL-JOBS.md`.
+   every other backfill in `docs/operations/BACKFILL-JOBS.md`.
 5. **Verify what's being replayed.** Once Program 1's hash-chain exists,
    require replay to verify the Bronze range's chain before re-processing
    it, so replay cannot silently reprocess a range that was itself
@@ -510,7 +510,7 @@ deletion of the data they were computed from.
 
 M2 depends on M1. M3 depends on M1 (reuses the same invalidation
 primitive) and on `services/backend/services/fraud_networks`' existing takedown flow. M4
-depends on the `docs/BACKFILL-JOBS.md` pattern and, for full range
+depends on the `docs/operations/BACKFILL-JOBS.md` pattern and, for full range
 verification, on Program 1 (M5 here depends on Program 1's M2/M3).
 
 ### Risks
@@ -518,7 +518,7 @@ verification, on Program 1 (M5 here depends on Program 1's M2/M3).
 - **Amplification**: automatic re-attribution triggered by every erasure
   could itself become a load spike if many erasures land at once (a bulk
   DSR request, or a large fraud-network takedown). Needs the same
-  throttle/off-peak guidance `docs/BACKFILL-JOBS.md` already states for
+  throttle/off-peak guidance `docs/operations/BACKFILL-JOBS.md` already states for
   backfills, applied to the re-attribution trigger itself.
 - **Retroactive number changes**: replaying a corrected pipeline over a
   historical range (M4) can change previously-reported totals. This must
@@ -564,14 +564,14 @@ which is precisely the "false certainty" this document is named for:
 `make ci-check` passing is not evidence that the transactional code paths
 those other four programs rely on actually work under real infrastructure.
 
-`docker-compose.yml` at the repo root already defines the exact
+`infra/local/docker-compose.yml` at the repo root already defines the exact
 production-shaped topology — `postgres`, `redis`, `kafka`/`zookeeper`,
 `clickhouse`, `backend`, `outbox-relay`, `stream-worker`, and the rest —
 that nothing in CI stands up today.
 
 ### What exists today
 
-- `docker-compose.yml` — full local topology, already used for manual
+- `infra/local/docker-compose.yml` — full local topology, already used for manual
   local development, not wired into any GitHub Actions workflow.
 - `AETHER_ENV=local` in-memory fallbacks throughout the ingestion and
   measurement repositories, explicitly documented in code as the
@@ -592,7 +592,7 @@ existing fast local-mode lane, which stays as the quick-feedback default for
 the finalization check; focused local feedback remains available while a PR is
 in draft:
 
-1. Stand up a bounded subset of `docker-compose.yml`'s services as GitHub
+1. Stand up a bounded subset of `infra/local/docker-compose.yml`'s services as GitHub
    Actions service containers (or via `docker compose up -d` in a CI job) —
    starting with `postgres` + `redis` only.
 2. Point the backend test run at that real stack (`DATABASE_URL` set, so
@@ -835,7 +835,7 @@ their value compounds in a specific order:
   marking in its own frontmatter.
 - Nothing here proposes weakening an existing validator, skipping an
   existing check, or bypassing the ownership map in
-  `docs/source-of-truth/repo_consistency_ownership.json`. Every milestone
+  `docs/reference/source-of-truth/repo_consistency_ownership.json`. Every milestone
   that touches source code, contracts, or generated docs would need to
   satisfy the same gates (`make ci-check`, `docs_drift.py`,
   `validate_contracts.py`, etc.) as any other change when it is actually

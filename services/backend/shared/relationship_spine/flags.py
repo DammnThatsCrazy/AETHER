@@ -1,7 +1,7 @@
 """Relationship-spine feature flags (Social360 + Relationship Fidelity, M6).
 
 Milestone M6 promotion / motif runtime behavior is ROLLOUT-GATED and defaults
-OFF (blueprint §121–122, docs/blueprints/social360.md). These helpers read the
+OFF (blueprint §121–122, docs/architecture/blueprints/social360.md). These helpers read the
 runtime settings DEFENSIVELY: the canonical env vars are honoured first, then a
 best-effort read of ``config.settings`` (a sibling agent owns ``config/settings.py``
 and may later surface the same knobs there), and the answer is ``False`` whenever

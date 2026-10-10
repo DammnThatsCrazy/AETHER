@@ -1,5 +1,5 @@
 # Feature readiness record — see config/readiness/schema.json.
-# Migrated from reports/mobile-productization/external-blockers.json (apns/fcm/
+# Migrated from docs/reference/reports/mobile-productization/external-blockers.json (apns/fcm/
 # web-push/email). externally_blocked != implementation-incomplete.
 feature_id: push-notification-delivery
 title: Push Notification Delivery
@@ -36,7 +36,7 @@ repository_ceiling:
   remaining_is_repository_controlled: false
   evidence:
     - config/credential_contracts.yaml
-    - reports/mobile-productization/external-blockers.json
+    - docs/reference/reports/mobile-productization/external-blockers.json
 
 implementation:
   state: TURNKEY

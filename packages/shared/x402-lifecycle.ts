@@ -1,7 +1,7 @@
 // =============================================================================
 // Aether SDK — x402 Lifecycle Payload Types
 // Canonical payload shapes for the full x402 payment lifecycle.
-// See docs/source-of-truth/EVENT_REGISTRY.md and backend
+// See docs/reference/source-of-truth/EVENT_REGISTRY.md and backend
 // services/x402/lifecycle_mapper.py for downstream processing.
 // =============================================================================
 

@@ -16,7 +16,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "Bumping SDK version to $VERSION..."
 
-for PKG in . packages/shared packages/web packages/react-native; do
+for PKG in . packages/shared packages/sdk/web packages/sdk/react-native; do
   npm pkg set version="$VERSION" --prefix "$ROOT/$PKG"
   echo "  ✓ $PKG/package.json"
 done

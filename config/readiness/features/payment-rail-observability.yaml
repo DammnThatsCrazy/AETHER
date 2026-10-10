@@ -28,7 +28,7 @@ repository_ceiling:
   evidence:
   - services/backend/services/integrations/providers/payment_rails/
   - services/backend/services/integrations/providers/payment_rails/sync_worker.py
-  - docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md
+  - docs/reference/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md
 implementation:
   state: RUNTIME_INTEGRATED
   denominator: in-scope repository controls (migration-derived)
@@ -112,7 +112,7 @@ operational_ownership:
   technical_owner: financial-platform
   operational_owner: platform-ops
   escalation: pagerduty:financial-platform
-  runbook: docs/runbooks/PAYMENT_RAILS_RUNBOOK.md
+  runbook: docs/operations/runbooks/PAYMENT_RAILS_RUNBOOK.md
   dashboards:
   - grafana:financial-platform
   alerts:

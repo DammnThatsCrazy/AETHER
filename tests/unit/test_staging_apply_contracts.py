@@ -18,7 +18,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TF = ROOT / "deploy/aws/terraform"
+TF = ROOT / "infra/aws/terraform"
 ALB = TF / "modules/alb/main.tf"
 PROFILE_PLAN = TF / "tests/profile_plan.tftest.hcl"
 MONITORING = TF / "modules/monitoring/main.tf"
@@ -434,15 +434,15 @@ def test_staging_cache_readiness_permission_is_applied_and_verified() -> None:
 
     promote = PROMOTE.read_text(encoding="utf-8")
     cache_gate = promote[promote.index("Verify applied staging ECS cache IAM permissions") :]
-    assert "working-directory: deploy/aws/terraform" in cache_gate
+    assert "working-directory: infra/aws/terraform" in cache_gate
     assert "terraform output -raw ecs_task_role_arn" in cache_gate
     assert "terraform output -raw dynamodb_cache_table_name" in cache_gate
     assert "check_staging_runtime_iam.py" in cache_gate
 
     lifecycle = STAGING_LIFECYCLE.read_text(encoding="utf-8")
-    ready_guard = lifecycle[lifecycle.index('status="$(curl -sS -o artifacts/rehearsal/ready.json') :]
+    ready_guard = lifecycle[lifecycle.index('status="$(curl -sS -o .artifacts/rehearsal/ready.json') :]
     assert 'if [ "$status" != 200 ]' in ready_guard
-    assert "jq . artifacts/rehearsal/ready.json" in ready_guard
+    assert "jq . .artifacts/rehearsal/ready.json" in ready_guard
 
 
 def test_staging_cache_iam_checker_fails_closed_on_denied_action() -> None:

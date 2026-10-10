@@ -58,7 +58,7 @@ if str(BACKEND) not in sys.path:
 #   services/backend/services/integrations/connectors/base.py
 # plus the intelligence-source-coverage shape from services/provider_catalog.
 # It predates the unified catalog and is a stable public surface on
-# @aether/shared (apps/shared/src/status/capability-state.ts imports
+# @aether/shared (packages/ui/core/src/status/capability-state.ts imports
 # ImplementationStatus through it), so the generator reproduces it unchanged.
 # The catalog-derived provider/category mirror is appended below the marker.
 # ---------------------------------------------------------------------------

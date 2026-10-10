@@ -16,7 +16,7 @@
 # here (DEPLOYMENT_PROFILE_MATRIX.md, TARGET_ARCHITECTURE.md) were cleared
 # after a genuine content re-review in the lane0 basefix delivery: the docs'
 # capability/flag inventories were checked against config/settings.py +
-# .env.example at HEAD (cf6a8c30), the new default-OFF sdk-universal-ingestion
+# config/environments/.env.example at HEAD (cf6a8c30), the new default-OFF sdk-universal-ingestion
 # flag blocks were assessed and found to belong to a separate /v1/batch-plane
 # outside these docs' scope, prose was confirmed accurate unchanged, and the
 # docs were re-stamped to cf6a8c30. The CI/CD page was also re-reviewed

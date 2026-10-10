@@ -79,15 +79,15 @@ def check_required_files() -> list[CheckResult]:
         BACKEND / "tests/security/test_campaign_registry_security.py",
         REPO_ROOT / "scripts/campaign/backfill_campaign_ids.py",
         REPO_ROOT / "packages/shared/acquisition-evidence.ts",
-        REPO_ROOT / "docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
-        REPO_ROOT / "docs/campaign/CAMPAIGN_REGISTRY_ARCHITECTURE.md",
-        REPO_ROOT / "docs/campaign/CAMPAIGN_RESOLUTION_CONTRACT.md",
-        REPO_ROOT / "docs/campaign/CAMPAIGN_SDK_ACQUISITION.md",
-        REPO_ROOT / "docs/campaign/CAMPAIGN_CONNECTORS.md",
-        REPO_ROOT / "docs/campaign/CAMPAIGN_MIGRATION.md",
-        REPO_ROOT / "docs/campaign/CAMPAIGN_KYBER_GUIDE.md",
-        REPO_ROOT / "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
-        REPO_ROOT / "deploy/observability/prometheus/alert_rules.yml",
+        REPO_ROOT / "docs/product/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
+        REPO_ROOT / "docs/product/campaign/CAMPAIGN_REGISTRY_ARCHITECTURE.md",
+        REPO_ROOT / "docs/product/campaign/CAMPAIGN_RESOLUTION_CONTRACT.md",
+        REPO_ROOT / "docs/product/campaign/CAMPAIGN_SDK_ACQUISITION.md",
+        REPO_ROOT / "docs/product/campaign/CAMPAIGN_CONNECTORS.md",
+        REPO_ROOT / "docs/product/campaign/CAMPAIGN_MIGRATION.md",
+        REPO_ROOT / "docs/product/campaign/CAMPAIGN_KYBER_GUIDE.md",
+        REPO_ROOT / "docs/product/campaign/ADR_CAMPAIGN_IDENTITY.md",
+        REPO_ROOT / "infra/observability/prometheus/alert_rules.yml",
     ]
     results = []
     for path in required:
@@ -101,7 +101,7 @@ def check_required_files() -> list[CheckResult]:
 
 
 def check_alert_rules_present() -> CheckResult:
-    alert_file = REPO_ROOT / "deploy/observability/prometheus/alert_rules.yml"
+    alert_file = REPO_ROOT / "infra/observability/prometheus/alert_rules.yml"
     if not alert_file.exists():
         return CheckResult("campaign alert rules", False, "alert_rules.yml missing")
     content = alert_file.read_text()

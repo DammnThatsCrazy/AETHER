@@ -548,7 +548,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--deployment-id", default=os.getenv("AETHER_DEPLOYMENT_ID"),
                         help="optional expected deployment ID; the authenticated capture endpoint supplies the bound ID")
     parser.add_argument("--execution-id", default=os.getenv("AETHER_IDENTITY_EXECUTION_ID"), required=not bool(os.getenv("AETHER_IDENTITY_EXECUTION_ID")))
-    parser.add_argument("--output-directory", default="artifacts/rehearsal/identity-continuity-scenarios")
+    parser.add_argument("--output-directory", default=".artifacts/rehearsal/identity-continuity-scenarios")
     args = parser.parse_args(argv)
     try:
         base_url = args.base_url.rstrip("/")

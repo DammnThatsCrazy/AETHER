@@ -1,6 +1,6 @@
 """Payment Rail Observability — supervised derived-condition alert evaluator.
 
-The Prometheus rules in ``deploy/observability/prometheus/alert_rules.yml`` cover
+The Prometheus rules in ``infra/observability/prometheus/alert_rules.yml`` cover
 the payment-rail conditions expressible as a single-series PromQL threshold. But
 several operationally critical signals have **no** clean single-series form —
 above all the reconciliation-conflict backlog (an SDK-vs-provider truth

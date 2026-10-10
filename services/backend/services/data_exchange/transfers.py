@@ -2,7 +2,7 @@
 
 M2 adds short-TTL **presigned URL** transfers over the shared ObjectStore so
 artifact bytes move directly between the tenant client and object storage —
-never proxied through the envelope (see ``docs/plans/data-exchange-api.md``
+never proxied through the envelope (see ``docs/architecture/plans/data-exchange-api.md``
 M2).  This module is the DB-free core; the FastAPI surface lives in
 ``routes_transfer.py``.
 

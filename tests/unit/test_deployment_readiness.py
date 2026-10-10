@@ -269,9 +269,9 @@ def test_control_with_no_evidence_file_scores_zero(tmp_path):
 
 def test_control_whose_evidence_exists_but_fails_validation_scores_zero(tmp_path):
     """Present is not passing. The file is there and the validator rejects it."""
-    _write(tmp_path / "artifacts/result.json", {"profile": "production-lean"})
+    _write(tmp_path / ".artifacts/result.json", {"profile": "production-lean"})
     config = _config(_one_per_profile([
-        {"id": "e", "kind": "json_artifact", "path": "artifacts/result.json",
+        {"id": "e", "kind": "json_artifact", "path": ".artifacts/result.json",
          "require_keys": ["profile", "passed"], "external": False},
     ]))
     report = dr.build_report(tmp_path, config, runner=PASS_RUNNER)
@@ -294,10 +294,10 @@ def test_control_whose_validator_script_exits_nonzero_scores_zero(tmp_path):
 
 
 def test_require_true_rejects_a_falsy_pass_flag(tmp_path):
-    _write(tmp_path / "reports/cost/cost-report.json",
+    _write(tmp_path / "docs/reference/reports/cost/cost-report.json",
            {"profile": "production-lean", "passed": False})
     config = _config(_one_per_profile([
-        {"id": "e", "kind": "json_artifact", "path": "reports/cost/cost-report.json",
+        {"id": "e", "kind": "json_artifact", "path": "docs/reference/reports/cost/cost-report.json",
          "require_keys": ["profile"], "require_true": ["passed"], "external": False},
     ]))
     report = dr.build_report(tmp_path, config, runner=PASS_RUNNER)
@@ -329,7 +329,7 @@ def test_a_control_declaring_no_internal_evidence_is_never_code_complete(tmp_pat
     ({"captured_at": "2026-07-25T13:00:00"}, "timezone-aware"),
     ({"commit_sha": "nothex!"}, "hex commit"),
     ({"source": "/tmp/scratch/lean.json"}, "never becomes credentialed evidence"),
-    ({"source": "reports/cost/synthetic-plan.json"}, "never becomes credentialed evidence"),
+    ({"source": "docs/reference/reports/cost/synthetic-plan.json"}, "never becomes credentialed evidence"),
 ])
 def test_provenance_rejects_uncredentialed_artifacts(override, fragment):
     reasons = dr.validate_provenance({"provenance": _provenance(**override)})
@@ -1055,7 +1055,7 @@ def test_external_evidence_must_live_inside_the_bundle():
     control = next(c for c in edited["controls"]
                    if any(e.get("external") for e in c["required_evidence"]))
     entry = next(e for e in control["required_evidence"] if e.get("external"))
-    entry["path"] = "reports/cost/cost-report.json"
+    entry["path"] = "docs/reference/reports/cost/cost-report.json"
     reporter = dr.Reporter("integrity")
     dr.check_integrity(edited, reporter)
     assert reporter.finish() != 0
@@ -1086,25 +1086,25 @@ def test_an_artifact_derived_from_a_fixture_earns_nothing(tmp_path):
     committed fixture took it to 100. Two engineers, same commit, different
     readiness numbers.
     """
-    _write(tmp_path / "artifacts/profile-policy-result.json", {
+    _write(tmp_path / ".artifacts/profile-policy-result.json", {
         "profile": "production-lean", "passed": True, "violations": [],
         "checks_total": 59,
         "plan_json": "/repo/tests/fixtures/terraform_plans/production-lean-valid.json",
         "synthetic_input": "tests/fixtures"})
-    _write(tmp_path / "reports/cost/cost-report.json", {
+    _write(tmp_path / "docs/reference/reports/cost/cost-report.json", {
         "profile": "production-lean", "gated_amount": 187.13,
         "effective_ceiling": 200.0, "passed": True,
-        "inventory_path": "artifacts/profile-resource-inventory.json",
+        "inventory_path": ".artifacts/profile-resource-inventory.json",
         "inventory_source": {
             "generated_from": "tests/fixtures/terraform_plans/production-lean-valid.json",
             "synthetic_input": "tests/fixtures"}})
     config = _config(_one_per_profile([
         {"id": "plan", "kind": "json_artifact",
-         "path": "artifacts/profile-policy-result.json",
+         "path": ".artifacts/profile-policy-result.json",
          "require_keys": ["profile", "passed"], "require_true": ["passed"],
          "external": False},
         {"id": "cost", "kind": "json_artifact",
-         "path": "reports/cost/cost-report.json",
+         "path": "docs/reference/reports/cost/cost-report.json",
          "require_keys": ["profile", "gated_amount"], "external": False},
     ]))
     report = dr.build_report(tmp_path, config, runner=PASS_RUNNER)
@@ -1116,13 +1116,13 @@ def test_an_artifact_derived_from_a_fixture_earns_nothing(tmp_path):
 
 def test_an_artifact_from_a_real_plan_still_earns_its_point(tmp_path):
     """The rejection must be about provenance, not about the artifact's shape."""
-    _write(tmp_path / "artifacts/profile-policy-result.json", {
+    _write(tmp_path / ".artifacts/profile-policy-result.json", {
         "profile": "production-lean", "passed": True, "violations": [],
-        "checks_total": 59, "plan_json": "artifacts/reviewed.tfplan.json",
+        "checks_total": 59, "plan_json": ".artifacts/reviewed.tfplan.json",
         "synthetic_input": None})
     config = _config(_one_per_profile([
         {"id": "plan", "kind": "json_artifact",
-         "path": "artifacts/profile-policy-result.json",
+         "path": ".artifacts/profile-policy-result.json",
          "require_keys": ["profile", "passed"], "require_true": ["passed"],
          "external": False},
     ]))
@@ -1169,9 +1169,9 @@ def test_the_numbers_do_not_depend_on_gitignored_local_artifacts(tmp_path):
     # from the committed fixture and must not move a single point.
     for row in baseline["controls"]:
         for entry in row["evidence"]:
-            if entry["path"].startswith(("artifacts/", "reports/")):
+            if entry["path"].startswith((".artifacts/", "docs/reference/reports/")):
                 assert not entry["satisfied"] or entry.get("synthetic") is None
-    artifacts = ROOT / "artifacts/profile-policy-result.json"
+    artifacts = ROOT / ".artifacts/profile-policy-result.json"
     if artifacts.is_file():
         data = json.loads(artifacts.read_text(encoding="utf-8"))
         assert dr.synthetic_artifact_reason(data), (

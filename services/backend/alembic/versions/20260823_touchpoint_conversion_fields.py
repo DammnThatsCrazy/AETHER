@@ -19,7 +19,7 @@ Adds three backward-compatible columns:
   ``revenue_adjustments.amount`` (see ``20260622_measurement_core.py``) are
   both nullable/plain ``NUMERIC(18,6)`` with no implicit zero-coercion.
   NUMERIC (never FLOAT/DOUBLE PRECISION) so revenue is never persisted as a
-  binary float — see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md.
+  binary float — see docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md.
 - ``is_conversion``   BOOLEAN — ``NOT NULL DEFAULT FALSE``, the same
   convention already used by this table's ``is_view_through`` /
   ``is_click_through`` columns.

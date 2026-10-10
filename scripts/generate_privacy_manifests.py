@@ -7,7 +7,7 @@ store-facing artifacts, derived deterministically and validated against the
 platform's own governance sources:
 
   * ``PrivacyInfo.xcprivacy`` — an Apple Privacy Manifest, mirroring the structure
-    of the hand-authored SDK manifest (packages/ios/.../PrivacyInfo.xcprivacy):
+    of the hand-authored SDK manifest (packages/sdk/ios/.../PrivacyInfo.xcprivacy):
     NSPrivacyTracking, NSPrivacyTrackingDomains, NSPrivacyAccessedAPITypes, and
     NSPrivacyCollectedDataTypes (grouped by data type, with Linked/Tracking/Purposes).
   * ``data-safety.json`` — a machine-readable Google Play Data Safety declaration:

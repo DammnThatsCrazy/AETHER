@@ -11,7 +11,7 @@ dispatcher projector (a catalog is a table→table derivation, not a Bronze-even
 projection). Phase B1 adds capability authority (authorizations stored as delegation
 rows) and the ``capability.invoke`` policy; Phase B2 adds artifact/publisher identity
 and the declared side that drift compares against — see
-``docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md``.
+``docs/reference/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md``.
 
 Identity note, because it is the easiest thing here to get wrong: nothing in this
 package verifies a third-party publisher, and no ``verified`` state exists anywhere in

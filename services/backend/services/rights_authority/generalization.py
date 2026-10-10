@@ -19,7 +19,7 @@ Doctrine
   NOT a parallel graph or a second rights registry.
 
 The parallel streams P-A (``services.integrations.data_rights`` structured grant
-contracts) and P-B1 (``services.rights_authority`` contracts/repositories/
+contracts) and P-B1 (``services.rights_authority`` packages/contracts/repositories/
 resolver) may not yet exist when this module is imported. All access to their
 symbols therefore goes through the module-level *accessor* functions
 (``_pa_models`` / ``_pb1_repositories`` / ``_pb1_resolver``) which are resolved

@@ -22,7 +22,7 @@
  *
  * The report is both machine-readable (JSON version saved alongside) and
  * human-readable (Markdown). Written to:
- *   reports/release-readiness/aether-functionality-proof-report-{date}.md
+ *   docs/reference/reports/release-readiness/aether-functionality-proof-report-{date}.md
  */
 
 import { execSync } from "child_process";
@@ -36,7 +36,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
-const REPORT_DIR = resolve(REPO_ROOT, "reports", "release-readiness");
+const REPORT_DIR = resolve(REPO_ROOT, "docs", "reference", "reports", "release-readiness");
 
 function envOr(defaultValue: string, key: string): string {
   return process.env[key] ?? defaultValue;

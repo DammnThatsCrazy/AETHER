@@ -52,7 +52,7 @@ importers:
     dependencies:
       '@aether/mobile-core':
         specifier: '*'
-        version: link:../../packages/mobile-core
+        version: link:../../packages/sdk/mobile-core
       expo:
         specifier: ^51.0.0
         version: 51.0.39(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react-native@0.74.0(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
@@ -80,10 +80,10 @@ importers:
     dependencies:
       '@aether/mobile-core':
         specifier: '*'
-        version: link:../../packages/mobile-core
+        version: link:../../packages/sdk/mobile-core
       '@aether/mobile-ui':
         specifier: '*'
-        version: link:../../packages/mobile-ui
+        version: link:../../packages/ui/mobile
       expo:
         specifier: ^51.0.0
         version: 51.0.39(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react-native@0.74.0(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
@@ -107,11 +107,11 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
 
-  apps/proof-android:
+  tests/e2e/proof/apps/android:
     dependencies:
       '@aether/react-native':
         specifier: '*'
-        version: link:../../packages/react-native
+        version: link:../../packages/sdk/react-native
       expo:
         specifier: ^51.0.0
         version: 51.0.39(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react-native@0.74.0(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
@@ -132,14 +132,14 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  apps/proof-connectors:
+  tests/e2e/proof/apps/connectors:
     dependencies:
       '@aether/proof-fixtures':
         specifier: '*'
-        version: link:../../packages/proof-fixtures
+        version: link:../../tests/e2e/proof/packages/fixtures
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/web
+        version: link:../../packages/sdk/web
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -169,11 +169,11 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  apps/proof-ios:
+  tests/e2e/proof/apps/ios:
     dependencies:
       '@aether/react-native':
         specifier: '*'
-        version: link:../../packages/react-native
+        version: link:../../packages/sdk/react-native
       expo:
         specifier: ^51.0.0
         version: 51.0.39(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react-native@0.74.0(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
@@ -194,11 +194,11 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  apps/proof-react:
+  tests/e2e/proof/apps/react:
     dependencies:
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/web
+        version: link:../../packages/sdk/web
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -228,14 +228,14 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  apps/proof-web:
+  tests/e2e/proof/apps/web:
     dependencies:
       '@aether/shared':
         specifier: '*'
         version: link:../../packages/shared
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/web
+        version: link:../../packages/sdk/web
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -265,7 +265,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  apps/aether:
+  apps/aether-web:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -275,7 +275,7 @@ importers:
         version: link:../shared
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/web
+        version: link:../../packages/sdk/web
       '@tanstack/react-virtual':
         specifier: ^3.10.0
         version: 3.14.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -353,7 +353,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  apps/aether-marketing:
+  apps/marketing-aether:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -363,7 +363,7 @@ importers:
         version: link:../shared
       '@olympus/brand':
         specifier: '*'
-        version: link:../../packages/brand
+        version: link:../../packages/ui/brand
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -424,7 +424,7 @@ importers:
         version: link:../shared
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/web
+        version: link:../../packages/sdk/web
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -518,7 +518,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  apps/kyber:
+  apps/kyber-web:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -528,7 +528,7 @@ importers:
         version: link:../shared
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/web
+        version: link:../../packages/sdk/web
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
@@ -618,7 +618,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  apps/marketing:
+  packages/ui/marketing:
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -633,14 +633,14 @@ importers:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
 
-  apps/olympus-marketing:
+  apps/marketing-olympus:
     dependencies:
       '@aether/ui':
         specifier: '*'
         version: link:../shared
       '@olympus/brand':
         specifier: '*'
-        version: link:../../packages/brand
+        version: link:../../packages/ui/brand
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -691,14 +691,14 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  apps/shared:
+  packages/ui/core:
     dependencies:
       '@aether/shared':
         specifier: '*'
         version: link:../../packages/shared
       '@olympus/brand':
         specifier: '*'
-        version: link:../../packages/brand
+        version: link:../../packages/ui/brand
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
@@ -725,11 +725,11 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  apps/site:
+  apps/public-site:
     dependencies:
       '@olympus/brand':
         specifier: '*'
-        version: link:../../packages/brand
+        version: link:../../packages/ui/brand
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -808,7 +808,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  packages/brand:
+  packages/ui/brand:
     devDependencies:
       typescript:
         specifier: ^5.4.0
@@ -826,7 +826,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  packages/mobile-core:
+  packages/sdk/mobile-core:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -836,7 +836,7 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
 
-  packages/mobile-ui:
+  packages/ui/mobile:
     devDependencies:
       '@types/react':
         specifier: ~18.2.0
@@ -854,7 +854,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  packages/proof-contracts:
+  tests/e2e/proof/packages/contracts:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -867,7 +867,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  packages/proof-fixtures:
+  tests/e2e/proof/packages/fixtures:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -883,7 +883,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  packages/proof-reporting:
+  tests/e2e/proof/packages/reporting:
     dependencies:
       '@aether/proof-contracts':
         specifier: '*'
@@ -902,7 +902,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  packages/proof-runner:
+  tests/e2e/proof/packages/runner:
     dependencies:
       '@aether/proof-contracts':
         specifier: '*'
@@ -921,7 +921,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  packages/react-native:
+  packages/sdk/react-native:
     dependencies:
       '@aether/shared':
         specifier: ^0.1.0-alpha.0
@@ -943,7 +943,7 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
 
-  packages/server:
+  packages/sdk/server:
     devDependencies:
       '@aether/shared':
         specifier: '*'
@@ -970,7 +970,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  packages/web:
+  packages/sdk/web:
     dependencies:
       '@aether/shared':
         specifier: ^0.1.0-alpha.0

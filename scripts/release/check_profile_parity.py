@@ -25,8 +25,8 @@ Surfaces cross-checked:
      ``permitted_in`` / ``also_applies_to`` must be a canonical profile.
   5. RUNTIME TOPOLOGY — every profile in ``config/runtime_deployment.yaml`` must
      be canonical, and every SELECTABLE profile must have a runtime topology.
-  6. ENV TEMPLATES — ``DEPLOYMENT_PROFILE`` in ``.env.staging.example`` and
-     ``.env.production.example`` must be a canonical profile (membership).
+  6. ENV TEMPLATES — ``DEPLOYMENT_PROFILE`` in ``config/environments/.env.staging.example`` and
+     ``config/environments/.env.production.example`` must be a canonical profile (membership).
      Backend-parity with the profile's declared backends is enforced by
      ``tests/unit/test_release_profile_enforcement.py``.
 
@@ -54,12 +54,12 @@ CLOUD_CLASSES = {"staging", "production", "enterprise"}
 # prose that states a number is exactly what the monoprompt's parity rule
 # targets.
 DOCS_COUNT_PHRASES = {
-    "docs/DEPLOYMENT-PROFILES.md": [
+    "docs/architecture/DEPLOYMENT-PROFILES.md": [
         r"{word} deployment profiles",
         r"four of the \*{{0,2}}{word}\*{{0,2}}",
     ],
-    "docs/STAGING-WAKE-SLEEP.md": [r"{word}-profile matrix"],
-    "docs/COST-OPTIMIZATION.md": [r"{word}-profile matrix"],
+    "docs/operations/STAGING-WAKE-SLEEP.md": [r"{word}-profile matrix"],
+    "docs/operations/COST-OPTIMIZATION.md": [r"{word}-profile matrix"],
 }
 
 # English count words for the small integers the canonical set can plausibly be.
@@ -83,7 +83,7 @@ EPHEMERAL_CLASSES = {"demo", "preview"}
 EXPECTED_SELECTABLE = EXPECTED_CLOUD + ["demo", "preview"]
 
 CHECK_COST_POLICY_TERRAFORM = "scripts/release/check_cost_policy_terraform.py"
-TF_DIR = "deploy/aws/terraform"
+TF_DIR = "infra/aws/terraform"
 PROFILES_TF = f"{TF_DIR}/profiles.tf"
 VARIABLES_TF = f"{TF_DIR}/variables.tf"
 CONTRACTS_YAML = "config/terraform_resource_contracts.yaml"
@@ -247,7 +247,7 @@ def check() -> int:
     )
 
     # 6. Env template membership --------------------------------------------------
-    for envf in (".env.staging.example", ".env.production.example"):
+    for envf in ("config/environments/.env.staging.example", "config/environments/.env.production.example"):
         try:
             text = _read(envf)
         except FileNotFoundError:

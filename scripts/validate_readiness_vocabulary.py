@@ -6,7 +6,7 @@ Cross-checks the four hand-written readiness surfaces:
   1. packages/shared/contracts/readiness-vocabulary.json   (the contract)
   2. Backend .../shared/certification/readiness.py          (Python enum + ranks
      + the _coarse_state inference set)                     — AST-parsed
-  3. apps/shared/src/status/capability-state.ts         (TS union +
+  3. packages/ui/core/src/status/capability-state.ts         (TS union +
      precedence array)                                      — regex-parsed
   4. packages/shared/contracts/evidence-manifest.schema.json (certification
      state enum)
@@ -40,7 +40,7 @@ READINESS_PY = (
     / "certification"
     / "readiness.py"
 )
-CAPABILITY_TS = ROOT / "apps" / "shared" / "src" / "status" / "capability-state.ts"
+CAPABILITY_TS = ROOT / "packages" / "ui" / "core" / "src" / "status" / "capability-state.ts"
 
 ERRORS: list[str] = []
 

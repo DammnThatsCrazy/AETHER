@@ -5,7 +5,7 @@ read adapter* over the canonical export engine (``services/export/service.py``
 ``request_export`` + the canonical ``EXPORTERS`` registry) and the M1
 ``data_artifacts`` metadata repository — never a second export engine.
 
-Route map (frozen in ``docs/plans/data-exchange-api.md`` M4):
+Route map (frozen in ``docs/architecture/plans/data-exchange-api.md`` M4):
 
 - ``GET    /v1/data-exchange/exports/types``   → ``{export_types, formats}``
 - ``POST   /v1/data-exchange/exports``         → ``{export_id, artifact_id,

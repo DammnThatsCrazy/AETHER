@@ -350,7 +350,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Communication 360',
     projectionKind: 'sequence_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/communication360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/communication360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'source'],
     canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'entities', 'evidence', 'outcomes'],
@@ -398,7 +398,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['profile360', 'timeline'],
       services: ['services/backend/services/comms'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/communication360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/communication360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -477,7 +477,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Economic 360',
     projectionKind: 'measurement_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/economic360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/economic360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'source'],
     canonicalAuthorities: ['commerce', 'currency_value_normalization', 'economic_facts', 'graph', 'outcome_facts', 'payments'],
@@ -525,7 +525,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['campaign360', 'economic360', 'product_intelligence'],
       services: ['services/backend/services/economic'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/economic360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/economic360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -664,7 +664,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Fraud 360',
     projectionKind: 'risk_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/fraud360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/fraud360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'relationship'],
     canonicalAuthorities: ['economic_facts', 'evidence', 'execution_facts', 'fraud_synthesis', 'graph_motifs', 'identity', 'relationship_facts', 'risk_outputs', 'social_observations'],
@@ -712,7 +712,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['fraud360', 'graph'],
       services: ['services/backend/services/fraud'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/fraud360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/fraud360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -724,7 +724,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Geographic 360',
     projectionKind: 'context_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/geographic360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/geographic360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'population', 'source'],
     canonicalAuthorities: ['context_capsules', 'entity_graph', 'geo_observations', 'locations', 'temporal'],
@@ -772,7 +772,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['geographic360'],
       services: ['services/backend/services/geo'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/geographic360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/geographic360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -784,7 +784,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Infrastructure 360',
     projectionKind: 'infrastructure_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/infrastructure360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/infrastructure360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['deployment', 'infrastructure'],
     canonicalAuthorities: ['deployments', 'infrastructure_facts', 'infrastructure_state'],
@@ -832,7 +832,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['infrastructure360'],
       services: ['services/backend/services/infrastructure'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/infrastructure360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/infrastructure360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -844,7 +844,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Outcome 360',
     projectionKind: 'measurement_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/outcome360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/outcome360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'population'],
     canonicalAuthorities: ['evidence', 'graph', 'measurement_contract', 'outcome_facts'],
@@ -892,7 +892,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['campaign360', 'outcome360'],
       services: ['services/backend/services/measurement'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/outcome360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/outcome360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -904,7 +904,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Population 360',
     projectionKind: 'context_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/population360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/population360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['cluster', 'entity', 'population'],
     canonicalAuthorities: ['cluster_definitions', 'cohort_membership', 'entities', 'evidence', 'population_definitions', 'temporal'],
@@ -952,7 +952,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['population360'],
       services: ['services/backend/services/population'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/population360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/population360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -1084,7 +1084,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Risk 360',
     projectionKind: 'risk_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/risk360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/risk360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['cluster', 'entity', 'population', 'relationship'],
     canonicalAuthorities: ['cluster_membership', 'economic_facts', 'entity_graph', 'evidence', 'model_governance', 'risk_outputs'],
@@ -1132,7 +1132,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['comparison_workbench', 'graph', 'risk360'],
       services: ['services/backend/services/risk_overlay'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/risk360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/risk360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -1144,7 +1144,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Social 360',
     projectionKind: 'relationship_360',
     implementationState: 'in_flight',
-    implementationBlueprint: 'docs/blueprints/social360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/social360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'relationship'],
     canonicalAuthorities: ['evidence', 'graph', 'relationship_facts', 'social_observations', 'source_facts'],
@@ -1192,7 +1192,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['profile360'],
       services: ['services/backend/services/profile'],
       migrationMode: 'adapter',
-      migrationBlueprint: 'docs/blueprints/social360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/social360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -1264,7 +1264,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Temporal 360',
     projectionKind: 'context_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/temporal360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/temporal360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'relationship'],
     canonicalAuthorities: ['graph_snapshots', 'mutation_history', 'temporal_kernel', 'validity_state'],
@@ -1312,7 +1312,7 @@ export const intelligenceProjectionDefinitions: Record<
       surfaceIds: ['temporal360'],
       services: ['services/backend/shared/temporal'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/temporal360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/temporal360.md'
     },
     deprecatedReason: null,
     successorId: null,

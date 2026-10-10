@@ -80,13 +80,13 @@ jobs:
           path: |
             package.json
             packages/shared/package.json
-            packages/web/package.json
+            packages/sdk/web/package.json
             packages/shared/sdk-version.ts
-            packages/react-native/package.json
-            packages/react-native/aether-react-native.podspec
-            packages/android/gradle.properties
-            packages/ios/AetherSDK.podspec
-            packages/web/src/loader/bootstrap.ts
+            packages/sdk/react-native/package.json
+            packages/sdk/react-native/aether-react-native.podspec
+            packages/sdk/android/gradle.properties
+            packages/sdk/ios/AetherSDK.podspec
+            packages/sdk/web/src/loader/bootstrap.ts
             services/backend/services/sdk_distribution/versions.py
 
   # ── Tag (must precede CocoaPods — podspec source URL requires the tag) ────
@@ -122,13 +122,13 @@ jobs:
           git add package.json \
                   packages/shared/package.json \
                   packages/shared/sdk-version.ts \
-                  packages/web/package.json \
-                  packages/react-native/package.json \
-                  packages/react-native/aether-react-native.podspec \
-                  packages/android/gradle.properties \
-                  packages/ios/AetherSDK.podspec \
+                  packages/sdk/web/package.json \
+                  packages/sdk/react-native/package.json \
+                  packages/sdk/react-native/aether-react-native.podspec \
+                  packages/sdk/android/gradle.properties \
+                  packages/sdk/ios/AetherSDK.podspec \
                   services/backend/services/sdk_distribution/versions.py \
-                  packages/web/src packages/react-native/src packages/android/src packages/ios/Sources
+                  packages/sdk/web/src packages/sdk/react-native/src packages/sdk/android/src packages/sdk/ios/Sources
           git commit -m "chore(sdk): bump version to $VERSION"
 
       - name: Create and push tag
@@ -166,10 +166,10 @@ jobs:
         run: npm run build --workspace=packages/shared
 
       - name: Build @aether/web
-        run: npm run build --workspace=packages/web
+        run: npm run build --workspace=packages/sdk/web
 
       - name: Build @aether/react-native
-        run: npm run build --workspace=packages/react-native
+        run: npm run build --workspace=packages/sdk/react-native
 
       - name: Validate SDK release alignment
         run: python scripts/validate_sdk_release_alignment.py
@@ -178,11 +178,11 @@ jobs:
         run: |
           set -euo pipefail
           npm pack --workspace=packages/shared --dry-run
-          npm pack --workspace=packages/web --dry-run
-          npm pack --workspace=packages/react-native --dry-run
-          test -f packages/web/dist/aether.esm.js
-          test -f packages/web/dist/aether.cjs.js
-          test -f packages/react-native/dist/index.js
+          npm pack --workspace=packages/sdk/web --dry-run
+          npm pack --workspace=packages/sdk/react-native --dry-run
+          test -f packages/sdk/web/dist/aether.esm.js
+          test -f packages/sdk/web/dist/aether.cjs.js
+          test -f packages/sdk/react-native/dist/index.js
 
       - name: Publish @aether/shared
         if: ${{ !inputs.dry_run }}
@@ -206,7 +206,7 @@ jobs:
             CHANNEL="${CHANNEL%%.*}"
             TAG_FLAG="--tag $CHANNEL"
           fi
-          npm publish --workspace=packages/web --access public $TAG_FLAG
+          npm publish --workspace=packages/sdk/web --access public $TAG_FLAG
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -219,7 +219,7 @@ jobs:
             CHANNEL="${CHANNEL%%.*}"
             TAG_FLAG="--tag $CHANNEL"
           fi
-          npm publish --workspace=packages/react-native --access public $TAG_FLAG
+          npm publish --workspace=packages/sdk/react-native --access public $TAG_FLAG
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -228,8 +228,8 @@ jobs:
         run: |
           echo "DRY RUN — would publish:"
           npm pack --workspace=packages/shared --dry-run
-          npm pack --workspace=packages/web --dry-run
-          npm pack --workspace=packages/react-native --dry-run
+          npm pack --workspace=packages/sdk/web --dry-run
+          npm pack --workspace=packages/sdk/react-native --dry-run
 
   # ── CDN ──────────────────────────────────────────────────────────────────
   # Publishes the loader bootstrap, version-pinned bundles, and the web
@@ -270,10 +270,10 @@ jobs:
         run: npm run build --workspace=packages/shared
 
       - name: Build @aether/web
-        run: npm run build --workspace=packages/web
+        run: npm run build --workspace=packages/sdk/web
 
       - name: Verify web SDK package artifacts
-        run: npm run verify:artifacts --workspace=packages/web
+        run: npm run verify:artifacts --workspace=packages/sdk/web
 
       - name: Generate CDN manifest and release layout
         run: node scripts/release/generate-sdk-cdn-manifest.mjs
@@ -284,7 +284,7 @@ jobs:
       - name: Record CDN release evidence
         run: |
           mkdir -p release-evidence
-          cp artifacts/sdk/cdn/sdk/manifests/web/latest.json release-evidence/sdk-cdn-manifest.json
+          cp .artifacts/sdk/cdn/sdk/manifests/web/latest.json release-evidence/sdk-cdn-manifest.json
           printf '{"sha":"%s","job":"publish-cdn","dry_run":%s}\n' \
             "$GITHUB_SHA" "${{ inputs.dry_run }}" > release-evidence/sdk-cdn.json
 
@@ -299,7 +299,7 @@ jobs:
         if: ${{ inputs.dry_run }}
         run: |
           echo "DRY RUN — CDN layout validated, nothing uploaded:"
-          find artifacts/sdk/cdn -type f | sort
+          find .artifacts/sdk/cdn -type f | sort
 
       - name: Require AWS credentials
         if: ${{ !inputs.dry_run }}
@@ -326,7 +326,7 @@ jobs:
           set -euo pipefail
           # No --delete: versioned prefixes are immutable and accumulate so
           # that pinned installs keep resolving after a new release.
-          aws s3 sync artifacts/sdk/cdn/ "s3://${CDN_BUCKET}/" \
+          aws s3 sync .artifacts/sdk/cdn/ "s3://${CDN_BUCKET}/" \
             --exclude "v1.js" \
             --exclude "sdk/manifests/*" \
             --cache-control "public, max-age=31536000, immutable"
@@ -335,14 +335,14 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: |
           set -euo pipefail
-          aws s3 cp artifacts/sdk/cdn/v1.js "s3://${CDN_BUCKET}/v1.js" \
+          aws s3 cp .artifacts/sdk/cdn/v1.js "s3://${CDN_BUCKET}/v1.js" \
             --cache-control "public, max-age=300, must-revalidate"
 
       - name: Upload CDN manifest
         if: ${{ !inputs.dry_run }}
         run: |
           set -euo pipefail
-          aws s3 cp artifacts/sdk/cdn/sdk/manifests/web/latest.json \
+          aws s3 cp .artifacts/sdk/cdn/sdk/manifests/web/latest.json \
             "s3://${CDN_BUCKET}/sdk/manifests/web/latest.json" \
             --cache-control "public, max-age=60, must-revalidate"
 
@@ -380,20 +380,20 @@ jobs:
 
       # --quick validates podspec format only; source URL/tag checked by trunk push below.
       - name: Validate AetherSDK podspec (format)
-        run: pod spec lint packages/ios/AetherSDK.podspec --allow-warnings --quick
+        run: pod spec lint packages/sdk/ios/AetherSDK.podspec --allow-warnings --quick
 
       - name: Validate aether-react-native podspec (format)
-        run: pod spec lint packages/react-native/aether-react-native.podspec --allow-warnings --quick
+        run: pod spec lint packages/sdk/react-native/aether-react-native.podspec --allow-warnings --quick
 
       - name: Push AetherSDK to trunk
         if: ${{ !inputs.dry_run }}
-        run: pod trunk push packages/ios/AetherSDK.podspec --allow-warnings
+        run: pod trunk push packages/sdk/ios/AetherSDK.podspec --allow-warnings
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
 
       - name: Push aether-react-native to trunk
         if: ${{ !inputs.dry_run }}
-        run: pod trunk push packages/react-native/aether-react-native.podspec --allow-warnings
+        run: pod trunk push packages/sdk/react-native/aether-react-native.podspec --allow-warnings
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
 
@@ -428,20 +428,20 @@ jobs:
           gradle-version: '8.6'
 
       - name: Assemble release AAR
-        working-directory: packages/android
+        working-directory: packages/sdk/android
         run: gradle assembleRelease
 
       - name: Dry-run Maven publication to local repository
-        working-directory: packages/android
+        working-directory: packages/sdk/android
         run: gradle publishToMavenLocal
 
       - name: Verify Android AAR artifact
-        working-directory: packages/android
+        working-directory: packages/sdk/android
         run: test -n "$(find build/outputs/aar -name '*release*.aar' -print -quit)"
 
       - name: Publish to GitHub Packages
         if: ${{ !inputs.dry_run }}
-        working-directory: packages/android
+        working-directory: packages/sdk/android
         run: gradle publishReleasePublicationToGitHubPackagesRepository
         env:
           GITHUB_ACTOR: ${{ github.actor }}

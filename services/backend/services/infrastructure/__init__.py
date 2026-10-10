@@ -19,7 +19,7 @@ This package ships:
 * :mod:`~services.infrastructure.routes` — the read-only ``/v1/infrastructure``
   FastAPI router (all GET, tenant-scoped, ``infrastructure360.read``-gated).
 
-The blueprint is ``docs/blueprints/infrastructure360.md``.
+The blueprint is ``docs/architecture/blueprints/infrastructure360.md``.
 """
 
 from __future__ import annotations

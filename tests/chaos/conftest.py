@@ -12,7 +12,7 @@ message bus), the test uses an in-process fault-injecting fake and asserts the
 RECOVERABLE in-process portion (retry / backoff / circuit-break / at-least-once
 lease-reclaim). Those tests say so in their module docstring; the live-service
 leg is out of credentialless scope and is exercised by the staging runbooks
-under docs/runbooks/.
+under docs/operations/runbooks/.
 
 The package is isolation-safe under ``pytest -n auto``: process-global in-memory
 stores are reset before and after each test and every test uses a unique tenant

@@ -31,8 +31,8 @@ Modules:
 * :mod:`~services.communication360.routes` — the read-only ``/v1/communication360``
   FastAPI router (all GET, tenant-scoped, ``communication360.read``-gated).
 
-The blueprint is ``docs/blueprints/communication360.md``; the program ledger is
-``docs/plans/COMMUNICATION_360_PHASES.md``.
+The blueprint is ``docs/architecture/blueprints/communication360.md``; the program ledger is
+``docs/architecture/plans/COMMUNICATION_360_PHASES.md``.
 """
 
 from services.communication360.contracts import (  # noqa: F401

@@ -184,7 +184,7 @@ export * from './social-provider-capability-vocabulary';
 // (services/backend/shared/integration_contracts/commerce_bridge.py).
 // The web SDK imports only the source-observable signal types + schema version it
 // needs via the explicit subpath '@aether/shared/commerce-bridge'
-// (packages/web/src/modules/commerce-detection.ts), NOT from this public barrel.
+// (packages/sdk/web/src/modules/commerce-detection.ts), NOT from this public barrel.
 // Do NOT re-add it to the SDK public surface.
 
 // ADR-011 D3 common spine envelope (composes canonical primitives; redefines nothing).

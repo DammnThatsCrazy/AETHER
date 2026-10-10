@@ -1,7 +1,7 @@
 """Data Exchange Plane — signed transfer routes (/v1/data-exchange/transfers).
 
 M2 tenant-facing surface over ``ObjectTransferService`` (see
-``docs/plans/data-exchange-api.md`` M2).  Three thin, tenant-scoped verbs:
+``docs/architecture/plans/data-exchange-api.md`` M2).  Three thin, tenant-scoped verbs:
 
   - ``POST /transfers/{artifact_id}/upload-url``      issue a signed PUT
   - ``POST /transfers/{artifact_id}/upload-complete`` server-side verify

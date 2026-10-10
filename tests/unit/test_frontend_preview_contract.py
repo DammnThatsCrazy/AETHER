@@ -16,8 +16,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/frontend-preview.yml"
 MANIFEST = ROOT / "config/staging_frontend_preview_iam_policy.yaml"
-MAIN_TF = ROOT / "deploy/aws/terraform/main.tf"
-STAGING_TFVARS = ROOT / "deploy/aws/terraform/profiles/staging.tfvars"
+MAIN_TF = ROOT / "infra/aws/terraform/main.tf"
+STAGING_TFVARS = ROOT / "infra/aws/terraform/profiles/staging.tfvars"
 
 def _workflow() -> dict:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))

@@ -116,7 +116,7 @@ operational_ownership:
   technical_owner: integrations
   operational_owner: platform-ops
   escalation: pagerduty:integrations
-  runbook: docs/runbooks/CREDENTIAL-ROTATION.md
+  runbook: docs/operations/runbooks/CREDENTIAL-ROTATION.md
   dashboards:
   - grafana:integrations
   alerts:

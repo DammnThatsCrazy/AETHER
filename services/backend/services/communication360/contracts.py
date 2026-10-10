@@ -4,7 +4,7 @@ These are the genuinely-new canonical communication objects the read-only
 ``communication360`` projection consumes (registry row ``communication360``,
 ``ownsCanonicalTruth: false``, ``graphMutationPolicy: read_only``). The program's
 central modeling obligations (ratified in Phase 2, R1–R5, recorded in
-``docs/blueprints/communication360.md``):
+``docs/architecture/blueprints/communication360.md``):
 
 - **R2 — message is not information.** A delivered message is never collapsed
   into "the content was known". The information layer (:class:`Information`,

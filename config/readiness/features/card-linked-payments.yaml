@@ -27,8 +27,8 @@ repository_ceiling:
   remaining_is_repository_controlled: true
   evidence:
   - services/backend/services/card_linked_payments/
-  - docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md
-  - docs/runbooks/CARD_LINKED_RUNBOOK.md
+  - docs/reference/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md
+  - docs/operations/runbooks/CARD_LINKED_RUNBOOK.md
 implementation:
   state: IMPLEMENTED
   denominator: in-scope repository controls (migration-derived)
@@ -114,7 +114,7 @@ operational_ownership:
   technical_owner: financial-platform
   operational_owner: platform-ops
   escalation: pagerduty:financial-platform
-  runbook: docs/runbooks/CARD_LINKED_RUNBOOK.md
+  runbook: docs/operations/runbooks/CARD_LINKED_RUNBOOK.md
   dashboards:
   - grafana:financial-platform
   alerts:

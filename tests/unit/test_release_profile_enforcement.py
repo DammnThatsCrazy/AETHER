@@ -1,10 +1,10 @@
 """Release-surface enforcement config — env examples and excluded-domain denial.
 
 Guards two regressions found during production wiring:
-  1. `.env.production.example` shipped ROUTE_REGISTRY_ENFORCED=false and a
+  1. `config/environments/.env.production.example` shipped ROUTE_REGISTRY_ENFORCED=false and a
      non-canonical DEPLOYMENT_PROFILE=cloud-live, so the route-policy spine was
      inert and the founding-tenant excluded-domain denial never fired.
-  2. `.env.staging.example` set no DEPLOYMENT_PROFILE (defaulting to local-live)
+  2. `config/environments/.env.staging.example` set no DEPLOYMENT_PROFILE (defaulting to local-live)
      and no enforcement flags.
 
 Also pins that the founding-tenant manifest's excluded domains resolve to a
@@ -25,8 +25,8 @@ BACKEND = ROOT / "services" / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-PROD = ROOT / ".env.production.example"
-STAGING = ROOT / ".env.staging.example"
+PROD = ROOT / "config/environments/.env.production.example"
+STAGING = ROOT / "config/environments/.env.staging.example"
 
 
 def _canonical_profiles() -> set[str]:
@@ -122,7 +122,7 @@ def test_excluded_domains_scoped_to_founding_profile():
 # template shipped `EVENT_BROKER=kafka` as an active default while the canonical
 # staging event backend is sns_sqs and msk is forbidden.
 #
-# `.env.example` is intentionally excluded: it is the LOCAL development
+# `config/environments/.env.example` is intentionally excluded: it is the LOCAL development
 # template, and the local profile legitimately runs kafka/redis/neptune as
 # optional local dependencies.
 

@@ -1,8 +1,8 @@
 """Data Exchange Plane — ObjectStore import-storage seam (M1).
 
 M1 moves artifact payload bytes onto the shared ObjectStore while Postgres
-BYTEA stays canonical for the legacy window (see ``docs/plans/
-DATA_EXCHANGE_PHASES.md`` M1 and ``docs/plans/data-exchange-api.md`` M1).
+BYTEA stays canonical for the legacy window (see ``docs/architecture/plans/
+DATA_EXCHANGE_PHASES.md`` M1 and ``docs/architecture/plans/data-exchange-api.md`` M1).
 
 Two pieces:
 

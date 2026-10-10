@@ -11,7 +11,7 @@ was stored with USD parity and could be counted as the same USD amount. The
 write path (``ConversionRepository.upsert``) now records an unknown rate as
 ``NULL`` and marks the row unconverted in ``provenance.fx_conversion``
 (``priced = false``), preserving the native amount and currency
-(docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md: unknown is never guessed).
+(docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md: unknown is never guessed).
 
 The default is dropped too: an insert that omits the rate must not be given
 parity silently. Same-currency rows are written with an explicit ``1.0`` by the

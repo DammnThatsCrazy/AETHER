@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-MAP_PATH = ROOT / "docs" / "source-of-truth" / "repo_consistency_ownership.json"
+MAP_PATH = ROOT / "docs" / "reference" / "source-of-truth" / "repo_consistency_ownership.json"
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:

@@ -133,8 +133,8 @@ def _check_docs_present() -> GateResult:
 
     root = Path(__file__).resolve().parents[3].parent
     docs = [
-        root / "docs" / "source-of-truth" / "CARD_LINKED_PAYMENT_RAILS.md",
-        root / "docs" / "source-of-truth" / "PAYMENTSCAN_CATALOG.md",
+        root / "docs" / "reference" / "source-of-truth" / "CARD_LINKED_PAYMENT_RAILS.md",
+        root / "docs" / "reference" / "source-of-truth" / "PAYMENTSCAN_CATALOG.md",
     ]
     missing = [str(d) for d in docs if not d.exists()]
     return GateResult("docs_source_of_truth_present", not missing, ", ".join(missing))

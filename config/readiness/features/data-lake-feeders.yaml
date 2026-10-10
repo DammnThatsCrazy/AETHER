@@ -109,7 +109,7 @@ operational_ownership:
   technical_owner: data-platform
   operational_owner: platform-ops
   escalation: pagerduty:data-platform
-  runbook: docs/runbooks/RECONCILIATION.md
+  runbook: docs/operations/runbooks/RECONCILIATION.md
   dashboards:
   - grafana:data-platform
   alerts:

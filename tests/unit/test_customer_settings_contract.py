@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-FRONTEND = ROOT / "apps/aether/src/lib/api/endpoints.ts"
+FRONTEND = ROOT / "apps/aether-web/src/lib/api/endpoints.ts"
 BILLING = ROOT / "services/backend/services/billing/routes.py"
 ME = ROOT / "services/backend/services/me/routes.py"
 
@@ -53,7 +53,7 @@ def test_invoice_and_api_key_dtos_have_one_canonical_shape() -> None:
 
 def test_enterprise_company_enum_is_identical() -> None:
     frontend = (
-        ROOT / "apps/aether/src/pages/billing/billing-page.tsx"
+        ROOT / "apps/aether-web/src/pages/billing/billing-page.tsx"
     ).read_text(encoding="utf-8")
     backend = (
         ROOT / "services/backend/services/contact/routes.py"

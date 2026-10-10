@@ -1,7 +1,7 @@
 /**
  * Aether Mobile route map — the typed screen registry (M3b).
  *
- * Mirrors the Aether routes anticipated by `packages/mobile-ui`
+ * Mirrors the Aether routes anticipated by `packages/ui/mobile`
  * (`src/__tests__/navigation.test.ts`). Every screen is a root tab with no params;
  * typed params can be added here (e.g. `Account: { section?: string }`) without
  * touching the navigator.

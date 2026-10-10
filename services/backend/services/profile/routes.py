@@ -638,7 +638,7 @@ async def get_predictions(user_id: str, request: Request):
 #
 # These endpoints are powered by Profile360Aggregator and return the
 # normalized "frontend-ready" shape documented in
-# docs/PROFILE-360-AGGREGATION.md. They are additive: existing routes above
+# docs/architecture/PROFILE-360-AGGREGATION.md. They are additive: existing routes above
 # are unchanged. Frontends should prefer these routes when building a
 # Profile 360 view because they pre-compute counts, summaries, and drill
 # refs so the UI does not need to join across services.

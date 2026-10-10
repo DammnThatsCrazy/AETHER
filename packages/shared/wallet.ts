@@ -1,7 +1,7 @@
 // =============================================================================
 // Aether SDK — Shared Wallet / VM Contract
 // Used by wallet, transaction, and onchain-action event families.
-// See docs/source-of-truth/ENTITY_MODEL.md §Wallet.
+// See docs/reference/source-of-truth/ENTITY_MODEL.md §Wallet.
 // =============================================================================
 
 /** Virtual machine family — matches backend VMType enum. */

@@ -2,7 +2,7 @@
 Audit-package completeness + mainnet-gate honesty tests (A6 / program sec18, 3F).
 
 Asserts two things about the external-audit readiness package under
-``contracts/smart-contracts/audit/``:
+``packages/contracts/smart-contracts/audit/``:
 
 1. **Completeness** — every artifact the external auditor and the deploy-time
    gate need is present: the evidence manifest template, the code-review
@@ -13,7 +13,7 @@ Asserts two things about the external-audit readiness package under
    - ``audit/AUDIT_EVIDENCE.json`` (the file that actually unblocks mainnet)
      does NOT exist at this build state; only the ``...template.json`` exists and
      its ``signoff.approved`` is ``false``.
-   - Both deploy-time gates (``deploy/evm_guards.py`` and
+   - Both deploy-time gates (``infra/evm_guards.py`` and
      ``scripts/lib/audit_gate.js``) reference the evidence file and fail closed
      on mainnet-class networks — verified by running the Python gate's
      ``validate_evidence`` against the template and asserting it is REJECTED.
@@ -40,7 +40,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 # Repo root: <pkg>/tests/unit → up 4 to the monorepo root.
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-CONTRACTS_ROOT = _REPO_ROOT / "contracts/smart-contracts"
+CONTRACTS_ROOT = _REPO_ROOT / "packages/contracts/smart-contracts"
 AUDIT_DIR = CONTRACTS_ROOT / "audit"
 BACKEND_REPO = _REPO_ROOT / "services" / "backend"
 
@@ -55,7 +55,7 @@ REQUIRED_AUDIT_FILES: tuple[str, ...] = (
     "INVARIANTS.md",                   # properties that must always hold
     "EIP712_SIGNATURE_SPEC.md",        # signature scheme / domain separation
     "TEST_PLAN.md",                    # test inventory + commands
-    "DEPLOYMENT.md",                   # deploy/verify + runbooks
+    "DEPLOYMENT.md",                   # infra/verify + runbooks
     "DEPLOYMENT_GUARDS.md",            # summary of the fail-closed deploy gates
     "CODE_REVIEW_CHECKLIST.md",        # what the external auditor must verify
     "KNOWN_LIMITATIONS.md",            # accepted limitations / trade-offs

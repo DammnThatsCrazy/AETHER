@@ -46,5 +46,5 @@ platform runtime.
 
 ## Current State
 
-See `SECURITY.md` for the security overview and `docs/security/` for
+See `SECURITY.md` for the security overview and `docs/reference/security/` for
 detailed security documentation.

@@ -15,7 +15,7 @@ and ``get`` with correct, durable types:
 
 - ``properties``    -> dict (JSONB column)
 - ``revenue_usd``   -> decimal.Decimal, never float (NUMERIC(18,6) column;
-  see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md)
+  see docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md)
 - ``is_conversion`` -> bool (BOOLEAN column)
 """
 from __future__ import annotations

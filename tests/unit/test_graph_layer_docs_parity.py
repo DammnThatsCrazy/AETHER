@@ -15,13 +15,13 @@ REPO_ROOT = Path(__file__).parents[2]
 LAYER_DOCS = [
     "README.md",
     "docs/archive/legacy-architecture/backend/README.md",
-    "docs/INTELLIGENCE-GRAPH.md",
-    "docs/UNIFIED-ECONOMIC-GRAPH.md",
-    "docs/ECONOMIC-OBSERVABILITY.md",
-    "docs/KYBER-ECONOMIC-OBSERVABILITY.md",
-    "docs/OPERATIONAL-INTELLIGENCE-AUDIT.md",
-    "docs/PRODUCTION-READINESS.md",
-    "docs/productization/aether_productization_audit.md",
+    "docs/architecture/INTELLIGENCE-GRAPH.md",
+    "docs/architecture/UNIFIED-ECONOMIC-GRAPH.md",
+    "docs/architecture/ECONOMIC-OBSERVABILITY.md",
+    "docs/product/KYBER-ECONOMIC-OBSERVABILITY.md",
+    "docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md",
+    "docs/operations/PRODUCTION-READINESS.md",
+    "docs/product/productization/aether_productization_audit.md",
 ]
 
 FOUR_LAYERS = ["H2H", "H2A", "A2H", "A2A"]
@@ -59,39 +59,39 @@ def test_backend_readme_has_a2h_in_relationship_table() -> None:
 
 
 def test_intelligence_graph_doc_has_all_four_layers() -> None:
-    """docs/INTELLIGENCE-GRAPH.md must document all four layers."""
-    content = _read("docs/INTELLIGENCE-GRAPH.md")
-    assert content, "docs/INTELLIGENCE-GRAPH.md not found"
+    """docs/architecture/INTELLIGENCE-GRAPH.md must document all four layers."""
+    content = _read("docs/architecture/INTELLIGENCE-GRAPH.md")
+    assert content, "docs/architecture/INTELLIGENCE-GRAPH.md not found"
     for layer in FOUR_LAYERS:
-        assert layer in content, f"Layer {layer} missing from docs/INTELLIGENCE-GRAPH.md"
+        assert layer in content, f"Layer {layer} missing from docs/architecture/INTELLIGENCE-GRAPH.md"
 
 
 def test_production_readiness_doc_has_all_four_layers() -> None:
-    """docs/PRODUCTION-READINESS.md must list all four relationship layers."""
-    content = _read("docs/PRODUCTION-READINESS.md")
-    assert content, "docs/PRODUCTION-READINESS.md not found"
-    assert "A2H" in content, "A2H missing from docs/PRODUCTION-READINESS.md"
+    """docs/operations/PRODUCTION-READINESS.md must list all four relationship layers."""
+    content = _read("docs/operations/PRODUCTION-READINESS.md")
+    assert content, "docs/operations/PRODUCTION-READINESS.md not found"
+    assert "A2H" in content, "A2H missing from docs/operations/PRODUCTION-READINESS.md"
 
 
 def test_operational_intelligence_audit_has_a2h() -> None:
-    """docs/OPERATIONAL-INTELLIGENCE-AUDIT.md must reference A2H layer."""
-    content = _read("docs/OPERATIONAL-INTELLIGENCE-AUDIT.md")
-    assert content, "docs/OPERATIONAL-INTELLIGENCE-AUDIT.md not found"
-    assert "A2H" in content, "A2H missing from docs/OPERATIONAL-INTELLIGENCE-AUDIT.md"
+    """docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md must reference A2H layer."""
+    content = _read("docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md")
+    assert content, "docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md not found"
+    assert "A2H" in content, "A2H missing from docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md"
 
 
 def test_graph_contract_source_of_truth_exists() -> None:
-    """docs/source-of-truth/GRAPH_CONTRACT.md must exist and contain all four layers."""
-    content = _read("docs/source-of-truth/GRAPH_CONTRACT.md")
-    assert content, "docs/source-of-truth/GRAPH_CONTRACT.md not found or empty"
+    """docs/reference/source-of-truth/GRAPH_CONTRACT.md must exist and contain all four layers."""
+    content = _read("docs/reference/source-of-truth/GRAPH_CONTRACT.md")
+    assert content, "docs/reference/source-of-truth/GRAPH_CONTRACT.md not found or empty"
     for layer in FOUR_LAYERS:
         assert layer in content, f"Layer {layer} missing from GRAPH_CONTRACT.md"
 
 
 def test_graph_layer_parity_doc_exists() -> None:
-    """docs/source-of-truth/GRAPH_LAYER_PARITY.md must exist."""
-    path = REPO_ROOT / "docs/source-of-truth/GRAPH_LAYER_PARITY.md"
-    assert path.exists(), "docs/source-of-truth/GRAPH_LAYER_PARITY.md not found"
+    """docs/reference/source-of-truth/GRAPH_LAYER_PARITY.md must exist."""
+    path = REPO_ROOT / "docs/reference/source-of-truth/GRAPH_LAYER_PARITY.md"
+    assert path.exists(), "docs/reference/source-of-truth/GRAPH_LAYER_PARITY.md not found"
 
 
 def test_no_placeholder_in_operational_intelligence_routes() -> None:

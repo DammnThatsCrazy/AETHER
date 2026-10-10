@@ -23,7 +23,7 @@ The M1 safety properties are preserved verbatim (see
   conversion, synchronously. A bulk trigger — a large DSR batch or a
   fraud-network takedown spanning many identities — can therefore turn into a
   load spike on ``attribution_runs``; that is the same amplification risk
-  ``docs/BACKFILL-JOBS.md`` covers for backfills, and throttling it remains a
+  ``docs/operations/BACKFILL-JOBS.md`` covers for backfills, and throttling it remains a
   later milestone. The risk is kept explicit here rather than silent.
 * **Never a silent truncation.** When a caller passes ``identity_selectors`` /
   ``voided_touchpoint_selectors``, resolution over-fetches one row past

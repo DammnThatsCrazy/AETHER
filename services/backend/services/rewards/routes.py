@@ -5,7 +5,7 @@ Full API surface for attribution-verified reward eligibility. Aether verifies
 eligibility and produces reward action payloads; tenants execute rewards through
 their own configured rails. Aether never holds, transfers, or distributes rewards.
 
-See docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md for the custody boundary.
+See docs/reference/source-of-truth/REWARD_NO_CUSTODY_MODEL.md for the custody boundary.
 
 Tenant-scoped endpoints (require auth middleware):
     Campaigns:   POST/GET/PATCH /campaigns, /campaigns/{id}/pause|resume|archive

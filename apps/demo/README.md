@@ -15,7 +15,7 @@ backend and must not own a canonical operational fixture dataset.
   frontend environment flag.
 
 ```bash
-cp .env.example .env
+cp config/environments/.env.example .env
 npm run dev --workspace=@aether/demo   # http://localhost:5177
 npm run test --workspace=@aether/demo
 ```
@@ -24,5 +24,5 @@ The versioned backend seed pipeline and its `demo-seed`, `demo-reset`,
 `demo-status`, and `demo-verify` commands are the sole operational demo-data
 path. Until that pipeline is available, use the Demo App only for UI development
 against a live backend; do not restore browser fixtures or no-op seed scripts.
-See `docs/DEMO-DATA.md`, `docs/DEMO-APP.md`, and
-`docs/DEMO-WALKTHROUGH.md`.
+See `docs/product/DEMO-DATA.md`, `docs/product/DEMO-APP.md`, and
+`docs/product/DEMO-WALKTHROUGH.md`.

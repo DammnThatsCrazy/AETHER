@@ -5,8 +5,8 @@ ROOT = Path(__file__).resolve().parents[4]
 REGISTRY = ROOT / "packages" / "shared" / "contracts" / "integration-consent-registry.json"
 TS = ROOT / "packages" / "shared" / "integration-consent.ts"
 PY_GEN = ROOT / "services" / "backend" / "shared" / "privacy" / "generated_integration_consent.py"
-SWIFT = ROOT / "packages" / "ios" / "Sources" / "AetherSDK" / "GeneratedIntegrationConsent.swift"
-KOTLIN = ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "GeneratedIntegrationConsent.kt"
+SWIFT = ROOT / "packages" / "sdk" / "ios" / "Sources" / "AetherSDK" / "GeneratedIntegrationConsent.swift"
+KOTLIN = ROOT / "packages" / "sdk" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "GeneratedIntegrationConsent.kt"
 
 EXPECTED = {
     "slack", "generic_webhook", "shopify", "stripe", "hubspot", "salesforce",

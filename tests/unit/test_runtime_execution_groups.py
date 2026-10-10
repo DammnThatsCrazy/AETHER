@@ -162,7 +162,7 @@ _DLQ_MAP = {role: f"{url}-dlq" for role, url in _QUEUE_MAP.items()}
 
 _TERRAFORM_SQS_VARIABLES = (
     Path(__file__).parents[2]
-    / "deploy" / "aws" / "terraform" / "modules" / "sqs" / "variables.tf"
+    / "infra" / "aws" / "terraform" / "modules" / "sqs" / "variables.tf"
 )
 
 

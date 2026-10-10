@@ -127,7 +127,7 @@ def _entry(
     return {
         "id": pid,
         "implementationState": state,
-        "implementationBlueprint": "docs/ACCESS-CONTROL.md",
+        "implementationBlueprint": "docs/architecture/ACCESS-CONTROL.md",
         "legacyBindings": {
             "routes": routes or [],
             "surfaceIds": [],

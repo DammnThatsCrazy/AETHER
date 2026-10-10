@@ -19,13 +19,13 @@
 #
 # Roles come from services/backend/services/runtime/roles.py
 # (WORKER_ROLES + api). Terraform modules live under
-# deploy/aws/terraform/modules/<name>.
+# infra/aws/terraform/modules/<name>.
 # =============================================================================
 
 schema_version: 1
 canonical_source: config/deploy_profile.yaml
-compose_file: docker-compose.yml
-terraform_modules_dir: deploy/aws/terraform/modules
+compose_file: infra/local/docker-compose.yml
+terraform_modules_dir: infra/aws/terraform/modules
 runtime_roles_source: services/backend/services/runtime/roles.py
 
 # The full required capability set. Every id here must appear in `capabilities`.
@@ -122,7 +122,7 @@ capabilities:
 
   - id: logs
     status: present
-    local: {compose_service: grafana, note: "Loki/promtail overlay in deploy/observability/loki"}
+    local: {compose_service: grafana, note: "Loki/promtail overlay in infra/observability/loki"}
     cloud: {terraform_module: monitoring, ref: "CloudWatch log groups + log-archive S3"}
 
   - id: traces
@@ -133,7 +133,7 @@ capabilities:
 
   - id: dashboards_alerts
     status: present
-    local: {compose_service: grafana, note: "deploy/observability/grafana dashboards + prometheus alert_rules.yml + alertmanager"}
+    local: {compose_service: grafana, note: "infra/observability/grafana dashboards + prometheus alert_rules.yml + alertmanager"}
     cloud: {terraform_module: monitoring, ref: "CloudWatch dashboards + metric alarms + SNS"}
 
   - id: backup_restore

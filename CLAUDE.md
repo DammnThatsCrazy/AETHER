@@ -120,6 +120,6 @@ new metadata commit when the reviewed source bytes are unchanged.
 ## Production claims rule
 
 `scripts/production_status.py` is the canonical readiness scorecard
-(`docs/productization/aether_productization_audit.md` is its dated
+(`docs/product/productization/aether_productization_audit.md` is its dated
 narrative snapshot). Do not claim an area is production-ready in any doc
 unless the scorecard supports it; update both together.

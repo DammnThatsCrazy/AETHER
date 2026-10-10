@@ -2,7 +2,7 @@
 Aether Service — POST /v1/batch
 Canonical SDK ingestion endpoint for Web, iOS, Android, and React Native.
 
-Contract source: docs/source-of-truth/INGESTION_CONTRACT.md
+Contract source: docs/reference/source-of-truth/INGESTION_CONTRACT.md
 
 Auth: Bearer API key (Authorization: Bearer <api_key>)
      Must carry write permission.

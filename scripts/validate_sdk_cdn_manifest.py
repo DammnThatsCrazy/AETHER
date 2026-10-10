@@ -29,7 +29,7 @@ NOTES: list[str] = []
 GENERATOR = 'scripts/release/generate-sdk-cdn-manifest.mjs'
 VERIFIER = 'scripts/release/verify-cdn-layout.mjs'
 WORKFLOW = '.github/workflows/publish-sdk.yml'
-LAYOUT = ROOT / 'artifacts/sdk/cdn'
+LAYOUT = ROOT / '.artifacts/sdk/cdn'
 
 
 def fail(msg: str) -> None:
@@ -55,13 +55,13 @@ if ERRORS:
         print(f'  - {err}')
     sys.exit(1)
 
-pkg_version = json.loads(text('packages/web/package.json'))['version']
+pkg_version = json.loads(text('packages/sdk/web/package.json'))['version']
 major = pkg_version.split('.')[0]
 
 # --- 2. Version must derive from the package, never be hardcoded -------------
 generator = text(GENERATOR)
 if "readFileSync(join(WEB, 'package.json'" not in generator:
-    fail(f'{GENERATOR} does not read the version from packages/web/package.json')
+    fail(f'{GENERATOR} does not read the version from packages/sdk/web/package.json')
 for stale in re.findall(r'\b(\d+\.\d+\.\d+)\b', generator):
     # A literal version in the generator would silently pin the CDN layout.
     fail(f'{GENERATOR} contains hardcoded version literal {stale}; derive it from package.json')
@@ -123,7 +123,7 @@ if 'immutable' not in workflow:
 # --- 6. If a layout is staged, its hashes must verify ------------------------
 if LAYOUT.exists() and any(LAYOUT.rglob('*.json')):
     if shutil.which('node') is None:
-        note('artifacts/sdk/cdn is staged but node is unavailable; deferred to the publish workflow')
+        note('.artifacts/sdk/cdn is staged but node is unavailable; deferred to the publish workflow')
     else:
         result = subprocess.run(
             ['node', VERIFIER], cwd=ROOT, capture_output=True, text=True
@@ -135,7 +135,7 @@ if LAYOUT.exists() and any(LAYOUT.rglob('*.json')):
         else:
             note('staged CDN layout verified: manifest hashes match the staged bytes')
 else:
-    note('artifacts/sdk/cdn is not staged; hash verification deferred to the publish workflow')
+    note('.artifacts/sdk/cdn is not staged; hash verification deferred to the publish workflow')
 
 if ERRORS:
     print('SDK CDN manifest validation failed:')

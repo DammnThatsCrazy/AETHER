@@ -112,7 +112,7 @@ operational_ownership:
   technical_owner: financial-platform
   operational_owner: platform-ops
   escalation: pagerduty:financial-platform
-  runbook: docs/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md
+  runbook: docs/operations/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md
   dashboards:
   - grafana:financial-platform
   alerts:

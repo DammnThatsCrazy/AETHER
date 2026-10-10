@@ -4,7 +4,7 @@ Aether is governed by source-of-truth documentation, canonical contracts, and re
 
 ## Development Setup
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the full local setup guide. Quick start:
+See [docs/operations/DEVELOPMENT.md](docs/operations/DEVELOPMENT.md) for the full local setup guide. Quick start:
 
 ```bash
 git clone https://github.com/DammnThatsCrazy/AETHER.git
@@ -13,19 +13,19 @@ cd AETHER
 pip install -e ".[backend]" --ignore-installed PyJWT
 npm ci
 
-cp .env.example .env
-cp apps/aether/.env.example apps/aether/.env.local
+cp config/environments/.env.example .env
+cp apps/aether-web/.env.example apps/aether-web/.env.local
 
 docker compose up -d postgres
 make serve-backend          # → http://localhost:8000
 
-cd apps/aether && npm run dev   # → http://localhost:5175
-cd apps/kyber  && npm run dev   # → http://localhost:5174
+cd apps/aether-web && npm run dev   # → http://localhost:5175
+cd apps/kyber-web  && npm run dev   # → http://localhost:5174
 ```
 
 ## Environment
 
-Set `AETHER_ENV=local` in `.env` for development. This enables in-memory fallbacks for Kafka and Neptune — only PostgreSQL is required locally. Set `VITE_AETHER_ENV=local-mocked` in `apps/aether/.env.local` to develop the UI without a running backend.
+Set `AETHER_ENV=local` in `.env` for development. This enables in-memory fallbacks for Kafka and Neptune — only PostgreSQL is required locally. Set `VITE_AETHER_ENV=local-mocked` in `apps/aether-web/.env.local` to develop the UI without a running backend.
 
 ## Code Standards
 
@@ -85,7 +85,7 @@ Before opening or updating a PR:
 6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
 7. Use `make ci-check` for broad local or release evidence when needed; PR merge-readiness is determined by the verification disposition.
 
-See `docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md` for the enforced source-to-derived ownership map.
+See `docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md` for the enforced source-to-derived ownership map.
 
 ## Branching
 

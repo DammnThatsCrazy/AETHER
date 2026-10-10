@@ -40,5 +40,5 @@ product, operator, developer, and intelligence surfaces.
 
 ## Current State
 
-Aether is in pre-production (alpha). See `RELEASES.md` for the
+Aether is in pre-production (alpha). See `docs/operations/RELEASES.md` for the
 current release state.

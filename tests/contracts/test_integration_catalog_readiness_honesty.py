@@ -16,7 +16,7 @@ loudly here rather than surfacing as a dishonest "Ready" badge:
   - the endpoint projection keeps entry facts and readiness claims separate.
 
 Namespaced (test_integration_catalog_*). See
-docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md § state model for the spec.
+docs/reference/source-of-truth/AETHER_END_USER_LIFECYCLE.md § state model for the spec.
 """
 
 from __future__ import annotations

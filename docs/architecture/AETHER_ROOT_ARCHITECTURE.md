@@ -12,7 +12,7 @@ since_version: 0.1.0
 
 This document defines the **target** of the architecture reset. It is not a claim
 that every layer is implemented or ready for a design partner. The migration
-ledger in `docs/blueprints/architecture-reset/README.md` records what is present,
+ledger in `docs/architecture/blueprints/architecture-reset/README.md` records what is present,
 what must change, and the evidence required before an old path can retire.
 
 ## Purpose and one proof path
@@ -158,8 +158,8 @@ production, and production; capabilities are overlays, not new environments.
 This layout is a destination, not an instruction to copy code into parallel
 packages or deploy more microservices. Today `services/backend/` is the
 deployed Python authority, `packages/shared/contracts/` is the contract source,
-`apps/aether/` is the customer web app, `apps/kyber/` is the operator
-web app, and `deploy/aws/` contains the active AWS implementation. A physical
+`apps/aether-web/` is the customer web app, `apps/kyber-web/` is the operator
+web app, and `infra/aws/` contains the active AWS implementation. A physical
 move occurs only after the target owner, import/API adapters, deployment paths,
 generated artifacts, docs ownership, and rollback have been verified together.
 Historical trees remain explicitly archived and cannot become new authorities.

@@ -572,7 +572,7 @@ async def kyber_ml_readiness(request: Request):
             }
             for d in details
         ],
-        "docs": "docs/reports/ML-PRODUCTIZATION-READINESS.md",
+        "docs": "docs/reference/reports/ML-PRODUCTIZATION-READINESS.md",
     }).to_dict()
 
 

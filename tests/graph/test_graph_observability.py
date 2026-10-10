@@ -95,7 +95,7 @@ def test_makefile_has_graph_replay_target() -> None:
 
 
 def test_graph_alignment_doc_has_source_files_frontmatter() -> None:
-    content = _read("docs/source-of-truth/GRAPH_ALIGNMENT.md")
+    content = _read("docs/reference/source-of-truth/GRAPH_ALIGNMENT.md")
     assert content, "GRAPH_ALIGNMENT.md not found"
     assert "source_files:" in content, (
         "GRAPH_ALIGNMENT.md is missing source_files: frontmatter"

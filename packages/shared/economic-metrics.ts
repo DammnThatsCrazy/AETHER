@@ -22,7 +22,7 @@
 //   4. Mixed currencies never produce unsafe flat totals.
 //   5. Tenant isolation is always preserved.
 //
-// See docs/ECONOMIC-VALUE-FRAMING.md for the full business distinction.
+// See docs/product/ECONOMIC-VALUE-FRAMING.md for the full business distinction.
 // =============================================================================
 
 import type { EconomicRail } from './economic';

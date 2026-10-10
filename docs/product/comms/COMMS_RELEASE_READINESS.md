@@ -1,0 +1,85 @@
+---
+title: Communications Intelligence — Release Readiness
+slug: comms/comms-release-readiness
+section: operations
+visibility: I
+audience: [ops, dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [services/backend/config/settings.py, tests/integration/test_comms_golden_scenario.py]
+source_hashes:
+  "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
+  "tests/integration/test_comms_golden_scenario.py": "sha256:a26db2d8632f089933adf8df5d15d2a20756b33e6f4f3e082d384e8d5dd831ff"
+---
+
+# Communications Intelligence — Release Readiness
+
+## Feature flags (`config/settings.py::CommsConfig`)
+
+| Flag | Default | Gates |
+|---|---|---|
+| `AETHER_COMMS_INGESTION_ENABLED` | true | Silver projection of comm events (Bronze always accepts) |
+
+Campaign projection, journey inclusion, Campaign 360 and reply attribution are not separately flag-gated. Flags for them (`AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED`, `AETHER_COMMS_JOURNEYS_ENABLED`, `AETHER_COMMS_CAMPAIGN360_ENABLED`, `AETHER_COMMS_REPLIES_ELIGIBLE`), and for graph emission, Profile360 surfaces and the Noesis intent (`AETHER_COMMS_GRAPH_ENABLED`, `AETHER_COMMS_PROFILE360_ENABLED`, `AETHER_COMMS_NOESIS_ENABLED`), were documented here but no code read them, so they were retired.
+
+## Rollout sequence
+
+1. Local/dev — `make test` + golden fixture green.
+2. Internal tenant — enable ingestion only; verify Kyber comms health card.
+3. Test provider — Klaviyo sandbox webhook + 30d backfill
+   (`docs/product/comms/COMMS_BACKFILL_RUNBOOK.md`); reconcile provider counts vs
+   `/v1/campaigns/{id}/comms-funnel`.
+4. One pilot tenant — enable campaign projection + journeys + profile360.
+5. Limited beta — enable graph + campaign360 + noesis.
+6. GA.
+
+## Release gates
+
+- `tests/integration/test_comms_golden_scenario.py` (permanent CI fixture —
+  machine-open exclusion, one-fact/one-touchpoint/one-activity, replay
+  safety, funnel reconciliation, bounded graph, cross-tenant token
+  rejection, health reporting) must pass.
+- `tests/unit/comms/` (contracts, dispatcher, projector, state, click token,
+  mailbox, replies, Klaviyo, graph, attribution policy) must pass.
+- `make repo-doctor` and `python scripts/generate_contracts.py --check` green.
+- Migration `20260703_comms_intel` applied with verified `downgrade()`.
+
+## Rollback plan
+
+| Failure | Action |
+|---|---|
+| Bad projections | `AETHER_COMMS_INGESTION_ENABLED=false`, fix, replay Bronze range |
+| Graph pressure | Disable the connector (graph emission has no switch of its own); facts stay in Bronze and replay later |
+| Provider flood | Disable connector; webhook inbox retains raw payloads |
+| Schema issue | `alembic downgrade 20260702_fraud_decisions` (additive-only drop) |
+| Attribution dispute | Reported opens count as view-through only when a caller passes `CommsAttributionConfig(reported_opens_as_view_through=True)`; there is no environment toggle. Rerun attribution after correcting the policy |
+
+## Operator remediation surface
+
+Audited, operator-gated actions under `/v1/comms/admin/*` (Kyber →
+Measurement Operations → Communications pipeline health):
+
+- `POST /state/rebuild` — recompute one entity's communication state and
+  journey from facts (idempotent).
+- `POST /graph/reproject` — re-fold a campaign's facts into the aggregated
+  relationship graph (aggregates upsert in place; no cardinality growth).
+- `POST /dsr/erase` — DSR erasure of an entity's communication facts and
+  derived state (`confirm=true` required; suppressions retained so
+  opt-outs stay honored).
+
+Rebuilds are coalesced (`services/backend/services/comms/rebuild_coalescer.py`): an event
+burst for one profile inside the debounce window
+(`AETHER_COMMS_REBUILD_WINDOW_SECONDS`, default 5s) produces exactly one
+state recompute and one journey recompile.
+
+## Known limitations
+
+- Klaviyo pull requires credentials in a non-local environment
+  (`CREDENTIAL_GATED`); local mode exercises webhook parsing only.
+- Initiative rollups sum per-campaign unique recipients; cross-channel
+  identity overlap is not deduplicated at the initiative level (stated in
+  the rollup response notes).
+- Reply intent classification (positive/negative/scheduling) is deferred;
+  deterministic automated-response detection ships now.
+- The rebuild coalescer is process-local; a lost flush on restart
+  self-heals on the next event or via the operator rebuild action.

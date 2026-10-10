@@ -16,10 +16,10 @@ re-gates a single event to a laxer purpose (e.g. ``agent`` instead of
 ``financial_activity``) must still be caught here.
 
 Checked structures:
-  - iOS   packages/ios/Sources/AetherSDK/Aether.swift
+  - iOS   packages/sdk/ios/Sources/AetherSDK/Aether.swift
           `enum AetherEventType` cases
           `eventConsentPurpose` dictionary keys + values
-  - Android packages/android/src/main/java/com/aether/sdk/Aether.kt
+  - Android packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt
           `EVENT_CONSENT_PURPOSE` map keys + values
 
 Mirrors scripts/validate_event_schema_parity.py's extraction/diff/CLI style.
@@ -34,8 +34,8 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 
 REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "event-registry.json"
-IOS_SOURCE = ROOT / "packages" / "ios" / "Sources" / "AetherSDK" / "Aether.swift"
-ANDROID_SOURCE = ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "Aether.kt"
+IOS_SOURCE = ROOT / "packages" / "sdk" / "ios" / "Sources" / "AetherSDK" / "Aether.swift"
+ANDROID_SOURCE = ROOT / "packages" / "sdk" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "Aether.kt"
 
 
 def load_registry_types() -> set[str]:

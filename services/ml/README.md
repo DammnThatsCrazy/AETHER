@@ -506,7 +506,7 @@ aether-ml/
 │   └── integration/               API integration tests
 ├── docker/
 │   ├── Dockerfile                 Multi-stage (training, serving, features, monitoring)
-│   └── docker-compose.yml         Local dev stack (Redis, MLflow, Prometheus, Jupyter)
+│   └── infra/local/docker-compose.yml         Local dev stack (Redis, MLflow, Prometheus, Jupyter)
 ├── scripts/
 │   └── dev.sh                     Development CLI (train, serve, test, export, lint)
 ├── pyproject.toml                 Dependencies + tool configs

@@ -915,7 +915,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         stop_on_failure=stop,
         remediation=(
             "keep the publish-cdn job running the manifest generator and layout verifier, "
-            "derive CDN paths from packages/web/package.json, and preserve the dry_run guard"
+            "derive CDN paths from packages/sdk/web/package.json, and preserve the dry_run guard"
         ),
     )
     run(
@@ -958,7 +958,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Source-of-truth ownership map enforcement",
         results=results,
         stop_on_failure=stop,
-        remediation="update the derived surfaces required by docs/source-of-truth/repo_consistency_ownership.json",
+        remediation="update the derived surfaces required by docs/reference/source-of-truth/repo_consistency_ownership.json",
     )
     run(
         [sys.executable, "scripts/validate_canonical_ingestion_trees.py"],
@@ -979,7 +979,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Temporal integrity static gates (naive datetimes, ad-hoc frontend formatting, CH DateTime64, single Alembic head)",
         results=results,
         stop_on_failure=stop,
-        remediation="use shared/temporal (Py) or apps/shared/src/time (TS); shrink scripts/allowlists/* only",
+        remediation="use shared/temporal (Py) or packages/ui/core/src/time (TS); shrink scripts/allowlists/* only",
     )
     run(
         [sys.executable, "scripts/validate_computation_substrate.py"],
@@ -1056,35 +1056,35 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Financial value semantics (USD-first contract + no cross-currency sums)",
         results=results,
         stop_on_failure=stop,
-        remediation="use services.value.safe_rollup and the canonical value contract; see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
+        remediation="use services.value.safe_rollup and the canonical value contract; see docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
     )
     run(
         [sys.executable, "scripts/validate_universal_financial_assets.py"],
         name="Universal financial-asset normalization (namespaced ids, Decimal money, immutable valuation, observe-only)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep canonical asset/valuation surfaces on the namespaced Decimal immutable observe-only model; see docs/source-of-truth/FINANCIAL_NORMALIZATION.md",
+        remediation="keep canonical asset/valuation surfaces on the namespaced Decimal immutable observe-only model; see docs/reference/source-of-truth/FINANCIAL_NORMALIZATION.md",
     )
     run(
         [sys.executable, "scripts/validate_kyber_ops_surface.py"],
         name="Kyber operations surface (Gate G: source/schema health, ingestion lag, quality, rejection, replay, lineage via operator-only Kyber control plane)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep the WS-E/WS-B4 Kyber control-plane surfaces mounted + operator-only: /v1/health/pipeline, /v1/config/sdk/versions, the /v1/kyber/ingest/observability router (funnel + Observation Inspector), and the /v1/kyber/ingest/replay router; see docs/source-of-truth/INGESTION_OPS.md",
+        remediation="keep the WS-E/WS-B4 Kyber control-plane surfaces mounted + operator-only: /v1/health/pipeline, /v1/config/sdk/versions, the /v1/kyber/ingest/observability router (funnel + Observation Inspector), and the /v1/kyber/ingest/replay router; see docs/reference/source-of-truth/INGESTION_OPS.md",
     )
     run(
         [sys.executable, "scripts/validate_sdk_compat_tiers.py"],
         name="SDK version-compatibility tiers (Gate H: supported/deprecated/read-compatible bands preserved, fail-closed date enforcement staged behind default-OFF flags)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep services/ingestion/sdk_version_tiers.py on the honest tier table (never block a served band before its date; never weaken staged default-OFF enforcement); see docs/source-of-truth/INGESTION_OPS.md",
+        remediation="keep services/ingestion/sdk_version_tiers.py on the honest tier table (never block a served band before its date; never weaken staged default-OFF enforcement); see docs/reference/source-of-truth/INGESTION_OPS.md",
     )
     run(
         [sys.executable, "scripts/validate_frontend_value_display.py"],
         name="Frontend value-display guardrail (canonical ValueDisplay/formatUSD)",
         results=results,
         stop_on_failure=stop,
-        remediation="render financial values via apps/shared ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
+        remediation="render financial values via packages/ui/core ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
     )
     run(
         [sys.executable, "scripts/validate_cross360_monetary_fx.py"],
@@ -1107,8 +1107,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         stop_on_failure=stop,
         remediation=(
             "run python scripts/generate_contracts.py to regenerate the marker-delimited native "
-            "regions (AetherEventType enum / eventConsentPurpose in packages/ios/Sources/AetherSDK/Aether.swift "
-            "and EVENT_CONSENT_PURPOSE in packages/android/src/main/java/com/aether/sdk/Aether.kt) from "
+            "regions (AetherEventType enum / eventConsentPurpose in packages/sdk/ios/Sources/AetherSDK/Aether.swift "
+            "and EVENT_CONSENT_PURPOSE in packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt) from "
             "packages/shared/contracts/event-registry.json; hand-editing the regions is not supported"
         ),
     )
@@ -1165,7 +1165,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation=(
             "a compose file is presenting itself as the canonical staging profile "
             "(provisions forbidden MSK/ElastiCache/Prometheus). The stale stack must "
-            "stay quarantined under deploy/legacy-staging/ with the LEGACY marker; "
+            "stay quarantined under infra/legacy-staging/ with the LEGACY marker; "
             "canonical staging is Terraform (profiles/staging.tfvars)"
         ),
     )
@@ -1210,7 +1210,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Model governance (consent-scoped training + inference gates)",
         results=results,
         stop_on_failure=stop,
-        remediation="ensure services/model_governance gates exist, reuse the consent engine, and are wired into ml_serving/routes.py; see docs/source-of-truth/MODEL_GOVERNANCE.md",
+        remediation="ensure services/model_governance gates exist, reuse the consent engine, and are wired into ml_serving/routes.py; see docs/reference/source-of-truth/MODEL_GOVERNANCE.md",
     )
     run(
         [sys.executable, "scripts/validate_consent_purpose_reconciliation.py"],
@@ -1224,7 +1224,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="SDK runtime parity (observe / manifest-verify / batch-health across SDKs)",
         results=results,
         stop_on_failure=stop,
-        remediation="expose canonical observe(), iOS/Android manifest signature verification, and batch health metrics; see docs/source-of-truth/SDK_RUNTIME_PARITY.md",
+        remediation="expose canonical observe(), iOS/Android manifest signature verification, and batch health metrics; see docs/reference/source-of-truth/SDK_RUNTIME_PARITY.md",
     )
     run(
         [sys.executable, "scripts/check_version_consistency.py"],

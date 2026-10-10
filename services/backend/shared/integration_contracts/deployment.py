@@ -1,7 +1,7 @@
 """Typed deployment contract (§14).
 
 Each entry under ``capabilities:`` in
-``docs/integration-control-plane/DEPLOYMENT_CONTRACT.yaml`` declares what a
+``docs/architecture/integration-control-plane/DEPLOYMENT_CONTRACT.yaml`` declares what a
 deployment operator must supply for a capability to run turnkey — no
 application code change. :class:`DeploymentContract` is the typed schema those
 entries conform to, and :func:`load_capability` validates a raw mapping into

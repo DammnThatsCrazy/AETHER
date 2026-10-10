@@ -22,7 +22,7 @@ depends_on = None
 
 # Additive columns for silver_comms_facts (Phase 4). All nullable — existing
 # rows remain valid; the CommsProjector populates them for new events and the
-# backfill job (docs/comms/COMMS_BACKFILL_RUNBOOK.md) fills history.
+# backfill job (docs/product/comms/COMMS_BACKFILL_RUNBOOK.md) fills history.
 _COMMS_FACT_COLUMNS: list[tuple[str, str]] = [
     ("provider", "TEXT"),
     ("provider_account_id", "TEXT"),

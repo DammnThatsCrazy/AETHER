@@ -6,7 +6,7 @@
 // consumed type-only across the frontends and SDKs.
 //
 // The runtime PARSER (`parseProblemDetails`) lives in `@aether/ui`
-// (`apps/shared/src/problem-details.ts`) — this package compiles to
+// (`packages/ui/core/src/problem-details.ts`) — this package compiles to
 // CommonJS and its runtime values are not resolvable by the app rollup
 // builds, but its types always are.
 // =============================================================================

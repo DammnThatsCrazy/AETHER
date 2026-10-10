@@ -106,7 +106,7 @@ operational_ownership:
   technical_owner: platform
   operational_owner: platform-ops
   escalation: pagerduty:platform
-  runbook: docs/runbooks/STAGING_PREFLIGHT.md
+  runbook: docs/operations/runbooks/STAGING_PREFLIGHT.md
   dashboards:
   - grafana:platform
   alerts:

@@ -24,7 +24,7 @@ Gate evaluation order:
     12. Idempotency (return existing if duplicate key)
 
 The engine never holds, transfers, or distributes rewards.
-See docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md.
+See docs/reference/source-of-truth/REWARD_NO_CUSTODY_MODEL.md.
 """
 
 from __future__ import annotations

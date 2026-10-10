@@ -60,17 +60,10 @@ _AGENT_LAYER = "services/agents"
 
 _ROOT_NOTES = {
     "apps": "product web applications (Aether, Kyber, demo, marketing, status, docs, site and their shared UI) and mobile clients; route runtime services into services/ and shared contracts into packages/.",
-    "artifacts": "generated validation, readiness, and release evidence; never a source-of-truth implementation tree.",
-    "cicd": "legacy local pipeline fixtures; root Makefile and GitHub Actions are the canonical CI/CD control plane.",
     "config": "canonical runtime, impact-graph, readiness, and verification configuration.",
-    "contracts": "canonical contract schemas and smart-contract project container; shared runtime contracts remain under packages/shared/contracts/.",
-    "data-modules": "data-module metadata and fixtures consumed by the canonical services; not an independent runtime.",
-    "deploy": "canonical deployment configuration and infrastructure promotion assets.",
     "docs": "human-authored, generated, and source-linked documentation; implementation code does not belong here.",
-    "lambda": "serverless entrypoint fixtures and handlers governed by deployment configuration.",
+    "infra": "canonical deployment configuration, local compose, Terraform, serverless handlers, and infrastructure promotion assets.",
     "packages": "canonical shared packages, SDKs, UI primitives, and runtime contract twins.",
-    "playground": "non-production experiments and reproducible investigations; no runtime dependency may originate here.",
-    "reports": "authored audit and implementation reports; claims must be evidence-backed and do not define runtime behavior.",
     "scripts": "repository validation, generation, release, docs, and contract tooling.",
     "security": "security policy, threat-model, and review assets; enforcement code remains in canonical runtime services.",
     "tests": "cross-package, integration, security, and system tests; service-local tests remain with their owning service.",

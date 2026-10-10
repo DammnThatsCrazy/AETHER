@@ -41,7 +41,7 @@ own canonical vocabulary and policy. Existing identity, credential, ingestion,
 rights, graph, projection, and managed-integration authorities retain their
 responsibilities.
 
-The [full implementation blueprint](../../blueprints/universal-connector-runtime/README.md)
+The [full implementation blueprint](../blueprints/universal-connector-runtime/README.md)
 defines the current-to-target map, canonical ID and event contracts, Shopify
 reference slice, cross-provider expansion, migration, certification, and
 acceptance gates. This branch implements stream and raw-revision foundations,
@@ -52,9 +52,9 @@ fence, or cross-provider convergence follows from those foundations alone.
 
 ## Dependencies
 
-- [Universal Provider Runtime](../../UNIVERSAL-PROVIDER-RUNTIME.md) and
-  [ADR-009](../../decisions/ADR-009-universal-provider-runtime.md)
-- [Provider migration](../../PROVIDER-MIGRATION.md) and
-  [provider certification](../../PROVIDER-CERTIFICATION.md)
-- [SDK and universal ingestion alignment](../../blueprints/sdk-universal-ingestion-alignment.md)
-- [Connector taxonomy](../../source-of-truth/CONNECTOR_TAXONOMY.md)
+- [Universal Provider Runtime](../UNIVERSAL-PROVIDER-RUNTIME.md) and
+  [ADR-009](../decisions/ADR-009-universal-provider-runtime.md)
+- [Provider migration](../../operations/PROVIDER-MIGRATION.md) and
+  [provider certification](../../reference/PROVIDER-CERTIFICATION.md)
+- [SDK and universal ingestion alignment](../blueprints/sdk-universal-ingestion-alignment.md)
+- [Connector taxonomy](../../reference/source-of-truth/CONNECTOR_TAXONOMY.md)

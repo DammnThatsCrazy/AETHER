@@ -465,7 +465,7 @@ class Topic(str, Enum):
 
     # ── Responsiveness spine (services/responsiveness) — appended block ──────
     # Best-effort state-transition notifications the spine publishes so UIs can
-    # refetch instead of polling (docs/responsiveness-spine/README.md#events).
+    # refetch instead of polling (docs/product/responsiveness-spine/README.md#events).
     # The publisher previously built ``Topic("tenant.activation.updated")`` etc.
     # from strings no member declared, which raised on every publish.
     TENANT_ACTIVATION_UPDATED = "aether.tenant.activation.updated"

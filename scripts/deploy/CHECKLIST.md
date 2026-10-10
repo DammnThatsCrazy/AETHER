@@ -5,10 +5,10 @@
 | URL | Host | Source |
 |---|---|---|
 | `olympuslabsml.com` | Squarespace | Apex/redirect surface → `www` |
-| `www.olympuslabsml.com` | AWS Amplify | `apps/olympus-marketing/` |
-| `aether.olympuslabsml.com` | AWS Amplify | `apps/aether-marketing/` |
+| `www.olympuslabsml.com` | AWS Amplify | `apps/marketing-olympus/` |
+| `aether.olympuslabsml.com` | AWS Amplify | `apps/marketing-aether/` |
 | `docs.olympuslabsml.com` | AWS Amplify | `apps/docs/` |
-| `app.olympuslabsml.com` | AWS Amplify | `apps/aether/` |
+| `app.olympuslabsml.com` | AWS Amplify | `apps/aether-web/` |
 | `status.olympuslabsml.com` | AWS Amplify | `apps/status/` |
 | `kyber.olympuslabsml.com` | Internal only | No public DNS/application route by default |
 | `api.olympuslabsml.com` | AWS ECS/ALB | `services/backend/` |
