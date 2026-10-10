@@ -92,6 +92,8 @@ design-partner evidence is distinguished from production readiness.
 | `29278a80` | Normalize signed Stripe merchant PaymentIntents into commerce evidence, preserving exact order references and distinguishing payment completion from settlement. |
 | `2b986220` | Show tenant-scoped order/payment evidence in the Aether Payment Rails session drawer. |
 | `8d79a836` | Record the commerce reconciliation surface in the implementation ledger and release plan. |
+| `533b2b7a` | Fix first-order evidence persistence and reject unclassified Stripe currency scales. |
+| `2784aaaa` | Namespace payment identities by provider and preserve divergent same-ID evidence as conflicts. |
 
 ### Slice 5 — Exact-reference multi-provider commerce evidence
 
