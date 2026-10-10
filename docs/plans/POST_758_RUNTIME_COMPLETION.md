@@ -94,7 +94,7 @@ design-partner evidence is distinguished from production readiness.
 | `8d79a836` | Record the commerce reconciliation surface in the implementation ledger and release plan. |
 | `533b2b7a` | Fix first-order evidence persistence and reject unclassified Stripe currency scales. |
 | `2784aaaa` | Namespace payment identities by provider and preserve divergent same-ID evidence as conflicts. |
-| Current continuation | Preserve payment observation history, add commerce-ledger knowledge-time reconstruction, and carry explicit order references through canonical activity into Journey and Economic360 evidence surfaces. |
+| `786e588b` | Preserve payment/refund observation history, add commerce-ledger knowledge-time reconstruction, and carry exact commerce operation references through canonical activity into Journey and Economic360 evidence surfaces. |
 
 ### Slice 5 — Exact-reference multi-provider commerce evidence
 
