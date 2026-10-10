@@ -73,6 +73,10 @@ class StripeOnrampAdapter(PaymentRailAdapter):
         session = (event.payload.get("data") or {}).get("object") or {}
         if str(event.event_type or "") == "payment_intent.succeeded":
             return self._normalize_payment_intent(tenant_id, event, session)
+        if str(event.event_type or "") == "charge.refunded":
+            # Refunds are distinct source facts in the commerce evidence ledger,
+            # not replacement funding-session states.
+            return None
         session_id = session.get("id")
         if not session_id:
             return None
@@ -156,6 +160,42 @@ class StripeOnrampAdapter(PaymentRailAdapter):
             occurred_at=event.occurred_at,
             metadata=metadata,
         )
+
+    @staticmethod
+    def extract_commerce_adjustments(event: ParsedProviderEvent) -> list[dict[str, str]]:
+        """Whitelist explicit Stripe refund facts from a signed charge event."""
+        if str(event.event_type or "") != "charge.refunded":
+            return []
+        charge = (event.payload.get("data") or {}).get("object") or {}
+        metadata = charge.get("metadata") or {}
+        order_ref = _safe_reference(
+            metadata.get("aether_order_ref") if isinstance(metadata, dict) else None,
+            limit=512,
+        )
+        payment_intent_id = _safe_reference(charge.get("payment_intent"), limit=512)
+        currency = str(charge.get("currency") or "").upper()
+        refunds = (charge.get("refunds") or {}).get("data") or []
+        if not order_ref or not payment_intent_id or not currency or not isinstance(refunds, list):
+            return []
+
+        results: list[dict[str, str]] = []
+        for refund in refunds:
+            if not isinstance(refund, dict) or refund.get("status") != "succeeded":
+                continue
+            refund_id = _safe_reference(refund.get("id"), limit=512)
+            amount = _stripe_minor_to_major(refund.get("amount"), currency)
+            if not refund_id or amount is None:
+                continue
+            results.append({
+                "commerce_order_ref": order_ref,
+                "provider": "stripe",
+                "adjustment_id": refund_id,
+                "reverses_payment_id": payment_intent_id,
+                "amount": amount,
+                "currency": currency,
+                "occurred_at": event.occurred_at,
+            })
+        return results
 
 
 def _str(value: Any) -> Optional[str]:

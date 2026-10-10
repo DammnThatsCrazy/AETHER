@@ -105,6 +105,39 @@ def commerce_ledger_operation_link(record: dict[str, Any]) -> EconomicOperationL
             )
         )
 
+    payment_link_refs = {
+        (str(payment.get("provider") or ""), str(payment.get("providerPaymentId") or "")):
+            link_ref_id
+        for link_ref_id, payment in payment_refs
+    }
+    adjustments = record.get("adjustmentObservations")
+    if not isinstance(adjustments, list):
+        adjustments = list((record.get("adjustments") or {}).values())
+    refund_refs: list[tuple[str, dict[str, Any]]] = []
+    for index, adjustment in enumerate(adjustments):
+        if not isinstance(adjustment, dict) or adjustment.get("adjustmentType") != "refund":
+            continue
+        provider = _required(adjustment.get("provider"), "adjustment.provider")
+        adjustment_id = _required(adjustment.get("adjustmentId"), "adjustment.adjustmentId")
+        link_ref_id = f"refund-{index}"
+        refund_refs.append((link_ref_id, adjustment))
+        refs.append(
+            EconomicOperationRecordRef(
+                link_ref_id=link_ref_id,
+                source_authority=provider,
+                record_type="provider_refund",
+                record_id=adjustment_id,
+                role="refund",
+                evidence=[EvidenceRef(
+                    id=adjustment_id,
+                    type="transaction",
+                    source=provider,
+                )],
+                occurred_at=adjustment.get("occurredAt"),
+                observed_at=adjustment.get("observedAt"),
+            )
+        )
+
     source_state = str(record.get("state") or "unmatched")
     state = {
         "matched": "linked",
@@ -129,6 +162,23 @@ def commerce_ledger_operation_link(record: dict[str, Any]) -> EconomicOperationL
                         evidence=[ledger_evidence],
                     )
                 )
+
+    for refund_ref_id, adjustment in refund_refs:
+        payment_ref_id = payment_link_refs.get((
+            str(adjustment.get("provider") or ""),
+            str(adjustment.get("reversesPaymentId") or ""),
+        ))
+        if payment_ref_id is not None:
+            refund_record = next(row for row in refs if row.link_ref_id == refund_ref_id)
+            relations.append(
+                EconomicOperationRelation(
+                    from_link_ref_id=refund_ref_id,
+                    relation="reverses",
+                    to_link_ref_id=payment_ref_id,
+                    source_authority=str(adjustment.get("provider")),
+                    evidence=refund_record.evidence,
+                )
+            )
 
     warnings: list[EconomicWarning] = []
     if source_state == "multiple_payments":

@@ -552,6 +552,7 @@ class PaymentRailsService:
                     await self._record_commerce_payment_evidence(
                         tenant_id, adapter, event, prior_session
                     )
+            await self._record_commerce_adjustment_evidence(tenant_id, adapter, event)
             # A legitimate duplicate retry is a completed delivery — never rebilled.
             await self._receipt_advance(tenant_id, rid, ReceiptStage.COMPLETED,
                                         verification_state="duplicate")
@@ -567,6 +568,8 @@ class PaymentRailsService:
             ))
             return {"provider_event_id": event.provider_event_id,
                     "disposition": "rejected", "receipt_id": rid}
+
+        await self._record_commerce_adjustment_evidence(tenant_id, adapter, event)
 
         # Side records (never funding sessions themselves).
         deposit_address = adapter.extract_deposit_address(tenant_id, event)
@@ -671,6 +674,41 @@ class PaymentRailsService:
             status="completed",
             occurred_at=str(record.get("occurred_at") or event.occurred_at),
         )
+
+    async def _record_commerce_adjustment_evidence(
+        self,
+        tenant_id: str,
+        adapter: PaymentRailAdapter,
+        event: ParsedProviderEvent,
+    ) -> None:
+        """Persist explicit adjustments only from signature-verified webhooks."""
+        if event.source != "webhook":
+            return
+        extractor = getattr(adapter, "extract_commerce_adjustments", None)
+        if not callable(extractor):
+            return
+        adjustments = extractor(event)
+        if not isinstance(adjustments, list) or not adjustments:
+            return
+
+        from services.commerce.order_payment_reconciliation import (
+            CommerceOrderPaymentLedger,
+        )
+
+        ledger = CommerceOrderPaymentLedger()
+        for adjustment in adjustments:
+            if not isinstance(adjustment, dict):
+                continue
+            await ledger.record_adjustment(
+                tenant_id,
+                commerce_order_ref=str(adjustment["commerce_order_ref"]),
+                provider=str(adjustment["provider"]),
+                adjustment_id=str(adjustment["adjustment_id"]),
+                reverses_payment_id=str(adjustment["reverses_payment_id"]),
+                amount=str(adjustment["amount"]),
+                currency=str(adjustment["currency"]),
+                occurred_at=str(adjustment["occurred_at"]),
+            )
 
     # ── Receipt lifecycle helpers (best-effort; never break the flow) ─────────
 

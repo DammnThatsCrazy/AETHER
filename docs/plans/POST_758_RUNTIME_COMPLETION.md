@@ -94,6 +94,7 @@ design-partner evidence is distinguished from production readiness.
 | `8d79a836` | Record the commerce reconciliation surface in the implementation ledger and release plan. |
 | `533b2b7a` | Fix first-order evidence persistence and reject unclassified Stripe currency scales. |
 | `2784aaaa` | Namespace payment identities by provider and preserve divergent same-ID evidence as conflicts. |
+| Current continuation | Preserve payment observation history, add commerce-ledger knowledge-time reconstruction, and carry explicit order references through canonical activity into Journey and Economic360 evidence surfaces. |
 
 ### Slice 5 — Exact-reference multi-provider commerce evidence
 
@@ -118,20 +119,35 @@ identity is provider-scoped, so identical transaction IDs from separate rails
 remain distinct evidence; divergent facts reusing the same provider payment ID
 are preserved as a conflict. This ledger ignores source-time older order
 revisions and flags divergent revisions with equal source time for review. This
-slice does not project payment graph facts or claim settlement. Merchant
+slice does not project payment graph facts or claim settlement. A signature-
+verified Stripe `charge.refunded` webhook may write a separate refund fact
+only when its charge carries explicit `aether_order_ref`, PaymentIntent ID,
+refund ID, currency, and succeeded refund amount; the operation link then adds
+an exact `reverses` relation. This does not rewrite the original payment
+status. Merchant
 metadata configuration, live staging
-certification, SDK checkout linkage, correction/refund semantics, and
+certification, SDK checkout linkage, non-Stripe adjustment support, and
 two-provider live certification remain release work. A contract-only scenario
 fixture now records first-order persistence, exact-match, missing-reference,
 mismatch, duplicate, multiple-payment, partial-write retry, stale-revision, and
 equal-time conflict expectations at
 `packages/proof-fixtures/fixtures/commerce-reconciliation/exact_reference_scenarios.json`.
 
+The continuation timestamps payment observations and reconstructs the ledger's
+known state with `as_of`. `CanonicalActivity` retains a source-supplied,
+explicit `commerce_order_ref`, and the Journey compiler carries it into step
+evidence. The tenant-scoped Journey endpoint and Economic360 Evidence section
+surface operation links without copying amounts; missing references remain
+unlinked. Journey reads cap evidence scans at 10,000 steps and report
+truncation explicitly.
+
 Commerce order/payment evidence remains tenant-scoped. The current provider
 contracts do not supply a verified, consented order-to-profile identity claim,
-so this implementation does not attach orders to Profile 360 or Unified
-Journey. The Aether Payment Rails session drawer and tenant reconciliation API
-are the supported customer surfaces until such identity evidence is available.
+so the operation link is attached to Journey only when the source explicitly
+provides the shared commerce reference; it never attaches the order to a person
+or Profile 360. The Aether Payment Rails session drawer, tenant reconciliation
+API, Journey Explorer and Economic360 evidence section are the supported
+customer surfaces.
 
 ### Slice 0 — Capability and work-order traceability
 
@@ -226,8 +242,14 @@ view, but no graph execution edge is projected because the current record does
 not prove the causal semantics of `RESULTED_IN_EXECUTION`. The product surface
 lists linked record roles and relations without copying
 financial amounts or replacing source lifecycle status. Journey and Value
-propagation, correction/reversal lineage, and full bitemporal reconstruction
-remain open.
+propagation now carries explicit commerce references into canonical activity;
+the journey compiler preserves them in step evidence. The tenant-scoped
+`/v1/journeys/{id}/economic-operations` read and Economic360's existing Evidence
+section expose exact-reference commerce links without copying amounts. The
+commerce ledger reconstructs order revisions and payment observations at a
+knowledge-time cutoff. Broader refund/reversal ingestion and cross-domain
+history beyond this commerce evidence ledger remain open pending explicit
+source events and provider-certified fixtures.
 
 ### Slice 4 — Journey and release evidence
 
@@ -241,7 +263,7 @@ simulator evidence distinct from production readiness.
 | Human mobile financial activity | Android/iOS wallet and transaction observations reach Web3 Silver with source-observed status; identity recognizes wallet-address aliases; the tenant-scoped verifier checks existing Silver observations against read-only EVM/Solana RPC and refreshes canonical Journey status. | Exercise a configured RPC provider with a controlled observation; prove the customer surface shows observation and verification separately from settlement, then cover reorg/correction behavior. |
 | Cross-platform economic identity | SDK identity observations use the existing tenant-scoped source-identity resolver; profile identity review and merge controls already exist. | Pair an authorized provider observation with an SDK source in a controlled tenant; prove provenance, confidence, no false merge, replay safety, and consent withdrawal. |
 | Human → agent → subagent delegation | Server-authored user-agent completion/failure lifecycle reaches the existing mapper; Agent 360 includes evidence-only links among exact-matched intent, authorization, execution, and settlement records, and authoritative x402 activity reaches existing graph types. | Run a controlled delegated execution through a real executor callback and an authoritative payment/settlement path; demonstrate child-agent lineage, retry, revoke, and no spend from execution status alone. |
-| Multi-provider commerce | Commerce and x402 lifecycle owners, provider connectors, unified journey, and Value surfaces are present. | Certify one tenant-scoped two-provider golden path (order plus settlement); demonstrate normalized source lineage, deduplication, correction, and consistent Journey/Value output. |
+| Multi-provider commerce | Commerce and x402 lifecycle owners, provider connectors, unified journey, and Value surfaces are present. Exact commerce references now flow through canonical activity into Journey and Economic360 evidence links; ledger knowledge-time reads preserve order/payment visibility. | Certify one tenant-scoped two-provider golden path (order plus authoritative settlement); demonstrate normalized source lineage, deduplication, correction/refund, and consistent Journey/Value output. |
 | Relationship and exposure intelligence | Social Silver and Social360 runtime reads are connected; Profile relationship and exposure APIs exist with consent gates. | Use one licensed and authorized source; prove evidence health, consent withdrawal, explainable edge lineage, unknown states, and production SLOs. |
 
 The repository has no authorized provider credentials or design-partner

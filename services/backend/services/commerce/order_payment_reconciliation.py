@@ -9,10 +9,12 @@ graph facts or assert processor payout settlement.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from shared.common.common import utc_now
+from shared.temporal.instant import coerce_utc_lenient, parse_instant_strict
 from shared.store import DurableStore, get_store
 
 
@@ -127,6 +129,7 @@ class CommerceOrderPaymentLedger:
             "currency": _currency(currency),
             "status": _required(status, "status"),
             "occurredAt": occurred_at,
+            "observedAt": utc_now().isoformat(),
         }
         key = _key(tenant_id, ref)
         record = await self._store.get(key) or {
@@ -140,23 +143,227 @@ class CommerceOrderPaymentLedger:
         # retained as two payment observations rather than overwriting one.
         payment_key = f"{payment_provider}:{payment_id}"
         payments = record.setdefault("payments", {})
+        observations = record.setdefault("paymentObservations", [])
+        if not isinstance(observations, list):
+            observations = record["paymentObservations"] = []
+        if not observations:
+            observations.extend(
+                row.copy() for row in payments.values() if isinstance(row, dict)
+            )
         prior_payment = payments.get(payment_key)
         if prior_payment is None:
             payments[payment_key] = payment
+            observations.append(payment.copy())
         elif any(
             prior_payment.get(field) != payment.get(field)
             for field in ("provider", "providerPaymentId", "amount", "currency", "status")
         ):
             record["state"] = "conflict"
             record["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
+            if not any(
+                all(prior.get(field) == payment.get(field) for field in (
+                    "provider", "providerPaymentId", "amount", "currency", "status", "occurredAt"
+                ))
+                for prior in observations
+                if isinstance(prior, dict)
+            ):
+                observations.append(payment.copy())
         record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
         self._reconcile(record)
+        await self._store.set(key, record)
+        return record
+
+    async def record_adjustment(
+        self,
+        tenant_id: str,
+        *,
+        commerce_order_ref: str,
+        provider: str,
+        adjustment_id: str,
+        reverses_payment_id: str,
+        amount: str,
+        currency: str,
+        occurred_at: str,
+        adjustment_type: str = "refund",
+    ) -> dict[str, Any]:
+        """Persist an explicit provider correction/refund as a separate fact.
+
+        Callers must verify provider authority before recording. The relation
+        to a payment is created only from the explicit provider payment ID.
+        """
+        if adjustment_type != "refund":
+            raise ValueError("unsupported commerce adjustment type")
+        ref = _required(commerce_order_ref, "commerce_order_ref")
+        adjustment = {
+            "provider": _required(provider, "provider").lower(),
+            "adjustmentId": _required(adjustment_id, "adjustment_id"),
+            "adjustmentType": adjustment_type,
+            "reversesPaymentId": _required(reverses_payment_id, "reverses_payment_id"),
+            "amount": _decimal_text(amount),
+            "currency": _currency(currency),
+            "occurredAt": _required(occurred_at, "occurred_at"),
+            "observedAt": utc_now().isoformat(),
+        }
+        key = _key(tenant_id, ref)
+        record = await self._store.get(key) or {
+            "tenantId": tenant_id,
+            "commerceOrderRef": ref,
+            "payments": {},
+            "createdAt": occurred_at,
+        }
+        adjustments = record.setdefault("adjustments", {})
+        observations = record.setdefault("adjustmentObservations", [])
+        adjustment_key = f"{adjustment['provider']}:{adjustment['adjustmentId']}"
+        prior = adjustments.get(adjustment_key)
+        if prior is None:
+            adjustments[adjustment_key] = adjustment
+            observations.append(adjustment.copy())
+        elif any(
+            prior.get(field) != adjustment.get(field)
+            for field in (
+                "provider", "adjustmentId", "adjustmentType", "reversesPaymentId",
+                "amount", "currency", "occurredAt",
+            )
+        ):
+            record["state"] = "conflict"
+            record["conflictReason"] = "provider_adjustment_id_reused_with_divergent_evidence"
+            if not any(
+                all(row.get(field) == adjustment.get(field) for field in (
+                    "provider", "adjustmentId", "adjustmentType", "reversesPaymentId",
+                    "amount", "currency", "occurredAt",
+                ))
+                for row in observations
+                if isinstance(row, dict)
+            ):
+                observations.append(adjustment.copy())
+        record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
         await self._store.set(key, record)
         return record
 
     async def get(self, tenant_id: str, commerce_order_ref: str) -> dict[str, Any] | None:
         ref = _required(commerce_order_ref, "commerce_order_ref")
         return await self._store.get(_key(tenant_id, ref))
+
+    async def get_as_of(
+        self, tenant_id: str, commerce_order_ref: str, as_of: str
+    ) -> dict[str, Any] | None:
+        """Reconstruct the ledger knowledge available at ``as_of``.
+
+        Source-valid order revisions are selected only from rows observed by
+        the cutoff. Provider payment evidence is likewise bounded by its
+        first-observed time. This is a read-only projection; the stored ledger
+        and source-owned status are not changed.
+        """
+        cutoff = parse_instant_strict(as_of)
+        current = await self.get(tenant_id, commerce_order_ref)
+        if current is None:
+            return None
+
+        snapshot = {
+            key: value for key, value in current.items()
+            if key not in {"order", "payments", "adjustments", "state", "conflictReason", "matchedPaymentIds", "matchedPayments"}
+        }
+        revisions = current.get("orderRevisions")
+        if not isinstance(revisions, list):
+            revisions = [current["order"]] if isinstance(current.get("order"), dict) else []
+        known_revisions = [
+            row for row in revisions
+            if isinstance(row, dict)
+            and _known_by(row.get("observedAt"), cutoff, current.get("createdAt"))
+        ]
+        if known_revisions:
+            provider_order_ids = {str(row.get("providerOrderId") or "") for row in known_revisions}
+            revision_groups: dict[str, list[dict[str, Any]]] = {}
+            time_groups: dict[str, list[dict[str, Any]]] = {}
+            for row in known_revisions:
+                revision_groups.setdefault(str(row.get("revisionId") or ""), []).append(row)
+                time_groups.setdefault(
+                    str(row.get("sourceRevisionAt") or row.get("occurredAt") or ""), []
+                ).append(row)
+            if len(provider_order_ids) > 1:
+                snapshot["conflictReason"] = "reference_maps_to_multiple_orders"
+            elif any(
+                len({tuple(row.get(field) for field in (
+                    "provider", "providerOrderId", "amount", "currency", "revisionId",
+                    "sourceRevisionAt", "occurredAt",
+                )) for row in group}) > 1
+                for group in revision_groups.values()
+            ):
+                snapshot["conflictReason"] = "order_revision_id_reused_with_divergent_evidence"
+            elif any(
+                len({tuple(row.get(field) for field in (
+                    "provider", "providerOrderId", "amount", "currency", "revisionId",
+                )) for row in group}) > 1
+                for group in time_groups.values()
+            ):
+                snapshot["conflictReason"] = "divergent_order_revisions_with_equal_source_time"
+            known_revisions.sort(key=lambda row: (
+                _time_key(row.get("sourceRevisionAt") or row.get("occurredAt")),
+                _time_key(row.get("observedAt") or current.get("createdAt")),
+                str(row.get("revisionId") or ""),
+            ))
+            snapshot["orderRevisions"] = known_revisions
+            snapshot["order"] = known_revisions[-1]
+
+        observations = current.get("paymentObservations")
+        if not isinstance(observations, list):
+            observations = [
+                row for row in (current.get("payments") or {}).values()
+                if isinstance(row, dict)
+            ]
+        known_payments = [
+            row for row in observations
+            if isinstance(row, dict)
+            and _known_by(row.get("observedAt"), cutoff, current.get("createdAt"))
+        ]
+        payment_map: dict[str, dict[str, Any]] = {}
+        payment_groups: dict[str, list[dict[str, Any]]] = {}
+        for payment in known_payments:
+            key = f"{payment.get('provider')}:{payment.get('providerPaymentId')}"
+            payment_map[key] = payment
+            payment_groups.setdefault(key, []).append(payment)
+        if any(
+            len({tuple(row.get(field) for field in (
+                "provider", "providerPaymentId", "amount", "currency", "status"
+            )) for row in group}) > 1
+            for group in payment_groups.values()
+        ):
+            snapshot["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
+        snapshot["paymentObservations"] = known_payments
+        snapshot["payments"] = payment_map
+
+        adjustment_observations = current.get("adjustmentObservations")
+        if not isinstance(adjustment_observations, list):
+            adjustment_observations = list((current.get("adjustments") or {}).values())
+        known_adjustments = [
+            row for row in adjustment_observations
+            if isinstance(row, dict)
+            and _known_by(row.get("observedAt"), cutoff, current.get("createdAt"))
+        ]
+        snapshot["adjustmentObservations"] = known_adjustments
+        snapshot["adjustments"] = {
+            f"{row.get('provider')}:{row.get('adjustmentId')}": row
+            for row in known_adjustments
+        }
+
+        # A conflict is knowable only if its conflicting observations had both
+        # arrived by the cutoff. Reconciliation recomputes the visible state.
+        if not snapshot.get("conflictReason"):
+            adjustment_groups: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
+            for row in known_adjustments:
+                adjustment_groups.setdefault(
+                    (row.get("provider"), row.get("adjustmentId")), []
+                ).append(row)
+            if any(
+                len({tuple(row.get(field) for field in (
+                    "provider", "adjustmentId", "adjustmentType", "reversesPaymentId",
+                    "amount", "currency", "occurredAt",
+                )) for row in group}) > 1
+                for group in adjustment_groups.values()
+            ):
+                snapshot["conflictReason"] = "provider_adjustment_id_reused_with_divergent_evidence"
+        self._reconcile(snapshot)
+        return snapshot
 
     async def list_for_tenant(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
         records = await self._store.find(tenantId=tenant_id)
@@ -221,6 +428,19 @@ def _currency(value: str) -> str:
     if len(currency) != 3 or not currency.isalpha():
         raise ValueError("currency must be a three-letter code")
     return currency
+
+
+def _time_key(value: Any) -> str:
+    parsed = coerce_utc_lenient(value)
+    return parsed.isoformat() if parsed is not None else ""
+
+
+def _known_by(observed_at: Any, cutoff: datetime, legacy_time: Any = None) -> bool:
+    value = observed_at or legacy_time
+    if value is None:
+        return False
+    parsed = coerce_utc_lenient(value)
+    return parsed is not None and parsed <= cutoff
 
 
 __all__ = ["CommerceOrderPaymentLedger"]

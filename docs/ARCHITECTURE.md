@@ -21,7 +21,7 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:686d51ba27537d19a14461c8a7c4e82e87be24c65358f6a7a90cd3dd3901e279"
+  "packages/shared/": "sha256:9e6e6a8dad84190c4b3f1892b71f2904b546ac783dcce5ffa09d2e075eedef79"
   "services/backend/config/settings.py": "sha256:f773fff062633f90208b21fcb23d2bab6e66a4457d725bd1e019cb6277707ef4"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
@@ -493,6 +493,9 @@ the context-360 time leaf `temporal360`, the context-360 WHO/SET leaf
 `population360` and the context-360 WHERE leaf `geographic360` — are now
 implemented native providers) and the shared request/context/result contracts
 (TS + Python) that every future 360 provider implements against.
+Economic360 accepts `journey` subjects so its Evidence section can expose
+source-linked commerce operation records carried by Journey steps; it does not
+copy operation amounts or claim settlement from those links.
 `implementationState` is repo metadata describing
 
 how far a projection has been converged onto the plane (`in_flight` = an

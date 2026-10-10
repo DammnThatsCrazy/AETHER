@@ -6,14 +6,15 @@ visibility: I
 audience: [architect, ops, buyer]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/repositories/activity_repo.py, services/backend/services/measurement/repositories/journey_step_repo.py, services/backend/services/measurement/silver_adapters.py, services/backend/alembic/versions/20260627_canonical_activity.py, services/backend/alembic/versions/20260725_ai_referral_attribution.py]
+source_files: [services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/repositories/activity_repo.py, services/backend/services/measurement/repositories/journey_step_repo.py, services/backend/services/measurement/silver_adapters.py, services/backend/alembic/versions/20260627_canonical_activity.py, services/backend/alembic/versions/20260725_ai_referral_attribution.py, services/backend/alembic/versions/20261010_economic_operation_journey_refs.py]
 source_hashes:
   "services/backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
   "services/backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
-  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:98e99f5d910664206e0ba6f1e4c33fe9082eba588ec63e25e3c53e82e06905e1"
-  "services/backend/services/measurement/repositories/activity_repo.py": "sha256:8ef772fda45e4364b7529e4c4f12724a88116fdc9f9021727c6e9cd91ae6ab06"
+  "services/backend/alembic/versions/20261010_economic_operation_journey_refs.py": "sha256:78479dca594fb9ac8f2ce19f317de933afae3ed1211d8c0c45120c9b023ea87a"
+  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:32bad8c530ae3e357a5820af0e45542611ee4cfb0176c9e2c25c6f2078f6e564"
+  "services/backend/services/measurement/repositories/activity_repo.py": "sha256:fa144dfc1aa0ddeffbb55b3f93707267bd5b7a95f852a445316adf373149ae9e"
   "services/backend/services/measurement/repositories/journey_step_repo.py": "sha256:b6ae724521d9e8aea583549eba3db22d38ca1ef50bcc1be190e0be8eecda9d0d"
-  "services/backend/services/measurement/silver_adapters.py": "sha256:1488ee3e52430dcc49ac07a280b54f1297434c8d79bfe1c084e4aa3fd862be92"
+  "services/backend/services/measurement/silver_adapters.py": "sha256:39d39d5de1c893eae5688cdb5f1cc07966468617979970eb0631ff64dcf42d41"
 ---
 
 # Unified Web2/Web3 Canonical Journey — Execution State
@@ -34,6 +35,7 @@ source_hashes:
 | 9 | Observability (metrics module) | ✅ Complete |
 | 10 | Documentation | ✅ Complete |
 | 11 | SDK transaction verification + Journey surface | ✅ Connected; provider-backed release evidence open |
+| 12 | Exact-reference commerce operation evidence | ✅ Connected; live settlement/refund proof open |
 
 ## Key Deliverables
 
@@ -48,6 +50,8 @@ source_hashes:
 - **Kyber UI**: Extended `JourneyExplorerPage` with steps panel, transitions panel, explain panel, rebuild action
 - **Web3 transaction verification**: SDK transaction references are matched to tenant-scoped Silver facts, checked against registered-chain read-only RPC, persisted as separate execution evidence, and reflected in Journey status/evidence summary; settlement is not inferred
 - **Kyber UI verification action**: Journey Explorer can request an RPC check for an observed Web3 step and labels chain execution independently from payment settlement
+- **Economic operation continuity**: source-supplied `commerce_order_ref` persists through canonical activity and Journey step evidence; tenant-scoped Journey and Economic360 surfaces show exact-reference commerce operation links without copying amounts or asserting settlement
+- **Knowledge-time evidence**: commerce order revisions and first-seen payment observations can be reconstructed with an explicit, timezone-qualified `as_of` cutoff
 - **Tests**: 6 core journey test files covering 57 collected scenarios, including tenant and typed-identity collision isolation
 - **Metrics**: `canonical_activities_ingested_total`, `journey_compile_duration_seconds`, `cross_rail_transition_count`, `web3_reorg_corrections_total`, `late_event_insertions_total`
 

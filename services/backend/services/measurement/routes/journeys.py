@@ -7,11 +7,12 @@ import json
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
 
 from shared.common.common import APIResponse, NotFoundError
 from shared.logger.logger import get_logger
+from shared.temporal.instant import TemporalError, parse_instant_strict
 from services.measurement.repositories.activity_repo import ActivityRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
 from services.measurement.repositories.journey_step_repo import JourneyStepRepository
@@ -230,6 +231,51 @@ async def get_journey_step(
             "activity": activity,
         },
         meta={"journey_id": journey_id},
+    ).to_dict()
+
+
+@router.get("/{journey_id}/economic-operations")
+async def get_journey_economic_operations(
+    journey_id: str,
+    request: Request,
+    as_of: Optional[str] = Query(
+        None,
+        description="Optional knowledge-time cutoff for evidence reconstruction",
+    ),
+):
+    """Return source-linked commerce operation evidence attached to a journey.
+
+    The join is permitted only for explicit ``commerce_order_ref`` values in
+    persisted journey-step evidence summaries. It does not join by amount,
+    timestamp, identity, order ID, or payment ID and returns no copied value.
+    """
+    tenant = _require_tenant(request)
+    journey = await _journey_repo.get_current(tenant.tenant_id, journey_id)
+    if journey is None:
+        raise NotFoundError("Journey")
+
+    from services.economic.journey_operation_evidence import (
+        journey_commerce_operation_evidence,
+    )
+
+    try:
+        cutoff = parse_instant_strict(as_of).isoformat() if as_of else None
+    except TemporalError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="as_of must be an ISO-8601 timestamp with an explicit timezone",
+        ) from exc
+    evidence = await journey_commerce_operation_evidence(
+        tenant.tenant_id, journey_id, as_of=cutoff
+    )
+    return APIResponse(
+        data=evidence,
+        meta={
+            "as_of": cutoff,
+            "join_basis": "explicit_journey_step_commerce_order_ref",
+            "amounts_included": False,
+            "unlinked_evidence": "not_inferred",
+        },
     ).to_dict()
 
 

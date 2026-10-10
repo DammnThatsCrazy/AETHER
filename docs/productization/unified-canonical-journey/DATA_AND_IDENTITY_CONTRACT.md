@@ -10,7 +10,7 @@ source_files: [services/backend/services/measurement/contracts.py, services/back
 source_hashes:
   "services/backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
   "services/backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
-  "services/backend/services/measurement/contracts.py": "sha256:9640687983cb6a2a3e478a68f5bc7e038c5b60a73811351c29d3d85377855770"
+  "services/backend/services/measurement/contracts.py": "sha256:d86b770bb1edb51405572f8034f798b522e2267dc0c81f2dd848444c0b1e619b"
 ---
 
 # Data and Identity Contract
@@ -60,6 +60,10 @@ Every row carries the identity chain available at write time:
   resolution is `not_applicable` or fails.
 - Eligibility/provenance: `attribution_eligible`, normalized referrer domain,
   and optional `verified_referral_link_id`
+- Economic operation navigation: optional source-supplied `commerce_order_ref`.
+  It is retained as a shared provider reference for an evidence-only operation
+  link; it must never be derived from a person, amount, timestamp, order ID, or
+  payment ID, and it does not establish order ownership or settlement.
 
 Classifier revisions are append-only evidence keyed by tenant, touchpoint,
 classifier version, and stable input hash. Reclassification does not overwrite

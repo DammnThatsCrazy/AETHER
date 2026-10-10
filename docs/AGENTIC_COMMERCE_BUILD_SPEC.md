@@ -12,9 +12,9 @@ estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
   "services/backend/services/agent/economic.py": "sha256:2e2737ac4b21dcf54564ad43978d09d0133225a05a488414c7a28c16b1edf56a"
-  "services/backend/services/commerce/": "sha256:3f303279cc6721e738687e4495360107a5eebfe3e9cfe9952ac7bc2cf50dc725"
+  "services/backend/services/commerce/": "sha256:44b69df3ae9cd06b6f7f95c36af52e5d512a9c8aad8ba1acbcfdad79580f4201"
   "services/backend/services/economic/economic360_contracts.py": "sha256:06de628e97ad446722d432701d4850e0b62cb89b38d1f74265d73181b6ae6ba2"
-  "services/backend/services/economic/operation_linkage.py": "sha256:16c0aacc4bf52e3dcdd5ad389497540c7faaa17078dd25d9719d924cc4c8efdc"
+  "services/backend/services/economic/operation_linkage.py": "sha256:2b7ba5ea6d4f222b6d5aec8bc27e44835ff69f7ef33f496d49d00a4a6ba05dfa"
   "services/backend/services/ingestion/lifecycle_worker.py": "sha256:2ff252e1d0b87e341769cdfe9054e3523bcfe8a2bf5f94798b5306625cbca5bf"
   "services/backend/services/profile/agent.py": "sha256:453e149e6afd48cc27de997fdbfed6e0a7712d5ca9514c92e146a11b7546b129"
   "services/backend/services/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
@@ -26,6 +26,17 @@ source_hashes:
 **Status note:** two parts of this spec were not built and were removed as dead code: the typed event layer (`shared/events/economic_topics.py`, `economic_schemas.py`; the commerce lifecycle publishes plain payloads on the existing `EventTopic.COMMERCE_*` topics) and the separate approvals router (`x402/approvals_routes.py`; approvals are served by `approvals_router` in `x402/commerce_routes.py` under `/v1/approvals`). References below to those files describe the original design only.
 **Day-1 GA anchor:** All Aether-native protected resource classes, mandatory approval on all spend classes, USDC on Base + Solana.
 **External providers:** Designed-in, shipped second-wave.
+
+**Current implementation boundary (October 10, 2026):** The repository now
+has a versioned, evidence-only `EconomicOperationLink` for exact-reference
+commerce order/payment evidence and tenant-scoped agent intent, authorization,
+execution, and settlement records. Commerce evidence is knowledge-time
+reconstructable and can flow into Journey/Economic360 only when a persisted
+journey step contains the source-shared order reference. This link does not
+execute payments, assert payout settlement, attach an order to a person, or
+replace the provider-owned lifecycle. Signed Stripe refunds now appear as
+separate facts only when the webhook supplies exact order/payment/refund IDs;
+other provider correction feeds and live provider certification remain open.
 
 ---
 

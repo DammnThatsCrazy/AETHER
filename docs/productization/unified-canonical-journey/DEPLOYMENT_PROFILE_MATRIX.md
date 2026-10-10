@@ -6,12 +6,13 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/alembic/versions/20260627_canonical_activity.py, services/backend/alembic/versions/20260725_ai_referral_attribution.py, services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/repositories/activity_repo.py, services/backend/services/measurement/repositories/journey_step_repo.py]
+source_files: [services/backend/alembic/versions/20260627_canonical_activity.py, services/backend/alembic/versions/20260725_ai_referral_attribution.py, services/backend/alembic/versions/20261010_economic_operation_journey_refs.py, services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/repositories/activity_repo.py, services/backend/services/measurement/repositories/journey_step_repo.py]
 source_hashes:
   "services/backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
   "services/backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
-  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:98e99f5d910664206e0ba6f1e4c33fe9082eba588ec63e25e3c53e82e06905e1"
-  "services/backend/services/measurement/repositories/activity_repo.py": "sha256:8ef772fda45e4364b7529e4c4f12724a88116fdc9f9021727c6e9cd91ae6ab06"
+  "services/backend/alembic/versions/20261010_economic_operation_journey_refs.py": "sha256:78479dca594fb9ac8f2ce19f317de933afae3ed1211d8c0c45120c9b023ea87a"
+  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:32bad8c530ae3e357a5820af0e45542611ee4cfb0176c9e2c25c6f2078f6e564"
+  "services/backend/services/measurement/repositories/activity_repo.py": "sha256:fa144dfc1aa0ddeffbb55b3f93707267bd5b7a95f852a445316adf373149ae9e"
   "services/backend/services/measurement/repositories/journey_step_repo.py": "sha256:b6ae724521d9e8aea583549eba3db22d38ca1ef50bcc1be190e0be8eecda9d0d"
 ---
 
@@ -24,6 +25,9 @@ migration. AI/referral source evidence and replay-safe attribution additionally
 require `20260725_ai_referral_attribution`. Canonical-envelope surface
 attribution (the `canonical_activity.surface` column + partial index) requires
 `20260733_canonical_activity_surface`.
+The exact-reference economic-operation link requires
+`20261010_economic_operation_journey_refs` to add the nullable,
+tenant-indexed `canonical_activity.commerce_order_ref` column.
 
 ```bash
 cd "services/backend"

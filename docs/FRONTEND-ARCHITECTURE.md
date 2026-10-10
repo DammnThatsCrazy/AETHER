@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:adfae7d0714daa65096b8453ee2fa814253a8c13566af0dcb0b6bbfe0765785e"
+  "frontend/aether/src/": "sha256:56ac96cef43f0a3ce31494887c415ccc181ce1e9889c1e0b21c16ba106486187"
   "frontend/kyber/src/": "sha256:eb8465356dcd45a14b32b4e991f7c388744d16f481f0bbd25ba3df6a26e05316"
   "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
 ---
@@ -128,7 +128,7 @@ the root.
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
 - Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample. Campaign 360 also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`): they render typed projection section states for the campaign focus (available/degraded/empty …), never recomputing projection content
-- Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata
+- Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata. Journey Explorer also renders exact-reference commerce operation links with source roles and relations, and explicitly states that the evidence does not imply settlement or add operation amounts to journey value.
 - API key management, plan management, usage metering
 - Webhook endpoint management — add/test/delete outbound delivery endpoints
 - **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)

@@ -619,6 +619,7 @@ def _build_steps(
                 "source_event_id": activity.get("source_event_id"),
                 "silver_table": activity.get("silver_table"),
                 "transaction_hash": activity.get("tx_hash"),
+                "commerce_order_ref": activity.get("commerce_order_ref"),
                 "touchpoint_id": (
                     str(activity.get("silver_fact_id"))
                     if activity.get("silver_table")

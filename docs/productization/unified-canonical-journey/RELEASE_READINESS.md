@@ -6,12 +6,13 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/routes/journeys.py, services/backend/services/measurement/routes/kyber.py, frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx, frontend/kyber/src/pages/measurement/journey-explorer-page.tsx]
+source_files: [services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/routes/journeys.py, services/backend/services/measurement/routes/kyber.py, services/backend/alembic/versions/20261010_economic_operation_journey_refs.py, frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx, frontend/kyber/src/pages/measurement/journey-explorer-page.tsx]
 source_hashes:
-  "frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx": "sha256:805e102327074f3c885d186f5c15d62ea0519f5206a0d729f259308d82c79b7d"
+  "frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx": "sha256:0e849243710c8ebac6d61906811ccd02b48f62dac0e4e519ffdecaddbc48b6aa"
   "frontend/kyber/src/pages/measurement/journey-explorer-page.tsx": "sha256:c6a5887e51223aee851e1ed4b500f484e183d78d9565d0774819fe2d9093a362"
-  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:98e99f5d910664206e0ba6f1e4c33fe9082eba588ec63e25e3c53e82e06905e1"
-  "services/backend/services/measurement/routes/journeys.py": "sha256:a7ad8d25a2fdfca0c105cd75e2a30429eb7f0043092f5e30f09f91c023f9995c"
+  "services/backend/alembic/versions/20261010_economic_operation_journey_refs.py": "sha256:78479dca594fb9ac8f2ce19f317de933afae3ed1211d8c0c45120c9b023ea87a"
+  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:32bad8c530ae3e357a5820af0e45542611ee4cfb0176c9e2c25c6f2078f6e564"
+  "services/backend/services/measurement/routes/journeys.py": "sha256:191c2d0f513a37729ae087d07a71f58230dbffef0693240a8d4047178043694e"
   "services/backend/services/measurement/routes/kyber.py": "sha256:c1676ae3c3dd86f71404f94dfaa08cd7a63772526bf0e7869fc6eed92f5ab0c7"
 ---
 
@@ -25,9 +26,9 @@ source_hashes:
 | Durable storage | 5/5 | `canonical_activity` + `journey_steps` tables, Alembic migration |
 | Web3 ingestion | 5/5 | Silver adapter + dispatcher wiring + `/v1/web3/status-change` webhook + tenant-scoped SDK transaction verification |
 | Journey compiler | 5/5 | v2.0, cross-rail, deterministic sort, transition taxonomy |
-| Journey steps API | 5/5 | `/steps`, `/steps/{id}`, `/transitions`, `/explain`, `/campaigns/{id}/journeys` |
+| Journey steps API | 5/5 | `/steps`, `/steps/{id}`, `/transitions`, `/explain`, `/economic-operations`, `/campaigns/{id}/journeys` |
 | Profile360 integration | 5/5 | `unified_journey()` in aggregator, `/v1/profile/{id}/unified-journey` |
-| Aether Journey UI | 5/5 | Virtualized timeline, filter bar, quality banners, accessibility; risk tab (GET /v1/journeys/{id}/risk); step-level risk tier badges |
+| Aether Journey UI | 5/5 | Virtualized timeline, filter bar, quality banners, accessibility; risk tab (GET /v1/journeys/{id}/risk); step-level risk tier badges; source-linked economic operation evidence with no inferred amount or settlement claim |
 | Kyber journey ops | 5/5 | Steps/transitions/explain panels, rebuild action, compiler health panel, and per-transaction RPC verification action |
 | Source evidence | 5/5 | Versioned source classification, eligibility filtering, verified referral provenance, and operator repair controls |
 | Tests | 5/5 | 57 core journey tests: unit, integration, security/tenant-isolation, and typed-identity collision coverage |

@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:b7755e908c8d81bbf520c5e4f0b0f17d9248de98728c51624a499eca40874c09"
+  "services/backend/services/": "sha256:a14323436b6c0787a8a62e47428d66c22502a4f2e84f6f566a8e1dabe3d861dc"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1271,7 +1271,7 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | POST | `/v1/commerce/payments` | Record payment + create `PAYS` edge in graph |
 | POST | `/v1/commerce/hires` | Record agent hire + create `HIRED` edge |
 | GET | `/v1/commerce/fees/report` | Fee elimination report for tenant |
-| GET | `/v1/commerce/reconciliation/order-payments` | Tenant-scoped order/payment evidence plus an evidence-only `operationLink`; accepts optional exact `commerce_order_ref` and requires `commerce:read` |
+| GET | `/v1/commerce/reconciliation/order-payments` | Tenant-scoped order/payment evidence plus an evidence-only `operationLink`; accepts optional exact `commerce_order_ref`, optional timezone-qualified `as_of`, and requires `commerce:read` |
 | GET | `/v1/commerce/agent/{id}/spend` | Agent spend history |
 | GET | `/v1/commerce/agents/{id}/economics` | Full economic profile: budget usage, delegation policy, economic identity, and evidence-only operation links across exact-matched intent, authorization, execution, and settlement records |
 | GET | `/v1/commerce/revenue/{service_id}` | Service revenue over a time window (settled payments attributed to service) |
@@ -1283,7 +1283,9 @@ Three service groups are available when Intelligence Graph feature flags are ena
 the exact shared order-reference basis, and reports linked/partial/conflict/
 unresolved. It has no amount or independent payment status. Multiple completed
 payments and mismatched evidence remain conflicts; processor completion is not
-a claim of payout settlement.
+a claim of payout settlement. When `as_of` is supplied it must include an
+explicit timezone and reconstructs which order revisions and payment
+observations Aether had recorded by that knowledge-time cutoff.
 
 The agent economics response includes `economic_operation_links`. Each link
 references its tenant-scoped `PaymentIntent` and `SettlementEvent` rows only
@@ -2604,6 +2606,7 @@ Unified cross-rail journey compilation — Web2, Web3, agent, x402, and campaign
 | GET | `/v1/journeys/{id}` | Get the current journey version for a journey |
 | GET | `/v1/journeys/{id}/versions` | List all versions of a journey, newest first |
 | GET | `/v1/journeys/{id}/steps` | Paginated journey steps (filterable by `family`, `status`, `session_id`, `wallet_id`, `chain_id`, `campaign_id`) |
+| GET | `/v1/journeys/{id}/economic-operations` | Exact-reference commerce operation links carried by journey-step evidence; optional timezone-qualified `as_of`; no copied amounts or inferred joins |
 | GET | `/v1/journeys/{id}/steps/{step_id}` | Single step with full activity detail |
 | GET | `/v1/journeys/{id}/transitions` | Transition type summary between steps |
 | GET | `/v1/journeys/{id}/explain` | Identity evidence and confidence explanation |

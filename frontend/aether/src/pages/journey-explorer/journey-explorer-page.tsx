@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { api } from '@aether-app/lib/api/endpoints';
 import {
   Card, CardContent, CardHeader, CardTitle,
   Badge, LoadingState, ErrorState, EmptyState, EvidenceDrawer,
@@ -163,6 +164,9 @@ export function JourneyExplorerPage() {
   if (after) journeyParams.after = after;
   if (before) journeyParams.before = before;
   const { steps, meta, hasMore, loading, error, loadMore } = useUnifiedJourney(journeyParams);
+  const [operationLinks, setOperationLinks] = useState<Array<Record<string, any>>>([]);
+  const [operationLinksLoading, setOperationLinksLoading] = useState(false);
+  const [operationLinksError, setOperationLinksError] = useState<string | null>(null);
   const {
     data: explorationValidation,
     isLoading: explorationLoading,
@@ -172,6 +176,27 @@ export function JourneyExplorerPage() {
   } = useJourneyExplorationAvailability(id);
 
   const journeyId = meta?.journey_id ?? null;
+  useEffect(() => {
+    let active = true;
+    if (!journeyId) {
+      setOperationLinks([]);
+      return () => { active = false; };
+    }
+    setOperationLinksLoading(true);
+    setOperationLinksError(null);
+    void api.economicOperations.journey(journeyId)
+      .then((value: any) => {
+        const payload = value && typeof value === 'object' && 'data' in value ? value.data : value;
+        if (active) setOperationLinks(Array.isArray(payload?.operation_links) ? payload.operation_links : []);
+      })
+      .catch((error: unknown) => {
+        if (active) setOperationLinksError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (active) setOperationLinksLoading(false);
+      });
+    return () => { active = false; };
+  }, [journeyId]);
   const { data: riskData, loading: riskLoading, error: riskError } = useJourneyRisk(
     activeTab === 'risk' ? journeyId : null,
   );
@@ -269,6 +294,53 @@ export function JourneyExplorerPage() {
                 onBeforeChange={setBefore}
                 onClear={handleClear}
               />
+            </CardContent>
+          </Card>
+
+          <Card aria-label="Journey economic operation evidence">
+            <CardHeader>
+              <CardTitle>Economic operation evidence</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {operationLinksLoading ? (
+                <LoadingState lines={2} />
+              ) : operationLinksError ? (
+                <ErrorState title="Unable to load operation evidence" message={operationLinksError} />
+              ) : operationLinks.length === 0 ? (
+                <p className="text-sm text-text-muted">
+                  No commerce operation reference is explicitly linked to this journey. Aether does not infer links from identity, amount, or timing.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {operationLinks.map((link) => (
+                    <li key={String(link.id)} className="rounded border border-border p-3">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <Badge variant={link.state === 'linked' ? 'success' : link.state === 'conflict' ? 'warning' : 'default'}>
+                          {String(link.state ?? 'unresolved')}
+                        </Badge>
+                        <span className="font-mono text-xs text-text-muted">{String(link.operation_ref ?? '')}</span>
+                      </div>
+                      <ul className="mt-2 space-y-1 text-xs text-text-secondary">
+                        {(Array.isArray(link.records) ? link.records : []).map((record: any) => (
+                          <li key={String(record.link_ref_id)}>
+                            {String(record.role)} · {String(record.source_authority)} · {String(record.record_id)}
+                          </li>
+                        ))}
+                      </ul>
+                      {Array.isArray(link.relations) && link.relations.length > 0 && (
+                        <ul className="mt-2 space-y-1 text-xs text-text-muted">
+                          {link.relations.map((relation: any, index: number) => (
+                            <li key={`${String(relation.from_link_ref_id)}:${String(relation.relation)}:${index}`}>
+                              {String(relation.from_link_ref_id)} → {String(relation.relation)} → {String(relation.to_link_ref_id)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="mt-2 text-xs text-text-muted">Source evidence only. This view does not claim payout settlement or add operation amounts to journey value.</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
 
