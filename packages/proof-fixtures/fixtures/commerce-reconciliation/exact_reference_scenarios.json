@@ -31,6 +31,14 @@
   },
   "cases": [
     {
+      "id": "first_order_observation",
+      "prior_order": null,
+      "order_revision_id": "revision-order-41001-v2",
+      "expected_order_persisted": true,
+      "expected_state": "order_only",
+      "reason": "first_seen_order_is_stored_without_a_revision_comparison"
+    },
+    {
       "id": "same_amount_without_reference",
       "payment_ref": null,
       "payment_amount": "49.95",

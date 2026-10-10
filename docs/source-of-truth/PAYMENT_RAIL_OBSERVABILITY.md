@@ -87,9 +87,10 @@ parallel ingestion API.
 
 Successful merchant PaymentIntents emit a completed funding session with flow
 `commerce_payment`, distinct from payout `settlement`. The Stripe adapter
-converts supported integer minor-unit amounts using `Decimal`; malformed and
-three-decimal currencies are excluded from order reconciliation. If the signed
-PaymentIntent metadata includes `aether_order_ref`, the canonical payment event
+converts supported integer minor-unit amounts using `Decimal`; malformed
+amounts and currencies outside the adapter's explicit scale table are excluded
+from order reconciliation. If the signed PaymentIntent metadata includes
+`aether_order_ref`, the canonical payment event
 preserves the exact opaque reference and the tenant commerce ledger checks it
 against the Shopify order reference. No reference is inferred from amount,
 time, or customer fields. Live endpoint certification and merchant-side

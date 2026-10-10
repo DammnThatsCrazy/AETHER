@@ -91,6 +91,7 @@ design-partner evidence is distinguished from production readiness.
 | `866fbec2` | Add acceptance-contract scenarios for exact commerce reconciliation, duplicate and conflicting payments, and revision replay. |
 | `29278a80` | Normalize signed Stripe merchant PaymentIntents into commerce evidence, preserving exact order references and distinguishing payment completion from settlement. |
 | `2b986220` | Show tenant-scoped order/payment evidence in the Aether Payment Rails session drawer. |
+| `8d79a836` | Record the commerce reconciliation surface in the implementation ledger and release plan. |
 
 ### Slice 5 — Exact-reference multi-provider commerce evidence
 
@@ -102,9 +103,10 @@ adapter supplies the same explicit reference, exact amount, and currency in
 sanitized metadata. Stripe now normalizes signed
 `payment_intent.succeeded` webhooks as the distinct `commerce_payment` flow
 and passes PaymentIntent `aether_order_ref` metadata into the ledger. This flow
-does not mean payout settlement, and unsupported three-decimal currencies are
-excluded from reconciliation. The ledger exposes the evidence through
-`GET /v1/commerce/reconciliation/order-payments`, guarded by `commerce:read`.
+does not mean payout settlement, and currencies outside the Stripe adapter's
+explicit minor-unit scale table are excluded from reconciliation. The ledger
+exposes the evidence through `GET /v1/commerce/reconciliation/order-payments`,
+guarded by `commerce:read`.
 The Aether Payment Rails session drawer shows the exact order reference,
 order/payment amounts, source IDs, and evidence state for Stripe merchant
 payment sessions.
@@ -113,11 +115,18 @@ successful payments and mismatched amounts remain explicit conflicts. This
 ledger ignores source-time older order revisions and flags divergent revisions
 with equal source time for review. This slice does not project payment graph
 facts or claim settlement. Merchant metadata configuration, live staging
-certification, SDK checkout linkage, correction/refund semantics, and the
-two-provider golden path remain release work. A contract-only scenario fixture
-now records exact-match, missing-reference, mismatch, duplicate, multiple-
-payment, partial-write retry, stale-revision, and equal-time conflict expectations at
+certification, SDK checkout linkage, correction/refund semantics, and
+two-provider live certification remain release work. A contract-only scenario
+fixture now records first-order persistence, exact-match, missing-reference,
+mismatch, duplicate, multiple-payment, partial-write retry, stale-revision, and
+equal-time conflict expectations at
 `packages/proof-fixtures/fixtures/commerce-reconciliation/exact_reference_scenarios.json`.
+
+Commerce order/payment evidence remains tenant-scoped. The current provider
+contracts do not supply a verified, consented order-to-profile identity claim,
+so this implementation does not attach orders to Profile 360 or Unified
+Journey. The Aether Payment Rails session drawer and tenant reconciliation API
+are the supported customer surfaces until such identity evidence is available.
 
 ### Slice 0 — Capability and work-order traceability
 

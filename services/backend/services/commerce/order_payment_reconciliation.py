@@ -58,10 +58,12 @@ class CommerceOrderPaymentLedger:
             "createdAt": occurred_at,
         }
         prior = record.get("order")
-        if prior and prior.get("providerOrderId") != order["providerOrderId"]:
+        if not prior:
+            record["order"] = order
+        elif prior.get("providerOrderId") != order["providerOrderId"]:
             record["state"] = "conflict"
             record["conflictReason"] = "reference_maps_to_multiple_orders"
-        elif not prior or prior.get("revisionId") != order["revisionId"]:
+        elif prior.get("revisionId") != order["revisionId"]:
             prior_revision_at = str(prior.get("sourceRevisionAt") or "")
             next_revision_at = str(order.get("sourceRevisionAt") or "")
             if next_revision_at > prior_revision_at:

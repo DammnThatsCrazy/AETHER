@@ -118,8 +118,8 @@ class StripeOnrampAdapter(PaymentRailAdapter):
         """Normalize a signed merchant PaymentIntent success.
 
         Stripe amounts arrive in minor units. Malformed amounts are rejected;
-        unsupported currencies remain outside order reconciliation rather than
-        being guessed or rounded.
+        currencies outside the explicit scale table remain outside order
+        reconciliation rather than being guessed or rounded.
         """
         intent_id = str(intent.get("id") or "").strip()
         currency = str(intent.get("currency") or "").strip().upper()
@@ -185,7 +185,14 @@ def _stripe_minor_to_major(value: Any, currency: str) -> str | None:
         "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA",
         "PYG", "RWF", "VND", "VUV", "XAF", "XOF", "XPF",
     }
-    if currency in {"BHD", "JOD", "KWD", "OMR", "TND"}:
+    two_decimal = {
+        "AED", "ARS", "AUD", "BRL", "CAD", "CHF", "CNY", "COP", "CZK",
+        "DKK", "EGP", "EUR", "GBP", "HKD", "IDR", "ILS", "INR", "KES",
+        "MAD", "MXN", "MYR", "NGN", "NOK", "NZD", "PHP", "PKR", "PLN",
+        "QAR", "RON", "SAR", "SEK", "SGD", "THB", "TRY", "UAH",
+        "USD", "ZAR",
+    }
+    if currency not in zero_decimal and currency not in two_decimal:
         return None
     try:
         amount = Decimal(str(value))
