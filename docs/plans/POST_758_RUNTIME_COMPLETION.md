@@ -87,6 +87,22 @@ design-partner evidence is distinguished from production readiness.
 | `4c32605a` | Verify stored SDK transactions against registered tenant-scoped EVM/SVM RPC and refresh Journey status from verified execution evidence. |
 | `9c0b2507` | Expose RPC execution evidence and an explicit verify action in the Journey Explorer, preserving settlement as a separate source. |
 
+### Slice 5 — Exact-reference multi-provider commerce evidence
+
+Shopify canonical order events now carry a stable `commerce_order_ref` scoped
+to the Shopify shop/account and order ID. After Bronze/outbox persistence, a
+tenant-scoped ledger records the order revision and exact decimal total. The
+ledger can accept a completed payment observation only when its provider
+adapter supplies the same explicit reference, exact amount, and currency in
+sanitized metadata. It exposes the evidence through
+`GET /v1/commerce/reconciliation/order-payments`, guarded by `commerce:read`.
+Matching never uses amount, time, email, or customer identity; multiple
+successful payments and mismatched amounts remain explicit conflicts. This
+slice does not project payment graph facts or claim settlement. No current
+payment adapter emits the commerce metadata contract by default, so provider
+certification, SDK checkout linkage, correction/refund semantics, and the
+two-provider golden path remain release work.
+
 ### Slice 0 — Capability and work-order traceability
 
 The original 72-work-order inventory is not present in this repository or the

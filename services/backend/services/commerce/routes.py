@@ -15,6 +15,7 @@ from .models import AgentHireRecord, PaymentRecord
 from .service import CommerceService
 from .economic_analytics import CommerceEconomicAnalytics
 from services.agent.economic import AgentEconomicViews
+from services.commerce.order_payment_reconciliation import CommerceOrderPaymentLedger
 
 logger = get_logger("aether.service.commerce.routes")
 router = APIRouter(prefix="/v1/commerce", tags=["Commerce"])
@@ -22,6 +23,7 @@ router = APIRouter(prefix="/v1/commerce", tags=["Commerce"])
 _service = CommerceService()
 _agent_economics = AgentEconomicViews()
 _analytics = CommerceEconomicAnalytics()
+_order_payment_ledger = CommerceOrderPaymentLedger()
 
 
 @router.post("/payments")
@@ -46,6 +48,22 @@ async def fee_elimination_report(request: Request, period: str = "all"):
     request.state.tenant.require_permission("commerce:read")
     report = await _service.get_fee_elimination_report(period)
     return APIResponse(data=report.model_dump()).to_dict()
+
+
+@router.get("/reconciliation/order-payments")
+async def order_payment_reconciliation(
+    request: Request,
+    commerce_order_ref: str | None = None,
+    limit: int = 100,
+):
+    """Read exact-reference order/payment evidence for the current tenant."""
+    request.state.tenant.require_permission("commerce:read")
+    tenant_id = request.state.tenant.tenant_id
+    if commerce_order_ref:
+        result = await _order_payment_ledger.get(tenant_id, commerce_order_ref)
+        return APIResponse(data=result).to_dict()
+    result = await _order_payment_ledger.list_for_tenant(tenant_id, limit=limit)
+    return APIResponse(data=result).to_dict()
 
 
 @router.get("/agent/{agent_id}/spend")

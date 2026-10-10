@@ -21,9 +21,9 @@ toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
-  "services/backend/services/provider_runtime/": "sha256:4d2b5f1bae274fe1f369d4c294ce936dd917c44b72ef13333c6097fa3285daf3"
-  "services/backend/services/providers/": "sha256:c5f185eb1a96f4c9c081c70a930cddd1ab1cc183308663b0256944fca5fdf70e"
-  "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
+  "services/backend/services/provider_runtime/": "sha256:76161c67972ddd7ab2b014beb85b6f1c3488fd9136be799f18f2debc0fc2313d"
+  "services/backend/services/providers/": "sha256:faa27d5485906802e22cc8c2289b047ff9094f3cf4f0eaed6e84d7ef0c3e5a3c"
+  "services/backend/services/providers/shopify/": "sha256:bd8171dabd1af895c65cfd432611241b436a1255bd0e08f57b2fd8bd1bbbab7c"
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
   "services/backend/shared/integration_contracts/": "sha256:e7cbea51644fe93fb204a21cf8e2ece11833a6aa7803b6fdf2dfc076988e5929"
   "services/backend/shared/rate_limit/feature_gate.py": "sha256:a93ea91270a1d0ca3d8664ddea29b75cbfca8c2180a239cb78a3a61d8facda96"

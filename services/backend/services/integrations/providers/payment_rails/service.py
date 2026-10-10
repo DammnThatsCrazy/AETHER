@@ -606,6 +606,40 @@ class PaymentRailsService:
             record["reconciliation_state"] = reconciliation.state
             await self.repos.sessions.save(tenant_id, record)
 
+        # Merchant order reconciliation is opt-in per provider observation:
+        # the adapter must expose an explicit, server supplied reference and
+        # exact commerce amount/currency in sanitized metadata. Never derive
+        # this link from customer, amount, or timestamps.
+        commerce_meta = record.get("metadata") or {}
+        commerce_ref = commerce_meta.get("commerce_order_ref")
+        commerce_amount = commerce_meta.get("commerce_payment_amount")
+        commerce_currency = commerce_meta.get("commerce_payment_currency")
+        if (
+            record.get("flow_type") == "settlement"
+            and record.get("status") == "completed"
+            and commerce_ref
+            and commerce_amount is not None
+            and commerce_currency
+        ):
+            from services.commerce.order_payment_reconciliation import (
+                CommerceOrderPaymentLedger,
+            )
+
+            await CommerceOrderPaymentLedger().record_payment(
+                tenant_id,
+                commerce_order_ref=str(commerce_ref),
+                provider=str(record.get("provider") or adapter.provider_name),
+                provider_payment_id=str(
+                    record.get("provider_transaction_id")
+                    or record.get("provider_session_id")
+                    or record.get("id")
+                ),
+                amount=str(commerce_amount),
+                currency=str(commerce_currency),
+                status="completed",
+                occurred_at=str(record.get("occurred_at") or event.occurred_at),
+            )
+
         emitted = await self._emit_canonical_events(tenant_id, adapter, record)
         await self._receipt_finalize_delivery(tenant_id, rid, record)
         return {
