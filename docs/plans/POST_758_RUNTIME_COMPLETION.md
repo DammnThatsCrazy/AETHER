@@ -145,7 +145,9 @@ at `/agents/:agentId`, linked from the observed-agent access panel. It consumes
 the existing tenant-scoped Agent 360 API and presents identity/authority,
 execution history, delegation, and payment/settlement evidence. The page keeps
 missing records explicit and states that executor completion is not settled
-value. The mobile Journey and graph reconciliation path remains open.
+value. Unified Journey steps now expose the verification field even when it is
+absent, link agent activity to Agent 360, and link the journey back to Profile
+360. The mobile Journey and graph reconciliation path remains open.
 
 ### Slice 4 — Journey and release evidence
 
@@ -153,6 +155,18 @@ Run the five approved journeys against controlled fixtures first and authorized
 providers where available. Record replay, correction, revocation, consent,
 tenant isolation, latency, scale, and cost results. Keep design-partner or
 simulator evidence distinct from production readiness.
+
+| Approved journey | Current implementation evidence | Remaining release evidence |
+|---|---|---|
+| Human mobile financial activity | Android/iOS wallet and transaction observations reach Web3 Silver with source-observed status; identity recognizes wallet-address aliases; Profile and Journey surfaces exist. | Verify a provider-backed chain observation joins on tenant, chain, wallet context, and transaction hash; prove the UI keeps observed activity distinct from verified execution and settlement. |
+| Cross-platform economic identity | SDK identity observations use the existing tenant-scoped source-identity resolver; profile identity review and merge controls already exist. | Pair an authorized provider observation with an SDK source in a controlled tenant; prove provenance, confidence, no false merge, replay safety, and consent withdrawal. |
+| Human → agent → subagent delegation | Server-authored user-agent completion/failure lifecycle now reaches the existing mapper; Agent 360 shows authority, execution, delegation, and existing payment/settlement records. | Run a controlled delegated execution through a real executor callback and an authoritative payment/settlement path; demonstrate child-agent lineage, retry, revoke, and no spend from execution status alone. |
+| Multi-provider commerce | Commerce and x402 lifecycle owners, provider connectors, unified journey, and Value surfaces are present. | Certify one tenant-scoped two-provider golden path (order plus settlement); demonstrate normalized source lineage, deduplication, correction, and consistent Journey/Value output. |
+| Relationship and exposure intelligence | Social Silver and Social360 runtime reads are connected; Profile relationship and exposure APIs exist with consent gates. | Use one licensed and authorized source; prove evidence health, consent withdrawal, explainable edge lineage, unknown states, and production SLOs. |
+
+The repository has no authorized provider credentials or design-partner
+evidence attached to this implementation run. These release rows are therefore
+open; code presence is not recorded as production proof.
 
 ## Shared architecture decisions carried forward
 

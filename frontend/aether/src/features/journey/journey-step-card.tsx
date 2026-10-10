@@ -58,9 +58,10 @@ interface Props {
   step: JourneyStep;
   position: number;
   onCampaignOpen?: (campaignId: string) => void;
+  onAgentOpen?: (agentId: string) => void;
 }
 
-export const JourneyStepCard: FC<Props> = ({ step, position, onCampaignOpen }) => {
+export const JourneyStepCard: FC<Props> = ({ step, position, onCampaignOpen, onAgentOpen }) => {
   const timeCtx = useTimeContext();
   const [expanded, setExpanded] = useState(false);
   const family = step.activity_family as ActivityFamily;
@@ -152,12 +153,24 @@ export const JourneyStepCard: FC<Props> = ({ step, position, onCampaignOpen }) =
           {step.ai_product && <><dt className="text-text-muted">AI product</dt><dd>{step.ai_product}</dd></>}
           {step.referral_mediation_type && <><dt className="text-text-muted">Mediation</dt><dd>{step.referral_mediation_type}</dd></>}
           {step.journey_role && <><dt className="text-text-muted">Journey role</dt><dd>{step.journey_role}</dd></>}
-          {step.verification_level && <><dt className="text-text-muted">Verification</dt><dd>{step.verification_level}</dd></>}
+          <dt className="text-text-muted">Verification</dt>
+          <dd>{step.verification_level ?? 'Not provided'}</dd>
           {step.evidence_confidence != null && <><dt className="text-text-muted">Evidence confidence</dt><dd>{(step.evidence_confidence * 100).toFixed(0)}%</dd></>}
           {step.attribution_eligible === false && <><dt className="text-text-muted">Attribution</dt><dd>Excluded source noise</dd></>}
           {formattedAttributedRevenue && <><dt className="text-text-muted">Attributed net revenue</dt><dd>{formattedAttributedRevenue}</dd></>}
           <dt className="text-text-muted">Position</dt><dd>{step.step_position}</dd>
         </dl>
+      )}
+      {expanded && step.agent_id && onAgentOpen && (
+        <div className="mt-2 ml-7 text-xs">
+          <button
+            type="button"
+            className="text-accent hover:underline"
+            onClick={() => onAgentOpen(step.agent_id!)}
+          >
+            Open Agent 360
+          </button>
+        </div>
       )}
     </article>
   );

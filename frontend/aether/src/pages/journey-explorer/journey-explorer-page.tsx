@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Card, CardContent, CardHeader, CardTitle,
   Badge, LoadingState, ErrorState, EmptyState, EvidenceDrawer,
@@ -203,10 +203,17 @@ export function JourneyExplorerPage() {
   return (
     <main className="flex flex-col gap-4 p-4 max-w-3xl mx-auto" aria-label="Unified journey explorer">
       <header>
-        <h1 className="text-xl font-semibold text-text">Unified Journey</h1>
-        <p className="text-sm text-text-muted mt-0.5">
-          Interleaved Web2, Web3, campaign, commerce, agent, and x402 activity for this profile.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-xl font-semibold text-text">Unified Journey</h1>
+            <p className="text-sm text-text-muted mt-0.5">
+              Interleaved Web2, Web3, campaign, commerce, agent, and x402 activity for this profile.
+            </p>
+          </div>
+          <Link className="text-xs text-accent hover:underline" to={`/users/${encodeURIComponent(id)}`}>
+            Open Profile 360
+          </Link>
+        </div>
       </header>
 
       {meta && <RailSummary meta={meta} />}
@@ -286,6 +293,7 @@ export function JourneyExplorerPage() {
                   loading={loading}
                   onLoadMore={loadMore}
                   onCampaignOpen={(campaignId) => void openCampaign(campaignId)}
+                  onAgentOpen={(agentId) => navigate(`/agents/${encodeURIComponent(agentId)}`)}
                 />
               )}
             </CardContent>
