@@ -88,7 +88,7 @@ These labels distinguish code presence from completed customer capability.
 | CF-04 | Standardize cross-domain canonical events and relationships | Partial. Generated event registries and domain-specific event contracts exist; common economic, agent and wallet semantics still need reconciliation. | Map each domain event to existing canonical event/relationship types and identify contract mismatches before adding new types. |
 | CF-05 | Define lifecycle, transition and capability ownership rules | Partial. Service classification, lifecycle owners and bounded consumers exist; remaining provider and executor lifecycles need authority tables. | Produce a lifecycle/producer/topic ownership matrix for human, agent, payment and commerce states, including terminal-state authority. |
 | CF-06 | Establish schema versioning, compatibility and migration governance | Partial / validate. Schema and contract generation exist; multi-SDK/provider compatibility has not been proven across the target flows. | Validate version evolution, replay and old-client behavior across iOS, Android, React Native and provider adapters. |
-| CF-07 | Formalize economic operations, authorization and attestation-ready evidence contracts | Design gap. Domain-specific payment, x402, derivatives and commerce records exist; the recent commerce ledger is a tenant-scoped side ledger, not a canonical cross-domain operation. | Resolve the existing authoritative operation entity and relationship among intent, authorization, execution, settlement, fee and outcome before creating new graph structure. |
+| CF-07 | Formalize economic operations, authorization and attestation-ready evidence contracts | Partial. Domain-specific authorities exist, but no one record owns the lifecycle across intent, authorization, execution, payment, settlement, fee and outcome. | Use source-owned records plus the shared evidence-only operation linkage specified below; do not establish a competing universal operation system of record. |
 
 ### Program II — Universal Observability
 
@@ -115,7 +115,7 @@ These labels distinguish code presence from completed customer capability.
 | IG-02 | Represent custodial and noncustodial ownership/control relationships | Design gap. Current wallet evidence distinguishes observation from ownership but no complete custody/control contract is proven here. | Define separate relationships for account association, custody, control, delegation and ownership, each with source authority and verification requirements. |
 | IG-03 | Resolve agent identity, lifecycle and principal relationships | Partial. Agent lifecycle consumers and Agent 360 are connected; a production executor and real principal/child-agent journey are unproven. | Prove server-authored lifecycle events from an actual executor and preserve tenant, agent, parent, principal and execution lineage. |
 | IG-04 | Represent delegation chains, mandates, effective permissions and revocation | Partial / proof gap. Existing authority and delegation stores are surfaced in Agent 360; runtime revoke-to-execution enforcement needs proof. | Demonstrate principal → agent → subagent authority, effective permission evaluation, revocation and rejection of unauthorized spend. |
-| IG-05 | Reconcile canonical economic operations and transaction lifecycles | Partial. Exact-reference Shopify order/Stripe payment evidence works as a narrow ledger; it does not join intent, authority, execution and settlement across domains. | Decide and implement the shared operation contract around existing domain authorities; preserve lifecycle-specific semantics and avoid duplicate value. |
+| IG-05 | Reconcile canonical economic operations and transaction lifecycles | Partial. Exact-reference Shopify order/Stripe payment evidence works as a narrow ledger; it does not join intent, authority, execution and settlement across domains. | Implement the evidence-only operation linkage around existing domain authorities; preserve lifecycle-specific semantics and avoid duplicate value. |
 | IG-06 | Support cross-chain and cross-provider economic continuity | Partial / proof gap. EVM/Solana verification and Shopify/Stripe evidence exist; Sui and a verified cross-provider graph journey remain open. | Certify source-specific identifiers and settlement continuity for the five journeys; do not join on amount/time/customer identity. |
 | IG-07 | Implement bitemporal financial, agent and authorization reconstruction | Partial. Temporal graph primitives exist; this program has not proven bitemporal reconstruction across these economic/authority domains. | Map valid time and system/knowledge time on canonical evidence and prove as-of reconstruction after correction and replay. |
 | IG-08 | Govern graph mutations, replay, correction and restatement | Partial. Graph mutation gateway and replay-safe domain paths exist; end-to-end restatement after financial correction/revocation is open. | Prove idempotent mutation, supersession, reverse/restate, consent invalidation and audit lineage in controlled journeys. |
@@ -186,11 +186,72 @@ consent and tenant governance; observation-only financial execution initially;
 shared graph/lenses/360s; and five progressive demonstrations.
 
 It also recommends one economic-operation reconciliation primitive with
-domain-specific lifecycle rules. Before encoding that as a new entity, resolve
-CF-07 and IG-05 against current payment, x402, derivatives, commerce and graph
-owners. The latest checkout has not completed that decision: its Shopify/Stripe
-ledger is deliberately narrower and does not write graph facts or claim
-settlement.
+domain-specific lifecycle rules. The audit and decision below resolve CF-07
+and IG-05 against current payment, x402, derivatives, commerce and graph
+owners. The Shopify/Stripe ledger remains deliberately narrower: it does not
+write graph facts or claim settlement.
+
+## Economic-operation authority decision
+
+The current checkout does not contain a single authoritative economic
+operation record spanning all domains. The owning records are intentionally
+different because they capture different evidence and lifecycle semantics:
+
+| Evidence/lifecycle | Existing authority | What it proves | Boundary |
+|---|---|---|---|
+| Agent payment intent, quote, authorization and execution reference | `PaymentIntentRepository` / agent x402 lifecycle | What an agent requested and the intent's linked lifecycle references | It is an agent-payment record, not the canonical owner of provider commerce orders or all financial activity. |
+| Settlement attempts/outcomes for agent intents | `SettlementEventRepository`; source-specific chain verification in stablecoin reconciliation | A settlement attempt/outcome linked to an agent intent, including chain finality state where verified | Settlement remains a distinct fact; intent or processor completion alone does not prove payout settlement. |
+| Commerce order and processor payment observations | Provider order/payment sources, joined by `CommerceOrderPaymentLedger` on the explicit `commerce_order_ref` | A tenant-scoped exact-reference match or conflict between order and completed payment observations | This ledger does not prove settlement, infer a person, write canonical graph facts, or aggregate multiple payments into value. |
+| Derivatives order, execution and funding/payment | Derivatives repositories and lifecycle state machines | Domain-specific market order, execution and funding facts | These records keep exchange/market semantics and are not interchangeable with commerce orders or consumer payments. |
+| Economic events, flows, positions, obligations, adjustments and settlements | `Economic360` contracts/provider | Typed projection/read vocabulary over canonical evidence | Economic360 is explicitly a projection, not a competing system of record. |
+
+**Decision:** do not add a universal `EconomicOperation` graph vertex or
+repository as a new authority. Preserve source-owned lifecycle records and
+introduce a versioned, provider-neutral **operation linkage contract** only at
+the integration seam. It is a correlation/projection record, not an economic
+fact authority. It must carry tenant scope, a stable operation key, typed
+source-authority references, relation semantics (for example `fulfills`,
+`authorized_by`, `executed_as`, `settled_by`, `reverses`, or `produced`),
+source/evidence references, observed/valid time, and reconciliation state.
+It must not copy an amount as a new source of truth, flatten lifecycle states,
+or imply that linked records are equal-value events.
+
+**Identity rule:** only join records through a source-provided shared
+identifier or an explicitly verified mapping. Never infer operation identity
+from matching amount, time, currency, email, wallet, or customer. Preserve
+provider namespaces and tenant isolation. Conflicting or insufficient evidence
+must remain `conflict` or `unresolved`, not be auto-resolved.
+
+**Value rule:** instruction, authorization, execution, transfer, conversion,
+fee, settlement, refund/reversal, and merchant outcome are separate semantic
+facts. Value projections select the appropriate recognized fact for each
+measure and expose possible double counting; they do not sum every stage in an
+operation chain. Settlement/finality claims require the relevant authoritative
+provider or chain evidence.
+
+**Why this is the recommended shape:** it reuses current domain owners, fits
+the existing evidence-reference and graph conventions, allows later standards
+such as AP2 or Verifiable Intent to map in without owning unrelated providers,
+and supports the human, agent, and economic domains in the target graph. It
+also gives the five demonstrations a consistent way to connect evidence
+without forcing their distinct lifecycles into one state machine.
+
+**Implementation order:** (1) define relation vocabulary and source-reference
+contract; (2) map the Shopify/Stripe proof seam and agent x402 intent →
+authorization → execution → settlement seam into it; (3) add chain finality,
+correction/reversal, and merchant outcome evidence; (4) project the linked
+evidence through graph, Journey, Agent 360 and Value; (5) validate replay,
+tenant isolation, temporal reconstruction and no-double-counting. Do not
+expand provider coverage before these seams preserve their source authority.
+
+The first implementation artifact is now the strict `EconomicOperationLink`
+contract in `services/backend/services/economic/economic360_contracts.py`. It carries
+provider-namespaced source-record references, lifecycle roles, evidence-backed
+relations, identity basis and reconciliation state. It forbids extra fields,
+is explicitly versioned, requires identity evidence, rejects a `linked` state
+with fewer than two source records, and does not carry amounts. It is currently
+a contract only: runtime mapping, graph navigation and projections remain the
+next implementation work.
 
 ## Recommended implementation program
 
@@ -231,8 +292,9 @@ vertical-slice acceptance criteria.
 
 1. Reconcile the enumerated 67 rows in this document with the exact source
    list; add the five missing source items only when recovered.
-2. Audit CF-07/IG-05: identify whether an existing economic operation is
-   authoritative and document the result before any shared-model implementation.
+2. Map the exact-reference Shopify/Stripe seam and agent x402 lifecycle into
+   `EconomicOperationLink`, retaining their separate status and settlement
+   authorities.
 3. Turn the first three approved customer journeys into evidence checklists
    with owner, source, permissions/credentials, fixture, product surface and
    pass criteria.

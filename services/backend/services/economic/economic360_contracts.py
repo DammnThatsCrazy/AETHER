@@ -38,7 +38,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Iterable, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Reused canonical primitives (single-monolith reuse — never redefined here).
 from services.operational_intelligence.models import (
@@ -237,6 +237,98 @@ class EconomicSettlement(EconomicContract):
     warnings: list[EconomicWarning] = Field(default_factory=list)
 
 
+EconomicOperationRole = Literal[
+    "order",
+    "payment_intent",
+    "authorization",
+    "execution",
+    "transfer",
+    "conversion",
+    "fee",
+    "settlement",
+    "refund",
+    "merchant_outcome",
+    "agent_outcome",
+]
+
+EconomicOperationRelationKind = Literal[
+    "fulfills",
+    "authorized_by",
+    "executed_as",
+    "settled_by",
+    "reverses",
+    "produced",
+    "converted_from",
+    "charged_as",
+    "associated_with",
+]
+
+
+class EconomicOperationRecordRef(EconomicContract):
+    """Reference to a source-owned record participating in an operation.
+
+    The referenced domain service remains authoritative for record contents,
+    amount and lifecycle status. This projection contract carries only the
+    identity needed to navigate to that record and its evidence.
+    """
+
+    link_ref_id: str = Field(min_length=1, max_length=512)
+    source_authority: str = Field(min_length=1, max_length=256)
+    record_type: str = Field(min_length=1, max_length=128)
+    record_id: str = Field(min_length=1, max_length=512)
+    role: EconomicOperationRole
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    occurred_at: Optional[str] = None
+    valid_at: Optional[str] = None
+
+
+class EconomicOperationRelation(EconomicContract):
+    """Evidence-backed semantic edge between two source-owned records."""
+
+    from_link_ref_id: str = Field(min_length=1, max_length=512)
+    relation: EconomicOperationRelationKind
+    to_link_ref_id: str = Field(min_length=1, max_length=512)
+    source_authority: str = Field(min_length=1, max_length=256)
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+
+class EconomicOperationLink(EconomicContract):
+    """Evidence-only correlation projection over domain-owned economic facts.
+
+    ``operation_ref`` must come from a source-shared identifier or an
+    explicitly verified mapping. This model deliberately contains no amount,
+    canonical payment status, or graph-entity identity: those remain with the
+    source authorities and their projections.
+    """
+
+    schema_version: Literal["1"] = "1"
+    id: str = Field(min_length=1, max_length=512)
+    tenant_id: str = Field(min_length=1, max_length=256)
+    operation_ref: str = Field(min_length=1, max_length=512)
+    identity_basis: Literal["source_shared_identifier", "verified_mapping"]
+    identity_evidence: list[EvidenceRef] = Field(min_length=1)
+    state: Literal["linked", "partial", "conflict", "unresolved"]
+    records: list[EconomicOperationRecordRef] = Field(default_factory=list)
+    relations: list[EconomicOperationRelation] = Field(default_factory=list)
+    warnings: list[EconomicWarning] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def linked_state_requires_multiple_records(self) -> "EconomicOperationLink":
+        link_ref_ids = [record.link_ref_id for record in self.records]
+        if len(link_ref_ids) != len(set(link_ref_ids)):
+            raise ValueError("operation link reference IDs must be unique")
+        if self.state == "linked" and len(self.records) < 2:
+            raise ValueError("linked operation requires at least two source records")
+        known_ids = set(link_ref_ids)
+        for relation in self.relations:
+            if (
+                relation.from_link_ref_id not in known_ids
+                or relation.to_link_ref_id not in known_ids
+            ):
+                raise ValueError("operation relations must reference records in the link")
+        return self
+
+
 # ── Anti-pattern detection / safe-value helpers ──────────────────────────────
 
 
@@ -402,6 +494,11 @@ __all__ = [
     "EconomicContract",
     "EconomicEvent",
     "EconomicFlow",
+    "EconomicOperationLink",
+    "EconomicOperationRecordRef",
+    "EconomicOperationRelation",
+    "EconomicOperationRelationKind",
+    "EconomicOperationRole",
     "EconomicObligation",
     "EconomicPosition",
     "EconomicSectionState",
