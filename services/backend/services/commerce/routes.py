@@ -16,6 +16,7 @@ from .service import CommerceService
 from .economic_analytics import CommerceEconomicAnalytics
 from services.agent.economic import AgentEconomicViews
 from services.commerce.order_payment_reconciliation import CommerceOrderPaymentLedger
+from services.economic.operation_linkage import commerce_ledger_operation_link
 
 logger = get_logger("aether.service.commerce.routes")
 router = APIRouter(prefix="/v1/commerce", tags=["Commerce"])
@@ -61,8 +62,20 @@ async def order_payment_reconciliation(
     tenant_id = request.state.tenant.tenant_id
     if commerce_order_ref:
         result = await _order_payment_ledger.get(tenant_id, commerce_order_ref)
+        if result is not None:
+            result = {
+                **result,
+                "operationLink": commerce_ledger_operation_link(result).model_dump(mode="json"),
+            }
         return APIResponse(data=result).to_dict()
     result = await _order_payment_ledger.list_for_tenant(tenant_id, limit=limit)
+    result = [
+        {
+            **record,
+            "operationLink": commerce_ledger_operation_link(record).model_dump(mode="json"),
+        }
+        for record in result
+    ]
     return APIResponse(data=result).to_dict()
 
 

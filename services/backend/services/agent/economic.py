@@ -16,6 +16,7 @@ from repositories.repos import (
     PaymentIntentRepository,
     SettlementEventRepository,
 )
+from services.economic.operation_linkage import agent_intent_operation_link
 from services.value.models import to_decimal
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
@@ -386,6 +387,22 @@ class AgentEconomicViews:
         budget = await self.budget_view(agent_id, tenant_id, limit=limit)
         delegation = await self.delegation_policy_view(agent_id, tenant_id)
         identity = await self._identities.find_for_agent(agent_id, tenant_id)
+        intents = await self._intents.list_for_agent(agent_id, tenant_id, limit=limit)
+        settlements = await self._settlements.list_for_agent(
+            agent_id, tenant_id, limit=limit
+        )
+        settlements_by_intent: dict[str, list[dict[str, Any]]] = {}
+        for settlement in settlements:
+            intent_id = str(settlement.get("intent_id") or "")
+            if intent_id:
+                settlements_by_intent.setdefault(intent_id, []).append(settlement)
+        operation_links = [
+            agent_intent_operation_link(
+                intent,
+                settlements_by_intent.get(str(intent.get("intent_id") or ""), []),
+            ).model_dump(mode="json")
+            for intent in intents
+        ]
 
         return {
             "agent_id": agent_id,
@@ -393,6 +410,7 @@ class AgentEconomicViews:
             "budget": budget,
             "delegation_policy": delegation,
             "economic_identity": identity,
+            "economic_operation_links": operation_links,
             "computed_at": utc_now().isoformat(),
         }
 

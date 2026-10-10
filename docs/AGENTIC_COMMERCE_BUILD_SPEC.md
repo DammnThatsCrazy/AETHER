@@ -11,7 +11,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
-  "services/backend/services/commerce/": "sha256:b5cbea407bb7725a079322ffd87e5a20043a35b536d4932e543326aebdf6fca3"
+  "services/backend/services/commerce/": "sha256:e9ceb23751414f2c29484cf2a6c7bbf8ab85ca6e50e68fdbb3716fc07ad918e4"
   "services/backend/services/x402/": "sha256:25894ad21bdef715d9efd91c019cb90c66eeda7a0b3153f24f7812a3f3831795"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
@@ -107,6 +107,22 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 | Kyber = **dashboard** | Kyber = **operator command surface** with audited actions |
 | Commerce = **record-keeping** | Commerce = **governed workflow** with mandatory approvals |
 | Approval = N/A | Approval = **first-class domain** across all layers |
+
+### 2.4 Cross-domain economic operation linkage
+
+The commerce reconciliation read now adds an `operationLink` projection to
+`GET /v1/commerce/reconciliation/order-payments`. It links the provider-owned
+commerce order and payment records only through their explicit shared
+`commerce_order_ref`, retains provider namespaces and evidence references, and
+surfaces partial, unresolved and conflicting matches. It carries no amount or
+independent payment status and does not claim payout settlement.
+
+This linkage is an Aether projection for navigating evidence across domains.
+It does not make the graph or this projection the source of truth for an x402
+intent, authorization, execution or settlement. Those remain with their
+existing control-plane and source-specific authorities. Mapping the x402
+lifecycle into the shared linkage and projecting it through Journey, Agent 360
+and Value remain follow-on work.
 
 
 ---

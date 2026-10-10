@@ -244,14 +244,21 @@ evidence through graph, Journey, Agent 360 and Value; (5) validate replay,
 tenant isolation, temporal reconstruction and no-double-counting. Do not
 expand provider coverage before these seams preserve their source authority.
 
-The first implementation artifact is now the strict `EconomicOperationLink`
-contract in `services/backend/services/economic/economic360_contracts.py`. It carries
-provider-namespaced source-record references, lifecycle roles, evidence-backed
-relations, identity basis and reconciliation state. It forbids extra fields,
-is explicitly versioned, requires identity evidence, rejects a `linked` state
-with fewer than two source records, and does not carry amounts. It is currently
-a contract only: runtime mapping, graph navigation and projections remain the
-next implementation work.
+The first implementation slice defines the strict `EconomicOperationLink`
+contract in `services/backend/services/economic/economic360_contracts.py` and
+maps (a) Shopify/Stripe exact-reference order/payment evidence at
+`GET /v1/commerce/reconciliation/order-payments`, and (b) tenant-scoped agent
+`PaymentIntent` → explicitly associated `SettlementEvent` evidence in the
+existing agent economics response. The contract carries provider-namespaced
+source-record references, lifecycle roles, evidence-backed relations, identity
+basis and reconciliation state. It forbids extra fields, is explicitly
+versioned, requires identity evidence, rejects a `linked` state with fewer
+than two source records, and does not carry amounts. The routes remain
+tenant-scoped, and processor completion remains distinct from payout
+settlement. Agent authorization/execution references are not independently
+linked until their authoritative records are available. Graph navigation,
+Journey/Agent 360/Value projections and correction/reversal handling remain
+open.
 
 ## Recommended implementation program
 
@@ -292,9 +299,9 @@ vertical-slice acceptance criteria.
 
 1. Reconcile the enumerated 67 rows in this document with the exact source
    list; add the five missing source items only when recovered.
-2. Map the exact-reference Shopify/Stripe seam and agent x402 lifecycle into
-   `EconomicOperationLink`, retaining their separate status and settlement
-   authorities.
+2. Complete agent lifecycle linkage by sourcing authoritative authorization
+   and executor records, and distinguish settlement attempts from verified
+   finality before projecting further.
 3. Turn the first three approved customer journeys into evidence checklists
    with owner, source, permissions/credentials, fixture, product surface and
    pass criteria.

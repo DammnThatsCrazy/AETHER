@@ -10,7 +10,7 @@ source_files: [services/backend/services/x402/, services/backend/services/agent/
 source_hashes:
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/events.ts": "sha256:c2c9b0df3d1a018a320981a2dfad443829583e10c399299711a6b76e5bc960ac"
-  "services/backend/services/agent/": "sha256:19d38e0896224afbba2f2587cc5d0c97496e726d68676e262171e499b23a975d"
+  "services/backend/services/agent/": "sha256:0d0f2c49c7a7930f16012e8cb27d40f0780d9bae2c9293be7d4b824d54784b81"
   "services/backend/services/x402/": "sha256:25894ad21bdef715d9efd91c019cb90c66eeda7a0b3153f24f7812a3f3831795"
 ---
 
@@ -33,7 +33,7 @@ source_hashes:
 | `services/backend/services/x402/policies.py` | Policy engine: evaluates allow/deny/require_approval. Emits decisions; does not enforce them autonomously. |
 | `services/backend/services/x402/interceptor.py` | Header parsing only. Observational. |
 | `services/backend/services/x402/economic_graph.py` | Graph mutations for lifecycle stages. Observational. |
-| `services/backend/services/agent/economic.py` | Agent economic views: budget aggregation. Read-only. |
+| `services/backend/services/agent/economic.py` | Agent economic views: budget aggregation and evidence-only links from tenant-scoped payment intents to explicitly associated settlement events. Read-only; authorization/execution references are not represented as independently evidenced records. |
 | `services/backend/services/agent/lifecycle_mapper.py` | Routes agent events to repositories and graph. Observational. |
 | `services/backend/services/agent/worker_bridge.py` (2026-07-10) | Publishes internal objective-step envelopes to AETHER's own Agent Layer Celery broker by task name. Internal work dispatch only — no external execution, no payments, no trades. Hosted modes fail closed when the broker is unreachable. |
 | `services/backend/services/agent/worker_routes.py` (2026-07-10) | Worker status callbacks (`agent:run_update` service credential). Records run state; executes nothing. |
