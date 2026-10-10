@@ -26,7 +26,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from shared.events.events import Event, EventEnvelopeV2, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.graph.mutation_gateway import GraphMutationGateway
@@ -91,6 +91,14 @@ class AgentExecute(BaseModel):
     # caller layer, pass it through so it lands on the execution record.
     reasoning: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class AgentExecutionOutcome(BaseModel):
+    """Trusted executor callback for a previously started user-agent run."""
+
+    status: str = Field(..., pattern="^(completed|failed)$")
+    output: dict[str, Any] = Field(default_factory=dict)
+    error: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────
@@ -341,4 +349,98 @@ async def read_execution(agent_id: str, execution_id: str, request: Request):
     if record is None or record.get("tenant_id") != tenant.tenant_id \
             or record.get("agent_id") != agent_id:
         raise NotFoundError("Execution")
+    return APIResponse(data=record).to_dict()
+
+
+@router.post("/{agent_id}/executions/{execution_id}/status")
+async def update_execution_status(
+    agent_id: str,
+    execution_id: str,
+    body: AgentExecutionOutcome,
+    request: Request,
+    producer: EventProducer = Depends(get_producer),
+):
+    """Persist and publish an authoritative executor outcome.
+
+    Only a worker credential with ``agent:run_update`` may finalize a run.
+    Repeated callbacks for the same terminal state are idempotent; a terminal
+    outcome cannot be rewritten to a conflicting state.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("agent:run_update")
+
+    record = await _executions.find_by_id(execution_id)
+    if (
+        record is None
+        or record.get("tenant_id") != tenant.tenant_id
+        or record.get("agent_id") != agent_id
+    ):
+        raise NotFoundError("Execution")
+    terminal = record.get("status") in {"completed", "failed"}
+    if terminal:
+        if record.get("status") != body.status:
+            raise ConflictError("Execution already has a different terminal outcome")
+        if record.get("outcome_event_published"):
+            return APIResponse(data=record).to_dict()
+    elif record.get("status") != "running":
+        raise ConflictError("Only a running execution can be finalized")
+
+    from services.agent.runtime_repository import sanitize_payload, utc_now
+
+    if not terminal:
+        now = utc_now()
+        output = sanitize_payload(body.output)
+        error = sanitize_payload(body.error)
+        outcome_event_id = str(uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"aether:agent-execution:{tenant.tenant_id}:{execution_id}:{body.status}",
+        ))
+        record = await _executions.update(execution_id, {
+            "status": body.status,
+            "output": output,
+            "error": error if body.status == "failed" else None,
+            "ended_at": now,
+            "outcome_event_id": outcome_event_id,
+            "outcome_event_published": False,
+        })
+    else:
+        error = dict(record.get("error") or {})
+        if not record.get("outcome_event_id"):
+            record = await _executions.update(execution_id, {
+                "outcome_event_id": str(uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"aether:agent-execution:{tenant.tenant_id}:{execution_id}:{body.status}",
+                )),
+                "outcome_event_published": False,
+            })
+    config = await _configs.find_by_id(agent_id) or {}
+    owner_entity_id = str(config.get("owner_entity_id") or "")
+    failed = body.status == "failed"
+    lifecycle = Event(
+        topic=Topic.AGENT_EXECUTION_FAILED if failed else Topic.AGENT_EXECUTION_COMPLETED,
+        tenant_id=tenant.tenant_id,
+        event_id=record.get("outcome_event_id"),
+        source_service="agents",
+        payload={
+            "agent_id": agent_id,
+            "execution_id": execution_id,
+            "delegation_id": record.get("delegation_id"),
+            "action": (record.get("input_snapshot") or {}).get("action"),
+            "resource": (record.get("input_snapshot") or {}).get("resource"),
+            "outcome": "failure" if failed else "success",
+            "failure_reason": error.get("code", "executor_failed") if failed else None,
+        },
+    )
+    if owner_entity_id:
+        lifecycle = lifecycle.with_v2(EventEnvelopeV2(
+            actor={"entity_id": agent_id, "entity_type": "agent"},
+            beneficiary={"entity_id": owner_entity_id, "entity_type": "human"},
+            delegation={
+                "delegation_id": record.get("delegation_id"),
+                "granted_by_entity_id": owner_entity_id,
+            },
+            causality={"triggered_by_event_id": record.get("triggered_by_event_id")},
+        ))
+    await producer.publish(lifecycle)
+    record = await _executions.update(execution_id, {"outcome_event_published": True})
     return APIResponse(data=record).to_dict()

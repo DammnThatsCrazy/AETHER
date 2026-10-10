@@ -123,6 +123,16 @@ refs. Reconcile those refs with the existing domain-specific payment, x402,
 stablecoin, commerce, and derivatives contracts before introducing a shared
 cross-domain operation identity.
 
+**Implementation status (October 10, 2026):** user-agent executions now have a
+worker-only status callback guarded by `agent:run_update`. It verifies tenant,
+agent, and execution ownership; persists terminal status and sanitized output;
+rejects conflicting terminal rewrites; and publishes the existing
+server-authored completed/failed lifecycle topics with stable event identity.
+This connects the executor callback seam to the existing lifecycle mapper and
+Agent 360 data sources. A production executor integration and settlement
+reconciliation remain open; execution completion alone does not establish
+economic value or payment settlement.
+
 ### Slice 3 — Evidence-backed customer surfaces
 
 Expose the verified operation chain through existing graph and temporal reads,
