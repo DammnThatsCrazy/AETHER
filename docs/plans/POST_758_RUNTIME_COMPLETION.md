@@ -135,17 +135,16 @@ are the supported customer surfaces until such identity evidence is available.
 
 ### Slice 0 — Capability and work-order traceability
 
-The original 72-work-order inventory is not present in this repository or the
-available conversation context. Its exact item names and IDs therefore cannot
-be reconciled yet. Do not fabricate replacement rows or claim a complete
-traceability audit. Once the original list is restored, create one row per
-source item and map it to the current owner, runtime reachability, the eight
-runtime gaps above, and the three priorities below. Dispositions are
-`implemented_and_reachable`, `implemented_but_unproven`, `disconnected`,
-`missing`, or `superseded`. Each row must carry an evidence path, next action,
-dependency, and acceptance criterion. Existing implementations remain
-authoritative where they already own the capability. Until then, this program
-tracks the eight gaps and three priorities as the available source of truth.
+The referenced **“Analyze Samsung Crypto SDK”** chat contains the six program
+tables and their item descriptions. The response labels them 72 work orders,
+but the listed IDs enumerate 67 (CF-01–07 and UO/IG/IP/TS/CR-01–12). The
+reconciliation and grouped implementation plan are in
+[OLYMPUS_AETHER_WORK_ORDER_REBASELINE.md](OLYMPUS_AETHER_WORK_ORDER_REBASELINE.md).
+Do not fabricate the five unlisted items or claim the 72-item inventory is
+complete until the source list is reconciled. Preserve each recovered ID as a
+capability reference, then derive implementation tasks by canonical owner,
+runtime gap, dependency and acceptance evidence rather than creating one PR
+per item.
 
 ### Slice 1 — Mobile source observation to economic graph
 
