@@ -22,7 +22,7 @@ reviewed_source_commits:
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:79363dfaa2103283b55b0e0afbe58f2b5fe70db35d3307f58985884f59546701"
-  ".github/workflows/staging-lifecycle.yml": "sha256:8b9cc6e514c5d67739f7bda05e17c67745e8bfb5d0d0d37ca022c2289381451c"
+  ".github/workflows/staging-lifecycle.yml": "sha256:e95cad6f31907115d5534734a9feaf9f69c405e3b4329b60fb904c075be90c02"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"

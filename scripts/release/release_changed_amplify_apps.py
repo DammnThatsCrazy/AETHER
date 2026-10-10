@@ -36,7 +36,9 @@ ACTIVE_JOB_STATUSES = frozenset({"CREATED", "PENDING", "PROVISIONING", "QUEUED",
 # Amplify's reply when another job started between our check and start-job.
 CONCURRENT_JOB_MESSAGE = "already have pending or running jobs"
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-DEFAULT_BRANCH = "main"
+# The staging profile's apps build from the persistent staging branch (this script
+# runs only after a staging apply).
+DEFAULT_BRANCH = "staging"
 
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
 

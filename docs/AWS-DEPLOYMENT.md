@@ -54,7 +54,7 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:179a285bb3252c8c3b9d01e189afb910348c52a4356862abf2c277465fda034d"
   ".github/workflows/deploy.yml": "sha256:1ed685584a46b685af03666e75c483d0235ba3ea7d285bbb65bd6c84ddeb565a"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:8b9cc6e514c5d67739f7bda05e17c67745e8bfb5d0d0d37ca022c2289381451c"
+  ".github/workflows/staging-lifecycle.yml": "sha256:e95cad6f31907115d5534734a9feaf9f69c405e3b4329b60fb904c075be90c02"
   ".github/workflows/staging-state-reconcile.yml": "sha256:524912b39e541837d9cdb3b19d3e10053247ada863f50f07302cecc921c3a3e8"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6db80a1a80262cc60923789c40b233659f495dd026d54585bf20c61db36ddcb2"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
@@ -87,7 +87,7 @@ source_hashes:
   "scripts/release/check_staging_task_definition_contract.py": "sha256:c50654e19fa30de91b78dc954f967301a28aa45c8cef2bbf449eeca5f96f11e9"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
-  "scripts/release/release_changed_amplify_apps.py": "sha256:cc584d65fd667420713cbe2de6a3ddca46e72f980c921828707ca9239940b6d2"
+  "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
@@ -656,7 +656,7 @@ verified `*.staging.olympuslabsml.com` association of the one web app; the
 import-only state reconciliation workflow adopts it before the reviewed plan
 (its repair never adds `app`, which Terraform moves to the web app after
 deleting the retired product app's association). If an existing association is missing
-one of its reviewed `main` hosts, the lifecycle passes the explicit `REPAIR-STAGING-AMPLIFY` token;
+one of its reviewed staging hosts (served from the `staging` branch), the lifecycle passes the explicit `REPAIR-STAGING-AMPLIFY` token;
 reconciliation preserves the association, adds only the missing reviewed
 mapping, waits for `AVAILABLE` and a live mapping, and then imports state. A
 mapping is live when Amplify marks it verified or its public CNAME already

@@ -54,7 +54,7 @@ on:
         type: string
         required: false
       intended_release_sha:
-        description: Exact main SHA the reviewed release/plan must contain
+        description: Exact staging SHA the reviewed release/plan must contain
         type: string
         required: false
       plan_run_id:

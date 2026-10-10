@@ -61,7 +61,7 @@ on:
         type: string
         required: false
       intended_release_sha:
-        description: "Merged-main SHA the approved delivery run must contain (defaults to this workflow revision)"
+        description: "Merged-staging SHA the approved delivery run must contain (defaults to this workflow revision)"
         type: string
         required: false
       plan_run_id:
