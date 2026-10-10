@@ -7,8 +7,8 @@ asserts that the resulting graph matches the expected vertex/edge/layer counts.
 A non-zero diff exits 1 (for CI use).
 
 Usage:
-    python scripts/graph/graph_rebuild_validation.py
-    python scripts/graph/graph_rebuild_validation.py --fixture tests/fixtures/graph/canonical_graph.json
+    python scripts/graph_tools/graph_rebuild_validation.py
+    python scripts/graph_tools/graph_rebuild_validation.py --fixture tests/fixtures/graph/canonical_graph.json
 """
 
 from __future__ import annotations

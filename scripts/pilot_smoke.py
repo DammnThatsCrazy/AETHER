@@ -50,7 +50,7 @@ from scripts.lib.preflight_results import (  # noqa: E402
 FOUNDING = ROOT / "config" / "founding_tenant_release.yaml"
 ROLES_PY = BACKEND_ROOT / "workers" / "runtime" / "roles.py"
 CONSUMER_SPECS = BACKEND_ROOT / "workers" / "runtime" / "consumer_specs.py"
-GRAPH_REPLAY = ROOT / "scripts" / "graph" / "replay_relationship_layers.py"
+GRAPH_REPLAY = ROOT / "scripts" / "graph_tools" / "replay_relationship_layers.py"
 GOLD_SCHEMA = ROOT / "infra" / "clickhouse" / "schemas" / "008_measurement_gold.sql"
 CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
 DEFAULT_MANIFEST = ROOT / "config" / "pilot" / "examples" / "usdc-observation.yaml"
@@ -98,7 +98,7 @@ def cap_graph(surface) -> CheckResult:
                           capture_output=True, text=True, timeout=180)
     if proc.returncode != 0:
         return failed("cap:graph", "in-memory relationship-layer replay failed",
-                      "debug scripts/graph/replay_relationship_layers.py")
+                      "debug scripts/graph_tools/replay_relationship_layers.py")
     role_ok = _has_role(surface, "graph-writer") and _has_consumer(surface, "graph-profile-projection")
     return (passed("cap:graph", "relationship-layer replay OK + graph-writer wired")
             if role_ok else failed("cap:graph", "graph replay ran but writer/consumer wiring missing"))

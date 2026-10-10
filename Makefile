@@ -572,10 +572,10 @@ graph-test: ## Run all graph tests (root-level + backend tests)
 	python -m pytest tests/graph/ "services/api/tests/graph/" -v --tb=short
 
 graph-replay: ## Run synthetic graph replay workload (in-memory, no Neptune required)
-	python scripts/graph/replay_relationship_layers.py
+	python scripts/graph_tools/replay_relationship_layers.py
 
 graph-release-check: ## Machine-readable graph release gate (exits 0 on pass, 1 on fail)
-	python scripts/graph/check_graph_release_gate.py
+	python scripts/graph_tools/check_graph_release_gate.py
 
 graph-docs-check: ## Docs drift check scoped to graph source files
 	python scripts/docs_drift.py --strict

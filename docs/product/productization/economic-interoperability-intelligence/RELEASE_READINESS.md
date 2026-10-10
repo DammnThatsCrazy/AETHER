@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [scripts/production_status.py]
 canonical_owner: platform@aether
 source_hashes:
-  "scripts/production_status.py": "sha256:6b6badca4741087308e025685c49157426436c57e76ea785b40b5774aaac221b"
+  "scripts/production_status.py": "sha256:a75840ae3586cd542c5ef9231927f3c1a15441742947f460987693e426bc4aab"
 ---
 
 # Release Readiness

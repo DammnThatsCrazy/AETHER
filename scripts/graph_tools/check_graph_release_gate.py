@@ -2,7 +2,7 @@
 """
 Graph Release Gate — exits 0 if all invariants pass, exits 1 with failure list.
 
-Run: python scripts/graph/check_graph_release_gate.py
+Run: python scripts/graph_tools/check_graph_release_gate.py
 
 Checks:
 1.  All EdgeType class attributes are mapped in _EDGE_LAYER_MAP (exhaustiveness)

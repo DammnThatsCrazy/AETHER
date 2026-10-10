@@ -7,9 +7,9 @@ edges through the in-memory GraphClient (no Neptune required), and reports
 per-layer statistics and write latency.
 
 Usage:
-    python scripts/graph/replay_relationship_layers.py
-    python scripts/graph/replay_relationship_layers.py --tenants 5 --users 100
-    python scripts/graph/replay_relationship_layers.py --tenants 1 --users 10 --quiet
+    python scripts/graph_tools/replay_relationship_layers.py
+    python scripts/graph_tools/replay_relationship_layers.py --tenants 5 --users 100
+    python scripts/graph_tools/replay_relationship_layers.py --tenants 1 --users 10 --quiet
 """
 
 from __future__ import annotations

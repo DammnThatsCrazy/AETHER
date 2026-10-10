@@ -35,6 +35,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/explore` | primary graph workspace, maturity, lenses, and inspector | yes | A | A | A | A | I | `explore-workspace.test.tsx`, `graph-page.test.tsx` |
 | `/compare` | comparison definitions, runs, preflight, findings | no | I | A | I | A | I | `comparison-page.test.tsx` |
 | `/noesis` | Noesis conversations and answers | no | I | A | A | A | I | `noesis-page.test.tsx`, `noesis-workspace.test.tsx` |
+| `/agents/:agentId` | Agent 360 profile and evidence-linked operations | no | I | — | I | — | — | gap |
 | `/settings` | tenant profile, notifications, keys | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/notifications` | notification preferences | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/data-exchange` | data-exchange settings, capabilities, artifact history | no | I | A | A | A | A | `data-exchange-section.test.tsx`, `data-exchange.spec.ts` |
@@ -177,15 +178,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 148 data-bearing route patterns above: 61 Aether and
+The denominator is the 149 data-bearing route patterns above: 62 Aether and
 87 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 21 / 148 (14.2%) | tracked for every route |
-| Empty-state assertions | 135 / 148 (91.2%) | at least 90% overall |
-| Error/unavailable assertions | 115 / 148 (77.7%) | 100% of critical routes |
-| Populated-state assertions | 43 / 148 (29.1%) | tracked for every route |
+| Explicit loading-state assertions | 21 / 149 (14.1%) | tracked for every route |
+| Empty-state assertions | 135 / 149 (90.6%) | at least 90% overall |
+| Error/unavailable assertions | 115 / 149 (77.2%) | 100% of critical routes |
+| Populated-state assertions | 43 / 149 (28.9%) | tracked for every route |
 | Critical routes with both empty and error assertions | 68 / 68 (100%) | 68 / 68 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

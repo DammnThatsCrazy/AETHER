@@ -276,7 +276,10 @@ class _FakeProducer:
 
 
 def _mk_body(batch_mod, event_ids, event_type=None):
-    et = event_type or sorted(batch_mod.CANONICAL_EVENT_TYPES)[0]
+    from ingestion.ingestion.generated_registry import SDK_EMITTABLE_EVENT_TYPES
+
+    # Only SDK-emittable types are accepted from clients; pick one deterministically.
+    et = event_type or sorted(SDK_EMITTABLE_EVENT_TYPES & set(batch_mod.CANONICAL_EVENT_TYPES))[0]
     events = [
         batch_mod.BaseEvent(
             id=eid,
