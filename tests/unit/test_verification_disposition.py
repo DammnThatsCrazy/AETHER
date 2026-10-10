@@ -124,7 +124,10 @@ def test_backend_change_selects_backend_build_without_unrelated_apps() -> None:
     }
 
 
-def test_unresolved_executable_change_blocks_pr_only_disposition() -> None:
+def test_unresolved_executable_change_blocks_pr_only_disposition(monkeypatch) -> None:
+    import scripts.lib.impact_graph as impact_module
+
+    monkeypatch.setattr(impact_module, "_path_exists", lambda path: path == "new-runtime-surface/worker.py")
     result = build_disposition(["new-runtime-surface/worker.py"])
 
     assert result["status"] == "BLOCKED"

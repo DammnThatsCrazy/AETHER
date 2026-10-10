@@ -80,7 +80,7 @@ class SmokeRunner:
 
         The staging and production profiles enforce the envelope fields for
         release-critical event families.  Keeping this helper aligned with
-        ``services.backend.services.ingestion.batch.BatchRequest`` prevents the
+        ``services.api.ingestion.ingestion.batch.BatchRequest`` prevents the
         smoke test from probing a retired ``/v1/sdk/events`` alias or sending
         legacy fields that the canonical ingestion route rejects.
         """

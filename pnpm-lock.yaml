@@ -76,6 +76,198 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
 
+  apps/aether-web:
+    dependencies:
+      '@aether/shared':
+        specifier: '*'
+        version: link:../../packages/shared
+      '@aether/ui':
+        specifier: '*'
+        version: link:../../packages/ui/core
+      '@aether/web':
+        specifier: '*'
+        version: link:../../packages/sdk/web
+      '@tanstack/react-virtual':
+        specifier: ^3.10.0
+        version: 3.14.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      cytoscape:
+        specifier: ^3.30.0
+        version: 3.34.3
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+      react-router-dom:
+        specifier: ^7.18.2
+        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      '@auth0/auth0-react':
+        specifier: ^2.16.2
+        version: 2.26.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@playwright/test':
+        specifier: ^1.48.0
+        version: 1.63.0
+      '@testing-library/jest-dom':
+        specifier: ^6.4.0
+        version: 6.10.0(@testing-library/dom@10.4.2)
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@testing-library/user-event':
+        specifier: ^14.5.0
+        version: 14.6.7(@testing-library/dom@10.4.2)
+      '@types/cytoscape':
+        specifier: ^3.21.0
+        version: 3.31.0
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.6.1(postcss@8.5.28)
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@1.21.7)
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+      msw:
+        specifier: ^2.14.6
+        version: 2.15.0(@types/node@20.19.43)(typescript@5.9.3)
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.28
+      prettier:
+        specifier: ^3.4.0
+        version: 3.9.7
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
+
+  apps/demo:
+    dependencies:
+      '@aether/shared':
+        specifier: '*'
+        version: link:../../packages/shared
+      '@aether/ui':
+        specifier: '*'
+        version: link:../../packages/ui/core
+      '@aether/web':
+        specifier: '*'
+        version: link:../../packages/sdk/web
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+    devDependencies:
+      '@testing-library/jest-dom':
+        specifier: ^6.4.0
+        version: 6.10.0(@testing-library/dom@10.4.2)
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.6.1(postcss@8.5.28)
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.28
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
+
+  apps/docs:
+    dependencies:
+      '@mdx-js/rollup':
+        specifier: ^3.1.1
+        version: 3.1.1(rollup@4.63.3)
+      '@types/mdx':
+        specifier: ^2.0.13
+        version: 2.0.14
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+      react-router-dom:
+        specifier: ^7.0.0
+        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      remark-frontmatter:
+        specifier: ^5.0.0
+        version: 5.0.0
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
+      remark-mdx-frontmatter:
+        specifier: ^4.0.0
+        version: 4.0.0
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@1.21.7)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
+
   apps/kyber-mobile:
     dependencies:
       '@aether/mobile-core':
@@ -106,6 +298,465 @@ importers:
       typescript:
         specifier: ^5.3.0
         version: 5.9.3
+
+  apps/kyber-web:
+    dependencies:
+      '@aether/shared':
+        specifier: '*'
+        version: link:../../packages/shared
+      '@aether/ui':
+        specifier: '*'
+        version: link:../../packages/ui/core
+      '@aether/web':
+        specifier: '*'
+        version: link:../../packages/sdk/web
+      clsx:
+        specifier: ^2.1.0
+        version: 2.1.1
+      cytoscape:
+        specifier: ^3.30.0
+        version: 3.34.3
+      date-fns:
+        specifier: ^4.1.0
+        version: 4.4.0
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+      react-router-dom:
+        specifier: ^7.18.2
+        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      recharts:
+        specifier: ^2.15.0
+        version: 2.15.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      tailwind-merge:
+        specifier: ^2.6.0
+        version: 2.6.1
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      '@auth0/auth0-react':
+        specifier: ^2.16.2
+        version: 2.26.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@playwright/test':
+        specifier: ^1.48.0
+        version: 1.63.0
+      '@testing-library/jest-dom':
+        specifier: ^6.6.0
+        version: 6.10.0(@testing-library/dom@10.4.2)
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@testing-library/user-event':
+        specifier: ^14.5.0
+        version: 14.6.7(@testing-library/dom@10.4.2)
+      '@types/cytoscape':
+        specifier: ^3.21.0
+        version: 3.31.0
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.6.1(postcss@8.5.28)
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@1.21.7)
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+      msw:
+        specifier: ^2.6.0
+        version: 2.15.0(@types/node@20.19.43)(typescript@5.9.3)
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.28
+      prettier:
+        specifier: ^3.4.0
+        version: 3.9.7
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
+      tsx:
+        specifier: ^4.19.0
+        version: 4.23.13
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
+
+  apps/marketing-aether:
+    dependencies:
+      '@aether/shared':
+        specifier: '*'
+        version: link:../../packages/shared
+      '@aether/ui':
+        specifier: '*'
+        version: link:../../packages/ui/core
+      '@olympus/brand':
+        specifier: '*'
+        version: link:../../packages/ui/brand
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+      react-router-dom:
+        specifier: ^7.18.2
+        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+    devDependencies:
+      '@testing-library/jest-dom':
+        specifier: ^6.4.0
+        version: 6.10.0(@testing-library/dom@10.4.2)
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.6.1(postcss@8.5.28)
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.28
+      prettier:
+        specifier: ^3.4.0
+        version: 3.9.7
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
+
+  apps/marketing-olympus:
+    dependencies:
+      '@aether/ui':
+        specifier: '*'
+        version: link:../../packages/ui/core
+      '@olympus/brand':
+        specifier: '*'
+        version: link:../../packages/ui/brand
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+      react-router-dom:
+        specifier: ^7.18.2
+        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+    devDependencies:
+      '@testing-library/jest-dom':
+        specifier: ^6.4.0
+        version: 6.10.0(@testing-library/dom@10.4.2)
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.6.1(postcss@8.5.28)
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.28
+      prettier:
+        specifier: ^3.4.0
+        version: 3.9.7
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
+
+  apps/public-site:
+    dependencies:
+      '@olympus/brand':
+        specifier: '*'
+        version: link:../../packages/ui/brand
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+      react-router-dom:
+        specifier: ^7.18.2
+        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+    devDependencies:
+      '@testing-library/jest-dom':
+        specifier: ^6.4.0
+        version: 6.10.0(@testing-library/dom@10.4.2)
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@testing-library/user-event':
+        specifier: ^14.5.0
+        version: 14.6.7(@testing-library/dom@10.4.2)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.6.1(postcss@8.5.28)
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.28
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
+
+  apps/status:
+    dependencies:
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.0
+        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
+
+  packages/config:
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
+
+  packages/sdk/mobile-core:
+    dependencies:
+      '@aether/shared':
+        specifier: '*'
+        version: link:../../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+
+  packages/sdk/react-native:
+    dependencies:
+      '@aether/shared':
+        specifier: ^0.1.0-alpha.0
+        version: link:../../shared
+      '@react-native-async-storage/async-storage':
+        specifier: '>=1.0.0'
+        version: 3.1.1(react-native@0.73.11(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react@18.2.0))(react@18.2.0)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.0.0
+        version: 18.2.79
+      react:
+        specifier: ^18.0.0
+        version: 18.2.0
+      react-native:
+        specifier: ^0.73.0
+        version: 0.73.11(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react@18.2.0)
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+
+  packages/sdk/server:
+    devDependencies:
+      '@aether/shared':
+        specifier: '*'
+        version: link:../../shared
+      '@vitest/coverage-v8':
+        specifier: ^1.6.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
+
+  packages/sdk/web:
+    dependencies:
+      '@aether/shared':
+        specifier: ^0.1.0-alpha.0
+        version: link:../../shared
+      react:
+        specifier: '>=18.0.0'
+        version: 18.2.0
+    devDependencies:
+      '@types/react':
+        specifier: ^18.0.0
+        version: 18.2.79
+
+  packages/shared:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^1.6.0
+        version: 1.6.1(vitest@1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
+
+  packages/ui/brand:
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
+
+  packages/ui/core:
+    dependencies:
+      '@aether/shared':
+        specifier: '*'
+        version: link:../../shared
+      '@olympus/brand':
+        specifier: '*'
+        version: link:../brand
+      clsx:
+        specifier: ^2.1.0
+        version: 2.1.1
+      react:
+        specifier: '>=19.0.0'
+        version: 19.3.0
+      tailwind-merge:
+        specifier: ^2.6.0
+        version: 2.6.1
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      cytoscape:
+        specifier: ^3.30.0
+        version: 3.34.3
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
+
+  packages/ui/marketing:
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
+
+  packages/ui/mobile:
+    devDependencies:
+      '@types/react':
+        specifier: ~18.2.0
+        version: 18.2.79
+      react:
+        specifier: 18.2.0
+        version: 18.2.0
+      react-native:
+        specifier: 0.74.0
+        version: 0.74.0(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@18.2.79)(react@18.2.0)
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
   tests/e2e/proof/apps/android:
     dependencies:
@@ -265,595 +916,6 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  apps/aether-web:
-    dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../packages/shared
-      '@aether/ui':
-        specifier: '*'
-        version: link:../../packages/ui/core
-      '@aether/web':
-        specifier: '*'
-        version: link:../../packages/sdk/web
-      '@tanstack/react-virtual':
-        specifier: ^3.10.0
-        version: 3.14.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      cytoscape:
-        specifier: ^3.30.0
-        version: 3.34.3
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
-      react-router-dom:
-        specifier: ^7.18.2
-        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      zod:
-        specifier: ^3.23.0
-        version: 3.25.76
-    devDependencies:
-      '@auth0/auth0-react':
-        specifier: ^2.16.2
-        version: 2.26.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@playwright/test':
-        specifier: ^1.48.0
-        version: 1.63.0
-      '@testing-library/jest-dom':
-        specifier: ^6.4.0
-        version: 6.10.0(@testing-library/dom@10.4.2)
-      '@testing-library/react':
-        specifier: ^16.0.0
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@testing-library/user-event':
-        specifier: ^14.5.0
-        version: 14.6.7(@testing-library/dom@10.4.2)
-      '@types/cytoscape':
-        specifier: ^3.21.0
-        version: 3.31.0
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
-      autoprefixer:
-        specifier: ^10.4.0
-        version: 10.6.1(postcss@8.5.28)
-      eslint:
-        specifier: ^9.0.0
-        version: 9.39.5(jiti@1.21.7)
-      jsdom:
-        specifier: ^25.0.0
-        version: 25.0.1
-      msw:
-        specifier: ^2.14.6
-        version: 2.15.0(@types/node@20.19.43)(typescript@5.9.3)
-      postcss:
-        specifier: ^8.4.0
-        version: 8.5.28
-      prettier:
-        specifier: ^3.4.0
-        version: 3.9.7
-      tailwindcss:
-        specifier: ^3.4.0
-        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
-
-  apps/marketing-aether:
-    dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../packages/shared
-      '@aether/ui':
-        specifier: '*'
-        version: link:../../packages/ui/core
-      '@olympus/brand':
-        specifier: '*'
-        version: link:../../packages/ui/brand
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
-      react-router-dom:
-        specifier: ^7.18.2
-        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-    devDependencies:
-      '@testing-library/jest-dom':
-        specifier: ^6.4.0
-        version: 6.10.0(@testing-library/dom@10.4.2)
-      '@testing-library/react':
-        specifier: ^16.0.0
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
-      autoprefixer:
-        specifier: ^10.4.0
-        version: 10.6.1(postcss@8.5.28)
-      jsdom:
-        specifier: ^25.0.0
-        version: 25.0.1
-      postcss:
-        specifier: ^8.4.0
-        version: 8.5.28
-      prettier:
-        specifier: ^3.4.0
-        version: 3.9.7
-      tailwindcss:
-        specifier: ^3.4.0
-        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
-
-  apps/demo:
-    dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../packages/shared
-      '@aether/ui':
-        specifier: '*'
-        version: link:../../packages/ui/core
-      '@aether/web':
-        specifier: '*'
-        version: link:../../packages/sdk/web
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
-    devDependencies:
-      '@testing-library/jest-dom':
-        specifier: ^6.4.0
-        version: 6.10.0(@testing-library/dom@10.4.2)
-      '@testing-library/react':
-        specifier: ^16.0.0
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
-      autoprefixer:
-        specifier: ^10.4.0
-        version: 10.6.1(postcss@8.5.28)
-      jsdom:
-        specifier: ^25.0.0
-        version: 25.0.1
-      postcss:
-        specifier: ^8.4.0
-        version: 8.5.28
-      tailwindcss:
-        specifier: ^3.4.0
-        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
-
-  apps/docs:
-    dependencies:
-      '@mdx-js/rollup':
-        specifier: ^3.1.1
-        version: 3.1.1(rollup@4.63.3)
-      '@types/mdx':
-        specifier: ^2.0.13
-        version: 2.0.14
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
-      react-router-dom:
-        specifier: ^7.0.0
-        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      remark-frontmatter:
-        specifier: ^5.0.0
-        version: 5.0.0
-      remark-gfm:
-        specifier: ^4.0.1
-        version: 4.0.1
-      remark-mdx-frontmatter:
-        specifier: ^4.0.0
-        version: 4.0.0
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
-      eslint:
-        specifier: ^9.0.0
-        version: 9.39.5(jiti@1.21.7)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^1.6.0
-        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
-
-  apps/kyber-web:
-    dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../packages/shared
-      '@aether/ui':
-        specifier: '*'
-        version: link:../../packages/ui/core
-      '@aether/web':
-        specifier: '*'
-        version: link:../../packages/sdk/web
-      clsx:
-        specifier: ^2.1.0
-        version: 2.1.1
-      cytoscape:
-        specifier: ^3.30.0
-        version: 3.34.3
-      date-fns:
-        specifier: ^4.1.0
-        version: 4.4.0
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
-      react-router-dom:
-        specifier: ^7.18.2
-        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      recharts:
-        specifier: ^2.15.0
-        version: 2.15.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      tailwind-merge:
-        specifier: ^2.6.0
-        version: 2.6.1
-      zod:
-        specifier: ^3.23.0
-        version: 3.25.76
-    devDependencies:
-      '@auth0/auth0-react':
-        specifier: ^2.16.2
-        version: 2.26.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@playwright/test':
-        specifier: ^1.48.0
-        version: 1.63.0
-      '@testing-library/jest-dom':
-        specifier: ^6.6.0
-        version: 6.10.0(@testing-library/dom@10.4.2)
-      '@testing-library/react':
-        specifier: ^16.0.0
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@testing-library/user-event':
-        specifier: ^14.5.0
-        version: 14.6.7(@testing-library/dom@10.4.2)
-      '@types/cytoscape':
-        specifier: ^3.21.0
-        version: 3.31.0
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
-      autoprefixer:
-        specifier: ^10.4.0
-        version: 10.6.1(postcss@8.5.28)
-      eslint:
-        specifier: ^9.0.0
-        version: 9.39.5(jiti@1.21.7)
-      jsdom:
-        specifier: ^25.0.0
-        version: 25.0.1
-      msw:
-        specifier: ^2.6.0
-        version: 2.15.0(@types/node@20.19.43)(typescript@5.9.3)
-      postcss:
-        specifier: ^8.4.0
-        version: 8.5.28
-      prettier:
-        specifier: ^3.4.0
-        version: 3.9.7
-      tailwindcss:
-        specifier: ^3.4.0
-        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
-      tsx:
-        specifier: ^4.19.0
-        version: 4.23.13
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^1.6.0
-        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
-
-  packages/ui/marketing:
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-
-  apps/marketing-olympus:
-    dependencies:
-      '@aether/ui':
-        specifier: '*'
-        version: link:../../packages/ui/core
-      '@olympus/brand':
-        specifier: '*'
-        version: link:../../packages/ui/brand
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
-      react-router-dom:
-        specifier: ^7.18.2
-        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-    devDependencies:
-      '@testing-library/jest-dom':
-        specifier: ^6.4.0
-        version: 6.10.0(@testing-library/dom@10.4.2)
-      '@testing-library/react':
-        specifier: ^16.0.0
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
-      autoprefixer:
-        specifier: ^10.4.0
-        version: 10.6.1(postcss@8.5.28)
-      jsdom:
-        specifier: ^25.0.0
-        version: 25.0.1
-      postcss:
-        specifier: ^8.4.0
-        version: 8.5.28
-      prettier:
-        specifier: ^3.4.0
-        version: 3.9.7
-      tailwindcss:
-        specifier: ^3.4.0
-        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
-
-  packages/ui/core:
-    dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../shared
-      '@olympus/brand':
-        specifier: '*'
-        version: link:../brand
-      clsx:
-        specifier: ^2.1.0
-        version: 2.1.1
-      react:
-        specifier: '>=19.0.0'
-        version: 19.3.0
-      tailwind-merge:
-        specifier: ^2.6.0
-        version: 2.6.1
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      cytoscape:
-        specifier: ^3.30.0
-        version: 3.34.3
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.6.0
-        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
-
-  apps/public-site:
-    dependencies:
-      '@olympus/brand':
-        specifier: '*'
-        version: link:../../packages/ui/brand
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
-      react-router-dom:
-        specifier: ^7.18.2
-        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-    devDependencies:
-      '@testing-library/jest-dom':
-        specifier: ^6.4.0
-        version: 6.10.0(@testing-library/dom@10.4.2)
-      '@testing-library/react':
-        specifier: ^16.0.0
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@testing-library/user-event':
-        specifier: ^14.5.0
-        version: 14.6.7(@testing-library/dom@10.4.2)
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
-      autoprefixer:
-        specifier: ^10.4.0
-        version: 10.6.1(postcss@8.5.28)
-      jsdom:
-        specifier: ^25.0.0
-        version: 25.0.1
-      postcss:
-        specifier: ^8.4.0
-        version: 8.5.28
-      tailwindcss:
-        specifier: ^3.4.0
-        version: 3.4.19(tsx@4.23.13)(yaml@2.9.1)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
-
-  apps/status:
-    dependencies:
-      react:
-        specifier: ^19.0.0
-        version: 19.3.0
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
-
-  packages/ui/brand:
-    devDependencies:
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.6.0
-        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
-
-  packages/config:
-    devDependencies:
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.0
-        version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
-
-  packages/sdk/mobile-core:
-    dependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../shared
-    devDependencies:
-      typescript:
-        specifier: ^5.3.0
-        version: 5.9.3
-
-  packages/ui/mobile:
-    devDependencies:
-      '@types/react':
-        specifier: ~18.2.0
-        version: 18.2.79
-      react:
-        specifier: 18.2.0
-        version: 18.2.0
-      react-native:
-        specifier: 0.74.0
-        version: 0.74.0(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@18.2.79)(react@18.2.0)
-      typescript:
-        specifier: ^5.3.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.6.0
-        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
-
   tests/e2e/proof/packages/contracts:
     dependencies:
       '@aether/shared':
@@ -920,68 +982,6 @@ importers:
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
-
-  packages/sdk/react-native:
-    dependencies:
-      '@aether/shared':
-        specifier: ^0.1.0-alpha.0
-        version: link:../../shared
-      '@react-native-async-storage/async-storage':
-        specifier: '>=1.0.0'
-        version: 3.1.1(react-native@0.73.11(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react@18.2.0))(react@18.2.0)
-    devDependencies:
-      '@types/react':
-        specifier: ^18.0.0
-        version: 18.2.79
-      react:
-        specifier: ^18.0.0
-        version: 18.2.0
-      react-native:
-        specifier: ^0.73.0
-        version: 0.73.11(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react@18.2.0)
-      typescript:
-        specifier: ^5.3.0
-        version: 5.9.3
-
-  packages/sdk/server:
-    devDependencies:
-      '@aether/shared':
-        specifier: '*'
-        version: link:../../shared
-      '@vitest/coverage-v8':
-        specifier: ^1.6.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2))
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.6.0
-        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
-
-  packages/shared:
-    devDependencies:
-      '@vitest/coverage-v8':
-        specifier: ^1.6.0
-        version: 1.6.1(vitest@1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2))
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vitest:
-        specifier: ^1.6.0
-        version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
-
-  packages/sdk/web:
-    dependencies:
-      '@aether/shared':
-        specifier: ^0.1.0-alpha.0
-        version: link:../../shared
-      react:
-        specifier: '>=18.0.0'
-        version: 18.2.0
-    devDependencies:
-      '@types/react':
-        specifier: ^18.0.0
-        version: 18.2.79
 
 packages:
 
