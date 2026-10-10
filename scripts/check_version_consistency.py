@@ -22,9 +22,9 @@ REQUIRED_WORKSPACE_MEMBERS = [
     "packages/shared",
     "packages/web",
     "packages/react-native",
-    "frontend/aether",
-    "frontend/kyber",
-    "frontend/shared",
+    "apps/aether",
+    "apps/kyber",
+    "apps/shared",
 ]
 
 

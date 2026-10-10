@@ -64,12 +64,12 @@ build status for each surface.
 
 | Origin | Surface | Audience | Workspace | Status |
 | --- | --- | --- | --- | --- |
-| `olympuslabsml.com` | Olympus Labs corporate marketing (company, products, research, principles, security, careers, legal) | Public | `frontend/olympus-marketing` | Phases 1–2 + 6 content; **code-complete, not deployed** ([deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)) |
-| `aether.olympuslabsml.com` | Aether public marketing **including the auth routes** (`/login`, `/signup`, `/forgot-password`) | Public | `frontend/aether-marketing` | Phases 1–4 + 6 content; **code-complete, not deployed** ([deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)) |
-| `app.olympuslabsml.com` | Protected Aether tenant application | Authenticated Aether tenants | `frontend/aether` | Existing |
-| `kyber.olympuslabsml.com` | Kyber — Olympus Labs' internal operator application | Olympus workforce only | `frontend/kyber` | Existing |
-| `docs.olympuslabsml.com` | Documentation | Public | `frontend/docs` | Existing |
-| `status.olympuslabsml.com` | Status | Public | `frontend/status` | Code-complete and Amplify/Terraform-wired; live API status remains unverified until credentialed staging |
+| `olympuslabsml.com` | Olympus Labs corporate marketing (company, products, research, principles, security, careers, legal) | Public | `apps/olympus-marketing` | Phases 1–2 + 6 content; **code-complete, not deployed** ([deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)) |
+| `aether.olympuslabsml.com` | Aether public marketing **including the auth routes** (`/login`, `/signup`, `/forgot-password`) | Public | `apps/aether-marketing` | Phases 1–4 + 6 content; **code-complete, not deployed** ([deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)) |
+| `app.olympuslabsml.com` | Protected Aether tenant application | Authenticated Aether tenants | `apps/aether` | Existing |
+| `kyber.olympuslabsml.com` | Kyber — Olympus Labs' internal operator application | Olympus workforce only | `apps/kyber` | Existing |
+| `docs.olympuslabsml.com` | Documentation | Public | `apps/docs` | Existing |
+| `status.olympuslabsml.com` | Status | Public | `apps/status` | Code-complete and Amplify/Terraform-wired; live API status remains unverified until credentialed staging |
 
 The public web provisioning path is now part of the AWS deployment contract.
 The public hosts are `www`, `aether`, `docs`, `app`, and `status`: under
@@ -79,7 +79,7 @@ authoritative DNS.
 
 - **Staging runs one Amplify application**, `AETHER-staging-web` (key
   `aether-marketing`). It builds the unified Olympus + Aether site
-  (`frontend/site`) with the product (`frontend/aether`) under `/app`, and
+  (`apps/site`) with the product (`apps/aether`) under `/app`, and
   serves `aether`, `www`, `docs`, `status` and `app` from one domain
   association. `docs.*`, `status.*` and `app.*` redirect to the site's
   `/docs`, `/status` and `/app` paths on the Aether host, so the product's
@@ -116,12 +116,12 @@ Routes and features mount inside a shell.
 
 | Shell | Public? | Primary purpose | Emotional model | Repository |
 | --- | --- | --- | --- | --- |
-| **Olympus Marketing** | Yes | Corporate site; the parent's face and the place Aether is introduced | Assured, editorial, calm | `frontend/olympus-marketing` |
-| **Aether Marketing** | Yes | Product marketing for Aether; behaves like a read-only intelligence application | Precise, confident, application-like | `frontend/aether-marketing` |
-| **Aether Tenant App** | No (authenticated) | The protected Aether product | Focused, fluent, trustworthy | `frontend/aether` |
-| **Kyber** | No (internal) | Olympus Labs' private operator application | Authoritative, dense, calm under pressure | `frontend/kyber` |
-| **AuthLayout** | Yes | The threshold inside the Aether public experience | Quiet, single-task, low noise | `frontend/aether-marketing` |
-| **Docs Shell** | Yes | Documentation | Neutral, searchable, precise | `frontend/docs` |
+| **Olympus Marketing** | Yes | Corporate site; the parent's face and the place Aether is introduced | Assured, editorial, calm | `apps/olympus-marketing` |
+| **Aether Marketing** | Yes | Product marketing for Aether; behaves like a read-only intelligence application | Precise, confident, application-like | `apps/aether-marketing` |
+| **Aether Tenant App** | No (authenticated) | The protected Aether product | Focused, fluent, trustworthy | `apps/aether` |
+| **Kyber** | No (internal) | Olympus Labs' private operator application | Authoritative, dense, calm under pressure | `apps/kyber` |
+| **AuthLayout** | Yes | The threshold inside the Aether public experience | Quiet, single-task, low noise | `apps/aether-marketing` |
+| **Docs Shell** | Yes | Documentation | Neutral, searchable, precise | `apps/docs` |
 
 AuthLayout is a first-class *layout* rather than a shell: it renders inside the
 Aether public experience but drops the marketing navigation and decoration so
@@ -172,7 +172,7 @@ One token set serves every shell. Canonical sources:
 
 | Concern | Source |
 | --- | --- |
-| Color, surface, elevation, borders, focus, radius, spacing | `packages/brand/src/tokens/` and `frontend/shared/src/styles/tokens.css` (CSS variables) |
+| Color, surface, elevation, borders, focus, radius, spacing | `packages/brand/src/tokens/` and `apps/shared/src/styles/tokens.css` (CSS variables) |
 | Typography | Geist (product sans), Geist Mono (IDs, structured data, code, operational labels) |
 | Motion | `packages/brand/src/motion/` |
 | Responsive behavior | `packages/brand/src/responsive/` |
@@ -207,7 +207,7 @@ not invented per-feature.
 ### 5.1 The public-to-private threshold
 
 The threshold between public product and protected tenant environment lives in
-the **Aether public** experience (`frontend/aether-marketing`), rendered by
+the **Aether public** experience (`apps/aether-marketing`), rendered by
 **AuthLayout**:
 
 - `aether.olympuslabsml.com/login`
@@ -240,7 +240,7 @@ complete on the application origin. The public threshold never sends a
 password-reset email and never claims to have signed anyone in; recovery is
 entered from the application sign-in, where a reset stays scoped to the
 environment that holds the credentials. `src/lib/handoff.ts` in
-`frontend/aether-marketing` is the single module authorized to build
+`apps/aether-marketing` is the single module authorized to build
 application-origin handoff URLs, and no public page writes a tenant
 credential, cookie, or session anywhere. Shell and footer navigation point
 Sign in and Start building at these public entry routes rather than jumping
@@ -285,14 +285,14 @@ Public web content follows the same truth standard as the product:
 | Path | Role | Registered in |
 | --- | --- | --- |
 | `packages/brand` | Framework-free tokens, identity manifests, motion, responsive, iconography (`@olympus/brand`) | npm workspaces |
-| `frontend/shared` | React/ui layer and shared styles (`@aether/ui`) | npm workspaces |
-| `frontend/olympus-marketing` | Olympus Labs corporate shell (`@olympus/olympus-marketing`) | npm workspaces, `bump_version.py`, `config/test_suites.yaml` |
-| `frontend/aether-marketing` | Aether public shell + AuthLayout (`@aether/aether-marketing`) | npm workspaces, `bump_version.py`, `config/test_suites.yaml` |
-| `frontend/marketing` | Drive-sourced shared launch-pack content and renderer inputs for both public marketing shells | `frontend-aether-marketing` + `frontend-olympus-marketing` verification suites |
-| `frontend/aether` | Protected Aether tenant app | npm workspaces |
-| `frontend/kyber` | Kyber internal operator app | npm workspaces |
-| `frontend/docs` | Docs shell | npm workspaces |
-| `frontend/status` | Fail-closed public service-status shell (`status.olympuslabsml.com`) | npm workspaces, `config/test_suites.yaml` |
+| `apps/shared` | React/ui layer and shared styles (`@aether/ui`) | npm workspaces |
+| `apps/olympus-marketing` | Olympus Labs corporate shell (`@olympus/olympus-marketing`) | npm workspaces, `bump_version.py`, `config/test_suites.yaml` |
+| `apps/aether-marketing` | Aether public shell + AuthLayout (`@aether/aether-marketing`) | npm workspaces, `bump_version.py`, `config/test_suites.yaml` |
+| `apps/marketing` | Drive-sourced shared launch-pack content and renderer inputs for both public marketing shells | `frontend-aether-marketing` + `frontend-olympus-marketing` verification suites |
+| `apps/aether` | Protected Aether tenant app | npm workspaces |
+| `apps/kyber` | Kyber internal operator app | npm workspaces |
+| `apps/docs` | Docs shell | npm workspaces |
+| `apps/status` | Fail-closed public service-status shell (`status.olympuslabsml.com`) | npm workspaces, `config/test_suites.yaml` |
 
 The two marketing workspaces are npm workspace members, participate in the
 root `typecheck`/`test`/`build` gates, carry the platform version via

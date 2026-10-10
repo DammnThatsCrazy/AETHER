@@ -52,8 +52,8 @@ jobs:
               - 'scripts/generate_ml_manifest.py'
               - 'deploy/**'
               - 'docs/archive/legacy-architecture/aws-deployment/**'
-              - 'frontend/kyber/src/features/ml/**'
-              - 'frontend/kyber/src/pages/ml/**'
+              - 'apps/kyber/src/features/ml/**'
+              - 'apps/kyber/src/pages/ml/**'
 
   pr-size:
     # Warn (non-blocking) when a PR exceeds 600 meaningful lines changed.
@@ -511,7 +511,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run tenant onboarding E2E tests
-        run: cd frontend/aether && npm run e2e
+        run: cd apps/aether && npm run e2e
         env:
           CI: true
 

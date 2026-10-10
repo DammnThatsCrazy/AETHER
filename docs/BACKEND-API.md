@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:b9b914b9ded361808e3c9d1db427cf5b15ac7a2334f58975fa2528aff6957c1f"
+  "services/backend/services/": "sha256:988c9d3c08b3d91a827ce0012cc6498eea126fff65f6c331c33e9c6639181d07"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -45,7 +45,7 @@ limits but applies its own per-client-IP limit (see below).
 
 `GET /v1/status/history?days=90` — unauthenticated, read-only feed behind the
 public status page's 90-day uptime bars (`VITE_STATUS_HISTORY_URL` in
-`frontend/site`; parsed by `frontend/site/src/site/status.ts`). Implemented in
+`apps/site`; parsed by `apps/site/src/site/status.ts`). Implemented in
 `services/backend/services/gateway/routes.py` and
 `services/backend/services/gateway/status_history.py`.
 
@@ -3880,8 +3880,8 @@ non-durable in-memory seed.
 All routes share the `tags=["model-runtime"]` group and carry the D9 gate
 dependency; the Aether (`models`, `tenant-default`) and Kyber (`registry`,
 `health`, `entitlements`, `usage`, `traces`) clients are typed to these exact
-paths in `frontend/aether/src/features/model-selection/types.ts` and
-`frontend/kyber/src/features/model-runtime/types.ts` respectively.
+paths in `apps/aether/src/features/model-selection/types.ts` and
+`apps/kyber/src/features/model-runtime/types.ts` respectively.
 
 ---
 

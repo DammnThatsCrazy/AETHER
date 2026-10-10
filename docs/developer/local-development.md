@@ -38,7 +38,7 @@ database, and message queue.
 ## Run the Frontend
 
 ```bash
-cd frontend/aether
+cd apps/aether
 npm run dev
 ```
 

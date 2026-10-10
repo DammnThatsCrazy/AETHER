@@ -64,7 +64,7 @@
       "passed": true
     },
     "production_build": {
-      "command": "npm run build --workspace=frontend/aether --workspace=frontend/kyber --workspace=frontend/demo --if-present",
+      "command": "npm run build --workspace=apps/aether --workspace=apps/kyber --workspace=apps/demo --if-present",
       "exit_code": 0,
       "output_tail": [
         "- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks",
@@ -135,7 +135,7 @@
       "passed": true
     },
     "staging_build": {
-      "command": "npm run build --workspace=frontend/aether --workspace=frontend/kyber --workspace=frontend/demo --if-present",
+      "command": "npm run build --workspace=apps/aether --workspace=apps/kyber --workspace=apps/demo --if-present",
       "exit_code": 0,
       "output_tail": [
         "- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks",

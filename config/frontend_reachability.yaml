@@ -22,7 +22,7 @@ authority: frontend-reachability
 
 apps:
   kyber:
-    root: frontend/kyber
+    root: apps/kyber
     alias: "@kyber"
     entries:
       - src/app/main.tsx            # index.html <script type="module">
@@ -53,7 +53,7 @@ apps:
         ledger: product-kyber-unmounted-code-pending
         reason: kept only for its component test; mount it or delete both
   aether:
-    root: frontend/aether
+    root: apps/aether
     alias: "@aether-app"
     entries:
       - src/app/main.tsx            # index.html <script type="module">

@@ -161,8 +161,8 @@ jobs:
           npm run build --workspace @aether/shared
           npm run build --workspace @aether/web
           test -f packages/web/dist/aether.esm.js
-          npm run build --workspace=frontend/aether
-          test -f frontend/aether/dist/index.html
+          npm run build --workspace=apps/aether
+          test -f apps/aether/dist/index.html
 
       - name: Deploy to the preview branch
         if: steps.pr.outputs.armed == 'true'
@@ -174,7 +174,7 @@ jobs:
           aws amplify get-branch --app-id "$PREVIEW_APP_ID" --branch-name "$PREVIEW_BRANCH" >/dev/null 2>&1 \
             || aws amplify create-branch --app-id "$PREVIEW_APP_ID" --branch-name "$PREVIEW_BRANCH" \
                  --stage DEVELOPMENT --description "Preview of PR #${PR_NUMBER}" >/dev/null
-          (cd frontend/aether/dist && zip -qr "$RUNNER_TEMP/preview.zip" .)
+          (cd apps/aether/dist && zip -qr "$RUNNER_TEMP/preview.zip" .)
           deployment="$(aws amplify create-deployment --app-id "$PREVIEW_APP_ID" --branch-name "$PREVIEW_BRANCH" --output json)"
           job_id="$(jq -r '.jobId' <<<"$deployment")"
           curl -sSf -X PUT -H 'Content-Type: application/zip' \

@@ -11,9 +11,9 @@ source_files: [services/ml/common/model_registry.py, services/ml/common/artifact
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:faecff9bfcf5ad507349211edceee285ec4e6dcf4d524579a77e3f033d2dacb7"
+  ".github/workflows/repo-health.yml": "sha256:9f12e57a7a0b4fd855ff1ca13cc8b4c8192a5b105e74f1113c7910f6b263c6c9"
   "deploy/aws/terraform/modules/s3/main.tf": "sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4"
-  "docker-compose.yml": "sha256:b17b579dd422ed31de2d16145c58bd1183ff9faafab35683ce7e02770d2cf6e1"
+  "docker-compose.yml": "sha256:aef0243ba5a694487689bedfe90a1343b3139cadaa36b5e366146ea4090705a9"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
   "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"

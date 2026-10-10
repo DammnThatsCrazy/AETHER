@@ -156,7 +156,7 @@ async def _notify_sales_team(inquiry_id: str, body: EnterpriseContactRequest) ->
 
 # ── Public lead capture ─────────────────────────────────────────────────
 
-# Contact-form topics (frontend/site Contact page) plus the older waitlist,
+# Contact-form topics (apps/site Contact page) plus the older waitlist,
 # early-access and demo-request forms.
 _CONTACT_TOPICS = {"pilot", "product", "developer", "security", "proof", "research"}
 _VALID_LEAD_TYPES = {"waitlist", "early-access", "demo-request"} | _CONTACT_TOPICS

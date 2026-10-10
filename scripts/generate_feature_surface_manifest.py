@@ -8,7 +8,7 @@ coverage gate that silently stops covering things is worse than no gate.
 
 ``--check`` is the CI mode. It fails when:
 
-1. a route exists in ``frontend/aether/src/app/router.tsx`` with no manifest
+1. a route exists in ``apps/aether/src/app/router.tsx`` with no manifest
    entry — a new tenant surface must be classified, one way or the other;
 2. a manifest entry names a route that no longer exists — stale coverage;
 3. an entry is ``tenant_parity_required`` with no ``kyber_mirror_route``;
@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-AETHER_ROUTER = ROOT / "frontend" / "aether" / "src" / "app" / "router.tsx"
+AETHER_ROUTER = ROOT / "apps" / "aether" / "src" / "app" / "router.tsx"
 MANIFEST = ROOT / "packages" / "shared" / "contracts" / "kyber-feature-surface-manifest.json"
 
 _ROUTE_RE = re.compile(r'<Route\s+path="([^"]+)"')
@@ -105,7 +105,7 @@ NON_SURFACE: dict[str, str] = {
 
 MANIFEST_COMMENT = (
     "Canonical map of every tenant-visible Aether surface to its Kyber Tenant "
-    "Mirror counterpart. Generated from frontend/aether/src/app/router.tsx by "
+    "Mirror counterpart. Generated from apps/aether/src/app/router.tsx by "
     "scripts/generate_feature_surface_manifest.py — edit the generator or the "
     "exception reasons, never the entries by hand. "
     "tenant_parity_required=true means the mirror MUST return byte-identical "

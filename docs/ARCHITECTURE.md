@@ -21,7 +21,7 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:f08901231d004c8af78a82ab9dcc7b23070d5f799ff431c3b8589afbdc929ac1"
+  "packages/shared/": "sha256:e38b928ba8341ec5657a3c5d6651a0257e960b66fe336f86fde233daac21fa82"
   "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
@@ -53,8 +53,7 @@ owns internal broker-coupled workers and staged graph-mutation workflows; and
 `services/compliance/` owns the GDPR/SOC 2 control implementation. AWS and
 Terraform delivery live under `deploy/aws/`, while EVM and multi-chain contract
 code lives under `contracts/smart-contracts/`. Shared contracts remain in
-`packages/shared/contracts/`, and product clients remain under `apps/` and
-`frontend/`.
+`packages/shared/contracts/`, and product clients (web and mobile) live under `apps/`.
 
 The old space-containing trees are not alternate implementations. The two
 un-deployed TypeScript duplicates are retained under

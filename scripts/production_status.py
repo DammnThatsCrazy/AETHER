@@ -216,7 +216,7 @@ AREAS: list[Area] = [
         "routes (/v1/admin/kyber, fleet, drift, intelligence quality), Playwright E2E "
         "in CI. Operator data never mounted on tenant-facing routers.",
         [
-            "frontend/kyber/",
+            "apps/kyber/",
             ".github/workflows/kyber-e2e.yml",
             "services/backend/services/intelligence/routes.py",
         ],
@@ -231,7 +231,7 @@ AREAS: list[Area] = [
         "usage dashboard, and implementation checklist (/v1/onboarding/*). "
         "Playwright E2E suite added (5 scenarios covering root redirect, signup form, "
         "OTP verification, login fields, SSO/plan selector); CI-gated via e2e-tenant job.",
-        ["frontend/aether/", "frontend/aether/src/test/e2e/", "docs/PRODUCTIZATION.md"],
+        ["apps/aether/", "apps/aether/src/test/e2e/", "docs/PRODUCTIZATION.md"],
     ),
     Area(
         "connectors (BYOK / source)",
@@ -282,7 +282,7 @@ AREAS: list[Area] = [
             "services/backend/services/dune_feeder/service.py",
             "services/backend/services/dune_feeder/routes.py",
             "services/backend/services/dune_feeder/models.py",
-            "frontend/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
+            "apps/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
     Area(
@@ -419,7 +419,7 @@ AREAS: list[Area] = [
             "services/backend/tests/e2e/test_b2b_account_flow.py",
             "services/backend/tests/e2e/test_privacy_consent_flow.py",
             "services/backend/tests/e2e/test_agent_web3_attribution_flow.py",
-            "frontend/kyber/src/pages/measurement/",
+            "apps/kyber/src/pages/measurement/",
             "deploy/clickhouse/schemas/008_measurement_gold.sql",
             "deploy/observability/grafana/dashboards/measurement-slos.json",
         ],
@@ -517,11 +517,11 @@ AREAS: list[Area] = [
             "services/backend/tests/e2e/test_campaign_registry_e2e.py",
             "services/backend/tests/security/test_campaign_registry_security.py",
             "packages/shared/acquisition-evidence.ts",
-            "frontend/aether/src/pages/campaigns/campaign-sources-page.tsx",
-            "frontend/aether/src/pages/campaigns/campaign-registry-page.tsx",
-            "frontend/aether/src/pages/campaigns/mapping-review-page.tsx",
-            "frontend/aether/src/pages/campaigns/campaign-quality-page.tsx",
-            "frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx",
+            "apps/aether/src/pages/campaigns/campaign-sources-page.tsx",
+            "apps/aether/src/pages/campaigns/campaign-registry-page.tsx",
+            "apps/aether/src/pages/campaigns/mapping-review-page.tsx",
+            "apps/aether/src/pages/campaigns/campaign-quality-page.tsx",
+            "apps/kyber/src/pages/measurement/campaign-registry-health-page.tsx",
             "scripts/campaign/backfill_campaign_ids.py",
             "scripts/campaign/check_campaign_release_gate.py",
             "docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",

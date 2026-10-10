@@ -1,6 +1,6 @@
 """Build-level containment checks for the synthetic demo frontend.
 
-These execute real Vite builds of ``frontend/demo``. They skip cleanly when the
+These execute real Vite builds of ``apps/demo``. They skip cleanly when the
 Node toolchain is unavailable (for example while dependencies are still
 installing) rather than failing spuriously; the pure-Python validator rules are
 covered in ``test_validate_frontend_data_truth.py``.

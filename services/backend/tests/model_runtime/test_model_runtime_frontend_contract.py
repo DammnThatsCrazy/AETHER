@@ -33,7 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 _AETHER_TYPES = (
     _REPO_ROOT
-    / "frontend"
+    / "apps"
     / "aether"
     / "src"
     / "features"
@@ -42,7 +42,7 @@ _AETHER_TYPES = (
 )
 _KYBER_TYPES = (
     _REPO_ROOT
-    / "frontend"
+    / "apps"
     / "kyber"
     / "src"
     / "features"

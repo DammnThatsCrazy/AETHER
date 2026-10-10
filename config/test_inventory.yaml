@@ -19,10 +19,10 @@ rules:
     owner: backend
     domain: backend
     dependencies: ["docs/archive/legacy-architecture/backend/**"]
-  - paths: ["frontend/**"]
+  - paths: ["apps/**"]
     owner: frontend
     domain: frontend
-    dependencies: ["frontend/**", "packages/shared/**"]
+    dependencies: ["apps/**", "packages/shared/**"]
   - paths: ["packages/**"]
     owner: sdk
     domain: sdk

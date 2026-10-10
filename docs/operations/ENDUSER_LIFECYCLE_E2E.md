@@ -14,7 +14,7 @@ toc_depth: 3
 
 Runbook for the Playwright acceptance suites that exercise the integrated
 End-User Lifecycle tenant app end to end. The suites live at
-`frontend/aether/src/test/e2e/lifecycle-{A,B,C,D,E,F}-*.spec.ts` (plus the shared
+`apps/aether/src/test/e2e/lifecycle-{A,B,C,D,E,F}-*.spec.ts` (plus the shared
 `lifecycle.harness.ts`) and are the executable acceptance spec for the lifecycle
 IA — see `docs/plans/ENDUSER_LIFECYCLE_PHASES.md` §7 and
 `docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md` §9.
@@ -38,14 +38,14 @@ they skip with a self-explanatory reason instead of timing out.
 ## 2. Prerequisites
 
 1. WS-1..WS-6 merged and the tenant app + backend running locally
-   (`frontend/aether` dev server on `http://localhost:5175`; backend seeded).
+   (`apps/aether` dev server on `http://localhost:5175`; backend seeded).
 2. `connectors_enabled` test flag ON for the connect flows (activation and
    Settings → Integrations connect must be enabled in the test env).
 3. Seeded scenario tenants with reset starting state (see §4).
 4. Env vars from §3 exported to the Playwright process.
-5. Playwright browsers installed for `frontend/aether`
+5. Playwright browsers installed for `apps/aether`
    (`npx playwright install --with-deps` once per machine, from
-   `frontend/aether`).
+   `apps/aether`).
 
 ---
 
@@ -88,7 +88,7 @@ tenant seed between runs.**
 
 ## 5. Running
 
-From `frontend/aether` (the config `testDir` is `./src/test/e2e`, base URL
+From `apps/aether` (the config `testDir` is `./src/test/e2e`, base URL
 `http://localhost:5175`, `VITE_AETHER_ENV=test`):
 
 ```bash
@@ -173,5 +173,5 @@ non-empty and discoverable.
 - `docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md` — canonical vocabulary,
   routes, state projection, markers the suites assert.
 - `docs/plans/ENDUSER_LIFECYCLE_PHASES.md` — program plan (§7 acceptance).
-- `frontend/aether/src/test/e2e/lifecycle.harness.ts` — gates, routes, copy,
+- `apps/aether/src/test/e2e/lifecycle.harness.ts` — gates, routes, copy,
   markers.

@@ -242,7 +242,7 @@ Backend admin routes for ML operational state are defined in:
 - `services/backend/services/ml_serving/kyber_ml_admin.py` — 14 admin routes at `/v1/admin/kyber/ml/` ✅
   - Includes 4 new routes: `/alerts`, `/audit`, `/models/{id}/rollback-eligibility`, `/models/{id}/training-history`
 
-**Kyber ML frontend page**: `frontend/kyber/src/pages/ml/ml-admin-page.tsx` — `/ml` route registered in Kyber router. Displays fleet overview health card (fleet_status, models_loaded/total, extraction defense toggle, readiness badge) and model fleet table via `useMLModels()` + `useMLOverview()` hooks. Frontend API callers for all 14 admin routes are in `frontend/kyber/src/lib/api/endpoints.ts` under `api.ml.*` ✅
+**Kyber ML frontend page**: `apps/kyber/src/pages/ml/ml-admin-page.tsx` — `/ml` route registered in Kyber router. Displays fleet overview health card (fleet_status, models_loaded/total, extraction defense toggle, readiness badge) and model fleet table via `useMLModels()` + `useMLOverview()` hooks. Frontend API callers for all 14 admin routes are in `apps/kyber/src/lib/api/endpoints.ts` under `api.ml.*` ✅
 
 ---
 

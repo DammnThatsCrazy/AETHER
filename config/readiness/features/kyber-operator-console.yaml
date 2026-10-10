@@ -26,7 +26,7 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - frontend/kyber/
+  - apps/kyber/
   - .github/workflows/kyber-e2e.yml
   - services/backend/services/intelligence/routes.py
 implementation:
@@ -115,7 +115,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: frontend/kyber/'
+  - 'repository evidence: apps/kyber/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

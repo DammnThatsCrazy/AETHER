@@ -9,7 +9,7 @@ def _ids(result: dict) -> set[str]:
 
 
 def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None:
-    result = build_disposition(["frontend/aether/src/pages/profile.tsx"])
+    result = build_disposition(["apps/aether/src/pages/profile.tsx"])
 
     assert result["authority"] == "verification"
     assert result["blocking"] is True
@@ -22,9 +22,9 @@ def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None
     assert result["build_selection"]["workspaces"] == [
         "packages/brand",
         "packages/shared",
-        "frontend/shared",
+        "apps/shared",
         "packages/web",
-        "frontend/aether",
+        "apps/aether",
     ]
     assert result["build_selection"]["backend_image"] is False
     assert result["build_selection"]["sdk"] == {
@@ -47,7 +47,7 @@ def test_brand_mark_change_rebuilds_the_unified_site() -> None:
     result = build_disposition(["packages/brand/src/identity/marks/logo-olympus-arch.svg"])
 
     assert "site" in result["build_selection"]["applications"]
-    assert "frontend/site" in result["build_selection"]["workspaces"]
+    assert "apps/site" in result["build_selection"]["workspaces"]
 
 
 def test_global_node_dependency_change_selects_every_buildable_workspace() -> None:
@@ -59,12 +59,12 @@ def test_global_node_dependency_change_selects_every_buildable_workspace() -> No
         "packages/server",
         "packages/react-native",
         "packages/mobile-core",
-        "frontend/aether",
-        "frontend/kyber",
-        "frontend/docs",
-        "frontend/demo",
-        "frontend/olympus-marketing",
-        "frontend/aether-marketing",
+        "apps/aether",
+        "apps/kyber",
+        "apps/docs",
+        "apps/demo",
+        "apps/olympus-marketing",
+        "apps/aether-marketing",
     }
     assert buildable <= set(result["build_selection"]["workspaces"])
 
@@ -79,7 +79,7 @@ def test_registry_change_skips_release_only_quarantined_suite() -> None:
 
 
 def test_advisory_suite_is_non_blocking_in_disposition() -> None:
-    result = build_disposition(["frontend/docs/src/main.tsx"])
+    result = build_disposition(["apps/docs/src/main.tsx"])
 
     advisory = [check for check in result["checks"] if check["check_id"] == "frontend-docs"]
     assert advisory and advisory[0]["blocking"] is False
@@ -103,7 +103,7 @@ def test_advisory_failure_does_not_fail_blocking_disposition(monkeypatch) -> Non
         ]
 
     monkeypatch.setattr(disposition_module, "_run_parallel", advisory_failure)
-    result = build_disposition(["frontend/docs/src/main.tsx"], execute=True)
+    result = build_disposition(["apps/docs/src/main.tsx"], execute=True)
 
     assert result["status"] == "PASS"
     assert result["advisory_failures"][0]["check_id"] == "frontend-docs"

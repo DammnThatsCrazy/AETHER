@@ -5,23 +5,23 @@ name: Aether Unit Tests
 #
 # Triggers:
 #   - Every push to main (guard main-branch regressions).
-#   - Finalized pull requests (ready_for_review) that touch frontend/aether/**
-#     or frontend/shared/**. Draft pushes remain an implementation phase and do
+#   - Finalized pull requests (ready_for_review) that touch apps/aether/**
+#     or apps/shared/**. Draft pushes remain an implementation phase and do
 #     not start hosted CI.
 #   - Manual dispatch via the Actions tab.
 on:
   push:
     branches: [Development, staging, main]
     paths:
-      - 'frontend/aether/**'
-      - 'frontend/shared/**'
+      - 'apps/aether/**'
+      - 'apps/shared/**'
       - 'packages/shared/**'
       - '.github/workflows/aether-test.yml'
   pull_request:
     types: [ready_for_review]
     paths:
-      - 'frontend/aether/**'
-      - 'frontend/shared/**'
+      - 'apps/aether/**'
+      - 'apps/shared/**'
       - 'packages/shared/**'
       - '.github/workflows/aether-test.yml'
   workflow_dispatch:
@@ -55,16 +55,16 @@ jobs:
 
       - name: Type check
         run: npm run typecheck
-        working-directory: frontend/aether
+        working-directory: apps/aether
 
       - name: Run unit and integration tests
         run: npm test
-        working-directory: frontend/aether
+        working-directory: apps/aether
 
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aether-coverage
-          path: frontend/aether/coverage/
+          path: apps/aether/coverage/
           retention-days: 7

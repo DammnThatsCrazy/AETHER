@@ -19,11 +19,11 @@ with the hosting/config contract.
 ## Build artifacts
 
 - Backend: `services/backend/Dockerfile`
-- Aether tenant frontend: `frontend/aether/Dockerfile`
-- Kyber operator frontend: `frontend/kyber/Dockerfile` (private artifact path)
-- Olympus Labs marketing: `frontend/olympus-marketing`
-- Aether marketing: `frontend/aether-marketing`
-- Public status: `frontend/status`
+- Aether tenant frontend: `apps/aether/Dockerfile`
+- Kyber operator frontend: `apps/kyber/Dockerfile` (private artifact path)
+- Olympus Labs marketing: `apps/olympus-marketing`
+- Aether marketing: `apps/aether-marketing`
+- Public status: `apps/status`
 - ML serving: `services/ml/docker/Dockerfile`
 
 `.github/workflows/deploy.yml` builds and pushes images to ECR; infrastructure is

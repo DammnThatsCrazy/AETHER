@@ -12,4 +12,4 @@ since_version: "0.1.0"
 
 The developer portal provides SDK documentation, API reference, quickstart guides, and integration tutorials.
 
-Path: `frontend/docs`
+Path: `apps/docs`

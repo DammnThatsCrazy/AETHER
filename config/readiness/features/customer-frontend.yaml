@@ -25,8 +25,8 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - frontend/aether/
-  - frontend/aether/src/test/e2e/
+  - apps/aether/
+  - apps/aether/src/test/e2e/
   - docs/PRODUCTIZATION.md
 implementation:
   state: TURNKEY
@@ -110,7 +110,7 @@ business_readiness:
 confidence:
   level: HIGH
   reasons:
-  - 'repository evidence: frontend/aether/'
+  - 'repository evidence: apps/aether/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

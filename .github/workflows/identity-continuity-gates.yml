@@ -307,14 +307,14 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== Gate 6: UX explainability — frontend components ==="
-          ls -la frontend/aether/src/features/identity/
-          test -f frontend/aether/src/features/identity/TenantActivationDashboard.tsx
-          test -f frontend/aether/src/features/identity/Profile360IdentityPanel.tsx
-          test -f frontend/aether/src/features/identity/IdentityReviewQueue.tsx
-          test -f frontend/aether/src/features/identity/ConflictDetail.tsx
-          test -f frontend/aether/src/features/identity/MergeSplitAudit.tsx
-          test -f frontend/aether/src/features/identity/SdkHealth.tsx
-          test -f frontend/aether/src/features/identity/index.ts
+          ls -la apps/aether/src/features/identity/
+          test -f apps/aether/src/features/identity/TenantActivationDashboard.tsx
+          test -f apps/aether/src/features/identity/Profile360IdentityPanel.tsx
+          test -f apps/aether/src/features/identity/IdentityReviewQueue.tsx
+          test -f apps/aether/src/features/identity/ConflictDetail.tsx
+          test -f apps/aether/src/features/identity/MergeSplitAudit.tsx
+          test -f apps/aether/src/features/identity/SdkHealth.tsx
+          test -f apps/aether/src/features/identity/index.ts
           echo "  all required frontend identity components present"
           echo ""
           echo "Checking backend explainability service & routes:"

@@ -25,7 +25,7 @@ Amplify/Terraform variables.
 | `kyber.olympuslabsml.com` | Kyber operator console | No public DNS or public marketing link by default; internal routing only |
 | `demo.[domain]` | Demo App | Synthetic, closed demo (`VITE_DEMO_ENV`) |
 | `api.olympuslabsml.com` | Backend API | `/v1/*`, `/health`, `/ready`, `/openapi.json` |
-| `docs.olympuslabsml.com` | Public documentation | Built from `frontend/docs` (tiered P/C/I) |
+| `docs.olympuslabsml.com` | Public documentation | Built from `apps/docs` (tiered P/C/I) |
 | `status.olympuslabsml.com` | Public status page | Reads the verified API `/health` payload and reports component states |
 
 ## Config

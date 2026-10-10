@@ -46,8 +46,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:179a285bb3252c8c3b9d01e189afb910348c52a4356862abf2c277465fda034d"
-  ".github/workflows/deploy.yml": "sha256:1ed685584a46b685af03666e75c483d0235ba3ea7d285bbb65bd6c84ddeb565a"
+  ".github/workflows/amplify-status-production.yml": "sha256:5650e91a2230116a613e3e54c55f1994aa2a44be3c169a5a6a109700fef5bd6a"
+  ".github/workflows/deploy.yml": "sha256:99d17622d986182d8b63ebabc7c39d3c2387ba8b448afebc14cf696f0ff5b093"
   ".github/workflows/pilot-staging.yml": "sha256:62ec13ff1a6f2869aa42a8b2e87c3d49412a33010c5fe8a875baee42cb29cef5"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:88f5054abd8530877c3406c752f48ebab4b272143534984c7025977bc220f00b"
@@ -69,7 +69,7 @@ source_hashes:
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:13bfa71ca795f6920b6e41eb844bfd6cecb6c6d34c326d69af2a0209eb52003f"
   "deploy/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:eaf97435240cc51fddd74190bb42a904b0d89b1504e330ef0454c63156b295ba"
+  "scripts/release/check_amplify_app_contract.py": "sha256:a67e551912ea28489862dd166e5200509674b6d612e6d79bc87428855262c9f1"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"

@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:c88be851cb18459cdf112089b1a5bfcabb4dcb8d3aa1babeb62aed62f412f2bf"
+  "scripts/production_status.py": "sha256:58939e71d245733c9c9e292b6b960d1c2e155188b8d3bb6ddc15fa4ca9c36c28"
 ---
 
 # Risk & Readiness Register

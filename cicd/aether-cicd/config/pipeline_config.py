@@ -83,7 +83,7 @@ REPO_SERVICES: dict[str, dict[str, str]] = {
 REPO_OTHER: dict[str, str] = {
     "deploy/aws/terraform/": "Terraform IaC for all AWS resources",
     "services/ml/":          "ML training pipelines, serving, and model configs",
-    "frontend/aether/":      "Customer-facing React application",
+    "apps/aether/":      "Customer-facing React application",
 }
 
 

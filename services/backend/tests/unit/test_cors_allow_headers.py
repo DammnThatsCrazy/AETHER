@@ -25,7 +25,7 @@ from starlette.testclient import TestClient
 from shared.security.cors import CORS_ALLOW_HEADERS
 
 REPO = Path(__file__).resolve().parents[4]
-FIRST_PARTY_APPS = ("frontend/aether/src", "frontend/kyber/src")
+FIRST_PARTY_APPS = ("apps/aether/src", "apps/kyber/src")
 ORIGIN = "https://app.staging.olympuslabsml.com"
 # A literal custom header used as an object key: 'X-Foo': value
 _HEADER_KEY = re.compile(r"""['"](X-[A-Za-z0-9-]+)['"]\s*:""")

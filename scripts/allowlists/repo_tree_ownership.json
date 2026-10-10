@@ -3,7 +3,7 @@
     "path": "apps",
     "role": "house",
     "owner": "platform@aether",
-    "note": "product application shells and mobile clients; route runtime services into services/ and shared contracts into packages/."
+    "note": "product web applications (Aether, Kyber, demo, marketing, status, docs, site and their shared UI) and mobile clients; route runtime services into services/ and shared contracts into packages/."
   },
   {
     "path": "artifacts",
@@ -188,12 +188,6 @@
     "role": "house",
     "owner": "platform@aether",
     "note": "monorepo house directory; route new work into canonical trees."
-  },
-  {
-    "path": "frontend",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "frontend application and shared UI implementation; backend runtime remains under services/backend/."
   },
   {
     "path": "lambda",

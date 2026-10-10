@@ -468,7 +468,7 @@ jobs:
             VITE_AETHER_ENDPOINT="$AETHER_API_BASE_URL" \
             VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
-            npm --workspace frontend/aether run build
+            npm --workspace apps/aether run build
           if [ "$DEPLOYMENT_LANE" = full ]; then
             VITE_KYBER_ENV=staging \
               VITE_AETHER_ENDPOINT="$KYBER_API_BASE_URL" \
@@ -479,15 +479,15 @@ jobs:
               VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID" \
               VITE_API_BASE_URL="$KYBER_API_BASE_URL" \
               VITE_WS_BASE_URL="$KYBER_WS_BASE_URL" \
-              npm --workspace frontend/kyber run build
+              npm --workspace apps/kyber run build
           else
             rm -rf frontend/kyber-pilot-deferred
             mkdir -p frontend/kyber-pilot-deferred
             printf '%s\n' 'Kyber workforce identity is intentionally deferred in the lean AWS pilot lane.' > frontend/kyber-pilot-deferred/README.txt
           fi
-          tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C frontend/aether/dist .
+          tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C apps/aether/dist .
           if [ "$DEPLOYMENT_LANE" = full ]; then
-            tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber/dist .
+            tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C apps/kyber/dist .
           else
             tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber-pilot-deferred .
           fi

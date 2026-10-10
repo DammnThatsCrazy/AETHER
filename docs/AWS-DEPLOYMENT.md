@@ -51,8 +51,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:179a285bb3252c8c3b9d01e189afb910348c52a4356862abf2c277465fda034d"
-  ".github/workflows/deploy.yml": "sha256:1ed685584a46b685af03666e75c483d0235ba3ea7d285bbb65bd6c84ddeb565a"
+  ".github/workflows/amplify-status-production.yml": "sha256:5650e91a2230116a613e3e54c55f1994aa2a44be3c169a5a6a109700fef5bd6a"
+  ".github/workflows/deploy.yml": "sha256:99d17622d986182d8b63ebabc7c39d3c2387ba8b448afebc14cf696f0ff5b093"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:e95cad6f31907115d5534734a9feaf9f69c405e3b4329b60fb904c075be90c02"
   ".github/workflows/staging-state-reconcile.yml": "sha256:524912b39e541837d9cdb3b19d3e10053247ada863f50f07302cecc921c3a3e8"
@@ -73,9 +73,9 @@ source_hashes:
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/lead-intake/template.yaml": "sha256:2df847eeb6c89621e25d6b905e9fc18cc2071e3add4b1012905d9deeb814e7b0"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:efd65d48db877d40ad26c12fa6a29d79aaf909eb82170f86e22d06d3c5a8551a"
+  "deploy/aws/terraform/": "sha256:25a89215fc659b746446ff0034479dfb71a40f3362d40ba138881ea03d13742b"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:eaf97435240cc51fddd74190bb42a904b0d89b1504e330ef0454c63156b295ba"
+  "scripts/release/check_amplify_app_contract.py": "sha256:a67e551912ea28489862dd166e5200509674b6d612e6d79bc87428855262c9f1"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -573,10 +573,10 @@ canonical subdomain under `var.amplify_domain_name`. SSM parameters export
 Amplify app IDs and default domains for downstream consumption.
 
 On staging, one Amplify app (`AETHER-staging-web`, key `aether-marketing`,
-building `frontend/site`) serves the whole public web: the Olympus pages,
+building `apps/site`) serves the whole public web: the Olympus pages,
 Aether marketing, pricing, docs, status, and the product itself under
-`aether.*/app` (the `frontend/site` entry in `amplify.yml` builds
-`frontend/aether` with `VITE_BASE_PATH=/app/` and publishes it into the site's
+`aether.*/app` (the `apps/site` entry in `amplify.yml` builds
+`apps/aether` with `VITE_BASE_PATH=/app/` and publishes it into the site's
 `dist/app`). One association (`aws_amplify_domain_association.site`) holds
 `aether`, `www`, `docs`, `status` and `app`. `www` shows the Olympus pages, and
 the site itself sends the retired hosts on (Amplify does not apply host-based
@@ -612,7 +612,7 @@ lifecycle preflight checks the production settings, exact commit and host
 mappings. It is not Terraform-managed yet.
 
 Each production page is a prerendered file (`scripts/prerender.mjs` in
-`frontend/site`): `/platform` is served from `platform.html` with its own
+`apps/site`): `/platform` is served from `platform.html` with its own
 title, description, canonical URL, Open Graph and Twitter cards and JSON-LD,
 and each site build writes its `sitemap.xml` and `robots.txt`. The catch-all
 rule is therefore a `404-200` rewrite to `/index.html`: a path with no file
@@ -712,7 +712,7 @@ release archives.
 
 Routing is app-specific. Olympus marketing and status serve prerendered files
 without a catch-all rewrite. On staging, the `aether-marketing` app builds the
-unified site (`frontend/site`) for the `aether` host, with the product under
+unified site (`apps/site`) for the `aether` host, with the product under
 `/app`. It redirects `/app/signin` and the legacy `/login` and
 `/forgot-password` paths to `/app/login`, the legacy `/signup` to
 `/app/signup` (Auth0 sign-up, keeping the pricing page's `?plan=` so a new
@@ -728,7 +728,7 @@ marketing app's URLs to their new pages. Its status page reads the backend's 90-
 logout and web-origin lists, the API's app URL and the Stripe checkout return
 URLs all use `https://aether.<domain>/app`, and the site build carries the
 product's `VITE_AUTH0_*` and `VITE_AETHER_*` settings. Other environments keep the
-prerendered `frontend/aether-marketing` build, with index rewrites for its
+prerendered `apps/aether-marketing` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders
 its own route metadata. The end-user app and docs portal
 also use an index fallback, because they resolve client routes at runtime. That fallback is a `404-200` rewrite: it

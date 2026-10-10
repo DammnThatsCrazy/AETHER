@@ -93,7 +93,7 @@ checking every consumer that resolves `$id` by string match.
 | `social-provider-capability-vocabulary.json` | 1.0.0 | 1.0.0 | `social-silver-facts.schema.json` |
 | `social-silver-facts.schema.json` | - | - | `social-provider-capability-vocabulary.json` |
 | `temporal-policy-registry.json` | 1.0.0 | - | Consumed by policy enforcement; no registered lock-step registry |
-| `kyber-feature-surface-manifest.json` | 1.0.0 | - | `frontend/kyber/**` surfaces (not schema-linked; validated structurally only) |
+| `kyber-feature-surface-manifest.json` | 1.0.0 | - | `apps/kyber/**` surfaces (not schema-linked; validated structurally only) |
 | `evidence-manifest.schema.json` | - | - | `scripts/release/evidence_bundle.py`, `release-evidence-bundle.schema.json` (delivery-side sibling) |
 | `incentive-context.schema.json` | - | - | `outcome-type-registry.json` |
 

@@ -12,4 +12,4 @@ since_version: "0.1.0"
 
 The Aether Console is the tenant-facing web application for accessing intelligence graph data, Profile360s, campaigns, journeys, and value surfaces.
 
-Path: `frontend/aether`
+Path: `apps/aether`

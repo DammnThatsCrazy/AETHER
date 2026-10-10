@@ -7,9 +7,9 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - frontend/aether/src/
-  - frontend/kyber/src/
-  - frontend/shared/src/
+  - apps/aether/src/
+  - apps/kyber/src/
+  - apps/shared/src/
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
@@ -19,19 +19,19 @@ reviewed_source_commits:
   - commit: "f4ba474e"
     reason: "Reviewed the Kyber empty-state test timing correction; data-bearing pages must await response-backed populated or empty state before asserting content."
   - commit: "436ebec1"
-    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (frontend/aether + frontend/kyber prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
+    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (apps/aether + apps/kyber prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
   - commit: "5d0a4989"
-    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under frontend/shared; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
+    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under apps/shared; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
   - commit: "01d51676"
-    reason: "R0 re-stamp after review (enduser-lifecycle lane). Reviewed against the two newer source commits under source_files: (1) 9620539f — the PR #607 squash; its non-test delta is login/signup ?email/?name prefill (already documented at lines 50-54 as the marketing-threshold handoff) plus frontend/shared motion tokenization (reviewed no-body-change at 5d0a4989), and the squash made the prior 0ebab813 stamp unreachable as an ancestor; (2) 01d51676 — the campaign-source triage touching the tenant Campaign Sources page under frontend/aether, which this doc does not describe (its Kyber /campaign-intelligence/sources bullet remains accurate). No body change required."
+    reason: "R0 re-stamp after review (enduser-lifecycle lane). Reviewed against the two newer source commits under source_files: (1) 9620539f — the PR #607 squash; its non-test delta is login/signup ?email/?name prefill (already documented at lines 50-54 as the marketing-threshold handoff) plus apps/shared motion tokenization (reviewed no-body-change at 5d0a4989), and the squash made the prior 0ebab813 stamp unreachable as an ancestor; (2) 01d51676 — the campaign-source triage touching the tenant Campaign Sources page under apps/aether, which this doc does not describe (its Kyber /campaign-intelligence/sources bullet remains accurate). No body change required."
   - commit: "95d53f4c"
-    reason: "R1 re-stamp after review (enduser-lifecycle lane, contract spine). Reviewed the R1-s4 FE twin under frontend/aether/src: new features/integrations/** (zod transport schemas for the four /v1 catalog read-model endpoints, useQuery hooks) plus the api.integrationCatalog group added to lib/api/endpoints.ts. This doc makes no exhaustive api-namespace or features/-directory enumeration, so the additions are additive and no body change was required."
+    reason: "R1 re-stamp after review (enduser-lifecycle lane, contract spine). Reviewed the R1-s4 FE twin under apps/aether/src: new features/integrations/** (zod transport schemas for the four /v1 catalog read-model endpoints, useQuery hooks) plus the api.integrationCatalog group added to lib/api/endpoints.ts. This doc makes no exhaustive api-namespace or features/-directory enumeration, so the additions are additive and no body change was required."
   - commit: "3456414b"
-    reason: "R2 WS-3 re-stamp after review (enduser-lifecycle lane, guided activation). Reviewed the additive intent-driven activation UI under frontend/aether/src: features/activation/use-activation-intents.ts, pages/activation/activate-page.tsx, exported step components in pages/activation/activation-page.tsx, the /activate router alias in app/router.tsx, and the resolveLandingTarget() seam in app/tenant-landing.tsx (redirect behavior unchanged, still /activation). This doc does not enumerate tenant activation pages/routes (its only router reference is Kyber, line ~787), and no documented frontend architecture contract changed, so no body change was required."
+    reason: "R2 WS-3 re-stamp after review (enduser-lifecycle lane, guided activation). Reviewed the additive intent-driven activation UI under apps/aether/src: features/activation/use-activation-intents.ts, pages/activation/activate-page.tsx, exported step components in pages/activation/activation-page.tsx, the /activate router alias in app/router.tsx, and the resolveLandingTarget() seam in app/tenant-landing.tsx (redirect behavior unchanged, still /activation). This doc does not enumerate tenant activation pages/routes (its only router reference is Kyber, line ~787), and no documented frontend architecture contract changed, so no body change was required."
   - commit: "5c5d85be"
     reason: "WS-4 review (enduser-lifecycle lane, contextual readiness). Reviewed the additive features/integrations readiness surface (useTenantIntegrationReadiness calling restClient directly + readiness-context advisor + tenant-readiness zod types) and its consumers on the Campaign 360 / Campaign Sources / Profile360 pages. Added the 'Contextual integration readiness CTAs' subsection under Connector Pages documenting the hook/advisor + §6 copy invariants. body change was required and made."
   - commit: "8b1ca3dc"
-    reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
+    reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under apps/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
   - commit: "b0313c2c"
     reason: "Graph-first scope review: graph exploration requests now preserve the host-authoritative tenant/workspace/environment scope and include all coordinates in the cache key; the documented GraphContextProvider binding remains accurate."
   - commit: "8b94e6c6"
@@ -43,9 +43,9 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:0cff23ecbd8960dd4418b98b8827e3b68a541d0e649a4472f515c95fafbbb358"
-  "frontend/kyber/src/": "sha256:93032585bc97ec9eadcb73298fbec30da3543d9a6dfa1eb51be8107b9cae22b5"
-  "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
+  "apps/aether/src/": "sha256:128da0e60edf1eecf6e4b8d9fed54329c7f4f862b4f7a0acb540765eda993d3d"
+  "apps/kyber/src/": "sha256:b2386b5b71c049f5f247e47ac949d3f0af4fba11476b134e95880ce68602b454"
+  "apps/shared/src/": "sha256:6bfcb3ee7c0d0371918d5b738b179cf3c82b4d71b4d34b6bfd89593d2408e7d6"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -58,8 +58,8 @@ There are two separate frontend applications. **Do not mix them up.**
 
 | App | Directory | Audience | Purpose |
 |-----|-----------|----------|---------|
-| **Aether** | `frontend/aether/` | External paying tenants / customers / clients | Self-service: sign up, install SDK, manage API keys, view their own intelligence graph, entity profiles, campaigns, geographic intelligence |
-| **Kyber** | `frontend/kyber/` | Internal Aether team / operators only | Operator mission control: monitor real tenants, diagnose system health, approve agent actions, and review entity clusters |
+| **Aether** | `apps/aether/` | External paying tenants / customers / clients | Self-service: sign up, install SDK, manage API keys, view their own intelligence graph, entity profiles, campaigns, geographic intelligence |
+| **Kyber** | `apps/kyber/` | Internal Aether team / operators only | Operator mission control: monitor real tenants, diagnose system health, approve agent actions, and review entity clusters |
 
 The Aether app can be served under a path prefix. Vite's `base` comes from
 `VITE_BASE_PATH` (default `/`); the router's `basename` and every hard-coded
@@ -98,13 +98,13 @@ the root.
   the billing page lists only the self-serve plans (contract tiers go through
   Contact sales). Without Auth0 settings, `/signup` is the email form, which
   registers a new tenant on a plan. The
-  Aether public marketing threshold (`frontend/aether-marketing`) hands users
+  Aether public marketing threshold (`apps/aether-marketing`) hands users
   into these pages with optional prefill query params — login accepts `?email`,
   signup accepts `?name` and `?email` — read once via a `useState` initializer
   (never an effect) so the first step arrives pre-filled; nothing is persisted
   and the auth semantics are unchanged
 - **Marketing connect/manage handoff consumers** — the tenant-side half of the
-  marketing shell's app-origin deep links (`frontend/aether-marketing` emits
+  marketing shell's app-origin deep links (`apps/aether-marketing` emits
   `/settings/integrations?family=<canonical>&experience=<category>&intent=connect|manage`
   and `/activate?experience=…&intent=connect|manage`, round-tripped through
   `/login?redirect=…`). Shared consumers in `features/settings/settings-handoff.ts`
@@ -172,7 +172,7 @@ the root.
   honest "telemetry is OFF" / disabled states rather than empty error surfaces.
 - Lab — backend-supported test and replay tools
 
-**Shared (`frontend/shared/` — npm package `@aether/ui`):**
+**Shared (`apps/shared/` — npm package `@aether/ui`):**
 - Design system components used by both Aether and Kyber
 - **Olympus brand rendering boundary:** `packages/brand` (`@olympus/brand`)
   owns framework-free identity, provider, entity, status, token, motion, and
@@ -187,7 +187,7 @@ the root.
   [brand-system architecture](brand-system/architecture.md), and
   [migration guide](brand-system/migration.md).
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
-- **Graph-first exploration runtime** (`frontend/shared/src/exploration/`):
+- **Graph-first exploration runtime** (`apps/shared/src/exploration/`):
   `GraphContextProvider` extends the existing exploration provider/store with
   one authoritative graph context for query, selection, presentation,
   snapshots, and diffs. Hosts must supply the full tenant/workspace/environment
@@ -231,8 +231,8 @@ the root.
   default-OFF feature flags. Noesis routes governed recommendations to the
   existing Decision Intelligence review surface; approval controls remain
   permission-gated and no opaque response can dispatch an action directly.
-- **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
-- **Canonical temporal validation** (`frontend/shared/src/time/validation.ts`):
+- **Canonical value display** (`apps/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
+- **Canonical temporal validation** (`apps/shared/src/time/validation.ts`):
   shareable graph state delegates ISO-instant and IANA-zone validation to the
   shared time module. Exploration codecs do not introduce local `Date` or
   `Intl` policy outside that authority.
@@ -672,9 +672,9 @@ All window-aware endpoints accept `?window=30d|60d|90d|lifetime`. The time windo
 
 ### API error contract and correlation
 
-Both REST clients (`frontend/aether/src/lib/api/rest/client.ts`,
-`frontend/kyber/src/lib/api/rest/client.ts`) parse backend failures through
-`parseProblemDetails` from `@aether/ui` (`frontend/shared/src/problem-details.ts`),
+Both REST clients (`apps/aether/src/lib/api/rest/client.ts`,
+`apps/kyber/src/lib/api/rest/client.ts`) parse backend failures through
+`parseProblemDetails` from `@aether/ui` (`apps/shared/src/problem-details.ts`),
 which normalizes the canonical RFC-7807-compatible body and both legacy error
 shapes into one structure. The canonical `ProblemDetails` **type** stays in
 `@aether/shared` (`packages/shared/problem-details.ts`) and is imported type-only;
@@ -816,7 +816,7 @@ Type contracts for all new sub-resources are in `packages/shared/`. The frontend
 
 ## Agentic Commerce Components (Kyber, v8.9.0)
 
-Commerce control plane code in `frontend/kyber/src/`:
+Commerce control plane code in `apps/kyber/src/`:
 
 **Mounted:** the Review page renders `components/commerce/approval-queue.tsx`
 (`ApprovalQueue`) from `features/approvals`, using the consolidated API adapter
@@ -844,7 +844,7 @@ test-only paths and cannot be imported by a production entrypoint.
 
 Attribution-verified reward eligibility UI. Aether never holds or distributes rewards; these pages surface eligibility decisions and action payloads for tenant systems to execute.
 
-### Aether (tenant) pages — `frontend/aether/src/pages/rewards/`
+### Aether (tenant) pages — `apps/aether/src/pages/rewards/`
 
 | Page | Route | Purpose |
 |---|---|---|
@@ -855,7 +855,7 @@ Attribution-verified reward eligibility UI. Aether never holds or distributes re
 
 **No-custody copy rules enforced in UI**: "Verify eligibility" (not "send reward"), "Generate proof for tenant contract" (not "Aether pays"), "Tenant executes reward" (not "Aether distributes").
 
-### Kyber (operator) pages — `frontend/kyber/src/pages/rewards/`
+### Kyber (operator) pages — `apps/kyber/src/pages/rewards/`
 
 | Page | Route | Purpose |
 |---|---|---|
@@ -889,11 +889,11 @@ Operator-facing and end-user notification components in `apps/kyber/src/features
 
 Cross-device handoff and governed-action visibility added by the mobile-productization program:
 
-- **Aether** (`frontend/aether/src/features/continuation/`): `continue-on-phone.tsx`
+- **Aether** (`apps/aether/src/features/continuation/`): `continue-on-phone.tsx`
   (create continuation, copy handoff link, resume), `recent-activity.tsx` (recent
   mobile activity), `use-client-sync.ts` (client-sync consumption),
   `use-continuations.ts` — wired to `/v1/continuations` + `/v1/client-sync`.
-- **Kyber** (`frontend/kyber/src/features/continuation/`):
+- **Kyber** (`apps/kyber/src/features/continuation/`):
   `operator-continuation-panel.tsx` + `continuation-create-button.tsx` against
   `/v1/kyber/continuations`; command receipts
   (`features/kyber-ops/command-receipts.tsx`) read durable
@@ -910,14 +910,14 @@ is feature-gated: the Aether panel behind `enableModelHarness` (default OFF),
 the Kyber pages behind the backend `MODEL_RUNTIME_ENABLED` gate (the routes
 return 503 while OFF). Typed contracts carry no credential material.
 
-- **Aether** (`frontend/aether/src/features/model-selection/`):
+- **Aether** (`apps/aether/src/features/model-selection/`):
   `ModelSelectionPanel` (tenant model-routing preference; `getModels` +
   `setTenantDefault` against `/v1/model-runtime/models` +
   `/v1/model-runtime/tenant-default`), `ModelRegistryView`, `EntitlementBadge`,
   `EvidenceReferences`, and the `useModelSelection` hook. `types.ts` is the
   server-shaped, credential-free contract (`ModelListResponse`,
   `TenantModelSelectionApi`).
-- **Kyber** (`frontend/kyber/src/features/model-runtime/`): `ModelRegistryPage`
+- **Kyber** (`apps/kyber/src/features/model-runtime/`): `ModelRegistryPage`
   (`GET /v1/model-runtime/registry`), `ModelRuntimeHealthPage` (`/health`),
   `EntitlementsPage` (`/entitlements`), `UsagePage` (`/usage`), `TracesPage`
   (`/traces`) — read-only operator pages, each with an injectable typed client
@@ -936,14 +936,14 @@ return 503 while OFF). Typed contracts carry no credential material.
 Both apps register their model-runtime surfaces on the signed-in route tree —
 all of it behind `enableModelHarness` (default OFF):
 
-- **Kyber** (`frontend/kyber/src/app/router.tsx`): the five operator pages are
+- **Kyber** (`apps/kyber/src/app/router.tsx`): the five operator pages are
   routed at `/model-runtime/registry`, `/model-runtime/health`,
   `/model-runtime/entitlements`, `/model-runtime/usage`,
   `/model-runtime/traces`, with discoverable sidebar entries
-  (`frontend/kyber/src/components/layout/sidebar.tsx`). While the feature flag
+  (`apps/kyber/src/components/layout/sidebar.tsx`). While the feature flag
   is OFF the routes stay registered but inert — every page renders the
   backend's `model_runtime_disabled` 503 surface.
-- **Aether** (`frontend/aether/src/pages/home/home-page.tsx`): the
+- **Aether** (`apps/aether/src/pages/home/home-page.tsx`): the
   `ModelSelectionPanel` is mounted on the authenticated tenant home page. While
   `enableModelHarness` is OFF the panel is absent (feature-flag gated); when ON
   it drives `getModels` + `setTenantDefault` against the tenant model-runtime
@@ -970,14 +970,14 @@ Shipped scope:
 - **Provider catalog** — installed plugins + legacy connectors, consumed from
   `GET /v1/admin/kyber/provider-connections/providers` via the
   `{providers, count}` envelope contract
-  (`frontend/kyber/src/features/provider-connections/use-provider-manifest.ts`).
+  (`apps/kyber/src/features/provider-connections/use-provider-manifest.ts`).
   Entry validation is per-entry tolerant: a single malformed plugin manifest
   is skipped and surfaced as a failed-entry status, never taking down the
   whole catalog.
 - **Connection lifecycle** — create / configure / credential / test / confirm /
   sync against the runtime tenant surface
   (`/v1/provider-connections/*`), with config fields validated against the
-  manifest (`frontend/kyber/src/pages/provider-connections/provider-connections-page.tsx`).
+  manifest (`apps/kyber/src/pages/provider-connections/provider-connections-page.tsx`).
 - **Migration views** — projection list/apply against the tenant-scoped
   migration routes (`GET /v1/provider-connections/migrations`,
   `GET`/`POST /v1/provider-connections/{connection_id}/migrations` — the
@@ -985,14 +985,14 @@ Shipped scope:
   `AETHER_PROVIDER_MIGRATIONS_ENABLED` (see `BACKEND-API.md`).
 - **Routing + nav** — the lazy route `/provider-connections` mounts
   `ProviderConnectionsPage`
-  (`frontend/kyber/src/app/router.tsx`); the sidebar entry is gated by
+  (`apps/kyber/src/app/router.tsx`); the sidebar entry is gated by
   `enableProviderRuntime`
-  (`frontend/kyber/src/components/layout/sidebar.tsx`). The frontend route is
+  (`apps/kyber/src/components/layout/sidebar.tsx`). The frontend route is
   not a grant — the backend still gates `/v1/admin/kyber/provider-connections/*`.
 
 The surface is additive and flag-gated; disabling the flags keeps the route
 present but inert (the backend gates the admin data routes). Unit coverage
-lives in `frontend/kyber/src/test/unit/` (`provider-manifest-hooks.test.ts`,
+lives in `apps/kyber/src/test/unit/` (`provider-manifest-hooks.test.ts`,
 `provider-manifest-schemas.test.ts`, `capability-state-surface.test.tsx`).
 
 ---
@@ -1056,10 +1056,10 @@ All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudN
 > **WS-1 rehome (end-user lifecycle):** the Aether tenant connector surfaces
 > moved into the nested Settings shell — `ConnectorsPage` and
 > `DeliveryHistoryPage` now live under
-> `frontend/aether/src/pages/settings/integrations/` (the connector manager
+> `apps/aether/src/pages/settings/integrations/` (the connector manager
 > renders at `/settings/integrations/connectors`, and the legacy `/integrations`
 > route redirects to `/settings/integrations`). A compatibility barrel at
-> `frontend/aether/src/pages/connectors/` re-exports them so legacy importers
+> `apps/aether/src/pages/connectors/` re-exports them so legacy importers
 > keep resolving. The Settings shell itself splits the historical one-long-page
 > `/settings` into a sub-nav over `/settings` (API Keys),
 > `/settings/integrations`, `/settings/data-exchange`, `/settings/sdk-fleet`,
@@ -1068,7 +1068,7 @@ All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudN
 
 ### Aether (tenant) — Delivery History
 
-**File:** `frontend/aether/src/pages/settings/integrations/delivery-history.tsx`
+**File:** `apps/aether/src/pages/settings/integrations/delivery-history.tsx`
 
 `DeliveryHistoryPage` provides tenants with a paginated view of their outbound `DeliveryIntent` records and their associated per-provider jobs, attempt details, and provider receipts.
 
@@ -1085,7 +1085,7 @@ All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudN
 
 ### Aether (tenant) — Connectors Page Health Labels
 
-**File:** `frontend/aether/src/pages/settings/integrations/connectors-page.tsx`
+**File:** `apps/aether/src/pages/settings/integrations/connectors-page.tsx`
 
 The `healthLabel(connector)` function maps `sync_status` + `secret_configured` to a human-readable label. **Critical invariant: never returns "Connected" when `secret_configured` is absent or false.**
 
@@ -1106,7 +1106,7 @@ The `connectorCapabilityState` helper maps every state above onto the shared `Ca
 
 ### Contextual integration readiness CTAs (v0.1.0-alpha.0)
 
-**Source:** `frontend/aether/src/features/integrations/use-tenant-readiness.ts`,
+**Source:** `apps/aether/src/features/integrations/use-tenant-readiness.ts`,
 `readiness-context.ts`, `types.ts` (additive over the R1 catalog/tenant read models)
 
 The joined tenant-contextual readiness graph (`GET /v1/tenant/integration-readiness`)
@@ -1134,7 +1134,7 @@ platform reads "appears after sync" rather than "connect".
 
 ### Kyber (operator) — Delivery Operations
 
-**File:** `frontend/kyber/src/pages/delivery/delivery-ops.tsx`
+**File:** `apps/kyber/src/pages/delivery/delivery-ops.tsx`
 
 `DeliveryOpsPage` is an operator cross-tenant delivery management surface with two tabs:
 
@@ -1145,7 +1145,7 @@ platform reads "appears after sync" rather than "connect".
 
 Pagination: 20 jobs per page with Previous/Next controls. Replay requires explicit operator confirmation via modal dialog — no action taken without approval.
 
-The `api.delivery` namespace in `frontend/aether/src/lib/api/endpoints.ts` and `frontend/kyber/src/lib/api/endpoints.ts` exposes:
+The `api.delivery` namespace in `apps/aether/src/lib/api/endpoints.ts` and `apps/kyber/src/lib/api/endpoints.ts` exposes:
 - `listIntents(params)` → `GET /v1/delivery/intents`
 - `listJobs(params)` → `GET /v1/delivery/jobs`
 - `getReceipt(jobId)` → `GET /v1/delivery/jobs/{id}/receipt`
@@ -1159,7 +1159,7 @@ interoperability domains. Feature-flagged-off backends return 404, which
 both apps render as an honest "not enabled" empty state rather than an
 error. Every page states its no-execution boundary in the header copy.
 
-### Aether (tenant) — `frontend/aether/src/pages/{stablecoins,derivatives,interop}/`
+### Aether (tenant) — `apps/aether/src/pages/{stablecoins,derivatives,interop}/`
 
 | Route | Page |
 |-------|------|
@@ -1176,7 +1176,7 @@ groups in `lib/api/endpoints.ts` parse the raw `{items, count}` responses
 helpers (`components/domain-intelligence.tsx`) provide the
 `NotEnabledOrError` state, stat tiles, and status badge variants.
 
-### Kyber (operator) — `frontend/kyber/src/pages/{stablecoins,derivatives,interop}/`
+### Kyber (operator) — `apps/kyber/src/pages/{stablecoins,derivatives,interop}/`
 
 | Route | Page |
 |-------|------|
@@ -1201,7 +1201,7 @@ consistent with the runtime data-truth contract.
 `SETTINGS_NAV` section in the nested settings shell (router.tsx lazy-loads
 `SettingsPage` for it, as for the other `/settings/*` section routes). The
 shell renders the section body through the `DataExchangeGate` from
-`frontend/aether/src/pages/settings/data-exchange-section.tsx` when the
+`apps/aether/src/pages/settings/data-exchange-section.tsx` when the
 resolver maps the URL to the `data-exchange` section — it is **not** mounted as
 a persistent footer under every `/settings/*` tab. The gate is
 capability-gated on the backend-published
@@ -1209,7 +1209,7 @@ capability-gated on the backend-published
 EmptyState and never mounts the full `DataExchangeSection` (its data fetches
 never fire on a disabled plane); when on it mounts the section.
 
-**Feature module** (`frontend/aether/src/features/data-exchange/`):
+**Feature module** (`apps/aether/src/features/data-exchange/`):
 - `api.ts` — zod-typed tenant client against the frozen `/v1/data-exchange/*`
   contract: `GET /settings`, `/capabilities`, `/usage` read adapters; history
   lists for `/artifacts`, `/exports`, `/imports`, `/reports`; `POST /exports`

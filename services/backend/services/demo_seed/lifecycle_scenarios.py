@@ -3,7 +3,7 @@
 This module is the PURE scenario-state layer of the lifecycle staging seeder.
 It has NO I/O and NO dependency on any repository / store / config: it maps each
 lifecycle suite (A-F, the executable acceptance spec in
-``frontend/aether/src/test/e2e/lifecycle-{A,B,C,D,E,F}-*.spec.ts`` +
+``apps/aether/src/test/e2e/lifecycle-{A,B,C,D,E,F}-*.spec.ts`` +
 ``lifecycle.harness.ts``) onto the tenant / user / activation / connector state
 the suite's starting conditions assert, expressed ONLY against the canonical
 stores and field vocabularies the backend actually reads (verified against the

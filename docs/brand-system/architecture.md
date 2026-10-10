@@ -16,7 +16,7 @@ canonical_owner: frontend@aether
 ```text
 packages/shared and backend contracts  -> exact IDs, authority, capability truth
 @olympus/brand                         -> manifests, taxonomy, token metadata
-@aether/ui (frontend/shared)           -> React/SVG renderers and a11y behavior
+@aether/ui (apps/shared)           -> React/SVG renderers and a11y behavior
 apps, docs, demo, mobile                -> render or consume the canonical source
 ```
 
@@ -93,7 +93,7 @@ material, and Kyber for operator material. Use a manifest lockup and shared
 tokens/components where the host supports `@aether/ui`; never attach an
 external logo URL to a doc page.
 
-The current `frontend/docs` SPA does **not** declare a dependency on
+The current `apps/docs` SPA does **not** declare a dependency on
 `@aether/ui` and uses local inline blue/gray styling. This slice intentionally
 does not add a second docs theme, a copied CSS token set, or a cross-workspace
 dependency. A future, separately-owned docs UI migration should first add the

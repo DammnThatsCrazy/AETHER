@@ -44,7 +44,7 @@ Everything else in `canonical_context` is a scalar or an id list (`route`, `sort
 ## The backend selection token
 
 Aether's Noesis "exact handoff" was blocked in-code
-(`frontend/aether/src/features/noesis/exploration-context.ts::exactContextHandoffLimitations`)
+(`apps/aether/src/features/noesis/exploration-context.ts::exactContextHandoffLimitations`)
 on a **backend selection token that did not exist**. The continuity plane
 introduces it as a first-class `ContinuationSelection` minted at `/handoff`:
 

@@ -1319,7 +1319,7 @@ suites:
   # Frontend / SDK workspaces — npm run test --workspace=<pkg>, cwd repo root.
   # Already exercised by .github/workflows/repo-health.yml's `typescript` job
   # (root `npm run test` -> `npm run test --workspaces --if-present`), except
-  # frontend/kyber's component/integration suites, which are wired into
+  # apps/kyber's component/integration suites, which are wired into
   # .github/workflows/kyber-e2e.yml instead.
   # ---------------------------------------------------------------------------
 
@@ -1452,8 +1452,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 45
     hard_runtime_budget_seconds: 120
-    paths: ["frontend/aether"]
-    runner: ["npm", "run", "test", "--workspace=frontend/aether"]
+    paths: ["apps/aether"]
+    runner: ["npm", "run", "test", "--workspace=apps/aether"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1475,8 +1475,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 90
     hard_runtime_budget_seconds: 180
-    paths: ["frontend/kyber"]
-    runner: ["npm", "run", "test", "--workspace=frontend/kyber"]
+    paths: ["apps/kyber"]
+    runner: ["npm", "run", "test", "--workspace=apps/kyber"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1498,9 +1498,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 60
     hard_runtime_budget_seconds: 180
-    paths: ["frontend/kyber"]
-    # Wired via .github/workflows/kyber-e2e.yml (working-directory: frontend/kyber).
-    runner: ["npm", "run", "test:component", "--workspace=frontend/kyber"]
+    paths: ["apps/kyber"]
+    # Wired via .github/workflows/kyber-e2e.yml (working-directory: apps/kyber).
+    runner: ["npm", "run", "test:component", "--workspace=apps/kyber"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1522,9 +1522,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 90
     hard_runtime_budget_seconds: 240
-    paths: ["frontend/kyber"]
-    # Wired via .github/workflows/kyber-e2e.yml (working-directory: frontend/kyber).
-    runner: ["npm", "run", "test:integration", "--workspace=frontend/kyber"]
+    paths: ["apps/kyber"]
+    # Wired via .github/workflows/kyber-e2e.yml (working-directory: apps/kyber).
+    runner: ["npm", "run", "test:integration", "--workspace=apps/kyber"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1546,8 +1546,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["frontend/shared"]
-    runner: ["npm", "run", "test", "--workspace=frontend/shared"]
+    paths: ["apps/shared"]
+    runner: ["npm", "run", "test", "--workspace=apps/shared"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1569,8 +1569,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["frontend/docs"]
-    runner: ["npm", "run", "test", "--workspace=frontend/docs"]
+    paths: ["apps/docs"]
+    runner: ["npm", "run", "test", "--workspace=apps/docs"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1592,8 +1592,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["frontend/demo"]
-    runner: ["npm", "run", "test", "--workspace=frontend/demo"]
+    paths: ["apps/demo"]
+    runner: ["npm", "run", "test", "--workspace=apps/demo"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1615,9 +1615,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["frontend/olympus-marketing"]
+    paths: ["apps/olympus-marketing"]
     # Olympus Labs corporate marketing site (olympuslabsml.com).
-    runner: ["npm", "run", "test", "--workspace=frontend/olympus-marketing"]
+    runner: ["npm", "run", "test", "--workspace=apps/olympus-marketing"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1639,9 +1639,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["frontend/aether-marketing"]
+    paths: ["apps/aether-marketing"]
     # Aether public marketing + auth-threshold site (aether.olympuslabsml.com).
-    runner: ["npm", "run", "test", "--workspace=frontend/aether-marketing"]
+    runner: ["npm", "run", "test", "--workspace=apps/aether-marketing"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1663,9 +1663,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["frontend/site"]
-    # Unified Olympus Labs + Aether site (frontend/site/design/README.md).
-    runner: ["npm", "run", "test", "--workspace=frontend/site"]
+    paths: ["apps/site"]
+    # Unified Olympus Labs + Aether site (apps/site/design/README.md).
+    runner: ["npm", "run", "test", "--workspace=apps/site"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1687,9 +1687,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["frontend/status"]
+    paths: ["apps/status"]
     # Public fail-closed status surface (status.olympuslabsml.com).
-    runner: ["npm", "run", "test", "--workspace=frontend/status"]
+    runner: ["npm", "run", "test", "--workspace=apps/status"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
