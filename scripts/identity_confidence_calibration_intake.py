@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from services.backend.services.identity.calibration_intake import (  # noqa: E402
+from services.api.identity.identity.calibration_intake import (  # noqa: E402
     assemble_reviewed_labels,
     prepare_review_intake,
 )
