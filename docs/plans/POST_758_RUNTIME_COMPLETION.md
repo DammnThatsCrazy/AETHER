@@ -88,6 +88,9 @@ design-partner evidence is distinguished from production readiness.
 | `9c0b2507` | Expose RPC execution evidence and an explicit verify action in the Journey Explorer, preserving settlement as a separate source. |
 | `66b7cc50` | Add tenant-scoped exact-reference commerce order/payment evidence and a read surface. |
 | `00eb4d83` | Prevent stale commerce order revisions from regressing ledger evidence; preserve equal-time divergent revisions as conflicts. |
+| `866fbec2` | Add acceptance-contract scenarios for exact commerce reconciliation, duplicate and conflicting payments, and revision replay. |
+| `29278a80` | Normalize signed Stripe merchant PaymentIntents into commerce evidence, preserving exact order references and distinguishing payment completion from settlement. |
+| `2b986220` | Show tenant-scoped order/payment evidence in the Aether Payment Rails session drawer. |
 
 ### Slice 5 — Exact-reference multi-provider commerce evidence
 
