@@ -1,0 +1,58 @@
+# =============================================================================
+# Aether journey-service — legacy fixture descriptor
+#
+# This descriptor is retained only for the historical journey-service tests.
+# The active journey capability is implemented in
+# services/api/journeys/measurement/ and is not a standalone Compose
+# service. The root Makefile and GitHub Actions workflows are authoritative.
+# =============================================================================
+service: journey-service
+language: python
+python_version: "3.11"
+
+build:
+  dockerfile: "docs/archive/legacy-architecture/backend/services/journey-service/Dockerfile"
+  context: "docs/archive/legacy-architecture/backend/services/journey-service"
+  image: aether/journey-service
+
+test:
+  unit:
+    command: pytest -q "docs/archive/legacy-architecture/backend/services/journey-service/tests"
+  integration:
+    command: pytest -q "tests/integration/journey"
+
+deploy:
+  staging:
+    replicas: 2
+    cpu: "500m"
+    memory: "1Gi"
+    env:
+      JOURNEY_CONSUMER_AUTOSTART: "1"
+  production:
+    replicas: 4
+    cpu: "1000m"
+    memory: "2Gi"
+    autoscale:
+      min: 4
+      max: 16
+      target_cpu_percent: 70
+
+dependencies:
+  - postgres
+  - redis
+  - kafka
+  - clickhouse
+  - neptune
+
+migrations:
+  postgres:
+    - "docs/archive/legacy-architecture/backend/migrations/2026_05_actors_journeys.sql"
+  clickhouse:
+    - "docs/archive/legacy-architecture/data-lake-architecture/aether-Datalake-backend/services/data-lake/src/schema/migrations/2026_05_event_extension.sql"
+
+observability:
+  metrics_port: 8080
+  health_path: /health
+  slo:
+    p99_event_processing_ms: 250
+    error_rate_pct: 0.5

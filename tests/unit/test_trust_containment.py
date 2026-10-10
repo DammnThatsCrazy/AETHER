@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 # Ensure backend modules are importable when this file runs in isolation.
 if str(BACKEND_ROOT) not in sys.path:
@@ -50,7 +50,7 @@ pytestmark = pytest.mark.skipif(not _crypto_ok(), reason="cryptography unavailab
 # To be fully robust to ordering, force a SINGLE consistent generation at the
 # start of each trust test: evict backend modules, then import them fresh so the
 # routes, repos, settings, and exception types all agree.
-_BACKEND_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+_BACKEND_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 def _evict_backend() -> None:
@@ -124,7 +124,7 @@ class TestHumanAuthIssuesSessionsNotKeys:
     def test_login_returns_session_not_api_key(self):
         with trust_flags(**_ON):
             from fastapi import Response
-            auth = importlib.import_module("services.auth.routes")
+            auth = importlib.import_module("tenancy.auth.routes")
             repos = importlib.import_module("repositories.repos")
             _run(_seed_password_user(repos, "t-login", "l@x.io", "pw12345678"))
 
@@ -143,7 +143,7 @@ class TestHumanAuthIssuesSessionsNotKeys:
                 return True
             monkeypatch.setattr(ver, "verify_otp", _ok)
 
-            auth = importlib.import_module("services.auth.routes")
+            auth = importlib.import_module("tenancy.auth.routes")
             resp = _run(auth.verify_email(auth.VerifyEmailRequest(email="v@x.io", code="123456"), Response()))
             data = resp["data"]
             assert "api_key" not in data
@@ -158,7 +158,7 @@ class TestHumanAuthIssuesSessionsNotKeys:
                 return {"sub": "sub-1", "email": "s@x.io", "name": "S", "email_verified": True}
             monkeypatch.setattr(a0, "validate_auth0_token", _claims)
 
-            auth = importlib.import_module("services.auth.routes")
+            auth = importlib.import_module("tenancy.auth.routes")
             repos = importlib.import_module("repositories.repos")
             resp = _run(auth.sso_callback(auth.SSOCallbackRequest(token="tok"), Response()))
             data = resp["data"]
@@ -174,7 +174,7 @@ class TestLegacyContainment:
 
     def test_legacy_registration_contained_no_key(self):
         with trust_flags(**_ON):
-            reg = importlib.import_module("services.registration.routes")
+            reg = importlib.import_module("tenancy.registration.routes")
             resp = _run(reg.register_tenant(
                 reg.TenantRegistration(name="Acme", contact_email="a@x.io", plan_tier="alpha"),
                 FakeRequest(),
@@ -186,7 +186,7 @@ class TestLegacyContainment:
 
     def test_recovery_creates_no_key(self):
         with trust_flags(**_ON):
-            reg = importlib.import_module("services.registration.routes")
+            reg = importlib.import_module("tenancy.registration.routes")
             repos = importlib.import_module("repositories.repos")
             _run(repos.AdminRepository().insert("t-rec", {
                 "name": "Rec", "contact_email": "r@x.io", "plan_tier": "alpha", "status": "active",
@@ -201,7 +201,7 @@ class TestSessionAndCredentialSemantics:
 
     def test_revoked_session_fails_validation(self):
         with trust_flags(**_ON):
-            sessions = importlib.import_module("services.auth.sessions")
+            sessions = importlib.import_module("tenancy.auth.sessions")
             svc = sessions.SessionService()
             issue = _run(svc.create_session("t-1", "p-1"))
             assert _run(svc.validate_session(issue.token))["tenant_id"] == "t-1"
@@ -211,7 +211,7 @@ class TestSessionAndCredentialSemantics:
 
     def test_expired_session_fails_validation(self):
         with trust_flags(**_ON):
-            sessions = importlib.import_module("services.auth.sessions")
+            sessions = importlib.import_module("tenancy.auth.sessions")
             svc = sessions.SessionService()
             issue = _run(svc.create_session("t-2", "p-2", absolute_minutes=-1))
             with pytest.raises(sessions.SessionValidationError):
@@ -219,7 +219,7 @@ class TestSessionAndCredentialSemantics:
 
     def test_public_ingest_identifier_is_ingest_only(self):
         with trust_flags(**_ON):
-            sessions = importlib.import_module("services.auth.sessions")
+            sessions = importlib.import_module("tenancy.auth.sessions")
             mw = importlib.import_module("middleware.middleware")
             auth_mod = importlib.import_module("shared.auth.auth")
 
@@ -243,7 +243,7 @@ class TestSessionAndCredentialSemantics:
 
     def test_service_credential_is_scoped(self):
         with trust_flags(**_ON):
-            sessions = importlib.import_module("services.auth.sessions")
+            sessions = importlib.import_module("tenancy.auth.sessions")
             svc = sessions.ServiceCredentialService()
             acct = _run(svc.create_service_account("t-1", "ci"))
             raw, cred = _run(svc.issue_credential(
@@ -261,7 +261,7 @@ class TestStatusEnforcement:
     def test_inactive_tenant_blocks_login(self):
         with trust_flags(**_ON):
             from fastapi import Response
-            auth = importlib.import_module("services.auth.routes")
+            auth = importlib.import_module("tenancy.auth.routes")
             repos = importlib.import_module("repositories.repos")
             common = importlib.import_module("shared.common.common")
             _run(_seed_password_user(repos, "t-inactive", "i@x.io", "pw12345678", status="inactive"))
@@ -279,7 +279,7 @@ class TestLegacyPreserved:
     def test_login_returns_api_key_when_flag_off(self):
         with trust_flags(**_OFF):
             from fastapi import Response
-            auth = importlib.import_module("services.auth.routes")
+            auth = importlib.import_module("tenancy.auth.routes")
             repos = importlib.import_module("repositories.repos")
             _run(_seed_password_user(repos, "t-legacy", "lg@x.io", "pw12345678"))
             resp = _run(auth.login(auth.LoginRequest(email="lg@x.io", password="pw12345678"), Response()))
@@ -288,7 +288,7 @@ class TestLegacyPreserved:
 
     def test_legacy_registration_returns_api_key_when_flag_on(self):
         with trust_flags(**_OFF):
-            reg = importlib.import_module("services.registration.routes")
+            reg = importlib.import_module("tenancy.registration.routes")
             resp = _run(reg.register_tenant(
                 reg.TenantRegistration(name="Acme", contact_email="lg2@x.io", plan_tier="alpha"),
                 FakeRequest(),
@@ -319,7 +319,7 @@ class TestTenantStatusRehydration:
 
     def test_deactivated_tenant_existing_session_is_rejected(self):
         with trust_flags(**_ON):
-            sessions = importlib.import_module("services.auth.sessions")
+            sessions = importlib.import_module("tenancy.auth.sessions")
             repos = importlib.import_module("repositories.repos")
             mw = importlib.import_module("middleware.middleware")
 
@@ -358,7 +358,7 @@ class TestTenantStatusRehydration:
 
     def test_missing_tenant_record_fails_closed(self):
         with trust_flags(**_ON):
-            sessions = importlib.import_module("services.auth.sessions")
+            sessions = importlib.import_module("tenancy.auth.sessions")
             mw = importlib.import_module("middleware.middleware")
 
             issue = _run(sessions.SessionService().create_session("t-ghost", "p-1"))
@@ -369,7 +369,7 @@ class TestTenantStatusRehydration:
 
     def test_service_credential_rehydrates_tenant_status(self):
         with trust_flags(**_ON):
-            sessions = importlib.import_module("services.auth.sessions")
+            sessions = importlib.import_module("tenancy.auth.sessions")
             repos = importlib.import_module("repositories.repos")
             mw = importlib.import_module("middleware.middleware")
 

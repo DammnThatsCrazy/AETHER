@@ -16,7 +16,7 @@ def test_feature_gate_runs_calibration_evaluator_rules_and_cli_contract():
     )
     command = step["run"]
 
-    assert "services/backend/tests/identity/test_confidence_calibration_evaluation.py" in command
+    assert "services/api/tests/identity/test_confidence_calibration_evaluation.py" in command
     assert "tests/unit/test_identity_continuity_calibration_workflow.py" in command
     assert "scripts/identity_confidence_calibration_evaluation.py --help" in command
     # The feature gate exercises rules with test inputs but never invents a
@@ -26,7 +26,7 @@ def test_feature_gate_runs_calibration_evaluator_rules_and_cli_contract():
 
 
 def test_identity_match_score_runtime_calibration_stays_disabled():
-    confidence_source = (ROOT / "services/backend/services/identity/confidence.py").read_text(encoding="utf-8")
+    confidence_source = (ROOT / "services/api/identity/identity/confidence.py").read_text(encoding="utf-8")
     assert "CALIBRATED: bool = False" in confidence_source
     assert "identity_match_score" in confidence_source
     assert "not a calibrated probability" in confidence_source
@@ -38,9 +38,9 @@ def test_routing_gate_exercises_sdk_identify_trace_and_pii_safe_observability():
     step = next(item for item in steps if item.get("name") == "Gate 2 — exercise import, SDK, and commerce identity routing")
     command = step["run"]
 
-    assert "services/backend/tests/identity/test_sdk_identify_route_resolution.py" in command
-    assert "services/backend/tests/identity/test_identity_observability_export.py" in command
-    assert "identity.trace" in (ROOT / "services/backend/tests/identity/test_identity_observability_export.py").read_text(encoding="utf-8")
+    assert "services/api/tests/identity/test_sdk_identify_route_resolution.py" in command
+    assert "services/api/tests/identity/test_identity_observability_export.py" in command
+    assert "identity.trace" in (ROOT / "services/api/tests/identity/test_identity_observability_export.py").read_text(encoding="utf-8")
 
 
 def test_identity_continuity_gate_remains_supplementary_ready_for_review_only():

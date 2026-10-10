@@ -29,6 +29,6 @@ provisioned → active → suspended → deactivated → purged
 
 ## See Also
 
-- `docs/security/tenant-isolation.md` — Tenant isolation details
-- `docs/developer/tenant-setup.md` — Tenant configuration guide
+- `docs/reference/security/tenant-isolation.md` — Tenant isolation details
+- `docs/reference/developer/tenant-setup.md` — Tenant configuration guide
 - `docs/product/graph-model.md` — Graph model

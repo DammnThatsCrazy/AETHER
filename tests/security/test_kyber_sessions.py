@@ -22,7 +22,7 @@ from typing import Any, Optional
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -30,16 +30,16 @@ from repositories.repos import reset_in_memory_stores  # noqa: E402
 from shared.common.common import ForbiddenError, UnauthorizedError  # noqa: E402
 from shared.temporal.clock import FixedClock  # noqa: E402
 
-from services.kyber.access.dependencies import (  # noqa: E402
+from governance.kyber.access.dependencies import (  # noqa: E402
     AccessProviders,
     reset_providers,
     resolve_access_context,
     set_providers,
 )
-from services.kyber.access.scopes import access_scope_service  # noqa: E402
-from services.kyber.sessions import cookies, validation  # noqa: E402
-from services.kyber.sessions.service import hash_token, session_service  # noqa: E402
-from services.kyber.sessions.step_up import step_up_service  # noqa: E402
+from governance.kyber.access.scopes import access_scope_service  # noqa: E402
+from governance.kyber.sessions import cookies, validation  # noqa: E402
+from governance.kyber.sessions.service import hash_token, session_service  # noqa: E402
+from governance.kyber.sessions.step_up import step_up_service  # noqa: E402
 
 ORIGIN = "http://localhost:3000"
 AUTHORITY_METHODS = ["google_oidc", "webauthn", "device_proof"]
@@ -87,7 +87,7 @@ class FakePrincipals:
         return list(principal.templates) if principal else []
 
     async def effective_capabilities(self, operator_id: str, *, environment: Any = None):
-        from services.kyber.access.roles import capabilities_for
+        from governance.kyber.access.roles import capabilities_for
 
         principal = self.by_id.get(operator_id)
         if principal is None:
@@ -277,7 +277,7 @@ async def open_session(
 
 
 async def raw_row(session_id: str) -> dict:
-    from services.kyber.sessions.service import KyberSessionRepository
+    from governance.kyber.sessions.service import KyberSessionRepository
 
     row = await KyberSessionRepository().find_by_id(session_id)
     assert row is not None
@@ -402,7 +402,7 @@ async def test_session_token_is_read_from_cookie_header_and_bearer(monkeypatch):
 
 
 async def test_idle_window_slides_on_use_then_expires(harness):
-    """The defect in services/auth/sessions: idle must move, then close."""
+    """The defect in services/api/tenancy/auth/sessions: idle must move, then close."""
     session, raw = await open_session(harness)  # founding_engineer: idle 120m
     original_idle = session.idle_expires_at
 

@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -29,7 +29,7 @@ def _make_activity(
     idempotency_key: str | None = None,
     offset: int = 0,
 ) -> dict:
-    from services.measurement.contracts import CanonicalActivity, ActivityFamily, ActivityStatus
+    from journeys.measurement.contracts import CanonicalActivity, ActivityFamily, ActivityStatus
     return CanonicalActivity(
         tenant_id=tenant_id,
         profile_id=profile_id,
@@ -49,7 +49,7 @@ class TestActivityRepositoryUpsert:
 
     @pytest.mark.asyncio
     async def test_upsert_creates_record(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         activity = _make_activity()
         result = await repo.upsert(activity)
@@ -57,7 +57,7 @@ class TestActivityRepositoryUpsert:
 
     @pytest.mark.asyncio
     async def test_upsert_is_idempotent(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         key = str(uuid4())
         activity = _make_activity(idempotency_key=key)
@@ -69,7 +69,7 @@ class TestActivityRepositoryUpsert:
 
     @pytest.mark.asyncio
     async def test_same_idem_key_different_tenants_are_separate(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         key = str(uuid4())
         a1 = _make_activity(tenant_id="tenant-a", idempotency_key=key)
@@ -82,7 +82,7 @@ class TestActivityRepositoryUpsert:
 
     @pytest.mark.asyncio
     async def test_list_by_profile_excludes_tombstoned(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         profile_id = f"prof-{uuid4()}"
         key_a = str(uuid4())
@@ -104,7 +104,7 @@ class TestActivityRepositoryUpsert:
 
     @pytest.mark.asyncio
     async def test_list_by_profile_family_filter(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         profile_id = f"prof-{uuid4()}"
         for family in ["web2", "web3", "campaign"]:
@@ -117,7 +117,7 @@ class TestActivityStatusUpdates:
 
     @pytest.mark.asyncio
     async def test_update_status_confirmed(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         profile_id = f"prof-{uuid4()}"
         key = str(uuid4())
@@ -133,7 +133,7 @@ class TestActivityStatusUpdates:
 
     @pytest.mark.asyncio
     async def test_update_status_by_tx_hash(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         tx = f"0x{uuid4().hex}"
         await repo.upsert({
@@ -149,7 +149,7 @@ class TestTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_list_by_profile_respects_tenant(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         profile_id = f"shared-prof-{uuid4()}"
         key_a = str(uuid4())

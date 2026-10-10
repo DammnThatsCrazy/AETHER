@@ -1,7 +1,7 @@
 """The unified site keeps the hosting headers of the app it replaces.
 
 Amplify reads customHttp.yml from the monorepo app root, so switching the
-Aether host from apps/aether-marketing to apps/site would silently drop
+Aether host from apps/marketing-aether to apps/public-site would silently drop
 its security headers and immutable asset caching without this file.
 """
 
@@ -23,8 +23,8 @@ def _headers(app_root: str) -> dict[str, dict[str, str]]:
 
 
 def test_site_serves_the_marketing_security_headers_and_asset_caching() -> None:
-    site = _headers("apps/site")
-    assert site == _headers("apps/aether-marketing")
+    site = _headers("apps/public-site")
+    assert site == _headers("apps/marketing-aether")
     assert site["**/*"] == {
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",

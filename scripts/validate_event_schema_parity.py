@@ -15,9 +15,8 @@ REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "event-registry.jso
 TS_SOURCE = ROOT / "packages" / "shared" / "events.ts"
 PY_SOURCE = (
     ROOT
-    / "services" / "backend"
-    / "services"
-    / "ingestion"
+    / "services" / "api"
+    / "ingestion" / "ingestion"
     / "generated_registry.py"
 )
 

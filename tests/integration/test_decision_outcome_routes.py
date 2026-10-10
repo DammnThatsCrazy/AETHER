@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT.parent / "services" / "backend"
+BACKEND_ROOT = ROOT.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 pytest.importorskip("fastapi")
 
@@ -49,7 +49,7 @@ def _restore_decision_flags(routes, previous: dict[str, bool]) -> None:
 @pytest.mark.asyncio
 async def test_recommend_decide_act_learn_flow_is_tenant_scoped():
     from repositories.repos import reset_in_memory_stores
-    from services.intelligence import routes
+    from intelligence.intelligence import routes
 
     reset_in_memory_stores()
     previous_flags = _set_decision_flags(routes, True)
@@ -151,7 +151,7 @@ class FakeRegistry:
 @pytest.mark.asyncio
 async def test_recommendation_preview_is_read_only_and_non_persistent(monkeypatch):
     from repositories.repos import reset_in_memory_stores
-    from services.intelligence import routes
+    from intelligence.intelligence import routes
     from shared.common.common import ForbiddenError
 
     reset_in_memory_stores()
@@ -180,7 +180,7 @@ async def test_recommendation_preview_is_read_only_and_non_persistent(monkeypatc
 @pytest.mark.asyncio
 async def test_recommendation_generate_requires_write_and_persists(monkeypatch):
     from repositories.repos import reset_in_memory_stores
-    from services.intelligence import routes
+    from intelligence.intelligence import routes
 
     reset_in_memory_stores()
     registry = FakeRegistry()
@@ -204,7 +204,7 @@ async def test_recommendation_generate_requires_write_and_persists(monkeypatch):
 @pytest.mark.asyncio
 async def test_recommendation_investigation_exposes_only_explicit_tenant_vertices(monkeypatch):
     from repositories.repos import reset_in_memory_stores
-    from services.intelligence import routes
+    from intelligence.intelligence import routes
 
     reset_in_memory_stores()
     registry = FakeRegistry()
@@ -237,7 +237,7 @@ async def test_recommendation_investigation_exposes_only_explicit_tenant_vertice
 @pytest.mark.asyncio
 async def test_outcome_ledger_aggregates_tenant_value(monkeypatch):
     from repositories.repos import reset_in_memory_stores
-    from services.intelligence import routes
+    from intelligence.intelligence import routes
 
     reset_in_memory_stores()
     monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())

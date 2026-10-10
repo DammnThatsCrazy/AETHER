@@ -25,13 +25,13 @@ from pathlib import Path
 import pytest  # noqa: F401  (imported for parity / future markers)
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 # Ensure backend modules are importable when this file runs in isolation.
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-_BACKEND_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+_BACKEND_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 def _evict_backend() -> None:
@@ -48,7 +48,7 @@ def _run(coro):
 def consent_env(**flag_overrides):
     """Force a fresh, consistent backend and override consent-authority flags.
 
-    Yields the freshly-imported ``services.consent.authority`` module so tests
+    Yields the freshly-imported ``governance.consent.authority`` module so tests
     seed receipts / profiles through the same generation the decision functions
     read from.
     """
@@ -56,7 +56,7 @@ def consent_env(**flag_overrides):
     settings_mod = importlib.import_module("config.settings")
     repos = importlib.import_module("repositories.repos")
     repos.reset_in_memory_stores()
-    authority = importlib.import_module("services.consent.authority")
+    authority = importlib.import_module("governance.consent.authority")
     settings = settings_mod.settings
     original = settings.consent_authority
     if flag_overrides:
@@ -257,7 +257,7 @@ class TestIngestionEnforcement:
     def test_granted_sdk_snapshot_but_no_server_receipt_is_rejected(self):
         # The SDK claims consent; the server has no receipt. Server wins.
         with consent_env(authoritative_consent_enforcement_enabled=True):
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             event = _make_event(batch, consent={"analytics": True})
             result = _process(batch, event)
             assert result.status == "rejected"
@@ -265,7 +265,7 @@ class TestIngestionEnforcement:
 
     def test_server_granted_receipt_is_accepted(self):
         with consent_env(authoritative_consent_enforcement_enabled=True) as authority:
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             _run(authority.ConsentReceiptRepository().record(
                 "r1", "t1", "analytics", "granted", subject_id="u1"))
             event = _make_event(batch, consent={"analytics": True})
@@ -274,7 +274,7 @@ class TestIngestionEnforcement:
 
     def test_server_revoked_receipt_is_rejected_despite_sdk_grant(self):
         with consent_env(authoritative_consent_enforcement_enabled=True) as authority:
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             _run(authority.ConsentReceiptRepository().record(
                 "r1", "t1", "analytics", "revoked", subject_id="u1",
                 revoked_at="2026-01-01T00:00:00Z"))
@@ -286,7 +286,7 @@ class TestIngestionEnforcement:
     def test_flag_off_preserves_legacy_sdk_snapshot_behavior(self):
         # Flag OFF: no server receipt required; the SDK snapshot governs.
         with consent_env(authoritative_consent_enforcement_enabled=False):
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             # SDK grants analytics, no server receipt → accepted (legacy).
             event = _make_event(batch, consent={"analytics": True})
             assert _process(batch, event).status == "accepted"
@@ -295,7 +295,7 @@ class TestIngestionEnforcement:
         # Flag OFF: the legacy per-event snapshot gate (4a) still blocks an
         # explicit SDK denial.
         with consent_env(authoritative_consent_enforcement_enabled=False):
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             event = _make_event(batch, consent={"analytics": False})
             result = _process(batch, event)
             assert result.status == "rejected"

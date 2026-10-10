@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -28,7 +28,7 @@ TENANT = "tenant-settlement-test"
 
 @pytest.fixture(autouse=True)
 def reset():
-    from services.x402.commerce_store import reset_commerce_store
+    from value.x402.commerce_store import reset_commerce_store
     reset_commerce_store()
     yield
     reset_commerce_store()
@@ -36,12 +36,12 @@ def reset():
 
 @pytest.fixture()
 def tracker():
-    from services.x402.settlement import SettlementTracker
+    from value.x402.settlement import SettlementTracker
     return SettlementTracker()
 
 
 async def _make_receipt(tenant_id: str = TENANT):
-    from services.x402.commerce_models import PaymentReceipt
+    from value.x402.commerce_models import PaymentReceipt
     return PaymentReceipt(
         tenant_id=tenant_id,
         authorization_id="auth-001",
@@ -60,7 +60,7 @@ async def _make_receipt(tenant_id: str = TENANT):
 @pytest.mark.asyncio
 async def test_start_creates_settlement(tracker):
     receipt = await _make_receipt()
-    from services.x402.commerce_models import SettlementState
+    from value.x402.commerce_models import SettlementState
     settlement = await tracker.start(TENANT, receipt, facilitator_id="fac-001")
     # In local mode advances immediately to SETTLED
     assert settlement.state in (SettlementState.VERIFYING, SettlementState.SETTLED)
@@ -70,7 +70,7 @@ async def test_start_creates_settlement(tracker):
 @pytest.mark.asyncio
 async def test_advance_to_settled(tracker):
     receipt = await _make_receipt()
-    from services.x402.commerce_models import SettlementState
+    from value.x402.commerce_models import SettlementState
     s = await tracker.start(TENANT, receipt, "fac-001")
     # mark_pending then check get
     pending = await tracker.mark_pending(TENANT, s.settlement_id, "waiting")
@@ -80,7 +80,7 @@ async def test_advance_to_settled(tracker):
 @pytest.mark.asyncio
 async def test_fail_marks_settlement_failed(tracker):
     receipt = await _make_receipt()
-    from services.x402.commerce_models import SettlementState
+    from value.x402.commerce_models import SettlementState
     s = await tracker.start(TENANT, receipt, "fac-001")
     failed = await tracker.fail(TENANT, s.settlement_id, "network error")
     assert failed.state == SettlementState.FAILED
@@ -98,7 +98,7 @@ async def test_retry_increments_retry_count(tracker):
 @pytest.mark.asyncio
 async def test_retry_exceeded_max_fails(tracker):
     receipt = await _make_receipt()
-    from services.x402.commerce_models import SettlementState
+    from value.x402.commerce_models import SettlementState
     s = await tracker.start(TENANT, receipt, "fac-001")
     await tracker.fail(TENANT, s.settlement_id, "first fail")
     # Exhaust retries (max is 5)

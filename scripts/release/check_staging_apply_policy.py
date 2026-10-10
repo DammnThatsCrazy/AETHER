@@ -567,7 +567,7 @@ def _staging_product_dns_zone() -> str:
     IAM contract cannot drift from the zone Terraform manages."""
     import re
 
-    tfvars = Path(__file__).resolve().parents[2] / "deploy/aws/terraform/profiles/staging.tfvars"
+    tfvars = Path(__file__).resolve().parents[2] / "infra/aws/terraform/profiles/staging.tfvars"
     match = re.search(r'^product_dns_zone_id\s*=\s*"(Z[A-Z0-9]+)"', tfvars.read_text(encoding="utf-8"), re.M)
     if not match:
         fail("staging.tfvars must set product_dns_zone_id for the Route 53 record grants")

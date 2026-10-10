@@ -21,8 +21,8 @@ def _make_request(tenant_id: str = TENANT):
 
 
 async def test_profile_semantic_dimension_empty_and_populated():
-    from services.profile.routes import get_semantic
-    from services.semantic_intelligence.engine import classify_event, get_store
+    from identity.profile.routes import get_semantic
+    from intelligence.semantic_intelligence.engine import classify_event, get_store
 
     # Empty → shaped, not 404.
     empty = await get_semantic(ENTITY, _make_request())

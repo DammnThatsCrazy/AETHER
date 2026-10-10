@@ -4,7 +4,7 @@
 PR 2 upgraded config/route_registry.yaml from the PR 0 seed (a `routes:` list) to
 the v2 rule-derived catalog: `default_decision: deny`, `known_prefixes`, and the
 `sensitive_domains` / `high_risk_domains` / `infra_domains` sets consumed by
-services/security/route_registry.py::classify. Schema v3 adds the optional
+services/api/governance/security/route_registry.py::classify. Schema v3 adds the optional
 `kyber_routes` block declaring each Kyber route's capability, disclosure ceiling
 and action class. This gate validates that shape and coherence. Full
 mounted-route COVERAGE (default-deny at CI) is enforced by
@@ -29,7 +29,7 @@ _MAX_ACTION_CLASS = 5
 def _backend_on_path() -> str:
     backend = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "services", "backend",
+        "services", "api",
     )
     if backend not in sys.path:
         sys.path.insert(0, backend)
@@ -54,8 +54,8 @@ def _check_kyber_routes(r: Reporter, data: dict) -> None:
 
     _backend_on_path()
     try:
-        from services.kyber.access.capabilities import ALL_CAPABILITY_IDS  # type: ignore
-        from services.kyber.access.disclosure import DisclosureLevel  # type: ignore
+        from governance.kyber.access.capabilities import ALL_CAPABILITY_IDS  # type: ignore
+        from governance.kyber.access.disclosure import DisclosureLevel  # type: ignore
     except Exception as exc:  # pragma: no cover - broken/absent Kyber package
         r.fail(f"kyber capability vocabulary could not be imported ({type(exc).__name__}: {exc})")
         return
@@ -138,7 +138,7 @@ def check() -> int:
     # The Python classifier must import and agree with the catalog.
     try:
         _backend_on_path()
-        from services.security.route_registry import classify  # type: ignore
+        from governance.security.route_registry import classify  # type: ignore
         pol = classify("/v1/kyber/tenants/x/operational-envelope")
         r.require(pol is not None and pol.kyber_operator_required and pol.audit_required,
                   "classify() marks /kyber routes operator-required + audited",

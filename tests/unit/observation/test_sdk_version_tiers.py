@@ -1,6 +1,6 @@
 """WS-E 6 — SDK version-compatibility tiers (Invariant #18), flag-gated.
 
-Unit tests for :mod:`services.ingestion.sdk_version_tiers`:
+Unit tests for :mod:`ingestion.ingestion.sdk_version_tiers`:
 
 * band classification boundaries (0.1.x+ supported / <0.1.0 unsupported /
   unparseable → unclassified), inclusive/exclusive bound semantics, recognized
@@ -20,7 +20,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.ingestion import sdk_version_tiers as st
+from ingestion.ingestion import sdk_version_tiers as st
 
 
 def _settings(enabled: bool, mode: str = "off") -> SimpleNamespace:

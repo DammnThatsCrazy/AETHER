@@ -58,5 +58,5 @@ assign a canonical entity.
 ## Current State
 
 Identity resolution is implemented in the backend resolution service.
-See `services/backend/services/identity/` for the
+See `services/api/identity/identity/` for the
 runtime implementation.

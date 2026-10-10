@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -20,8 +20,8 @@ import os  # noqa: E402
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.imports import kyber_routes as kr  # noqa: E402
-from services.imports import service as svc  # noqa: E402
+from ingestion.imports import kyber_routes as kr  # noqa: E402
+from ingestion.imports import service as svc  # noqa: E402
 
 
 @contextmanager

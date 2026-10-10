@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -23,8 +23,8 @@ TENANT = "tenant-entitlement-test"
 
 @pytest.fixture(autouse=True)
 def reset():
-    import services.x402.resources as _res_mod
-    from services.x402.commerce_store import reset_commerce_store
+    import value.x402.resources as _res_mod
+    from value.x402.commerce_store import reset_commerce_store
     reset_commerce_store()
     _res_mod._registry = None
     yield
@@ -34,13 +34,13 @@ def reset():
 
 @pytest.fixture()
 def svc():
-    from services.x402.entitlements import EntitlementService
+    from value.x402.entitlements import EntitlementService
     return EntitlementService()
 
 
 async def _make_settlement(tenant_id: str = TENANT):
     """Return a minimal Settlement object (matches Settlement model fields)."""
-    from services.x402.commerce_models import Settlement, SettlementState
+    from value.x402.commerce_models import Settlement, SettlementState
     return Settlement(
         tenant_id=tenant_id,
         receipt_id="rcpt-001",
@@ -55,8 +55,8 @@ async def _make_settlement(tenant_id: str = TENANT):
 
 async def _seed_resource(tenant_id: str = TENANT, resource_id: str = "res-001", ttl: int = 3600):
     """Register a protected resource in the commerce store."""
-    from services.x402.commerce_store import get_commerce_store
-    from services.x402.commerce_models import ProtectedResource, ResourceClass
+    from value.x402.commerce_store import get_commerce_store
+    from value.x402.commerce_models import ProtectedResource, ResourceClass
     store = get_commerce_store()
     resource = ProtectedResource(
         tenant_id=tenant_id,
@@ -75,7 +75,7 @@ async def _seed_resource(tenant_id: str = TENANT, resource_id: str = "res-001", 
 async def test_mint_creates_active_entitlement(svc):
     await _seed_resource()
     settlement = await _make_settlement()
-    from services.x402.commerce_models import EntitlementStatus
+    from value.x402.commerce_models import EntitlementStatus
     ent = await svc.mint(
         tenant_id=TENANT,
         holder_id="agent-001",
@@ -118,7 +118,7 @@ async def test_lookup_returns_active_entitlement(svc):
 @pytest.mark.asyncio
 async def test_lookup_returns_none_for_expired(svc):
     """Backdate expires_at directly then lookup() should return None."""
-    from services.x402.commerce_store import get_commerce_store
+    from value.x402.commerce_store import get_commerce_store
     await _seed_resource(ttl=10)
     settlement = await _make_settlement()
     ent = await svc.mint(
@@ -151,7 +151,7 @@ async def test_reuse_increments_count(svc):
 
 @pytest.mark.asyncio
 async def test_reuse_expired_raises(svc):
-    import services.x402.entitlements as mod
+    import value.x402.entitlements as mod
     # Seed resource with 1-second TTL
     await _seed_resource(ttl=1)
     settlement = await _make_settlement()
@@ -177,7 +177,7 @@ async def test_revoke_marks_entitlement_revoked(svc):
         tenant_id=TENANT, holder_id="agent-005",
         holder_type="agent", resource_id="res-001", settlement=settlement,
     )
-    from services.x402.commerce_models import EntitlementStatus
+    from value.x402.commerce_models import EntitlementStatus
     revoked = await svc.revoke(TENANT, ent.entitlement_id, "admin", "policy change")
     assert revoked.status == EntitlementStatus.REVOKED
 
@@ -193,5 +193,5 @@ async def test_revoke_idempotent(svc):
     await svc.revoke(TENANT, ent.entitlement_id, "admin", "first revoke")
     # Second revoke should not raise
     result = await svc.revoke(TENANT, ent.entitlement_id, "admin", "second revoke")
-    from services.x402.commerce_models import EntitlementStatus
+    from value.x402.commerce_models import EntitlementStatus
     assert result.status == EntitlementStatus.REVOKED

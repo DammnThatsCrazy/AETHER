@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
@@ -41,7 +41,7 @@ async def test_x402_payment_intent_created_writes_intent(monkeypatch):
             SettlementEventRepository,
             reset_in_memory_stores,
         )
-        from services.x402.lifecycle_mapper import X402LifecycleMapper
+        from value.x402.lifecycle_mapper import X402LifecycleMapper
         reset_in_memory_stores()
         pi_repo = PaymentIntentRepository()
         mapper = X402LifecycleMapper(
@@ -74,7 +74,7 @@ async def test_x402_payment_settled_writes_settlement(monkeypatch):
             SettlementEventRepository,
             reset_in_memory_stores,
         )
-        from services.x402.lifecycle_mapper import X402LifecycleMapper
+        from value.x402.lifecycle_mapper import X402LifecycleMapper
         reset_in_memory_stores()
         pi_repo = PaymentIntentRepository()
         se_repo = SettlementEventRepository()
@@ -112,7 +112,7 @@ async def test_x402_payment_failed_writes_failure(monkeypatch):
             SettlementEventRepository,
             reset_in_memory_stores,
         )
-        from services.x402.lifecycle_mapper import X402LifecycleMapper
+        from value.x402.lifecycle_mapper import X402LifecycleMapper
         reset_in_memory_stores()
         pi_repo = PaymentIntentRepository()
         se_repo = SettlementEventRepository()
@@ -152,7 +152,7 @@ async def test_x402_payment_legacy_normalizes(monkeypatch):
             SettlementEventRepository,
             reset_in_memory_stores,
         )
-        from services.x402.lifecycle_mapper import X402LifecycleMapper
+        from value.x402.lifecycle_mapper import X402LifecycleMapper
         reset_in_memory_stores()
         se_repo = SettlementEventRepository()
         mapper = X402LifecycleMapper(
@@ -184,7 +184,7 @@ async def test_mapper_tenant_isolation(monkeypatch):
             SettlementEventRepository,
             reset_in_memory_stores,
         )
-        from services.x402.lifecycle_mapper import X402LifecycleMapper
+        from value.x402.lifecycle_mapper import X402LifecycleMapper
         reset_in_memory_stores()
         pi_repo = PaymentIntentRepository()
         mapper = X402LifecycleMapper(

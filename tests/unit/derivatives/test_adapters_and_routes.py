@@ -10,10 +10,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from services.derivatives.adapters.base import DerivativesAdapter
-from services.derivatives.adapters.conformance import run_conformance
-from services.derivatives.adapters.simulator import SimulatorAdapter
-from services.derivatives.runtime_reconciliation import DerivativesReconciliation
+from value.derivatives.adapters.base import DerivativesAdapter
+from value.derivatives.adapters.conformance import run_conformance
+from value.derivatives.adapters.simulator import SimulatorAdapter
+from value.derivatives.runtime_reconciliation import DerivativesReconciliation
 
 TENANT = "t-deriv-a"
 OTHER_TENANT = "t-deriv-b"
@@ -124,7 +124,7 @@ class _FakeTenant:
 
 
 def _build_app(tenant_id: str) -> TestClient:
-    from services.derivatives.runtime_routes import router
+    from value.derivatives.runtime_routes import router
 
     app = FastAPI()
 

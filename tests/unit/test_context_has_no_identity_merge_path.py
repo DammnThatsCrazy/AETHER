@@ -13,20 +13,20 @@ import ast
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 
 CONTEXT_MODULES = (
-    BACKEND / "services/ingestion/context_enricher.py",
-    BACKEND / "services/ingestion/geo_provider.py",
+    BACKEND / "ingestion/ingestion/context_enricher.py",
+    BACKEND / "ingestion/ingestion/geo_provider.py",
     BACKEND / "shared/privacy/ip_hmac.py",
     *sorted((BACKEND / "shared/context_capsule").glob("*.py")),
 )
-IDENTITY_MODULE_PREFIXES = ("services.identity", "services.resolution", "shared.identity")
+IDENTITY_MODULE_PREFIXES = ("identity.identity", "services.resolution", "shared.identity")
 MERGE_NAMES = ("merge_identit", "link_identit", "resolve_identit", "alias_identit")
 
 
 def _module_name(path: Path) -> str:
-    """Dotted module name of a backend file (``services.ingestion.context_enricher``)."""
+    """Dotted module name of a backend file (``ingestion.ingestion.context_enricher``)."""
     parts = list(path.relative_to(BACKEND).with_suffix("").parts)
     return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
 
@@ -108,22 +108,21 @@ def test_context_modules_cannot_reach_identity_resolution_through_any_import_cha
 
 
 def test_the_closure_follows_indirect_and_relative_imports(tmp_path) -> None:
-    (tmp_path / "services/identity").mkdir(parents=True)
-    (tmp_path / "services/ingestion").mkdir(parents=True)
+    (tmp_path / "identity/identity").mkdir(parents=True)
+    (tmp_path / "ingestion/ingestion").mkdir(parents=True)
     for rel, text in {
-        "services/__init__.py": "",
-        "services/identity/__init__.py": "",
-        "services/identity/resolver.py": "def merge(): ...\n",
-        "services/ingestion/__init__.py": "",
-        "services/ingestion/facade.py": "from services.identity import resolver\n",
-        "services/ingestion/enricher.py": "from . import facade\n",
-        "services/ingestion/clean.py": "import os\n",
+        "identity/identity/__init__.py": "",
+        "identity/identity/resolver.py": "def merge(): ...\n",
+        "ingestion/ingestion/__init__.py": "",
+        "ingestion/ingestion/facade.py": "from identity.identity import resolver\n",
+        "ingestion/ingestion/enricher.py": "from . import facade\n",
+        "ingestion/ingestion/clean.py": "import os\n",
     }.items():
         (tmp_path / rel).write_text(text, encoding="utf-8")
     modules = _backend_modules(tmp_path)
-    paths = _identity_paths(["services.ingestion.enricher"], modules)
-    assert paths and "services.ingestion.facade" in paths[0] and "services.ingestion.enricher" in paths[0]
-    assert _identity_paths(["services.ingestion.clean"], modules) == []
+    paths = _identity_paths(["ingestion.ingestion.enricher"], modules)
+    assert paths and "ingestion.ingestion.facade" in paths[0] and "ingestion.ingestion.enricher" in paths[0]
+    assert _identity_paths(["ingestion.ingestion.clean"], modules) == []
 
 
 def test_context_modules_do_not_call_identity_merge_helpers() -> None:
@@ -135,11 +134,11 @@ def test_context_modules_do_not_call_identity_merge_helpers() -> None:
 
 
 def test_relative_imports_are_resolved_before_they_are_checked() -> None:
-    tree = ast.parse("from ..identity import repository\nfrom . import geo_provider\nimport os\n")
-    resolved = _imported_modules(tree, "services.ingestion.context_enricher")
-    assert "services.identity" in resolved
-    assert "services.identity.repository" in resolved
-    assert "services.ingestion.geo_provider" in resolved
+    tree = ast.parse("from ...identity.identity import repository\nfrom . import geo_provider\nimport os\n")
+    resolved = _imported_modules(tree, "ingestion.ingestion.context_enricher")
+    assert "identity.identity" in resolved
+    assert "identity.identity.repository" in resolved
+    assert "ingestion.ingestion.geo_provider" in resolved
     assert any(m.startswith(IDENTITY_MODULE_PREFIXES) for m in resolved)
     # An __init__ module is its own package.
     assert "shared.context_capsule.models" in _imported_modules(

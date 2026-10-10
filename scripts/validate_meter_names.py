@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 
 # Canonical meter names for the ingestion spine.
 # Names not in this set are flagged as non-canonical in the checked paths.
@@ -73,11 +73,11 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_bronze_replay_skip_total",
     # Consent-on-every-path (WS-B3): feed ingress seam consent/data-policy deny
     "ingestion_feed_consent_blocked_total",
-    # Analytics event store projector (services/ingestion/workers.py)
+    # Analytics event store projector (services/api/ingestion/ingestion/workers.py)
     "analytics_events_recorded_total",
     "analytics_events_duplicate_total",
     "analytics_events_skipped_total",
-    # Payment Rail Observability (services/integrations/providers/payment_rails)
+    # Payment Rail Observability (services/api/connectors/integrations/providers/payment_rails)
     "payment_rail_event_duplicate_total",
     "payment_rail_event_rejected_total",
     "payment_rail_sessions_upserted_total",
@@ -106,14 +106,14 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "payment_rail_webhook_unknown_endpoint_total",
     # Payment Rail provider polling health (services/.../payment_rails/service.py)
     "payment_rail_provider_poll_degraded_total",
-    # Card-linked payment rails (services/card_linked_payments)
+    # Card-linked payment rails (services/api/value/card_linked_payments)
     "card_linked_flows_upserted_total",
     "card_linked_audit_total",
     "card_linked_gold_materialized_total",
     "identity_resolve_error_total",
     "ingestion_bronze_write_failed_total",
     "ingestion_publish_failed_total",
-    # Semantic Intelligence classify pipeline (services/semantic_intelligence/
+    # Semantic Intelligence classify pipeline (services/api/intelligence/semantic_intelligence/
     # service.py) — contracted 1:1 with the aether_semantic_health alert group,
     # the semantic-pipeline dashboard, and
     # tests/unit/test_semantic_observability_assets.py. Counters use
@@ -126,7 +126,7 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "aether_semantic_classify_latency_ms",
     "aether_semantic_review_queue_open",
     "aether_semantic_replay_jobs_active",
-    # Comparison Intelligence (services/intelligence/comparison — WP3.5)
+    # Comparison Intelligence (services/api/intelligence/intelligence/comparison — WP3.5)
     "comparison_runs_total",
     "comparison_findings_total",
     "comparison_findings_suppressed_total",
@@ -135,7 +135,7 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "comparison_finding_recommendations_total",
     "comparison_refusals_total",
     "comparison_scenarios_total",
-    # Exploration Fabric (services/exploration — WP3.4)
+    # Exploration Fabric (services/api/journeys/exploration — WP3.4)
     "exploration_queries_total",
     "exploration_validate_total",
     "exploration_facets_total",
@@ -193,7 +193,7 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "storage_reconcile_checksum_drift_total",
     # Object-backed Bronze + cross-store lifecycle (FT-8,
     # shared/storage/compaction.py + shared/storage/lifecycle.py +
-    # services/storage_lifecycle/worker.py)
+    # services/api/ingestion/storage_lifecycle/worker.py)
     "storage_bronze_compaction_run_total",
     "storage_bronze_compaction_stale_rebuild_total",
     "storage_bronze_rows_externalized_total",
@@ -219,8 +219,8 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
 
 # Only check these directories for ingestion/connector meter names
 CHECKED_DIRS = [
-    BACKEND / "services" / "ingestion",
-    BACKEND / "services" / "integrations",
+    BACKEND / "ingestion" / "ingestion",
+    BACKEND / "connectors" / "integrations",
 ]
 
 

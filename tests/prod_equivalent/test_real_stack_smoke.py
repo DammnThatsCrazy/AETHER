@@ -6,7 +6,7 @@ service containers and run ONE existing-or-new smoke test against them to
 prove the harness works — not a migration of the whole ingestion suite
 (that is M2+).
 
-``services/ingestion/bronze_bulk.py`` has two backends selected purely by
+``services/api/ingestion/ingestion/bronze_bulk.py`` has two backends selected purely by
 whether ``repositories.repos.get_pool()`` returns a real asyncpg pool
 (DATABASE_URL set) or ``None`` (AETHER_ENV=local, in-memory dict fallback).
 Every other ingestion test in this repo (e.g. tests/unit/test_ingestion_v2.py)
@@ -36,12 +36,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -62,7 +62,7 @@ def fresh_backend():
     _evict_backend()
     try:
         repos = importlib.import_module("repositories.repos")
-        bulk = importlib.import_module("services.ingestion.bronze_bulk")
+        bulk = importlib.import_module("ingestion.ingestion.bronze_bulk")
         yield repos, bulk
     finally:
         _evict_backend()

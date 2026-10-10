@@ -37,11 +37,11 @@ const contentModules = import.meta.glob<DocModule>('../content/**/*.{md,mdx}');
 // The public launch-pack corpus is authored under docs/public so it remains a
 // repository-level documentation source of truth. Render it through the same
 // MDX pipeline instead of leaving manifest entries as non-renderable stubs.
-const publicModules = import.meta.glob<DocModule>('../../../../docs/public/**/*.md');
+const publicModules = import.meta.glob<DocModule>('../../../../docs/product/public/**/*.md');
 
 function publicLoaderForSlug(slug: string): (() => Promise<DocModule>) | null {
   const entry = manifest.docs.find(
-    (candidate) => candidate.slug === slug && candidate.path.startsWith('docs/public/'),
+    (candidate) => candidate.slug === slug && candidate.path.startsWith('docs/product/public/'),
   );
   if (entry === undefined) return null;
   const path = Object.keys(publicModules).find((candidate) => candidate.endsWith(`/${entry.path}`));
@@ -66,7 +66,7 @@ export function getAvailableSlugs(): string[] {
     return base;
   });
   const launchPackSlugs = manifest.docs
-    .filter((entry) => entry.path.startsWith('docs/public/') && publicLoaderForSlug(entry.slug ?? '') !== null)
+    .filter((entry) => entry.path.startsWith('docs/product/public/') && publicLoaderForSlug(entry.slug ?? '') !== null)
     .map((entry) => entry.slug ?? '')
     .filter(Boolean);
   return [...new Set([...authoredSlugs, ...launchPackSlugs])];

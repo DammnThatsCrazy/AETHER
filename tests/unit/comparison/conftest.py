@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 if str(Path(__file__).resolve().parent) not in sys.path:
@@ -18,7 +18,7 @@ from comparison_fakes import FakeAnalytics  # noqa: E402
 # ── Module-generation pinning ────────────────────────────────────────────────
 # ``tests/contracts/test_comparison_contract_parity.py`` verifies the lazy-import
 # invariant by deleting *every* ``services.*`` module from ``sys.modules`` and
-# re-importing ``services.intelligence`` fresh. That purge is a global side
+# re-importing ``intelligence.intelligence`` fresh. That purge is a global side
 # effect: any test that later imports a comparison submodule fresh (e.g. inside
 # a test body) gets a NEW class generation, which no longer matches the classes
 # these test modules captured at collection time — Pydantic then rejects a
@@ -43,7 +43,7 @@ _COLLECTION_MODULE_SNAPSHOT: dict[str, object] = {}
 # than the one ``pytest.raises`` holds, so a correctly-raised error would
 # escape uncaught. Pinning all of these to the single collection-time
 # generation keeps every party on the same classes.
-_PINNED_PREFIXES = ("services", "shared.common", "shared.auth", "config", "repositories")
+_PINNED_PREFIXES = ("tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared.common", "shared.auth", "config", "repositories")
 
 
 def _is_pinned(name: str) -> bool:

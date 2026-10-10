@@ -1,7 +1,7 @@
 """Kyber/Aether boundary gate: every kyber-scoped route must carry the operator guard.
 
 Kyber is the internal Olympus operator console. `require_kyber_operator`
-(services/security/request_context.py) fails closed — a tenant Role.ADMIN is
+(services/api/governance/security/request_context.py) fails closed — a tenant Role.ADMIN is
 NOT an operator. This test enforces that every route whose mounted path
 contains ``/kyber`` is guarded either declaratively (a `Depends` on the guard
 anywhere in its dependency tree) or imperatively (the handler source calls the
@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -78,7 +78,7 @@ def iter_api_routes(app):
 #: The one module allowed to mint Kyber authorization dependencies. Matching on
 #: module identity rather than a name substring keeps the check precise: a
 #: helper that merely happens to be called `_require` elsewhere does not count.
-_GATE_MODULE = "services.kyber.access.dependencies"
+_GATE_MODULE = "governance.kyber.access.dependencies"
 
 
 def _is_guard_callable(call) -> bool:
@@ -165,7 +165,7 @@ def test_tenant_admin_context_is_rejected_by_guard():
     """A tenant Role.ADMIN is NOT an operator — the guard must fail closed."""
     import pytest
 
-    from services.security.request_context import require_kyber_operator
+    from governance.security.request_context import require_kyber_operator
     from shared.auth.auth import Role, TenantContext
 
     tenant_admin = TenantContext(
@@ -188,7 +188,7 @@ def test_no_kyber_route_classifies_as_public():
     """A Kyber route may never be reachable without an operator identity."""
     import main
 
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     public_kyber = []
     for route in iter_api_routes(main.app):
@@ -203,7 +203,7 @@ def test_no_kyber_route_classifies_as_public():
 def test_operator_permission_passes_guard():
     """The configured kyber operator permission grants access."""
     from config.settings import get_settings
-    from services.security.request_context import require_kyber_operator
+    from governance.security.request_context import require_kyber_operator
     from shared.auth.auth import Role, TenantContext
 
     operator_perm = get_settings().security_governance.kyber_operator_permission

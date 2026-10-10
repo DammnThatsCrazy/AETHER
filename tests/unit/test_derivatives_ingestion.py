@@ -10,28 +10,28 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @pytest.fixture()
 def deriv():
     original = list(sys.path)
     for name in list(sys.modules):
-        if name == "services" or name.startswith("services."):
+        if name == "value" or name.startswith("value."):
             sys.modules.pop(name, None)
     sys.path.insert(0, str(BACKEND_ROOT))
     try:
         yield SimpleNamespace(
-            models=importlib.import_module("services.derivatives.models"),
-            generic=importlib.import_module("services.derivatives.connectors.generic_import"),
-            hyperliquid=importlib.import_module("services.derivatives.connectors.hyperliquid"),
-            position=importlib.import_module("services.derivatives.position_engine"),
-            replay=importlib.import_module("services.derivatives.replay"),
+            models=importlib.import_module("value.derivatives.models"),
+            generic=importlib.import_module("value.derivatives.connectors.generic_import"),
+            hyperliquid=importlib.import_module("value.derivatives.connectors.hyperliquid"),
+            position=importlib.import_module("value.derivatives.position_engine"),
+            replay=importlib.import_module("value.derivatives.replay"),
         )
     finally:
         sys.path[:] = original
         for name in list(sys.modules):
-            if name == "services" or name.startswith("services."):
+            if name == "value" or name.startswith("value."):
                 sys.modules.pop(name, None)
 
 

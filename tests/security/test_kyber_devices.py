@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -33,21 +33,21 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from webauthn.helpers import encode_cbor
 
 from repositories.repos import reset_in_memory_stores
-from services.kyber.access.roles import DEVICE_APPROVER_TEMPLATE_IDS
-from services.kyber.devices.approvals import (
+from governance.kyber.access.roles import DEVICE_APPROVER_TEMPLATE_IDS
+from governance.kyber.devices.approvals import (
     DeviceApprovalService,
     device_approval_service,
     grant_hash,
 )
-from services.kyber.devices.device_proof import device_proof_service
-from services.kyber.devices.repository import (
+from governance.kyber.devices.device_proof import device_proof_service
+from governance.kyber.devices.repository import (
     DeviceProofKeyRepository,
     TrustedDeviceRepository,
     WebAuthnCredentialRepository,
 )
-from services.kyber.devices.risk import browser_family, device_risk_service
-from services.kyber.devices.webauthn import relying_party, webauthn_service
-from services.security.repositories import SecurityAuditEventRepository
+from governance.kyber.devices.risk import browser_family, device_risk_service
+from governance.kyber.devices.webauthn import relying_party, webauthn_service
+from governance.security.repositories import SecurityAuditEventRepository
 from shared.common.common import (
     BadRequestError,
     ConflictError,

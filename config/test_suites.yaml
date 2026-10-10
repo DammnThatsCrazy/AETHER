@@ -67,7 +67,7 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 20
     hard_runtime_budget_seconds: 60
-    paths: [contracts]
+    paths: [packages/contracts]
     runner: [python, scripts/validate_contracts.py]
     requires:
       python_packages: []
@@ -152,7 +152,7 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 180
     hard_runtime_budget_seconds: 900
-    paths: [deploy/integration]
+    paths: [infra/integration]
     runner: [make, integration-durable]
     requires:
       python_packages: []
@@ -245,7 +245,7 @@ suites:
     profiles: [local, release]
     expected_runtime_seconds: 120
     hard_runtime_budget_seconds: 300
-    paths: ["services/backend/tests"]
+    paths: ["services/api/tests"]
     # Keep behavior tests parallel, then run the wall-clock performance
     # guardrails serially so xdist scheduler contention cannot turn into a
     # false regression. scripts/run_backend_tests.py covers both passes.
@@ -283,15 +283,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/identity",
-        "services/backend/tests/identity",
+        "services/api/identity/identity",
+        "services/api/tests/identity",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/identity",
+        "services/api/tests/identity",
         "-v",
         "--tb=short",
       ]
@@ -318,15 +318,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/ingestion",
-        "services/backend/tests/ingestion",
+        "services/api/ingestion/ingestion",
+        "services/api/tests/ingestion",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/ingestion",
+        "services/api/tests/ingestion",
         "-v",
         "--tb=short",
       ]
@@ -353,15 +353,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/campaign",
-        "services/backend/tests/campaign",
+        "services/api/journeys/campaign",
+        "services/api/tests/campaign",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/campaign",
+        "services/api/tests/campaign",
         "-v",
         "--tb=short",
       ]
@@ -388,16 +388,16 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/profile",
-        "services/backend/services/profile360_workers",
-        "services/backend/tests/profile360",
+        "services/api/identity/profile",
+        "services/api/workers/profile360_workers",
+        "services/api/tests/profile360",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/profile360",
+        "services/api/tests/profile360",
         "-v",
         "--tb=short",
       ]
@@ -424,15 +424,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/agent",
-        "services/backend/tests/agent",
+        "services/api/actions/agent",
+        "services/api/tests/agent",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/agent",
+        "services/api/tests/agent",
         "-v",
         "--tb=short",
       ]
@@ -459,15 +459,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/computation",
-        "services/backend/tests/computation",
+        "services/api/intelligence/computation",
+        "services/api/tests/computation",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/computation",
+        "services/api/tests/computation",
         "-v",
         "--tb=short",
       ]
@@ -494,15 +494,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/value",
-        "services/backend/tests/valuation",
+        "services/api/value/value",
+        "services/api/tests/valuation",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/valuation",
+        "services/api/tests/valuation",
         "-v",
         "--tb=short",
       ]
@@ -668,19 +668,19 @@ suites:
     # standalone per-service invocation would hit for those two).
     paths:
       [
-        "services/backend/services/agent_comm_observability/tests",
-        "services/backend/services/external_account_observability/tests",
-        "services/backend/services/agentic_observability/tests",
-        "services/backend/services/protocol_observability/tests",
+        "services/api/actions/agent_comm_observability/tests",
+        "services/api/connectors/external_account_observability/tests",
+        "services/api/actions/agentic_observability/tests",
+        "services/api/graph/protocol_observability/tests",
       ]
     runner:
       [
         "python",
         "scripts/run_pytest_files.py",
-        "services/backend/services/agent_comm_observability/tests",
-        "services/backend/services/external_account_observability/tests",
-        "services/backend/services/agentic_observability/tests",
-        "services/backend/services/protocol_observability/tests",
+        "services/api/actions/agent_comm_observability/tests",
+        "services/api/connectors/external_account_observability/tests",
+        "services/api/actions/agentic_observability/tests",
+        "services/api/graph/protocol_observability/tests",
         "--workers",
         "4",
       ]
@@ -1254,12 +1254,12 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 60
     hard_runtime_budget_seconds: 180
-    paths: ["contracts/smart-contracts/test"]
+    paths: ["packages/contracts/smart-contracts/test"]
     # Mirrors .github/workflows/smart-contract-analysis.yml's contract-tests
     # job. This suite is outside the root npm workspaces, so install its
     # lockfile before invoking the local Hardhat binary; relying on npx would
     # silently download an unrelated version in the adaptive PR job.
-    runner: ["bash", "-lc", "npm ci --prefix 'contracts/smart-contracts' --ignore-scripts && npm test --prefix 'contracts/smart-contracts'"]
+    runner: ["bash", "-lc", "npm ci --prefix 'packages/contracts/smart-contracts' --ignore-scripts && npm test --prefix 'packages/contracts/smart-contracts'"]
     requires:
       python_packages: []
       services: []
@@ -1319,7 +1319,7 @@ suites:
   # Frontend / SDK workspaces — npm run test --workspace=<pkg>, cwd repo root.
   # Already exercised by .github/workflows/repo-health.yml's `typescript` job
   # (root `npm run test` -> `npm run test --workspaces --if-present`), except
-  # apps/kyber's component/integration suites, which are wired into
+  # apps/kyber-web's component/integration suites, which are wired into
   # .github/workflows/kyber-e2e.yml instead.
   # ---------------------------------------------------------------------------
 
@@ -1360,8 +1360,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["packages/web"]
-    runner: ["npm", "run", "test", "--workspace=packages/web"]
+    paths: ["packages/sdk/web"]
+    runner: ["npm", "run", "test", "--workspace=packages/sdk/web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1383,8 +1383,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["packages/server"]
-    runner: ["npm", "run", "test", "--workspace=packages/server"]
+    paths: ["packages/sdk/server"]
+    runner: ["npm", "run", "test", "--workspace=packages/sdk/server"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1406,8 +1406,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["packages/react-native"]
-    runner: ["npm", "run", "test", "--workspace=packages/react-native"]
+    paths: ["packages/sdk/react-native"]
+    runner: ["npm", "run", "test", "--workspace=packages/sdk/react-native"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1429,7 +1429,7 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 120
-    paths: ["tests/contracts", "tests/sdk", "tests/connectors", "tests/identity", "tests/journeys", "tests/campaigns", "tests/value", "tests/lenses", "tests/e2e", "tests/graph", "tests/mocks", "sdk-fixtures", "vitest.config.fps.ts"]
+    paths: ["tests/contracts", "tests/sdk", "tests/connectors", "tests/identity", "tests/journeys", "tests/campaigns", "tests/value", "tests/lenses", "tests/e2e", "tests/graph", "tests/mocks", "tests/fixtures/sdk", "vitest.config.fps.ts"]
     runner: ["npx", "vitest", "run", "--config", "vitest.config.fps.ts"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
@@ -1452,8 +1452,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 45
     hard_runtime_budget_seconds: 120
-    paths: ["apps/aether"]
-    runner: ["npm", "run", "test", "--workspace=apps/aether"]
+    paths: ["apps/aether-web"]
+    runner: ["npm", "run", "test", "--workspace=apps/aether-web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1475,8 +1475,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 90
     hard_runtime_budget_seconds: 180
-    paths: ["apps/kyber"]
-    runner: ["npm", "run", "test", "--workspace=apps/kyber"]
+    paths: ["apps/kyber-web"]
+    runner: ["npm", "run", "test", "--workspace=apps/kyber-web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1498,9 +1498,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 60
     hard_runtime_budget_seconds: 180
-    paths: ["apps/kyber"]
-    # Wired via .github/workflows/kyber-e2e.yml (working-directory: apps/kyber).
-    runner: ["npm", "run", "test:component", "--workspace=apps/kyber"]
+    paths: ["apps/kyber-web"]
+    # Wired via .github/workflows/kyber-e2e.yml (working-directory: apps/kyber-web).
+    runner: ["npm", "run", "test:component", "--workspace=apps/kyber-web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1522,9 +1522,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 90
     hard_runtime_budget_seconds: 240
-    paths: ["apps/kyber"]
-    # Wired via .github/workflows/kyber-e2e.yml (working-directory: apps/kyber).
-    runner: ["npm", "run", "test:integration", "--workspace=apps/kyber"]
+    paths: ["apps/kyber-web"]
+    # Wired via .github/workflows/kyber-e2e.yml (working-directory: apps/kyber-web).
+    runner: ["npm", "run", "test:integration", "--workspace=apps/kyber-web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1546,8 +1546,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["apps/shared"]
-    runner: ["npm", "run", "test", "--workspace=apps/shared"]
+    paths: ["packages/ui/core"]
+    runner: ["npm", "run", "test", "--workspace=packages/ui/core"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1615,9 +1615,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["apps/olympus-marketing"]
+    paths: ["apps/marketing-olympus"]
     # Olympus Labs corporate marketing site (olympuslabsml.com).
-    runner: ["npm", "run", "test", "--workspace=apps/olympus-marketing"]
+    runner: ["npm", "run", "test", "--workspace=apps/marketing-olympus"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1639,9 +1639,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["apps/aether-marketing"]
+    paths: ["apps/marketing-aether"]
     # Aether public marketing + auth-threshold site (aether.olympuslabsml.com).
-    runner: ["npm", "run", "test", "--workspace=apps/aether-marketing"]
+    runner: ["npm", "run", "test", "--workspace=apps/marketing-aether"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
@@ -1663,9 +1663,9 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["apps/site"]
-    # Unified Olympus Labs + Aether site (apps/site/design/README.md).
-    runner: ["npm", "run", "test", "--workspace=apps/site"]
+    paths: ["apps/public-site"]
+    # Unified Olympus Labs + Aether site (apps/public-site/design/README.md).
+    runner: ["npm", "run", "test", "--workspace=apps/public-site"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never

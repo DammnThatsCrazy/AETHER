@@ -1,0 +1,33 @@
+---
+title: Kyber identity
+slug: kyber/brand-system
+section: operations
+visibility: I
+audience: [dev-senior, architect, ops]
+status: stable
+since_version: 0.1.0
+canonical_owner: frontend@aether
+---
+
+# Kyber identity
+
+Kyber is Olympus Labs' **private internal operator application** — the console
+Olympus runs to operate Aether. It is never a customer-facing product, never an
+Aether product, and never linked from public marketing. It shares the
+Olympus/Aether lineage and can add an operator descriptor; it must not become a
+third palette or independent corporate mark. Present it as "Olympus Labs ·
+Kyber" where an Olympus audience sees it.
+
+```tsx
+import { KyberLockup } from '@aether/ui';
+
+<KyberLockup variant="responsive" label="Kyber" size={28} />
+```
+
+- Follow `packages/ui/brand/src/identity/kyber/manifest.ts`.
+- Select `full` at 132px+, `compact` at 84px+, and `mark` only in collapsed
+  navigation with an accessible Kyber name.
+- Preserve Kyber's existing operator authority, environment, and forbidden
+  states; replacing a glyph must never alter a gate or direct-route behavior.
+- Do not retain a separate cold base palette, local lockup, or raw nav glyph
+  system as an identity substitute.

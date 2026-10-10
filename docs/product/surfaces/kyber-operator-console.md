@@ -12,4 +12,4 @@ since_version: "0.1.0"
 
 The Kyber Operator Console is the operator-facing web application for managing tenants, monitoring system health, and operating the platform.
 
-Path: `apps/kyber`
+Path: `apps/kyber-web`

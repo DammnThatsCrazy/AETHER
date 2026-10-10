@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-OUTPUT = ROOT / "artifacts" / "frontend-data-truth-report.json"
+OUTPUT = ROOT / ".artifacts" / "frontend-data-truth-report.json"
 INVENTORY = ROOT / "docs" / "_generated" / "frontend-data-truth-inventory.json"
 
 BUILD_ENV = {
@@ -112,8 +112,8 @@ def main() -> int:
         checks[f"{profile}_build"] = run(
             f"{profile} frontend builds",
             [
-                "npm", "run", "build", "--workspace=apps/aether",
-                "--workspace=apps/kyber", "--workspace=apps/demo",
+                "npm", "run", "build", "--workspace=apps/aether-web",
+                "--workspace=apps/kyber-web", "--workspace=apps/demo",
                 "--if-present",
             ],
             env=profile_env,

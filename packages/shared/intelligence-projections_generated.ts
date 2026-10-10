@@ -217,7 +217,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/agent', '/v1/agents', '/v1/profile360'],
       surfaceIds: ['profile360'],
-      services: ['services/backend/services/agent'],
+      services: ['services/api/actions/agent'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/agent360.md'
     },
@@ -277,7 +277,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/campaign-quality', '/v1/campaign-sources', '/v1/campaigns', '/v1/mapping-review'],
       surfaceIds: ['campaign360', 'comparison_workbench'],
-      services: ['services/backend/services/campaign'],
+      services: ['services/api/journeys/campaign'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/campaign360.md'
     },
@@ -337,7 +337,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/clusters'],
       surfaceIds: ['cluster360', 'graph'],
-      services: ['services/backend/services/cluster'],
+      services: ['services/api/graph/cluster'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/cluster360.md'
     },
@@ -351,7 +351,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Communication 360',
     projectionKind: 'sequence_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/communication360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/communication360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'journey', 'source'],
     canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'entities', 'evidence', 'outcomes'],
@@ -397,9 +397,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/comms', '/v1/contact', '/v1/delivery', '/v1/notifications'],
       surfaceIds: ['profile360', 'timeline'],
-      services: ['services/backend/services/comms'],
+      services: ['services/api/journeys/comms'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/communication360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/communication360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -457,7 +457,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/client-sync', '/v1/integrations', '/v1/provider-connections'],
       surfaceIds: ['connection360'],
-      services: ['services/backend/services/provider_runtime'],
+      services: ['services/api/connectors/provider_runtime'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/connection360.md'
     },
@@ -478,7 +478,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Economic 360',
     projectionKind: 'measurement_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/economic360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/economic360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'journey', 'source'],
     canonicalAuthorities: ['commerce', 'currency_value_normalization', 'economic_facts', 'graph', 'outcome_facts', 'payments'],
@@ -524,9 +524,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/economic', '/v1/profile'],
       surfaceIds: ['campaign360', 'economic360', 'product_intelligence'],
-      services: ['services/backend/services/economic'],
+      services: ['services/api/value/economic'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/economic360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/economic360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -584,7 +584,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/events', '/v1/journeys'],
       surfaceIds: ['journeys', 'timeline'],
-      services: ['services/backend/services/events', 'services/backend/services/journeys'],
+      services: ['services/api/ingestion/events', 'services/api/journeys/journeys'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/episode360.md'
     },
@@ -651,7 +651,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/agent', '/v1/agents', '/v1/computations', '/v1/flows', '/v1/jobs'],
       surfaceIds: ['timeline'],
-      services: ['services/backend/services/agent', 'services/backend/services/flows', 'services/backend/services/jobs'],
+      services: ['services/api/actions/agent', 'services/api/value/flows', 'services/api/workers/jobs'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/execution360.md'
     },
@@ -665,7 +665,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Fraud 360',
     projectionKind: 'risk_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/fraud360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/fraud360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'relationship'],
     canonicalAuthorities: ['economic_facts', 'evidence', 'execution_facts', 'fraud_synthesis', 'graph_motifs', 'identity', 'relationship_facts', 'risk_outputs', 'social_observations'],
@@ -711,9 +711,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/fraud'],
       surfaceIds: ['fraud360', 'graph'],
-      services: ['services/backend/services/fraud'],
+      services: ['services/api/intelligence/fraud'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/fraud360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/fraud360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -725,7 +725,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Geographic 360',
     projectionKind: 'context_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/geographic360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/geographic360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'population', 'source'],
     canonicalAuthorities: ['context_capsules', 'entity_graph', 'geo_observations', 'locations', 'temporal'],
@@ -771,9 +771,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/geo'],
       surfaceIds: ['geographic360'],
-      services: ['services/backend/services/geo'],
+      services: ['services/api/graph/geo'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/geographic360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/geographic360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -785,7 +785,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Infrastructure 360',
     projectionKind: 'infrastructure_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/infrastructure360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/infrastructure360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['deployment', 'infrastructure'],
     canonicalAuthorities: ['deployments', 'infrastructure_facts', 'infrastructure_state'],
@@ -831,9 +831,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/infrastructure'],
       surfaceIds: ['infrastructure360'],
-      services: ['services/backend/services/infrastructure'],
+      services: ['services/api/graph/infrastructure'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/infrastructure360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/infrastructure360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -845,7 +845,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Outcome 360',
     projectionKind: 'measurement_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/outcome360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/outcome360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'population'],
     canonicalAuthorities: ['evidence', 'graph', 'measurement_contract', 'outcome_facts'],
@@ -891,9 +891,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/attribution', '/v1/conversions', '/v1/journeys', '/v1/measurement', '/v1/spend'],
       surfaceIds: ['campaign360', 'outcome360'],
-      services: ['services/backend/services/measurement'],
+      services: ['services/api/journeys/measurement'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/outcome360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/outcome360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -905,7 +905,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Population 360',
     projectionKind: 'context_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/population360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/population360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['cluster', 'entity', 'population'],
     canonicalAuthorities: ['cluster_definitions', 'cohort_membership', 'entities', 'evidence', 'population_definitions', 'temporal'],
@@ -951,9 +951,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/population'],
       surfaceIds: ['population360'],
-      services: ['services/backend/services/population'],
+      services: ['services/api/identity/population'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/population360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/population360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -1011,7 +1011,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/profile', '/v1/profile360'],
       surfaceIds: ['profile360'],
-      services: ['services/backend/services/profile'],
+      services: ['services/api/identity/profile'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/profile360.md'
     },
@@ -1071,7 +1071,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/entities', '/v1/graph', '/v1/semantic'],
       surfaceIds: ['graph', 'profile360'],
-      services: ['services/backend/services/operational_intelligence', 'services/backend/services/semantic_intelligence'],
+      services: ['services/api/graph/operational_intelligence', 'services/api/intelligence/semantic_intelligence'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/relationship360.md'
     },
@@ -1085,7 +1085,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Risk 360',
     projectionKind: 'risk_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/risk360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/risk360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['cluster', 'entity', 'population', 'relationship'],
     canonicalAuthorities: ['cluster_membership', 'economic_facts', 'entity_graph', 'evidence', 'model_governance', 'risk_outputs'],
@@ -1131,9 +1131,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/capability-risk', '/v1/risk-overlays'],
       surfaceIds: ['comparison_workbench', 'graph', 'risk360'],
-      services: ['services/backend/services/risk_overlay'],
+      services: ['services/api/graph/risk_overlay'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/risk360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/risk360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -1145,7 +1145,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Social 360',
     projectionKind: 'relationship_360',
     implementationState: 'in_flight',
-    implementationBlueprint: 'docs/blueprints/social360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/social360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'relationship'],
     canonicalAuthorities: ['evidence', 'graph', 'relationship_facts', 'social_observations', 'source_facts'],
@@ -1191,9 +1191,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/profile'],
       surfaceIds: ['profile360'],
-      services: ['services/backend/services/profile'],
+      services: ['services/api/identity/profile'],
       migrationMode: 'adapter',
-      migrationBlueprint: 'docs/blueprints/social360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/social360.md'
     },
     deprecatedReason: null,
     successorId: null,
@@ -1251,7 +1251,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/imports', '/v1/kyber', '/v1/providers'],
       surfaceIds: ['campaign360'],
-      services: ['services/backend/services/imports'],
+      services: ['services/api/ingestion/imports'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/source360.md'
     },
@@ -1265,7 +1265,7 @@ export const intelligenceProjectionDefinitions: Record<
     displayName: 'Temporal 360',
     projectionKind: 'context_360',
     implementationState: 'implemented',
-    implementationBlueprint: 'docs/blueprints/temporal360.md',
+    implementationBlueprint: 'docs/architecture/blueprints/temporal360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'relationship'],
     canonicalAuthorities: ['graph_snapshots', 'mutation_history', 'temporal_kernel', 'validity_state'],
@@ -1311,9 +1311,9 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/graph', '/v1/preferences'],
       surfaceIds: ['temporal360'],
-      services: ['services/backend/shared/temporal'],
+      services: ['services/api/shared/temporal'],
       migrationMode: 'converged',
-      migrationBlueprint: 'docs/blueprints/temporal360.md'
+      migrationBlueprint: 'docs/architecture/blueprints/temporal360.md'
     },
     deprecatedReason: null,
     successorId: null,

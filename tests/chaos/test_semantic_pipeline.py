@@ -58,8 +58,8 @@ def model_unavailable(monkeypatch):
 @pytest.fixture()
 def durable_semantic_store():
     """Swap the engine store singleton for the durable store, restoring after."""
-    from services.semantic_intelligence.engine import get_store, set_store
-    from services.semantic_intelligence.store import DurableSemanticSentimentStore
+    from intelligence.semantic_intelligence.engine import get_store, set_store
+    from intelligence.semantic_intelligence.store import DurableSemanticSentimentStore
 
     original = get_store()
     set_store(DurableSemanticSentimentStore())
@@ -73,10 +73,10 @@ async def test_model_unavailable_classify_abstains_never_fabricates(tenant, mode
     must record an ABSTAINED observation (reason: missing credentials) and must
     not fabricate an inferred classification or any sentiment row."""
     from config.settings import settings
-    from services.semantic_intelligence.eligibility import Eligibility
-    from services.semantic_intelligence.models import ObservationStatus
-    from services.semantic_intelligence.providers import DisabledProvider, get_classifier_provider
-    from services.semantic_intelligence.service import SemanticIntelligenceService
+    from intelligence.semantic_intelligence.eligibility import Eligibility
+    from intelligence.semantic_intelligence.models import ObservationStatus
+    from intelligence.semantic_intelligence.providers import DisabledProvider, get_classifier_provider
+    from intelligence.semantic_intelligence.service import SemanticIntelligenceService
 
     provider = get_classifier_provider(settings)
     assert isinstance(provider, DisabledProvider)
@@ -106,7 +106,7 @@ async def test_replay_dry_run_counts_scope_and_writes_nothing(tenant):
     """A dry-run replay over durable Bronze reports the would-replay scope but
     persists NO semantic facts — only the job's own progress record."""
     from repositories.repos import _IN_MEMORY_STORES
-    from services.semantic_intelligence.service import SemanticIntelligenceService
+    from intelligence.semantic_intelligence.service import SemanticIntelligenceService
 
     bronze = _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})
     for i in range(3):
@@ -144,10 +144,10 @@ async def test_replay_dry_run_counts_scope_and_writes_nothing(tenant):
 async def test_durable_store_round_trip_survives_simulated_restart(tenant, durable_semantic_store):
     """Classify → durably persist → 'restart' (fresh store + service instances)
     → the observation is still readable, and re-delivery stays idempotent."""
-    from services.semantic_intelligence.engine import set_store
-    from services.semantic_intelligence.models import ObservationStatus
-    from services.semantic_intelligence.service import SemanticIntelligenceService
-    from services.semantic_intelligence.store import DurableSemanticSentimentStore
+    from intelligence.semantic_intelligence.engine import set_store
+    from intelligence.semantic_intelligence.models import ObservationStatus
+    from intelligence.semantic_intelligence.service import SemanticIntelligenceService
+    from intelligence.semantic_intelligence.store import DurableSemanticSentimentStore
 
     subject = f"product-{tenant}"
     obs, sentiments = await SemanticIntelligenceService().classify_and_persist(

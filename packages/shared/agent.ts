@@ -1,8 +1,8 @@
 // =============================================================================
 // Aether SDK — Shared Agent Contract
 // Feeds the L2 (agent behavioral) and A2H (agent-to-human) graph layers.
-// See docs/source-of-truth/ENTITY_MODEL.md §Agent and backend
-// services/backend/services/agent/routes.py for downstream topics.
+// See docs/reference/source-of-truth/ENTITY_MODEL.md §Agent and backend
+// services/api/actions/agent/routes.py for downstream topics.
 // =============================================================================
 
 import type { EntityRef } from './entities';

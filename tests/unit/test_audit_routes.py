@@ -11,8 +11,8 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -40,7 +40,7 @@ def audit_routes(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     with backend_module_path():
-        mod = importlib.import_module("services.consent.audit_routes")
+        mod = importlib.import_module("governance.consent.audit_routes")
         importlib.reload(mod)
         # Reset shared.store-backed sources
         from shared.store import get_store

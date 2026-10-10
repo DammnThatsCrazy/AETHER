@@ -8,8 +8,8 @@ from __future__ import annotations
 import pytest
 
 from repositories.interop_repos import InteropMessageEventRepo, InteropMessageRepo
-from services.interop.correlation import CorrelationEngine
-from services.interop.providers.wormhole import (
+from graph.interop.correlation import CorrelationEngine
+from graph.interop.providers.wormhole import (
     WormholeAdapter,
     decode_vaa,
     vaa_correlation_key,

@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -44,7 +44,7 @@ def revops(monkeypatch):
     with backend_module_path():
         repos = importlib.import_module("repositories.repos")
         repos.reset_in_memory_stores()
-        mod = importlib.import_module("services.billing.revops")
+        mod = importlib.import_module("billing.billing.revops")
         yield mod
 
 

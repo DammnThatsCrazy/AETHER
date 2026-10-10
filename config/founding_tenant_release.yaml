@@ -120,7 +120,7 @@ release_thresholds:
   # An alert name with no numeric trigger behind it is a control nobody can
   # page on. These three were declared under required_controls.alerts with
   # nothing operationalizing them; the supervisor telemetry they read
-  # (services/runtime/supervisor.py::status) now publishes the signals, so the
+  # (services/api/workers/runtime/supervisor.py::status) now publishes the signals, so the
   # triggers below are measurable rather than aspirational.
   #
   # Consumer lag is a backlog depth, not a rate: a worker that is behind but
@@ -135,7 +135,7 @@ release_thresholds:
   dlq_depth_count: 0
   # A release-critical worker role that is failed, stopped, or whose heartbeat
   # has not advanced within this window fails /v1/ready. Must equal
-  # HEARTBEAT_TIMEOUT_S in services/runtime/supervisor.py, which is what
+  # HEARTBEAT_TIMEOUT_S in services/api/workers/runtime/supervisor.py, which is what
   # role_state() actually compares heartbeat_age_s against — if the alert and
   # the probe disagree about what "stale" means, one of them is lying.
   worker_readiness_stale_seconds: 60

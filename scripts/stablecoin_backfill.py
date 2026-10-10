@@ -15,11 +15,11 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "services" / "backend"))
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
-from services.stablecoins.ingestion import ProviderObservation  # noqa: E402
-from services.stablecoins.models import FinalityState, StablecoinEventType  # noqa: E402
-from services.stablecoins.providers import StablecoinProviderIngestionRunner  # noqa: E402
+from value.stablecoins.ingestion import ProviderObservation  # noqa: E402
+from value.stablecoins.models import FinalityState, StablecoinEventType  # noqa: E402
+from value.stablecoins.providers import StablecoinProviderIngestionRunner  # noqa: E402
 
 
 def _load_rows(path: str, *, tenant_id: str, provider: str, execution_id: str, manifest_id: str) -> list[ProviderObservation]:

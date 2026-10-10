@@ -73,7 +73,7 @@ def test_parity_validator_fails_on_wrong_doc_count(monkeypatch):
 
     def mutated_read(rel_path: str) -> str:
         text = (ROOT / rel_path).read_text()
-        if rel_path == "docs/DEPLOYMENT-PROFILES.md":
+        if rel_path == "docs/architecture/DEPLOYMENT-PROFILES.md":
             # Break every count-carrying phrase the validator watches.
             text = text.replace("eight deployment profiles", "nine deployment profiles")
         return text
@@ -111,8 +111,8 @@ def test_parity_validator_fails_when_demo_tfvars_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(parity, "_read", read_from_real_tree)
     monkeypatch.setattr(parity, "repo_root", lambda: tmp_path)
 
-    src = ROOT / "deploy" / "aws" / "terraform" / "profiles"
-    dst = tmp_path / "deploy" / "aws" / "terraform" / "profiles"
+    src = ROOT / "infra" / "aws" / "terraform" / "profiles"
+    dst = tmp_path / "infra" / "aws" / "terraform" / "profiles"
     dst.mkdir(parents=True)
     for tfvars in src.glob("*.tfvars"):
         if tfvars.name != "demo.tfvars":
@@ -146,5 +146,5 @@ def test_docs_count_matches_canonical_config():
     data = yaml.safe_load((ROOT / "config" / "deployment_profiles.yaml").read_text())
     n = len((data.get("profiles") or {}).keys())
     assert n == 8, f"canonical profile count changed to {n}; update parity phrases/docs"
-    text = (ROOT / "docs" / "DEPLOYMENT-PROFILES.md").read_text()
+    text = (ROOT / "docs" / "architecture" / "DEPLOYMENT-PROFILES.md").read_text()
     assert f"{n} deployment profiles" in text or "eight deployment profiles" in text

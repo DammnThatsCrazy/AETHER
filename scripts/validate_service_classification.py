@@ -2,7 +2,7 @@
 """Validate that every backend service directory has one lifecycle class.
 
 ``config/service_classification.yaml`` is the registry. A directory under
-``services/backend/services`` with no entry, an entry with no directory, an
+``services/api/<domain>`` packages with no entry, an entry with no directory, an
 unknown class or stage, or a ``deprecated`` service with no row in
 ``config/debt_retirement_ledger.yaml`` fails validation. ``--report`` prints the
 count per class.
@@ -29,18 +29,37 @@ STAGES = {
 }
 
 
-ROOT_RELATIVE = "services/backend/services"
+ROOT_RELATIVE = "services/api"
+DOMAIN_PACKAGES = ("tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing")
+
+
+def service_paths(root: Path) -> dict[str, str]:
+    """Map each service directory name to its repo-relative path (services/api/<domain>/<name>)."""
+    found: dict[str, str] = {}
+    for domain in DOMAIN_PACKAGES:
+        base = root / ROOT_RELATIVE / domain
+        if not base.is_dir():
+            continue
+        for p in base.iterdir():
+            if p.is_dir() and not p.name.startswith(("__", ".")) and next(p.rglob("*.py"), None) is not None:
+                found[p.name] = f"{ROOT_RELATIVE}/{domain}/{p.name}"
+    return found
 
 
 def service_dirs(root: Path) -> set[str]:
     """Directories that hold Python source; a stray cache-only directory is not a service."""
-    base = root / ROOT_RELATIVE
-    return {
-        p.name for p in base.iterdir()
-        if p.is_dir()
-        and not p.name.startswith(("__", "."))
-        and next(p.rglob("*.py"), None) is not None
-    }
+    names: set[str] = set()
+    for domain in DOMAIN_PACKAGES:
+        base = root / ROOT_RELATIVE / domain
+        if not base.is_dir():
+            continue
+        names.update(
+            p.name for p in base.iterdir()
+            if p.is_dir()
+            and not p.name.startswith(("__", "."))
+            and next(p.rglob("*.py"), None) is not None
+        )
+    return names
 
 
 def _ledger_paths(ledger: Path) -> set[str]:
@@ -82,6 +101,7 @@ def validate(
     services = {n: e for n, e in services.items() if n not in bad_names}
 
     on_disk = service_dirs(root)
+    paths_by_name = service_paths(root)
     for name in sorted(on_disk - set(services)):
         errors.append(f"{name}: backend service directory has no classification")
     ledger_paths = _ledger_paths(ledger)
@@ -103,10 +123,13 @@ def validate(
             continue
         if name not in on_disk:
             errors.append(f"{name}: classified but the directory does not exist (use class removed)")
-        if cls == "deprecated" and f"{ROOT_RELATIVE}/{name}" not in ledger_paths:
+        if cls == "deprecated" and not (
+            {f"{ROOT_RELATIVE}/{name}", paths_by_name.get(name, "")} & ledger_paths
+            or any(lp.startswith(f"{ROOT_RELATIVE}/") and lp.endswith(f"/{name}") for lp in ledger_paths)
+        ):
             errors.append(
                 f"{name}: deprecated services need a row in the debt retirement ledger "
-                f"naming {ROOT_RELATIVE}/{name}"
+                f"naming {paths_by_name.get(name, f'{ROOT_RELATIVE}/{name}')}"
             )
     return errors
 

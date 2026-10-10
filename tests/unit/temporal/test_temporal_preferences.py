@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.temporal_preferences.models import (
+from tenancy.temporal_preferences.models import (
     TenantTemporalDefaults,
     ViewerTemporalPreferences,
 )
@@ -52,7 +52,7 @@ async def test_routes_flag_gated_and_roundtrip(monkeypatch):
     defaults versioning through the in-memory repository."""
     import config.settings as settings_module
     from config.settings import TemporalIntegrityConfig
-    from services.temporal_preferences import routes
+    from tenancy.temporal_preferences import routes
     from shared.auth.auth import TenantContext
     from shared.common.common import NotFoundError
 

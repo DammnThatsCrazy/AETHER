@@ -13,9 +13,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-# conftest.py has prepended the worktree backend path, so `services.silver`
+# conftest.py has prepended the worktree backend path, so `ingestion.silver`
 # resolves to THIS checkout.
-from services.silver.dispatcher import (  # noqa: E402
+from ingestion.silver.dispatcher import (  # noqa: E402
     _ALL_PROJECTORS,
     _TYPE_MAP,
     SilverDispatcher,

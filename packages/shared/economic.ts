@@ -18,7 +18,7 @@
 //   • Validation guards + structured error types
 //   • Aggregation utilities for derived state
 //
-// See docs/ECONOMIC-OBSERVABILITY.md for the full spec and examples.
+// See docs/architecture/ECONOMIC-OBSERVABILITY.md for the full spec and examples.
 // =============================================================================
 
 // ---------------------------------------------------------------------------

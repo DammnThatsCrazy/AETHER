@@ -1,7 +1,7 @@
 """Capability tool/schema scanning tests (PR 2, Phase B2 — monoprompt §9.4).
 
 The load-bearing properties proven here are the two reuse decisions in
-``services/agent_access_intelligence/scanning.py``:
+``services/api/actions/agent_access_intelligence/scanning.py``:
 
   1. scanning is **pure** — no DNS, no network, no clock. An unresolvable host yields no
      origin finding, and the module must never grow a dependency on
@@ -19,14 +19,14 @@ import socket
 
 import pytest
 
-from services.agent_access_intelligence import scanning
-from services.agent_access_intelligence.scanning import (
+from actions.agent_access_intelligence import scanning
+from actions.agent_access_intelligence.scanning import (
     CapabilityFinding,
     FindingCode,
     scan_capabilities,
     scan_capability,
 )
-from services.agentic_observability.models import RiskLevel
+from actions.agentic_observability.models import RiskLevel
 
 SECRET = "sup3rs3cr3tpassw0rd"
 SECRET_USER = "svc_account_user"
@@ -71,7 +71,7 @@ def test_scanning_performs_no_dns_lookup(monkeypatch):
 
     monkeypatch.setattr(socket, "getaddrinfo", _boom)
     monkeypatch.setattr(socket, "gethostbyname", _boom, raising=False)
-    from services.security import policy_engine
+    from governance.security import policy_engine
 
     monkeypatch.setattr(policy_engine, "_resolve_host", _boom)
 
@@ -279,7 +279,7 @@ def test_injection_finding_names_the_matched_pattern_only_once_per_record():
 def test_noesis_substring_matching_would_have_fired_on_the_traps():
     """Pins the reason this lane does not reuse noesis's matcher: the same vocabulary with
     substring matching flags ordinary tool names."""
-    from services.noesis.models import INJECTION_PATTERNS
+    from intelligence.noesis.models import INJECTION_PATTERNS
 
     # ("standardize" is listed as a trap upstream but does not actually contain any
     # pattern as a substring — the real substring traps are these three.)

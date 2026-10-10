@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -41,7 +41,7 @@ class TestJourneyCompilerLocal:
 
     @pytest.mark.asyncio
     async def test_compile_returns_journey_version(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         result = await compiler.compile_for_profile(
             tenant_id="tenant-a",
@@ -52,7 +52,7 @@ class TestJourneyCompilerLocal:
 
     @pytest.mark.asyncio
     async def test_rebuild_by_consent_change_returns_list(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         results = await compiler.rebuild_affected_by_consent_change(
             tenant_id="tenant-a",
@@ -62,7 +62,7 @@ class TestJourneyCompilerLocal:
 
     @pytest.mark.asyncio
     async def test_rebuild_by_identity_change_returns_list(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         results = await compiler.rebuild_affected_by_identity_change(
             tenant_id="tenant-a",
@@ -72,7 +72,7 @@ class TestJourneyCompilerLocal:
 
     @pytest.mark.asyncio
     async def test_rebuild_by_touchpoint_returns_list(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         touchpoint_id = str(uuid4())
         results = await compiler.rebuild_affected_by_touchpoint(
@@ -84,7 +84,7 @@ class TestJourneyCompilerLocal:
     @pytest.mark.asyncio
     async def test_compile_is_tenant_scoped(self):
         """Compiling for tenant-a must not return tenant-b data."""
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         result_a = await compiler.compile_for_profile("tenant-a", "profile-001")
         result_b = await compiler.compile_for_profile("tenant-b", "profile-001")
@@ -97,7 +97,7 @@ class TestJourneyCompilerLocal:
 
 
 def test_source_noise_is_counted_but_not_emitted_as_eligible_steps():
-    from services.measurement.engine.journey_compiler import _partition_source_noise
+    from journeys.measurement.engine.journey_compiler import _partition_source_noise
 
     activities = [
         {"activity_id": "human", "attribution_eligible": True, "journey_role": "entry"},
@@ -111,7 +111,7 @@ def test_source_noise_is_counted_but_not_emitted_as_eligible_steps():
 
 
 def test_journey_touchpoint_ids_are_precise_ordered_and_unique():
-    from services.measurement.engine.journey_compiler import _touchpoint_ids
+    from journeys.measurement.engine.journey_compiler import _touchpoint_ids
 
     touchpoint_id = str(uuid4())
     activities = [
@@ -124,7 +124,7 @@ def test_journey_touchpoint_ids_are_precise_ordered_and_unique():
 
 
 def test_journey_steps_snapshot_source_classification_dimensions():
-    from services.measurement.engine.journey_compiler import _build_steps
+    from journeys.measurement.engine.journey_compiler import _build_steps
 
     activity_id = str(uuid4())
     classification_id = str(uuid4())

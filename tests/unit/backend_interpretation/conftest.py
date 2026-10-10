@@ -1,7 +1,7 @@
 """Path setup for WS-D backend-interpretation unit tests.
 
 The WS-D primitives (shared/backend_interpretation/*), the episode engine
-(services/measurement/episodes), the outcome-truth recorder and the Silver
+(services/api/journeys/measurement/episodes), the outcome-truth recorder and the Silver
 projectors all live under the backend root, so it must sit on sys.path while
 these tests run (same pattern as tests/unit/observation/conftest.py).
 """
@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 

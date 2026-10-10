@@ -2,14 +2,14 @@
 """Delivery-safety validator — fail the build on unsafe delivery patterns.
 
 This is the permanent gate that D11 promotes from the D2/D4/D7-style regression
-checks. It scans the delivery path (``services/delivery/**`` +
-``services/notification_intelligence/**``) and fails when any of five unsafe
+checks. It scans the delivery path (``services/api/actions/delivery/**`` +
+``services/api/journeys/notification_intelligence/**``) and fails when any of five unsafe
 patterns appear:
 
-  1. DIRECT_ADAPTER_DISPATCH — a provider adapter (``services/delivery/adapters/*``)
+  1. DIRECT_ADAPTER_DISPATCH — a provider adapter (``services/api/actions/delivery/adapters/*``)
      is invoked outside the sanctioned pipeline. The only places allowed to call
-     ``.dispatch(...)`` on an adapter are ``services/delivery/worker.py`` (the
-     durable DeliveryWorker) and ``services/notification_intelligence/delivery_router.py``
+     ``.dispatch(...)`` on an adapter are ``services/api/actions/delivery/worker.py`` (the
+     durable DeliveryWorker) and ``services/api/journeys/notification_intelligence/delivery_router.py``
      (the notification router); the adapters directory itself is exempt for
      internal delegation (marketing -> webhook, ticketing -> linear/jira, ...).
      Any other caller bypasses the queue/lease/retry/receipt pipeline and risks
@@ -58,20 +58,20 @@ from typing import Any, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, main_guard, repo_root  # noqa: E402
 
-_BACKEND_REL = Path("services") / "backend"
+_BACKEND_REL = Path("services") / "api"
 
 # Scan scope: the delivery path and the notification intelligence delivery path.
-SCAN_SUBTREES = ("services/delivery", "services/notification_intelligence")
+SCAN_SUBTREES = ("actions/delivery", "journeys/notification_intelligence")
 
-ADAPTERS_PKG = "services.delivery.adapters"
-ADAPTERS_DIR = "services/delivery/adapters/"
+ADAPTERS_PKG = "actions.delivery.adapters"
+ADAPTERS_DIR = "actions/delivery/adapters/"
 
 # The only files sanctioned to invoke a provider adapter's ``dispatch``. The
 # worker owns the durable queue/lease/receipt pipeline; the router owns the
 # per-channel notification fan-out. Everything else must go through one of them.
 SANCTIONED_DISPATCH_FILES = frozenset({
-    "services/delivery/worker.py",
-    "services/notification_intelligence/delivery_router.py",
+    "actions/delivery/worker.py",
+    "journeys/notification_intelligence/delivery_router.py",
 })
 
 # Success-result types the detectors reason about.
@@ -194,7 +194,7 @@ def _imported_names(tree: ast.Module) -> dict[str, set[str]]:
 
 
 def _adapter_imported_names(imports: dict[str, set[str]]) -> set[str]:
-    """Names imported from ``services.delivery.adapters`` (classes/instances)."""
+    """Names imported from ``actions.delivery.adapters`` (classes/instances)."""
     names: set[str] = set()
     for mod, module_names in imports.items():
         if mod == ADAPTERS_PKG or mod.startswith(ADAPTERS_PKG + "."):

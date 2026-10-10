@@ -22,7 +22,7 @@ authority: frontend-reachability
 
 apps:
   kyber:
-    root: apps/kyber
+    root: apps/kyber-web
     alias: "@kyber"
     entries:
       - src/app/main.tsx            # index.html <script type="module">
@@ -36,7 +36,7 @@ apps:
         reason: unrouted page; mount a route or delete it
       - path: src/pages/measurement/campaign-registry-health-page.tsx
         ledger: product-kyber-unmounted-code-pending
-        reason: unrouted page that docs/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness scorecard name; mount it or correct both
+        reason: unrouted page that docs/product/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness scorecard name; mount it or correct both
       - path: src/pages/customer-success/index.ts
         ledger: product-kyber-unmounted-code-pending
         reason: unrouted page kept only for its component test; mount a route or delete both
@@ -53,7 +53,7 @@ apps:
         ledger: product-kyber-unmounted-code-pending
         reason: kept only for its component test; mount it or delete both
   aether:
-    root: apps/aether
+    root: apps/aether-web
     alias: "@aether-app"
     entries:
       - src/app/main.tsx            # index.html <script type="module">

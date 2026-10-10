@@ -29,7 +29,7 @@ def _flow(**overrides) -> dict:
 
 
 def test_flow_projection_builds_expected_edges():
-    from services.card_linked_payments.graph_projector import build_flow_mutations
+    from value.card_linked_payments.graph_projector import build_flow_mutations
     from shared.graph.graph import EdgeType
 
     vertices, edges = build_flow_mutations(_flow())
@@ -47,7 +47,7 @@ def test_flow_projection_builds_expected_edges():
 
 
 def test_flow_projection_idempotency_keys_stable():
-    from services.card_linked_payments.graph_projector import build_flow_mutations
+    from value.card_linked_payments.graph_projector import build_flow_mutations
 
     _, edges_a = build_flow_mutations(_flow())
     _, edges_b = build_flow_mutations(_flow())
@@ -57,7 +57,7 @@ def test_flow_projection_idempotency_keys_stable():
 
 
 def test_benchmark_rows_never_projected_to_graph():
-    from services.card_linked_payments.graph_projector import build_flow_mutations
+    from value.card_linked_payments.graph_projector import build_flow_mutations
 
     vertices, edges = build_flow_mutations(_flow(
         basis="benchmark_only", reconciliation_state="benchmark_only", source="paymentscan",
@@ -66,7 +66,7 @@ def test_benchmark_rows_never_projected_to_graph():
 
 
 def test_agent_influence_edge():
-    from services.card_linked_payments.graph_projector import build_flow_mutations
+    from value.card_linked_payments.graph_projector import build_flow_mutations
     from shared.graph.graph import EdgeType
 
     _, edges = build_flow_mutations(_flow(agent_id="agent-1", actor_kind="agent"))
@@ -74,7 +74,7 @@ def test_agent_influence_edge():
 
 
 def test_catalog_projection_nodes():
-    from services.card_linked_payments.graph_projector import build_catalog_mutations
+    from value.card_linked_payments.graph_projector import build_catalog_mutations
     from shared.graph.graph import EdgeType
 
     vertices, edges = build_catalog_mutations("t1", {
@@ -106,7 +106,7 @@ async def _seed_story(tenant, ingestion):
 
 
 async def test_profile_summary_story_sequence(tenant, ingestion):
-    from services.card_linked_payments.profile_summary import get_card_linked_profile_summary
+    from value.card_linked_payments.profile_summary import get_card_linked_profile_summary
 
     await _seed_story(tenant, ingestion)
     summary = await get_card_linked_profile_summary(tenant, "wh_story")
@@ -123,7 +123,7 @@ async def test_profile_summary_story_sequence(tenant, ingestion):
 
 
 async def test_profile_summary_filters(tenant, ingestion):
-    from services.card_linked_payments.profile_summary import get_card_linked_profile_summary
+    from value.card_linked_payments.profile_summary import get_card_linked_profile_summary
 
     await _seed_story(tenant, ingestion)
     only_spend = await get_card_linked_profile_summary(tenant, "wh_story", {"basis": "spend"})
@@ -135,7 +135,7 @@ async def test_profile_summary_filters(tenant, ingestion):
 
 
 async def test_topup_only_entity_gets_warning(tenant, ingestion):
-    from services.card_linked_payments.profile_summary import get_card_linked_profile_summary
+    from value.card_linked_payments.profile_summary import get_card_linked_profile_summary
 
     await ingestion.ingest_onchain_observation(tenant, {
         "id": "oc_w1", "chain": "base", "tx_hash": "0xw1",
@@ -147,7 +147,7 @@ async def test_topup_only_entity_gets_warning(tenant, ingestion):
 
 
 async def test_drilldown_shows_evidence_and_provenance(tenant, ingestion):
-    from services.card_linked_payments.profile_summary import get_card_linked_drilldown
+    from value.card_linked_payments.profile_summary import get_card_linked_drilldown
 
     record, _ = await ingestion.ingest_onchain_observation(tenant, {
         "id": "oc_d1", "chain": "base", "tx_hash": "0xd1",
@@ -173,7 +173,7 @@ class _FakeTenant:
 
 
 def _build_app(tenant_id: str) -> TestClient:
-    from services.card_linked_payments.routes import router
+    from value.card_linked_payments.routes import router
 
     app = FastAPI()
     app.include_router(router)
@@ -226,7 +226,7 @@ async def test_flows_route_filters_and_excludes_benchmarks(tenant, ingestion, mo
 
     monkeypatch.setattr(settings, "card_linked_payment_rails", _flags())
     await _seed_story(tenant, ingestion)
-    from services.card_linked_payments.paymentscan import ingest_benchmark
+    from value.card_linked_payments.paymentscan import ingest_benchmark
     await ingest_benchmark(tenant, entity_type="card_program", entity_ref="RedotPay",
                            metric_name="monthly_volume", metric_window="2026-06")
 
@@ -244,7 +244,7 @@ async def test_benchmarks_route_carries_honesty_notice(tenant, ingestion, monkey
     from config.settings import settings
 
     monkeypatch.setattr(settings, "card_linked_payment_rails", _flags())
-    from services.card_linked_payments.paymentscan import ingest_benchmark
+    from value.card_linked_payments.paymentscan import ingest_benchmark
     await ingest_benchmark(tenant, entity_type="card_program", entity_ref="KAST",
                            metric_name="monthly_volume", metric_window="2026-06")
     client = _build_app(tenant)

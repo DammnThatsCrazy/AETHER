@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPT = ROOT / "scripts" / "docs_extract" / "extract_providers.py"
 CATEGORIES_PY = (
     ROOT
-    / "services" / "backend"
+    / "services" / "api"
     / "shared"
     / "providers"
     / "categories.py"

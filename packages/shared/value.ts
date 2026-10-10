@@ -5,7 +5,7 @@
 // Aether observes and prices value; it never custodies, settles, or executes.
 //
 // Invariants (enforced by scripts/validate_financial_value_semantics.py and the
-// backend services/value mirror in `services/value/models.py`):
+// backend services/api/value/value mirror in `services/api/value/value/models.py`):
 //   - amounts are DECIMAL STRINGS, never floats
 //   - usd_value is a decimal string OR null (null => unavailable/unknown, NEVER 0)
 //   - unknown / stale / unpriced / conflicted values NEVER become 0

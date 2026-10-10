@@ -12,19 +12,19 @@ import pytest
 
 
 def _add_backend() -> None:
-    backend = str(Path(__file__).parents[2] / "services" / "backend")
+    backend = str(Path(__file__).parents[2] / "services" / "api")
     if backend not in sys.path:
         sys.path.insert(0, backend)
 
 
 _add_backend()
 
-from services.operational_intelligence.models import (
+from graph.operational_intelligence.models import (
     FilterExpression,
     FilterGroup,
     FilterOperator,
 )
-from services.operational_intelligence.routes import (
+from graph.operational_intelligence.routes import (
     _apply_boolean_filter,
     _cursor_decode,
     _cursor_encode,

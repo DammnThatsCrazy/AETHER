@@ -22,7 +22,7 @@ from typing import Any, Optional
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -30,7 +30,7 @@ from repositories.repos import reset_in_memory_stores  # noqa: E402
 from shared.common.common import BadRequestError, ForbiddenError, UnauthorizedError  # noqa: E402
 from shared.temporal.clock import FixedClock  # noqa: E402
 
-from services.kyber.access.dependencies import (  # noqa: E402
+from governance.kyber.access.dependencies import (  # noqa: E402
     AccessProviders,
     KyberAccessDecisionRepository,
     current_kyber_context,
@@ -39,15 +39,15 @@ from services.kyber.access.dependencies import (  # noqa: E402
     resolve_access_context,
     set_providers,
 )
-from services.kyber.access.disclosure import DisclosureLevel  # noqa: E402
-from services.kyber.access.scopes import (  # noqa: E402
+from governance.kyber.access.disclosure import DisclosureLevel  # noqa: E402
+from governance.kyber.access.scopes import (  # noqa: E402
     MAX_SCOPE_MINUTES,
     MIN_SCOPE_MINUTES,
     access_scope_service,
 )
-from services.kyber.sessions import cookies  # noqa: E402
-from services.kyber.sessions.service import session_service  # noqa: E402
-from services.kyber.sessions.step_up import step_up_service  # noqa: E402
+from governance.kyber.sessions import cookies  # noqa: E402
+from governance.kyber.sessions.service import session_service  # noqa: E402
+from governance.kyber.sessions.step_up import step_up_service  # noqa: E402
 
 ORIGIN = "http://localhost:3000"
 AUTHORITY_METHODS = ["google_oidc", "webauthn", "device_proof"]
@@ -104,7 +104,7 @@ class FakePrincipals:
         return list(principal.templates) if principal else []
 
     async def effective_capabilities(self, operator_id: str, *, environment: Any = None):
-        from services.kyber.access.roles import capabilities_for
+        from governance.kyber.access.roles import capabilities_for
 
         principal = self.by_id.get(operator_id)
         if principal is None:
@@ -316,7 +316,7 @@ async def test_scope_is_durable_and_bound_to_session_and_device(harness):
     assert scope.status == "active"
 
     # Durable: a fresh service instance over the same store still sees it.
-    from services.kyber.access.scopes import AccessScopeService
+    from governance.kyber.access.scopes import AccessScopeService
 
     reloaded = await AccessScopeService(clock=harness.clock).current_scope(session.session_id)
     assert reloaded is not None and reloaded.scope_id == scope.scope_id
@@ -803,8 +803,8 @@ def test_policy_engine_call_signature_matches() -> None:
     import inspect
     from pathlib import Path
 
-    from services.kyber.access import dependencies as deps
-    from services.security.policy_engine import PolicyEngine
+    from governance.kyber.access import dependencies as deps
+    from governance.security.policy_engine import PolicyEngine
 
     accepted = set(inspect.signature(PolicyEngine.check_kyber_access).parameters) - {"self"}
 
@@ -841,8 +841,8 @@ def test_policy_engine_call_signature_matches() -> None:
 
 async def test_policy_engine_records_a_linked_decision() -> None:
     """A real decision reaches security_policy_decisions and links back."""
-    from services.kyber.access.contracts import KyberAccessDecision
-    from services.kyber.access.dependencies import _record_through_policy_engine
+    from governance.kyber.access.contracts import KyberAccessDecision
+    from governance.kyber.access.dependencies import _record_through_policy_engine
 
     decision = KyberAccessDecision(
         operator_id="op_sig",

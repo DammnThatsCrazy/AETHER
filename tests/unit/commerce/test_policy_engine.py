@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -28,7 +28,7 @@ AGENT = "agent-policy-001"
 
 @pytest.fixture(autouse=True)
 def reset():
-    from services.x402.commerce_store import reset_commerce_store
+    from value.x402.commerce_store import reset_commerce_store
     reset_commerce_store()
     yield
     reset_commerce_store()
@@ -36,7 +36,7 @@ def reset():
 
 @pytest.fixture()
 def engine():
-    from services.x402.policies import PolicyEngine
+    from value.x402.policies import PolicyEngine
     return PolicyEngine()
 
 
@@ -47,7 +47,7 @@ def _make_resource(
     accepted_chains: list | None = None,
     approval_required: bool = True,
 ):
-    from services.x402.commerce_models import ProtectedResource, ResourceClass
+    from value.x402.commerce_models import ProtectedResource, ResourceClass
     return ProtectedResource(
         resource_id=resource_id,
         tenant_id=TENANT,
@@ -65,7 +65,7 @@ def _make_resource(
 @pytest.mark.asyncio
 async def test_default_outcome_is_require_approval(engine):
     """Day-1 GA: all evaluations produce REQUIRE_APPROVAL by default."""
-    from services.x402.commerce_models import PolicyOutcome
+    from value.x402.commerce_models import PolicyOutcome
     resource = _make_resource()
     decision = await engine.evaluate(
         tenant_id=TENANT,
@@ -83,7 +83,7 @@ async def test_default_outcome_is_require_approval(engine):
 @pytest.mark.asyncio
 async def test_mandatory_approval_can_be_disabled(engine):
     """When mandatory approval is disabled and no other rule triggers, outcome is ALLOW."""
-    from services.x402.commerce_models import PolicyOutcome
+    from value.x402.commerce_models import PolicyOutcome
     engine.set_mandatory_approval(False)
     resource = _make_resource(approval_required=False)
     decision = await engine.evaluate(
@@ -104,7 +104,7 @@ async def test_mandatory_approval_can_be_disabled(engine):
 @pytest.mark.asyncio
 async def test_deny_unsupported_asset(engine):
     """Asset not in accepted_assets → DENY."""
-    from services.x402.commerce_models import PolicyOutcome
+    from value.x402.commerce_models import PolicyOutcome
     resource = _make_resource(accepted_assets=["USDC"])
     decision = await engine.evaluate(
         tenant_id=TENANT,
@@ -123,7 +123,7 @@ async def test_deny_unsupported_asset(engine):
 @pytest.mark.asyncio
 async def test_allow_accepted_asset(engine):
     """Asset in accepted_assets passes the asset check."""
-    from services.x402.commerce_models import PolicyOutcome
+    from value.x402.commerce_models import PolicyOutcome
     resource = _make_resource(accepted_assets=["USDC"], approval_required=False)
     engine.set_mandatory_approval(False)
     decision = await engine.evaluate(
@@ -141,7 +141,7 @@ async def test_allow_accepted_asset(engine):
 @pytest.mark.asyncio
 async def test_deny_unsupported_chain(engine):
     """Chain not in accepted_chains → DENY."""
-    from services.x402.commerce_models import PolicyOutcome
+    from value.x402.commerce_models import PolicyOutcome
     resource = _make_resource(accepted_chains=["eip155:8453"])
     decision = await engine.evaluate(
         tenant_id=TENANT,
@@ -159,7 +159,7 @@ async def test_deny_unsupported_chain(engine):
 @pytest.mark.asyncio
 async def test_empty_accepted_assets_skips_asset_check(engine):
     """Empty accepted_assets list means no asset restriction."""
-    from services.x402.commerce_models import PolicyOutcome
+    from value.x402.commerce_models import PolicyOutcome
     resource = _make_resource(accepted_assets=[])
     decision = await engine.evaluate(
         tenant_id=TENANT,
@@ -179,8 +179,8 @@ async def test_empty_accepted_assets_skips_asset_check(engine):
 @pytest.mark.asyncio
 async def test_deny_exceeds_per_transaction_cap(engine):
     """Amount exceeding per_transaction_cap_usd → DENY."""
-    from services.x402.commerce_models import BudgetPolicy, PolicyOutcome
-    from services.x402.commerce_store import get_commerce_store
+    from value.x402.commerce_models import BudgetPolicy, PolicyOutcome
+    from value.x402.commerce_store import get_commerce_store
 
     store = get_commerce_store()
     policy = BudgetPolicy(
@@ -207,8 +207,8 @@ async def test_deny_exceeds_per_transaction_cap(engine):
 @pytest.mark.asyncio
 async def test_allow_within_per_transaction_cap(engine):
     """Amount within per_transaction_cap_usd passes budget check."""
-    from services.x402.commerce_models import BudgetPolicy, PolicyOutcome
-    from services.x402.commerce_store import get_commerce_store
+    from value.x402.commerce_models import BudgetPolicy, PolicyOutcome
+    from value.x402.commerce_store import get_commerce_store
 
     store = get_commerce_store()
     policy = BudgetPolicy(
@@ -235,7 +235,7 @@ async def test_allow_within_per_transaction_cap(engine):
 @pytest.mark.asyncio
 async def test_no_budget_policy_skips_budget_check(engine):
     """No BudgetPolicy → budget check skipped, outcome based on other rules."""
-    from services.x402.commerce_models import PolicyOutcome
+    from value.x402.commerce_models import PolicyOutcome
     resource = _make_resource()
     decision = await engine.evaluate(
         tenant_id=TENANT,
@@ -255,7 +255,7 @@ async def test_no_budget_policy_skips_budget_check(engine):
 @pytest.mark.asyncio
 async def test_evaluate_persists_decision(engine):
     """evaluate() stores PolicyDecision in the commerce store."""
-    from services.x402.commerce_store import get_commerce_store
+    from value.x402.commerce_store import get_commerce_store
     resource = _make_resource()
     decision = await engine.evaluate(
         tenant_id=TENANT,
@@ -277,7 +277,7 @@ async def test_evaluate_persists_decision(engine):
 @pytest.mark.asyncio
 async def test_simulate_does_not_persist(engine):
     """simulate() runs evaluation but does NOT persist the PolicyDecision."""
-    from services.x402.commerce_store import get_commerce_store
+    from value.x402.commerce_store import get_commerce_store
     resource = _make_resource()
     decision = await engine.simulate(
         tenant_id=TENANT,

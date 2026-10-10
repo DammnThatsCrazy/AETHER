@@ -5,17 +5,17 @@
  *
  *   1. DESCRIPTOR TAXONOMY (below the header) — a stable compatibility mirror
  *      of the connector-descriptor enums in
- *        services/backend/services/integrations/connectors/base.py
+ *        services/api/connectors/integrations/connectors/base.py
  *      (ConnectorClass, ConnectorRole, ImplementationStatus, ...) plus the
  *      provider-corpus intelligence-source coverage shape. Consumed via the
  *      @aether/shared barrel; reproduced verbatim by the generator.
  *
  *   2. PROVIDER / CATEGORY MIRROR (generated) — a pure TypeScript mirror of the
  *      unified integration catalog derived from
- *        services/backend/shared/integration_contracts/catalog.py
+ *        services/api/shared/integration_contracts/catalog.py
  *      (ALL_MANIFESTS four-group union: connectors / ad-platforms /
  *      payment-rails / deferred-credit-bureaus) and
- *        services/backend/shared/integration_contracts/experience.py
+ *        services/api/shared/integration_contracts/experience.py
  *      (customer-facing experience categories). Keep it in step by running the
  *      generator — never by hand-editing this file.
  *

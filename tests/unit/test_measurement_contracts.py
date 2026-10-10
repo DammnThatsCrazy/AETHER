@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -25,7 +25,7 @@ def _ts():
 
 class TestCanonicalTouchpointContract:
     def test_required_fields_only(self):
-        from services.measurement.contracts import CanonicalTouchpoint
+        from journeys.measurement.contracts import CanonicalTouchpoint
         tp = CanonicalTouchpoint(
             tenant_id="t1",
             touchpoint_type="click",
@@ -36,7 +36,7 @@ class TestCanonicalTouchpointContract:
         assert tp.touchpoint_type == "click"
 
     def test_optional_fields_default(self):
-        from services.measurement.contracts import CanonicalTouchpoint
+        from journeys.measurement.contracts import CanonicalTouchpoint
         tp = CanonicalTouchpoint(
             tenant_id="t1",
             touchpoint_type="impression",
@@ -48,7 +48,7 @@ class TestCanonicalTouchpointContract:
         assert tp.schema_version == 1
 
     def test_rejects_missing_tenant(self):
-        from services.measurement.contracts import CanonicalTouchpoint
+        from journeys.measurement.contracts import CanonicalTouchpoint
         from pydantic import ValidationError
         with pytest.raises((ValidationError, TypeError)):
             CanonicalTouchpoint(
@@ -60,7 +60,7 @@ class TestCanonicalTouchpointContract:
 
 class TestCanonicalConversionContract:
     def test_authority_rank_default(self):
-        from services.measurement.contracts import CanonicalConversion
+        from journeys.measurement.contracts import CanonicalConversion
         conv = CanonicalConversion(
             tenant_id="t1",
             conversion_type="purchase",
@@ -74,7 +74,7 @@ class TestCanonicalConversionContract:
         assert conv.conversion_status == "confirmed"
 
     def test_net_value_optional(self):
-        from services.measurement.contracts import CanonicalConversion
+        from journeys.measurement.contracts import CanonicalConversion
         conv = CanonicalConversion(
             tenant_id="t1",
             conversion_type="lead",
@@ -86,7 +86,7 @@ class TestCanonicalConversionContract:
         assert conv.net_value is None
 
     def test_gross_value_accepted(self):
-        from services.measurement.contracts import CanonicalConversion
+        from journeys.measurement.contracts import CanonicalConversion
         conv = CanonicalConversion(
             tenant_id="t1",
             conversion_type="purchase",
@@ -101,7 +101,7 @@ class TestCanonicalConversionContract:
 
 class TestSpendRecordContract:
     def test_defaults(self):
-        from services.measurement.contracts import SpendRecord
+        from journeys.measurement.contracts import SpendRecord
         sr = SpendRecord(
             tenant_id="t1",
             billing_currency="USD",
@@ -114,7 +114,7 @@ class TestSpendRecordContract:
         assert sr.media_spend is None or float(sr.media_spend or 0) == 0.0
 
     def test_exchange_rate_default(self):
-        from services.measurement.contracts import SpendRecord
+        from journeys.measurement.contracts import SpendRecord
         sr = SpendRecord(
             tenant_id="t1",
             billing_currency="EUR",
@@ -127,7 +127,7 @@ class TestSpendRecordContract:
 
 class TestAttributionCreditContract:
     def test_weight_range(self):
-        from services.measurement.contracts import AttributionCredit
+        from journeys.measurement.contracts import AttributionCredit
         credit = AttributionCredit(
             tenant_id="t1",
             attribution_run_id=str(uuid4()),
@@ -137,7 +137,7 @@ class TestAttributionCreditContract:
         assert 0.0 <= float(credit.credit_weight) <= 1.0
 
     def test_rejects_weight_above_one(self):
-        from services.measurement.contracts import AttributionCredit
+        from journeys.measurement.contracts import AttributionCredit
         from pydantic import ValidationError
         try:
             credit = AttributionCredit(
@@ -155,7 +155,7 @@ class TestAttributionCreditContract:
 # ══════════════════════════════════════════════════════════════════════════════
 # shared/measurement — Measurement Integrity Plane (pure contracts + logic)
 #
-# Distinct from services/measurement above: this exercises the dependency-free
+# Distinct from services/api/journeys/measurement above: this exercises the dependency-free
 # shared package that enforces "no metric is a real number unless the data
 # supports it". Imports are guarded so this coexists with the services suite.
 # ══════════════════════════════════════════════════════════════════════════════

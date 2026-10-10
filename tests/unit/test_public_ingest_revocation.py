@@ -11,8 +11,8 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -48,7 +48,7 @@ def ingest_service(monkeypatch):
     with backend_module_path():
         repos = importlib.import_module("repositories.repos")
         repos._IN_MEMORY_STORES.setdefault("public_ingest_identifiers", {}).clear()
-        sessions = importlib.import_module("services.auth.sessions.service")
+        sessions = importlib.import_module("tenancy.auth.sessions.service")
         service = sessions.PublicIngestService()
         yield service
 

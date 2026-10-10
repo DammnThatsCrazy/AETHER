@@ -23,7 +23,7 @@
 schema_version: 1
 authority: service-classification
 status: proposed
-root: services/backend/services
+root: services/api
 
 services:
   account_lifecycle: {class: core, stage: control-plane, reason: "account suspension, recovery and erasure orchestration (data lifecycle)"}
@@ -104,6 +104,7 @@ services:
   metering_evidence: {class: internal, stage: control-plane, reason: "metering evidence for cost tracking"}
   ml_serving: {class: beta, stage: intelligence, reason: "model inference, feature serving and prediction cache"}
   mobile: {class: beta, stage: product, reason: "mobile gateway: installations and push subscriptions"}
+  model_extraction_defense: {class: internal, stage: control-plane, reason: "model-extraction defense layer (formerly the repo-root security/ package)"}
   model_governance: {class: beta, stage: control-plane, reason: "consent-scoped training-data admission and inference gates"}
   model_runtime: {class: experimental, stage: intelligence, reason: "provider-neutral multi-model intelligence harness"}
   noesis: {class: experimental, stage: intelligence, reason: "graph-native natural-language intelligence"}

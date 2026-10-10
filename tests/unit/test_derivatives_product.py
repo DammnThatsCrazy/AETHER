@@ -6,18 +6,18 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from services.derivatives.product import (  # noqa: E402
+from value.derivatives.product import (  # noqa: E402
     DERIVATIVES_ALERT_RULES,
     DERIVATIVES_REALTIME_TOPICS,
     DerivativesAccountView,
     DerivativesProductService,
     DerivativesProductSnapshot,
 )
-from services.derivatives.models import PositionEpochState, PositionSide, PositionStatus  # noqa: E402
-from services.derivatives.routes import (  # noqa: E402
+from value.derivatives.models import PositionEpochState, PositionSide, PositionStatus  # noqa: E402
+from value.derivatives.routes import (  # noqa: E402
     OperatorActionRequest,
     derivatives_overview,
     derivatives_position_detail,
@@ -142,7 +142,7 @@ async def test_kyber_routes_require_platform_admin_and_record_operator_action():
 @pytest.mark.anyio
 async def test_kyber_quality_routes_report_counters_computed_from_durable_state():
     from repositories.derivatives_repos import ReconciliationVarianceRepo, TradingAccountRepo
-    from services.derivatives.routes import (
+    from value.derivatives.routes import (
         kyber_derivatives_data_quality,
         kyber_derivatives_fleet,
         kyber_derivatives_graph_quality,
@@ -179,7 +179,7 @@ async def test_topic_contract_report_is_operator_gated_and_valid(monkeypatch):
     from types import SimpleNamespace
 
     from config.settings import settings
-    from services.derivatives.admin_routes import topic_contract_report
+    from value.derivatives.admin_routes import topic_contract_report
 
     monkeypatch.setattr(settings, "derivatives", SimpleNamespace(kyber_enabled=True))
     operator = FakeTenant("operator", permissions={"kyber:operator", "derivatives:operator"})

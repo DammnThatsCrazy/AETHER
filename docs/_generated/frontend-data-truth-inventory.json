@@ -2840,7 +2840,7 @@
     {
       "path": "frontend/demo/README.md",
       "line": 12,
-      "symbol": "cp .env.example .env        # VITE_DEMO_ENV=local-mocked",
+      "symbol": "cp config/environments/.env.example .env        # VITE_DEMO_ENV=local-mocked",
       "application": "demo",
       "domain": "frontend data truth",
       "classification": "runtime mock environment control",

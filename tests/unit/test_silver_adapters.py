@@ -7,7 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -24,7 +24,7 @@ def _now() -> str:
 class TestSilverAdapters:
 
     def test_revenue_adapter_preserves_only_explicit_commerce_order_reference(self):
-        from services.measurement.silver_adapters import adapt_revenue
+        from journeys.measurement.silver_adapters import adapt_revenue
 
         base = {
             "tenant_id": "tenant-a",
@@ -39,7 +39,7 @@ class TestSilverAdapters:
         assert linked["commerce_order_ref"] == "shop:store-1:order-1"
 
     def test_adapt_from_silver_campaign_touchpoint(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "touchpoint_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -55,7 +55,7 @@ class TestSilverAdapters:
         assert result.get("tenant_id") == "tenant-a"
 
     def test_adapt_from_silver_web3_transaction(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "transaction_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -72,7 +72,7 @@ class TestSilverAdapters:
         assert result.get("tx_hash") is not None
 
     def test_adapt_from_silver_x402_flow(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "flow_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -84,7 +84,7 @@ class TestSilverAdapters:
         assert result.get("activity_family") == "x402"
 
     def test_adapt_from_silver_agent_execution(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "execution_id": str(uuid4()),
             "agent_id": f"agent-{uuid4()}",
@@ -98,7 +98,7 @@ class TestSilverAdapters:
         assert result.get("actor_type") == "agent"
 
     def test_adapt_from_silver_identity_evidence_login(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "evidence_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -112,7 +112,7 @@ class TestSilverAdapters:
         assert result.get("activity_type") == "login"
 
     def test_adapt_from_silver_identity_evidence_wallet_connection(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "evidence_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -125,7 +125,7 @@ class TestSilverAdapters:
         assert result.get("activity_type") == "wallet_connection"
 
     def test_adapt_from_silver_outcome(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "outcome_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -137,7 +137,7 @@ class TestSilverAdapters:
         assert result.get("activity_family") == "outcome"
 
     def test_adapt_from_silver_revenue(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "revenue_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -152,12 +152,12 @@ class TestSilverAdapters:
         assert result.get("gross_amount") is not None
 
     def test_adapt_from_silver_unknown_table_returns_none(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         result = adapt_from_silver("silver_nonexistent_table", {})
         assert result is None
 
     def test_idempotency_key_stability(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         key = str(uuid4())
         row = {
             "touchpoint_id": str(uuid4()),
@@ -171,7 +171,7 @@ class TestSilverAdapters:
             assert r1.get("idempotency_key") == r2.get("idempotency_key")
 
     def test_adapt_from_silver_exposure(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "fact_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -188,7 +188,7 @@ class TestSilverAdapters:
         assert result.get("tenant_id") == "tenant-a"
 
     def test_adapt_from_silver_account_activity(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "fact_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -211,7 +211,7 @@ class TestSilverAdapters:
         marketing category route to the campaign family. actor_type comes
         from provenance, never a hard-coded 'human'.
         """
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         legacy_row = {
             "fact_id": str(uuid4()),
             "tenant_id": "tenant-a",
@@ -245,7 +245,7 @@ class TestSilverAdapters:
         assert adapt_from_silver("silver_comms_facts", excluded_row) is None
 
     def test_canonical_conversion_adapter(self):
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.measurement.silver_adapters import adapt_from_silver
         row = {
             "conversion_id": str(uuid4()),
             "tenant_id": "tenant-a",

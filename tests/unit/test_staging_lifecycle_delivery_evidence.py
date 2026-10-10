@@ -114,7 +114,7 @@ def test_rehearsal_downloads_deployment_evidence_from_that_exact_delivery_run() 
     artifact = downloads[0]["with"]
     assert artifact["github-token"] == "${{ github.token }}"
     assert artifact["run-id"] == "${{ needs.wake-apply.outputs.delivery_run_id }}"
-    assert artifact["path"] == "artifacts/rehearsal/delivery"
+    assert artifact["path"] == ".artifacts/rehearsal/delivery"
     assert wake_apply["outputs"]["delivery_run_id"] == "${{ steps.delivery.outputs.delivery_run_id }}"
 
 
@@ -172,9 +172,9 @@ def test_rehearsal_reuses_deploy_migration_evidence_without_a_second_run_task() 
     rehearsal_scripts = [step.get("run", "") for step in _steps(lifecycle, "rehearse")]
     deploy_scripts = [step.get("run", "") for step in _steps(deploy, "deploy")]
 
-    assert 'evidence="artifacts/rehearsal/delivery/deployment-evidence.txt"' in migration_script
+    assert 'evidence=".artifacts/rehearsal/delivery/deployment-evidence.txt"' in migration_script
     assert "grep -E '^migrations ' \"$evidence\"" in migration_script
-    assert 'test "$(wc -l < artifacts/rehearsal/migrations.txt | tr -d \' \')" = 1' in migration_script
+    assert 'test "$(wc -l < .artifacts/rehearsal/migrations.txt | tr -d \' \')" = 1' in migration_script
     assert '"https://${ALB_DNS_NAME}/v1/ready"' in migration_script
     assert "aws ecs run-task" not in migration_script
     assert "alembic upgrade head" not in migration_script

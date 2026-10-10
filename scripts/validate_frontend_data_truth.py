@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
-APP_NAMES = ("aether", "kyber")
+APP_NAMES = ("aether-web", "kyber-web")
 APP_ROOTS = tuple(ROOT / "apps" / app for app in APP_NAMES)
 RUNTIME_ROOTS = tuple(app_root / "src" for app_root in APP_ROOTS)
 BUNDLE_ROOTS = tuple(app_root / "dist" for app_root in APP_ROOTS)
@@ -584,7 +584,7 @@ def build_production_bundles(root: Path = ROOT) -> int:
         # Aether imports the published web SDK package entry. A clean install
         # contains source but no ignored dist/ output, so build the dependency
         # before asking Vite to resolve it.
-        "packages/web",
+        "packages/sdk/web",
         *(f"apps/{app}" for app in APP_NAMES),
         "apps/demo",
     ]

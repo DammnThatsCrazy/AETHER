@@ -1,7 +1,7 @@
 """Ingestion V2 — typed Bronze + transactional outbox + /v1/batch V2 (PR 5).
 
-Exercises the correctness core (``services.ingestion.bronze_bulk.ingest_many``)
-and the flag-gated V2 route branch in ``services.ingestion.batch`` under
+Exercises the correctness core (``ingestion.ingestion.bronze_bulk.ingest_many``)
+and the flag-gated V2 route branch in ``ingestion.ingestion.batch`` under
 AETHER_ENV=local (in-memory backend, no asyncpg/Redis):
 
   * all-new events accepted
@@ -35,13 +35,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -59,8 +59,8 @@ class _Backend:
         self.settings_mod = importlib.import_module("config.settings")
         self.repos = importlib.import_module("repositories.repos")
         self.repos.reset_in_memory_stores()
-        self.bulk = importlib.import_module("services.ingestion.bronze_bulk")
-        self.batch = importlib.import_module("services.ingestion.batch")
+        self.bulk = importlib.import_module("ingestion.ingestion.bronze_bulk")
+        self.batch = importlib.import_module("ingestion.ingestion.batch")
         self.settings = self.settings_mod.settings
         if iv2_overrides:
             object.__setattr__(

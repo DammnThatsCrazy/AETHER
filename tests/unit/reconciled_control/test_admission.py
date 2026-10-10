@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from services.managed_integrations.admission import (
+from connectors.managed_integrations.admission import (
     IntegrationAdmissionFacts,
     activate,
     admit,
@@ -32,12 +32,12 @@ from services.managed_integrations.admission import (
     validate_lifecycle_move,
     validate_stage_move,
 )
-from services.managed_integrations.admission_repository import (
+from connectors.managed_integrations.admission_repository import (
     AdmissionRecordView,
     get_admission_record_repository,
     reset_admission_record_stores,
 )
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations.contracts import (
     ADMISSION_STAGES,
     CONTINUOUS_LIFECYCLE_ACTIONS,
 )
@@ -65,7 +65,7 @@ def _admission_db_free(monkeypatch: pytest.MonkeyPatch) -> None:
         return None
 
     monkeypatch.setattr(
-        "services.managed_integrations.admission_repository.get_pool", _no_pool
+        "connectors.managed_integrations.admission_repository.get_pool", _no_pool
     )
     monkeypatch.setattr("repositories.repos.get_pool", _no_pool)
     reset_admission_record_stores()
@@ -672,8 +672,8 @@ async def test_repo_update_stage_stamps_updated_at_and_preserves_columns() -> No
 def test_admission_engine_imports_inert_while_flags_off() -> None:
     # Nothing about the engine auto-runs or auto-mounts while the Reconciled
     # Control Plane flags are OFF — the module is importable and pure.
-    import services.managed_integrations.admission as admission_module
-    from services.managed_integrations import flags
+    import connectors.managed_integrations.admission as admission_module
+    from connectors.managed_integrations import flags
 
     assert flags.enabled() is False
     for name in (

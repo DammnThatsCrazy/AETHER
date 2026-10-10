@@ -1,0 +1,1173 @@
+"""
+Aether Service — Admin
+Tenant management, billing, and API key management.
+"""
+
+from __future__ import annotations
+
+import uuid
+import hashlib
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+from fastapi import APIRouter, Request
+from pydantic import BaseModel, Field
+
+from config.settings import settings
+from shared.auth.auth import PlanTier, legacy_tier_to_plan, APIKeyTier
+from shared.billing.overage import OverageCalculator
+from shared.billing import stripe_client, stripe_repository
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ForbiddenError,
+    NotFoundError,
+)
+from shared.logger.logger import get_logger
+from shared.plans.catalog import PLAN_CATALOG
+from repositories.repos import AdminRepository, APIKeyRepository
+from shared.events.events import EventProducer, Event, Topic
+
+logger = get_logger("aether.service.admin")
+router = APIRouter(prefix="/v1/admin", tags=["Admin"])
+
+_repo = AdminRepository()
+_key_repo = APIKeyRepository()
+_producer = EventProducer()
+
+_API_KEY_RATE_LIMIT = 10  # max keys per tenant per hour
+_rate_limit_cache: dict[str, list[float]] = {}
+
+
+def _check_api_key_rate_limit(tenant_id: str) -> None:
+    import time
+    now = time.monotonic()
+    window = _rate_limit_cache.setdefault(tenant_id, [])
+    _rate_limit_cache[tenant_id] = [t for t in window if now - t < 3600]
+    if len(_rate_limit_cache[tenant_id]) >= _API_KEY_RATE_LIMIT:
+        raise BadRequestError(f"Rate limit exceeded: max {_API_KEY_RATE_LIMIT} API keys per tenant per hour")
+    _rate_limit_cache[tenant_id].append(now)
+
+
+def _resolve_plan_tier(request: Request, fallback: str = "alpha") -> PlanTier:
+    """Determine the plan tier for a billing query.
+
+    Preference order:
+      1. request.state.tenant.plan_tier (set by AuthMiddleware)
+      2. legacy api_key_tier mapped to a PlanTier
+      3. default to Alpha
+    """
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is not None:
+        plan = getattr(tenant, "plan_tier", None)
+        if isinstance(plan, PlanTier):
+            return plan
+        legacy = getattr(tenant, "api_key_tier", None)
+        if isinstance(legacy, APIKeyTier):
+            return legacy_tier_to_plan(legacy)
+    try:
+        return PlanTier(fallback)
+    except ValueError:
+        return PlanTier.ALPHA
+
+
+def _current_period() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+async def _resolve_plan_tier_for_tenant(
+    request: Request, tenant_id: str,
+) -> PlanTier:
+    """Pick the PlanTier for an arbitrary tenant_id (used for billing).
+
+    For self-tenant requests, falls back to the auth context's plan_tier
+    (matches existing /billing endpoints). For cross-tenant admin requests,
+    reads the authoritative plan_tier from tenant_billing_accounts so quota
+    and pricing reflect the BILLED tenant, not the caller.
+    """
+    caller = getattr(request.state, "tenant", None)
+    if caller is not None and getattr(caller, "tenant_id", "") == tenant_id:
+        return _resolve_plan_tier(request)
+    try:
+        from shared.billing import stripe_repository
+        account = await stripe_repository.get_billing_account(tenant_id)
+    except Exception as e:
+        logger.debug(f"plan_tier lookup for {tenant_id} failed: {e}")
+        account = None
+    if account and account.get("plan_tier"):
+        try:
+            return PlanTier(account["plan_tier"])
+        except ValueError:
+            pass
+    return PlanTier.ALPHA
+
+
+class TenantCreate(BaseModel):
+    name: str
+    plan: str = Field(default="free", pattern="^(free|pro|enterprise)$")
+    contact_email: str
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class TenantUpdate(BaseModel):
+    name: Optional[str] = None
+    plan: Optional[str] = None
+    settings: Optional[dict[str, Any]] = None
+
+
+class APIKeyCreate(BaseModel):
+    name: str
+    tier: str = Field(default="free", pattern="^(free|pro|enterprise)$")
+    permissions: list[str] = Field(default_factory=lambda: ["read"])
+
+
+@router.post("/tenants")
+async def create_tenant(body: TenantCreate, request: Request):
+    request.state.tenant.require_permission("admin")
+    tenant_id = str(uuid.uuid4())
+    tenant = await _repo.insert(tenant_id, {
+        **body.model_dump(),
+        "status": "active",
+    })
+    return APIResponse(data=tenant).to_dict()
+
+
+@router.get("/tenants/{tenant_id}")
+async def get_tenant(tenant_id: str, request: Request):
+    request.state.tenant.require_permission("admin")
+    tenant = await _repo.find_by_id_or_fail(tenant_id)
+    return APIResponse(data=tenant).to_dict()
+
+
+@router.patch("/tenants/{tenant_id}")
+async def update_tenant(tenant_id: str, body: TenantUpdate, request: Request):
+    request.state.tenant.require_permission("admin")
+    tenant = await _repo.update(tenant_id, body.model_dump(exclude_none=True))
+    return APIResponse(data=tenant).to_dict()
+
+
+@router.post("/tenants/{tenant_id}/api-keys")
+async def create_api_key(tenant_id: str, body: APIKeyCreate, request: Request):
+    """Create a new API key for a tenant. Registers it in both the key repo and the auth cache."""
+    request.state.tenant.require_permission("admin")
+    _check_api_key_rate_limit(tenant_id)
+    raw_key = f"ak_{uuid.uuid4().hex[:24]}"
+    hashed = hashlib.sha256(raw_key.encode()).hexdigest()
+
+    await _key_repo.insert(hashed[:12], {
+        "tenant_id": tenant_id,
+        "name": body.name,
+        "tier": body.tier,
+        "permissions": body.permissions,
+        "key_hash": hashed,
+        "last_used_at": None,
+    })
+
+    # Register with the auth validator for async Redis lookup
+    try:
+        from dependencies.providers import get_registry
+        registry = get_registry()
+        await registry.api_key_validator.register_api_key(
+            api_key=raw_key,
+            tenant_id=tenant_id,
+            role="editor",
+            tier=body.tier,
+            permissions=body.permissions,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to register key in auth cache: {e}")
+
+    actor = getattr(request.state.tenant, "entity_id", "unknown")
+    logger.info("API key created: tenant=%s name=%s actor=%s", tenant_id, body.name, actor)
+    try:
+        await _producer.publish(Event(
+            topic=Topic.ADMIN_API_KEY_CREATED,
+            tenant_id=tenant_id,
+            payload={"name": body.name, "tier": body.tier, "actor": actor},
+        ))
+    except Exception:
+        pass
+
+    return APIResponse(data={
+        "api_key": raw_key,
+        "name": body.name,
+        "tier": body.tier,
+        "message": "Store this key securely — it will not be shown again.",
+    }).to_dict()
+
+
+@router.get("/tenants/{tenant_id}/api-keys")
+async def list_api_keys(tenant_id: str, request: Request):
+    request.state.tenant.require_permission("admin")
+    keys = await _key_repo.find_many(filters={"tenant_id": tenant_id})
+    safe_keys = [{k: v for k, v in key.items() if k != "key_hash"} for key in keys]
+    return APIResponse(data=safe_keys).to_dict()
+
+
+@router.delete("/api-keys/{key_id}")
+async def revoke_api_key(key_id: str, request: Request):
+    request.state.tenant.require_permission("admin")
+    await _key_repo.delete(key_id)
+    return APIResponse(data={"revoked": True}).to_dict()
+
+
+@router.get("/tenants/{tenant_id}/billing")
+async def get_billing(tenant_id: str, request: Request):
+    """Return current plan, usage, quota, and overage for the billing period."""
+    request.state.tenant.require_permission("billing")
+
+    plan_tier = _resolve_plan_tier(request)
+    plan = PLAN_CATALOG[plan_tier]
+    period = _current_period()
+    pricing_option = settings.rate_limit.pricing_option
+
+    # Resolve quota engine + DB pool from app state if available
+    redis_client = None
+    db_pool = None
+    try:
+        from dependencies.providers import get_registry
+        registry = get_registry()
+        quota_engine = getattr(registry, "quota_engine", None)
+        if quota_engine is not None:
+            redis_client = getattr(quota_engine, "_redis", None)
+        from repositories.repos import get_pool
+        db_pool = await get_pool()
+    except Exception as e:
+        logger.debug(f"Billing data sources partial: {e}")
+
+    calculator = OverageCalculator(
+        redis_client=redis_client,
+        db_pool=db_pool,
+        pricing_option=pricing_option,
+    )
+    invoice = await calculator.calculate(tenant_id, plan_tier, period)
+    remaining = max(0, plan.monthly_quota - invoice.total_requests)
+
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "plan": {
+            "plan_id": plan.plan_id,
+            "display_name": plan.display_name,
+            "target_user": plan.target_user,
+            "monthly_quota": plan.monthly_quota,
+            "burst_rpm": plan.burst_rpm,
+            "member_cap": plan.member_cap,
+            "service_count": plan.service_count,
+            "subscription_fee": str(invoice.plan_fee),
+            "pricing_option": pricing_option,
+        },
+        "usage": {
+            "billing_period": period,
+            "total_requests": invoice.total_requests,
+            "included_quota": plan.monthly_quota,
+            "remaining": remaining,
+            "overage_requests": invoice.overage_request_count,
+        },
+        "overage": {
+            "line_items": [li.to_dict() for li in invoice.line_items],
+            "total": str(invoice.total_overage),
+        },
+        "projected_period_total": str(invoice.period_total),
+    }).to_dict()
+
+
+@router.get("/tenants/{tenant_id}/billing/usage")
+async def get_usage_detail(tenant_id: str, request: Request):
+    """Return detailed per-service usage breakdown for the current period."""
+    request.state.tenant.require_permission("billing")
+
+    plan_tier = _resolve_plan_tier(request)
+    plan = PLAN_CATALOG[plan_tier]
+    period = _current_period()
+
+    redis_client = None
+    db_pool = None
+    overage_by_service: dict[str, int] = {}
+    total_requests = 0
+    try:
+        from dependencies.providers import get_registry
+        registry = get_registry()
+        quota_engine = getattr(registry, "quota_engine", None)
+        if quota_engine is not None:
+            redis_client = getattr(quota_engine, "_redis", None)
+            overage_by_service = await quota_engine.get_overage_counts(
+                tenant_id, period,
+            )
+            total_requests = await quota_engine.get_total_used(
+                tenant_id, period,
+            )
+        from repositories.repos import get_pool
+        db_pool = await get_pool()
+    except Exception as e:
+        logger.debug(f"Usage detail sources partial: {e}")
+
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "billing_period": period,
+        "plan_tier": plan.plan_id,
+        "monthly_quota": plan.monthly_quota,
+        "total_requests": total_requests,
+        "remaining": max(0, plan.monthly_quota - total_requests),
+        "overage_by_service": overage_by_service,
+        "overage_total": sum(overage_by_service.values()),
+    }).to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STRIPE BILLING — Checkout, Portal, Invoices, Webhook
+#
+# Stripe Price IDs come from settings.stripe_billing (env vars). PLAN_CATALOG
+# remains the single source of truth for plan identity, quota, RPM, and
+# pricing. Missing configuration and provider failures are reported as
+# unavailable; no environment manufactures billing sessions.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _enforce_tenant_scope(request: Request, tenant_id: str) -> None:
+    """Caller may only manage its own tenant unless it has the admin role."""
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        raise ForbiddenError("Authenticated tenant context required")
+    caller_tenant = getattr(tenant, "tenant_id", "")
+    role = getattr(tenant, "role", None)
+    role_value = getattr(role, "value", role)
+    if caller_tenant == tenant_id:
+        return
+    if role_value == "admin" or tenant.has_permission("admin"):
+        return
+    raise ForbiddenError("Cross-tenant billing access denied")
+
+
+async def _resolve_contact_email(
+    tenant_id: str, body_email: Optional[str],
+) -> Optional[str]:
+    if body_email:
+        return body_email
+    account = await stripe_repository.get_billing_account(tenant_id)
+    if account and account.get("contact_email"):
+        return account["contact_email"]
+    try:
+        tenant_record = await _repo.find_by_id(tenant_id)
+        if tenant_record and tenant_record.get("contact_email"):
+            return tenant_record["contact_email"]
+    except Exception:
+        pass
+    return None
+
+
+class CheckoutSessionCreate(BaseModel):
+    plan_tier: str = Field(pattern="^(alpha|beta|gamma|delta)$")
+    contact_email: Optional[str] = None
+
+
+class OverageInvoiceCreate(BaseModel):
+    billing_period: Optional[str] = None  # YYYY-MM; defaults to current period
+
+
+@router.post("/tenants/{tenant_id}/billing/checkout-session")
+async def create_checkout_session(
+    tenant_id: str, body: CheckoutSessionCreate, request: Request,
+):
+    """Create a Stripe subscription Checkout Session for the requested plan.
+
+    Local plan_tier is NOT updated here; only customer.subscription.updated
+    confirms the change.
+    """
+    request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
+
+    try:
+        plan_tier = PlanTier(body.plan_tier)
+    except ValueError:
+        raise BadRequestError(f"Unknown plan_tier: {body.plan_tier!r}")
+    if plan_tier not in PLAN_CATALOG:
+        raise BadRequestError(f"Plan {plan_tier.value} not in PLAN_CATALOG")
+
+    contact_email = await _resolve_contact_email(tenant_id, body.contact_email)
+    account = await stripe_repository.get_billing_account(tenant_id)
+    existing_customer_id = account.get("stripe_customer_id") if account else None
+    customer_id = await stripe_client.create_or_get_customer(
+        tenant_id=tenant_id,
+        contact_email=contact_email,
+        existing_customer_id=existing_customer_id,
+    )
+    await stripe_repository.upsert_billing_account(
+        tenant_id=tenant_id,
+        contact_email=contact_email,
+        plan_tier=(account.get("plan_tier") if account else None),
+    )
+    if customer_id and customer_id != existing_customer_id:
+        await stripe_repository.update_customer_mapping(
+            tenant_id=tenant_id,
+            stripe_customer_id=customer_id,
+            contact_email=contact_email,
+        )
+
+    session = await stripe_client.create_checkout_session(
+        tenant_id=tenant_id,
+        plan_tier=plan_tier,
+        contact_email=contact_email,
+        customer_id=customer_id,
+    )
+    return APIResponse(data={
+        "url": session.url,
+        "session_id": session.session_id,
+        "plan_tier": plan_tier.value,
+    }).to_dict()
+
+
+@router.post("/tenants/{tenant_id}/billing/portal-session")
+async def create_portal_session(tenant_id: str, request: Request):
+    """Create a Stripe Billing Portal session for an existing customer."""
+    request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
+
+    account = await stripe_repository.get_billing_account(tenant_id)
+    customer_id = account.get("stripe_customer_id") if account else None
+    portal = await stripe_client.create_portal_session(
+        tenant_id=tenant_id, customer_id=customer_id,
+    )
+    return APIResponse(data={
+        "url": portal.url,
+    }).to_dict()
+
+
+@router.get("/tenants/{tenant_id}/billing/invoices")
+async def list_billing_invoices(
+    tenant_id: str, request: Request, limit: int = 50,
+):
+    """List locally synced Stripe invoices for a tenant."""
+    request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
+
+    invoices = await stripe_repository.list_invoices(tenant_id, limit=limit)
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "invoices": [_invoice_to_dict(inv) for inv in invoices],
+        "count": len(invoices),
+    }).to_dict()
+
+
+@router.get("/tenants/{tenant_id}/billing/invoices/{invoice_id}")
+async def get_billing_invoice(
+    tenant_id: str, invoice_id: str, request: Request,
+):
+    """Return one locally synced Stripe invoice for a tenant."""
+    request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
+
+    invoice = await stripe_repository.get_invoice(tenant_id, invoice_id)
+    if invoice is None:
+        raise NotFoundError("Invoice")
+    return APIResponse(data=_invoice_to_dict(invoice)).to_dict()
+
+
+@router.post("/tenants/{tenant_id}/billing/overage-invoice")
+async def create_overage_invoice(
+    tenant_id: str, body: OverageInvoiceCreate, request: Request,
+):
+    """Create a Stripe overage invoice for the tenant's billing period.
+
+    Disabled (501-style 400 BadRequest) when STRIPE_OVERAGE_PRICE_ID is not
+    configured. Idempotent on (tenant_id, billing_period).
+    """
+    request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
+
+    cfg = settings.stripe_billing
+    if not cfg.overage_invoicing_enabled:
+        raise BadRequestError(
+            "Stripe overage invoicing is not configured. "
+            "Set STRIPE_OVERAGE_PRICE_ID to enable Stripe-charged overage."
+        )
+
+    # Use the BILLED tenant's plan_tier, not the caller's. Cross-tenant admin
+    # access is permitted by _enforce_tenant_scope, but overage quota and
+    # pricing must reflect the target tenant.
+    plan_tier = await _resolve_plan_tier_for_tenant(request, tenant_id)
+    plan = PLAN_CATALOG[plan_tier]
+    period = body.billing_period or _current_period()
+
+    # Idempotency: if a successful attempt already exists for this period,
+    # return it instead of double-charging.
+    existing = await stripe_repository.get_overage_invoice_attempt(
+        tenant_id, period,
+    )
+    if existing and existing.get("status") in ("succeeded", "submitted"):
+        return APIResponse(data={
+            "tenant_id": tenant_id,
+            "billing_period": period,
+            "status": existing["status"],
+            "stripe_invoice_id": existing.get("stripe_invoice_id"),
+            "stripe_invoice_item_id": existing.get("stripe_invoice_item_id"),
+            "overage_requests": existing.get("overage_requests", 0),
+            "amount_cents": existing.get("amount_cents"),
+            "idempotent": True,
+        }).to_dict()
+
+    # Reuse existing Aether overage calculation as the source of truth.
+    redis_client = None
+    db_pool = None
+    try:
+        from dependencies.providers import get_registry
+        registry = get_registry()
+        quota_engine = getattr(registry, "quota_engine", None)
+        if quota_engine is not None:
+            redis_client = getattr(quota_engine, "_redis", None)
+        from repositories.repos import get_pool
+        db_pool = await get_pool()
+    except Exception as e:
+        logger.debug(f"Overage calc data sources partial: {e}")
+
+    calculator = OverageCalculator(
+        redis_client=redis_client,
+        db_pool=db_pool,
+        pricing_option=settings.rate_limit.pricing_option,
+    )
+    invoice_proj = await calculator.calculate(tenant_id, plan_tier, period)
+
+    overage_requests = invoice_proj.overage_request_count
+    amount_cents = int((invoice_proj.total_overage * 100).to_integral_value())
+
+    if overage_requests <= 0 or amount_cents <= 0:
+        await stripe_repository.record_overage_invoice_attempt(
+            tenant_id=tenant_id,
+            billing_period=period,
+            overage_requests=overage_requests,
+            amount_cents=amount_cents,
+            status="skipped_no_overage",
+        )
+        return APIResponse(data={
+            "tenant_id": tenant_id,
+            "billing_period": period,
+            "status": "skipped_no_overage",
+            "overage_requests": overage_requests,
+            "amount_cents": amount_cents,
+        }).to_dict()
+
+    account = await stripe_repository.get_billing_account(tenant_id)
+    customer_id = account.get("stripe_customer_id") if account else None
+    if not customer_id:
+        raise BadRequestError(
+            "No Stripe customer mapping for tenant. Run a Checkout flow first."
+        )
+
+    try:
+        result = await stripe_client.create_overage_invoice_item(
+            tenant_id=tenant_id,
+            customer_id=customer_id,
+            billing_period=period,
+            overage_requests=overage_requests,
+            amount_cents=amount_cents,
+        )
+    except Exception as e:
+        await stripe_repository.record_overage_invoice_attempt(
+            tenant_id=tenant_id,
+            billing_period=period,
+            overage_requests=overage_requests,
+            amount_cents=amount_cents,
+            status="failed",
+            error=str(e),
+        )
+        raise
+
+    await stripe_repository.record_overage_invoice_attempt(
+        tenant_id=tenant_id,
+        billing_period=period,
+        overage_requests=overage_requests,
+        amount_cents=amount_cents,
+        stripe_invoice_id=result.get("stripe_invoice_id"),
+        stripe_invoice_item_id=result.get("stripe_invoice_item_id"),
+        status="submitted",
+    )
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "billing_period": period,
+        "status": "submitted",
+        "stripe_invoice_id": result.get("stripe_invoice_id"),
+        "stripe_invoice_item_id": result.get("stripe_invoice_item_id"),
+        "overage_requests": overage_requests,
+        "amount_cents": amount_cents,
+        "plan_tier": plan.plan_id,
+    }).to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Stripe invoice rows
+#
+# The Stripe webhook receiver lives in services/api/governance/admin/webhook_routes.py.
+# ---------------------------------------------------------------------------
+
+
+def _invoice_to_dict(inv: dict[str, Any]) -> dict[str, Any]:
+    """Normalize an invoice row (DB or in-memory) to a JSON-friendly dict."""
+    def _iso(v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return str(v)
+
+    return {
+        "stripe_invoice_id": inv.get("stripe_invoice_id"),
+        "tenant_id": inv.get("tenant_id"),
+        "stripe_customer_id": inv.get("stripe_customer_id"),
+        "stripe_subscription_id": inv.get("stripe_subscription_id"),
+        "status": inv.get("status"),
+        "currency": inv.get("currency"),
+        "amount_due": inv.get("amount_due"),
+        "amount_paid": inv.get("amount_paid"),
+        "amount_remaining": inv.get("amount_remaining"),
+        "hosted_invoice_url": inv.get("hosted_invoice_url"),
+        "invoice_pdf": inv.get("invoice_pdf"),
+        "period_start": _iso(inv.get("period_start")),
+        "period_end": _iso(inv.get("period_end")),
+        "created_at": _iso(inv.get("created_at")),
+        "updated_at": _iso(inv.get("updated_at")),
+    }
+
+
+# ── Kyber strategic observability and revenue intelligence ────────────────
+
+from governance.admin.kyber_strategic import KyberStrategicObservability, Window
+from intelligence.intelligence.repositories import (
+    ActionFeedbackRepository,
+    DecisionRepository,
+    OutcomeRepository,
+    PlaybookRepository,
+    PlaybookRunRepository,
+    RecommendationFeedbackRepository,
+    RecommendationRepository,
+)
+
+_kyber_recommendations = RecommendationRepository()
+_kyber_decisions = DecisionRepository()
+_kyber_actions = ActionFeedbackRepository()
+_kyber_outcomes = OutcomeRepository()
+_kyber_playbooks = PlaybookRepository()
+_kyber_playbook_runs = PlaybookRunRepository()
+_kyber_feedback = RecommendationFeedbackRepository()
+
+
+from governance.security.request_context import require_kyber_operator as _canonical_kyber_gate
+
+
+def _require_kyber_operator(request: Request) -> None:
+    """Require Olympus operator access via the canonical fail-closed gate.
+
+    A regular Aether tenant — even one holding the ``admin`` permission — is NOT
+    a Kyber operator (the strategic ``/kyber/*`` views expose cross-tenant
+    intelligence). Only the ``kyber:operator`` grant or the operator tenant-id
+    allowlist passes. (The name is also re-bound to the canonical gate later in
+    this module for the agentic block; both paths resolve to the same gate.)
+    """
+    _canonical_kyber_gate(request)
+
+
+async def _kyber_observability(window: Window = "30d") -> KyberStrategicObservability:
+    limit = 10000
+    tenants = await _repo.find_many(limit=limit)
+    recommendations = await _kyber_recommendations.find_many(limit=limit)
+    decisions = await _kyber_decisions.find_many(limit=limit)
+    actions = await _kyber_actions.find_many(limit=limit)
+    outcomes = await _kyber_outcomes.find_many(limit=limit)
+    feedback = await _kyber_feedback.find_many(limit=limit)
+    playbooks = await _kyber_playbooks.find_many(limit=limit)
+    runs = await _kyber_playbook_runs.find_many(limit=limit)
+    return KyberStrategicObservability(tenants, recommendations, decisions, actions, outcomes, feedback, playbooks, runs, window)
+
+
+@router.get("/kyber/strategic-overview")
+async def kyber_strategic_overview(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    return APIResponse(data=observability.response({"overview": observability.strategic_overview().model_dump()})).to_dict()
+
+
+@router.get("/kyber/tenant-value-health")
+async def kyber_tenant_value_health(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.tenant_health()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/tenant-expansion-opportunities")
+async def kyber_tenant_expansion_opportunities(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.tenant_health() if item.expansion_score >= 0.5]
+    items.sort(key=lambda item: item["expansion_score"], reverse=True)
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/tenant-churn-risk")
+async def kyber_tenant_churn_risk(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.tenant_health() if item.churn_risk_score >= 0.4]
+    items.sort(key=lambda item: item["churn_risk_score"], reverse=True)
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/recommendation-family-performance")
+async def kyber_recommendation_family_performance(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.family_performance()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/playbook-performance")
+async def kyber_playbook_performance(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.playbook_performance()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/outcome-capture-health")
+async def kyber_outcome_capture_health(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    tenants = observability.tenant_health()
+    weak = [item.model_dump() for item in tenants if item.outcome_capture_rate < 0.4 and item.recommendations_generated > 0]
+    summary = {
+        "average_outcome_capture_rate": round(sum(item.outcome_capture_rate for item in tenants) / len(tenants), 4) if tenants else 0.0,
+        "tenants_below_threshold": len(weak),
+        "threshold": 0.4,
+    }
+    return APIResponse(data=observability.response({"summary": summary, "items": weak, "count": len(weak)})).to_dict()
+
+
+@router.get("/kyber/model-confidence-drift")
+async def kyber_model_confidence_drift(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    return APIResponse(data=observability.response({"report": observability.model_confidence_drift().model_dump()})).to_dict()
+
+
+@router.get("/kyber/vertical-solution-signals")
+async def kyber_vertical_solution_signals(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.vertical_solution_signals()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/revenue-opportunities")
+async def kyber_revenue_opportunities(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.revenue_opportunities()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# KYBER OPERATOR — AGENTIC OBSERVABILITY
+# ═══════════════════════════════════════════════════════════════════════════
+
+from collections import Counter, defaultdict  # noqa: E402
+
+from repositories.repos import (  # noqa: E402
+    AgentConfigRepository,
+    BehaviorProfileRepository,
+    PaymentIntentRepository,
+    SettlementEventRepository,
+    DelegationRepository,
+)
+from governance.security.request_context import require_kyber_operator as _require_kyber_operator  # noqa: E402
+
+_op_agent_configs = AgentConfigRepository()
+_op_behavior_profiles = BehaviorProfileRepository()
+_op_payment_intents = PaymentIntentRepository()
+_op_settlements = SettlementEventRepository()
+_op_delegations = DelegationRepository()
+
+_LIMIT = 10000
+
+
+@router.get("/operator/agentic/overview")
+async def operator_agentic_overview(request: Request):
+    """Aggregate agentic + x402 metrics across all tenants."""
+    _require_kyber_operator(request)
+
+    agents = await _op_agent_configs.find_many(limit=_LIMIT)
+    behavior_profiles = await _op_behavior_profiles.find_many(limit=_LIMIT)
+    intents = await _op_payment_intents.find_many(limit=_LIMIT)
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    delegations = await _op_delegations.find_many(limit=_LIMIT)
+
+    agent_ids = {a.get("agent_id") for a in agents if a.get("agent_id")}
+    tenant_ids = {a.get("tenant_id") for a in agents if a.get("tenant_id")}
+    settled_count = sum(1 for s in settlements if s.get("status") in {"settled", "paid", "success"})
+    failed_count = sum(1 for s in settlements if s.get("status") in {"failed"})
+    timeout_count = sum(1 for s in settlements if s.get("status") == "timeout")
+    abandoned_count = sum(1 for i in intents if i.get("abandoned_reason"))
+    total = len(settlements)
+
+    # Subagent count: delegations where grantee is a known agent
+    subagent_count = sum(1 for d in delegations if d.get("grantee_entity_id") in agent_ids and not d.get("revoked_at"))
+
+    # High-risk: agents whose behavior_profile risk_score > 0.7
+    high_risk = sum(1 for bp in behavior_profiles if float((bp.get("risk_score") or 0)) > 0.7)
+
+    # Top protocols, providers, capabilities from intents
+    protocol_counts: Counter = Counter(i.get("protocol", "") for i in intents if i.get("protocol"))
+    provider_counts: Counter = Counter(i.get("provider", "") for i in intents if i.get("provider"))
+    capability_counts: Counter = Counter(i.get("capability_requested", "") for i in intents if i.get("capability_requested"))
+
+    # Recent failures (last 10)
+    recent_failures = sorted(
+        [s for s in settlements if s.get("status") in {"failed", "timeout"}],
+        key=lambda s: s.get("occurred_at", ""),
+        reverse=True,
+    )[:10]
+
+    return APIResponse(data={
+        "tenant_count": len(tenant_ids),
+        "active_agent_count": len(agents),
+        "active_subagent_count": subagent_count,
+        "x402_flow_count": len(intents),
+        "payment_intent_count": len(intents),
+        "settlement_event_count": total,
+        "settlement_success_rate": round(settled_count / total, 4) if total else 0.0,
+        "failed_settlement_count": failed_count,
+        "timeout_count": timeout_count,
+        "abandoned_payment_count": abandoned_count,
+        "authorization_violation_count": 0,
+        "spend_limit_violation_count": 0,
+        "high_risk_agent_count": high_risk,
+        "top_protocols": [{"id": k, "count": v} for k, v in protocol_counts.most_common(10)],
+        "top_providers": [{"id": k, "count": v} for k, v in provider_counts.most_common(10)],
+        "top_capabilities": [{"id": k, "count": v} for k, v in capability_counts.most_common(10)],
+        "recent_failures": recent_failures,
+    }).to_dict()
+
+
+@router.get("/operator/agentic/agents")
+async def operator_agentic_agents(request: Request):
+    """List all agents across tenants."""
+    _require_kyber_operator(request)
+    agents = await _op_agent_configs.find_many(limit=_LIMIT)
+    return APIResponse(data={"agents": agents, "count": len(agents)}).to_dict()
+
+
+@router.get("/operator/agentic/x402/flows")
+async def operator_x402_flows(request: Request):
+    """x402 payment intent explorer across all tenants."""
+    _require_kyber_operator(request)
+    intents = await _op_payment_intents.find_many(limit=_LIMIT)
+    return APIResponse(data={"flows": intents, "count": len(intents)}).to_dict()
+
+
+@router.get("/operator/agentic/x402/failures")
+async def operator_x402_failures(request: Request):
+    """Failed settlement events across all tenants."""
+    _require_kyber_operator(request)
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    failures = [s for s in settlements if s.get("status") in {"failed"}]
+    return APIResponse(data={"failures": failures, "count": len(failures)}).to_dict()
+
+
+@router.get("/operator/agentic/x402/timeouts")
+async def operator_x402_timeouts(request: Request):
+    """Timeout settlement events across all tenants."""
+    _require_kyber_operator(request)
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    timeouts = [s for s in settlements if s.get("status") == "timeout"]
+    return APIResponse(data={"timeouts": timeouts, "count": len(timeouts)}).to_dict()
+
+
+@router.get("/operator/agentic/settlements")
+async def operator_agentic_settlements(request: Request):
+    """All settlement events across all tenants."""
+    _require_kyber_operator(request)
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    return APIResponse(data={"settlements": settlements, "count": len(settlements)}).to_dict()
+
+
+@router.get("/operator/agentic/delegations")
+async def operator_agentic_delegations(request: Request):
+    """All delegations across all tenants."""
+    _require_kyber_operator(request)
+    delegations = await _op_delegations.find_many(limit=_LIMIT)
+    return APIResponse(data={"delegations": delegations, "count": len(delegations)}).to_dict()
+
+
+@router.get("/operator/agentic/subagents")
+async def operator_agentic_subagents(request: Request):
+    """Subagent relationships (delegations where grantee is a known agent)."""
+    _require_kyber_operator(request)
+    delegations = await _op_delegations.find_many(limit=_LIMIT)
+    agents = await _op_agent_configs.find_many(limit=_LIMIT)
+    agent_ids = {a.get("agent_id") for a in agents if a.get("agent_id")}
+    subagent_links = [
+        d for d in delegations
+        if d.get("grantee_entity_id") in agent_ids or d.get("grantor_entity_id") in agent_ids
+    ]
+    return APIResponse(data={"subagent_relationships": subagent_links, "count": len(subagent_links)}).to_dict()
+
+
+@router.get("/kyber/identity-health")
+async def kyber_identity_health(request: Request):
+    """Per-tenant identity quality metrics across all tenants (operator view)."""
+    _require_kyber_operator(request)
+    from identity.identity.repository import IdentityResolutionRepository
+    identity_repo = IdentityResolutionRepository()
+    tenants = await _repo.find_many(limit=10000)
+    results = []
+    for t in tenants:
+        tid = t.get("id") or t.get("tenant_id")
+        if not tid:
+            continue
+        try:
+            health = await identity_repo.get_identity_health(tid)
+            results.append({
+                "tenant_id": tid,
+                "tenant_name": t.get("name", ""),
+                "total_entities": health.get("total_subjects", 0),
+                "total_aliases": health.get("total_aliases", 0),
+                "open_conflicts": health.get("open_conflicts", 0),
+                "recent_merges": health.get("recent_merges", 0),
+                "recent_splits": health.get("recent_splits", 0),
+            })
+        except Exception as exc:
+            logger.warning("kyber_identity_health failed for tenant=%s: %s", tid, exc)
+    return APIResponse(data={"tenants": results, "count": len(results)}).to_dict()
+
+
+@router.get("/kyber/resolution-queue")
+async def kyber_resolution_queue(
+    request: Request,
+    limit: int = 200,
+    status: Optional[str] = None,
+):
+    """Paginated global conflict/candidate queue across all tenants."""
+    _require_kyber_operator(request)
+    from identity.identity.repository import IdentityResolutionRepository
+    identity_repo = IdentityResolutionRepository()
+    tenants = await _repo.find_many(limit=10000)
+    all_conflicts: list[dict] = []
+    for t in tenants:
+        tid = t.get("id") or t.get("tenant_id")
+        if not tid:
+            continue
+        try:
+            conflicts = await identity_repo.get_conflicts(tid, status=status, limit=100)
+            for c in conflicts:
+                c["_tenant_id"] = tid
+                c["_tenant_name"] = t.get("name", "")
+            all_conflicts.extend(conflicts)
+        except Exception as exc:
+            logger.warning("kyber_resolution_queue failed for tenant=%s: %s", tid, exc)
+    all_conflicts = all_conflicts[:limit]
+    return APIResponse(data={"conflicts": all_conflicts, "total": len(all_conflicts)}).to_dict()
+
+
+@router.get("/kyber/merge-split-audit")
+async def kyber_merge_split_audit(
+    request: Request,
+    limit: int = 200,
+):
+    """Cross-tenant merge/split ledger (most recent first)."""
+    _require_kyber_operator(request)
+    from identity.identity.repository import IdentityResolutionRepository
+    identity_repo = IdentityResolutionRepository()
+    tenants = await _repo.find_many(limit=10000)
+    audit_records: list[dict] = []
+    for t in tenants:
+        tid = t.get("id") or t.get("tenant_id")
+        if not tid:
+            continue
+        try:
+            merges = await identity_repo.get_recent_merges(tid, limit=50)
+            splits = await identity_repo.get_recent_splits(tid, limit=50)
+            for r in merges:
+                r["_record_type"] = "merge"
+                r["_tenant_id"] = tid
+            for r in splits:
+                r["_record_type"] = "split"
+                r["_tenant_id"] = tid
+            audit_records.extend(merges)
+            audit_records.extend(splits)
+        except Exception as exc:
+            logger.warning("kyber_merge_split_audit failed for tenant=%s: %s", tid, exc)
+    audit_records.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    audit_records = audit_records[:limit]
+    return APIResponse(data={"records": audit_records, "total": len(audit_records)}).to_dict()
+
+
+@router.get("/kyber/resolution-health")
+async def kyber_resolution_health(request: Request):
+    """Per-tenant resolver throughput and error rate metrics."""
+    _require_kyber_operator(request)
+    from identity.identity.repository import IdentityResolutionRepository
+    identity_repo = IdentityResolutionRepository()
+    tenants = await _repo.find_many(limit=10000)
+    results = []
+    for t in tenants:
+        tid = t.get("id") or t.get("tenant_id")
+        if not tid:
+            continue
+        try:
+            db_alive = await identity_repo.ping()
+            health = await identity_repo.get_identity_health(tid)
+            results.append({
+                "tenant_id": tid,
+                "tenant_name": t.get("name", ""),
+                "db_alive": db_alive,
+                "open_conflicts": health.get("open_conflicts", 0),
+                "recent_merges": health.get("recent_merges", 0),
+                "recent_splits": health.get("recent_splits", 0),
+                "total_entities": health.get("total_subjects", 0),
+            })
+        except Exception as exc:
+            logger.warning("kyber_resolution_health failed for tenant=%s: %s", tid, exc)
+            results.append({"tenant_id": tid, "error": str(exc)})
+    return APIResponse(data={"tenants": results, "count": len(results)}).to_dict()
+
+
+@router.get("/operator/agentic/anomalies")
+async def operator_agentic_anomalies(request: Request):
+    """Rule-based anomaly flags across all tenants."""
+    _require_kyber_operator(request)
+
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    intents = await _op_payment_intents.find_many(limit=_LIMIT)
+
+    # Count per agent
+    failed_by_agent: Counter = Counter()
+    timeout_by_agent: Counter = Counter()
+    spend_by_agent: dict[str, float] = defaultdict(float)
+
+    for s in settlements:
+        agent_id = s.get("agent_id", "")
+        if s.get("status") in {"failed"}:
+            failed_by_agent[agent_id] += 1
+        if s.get("status") == "timeout":
+            timeout_by_agent[agent_id] += 1
+
+    for i in intents:
+        agent_id = i.get("agent_id", "")
+        try:
+            spend_by_agent[agent_id] += float(i.get("amount") or 0)
+        except (TypeError, ValueError):
+            pass
+
+    # Compute average spend for spike detection
+    spend_values = list(spend_by_agent.values())
+    avg_spend = sum(spend_values) / len(spend_values) if spend_values else 0.0
+
+    anomalies: list[dict] = []
+
+    for agent_id, count in failed_by_agent.items():
+        if count > 3:
+            anomalies.append({
+                "type": "repeated_payment_failure",
+                "agent_id": agent_id,
+                "failed_count": count,
+                "threshold": 3,
+            })
+
+    for agent_id, count in timeout_by_agent.items():
+        if count > 5:
+            anomalies.append({
+                "type": "payment_timeout_spike",
+                "agent_id": agent_id,
+                "timeout_count": count,
+                "threshold": 5,
+            })
+
+    for agent_id, total_spend in spend_by_agent.items():
+        if avg_spend > 0 and total_spend > avg_spend * 5:
+            anomalies.append({
+                "type": "agent_spend_limit_exceeded",
+                "agent_id": agent_id,
+                "total_spend": total_spend,
+                "avg_spend": avg_spend,
+                "ratio": round(total_spend / avg_spend, 2),
+            })
+
+    return APIResponse(data={"anomalies": anomalies, "count": len(anomalies)}).to_dict()
+
+
+@router.get("/operator/agentic/agents/{agent_id}")
+async def operator_agentic_agent_detail(agent_id: str, request: Request):
+    """Single agent detail across all tenants."""
+    _require_kyber_operator(request)
+    config = await _op_agent_configs.find_by_id(agent_id)
+    if config is None:
+        raise NotFoundError("Agent")
+    behavior = await _op_behavior_profiles.find_by_id(agent_id)
+    intents = await _op_payment_intents.find_many(filters={"agent_id": agent_id}, limit=100)
+    settlements = await _op_settlements.find_many(filters={"agent_id": agent_id}, limit=100)
+    delegations_received = await _op_delegations.find_many(
+        filters={"grantee_entity_id": agent_id}, limit=100
+    )
+    return APIResponse(data={
+        "agent_id": agent_id,
+        "config": config,
+        "behavior_profile": behavior,
+        "payment_intent_count": len(intents),
+        "settlement_count": len(settlements),
+        "delegation_count": len(delegations_received),
+        "recent_intents": intents[:10],
+        "recent_settlements": settlements[:10],
+    }).to_dict()
+
+
+@router.get("/operator/agentic/authorization-violations")
+async def operator_agentic_authorization_violations(request: Request):
+    """Delegations or authorization events that exceeded their scope (rule-based)."""
+    _require_kyber_operator(request)
+    delegations = await _op_delegations.find_many(limit=_LIMIT)
+    # Flag delegations that were revoked (potential scope violation signal)
+    revoked = [d for d in delegations if d.get("revoked_at")]
+    return APIResponse(data={
+        "violations": revoked,
+        "count": len(revoked),
+        "note": "Shows revoked delegations as an authorization violation signal.",
+    }).to_dict()
+
+
+@router.get("/operator/agentic/spend-limits")
+async def operator_agentic_spend_limits(request: Request):
+    """Agents near or over estimated spend thresholds."""
+    _require_kyber_operator(request)
+    intents = await _op_payment_intents.find_many(limit=_LIMIT)
+    spend_by_agent: dict[str, float] = defaultdict(float)
+    for i in intents:
+        agent_id = i.get("agent_id", "")
+        try:
+            spend_by_agent[agent_id] += float(i.get("amount") or 0)
+        except (TypeError, ValueError):
+            pass
+    spend_values = list(spend_by_agent.values())
+    avg = sum(spend_values) / len(spend_values) if spend_values else 0.0
+    over_limit = [
+        {"agent_id": aid, "total_spend": spend, "ratio_vs_avg": round(spend / avg, 2) if avg else None}
+        for aid, spend in spend_by_agent.items()
+        if avg > 0 and spend > avg * 3
+    ]
+    return APIResponse(data={"over_limit": over_limit, "count": len(over_limit), "avg_spend": avg}).to_dict()
+
+
+@router.get("/operator/agentic/trust")
+async def operator_agentic_trust(request: Request):
+    """Trust score overview for agents across all tenants."""
+    _require_kyber_operator(request)
+    profiles = await _op_behavior_profiles.find_many(limit=_LIMIT)
+    rows = [
+        {
+            "agent_id": p.get("entity_id") or p.get("agent_id"),
+            "tenant_id": p.get("tenant_id"),
+            "trust_score": p.get("trust_score"),
+            "risk_score": p.get("risk_score"),
+            "anomaly_score": p.get("anomaly_score"),
+        }
+        for p in profiles
+        if p.get("entity_id") or p.get("agent_id")
+    ]
+    rows.sort(key=lambda r: float(r.get("risk_score") or 0), reverse=True)
+    return APIResponse(data={"trust_profiles": rows, "count": len(rows)}).to_dict()

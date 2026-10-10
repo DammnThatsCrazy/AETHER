@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
-BACKEND_ROOT = REPO_ROOT / "services" / "backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "api"
 
 
 @contextmanager

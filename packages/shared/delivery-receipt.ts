@@ -2,7 +2,7 @@
  * Delivery receipt / attempt contract (v1).
  *
  * TS twin of the Python-authoritative delivery models
- * (`services/delivery/models.py`). Preserves the honest delivery vocabulary:
+ * (`services/api/actions/delivery/models.py`). Preserves the honest delivery vocabulary:
  * provider-accepted ≠ delivered ≠ opened ≠ clicked. A ProviderReceipt is proof of
  * delivery only with a real `external_id` — the backend rejects an empty or
  * `sim-`-prefixed id, so a simulated receipt can never be recorded as delivered.

@@ -336,8 +336,8 @@ jobs:
       - name: Build and archive the deployment-sensitive image
         run: |
           build_started=$(date +%s.%N)
-          test -f "services/backend/Dockerfile"
-          docker build --file "services/backend/Dockerfile" \
+          test -f "services/api/Dockerfile"
+          docker build --file "services/api/Dockerfile" \
             --tag "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" .
           docker save "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             | gzip -n > release-evidence/backend-image.tar.gz

@@ -33,7 +33,7 @@ repository_ceiling:
     - Capture a credentialed plan/apply artifact
   remaining_is_repository_controlled: false
   evidence:
-    - deploy/terraform/
+    - infra/terraform/
     - config/deployment_profiles.yaml
     - config/deployment_readiness.yaml
 

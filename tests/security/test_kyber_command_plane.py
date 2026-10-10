@@ -38,28 +38,28 @@ from typing import Any, Optional
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
 from shared.common.common import BadRequestError, ForbiddenError  # noqa: E402
 
-from services.kyber.ops import dispatch, verification  # noqa: E402
-from services.kyber.ops.command_repository import (  # noqa: E402
+from governance.kyber.ops import dispatch, verification  # noqa: E402
+from governance.kyber.ops.command_repository import (  # noqa: E402
     CommandExecutionRepository,
     CommandRepository,
     command_execution_repository,
     command_repository,
 )
-from services.kyber.ops.commands import CommandService  # noqa: E402
-from services.kyber.ops.containment import (  # noqa: E402
+from governance.kyber.ops.commands import CommandService  # noqa: E402
+from governance.kyber.ops.containment import (  # noqa: E402
     OpsProviders,
     reset_ops_providers,
     set_ops_providers,
 )
-from services.kyber.ops.contracts import CommandRequest, CommandSpec  # noqa: E402
-from services.kyber.ops.registry import COMMAND_REGISTRY, register_command  # noqa: E402
+from governance.kyber.ops.contracts import CommandRequest, CommandSpec  # noqa: E402
+from governance.kyber.ops.registry import COMMAND_REGISTRY, register_command  # noqa: E402
 
 # ── Refusals, matched by name at call time ───────────────────────────────────
 
@@ -98,7 +98,7 @@ class _RefusalMatcher:
 def _refuses(name: str) -> _RefusalMatcher:
     return _RefusalMatcher(name)
 
-JOBS_CLASS = "services.jobs.service.JobsService"
+JOBS_CLASS = "workers.jobs.service.JobsService"
 
 REQUESTER = "op_requester"
 APPROVER_A = "op_approver_a"
@@ -507,7 +507,7 @@ def test_a_declared_check_with_no_verifier_fails_the_drift_assertion():
         title="drift probe",
         capability_id="kyber.command.retry",
         action_class=2,
-        handler="services.jobs.service.JobsService.retry",
+        handler="workers.jobs.service.JobsService.retry",
         verification_checks=("a_check_nobody_implements",),
     )
     register_command(spec)
@@ -562,7 +562,7 @@ async def test_a_spec_requiring_a_dry_run_cannot_execute_without_one(jobs: FakeJ
     assert jobs.enqueue_calls == [], "a blocked command must not reach its handler"
 
     plan = await svc.dry_run(command.command_id, actor_id=REQUESTER)
-    assert plan["handler"] == "services.jobs.service.JobsService.enqueue"
+    assert plan["handler"] == "workers.jobs.service.JobsService.enqueue"
     assert jobs.enqueue_calls == [], "a dry run must not call the handler either"
 
     await svc.execute(command.command_id, actor_id=REQUESTER)
@@ -619,7 +619,7 @@ async def test_a_spec_requiring_a_rollback_plan_cannot_execute_without_one(jobs:
 def test_every_registered_handler_resolves_to_a_real_callable():
     """A registered command with an unresolvable handler is a gate with no door.
 
-    Resolution is deliberately loud — ``services/kyber/seams.py`` records two
+    Resolution is deliberately loud — ``services/api/governance/kyber/seams.py`` records two
     production defects caused by a wrong module path reading as an absent one —
     so this walks the whole catalog against the real modules, with no fakes
     installed.
@@ -634,7 +634,7 @@ def test_every_registered_handler_resolves_to_a_real_callable():
 def test_an_unresolvable_handler_raises_instead_of_degrading():
     """No silent ``try/except ImportError``: a bad path is an error, not a no-op."""
     with pytest.raises(dispatch.CommandDispatchError) as excinfo:
-        dispatch.resolve_handler("services.jobs.service.JobsService.no_such_method")
+        dispatch.resolve_handler("workers.jobs.service.JobsService.no_such_method")
     assert "no_such_method" in str(excinfo.value)
 
     with pytest.raises(dispatch.CommandDispatchError):
@@ -658,7 +658,7 @@ async def test_record_approval_recomputes_gaps_instead_of_filtering_a_snapshot()
     policy inherits the stale verdict, which is exactly why the rule has to live
     in the policy rather than in one of its callers.
     """
-    from services.kyber.ops.approvals import ApprovalPolicy
+    from governance.kyber.ops.approvals import ApprovalPolicy
 
     spec = COMMAND_REGISTRY["activate_kill_switch"]
     policy = ApprovalPolicy()
@@ -765,7 +765,7 @@ def granted_scope(monkeypatch):
     calls the command plane made — so a test can prove the evaluator was
     consulted rather than bypassed.
     """
-    from services.kyber.access import dependencies
+    from governance.kyber.access import dependencies
 
     def _install(scope_tenant: Optional[str], asserted_tenant: Optional[str] = None):
         calls: list[dict[str, Any]] = []
@@ -789,7 +789,7 @@ async def test_a_command_may_not_target_a_tenant_outside_the_operators_scope(gra
     evaluator can see, and the command then acts on `tenant_ids`. Without the
     match, holding any scope on any tenant is authority over every tenant.
     """
-    from services.kyber.ops import routes
+    from governance.kyber.ops import routes
 
     calls = granted_scope("tenant-A")
 
@@ -805,7 +805,7 @@ async def test_a_command_may_not_target_a_tenant_outside_the_operators_scope(gra
 
 async def test_a_command_inside_the_scope_is_still_authorized(granted_scope):
     """The control. A gate that denies everything is not a gate, it is an outage."""
-    from services.kyber.ops import routes
+    from governance.kyber.ops import routes
 
     granted_scope(TENANT)
     context, spec = await routes._authorize_command(
@@ -821,7 +821,7 @@ async def test_a_tenant_scoped_command_naming_no_tenant_is_refused(granted_scope
     `_containment_refusal` iterates `tenant_ids`, so an empty list is checked
     against no containment switch at all, and the audit row records no tenant.
     """
-    from services.kyber.ops import routes
+    from governance.kyber.ops import routes
 
     granted_scope(TENANT)
     with _refuses("ForbiddenError") as excinfo:
@@ -831,7 +831,7 @@ async def test_a_tenant_scoped_command_naming_no_tenant_is_refused(granted_scope
 
 async def test_a_command_naming_two_tenants_is_refused_not_partly_run(granted_scope):
     """One live scope cannot cover two tenants, and a subset is not an answer."""
-    from services.kyber.ops import routes
+    from governance.kyber.ops import routes
 
     granted_scope(TENANT)
     with _refuses("ForbiddenError") as excinfo:
@@ -847,7 +847,7 @@ async def test_a_command_naming_two_tenants_is_refused_not_partly_run(granted_sc
 
 async def test_a_fleet_command_is_not_forced_through_the_tenant_match(granted_scope):
     """`tenant_scoped=False` commands are fleet-wide by declaration, not by omission."""
-    from services.kyber.ops import routes
+    from governance.kyber.ops import routes
 
     granted_scope(None)
     _context, spec = await routes._authorize_command(
@@ -866,7 +866,7 @@ async def test_execute_rechecks_the_tenants_stored_on_the_command(
     "the same way" — i.e. against a header — and never looked at what the
     command it was about to dispatch actually targets.
     """
-    from services.kyber.ops import routes
+    from governance.kyber.ops import routes
 
     install(jobs=jobs)
     svc = service()

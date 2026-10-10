@@ -56,7 +56,7 @@ apps/docs/                ← this app
 
 ## See also
 
-- [Documentation Pipeline](../../docs/internal/tooling/docs-pipeline.md) —
+- [Documentation Pipeline](../../docs/operations/internal/tooling/docs-pipeline.md) —
   the validators + generators that feed this app.
-- [Docs resolution plan](../../docs/internal/tooling/docs-pipeline.md) for
+- [Docs resolution plan](../../docs/operations/internal/tooling/docs-pipeline.md) for
   the overall multi-phase roadmap.

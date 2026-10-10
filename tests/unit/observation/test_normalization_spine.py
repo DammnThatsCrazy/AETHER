@@ -3,7 +3,7 @@ validated-topic payload shapes (additive ``observation_envelope`` / flat
 SDK/comms dict / provider-runtime ``AetherEvent`` dump), plus flag-gated
 consumer convergence.
 
-The spine (:func:`services.ingestion.spine.to_observation_view`) never raises and
+The spine (:func:`ingestion.ingestion.spine.to_observation_view`) never raises and
 every field is Optional, so a consumer degrades to skip exactly as it does on a
 missing key. Flag OFF keeps every legacy read (byte/row parity — the branch the
 existing Silver write-path tests assert); flag ON routes consumers through the
@@ -20,15 +20,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from services.ingestion import observation_envelope as oe
-from services.ingestion import workers
-from services.ingestion.spine import (
+from ingestion.ingestion import observation_envelope as oe
+from ingestion.ingestion import workers
+from ingestion.ingestion.spine import (
     ObservationView,
     normalization_spine_enabled,
     to_observation_view,
 )
-from services.semantic_intelligence.consumer import _to_semantic_payload
-from services.silver.dispatcher import ProjectionOutcome
+from intelligence.semantic_intelligence.consumer import _to_semantic_payload
+from ingestion.silver.dispatcher import ProjectionOutcome
 from shared.events.events import Event, Topic
 
 
@@ -432,7 +432,7 @@ def test_bus_envelope_aether_dump_gains_subject_and_occurrence_flag_on(monkeypat
 
 async def test_silver_fact_projector_flat_connector_envelope(monkeypatch) -> None:
     """silver_fact_projector hands the dispatcher a correct type/messageId envelope."""
-    from services.silver import dispatcher as dispatcher_module
+    from ingestion.silver import dispatcher as dispatcher_module
 
     _set_spine(monkeypatch, True)
     capture = _CaptureDispatcher()
@@ -450,7 +450,7 @@ async def test_silver_fact_projector_flat_connector_envelope(monkeypatch) -> Non
 
 async def test_silver_fact_projector_aether_dump_envelope(monkeypatch) -> None:
     """Flag ON: an AetherEvent dump projects through the spine (subject reachable)."""
-    from services.silver import dispatcher as dispatcher_module
+    from ingestion.silver import dispatcher as dispatcher_module
 
     _set_spine(monkeypatch, True)
     capture = _CaptureDispatcher()

@@ -53,7 +53,7 @@ def test_unknown_profile_and_status_fail_closed():
 
 
 def test_resolution_matches_contract_schema():
-    schema = json.loads(Path("contracts/delivery/environment-resolution.schema.json").read_text())
+    schema = json.loads(Path("packages/contracts/delivery/environment-resolution.schema.json").read_text())
     jsonschema.Draft202012Validator(schema).validate(resolve("staging", _full()))
 
 

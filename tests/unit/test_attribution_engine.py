@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -42,7 +42,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_credits_sum_to_one_linear(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         resolver = AttributionResolver(AttributionConfig())
         tps = _make_touchpoints(4)
         result = await resolver.resolve(
@@ -56,7 +56,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_credits_sum_to_one_first_touch(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         resolver = AttributionResolver(AttributionConfig())
         tps = _make_touchpoints(3)
         result = await resolver.resolve(
@@ -70,7 +70,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_credits_sum_to_one_last_touch(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         resolver = AttributionResolver(AttributionConfig())
         tps = _make_touchpoints(2)
         result = await resolver.resolve(
@@ -84,7 +84,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_credits_sum_to_one_position_based(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         resolver = AttributionResolver(AttributionConfig())
         tps = _make_touchpoints(5)
         result = await resolver.resolve(
@@ -98,7 +98,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_credits_sum_to_one_time_decay(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         resolver = AttributionResolver(AttributionConfig())
         tps = _make_touchpoints(4)
         result = await resolver.resolve(
@@ -112,7 +112,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_empty_touchpoints_returns_empty_credits(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         resolver = AttributionResolver(AttributionConfig())
         result = await resolver.resolve(
             user_id="u1",
@@ -124,7 +124,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_attributed_revenue_reconciles(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         revenue = 149.99
         resolver = AttributionResolver(AttributionConfig())
         tps = _make_touchpoints(3)
@@ -142,7 +142,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_single_touchpoint_gets_full_credit(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         resolver = AttributionResolver(AttributionConfig())
         tps = _make_touchpoints(1)
         for model in ("first_touch", "last_touch", "linear", "time_decay"):
@@ -158,7 +158,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_no_negative_credits(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
         resolver = AttributionResolver(AttributionConfig())
         tps = _make_touchpoints(5)
         for model in ("linear", "time_decay", "position_based", "first_touch", "last_touch"):
@@ -173,7 +173,7 @@ class TestAttributionEngineLocal:
 
     @pytest.mark.asyncio
     async def test_historical_lookback_uses_conversion_timestamp(self):
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
 
         resolver = AttributionResolver(AttributionConfig(lookback_window_hours=48))
         result = await resolver.resolve(
@@ -192,7 +192,7 @@ class TestAttributionEngineLocal:
 
 
 def test_credit_metadata_matches_exact_touchpoint_id():
-    from services.measurement.engine.attribution_engine import _find_touchpoint_by_id
+    from journeys.measurement.engine.attribution_engine import _find_touchpoint_by_id
 
     first_id = str(uuid4())
     second_id = str(uuid4())
@@ -206,7 +206,7 @@ def test_credit_metadata_matches_exact_touchpoint_id():
 
 
 def test_resolver_payload_carries_source_classification_snapshot():
-    from services.measurement.engine.attribution_engine import _touchpoint_to_resolver_dict
+    from journeys.measurement.engine.attribution_engine import _touchpoint_to_resolver_dict
 
     payload = _touchpoint_to_resolver_dict({
         "touchpoint_id": str(uuid4()),
@@ -230,7 +230,7 @@ def test_resolver_payload_carries_source_classification_snapshot():
 
 @pytest.mark.asyncio
 async def test_atomic_run_switch_and_referral_rollups_local():
-    from services.measurement.repositories.attribution_run_repo import (
+    from journeys.measurement.repositories.attribution_run_repo import (
         AttributionRunRepository,
         _local_credits,
         _local_runs,
@@ -304,7 +304,7 @@ async def test_atomic_run_switch_and_referral_rollups_local():
 
 @pytest.mark.asyncio
 async def test_recompute_reuses_prior_model_config_snapshot_semantics():
-    from services.measurement.engine.attribution_engine import AttributionEngine
+    from journeys.measurement.engine.attribution_engine import AttributionEngine
 
     conversion_id = str(uuid4())
     conversion_at = datetime(2026, 7, 10, tzinfo=timezone.utc)
@@ -390,7 +390,7 @@ async def test_recompute_reuses_prior_model_config_snapshot_semantics():
 
 @pytest.mark.asyncio
 async def test_snapshot_lookback_longer_than_resolver_default_is_preserved():
-    from services.measurement.engine.attribution_engine import AttributionEngine
+    from journeys.measurement.engine.attribution_engine import AttributionEngine
 
     conversion_id = str(uuid4())
     conversion_at = datetime(2026, 7, 10, tzinfo=timezone.utc)

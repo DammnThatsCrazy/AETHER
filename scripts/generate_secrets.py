@@ -140,7 +140,7 @@ def _print_generated(dry_run: bool = False) -> None:
     print("# STRIPE_SECRET_KEY=sk_live_<your_stripe_secret_key>")
     print()
     print("# Copy generated values into your secret management system.")
-    print("# See docs/SECRET-ROTATION.md for rotation procedures.")
+    print("# See docs/operations/SECRET-ROTATION.md for rotation procedures.")
 
 
 def _validate(env_path: str) -> bool:

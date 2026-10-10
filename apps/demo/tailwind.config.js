@@ -4,7 +4,7 @@ export default {
   content: [
     './index.html',
     './src/**/*.{ts,tsx}',
-    '../../apps/shared/src/**/*.{ts,tsx}',
+    '../../packages/ui/core/src/**/*.{ts,tsx}',
   ],
   darkMode: 'class',
   theme: { extend: {} },

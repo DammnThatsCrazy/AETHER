@@ -12,8 +12,8 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-ROUTES = ROOT / "services/backend/services/auth/routes.py"
-ENDPOINTS = ROOT / "apps/aether/src/lib/api/endpoints.ts"
+ROUTES = ROOT / "services/api/tenancy/auth/routes.py"
+ENDPOINTS = ROOT / "apps/aether-web/src/lib/api/endpoints.ts"
 
 
 def _model_fields(name: str) -> tuple[set[str], set[str]]:

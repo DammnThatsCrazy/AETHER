@@ -32,7 +32,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -40,19 +40,19 @@ from repositories.repos import reset_in_memory_stores  # noqa: E402
 from shared.common.common import ForbiddenError, UnauthorizedError  # noqa: E402
 from shared.temporal.clock import FixedClock  # noqa: E402
 
-from services.kyber.access.dependencies import (  # noqa: E402
+from governance.kyber.access.dependencies import (  # noqa: E402
     AccessProviders,
     reset_providers,
     resolve_access_context,
     set_providers,
 )
-from services.kyber.access.disclosure import (  # noqa: E402
+from governance.kyber.access.disclosure import (  # noqa: E402
     STEP_UP_REQUIRED_FROM,
     DisclosureLevel,
 )
-from services.kyber.sessions import cookies  # noqa: E402
-from services.kyber.sessions.service import session_service  # noqa: E402
-from services.kyber.sessions.step_up import step_up_service  # noqa: E402
+from governance.kyber.sessions import cookies  # noqa: E402
+from governance.kyber.sessions.service import session_service  # noqa: E402
+from governance.kyber.sessions.step_up import step_up_service  # noqa: E402
 
 ORIGIN = "http://localhost:3000"
 AUTHORITY_METHODS = ["google_oidc", "webauthn", "device_proof"]
@@ -87,7 +87,7 @@ class FakePrincipal:
 
 
 class FakePrincipals:
-    """Stands in for ``services.kyber.identity.principals.principal_service``."""
+    """Stands in for ``governance.kyber.identity.principals.principal_service``."""
 
     def __init__(self) -> None:
         self.by_id: dict[str, FakePrincipal] = {}
@@ -104,7 +104,7 @@ class FakePrincipals:
         return list(principal.templates) if principal else []
 
     async def effective_capabilities(self, operator_id: str, *, environment: Any = None):
-        from services.kyber.access.roles import capabilities_for
+        from governance.kyber.access.roles import capabilities_for
 
         principal = self.by_id.get(operator_id)
         return frozenset(capabilities_for(principal.templates)) if principal else frozenset()
@@ -387,7 +387,7 @@ def test_every_declaration_at_or_above_d4_names_a_capability_that_can_reach_it()
     at D1 does not tighten the route, it bricks it. This catches that at the
     declaration, where it is a typo, rather than in production.
     """
-    from services.kyber.access.capabilities import CAPABILITIES
+    from governance.kyber.access.capabilities import CAPABILITIES
 
     broken = []
     for entry in _declarations():

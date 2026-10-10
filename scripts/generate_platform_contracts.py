@@ -27,54 +27,54 @@ Sources (read-only — canonical source of truth):
 
 Generated outputs:
   packages/shared/temporal-policy.ts
-  services/backend/shared/temporal/generated_policy.py
+  services/api/shared/temporal/generated_policy.py
   docs/_generated/temporal-policy-table.md
   packages/shared/interaction-contract.ts
-  services/backend/shared/product/generated_vocabulary.py
+  services/api/shared/product/generated_vocabulary.py
   docs/_generated/interaction-vocabulary-table.md
   packages/shared/context-capsule.ts
-  services/backend/shared/context_capsule/generated_taxonomy.py
+  services/api/shared/context_capsule/generated_taxonomy.py
   docs/_generated/context-capsule-table.md
   packages/shared/location-registry.ts
-  services/backend/shared/geo/generated_taxonomy.py
+  services/api/shared/geo/generated_taxonomy.py
   docs/_generated/location-registry-table.md
   packages/shared/graph-mutation.ts
-  services/backend/shared/graph/generated_mutation_taxonomy.py
+  services/api/shared/graph/generated_mutation_taxonomy.py
   docs/_generated/graph-mutation-table.md
   packages/shared/filter-fields.ts
-  services/backend/shared/exploration/generated_fields.py
+  services/api/shared/exploration/generated_fields.py
   docs/_generated/filter-field-table.md
   packages/shared/surface-capabilities.ts
-  services/backend/shared/exploration/generated_surfaces.py
+  services/api/shared/exploration/generated_surfaces.py
   docs/_generated/surface-capability-table.md
   packages/shared/comparison-contract.ts
-  services/backend/services/intelligence/comparison/generated_vocabulary.py
+  services/api/intelligence/intelligence/comparison/generated_vocabulary.py
   docs/_generated/comparison-table.md
-  services/backend/services/silver/generated_ownership.py
+  services/api/ingestion/silver/generated_ownership.py
   docs/_generated/projector-ownership-table.md
   packages/shared/model-registry.ts
-  services/backend/shared/model_governance/generated_model_registry.py
+  services/api/shared/model_governance/generated_model_registry.py
   docs/_generated/model-registry-table.md
   packages/shared/task-profile.ts
-  services/backend/shared/model_governance/generated_task_profiles.py
+  services/api/shared/model_governance/generated_task_profiles.py
   docs/_generated/task-profile-table.md
   packages/shared/intelligence-projections_generated.ts
-  services/backend/shared/intelligence_projections/generated_registry.py
+  services/api/shared/intelligence_projections/generated_registry.py
   docs/_generated/intelligence-projection-registry-table.md
   docs/_generated/intelligence-projection-dependency-graph.md
   packages/shared/lenses_generated.ts
-  services/backend/shared/projection_engine/generated_lenses.py
+  services/api/shared/projection_engine/generated_lenses.py
   docs/_generated/lens-registry-table.md
   packages/shared/relationship-predicate-registry.ts
-  services/backend/shared/relationship_spine/generated_relationship_predicate_registry.py
+  services/api/shared/relationship_spine/generated_relationship_predicate_registry.py
   docs/_generated/relationship-predicate-registry-table.md
   packages/shared/relationship-motif-registry.ts
-  services/backend/shared/relationship_spine/generated_relationship_motif_registry.py
+  services/api/shared/relationship_spine/generated_relationship_motif_registry.py
   docs/_generated/relationship-motif-registry-table.md
   packages/shared/social-provider-capability-vocabulary.ts
-  services/backend/shared/social_provider/generated_social_provider_capability_vocabulary.py
+  services/api/shared/social_provider/generated_social_provider_capability_vocabulary.py
   packages/shared/spine-registry.ts
-  services/backend/shared/spine/generated_spine_registry.py
+  services/api/shared/spine/generated_spine_registry.py
   docs/_generated/spine-registry-table.md
 
 Usage:
@@ -98,7 +98,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 CONTRACTS = ROOT / "packages" / "shared" / "contracts"
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 
 # The intelligence-projection validator lives in scripts/lib and shares the
 # cross-registry context computed here — delegate to it (see _projection_context)
@@ -1597,7 +1597,7 @@ def _summary_surface_capabilities(reg: dict) -> str:
 
 COMPARISON_JSON = CONTRACTS / "comparison-registry.json"
 COMPARISON_TS = ROOT / "packages" / "shared" / "comparison-contract.ts"
-COMPARISON_PY = BACKEND / "services" / "intelligence" / "comparison" / "generated_vocabulary.py"
+COMPARISON_PY = BACKEND / "intelligence" / "intelligence" / "comparison" / "generated_vocabulary.py"
 COMPARISON_MD = ROOT / "docs" / "_generated" / "comparison-table.md"
 
 # (json key, TS const, TS type, Python tuple, doc)
@@ -1624,7 +1624,7 @@ _COMPARISON_VOCABS: tuple[tuple[str, str, str, str, str], ...] = (
      "Components blended into a finding's materiality score."),
 )
 
-# TS twin of services/intelligence/comparison/contracts.py::ComparisonSubject.
+# TS twin of services/api/intelligence/intelligence/comparison/contracts.py::ComparisonSubject.
 _COMPARISON_SUBJECT_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("subject_type", "string", True),
     ("subject_id", "string", True),
@@ -1633,7 +1633,7 @@ _COMPARISON_SUBJECT_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("as_of", "string", False),
 )
 
-# TS twin of services/intelligence/comparison/contracts.py::BaselineSpec.
+# TS twin of services/api/intelligence/intelligence/comparison/contracts.py::BaselineSpec.
 _BASELINE_SPEC_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("baseline_type", "string", True),
     ("subject", "ComparisonSubject", False),
@@ -1645,7 +1645,7 @@ _BASELINE_SPEC_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("scenario_id", "string", False),
 )
 
-# TS twin of services/intelligence/comparison/contracts.py::ComparisonDefinition.
+# TS twin of services/api/intelligence/intelligence/comparison/contracts.py::ComparisonDefinition.
 _COMPARISON_DEFINITION_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("definition_id", "string", True),
     ("tenant_id", "string", True),
@@ -1660,7 +1660,7 @@ _COMPARISON_DEFINITION_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("schema_version", "string", False),
 )
 
-# TS twin of services/intelligence/comparison/contracts.py::ComparisonRun.
+# TS twin of services/api/intelligence/intelligence/comparison/contracts.py::ComparisonRun.
 _COMPARISON_RUN_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("run_id", "string", True),
     ("definition_id", "string", True),
@@ -1678,7 +1678,7 @@ _COMPARISON_RUN_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("schema_version", "string", False),
 )
 
-# TS twin of services/intelligence/comparison/contracts.py::ComparisonFinding.
+# TS twin of services/api/intelligence/intelligence/comparison/contracts.py::ComparisonFinding.
 _COMPARISON_FINDING_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("id", "string", True),
     ("comparison_run_id", "string", True),
@@ -1728,31 +1728,31 @@ def gen_comparison_ts(reg: dict) -> str:
         "ComparisonSubject",
         _COMPARISON_SUBJECT_FIELDS,
         "One side of a comparison "
-        "(Python twin: services/intelligence/comparison/contracts.py).",
+        "(Python twin: services/api/intelligence/intelligence/comparison/contracts.py).",
     )
     lines += _ts_interface(
         "BaselineSpec",
         _BASELINE_SPEC_FIELDS,
         "How the baseline side of a comparison is resolved "
-        "(Python twin: services/intelligence/comparison/contracts.py).",
+        "(Python twin: services/api/intelligence/intelligence/comparison/contracts.py).",
     )
     lines += _ts_interface(
         "ComparisonDefinition",
         _COMPARISON_DEFINITION_FIELDS,
         "Saved definition of a comparison "
-        "(Python twin: services/intelligence/comparison/contracts.py).",
+        "(Python twin: services/api/intelligence/intelligence/comparison/contracts.py).",
     )
     lines += _ts_interface(
         "ComparisonRun",
         _COMPARISON_RUN_FIELDS,
         "One execution of a comparison definition "
-        "(Python twin: services/intelligence/comparison/contracts.py).",
+        "(Python twin: services/api/intelligence/intelligence/comparison/contracts.py).",
     )
     lines += _ts_interface(
         "ComparisonFinding",
         _COMPARISON_FINDING_FIELDS,
         "One materiality-scored difference surfaced by a comparison run "
-        "(Python twin: services/intelligence/comparison/contracts.py).",
+        "(Python twin: services/api/intelligence/intelligence/comparison/contracts.py).",
     )
     return "\n".join(lines)
 
@@ -1811,7 +1811,7 @@ def _summary_comparison(reg: dict) -> str:
 # ---------------------------------------------------------------------------
 
 PROJECTOR_OWNERSHIP_JSON = CONTRACTS / "projector-ownership-registry.json"
-PROJECTOR_OWNERSHIP_PY = BACKEND / "services" / "silver" / "generated_ownership.py"
+PROJECTOR_OWNERSHIP_PY = BACKEND / "ingestion" / "silver" / "generated_ownership.py"
 PROJECTOR_OWNERSHIP_MD = ROOT / "docs" / "_generated" / "projector-ownership-table.md"
 
 _PROJECTOR_LIST_KEYS = (

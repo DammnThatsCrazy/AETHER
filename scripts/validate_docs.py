@@ -116,11 +116,11 @@ def run_checks() -> None:
     for pj in [
         ROOT / "package.json",
         ROOT / "packages" / "shared" / "package.json",
-        ROOT / "packages" / "web" / "package.json",
-        ROOT / "packages" / "react-native" / "package.json",
-        ROOT / "apps" / "aether" / "package.json",
-        ROOT / "apps" / "kyber" / "package.json",
-        ROOT / "apps" / "shared" / "package.json",
+        ROOT / "packages" / "sdk" / "web" / "package.json",
+        ROOT / "packages" / "sdk" / "react-native" / "package.json",
+        ROOT / "apps" / "aether-web" / "package.json",
+        ROOT / "apps" / "kyber-web" / "package.json",
+        ROOT / "packages" / "ui" / "core" / "package.json",
         ROOT / "apps" / "docs" / "package.json",
         ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "package.json",
         ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "common" / "package.json",
@@ -128,7 +128,7 @@ def run_checks() -> None:
         ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "cache" / "package.json",
         ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "events" / "package.json",
         ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "logger" / "package.json",
-        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "services" / "ingestion" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "ingestion" / "ingestion" / "package.json",
         ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "package.json",
     ]:
         check_package_json(pj, version)

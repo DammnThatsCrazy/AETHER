@@ -86,7 +86,7 @@ CANONICAL_YAML = "config/deployment_profiles.yaml"
 RUNTIME_YAML = "config/runtime_deployment.yaml"
 CONTRACTS_YAML = "config/terraform_resource_contracts.yaml"
 READINESS_YAML = "config/deployment_readiness.yaml"
-TF_DIR = "deploy/aws/terraform"
+TF_DIR = "infra/aws/terraform"
 VARIABLES_TF = f"{TF_DIR}/variables.tf"
 BUNDLE_ROOT = "release-evidence"
 
@@ -98,8 +98,8 @@ EPHEMERAL_GUARD_WORKFLOW = ".github/workflows/ephemeral-ttl-guard.yml"
 
 # The env template each cloud profile with a template is checked against.
 ENV_TEMPLATES = {
-    "staging": ".env.staging.example",
-    "production-lean": ".env.production.example",
+    "staging": "config/environments/.env.staging.example",
+    "production-lean": "config/environments/.env.production.example",
 }
 
 KNOWN_CLASSES = {"local", "demo", "preview", "staging", "production", "enterprise"}

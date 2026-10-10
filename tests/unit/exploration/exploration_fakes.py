@@ -15,7 +15,7 @@ def context(
 ) -> "ExplorationContextV1":  # noqa: F821 — resolved at call time (see below)
     """Build a valid ExplorationContextV1 for a surface with a flat filter group.
 
-    ExplorationContextV1 is resolved at call time from ``services.exploration.routes``
+    ExplorationContextV1 is resolved at call time from ``journeys.exploration.routes``
     — the SAME module the tests import to reach ``ValidateRequest`` et al. Binding it
     at import time instead pins one class object, and when another suite pops/reimports
     ``shared.exploration.models`` (sys.modules churn), the route request models rebind
@@ -24,7 +24,7 @@ def context(
     Sourcing it from the routes module guarantees the class identity always matches
     whatever ``ValidateRequest``/``QueryRequest``/… expect in the current process state.
     """
-    from services.exploration.routes import ExplorationContextV1
+    from journeys.exploration.routes import ExplorationContextV1
 
     payload: dict[str, Any] = {
         "scope": {"tenant_id": tenant_id, "surface": surface},

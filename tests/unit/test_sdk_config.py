@@ -37,7 +37,7 @@ def service_module_context(monkeypatch):
 def config_service(monkeypatch):
     with service_module_context(monkeypatch):
         import importlib
-        import services.sdk_config.service as svc_mod
+        import ingestion.sdk_config.service as svc_mod
         importlib.reload(svc_mod)
         svc_mod._sdk_config_service = None
         svc = svc_mod.get_sdk_config_service()

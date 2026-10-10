@@ -8,7 +8,7 @@ Four checks, each with a committed SHRINK-ONLY allowlist under
    without a timezone / ``.replace(tzinfo=...)`` outside the temporal kernel.
 2. Frontend ad-hoc formatting ban — ``toLocaleString``-family /
    ``Intl.DateTimeFormat`` / ``getHours()``/``getDay()`` outside
-   ``apps/shared/src/time/``.
+   ``packages/ui/core/src/time/``.
 3. ClickHouse bare ``DateTime`` ban — canonical instants use
    ``DateTime64(3, 'UTC')``.
 4. Single Alembic head.
@@ -31,7 +31,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "services" / "backend"
+DOMAIN_PACKAGES = ("tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing")
+BACKEND = ROOT / "services" / "api"
 ALLOWLIST_DIR = ROOT / "scripts" / "allowlists"
 
 PY_ALLOWLIST = ALLOWLIST_DIR / "temporal_naive_datetime.json"
@@ -40,7 +41,7 @@ CH_ALLOWLIST = ALLOWLIST_DIR / "temporal_clickhouse_naive.json"
 
 # The temporal kernel and its tests are the sanctioned homes.
 _PY_EXEMPT = ("shared/temporal/",)
-_FE_EXEMPT = ("apps/shared/src/time/",)
+_FE_EXEMPT = ("packages/ui/core/src/time/",)
 
 _PY_PATTERNS = (
     re.compile(r"datetime\.utcnow\s*\("),
@@ -80,7 +81,7 @@ def _scan(paths: list[Path], patterns: tuple[re.Pattern, ...], exempt: tuple[str
 
 def scan_python() -> set[str]:
     paths: list[Path] = []
-    for base in (BACKEND / "services", BACKEND / "shared", BACKEND / "middleware",
+    for base in (*(BACKEND / d for d in DOMAIN_PACKAGES), BACKEND / "shared", BACKEND / "middleware",
                  BACKEND / "repositories", BACKEND / "config"):
         paths.extend(base.rglob("*.py"))
     return _scan(paths, _PY_PATTERNS, _PY_EXEMPT)
@@ -100,7 +101,7 @@ def scan_frontend() -> set[str]:
 
 def scan_clickhouse() -> set[str]:
     paths: list[Path] = []
-    paths.extend((ROOT / "deploy" / "clickhouse").rglob("*.sql"))
+    paths.extend((ROOT / "infra" / "clickhouse").rglob("*.sql"))
     lake_schemas = ROOT / "docs/archive/legacy-architecture/data-lake-architecture"
     if lake_schemas.exists():
         paths.extend(lake_schemas.rglob("schemas/*.py"))
@@ -180,7 +181,7 @@ def main() -> int:
             print(f"  - {e}", file=sys.stderr)
         print(
             "New date/time logic must use shared/temporal (Python) or "
-            "apps/shared/src/time (TS); ClickHouse instants use DateTime64(3,'UTC').",
+            "packages/ui/core/src/time (TS); ClickHouse instants use DateTime64(3,'UTC').",
             file=sys.stderr,
         )
         return 1

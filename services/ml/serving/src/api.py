@@ -42,7 +42,7 @@ def _get_defense_layer():
         return None
 
     try:
-        from security.model_extraction_defense import ExtractionDefenseLayer
+        from governance.model_extraction_defense import ExtractionDefenseLayer
         _defense_layer = ExtractionDefenseLayer.from_env()
         logger.info("Extraction defense layer loaded")
     except ImportError:
@@ -826,7 +826,7 @@ async def lifespan(app: FastAPI):
     defense = _get_defense_layer()
     if defense is not None:
         try:
-            from security.model_extraction_defense.cleanup import cleanup_periodic
+            from governance.model_extraction_defense.cleanup import cleanup_periodic
             import asyncio
             _cleanup_task = asyncio.create_task(cleanup_periodic(defense, interval_seconds=300))
             logger.info("Extraction defense cleanup task started (interval=300s)")

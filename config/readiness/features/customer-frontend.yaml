@@ -25,9 +25,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - apps/aether/
-  - apps/aether/src/test/e2e/
-  - docs/PRODUCTIZATION.md
+  - apps/aether-web/
+  - apps/aether-web/src/test/e2e/
+  - docs/product/PRODUCTIZATION.md
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)
@@ -97,7 +97,7 @@ operational_ownership:
   technical_owner: frontend
   operational_owner: platform-ops
   escalation: pagerduty:frontend
-  runbook: docs/runbooks/STAGING_PREFLIGHT.md
+  runbook: docs/operations/runbooks/STAGING_PREFLIGHT.md
   dashboards:
   - grafana:frontend
   alerts:
@@ -110,7 +110,7 @@ business_readiness:
 confidence:
   level: HIGH
   reasons:
-  - 'repository evidence: apps/aether/'
+  - 'repository evidence: apps/aether-web/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

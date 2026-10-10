@@ -13,19 +13,19 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 
 os.environ.setdefault("AETHER_ENV", "local")
 
 from repositories import artifacts as artifacts_mod  # noqa: E402
-from services.export.service import (  # noqa: E402
+from ingestion.export.service import (  # noqa: E402
     EXPORTERS,
     _governance_evidence_pack_exporter as governance_evidence_pack_exporter,
     _targeting_package_exporter as targeting_package_exporter,
     generate_export_artifact,
 )
-from services.jobs.handlers import JobContext  # noqa: E402
+from workers.jobs.handlers import JobContext  # noqa: E402
 
 TENANT = "tenant-domain-export"
 OTHER = "tenant-domain-export-other"
@@ -60,7 +60,7 @@ def _ctx(job_id="job-dx-1", tenant=TENANT):
 
 
 async def _seed_targeting_package(tenant: str, export_id: str) -> dict:
-    from services.targeting_intelligence.repository import get_targeting_repositories
+    from intelligence.targeting_intelligence.repository import get_targeting_repositories
 
     return await get_targeting_repositories().exports.save(
         tenant,
@@ -137,7 +137,7 @@ async def test_targeting_export_produces_verified_artifact():
 
 
 async def test_evidence_pack_exporter_reads_tenant_packs():
-    from services.security.evidence_packs import evidence_pack_service
+    from governance.security.evidence_packs import evidence_pack_service
 
     pack = await evidence_pack_service.generate(
         pack_type="access_control", requested_by="op-1", tenant_id=TENANT
@@ -150,7 +150,7 @@ async def test_evidence_pack_exporter_reads_tenant_packs():
 
 
 async def test_evidence_pack_exporter_is_tenant_scoped():
-    from services.security.evidence_packs import evidence_pack_service
+    from governance.security.evidence_packs import evidence_pack_service
 
     pack = await evidence_pack_service.generate(
         pack_type="access_control", requested_by="op-1", tenant_id=TENANT

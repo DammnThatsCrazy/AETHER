@@ -12,7 +12,7 @@ def _write(path: Path, text: str = "") -> Path:
 
 
 def _scan(tmp_path: Path) -> list[dict[str, object]]:
-    app_root = tmp_path / "apps" / "aether"
+    app_root = tmp_path / "apps" / "aether-web"
     return validator.scan_source(
         root=tmp_path,
         runtime_roots=[app_root / "src"],
@@ -23,28 +23,28 @@ def _scan(tmp_path: Path) -> list[dict[str, object]]:
 
 def test_test_only_allowlist_is_narrow(tmp_path: Path) -> None:
     _write(
-        tmp_path / "apps/aether/src/test/query.test.ts",
+        tmp_path / "apps/aether-web/src/test/query.test.ts",
         "import { rows } from '../fixtures/rows'; const token = 'local-mocked';",
     )
     _write(
-        tmp_path / "apps/aether/src/widget.stories.tsx",
+        tmp_path / "apps/aether-web/src/widget.stories.tsx",
         "import { rows } from './fixtures/rows';",
     )
     _write(
-        tmp_path / "apps/aether/src/fixtures/rows.ts",
+        tmp_path / "apps/aether-web/src/fixtures/rows.ts",
         "export const rows = [{ id: 'tenant_demo_001' }];",
     )
 
     findings = _scan(tmp_path)
 
     assert len(findings) == 1
-    assert findings[0]["path"] == "apps/aether/src/fixtures/rows.ts"
+    assert findings[0]["path"] == "apps/aether-web/src/fixtures/rows.ts"
     assert "prohibited" in str(findings[0]["reason"])
 
 
 def test_runtime_imports_and_tokens_are_reported(tmp_path: Path) -> None:
     _write(
-        tmp_path / "apps/aether/src/query.ts",
+        tmp_path / "apps/aether-web/src/query.ts",
         """
         import {
           rows,
@@ -68,25 +68,25 @@ def test_runtime_imports_and_tokens_are_reported(tmp_path: Path) -> None:
 
 def test_runtime_affecting_vite_and_env_files_are_scanned(tmp_path: Path) -> None:
     _write(
-        tmp_path / "apps/aether/vite.config.ts",
+        tmp_path / "apps/aether-web/vite.config.ts",
         "export const mode = 'local-mocked';",
     )
     _write(
-        tmp_path / "apps/aether/.env.example",
+        tmp_path / "apps/aether-web/.env.example",
         "VITE_AETHER_ENV=local-mocked\n",
     )
 
     findings = _scan(tmp_path)
 
     assert {finding["path"] for finding in findings} == {
-        "apps/aether/.env.example",
-        "apps/aether/vite.config.ts",
+        "apps/aether-web/.env.example",
+        "apps/aether-web/vite.config.ts",
     }
 
 
 def test_public_mock_worker_is_prohibited(tmp_path: Path) -> None:
     _write(
-        tmp_path / "apps/aether/public/mockServiceWorker.js",
+        tmp_path / "apps/aether-web/public/mockServiceWorker.js",
         "/* legacy */",
     )
 
@@ -94,7 +94,7 @@ def test_public_mock_worker_is_prohibited(tmp_path: Path) -> None:
 
     assert findings == [
         {
-            "path": "apps/aether/public/mockServiceWorker.js",
+            "path": "apps/aether-web/public/mockServiceWorker.js",
             "line": 1,
             "reason": "public mockServiceWorker.js is prohibited",
         }
@@ -102,7 +102,7 @@ def test_public_mock_worker_is_prohibited(tmp_path: Path) -> None:
 
 
 def test_bundle_scan_fails_closed_when_output_is_missing(tmp_path: Path) -> None:
-    bundle_root = tmp_path / "apps/aether/dist"
+    bundle_root = tmp_path / "apps/aether-web/dist"
 
     findings = validator.scan_bundles(
         root=tmp_path,
@@ -111,7 +111,7 @@ def test_bundle_scan_fails_closed_when_output_is_missing(tmp_path: Path) -> None
 
     assert findings == [
         {
-            "path": "apps/aether/dist",
+            "path": "apps/aether-web/dist",
             "line": 0,
             "reason": "production bundle directory is missing; build scan was not executed",
         }
@@ -119,7 +119,7 @@ def test_bundle_scan_fails_closed_when_output_is_missing(tmp_path: Path) -> None
 
 
 def test_bundle_scan_reports_known_synthetic_literals(tmp_path: Path) -> None:
-    bundle_root = tmp_path / "apps/aether/dist"
+    bundle_root = tmp_path / "apps/aether-web/dist"
     _write(
         bundle_root / "assets/index.js",
         "const worker = 'mockServiceWorker'; const tenant = 'tenant_demo_001';",

@@ -117,8 +117,8 @@ def test_header_section_used_before_first_marker(ee):
 
 
 def test_real_env_example_is_parseable(ee):
-    """End-to-end smoke: the actual repo .env.example produces categories."""
-    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    """End-to-end smoke: the actual repo config/environments/.env.example produces categories."""
+    text = (ROOT / "config/environments/.env.example").read_text(encoding="utf-8")
     categories = ee.parse_env_example(text)
     assert len(categories) > 5
     # At least one required-in-production var declared

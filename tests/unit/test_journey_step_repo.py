@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -34,7 +34,7 @@ def _make_step(
     chain_id: str | None = None,
     campaign_id: str | None = None,
 ) -> dict:
-    from services.measurement.contracts import JourneyStep, ActivityFamily, ActivityStatus
+    from journeys.measurement.contracts import JourneyStep, ActivityFamily, ActivityStatus
     return JourneyStep(
         tenant_id=tenant_id,
         journey_id=journey_id or str(uuid4()),
@@ -57,7 +57,7 @@ class TestJourneyStepRepoBulkCreate:
 
     @pytest.mark.asyncio
     async def test_bulk_create_and_list(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -68,7 +68,7 @@ class TestJourneyStepRepoBulkCreate:
 
     @pytest.mark.asyncio
     async def test_bulk_create_idempotent(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -80,7 +80,7 @@ class TestJourneyStepRepoBulkCreate:
 
     @pytest.mark.asyncio
     async def test_list_chronological_order(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -95,7 +95,7 @@ class TestJourneyStepRepoFilters:
 
     @pytest.mark.asyncio
     async def test_filter_by_family(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -111,7 +111,7 @@ class TestJourneyStepRepoFilters:
 
     @pytest.mark.asyncio
     async def test_filter_by_wallet_id(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -126,7 +126,7 @@ class TestJourneyStepRepoFilters:
 
     @pytest.mark.asyncio
     async def test_filter_by_session_id(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -144,7 +144,7 @@ class TestJourneyStepRepoAdjacent:
 
     @pytest.mark.asyncio
     async def test_get_adjacent_middle_step(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -159,7 +159,7 @@ class TestJourneyStepRepoAdjacent:
 
     @pytest.mark.asyncio
     async def test_get_adjacent_first_step_has_no_previous(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -176,7 +176,7 @@ class TestJourneyStepRepoPagination:
 
     @pytest.mark.asyncio
     async def test_cursor_pagination(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
         repo = JourneyStepRepository()
         jvid = str(uuid4())
         jid = str(uuid4())
@@ -194,7 +194,7 @@ class TestJourneyStepRepoPagination:
 
 
 def test_step_params_include_source_classification_columns():
-    from services.measurement.repositories.journey_step_repo import _step_params
+    from journeys.measurement.repositories.journey_step_repo import _step_params
 
     classification_id = str(uuid4())
     link_id = str(uuid4())

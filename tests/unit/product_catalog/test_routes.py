@@ -10,8 +10,8 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import TenantContext
 from shared.common.common import ForbiddenError, NotFoundError
 
-import services.product_catalog.routes as pc_routes
-from services.product_catalog.models import CatalogNode, MappingRule
+import billing.product_catalog.routes as pc_routes
+from billing.product_catalog.models import CatalogNode, MappingRule
 
 
 # Each test gets a fresh tenant (rotated by the autouse `_clean_stores` fixture).

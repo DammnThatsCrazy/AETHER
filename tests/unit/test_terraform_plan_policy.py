@@ -16,7 +16,7 @@ Fixtures in tests/fixtures/terraform_plans/ are `terraform show -json`
 documents: `format_version` / `terraform_version` at the top, `planned_values.
 root_module` with `child_modules`, and `resource_changes` carrying
 `change.actions` and `change.after`. Module addresses, resource names, for_each
-keys and count indices mirror deploy/aws/terraform.
+keys and count indices mirror infra/aws/terraform.
 """
 
 from __future__ import annotations
@@ -989,8 +989,8 @@ def test_inventory_defaults_to_the_artifacts_directory(tmp_path, monkeypatch):
         "--plan-json", str(FIXTURES / "production-lean-valid.json"),
     ])
     assert code == 0
-    assert (tmp_path / "artifacts" / "profile-resource-inventory.json").exists()
-    assert MODULE.DEFAULT_OUT_DIR == "artifacts"
+    assert (tmp_path / ".artifacts" / "profile-resource-inventory.json").exists()
+    assert MODULE.DEFAULT_OUT_DIR == ".artifacts"
     assert MODULE.INVENTORY_JSON == "profile-resource-inventory.json"
 
 

@@ -1,6 +1,6 @@
 """Path setup + shared fixtures for Reconciled Control Plane unit tests.
 
-The whole ``services/managed_integrations`` package (contracts, availability,
+The whole ``services/api/connectors/managed_integrations`` package (contracts, availability,
 desired_policy, sensors, reconciler, repository, routes) lives under the backend
 root, so it must sit on sys.path while these tests run (same pattern as
 ``tests/unit/observation/conftest.py`` and ``tests/unit/interop/conftest.py``).
@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -34,25 +34,25 @@ def _reset_rcp_stores():
     stores (managed_integrations.repository + change_sets_repository) and the
     Phase-3 engine stores (admission / simulation / source-authority) plus the
     Phase-4 rollout stores."""
-    from services.managed_integrations.admission_repository import (
+    from connectors.managed_integrations.admission_repository import (
         reset_admission_record_stores,
     )
-    from services.managed_integrations.change_sets_repository import (
+    from connectors.managed_integrations.change_sets_repository import (
         reset_change_set_in_memory_store,
     )
-    from services.managed_integrations.execution_records_repository import (
+    from connectors.managed_integrations.execution_records_repository import (
         reset_execution_record_stores,
     )
-    from services.managed_integrations.repository import (
+    from connectors.managed_integrations.repository import (
         reset_managed_integration_in_memory_store,
     )
-    from services.managed_integrations.rollout_repository import (
+    from connectors.managed_integrations.rollout_repository import (
         reset_rollout_stores,
     )
-    from services.managed_integrations.simulation_repository import (
+    from connectors.managed_integrations.simulation_repository import (
         reset_simulation_stores,
     )
-    from services.managed_integrations.source_authority_repository import (
+    from connectors.managed_integrations.source_authority_repository import (
         reset_source_authority_stores,
     )
 
@@ -109,5 +109,5 @@ def db_free(monkeypatch):
         return None
 
     monkeypatch.setattr(
-        "services.managed_integrations.repository.get_pool", _no_pool
+        "connectors.managed_integrations.repository.get_pool", _no_pool
     )

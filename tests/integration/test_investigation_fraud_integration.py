@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT.parent / "services" / "backend"
+BACKEND_ROOT = ROOT.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 pytest.importorskip("fastapi")
 
@@ -67,8 +67,8 @@ def _restore_flag(routes_module, flag_name: str, value: bool) -> None:
 
 
 async def _create_investigation(inv_routes, tenant_id: str = "t1") -> str:
-    from services.investigation.routes import CreateCaseRequest
-    from services.operational_intelligence.models import EntityRef
+    from governance.investigation.routes import CreateCaseRequest
+    from graph.operational_intelligence.models import EntityRef
     producer = FakeProducer()
     case = await inv_routes.create_case(
         CreateCaseRequest(
@@ -120,8 +120,8 @@ async def _create_flow_trace(ft_routes, tenant_id: str = "t1") -> str:
 @pytest.mark.asyncio
 async def test_attach_fraud_network_to_case() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.investigation import routes as inv_routes
-    from services.fraud_networks import routes as fn_routes
+    from governance.investigation import routes as inv_routes
+    from intelligence.fraud_networks import routes as fn_routes
 
     reset_in_memory_stores()
     prev_fn = _enable_flag(fn_routes, "fraud_networks_enabled", True)
@@ -148,8 +148,8 @@ async def test_attach_fraud_network_to_case() -> None:
 @pytest.mark.asyncio
 async def test_attach_flow_trace_to_case() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.investigation import routes as inv_routes
-    from services.flow_trace import routes as ft_routes
+    from governance.investigation import routes as inv_routes
+    from value.flow_trace import routes as ft_routes
 
     reset_in_memory_stores()
     prev_ft = _enable_flag(ft_routes, "flow_trace_enabled", True)
@@ -176,8 +176,8 @@ async def test_attach_flow_trace_to_case() -> None:
 @pytest.mark.asyncio
 async def test_get_fraud_summary_for_case() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.investigation import routes as inv_routes
-    from services.fraud_networks import routes as fn_routes
+    from governance.investigation import routes as inv_routes
+    from intelligence.fraud_networks import routes as fn_routes
 
     reset_in_memory_stores()
     prev_fn = _enable_flag(fn_routes, "fraud_networks_enabled", True)
@@ -203,7 +203,7 @@ async def test_get_fraud_summary_for_case() -> None:
 @pytest.mark.asyncio
 async def test_get_full_report_for_case() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.investigation import routes as inv_routes
+    from governance.investigation import routes as inv_routes
 
     reset_in_memory_stores()
     case_id = await _create_investigation(inv_routes)
@@ -217,7 +217,7 @@ async def test_get_full_report_for_case() -> None:
 @pytest.mark.asyncio
 async def test_export_case_bundle() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.investigation import routes as inv_routes
+    from governance.investigation import routes as inv_routes
 
     reset_in_memory_stores()
     case_id = await _create_investigation(inv_routes)

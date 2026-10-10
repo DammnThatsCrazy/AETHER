@@ -25,24 +25,24 @@ from typing import Any, Optional
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "kyber-graph-test")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.kyber.graph.contracts import (  # noqa: E402
+from governance.kyber.graph.contracts import (  # noqa: E402
     TENANT_SCOPED_NODE_TYPES,
     KyberGraphEdge,
     KyberGraphNode,
 )
-from services.kyber.graph.projector import (  # noqa: E402
+from governance.kyber.graph.projector import (  # noqa: E402
     PROJECTION_NAME,
     KyberGraphProjector,
     build_kyber_graph_projector_coro,
 )
-from services.kyber.graph.repository import KyberGraphStore  # noqa: E402
-from services.kyber.graph.topology import (  # noqa: E402
+from governance.kyber.graph.repository import KyberGraphStore  # noqa: E402
+from governance.kyber.graph.topology import (  # noqa: E402
     feature_surface_nodes,
     service_nodes,
     sync_topology,
@@ -75,7 +75,7 @@ class FakeLedger:
     """Stand-in for ``GraphMutationLedgerRepository`` with the same read shape.
 
     Only ``list_records`` is exercised by the projector, and the declared seam
-    in ``services/kyber/seams.py`` is what proves this signature still matches
+    in ``services/api/governance/kyber/seams.py`` is what proves this signature still matches
     the real repository — a fake that drifted would otherwise make these tests
     pass against an API that no longer exists.
     """

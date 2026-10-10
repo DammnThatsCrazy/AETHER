@@ -1,6 +1,6 @@
 """Provider evidence + provider routes (PR 3, Phase A, monoprompt §9.6).
 
-The point of this file is **reachability**. ``services/agentic_observability/provider_framework.py``
+The point of this file is **reachability**. ``services/api/actions/agentic_observability/provider_framework.py``
 was fully built and entirely unreferenced by the application; the tests that matter here
 are the ones that go through a route handler and come back holding something only the real
 framework could have produced — ``provider_registry``'s adapter metadata, and a
@@ -31,24 +31,24 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import TenantContext
 from shared.common.common import BadRequestError, ForbiddenError, NotFoundError
 
-from services.agentic_observability.provider_framework import (
+from actions.agentic_observability.provider_framework import (
     ProviderVerificationStatus,
     compute_permission_findings,
     provider_registry,
 )
-from services.agent_access_intelligence.authority_routes import (
+from actions.agent_access_intelligence.authority_routes import (
     CapabilityAuthorizationGrant,
 )
-import services.agent_access_intelligence.authority_routes as authority_routes
-import services.agent_access_intelligence.provider_routes as provider_routes
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
-from services.agent_access_intelligence.provider_evidence import (
+import actions.agent_access_intelligence.authority_routes as authority_routes
+import actions.agent_access_intelligence.provider_routes as provider_routes
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.provider_evidence import (
     ATTESTATION_DISCLOSURE,
     PROVIDER_EVIDENCE_TABLE,
     ProviderEvidenceRepository,
     ProviderEvidenceService,
 )
-from services.agent_access_intelligence.provider_routes import ProviderEvidenceRequest
+from actions.agent_access_intelligence.provider_routes import ProviderEvidenceRequest
 
 
 # ── fixtures / helpers ────────────────────────────────────────────────────────

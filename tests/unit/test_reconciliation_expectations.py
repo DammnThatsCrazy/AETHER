@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -17,11 +17,11 @@ import os  # noqa: E402
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.reconciliation.dimension_status import (  # noqa: E402
+from replay.reconciliation.dimension_status import (  # noqa: E402
     compute_data_status,
     compute_reconciliation,
 )
-from services.reconciliation.expectations import (  # noqa: E402
+from replay.reconciliation.expectations import (  # noqa: E402
     EXPECTATION_REGISTRY,
     get_expectation,
     registry_snapshot,

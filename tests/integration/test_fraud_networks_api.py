@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT.parent / "services" / "backend"
+BACKEND_ROOT = ROOT.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 pytest.importorskip("fastapi")
 
@@ -84,7 +84,7 @@ def _restore_flag(routes_module, flag_name: str, value: bool) -> None:
 @pytest.mark.asyncio
 async def test_build_network_happy_path() -> None:
     from repositories.repos import reset_in_memory_stores, TransferRepository
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "fraud_networks_enabled", True)
@@ -120,7 +120,7 @@ async def test_build_network_happy_path() -> None:
 @pytest.mark.asyncio
 async def test_list_networks_returns_only_tenant_networks() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "fraud_networks_enabled", True)
@@ -153,7 +153,7 @@ async def test_list_networks_returns_only_tenant_networks() -> None:
 @pytest.mark.asyncio
 async def test_get_network_by_id() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "fraud_networks_enabled", True)
@@ -178,7 +178,7 @@ async def test_get_network_by_id() -> None:
 @pytest.mark.asyncio
 async def test_get_network_wrong_tenant_raises_404() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
     from shared.common.common import NotFoundError
 
     reset_in_memory_stores()
@@ -203,7 +203,7 @@ async def test_get_network_wrong_tenant_raises_404() -> None:
 @pytest.mark.asyncio
 async def test_get_network_graph_returns_cytoscape_payload() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "fraud_networks_enabled", True)
@@ -230,7 +230,7 @@ async def test_get_network_graph_returns_cytoscape_payload() -> None:
 @pytest.mark.asyncio
 async def test_get_network_members() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "fraud_networks_enabled", True)
@@ -256,7 +256,7 @@ async def test_get_network_members() -> None:
 @pytest.mark.asyncio
 async def test_refresh_network() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "fraud_networks_enabled", True)
@@ -285,7 +285,7 @@ async def test_refresh_network() -> None:
 @pytest.mark.asyncio
 async def test_escalate_network() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "fraud_networks_enabled", True)
@@ -315,7 +315,7 @@ async def test_escalate_network() -> None:
 @pytest.mark.asyncio
 async def test_suppress_network() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "fraud_networks_enabled", True)
@@ -345,7 +345,7 @@ async def test_suppress_network() -> None:
 @pytest.mark.asyncio
 async def test_missing_permission_raises_forbidden() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
     from shared.common.common import ForbiddenError
 
     reset_in_memory_stores()
@@ -368,7 +368,7 @@ async def test_missing_permission_raises_forbidden() -> None:
 @pytest.mark.asyncio
 async def test_feature_disabled_raises_404() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.fraud_networks import routes
+    from intelligence.fraud_networks import routes
     from shared.common.common import NotFoundError
 
     reset_in_memory_stores()

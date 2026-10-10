@@ -1,0 +1,44 @@
+---
+title: Investigation Workspace
+slug: ai/investigation-workspace
+section: architecture
+visibility: I
+audience: [architect, dev-senior, ops]
+status: beta
+since_version: 0.1.0
+source_files: [services/api/intelligence/intelligence/investigations.py, services/api/intelligence/intelligence/routes.py]
+flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED]
+related: [ai/decision-outcome-intelligence, ai/recommendation-families]
+canonical_owner: platform@aether
+estimated_read_minutes: 5
+toc_depth: 3
+source_hashes:
+  "services/api/intelligence/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
+  "services/api/intelligence/intelligence/routes.py": "sha256:46f4df5f21914056a91810cb1c0a490183ed144e99a9568b8aedf170f3b05e29"
+---
+# Investigation Workspace
+
+Every recommendation can be opened as an investigation workspace without leaving Aether. The workspace is read-only, tenant-scoped, and composed from the existing OODA records and graph/profile/evidence references.
+
+## Endpoint
+
+`GET /v1/intelligence/recommendations/{recommendation_id}/investigation`
+
+The response includes the recommendation, confidence breakdown, evidence, related profile/entity summary, related graph edges when available, related events, attribution path, candidate actions, decision history, action history, outcome history, prior similar tenant outcomes, governance flags, data freshness, and suppression reason.
+
+Finding-originated recommendations also retain `finding_id` and
+`investigation_id` on the recommendation and downstream loop records. This is
+an additive provenance link to the canonical finding/investigation planes; it
+does not copy case state or authorize action.
+
+When the recommendation carries canonical path references (populated by `_compute_path_refs` in the recommendation family), the workspace also returns:
+- `graph_paths` — list of canonical `path_id` strings (SHA256[:32]) linking to saved `TraversalSnapshot` records
+- `snapshot_ref` — the `snapshot_id` of the traversal snapshot most relevant to this recommendation
+
+## Tenant isolation
+
+The route first verifies that the recommendation belongs to the authenticated tenant. Decision, action, outcome, and prior outcome reads are filtered by tenant id. Optional graph lookup degrades gracefully and fails closed: neighbours are filtered before the response cap and must carry an explicit tenant marker matching the authenticated tenant (`tenantId` and legacy `tenant_id` are normalized). Unmarked and foreign-tenant vertices are omitted.
+
+## Governance and rollout
+
+Investigation is read-only and requires `read` permission. It does not approve, execute, mutate graph state, emit lifecycle events, or bypass elevated/critical authorization metadata requirements. Roll out after recommendation preview so analysts can inspect evidence before deciding whether to persist and act on generated recommendations.

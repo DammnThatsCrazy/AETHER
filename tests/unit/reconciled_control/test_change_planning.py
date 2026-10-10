@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from services.managed_integrations.change_planning import (
+from connectors.managed_integrations.change_planning import (
     ControlTopologyNode,
     RiskInputs,
     assess_risk,
@@ -25,7 +25,7 @@ from services.managed_integrations.change_planning import (
     validate_guards,
     with_status,
 )
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations.contracts import (
     BlastRadiusView,
     ChangeSetPlanView,
     DriftRecord,

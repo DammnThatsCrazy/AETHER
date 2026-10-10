@@ -1,7 +1,7 @@
 """TS <-> Python parity for the Data Exchange Plane contract.
 
 ``packages/shared/data-exchange.ts`` and
-``services/data_exchange/contracts.py`` are hand-authored twins; this test
+``services/api/ingestion/data_exchange/contracts.py`` are hand-authored twins; this test
 fails if their canonical vocabularies drift (directions, artifact statuses,
 terminal statuses, ingress/egress formats, source types, classifications),
 and if the TS module is not exported from the shared barrel.
@@ -13,11 +13,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.data_exchange.contracts import (  # noqa: E402
+from ingestion.data_exchange.contracts import (  # noqa: E402
     DATA_ARTIFACT_STATUSES,
     DATA_ARTIFACT_TERMINAL_STATUSES,
     DATA_EXCHANGE_BLOCKED_CLASSIFICATIONS,

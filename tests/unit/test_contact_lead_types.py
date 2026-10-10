@@ -1,6 +1,6 @@
 """Public lead capture accepts the unified-site contact topics.
 
-apps/site's Contact page sends one of six topics as `lead_type`. The
+apps/public-site's Contact page sends one of six topics as `lead_type`. The
 endpoint previously accepted only waitlist, early-access and demo-request, so
 every contact-form submission failed with 400.
 """
@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 CONTACT_TOPICS = ["pilot", "product", "developer", "security", "proof", "research"]
 
@@ -38,7 +38,7 @@ def backend_path():
 @pytest.fixture()
 def contact_routes(monkeypatch):
     with backend_path():
-        from services.contact import routes
+        from identity.contact import routes
 
         store = AsyncMock()
         monkeypatch.setattr(routes, "_enterprise_inquiries", store)

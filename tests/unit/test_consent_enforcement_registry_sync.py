@@ -13,7 +13,7 @@ import pathlib
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 REGISTRY = REPO_ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
 
 sys.path.insert(0, str(BACKEND))

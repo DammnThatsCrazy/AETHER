@@ -24,10 +24,10 @@ EXTENSIONS = (".ts", ".tsx")
 INDEX_FILES = tuple(f"index{ext}" for ext in EXTENSIONS)
 
 ALIAS_ROOTS = {
-    "@kyber/": Path("apps/kyber/src"),
+    "@kyber/": Path("apps/kyber-web/src"),
     "@aether/shared/": Path("packages/shared/src"),
-    "@aether/web/": Path("packages/web/src"),
-    "@aether/react-native/": Path("packages/react-native/src"),
+    "@aether/web/": Path("packages/sdk/web/src"),
+    "@aether/react-native/": Path("packages/sdk/react-native/src"),
 }
 
 

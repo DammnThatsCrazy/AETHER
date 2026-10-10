@@ -20,11 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_WORKSPACE_MEMBERS = [
     "packages/shared",
-    "packages/web",
-    "packages/react-native",
-    "apps/aether",
-    "apps/kyber",
-    "apps/shared",
+    "packages/sdk/web",
+    "packages/sdk/react-native",
+    "apps/aether-web",
+    "apps/kyber-web",
+    "packages/ui/core",
 ]
 
 

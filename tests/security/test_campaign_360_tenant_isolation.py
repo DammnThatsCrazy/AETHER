@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -33,7 +33,7 @@ CAMPAIGN_B = f"campaign-sec-{uuid4()}"
 class TestCampaignTouchpointTenantIsolation:
     @pytest.fixture(autouse=True)
     def clear(self):
-        from services.measurement.repositories.touchpoint_repo import _local_store
+        from journeys.measurement.repositories.touchpoint_repo import _local_store
         _local_store.clear()
         yield
         _local_store.clear()
@@ -41,7 +41,7 @@ class TestCampaignTouchpointTenantIsolation:
     @pytest.mark.asyncio
     async def test_list_by_campaign_scoped_to_tenant(self):
         """list_by_campaign must not return rows from another tenant's campaign."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         tp_a = {
             "tenant_id": TENANT_A, "campaign_id": CAMPAIGN_A,
@@ -64,7 +64,7 @@ class TestCampaignTouchpointTenantIsolation:
     @pytest.mark.asyncio
     async def test_population_summary_scoped_to_tenant(self):
         """population_summary must only count touchpoints for the requesting tenant."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         for i in range(3):
             await repo.upsert({
@@ -87,7 +87,7 @@ class TestCampaignTouchpointTenantIsolation:
     @pytest.mark.asyncio
     async def test_cross_campaign_isolation(self):
         """Querying campaign B's touchpoints with campaign A's ID returns no rows."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         await repo.upsert({
             "tenant_id": TENANT_A, "campaign_id": CAMPAIGN_B,
@@ -103,8 +103,8 @@ class TestCampaignTouchpointTenantIsolation:
 class TestCampaignConversionTenantIsolation:
     @pytest.fixture(autouse=True)
     def clear(self):
-        from services.measurement.repositories.conversion_repo import _local_store as conv_store
-        from services.measurement.repositories.touchpoint_repo import _local_store as tp_store
+        from journeys.measurement.repositories.conversion_repo import _local_store as conv_store
+        from journeys.measurement.repositories.touchpoint_repo import _local_store as tp_store
         conv_store.clear()
         tp_store.clear()
         yield
@@ -114,7 +114,7 @@ class TestCampaignConversionTenantIsolation:
     @pytest.mark.asyncio
     async def test_list_by_campaign_excludes_other_tenant_conversions(self):
         """list_by_campaign on ConversionRepo must not expose cross-tenant conversions."""
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
         repo = ConversionRepository()
 
         # Insert attributed conversion for tenant A
@@ -140,7 +140,7 @@ class TestCampaignConversionTenantIsolation:
     @pytest.mark.asyncio
     async def test_campaign_population_summary_tenant_scoped(self):
         """campaign_population_summary must only aggregate the requesting tenant's data."""
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
         repo = ConversionRepository()
 
         for _ in range(2):
@@ -168,7 +168,7 @@ class TestCampaignConversionTenantIsolation:
 class TestCampaignAttributionRunTenantIsolation:
     @pytest.fixture(autouse=True)
     def clear(self):
-        from services.measurement.repositories.attribution_run_repo import _local_credits
+        from journeys.measurement.repositories.attribution_run_repo import _local_credits
         _local_credits.clear()
         yield
         _local_credits.clear()
@@ -176,7 +176,7 @@ class TestCampaignAttributionRunTenantIsolation:
     @pytest.mark.asyncio
     async def test_cluster_rollup_scoped_to_tenant(self):
         """campaign_cluster_rollup must only aggregate credits for the requesting tenant."""
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
         repo = AttributionRunRepository()
 
         cid = f"cluster-{uuid4()}"
@@ -194,7 +194,7 @@ class TestCampaignAttributionRunTenantIsolation:
 
 
 def _write_credit(cluster_id: str, tenant_id: str, campaign_id: str, weight: float, gross: float, net: float):
-    from services.measurement.repositories.attribution_run_repo import _local_credits
+    from journeys.measurement.repositories.attribution_run_repo import _local_credits
     _local_credits.append({
         "credit_id": str(uuid4()),
         "tenant_id": tenant_id,
@@ -215,7 +215,7 @@ class TestCampaignGraphBudgetEnforcement:
     @pytest.mark.asyncio
     async def test_graph_depth_exceeds_max_is_rejected(self):
         """CampaignPopulationExplorer.get_graph_anchor must reject depth > 3."""
-        from services.campaign.exploration import CampaignPopulationExplorer
+        from journeys.campaign.exploration import CampaignPopulationExplorer
         explorer = _make_explorer()
         with pytest.raises(ValueError, match="depth"):
             await explorer.get_graph_anchor(
@@ -226,7 +226,7 @@ class TestCampaignGraphBudgetEnforcement:
     @pytest.mark.asyncio
     async def test_graph_max_nodes_exceeds_limit_is_rejected(self):
         """CampaignPopulationExplorer.get_graph_anchor must reject max_nodes > 500."""
-        from services.campaign.exploration import CampaignPopulationExplorer
+        from journeys.campaign.exploration import CampaignPopulationExplorer
         explorer = _make_explorer()
         with pytest.raises(ValueError, match="max_nodes"):
             await explorer.get_graph_anchor(
@@ -237,7 +237,7 @@ class TestCampaignGraphBudgetEnforcement:
     @pytest.mark.asyncio
     async def test_graph_max_edges_exceeds_limit_is_rejected(self):
         """CampaignPopulationExplorer.get_graph_anchor must reject max_edges > 1500."""
-        from services.campaign.exploration import CampaignPopulationExplorer
+        from journeys.campaign.exploration import CampaignPopulationExplorer
         explorer = _make_explorer()
         with pytest.raises(ValueError, match="max_edges"):
             await explorer.get_graph_anchor(
@@ -248,12 +248,12 @@ class TestCampaignGraphBudgetEnforcement:
 
 def _make_explorer():
     """Build a CampaignPopulationExplorer with stub repos."""
-    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-    from services.measurement.repositories.conversion_repo import ConversionRepository
-    from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-    from services.measurement.repositories.journey_repo import JourneyRepository
-    from services.measurement.repositories.spend_repo import SpendRepository
-    from services.campaign.exploration import CampaignPopulationExplorer
+    from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+    from journeys.measurement.repositories.conversion_repo import ConversionRepository
+    from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+    from journeys.measurement.repositories.journey_repo import JourneyRepository
+    from journeys.measurement.repositories.spend_repo import SpendRepository
+    from journeys.campaign.exploration import CampaignPopulationExplorer
     return CampaignPopulationExplorer(
         touchpoint_repo=TouchpointRepository(),
         conversion_repo=ConversionRepository(),
@@ -268,7 +268,7 @@ def _make_explorer():
 class TestForgedCampaignIdIsolation:
     @pytest.fixture(autouse=True)
     def clear(self):
-        from services.measurement.repositories.touchpoint_repo import _local_store
+        from journeys.measurement.repositories.touchpoint_repo import _local_store
         _local_store.clear()
         yield
         _local_store.clear()
@@ -276,7 +276,7 @@ class TestForgedCampaignIdIsolation:
     @pytest.mark.asyncio
     async def test_forged_campaign_id_returns_empty(self):
         """Querying a non-existent (forged) campaign ID returns no touchpoints."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         await repo.upsert({
             "tenant_id": TENANT_A, "campaign_id": CAMPAIGN_A,
@@ -290,7 +290,7 @@ class TestForgedCampaignIdIsolation:
     @pytest.mark.asyncio
     async def test_tenant_id_always_propagated_to_touchpoint_repo(self):
         """Verify tenant_id is always required and present in touchpoint queries."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         # All list_by_campaign calls require tenant_id as first positional arg
         # This test verifies no rows are returned for an empty tenant

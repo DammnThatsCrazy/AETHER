@@ -6,9 +6,9 @@ import pytest
 
 from repositories.repos import reset_in_memory_stores
 from shared.graph.graph import Edge, GraphClient
-from services.identity.graph_reconciliation import repair_identity_edges
-from services.identity.models import ConfidenceTier, EdgeType
-from services.identity.repository import IdentityResolutionRepository
+from identity.identity.graph_reconciliation import repair_identity_edges
+from identity.identity.models import ConfidenceTier, EdgeType
+from identity.identity.repository import IdentityResolutionRepository
 
 
 @pytest.fixture(autouse=True)

@@ -16,7 +16,7 @@ RECEIVED = parse_instant_strict("2026-07-15T12:00:00Z")
 
 
 def _enforce(**overrides):
-    from services.ingestion.temporal_enforcement import enforce_temporal
+    from ingestion.ingestion.temporal_enforcement import enforce_temporal
 
     kwargs = dict(
         event_timestamp="2026-07-15T11:59:59Z",
@@ -112,7 +112,7 @@ def test_web3_family_tolerates_month_old_events():
 def _hook(mode: str, *, timestamp: str = "2026-07-15T11:59:59Z", canary=()):
     import config.settings as settings_module
     from config.settings import TemporalIntegrityConfig
-    from services.ingestion import batch
+    from ingestion.ingestion import batch
 
     original = settings_module.settings.temporal_integrity
     settings_module.settings.temporal_integrity = TemporalIntegrityConfig(

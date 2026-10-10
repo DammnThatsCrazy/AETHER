@@ -22,7 +22,7 @@ from shared.graph.graph import Vertex
 from shared.graph.mutation_gateway import replay_ledger, replay_state
 from shared.graph.mutation_models import MutationRecord
 
-from services.temporal360.history_replay import GraphHistoryReplay
+from graph.temporal360.history_replay import GraphHistoryReplay
 
 TENANT = "tenant_t360"
 OTHER_TENANT = "tenant_other"

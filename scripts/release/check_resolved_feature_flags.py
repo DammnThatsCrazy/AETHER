@@ -27,7 +27,7 @@ except ImportError as exc:  # pragma: no cover - environment diagnostic
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SETTINGS = ROOT / "services/backend/config/settings.py"
+SETTINGS = ROOT / "services/api/config/settings.py"
 DEPLOYMENT_PROFILES = ROOT / "config/deployment_profiles.yaml"
 PYPROJECT = ROOT / "pyproject.toml"
 

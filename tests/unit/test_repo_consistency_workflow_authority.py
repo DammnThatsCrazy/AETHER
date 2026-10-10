@@ -197,7 +197,7 @@ def test_repo_health_main_integration_is_bounded_and_fail_closed() -> None:
     assert "make generate-contracts-check" in script
     assert "make validate-impact-graph" in script
     assert "make integration-durable" in script
-    assert "services/backend/Dockerfile" in script
+    assert "services/api/Dockerfile" in script
     assert '"SELECTED"' in script
     assert '"NOT_APPLICABLE"' in script
     assert "Impact Graph did not select backend_image" in script
@@ -216,12 +216,12 @@ def test_repo_health_builds_cross_workspace_dependencies_before_lint() -> None:
     assert dependency_step < lint_step
     dependency_run = steps[dependency_step]["run"]
     for workspace in (
-        "packages/proof-contracts",
-        "packages/proof-fixtures",
-        "packages/proof-runner",
-        "packages/proof-reporting",
-        "packages/react-native",
-        "packages/mobile-core",
+        "tests/e2e/proof/packages/contracts",
+        "tests/e2e/proof/packages/fixtures",
+        "tests/e2e/proof/packages/runner",
+        "tests/e2e/proof/packages/reporting",
+        "packages/sdk/react-native",
+        "packages/sdk/mobile-core",
     ):
         assert workspace in dependency_run
 

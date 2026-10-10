@@ -1,7 +1,7 @@
 name: Smart Contract Static Analysis
 
 # Runs Slither and the Hardhat contract test suite on PR finalization or push
-# to main when contracts/smart-contracts/** is touched. Draft pushes remain an
+# to main when packages/contracts/smart-contracts/** is touched. Draft pushes remain an
 # implementation phase and do not start hosted CI.
 #
 # Slither findings are uploaded as a SARIF artifact for reviewer triage.
@@ -14,13 +14,13 @@ on:
   pull_request:
     types: [ready_for_review]
     paths:
-      - 'contracts/smart-contracts/**'
+      - 'packages/contracts/smart-contracts/**'
       - '.github/workflows/smart-contract-analysis.yml'
   push:
     branches:
       - main
     paths:
-      - 'contracts/smart-contracts/**'
+      - 'packages/contracts/smart-contracts/**'
   workflow_dispatch:
 
 permissions:
@@ -39,7 +39,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: contracts/smart-contracts
+        working-directory: packages/contracts/smart-contracts
 
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +49,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'contracts/smart-contracts/package-lock.json'
+          cache-dependency-path: 'packages/contracts/smart-contracts/package-lock.json'
 
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
@@ -101,7 +101,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: contracts/smart-contracts/results.sarif
+          sarif_file: packages/contracts/smart-contracts/results.sarif
         continue-on-error: true
 
       - name: Fail on HIGH/CRITICAL findings
@@ -125,7 +125,7 @@ jobs:
           path: release-evidence/smart-contract-analysis.json
 
   contract-tests:
-    # contracts/smart-contracts/test/ was not run by any gate. This job closes that gap
+    # packages/contracts/smart-contracts/test/ was not run by any gate. This job closes that gap
     # by running the Hardhat contract test suite (npm test -> `hardhat test`)
     # on the same triggers as Slither.
     name: Hardhat contract test suite
@@ -134,7 +134,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: contracts/smart-contracts
+        working-directory: packages/contracts/smart-contracts
 
     steps:
       - uses: actions/checkout@v4
@@ -144,7 +144,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'contracts/smart-contracts/package-lock.json'
+          cache-dependency-path: 'packages/contracts/smart-contracts/package-lock.json'
 
       - name: Install Node dependencies
         run: npm ci --ignore-scripts

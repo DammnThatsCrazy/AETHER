@@ -6,7 +6,7 @@ The provider capability/certification matrix is generated from source — never
 hand-maintained — so provider readiness claims stay honest. The canonical
 source of truth is::
 
-    services/backend/shared/certification/registry.py
+    services/api/shared/certification/registry.py
 
 Each first-release provider adapter's declared implementation status is resolved
 to a ``CredentialReadiness`` state directly from the domain adapters, so the
@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 OUTPUT = ROOT / "docs" / "_generated" / "adapter-certification-matrix.json"
 
 
@@ -53,7 +53,7 @@ def main() -> int:
     payload = {
         "version": read_version(),
         "generated_from": (
-            "services/backend/shared/certification/registry.py"
+            "services/api/shared/certification/registry.py"
         ),
         **matrix,
     }

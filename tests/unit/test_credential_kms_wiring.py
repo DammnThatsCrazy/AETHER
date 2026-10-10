@@ -29,7 +29,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-TF = ROOT / "deploy/aws/terraform"
+TF = ROOT / "infra/aws/terraform"
 MAIN = TF / "main.tf"
 PROFILES_TF = TF / "profiles.tf"
 ROOT_VARS = TF / "variables.tf"

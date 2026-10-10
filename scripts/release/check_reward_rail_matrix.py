@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 MATRIX_JSON = ROOT / "docs" / "_generated" / "reward-rail-matrix.json"
 
 ERRORS: list[str] = []
@@ -37,13 +37,13 @@ def err(m: str) -> None:
 def main() -> int:
     if str(BACKEND_ROOT) not in sys.path:
         sys.path.insert(0, str(BACKEND_ROOT))
-    from services.rewards.rail_matrix import (
+    from value.rewards.rail_matrix import (
         CONFIGURABLE_TIERS,
         RAIL_MATRIX,
         build_rail_matrix,
     )
-    from services.rewards.rails import _RAIL_ADAPTERS
-    from services.rewards.senders import RAIL_SENDERS
+    from value.rewards.rails import _RAIL_ADAPTERS
+    from value.rewards.senders import RAIL_SENDERS
 
     adapters = set(_RAIL_ADAPTERS)
     matrix = set(RAIL_MATRIX)
