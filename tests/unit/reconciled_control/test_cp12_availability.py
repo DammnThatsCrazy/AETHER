@@ -3,7 +3,7 @@
 Blueprint CP-12: ``missing``, ``empty``, ``zero``, ``degraded`` and
 ``not_applicable`` remain distinct, and no operator health surface may fabricate
 ``zero``/``empty`` to represent missing evidence. These tests pin the helper
-contracts in ``services/managed_integrations/availability.py`` and the value
+contracts in ``services/api/connectors/managed_integrations/availability.py`` and the value
 vocabulary in ``contracts.py``.
 """
 
@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import pytest
 
-from services.managed_integrations.availability import (
+from connectors.managed_integrations.availability import (
     assert_availability,
     availability_from_presence,
     availability_from_readiness,
     is_availability,
 )
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations.contracts import (
     INTEGRATION_AVAILABILITY_VALUES,
     RECONCILE_RESULT_VALUES,
 )

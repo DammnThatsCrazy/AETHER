@@ -2,10 +2,10 @@
 
 Guards the drift where a docker-compose file presents itself as the canonical
 ``staging`` profile while contradicting it. The historical defect: a
-"staging-equivalent" compose stack under ``deploy/staging/`` provisioned
+"staging-equivalent" compose stack under ``infra/staging/`` provisioned
 Redis, Kafka+Zookeeper, and Prometheus — all three forbidden by the canonical
 staging profile — and was validated by no CI gate. That stack is now
-quarantined under ``deploy/legacy-staging/``.
+quarantined under ``infra/legacy-staging/``.
 
 Every rule is tested by deliberately breaking the invariant (mutation) and
 asserting the validator trips, per the parity-test philosophy.
@@ -34,8 +34,8 @@ def _load(name: str):
 
 def _make_tree(tmp_path: Path) -> dict:
     """A minimal live repo tree with a quarantined legacy stack."""
-    (tmp_path / "deploy" / "legacy-staging").mkdir(parents=True)
-    (tmp_path / "deploy" / "legacy-staging" / "docker-compose.staging.yml").write_text(
+    (tmp_path / "infra" / "legacy-staging").mkdir(parents=True)
+    (tmp_path / "infra" / "legacy-staging" / "docker-compose.staging.yml").write_text(
         "# LEGACY — superseded by Terraform\nservices: {}\n"
     )
     (tmp_path / "Makefile").write_text("ci-check:\n\tpython scripts/repo_doctor.py --ci\n")
@@ -53,20 +53,20 @@ def test_compose_parity_validator_passes_on_current_tree():
 
 
 def test_fails_when_canonical_staging_path_exists(monkeypatch, tmp_path):
-    """A deploy/staging/ directory reappearing trips the validator."""
+    """A infra/staging/ directory reappearing trips the validator."""
     mod = _load("check_delivery_compose_parity")
     tree = _make_tree(tmp_path)
-    (tmp_path / "deploy" / "staging").mkdir()
-    (tmp_path / "deploy" / "staging" / "docker-compose.staging.yml").write_text("services: {}\n")
+    (tmp_path / "infra" / "staging").mkdir()
+    (tmp_path / "infra" / "staging" / "docker-compose.staging.yml").write_text("services: {}\n")
     monkeypatch.setattr(mod, "repo_root", lambda: tree["root"])
     assert mod.check() != 0
 
 
 def test_fails_when_staging_compose_escapes_quarantine(monkeypatch, tmp_path):
-    """A staging-named compose outside deploy/legacy-staging/ trips the validator."""
+    """A staging-named compose outside infra/legacy-staging/ trips the validator."""
     mod = _load("check_delivery_compose_parity")
     tree = _make_tree(tmp_path)
-    (tmp_path / "deploy" / "docker-compose.staging.yml").write_text("services: {}\n")
+    (tmp_path / "infra" / "docker-compose.staging.yml").write_text("services: {}\n")
     monkeypatch.setattr(mod, "repo_root", lambda: tree["root"])
     assert mod.check() != 0
 
@@ -75,7 +75,7 @@ def test_fails_when_quarantined_compose_loses_legacy_marker(monkeypatch, tmp_pat
     """A quarantined staging compose without the LEGACY marker trips the validator."""
     mod = _load("check_delivery_compose_parity")
     tree = _make_tree(tmp_path)
-    (tmp_path / "deploy" / "legacy-staging" / "docker-compose.staging.yml").write_text(
+    (tmp_path / "infra" / "legacy-staging" / "docker-compose.staging.yml").write_text(
         "services: {}\n"
     )
     monkeypatch.setattr(mod, "repo_root", lambda: tree["root"])
@@ -83,11 +83,11 @@ def test_fails_when_quarantined_compose_loses_legacy_marker(monkeypatch, tmp_pat
 
 
 def test_fails_when_live_surface_references_canonical_path(monkeypatch, tmp_path):
-    """A Makefile/scripts/config reference to deploy/staging trips the validator."""
+    """A Makefile/scripts/config reference to infra/staging trips the validator."""
     mod = _load("check_delivery_compose_parity")
     tree = _make_tree(tmp_path)
     (tmp_path / "Makefile").write_text(
-        "up:\n\tdocker compose -f deploy/staging/docker-compose.staging.yml up\n"
+        "up:\n\tdocker compose -f infra/staging/docker-compose.staging.yml up\n"
     )
     monkeypatch.setattr(mod, "repo_root", lambda: tree["root"])
     assert mod.check() != 0

@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -32,13 +32,13 @@ from shared.graph.graph import Edge, GraphClient, Vertex  # noqa: E402
 # after such a purge would raise a *different* ForbiddenError class than the
 # AetherError this file registers a handler for, and the 403 assertion below
 # would see the exception escape instead.
-from services.cluster.routes import (  # noqa: E402
+from graph.cluster.routes import (  # noqa: E402
     _get_cluster_member_vertices,
     _get_tenant_cluster_vertices,
 )
-from services.kyber_operator.routes import router as kyber_router  # noqa: E402
-from services.operational_intelligence.routes import router as graph_router  # noqa: E402
-from services.silver.reconciliation import SilverReconciliationWorker  # noqa: E402
+from governance.kyber_operator.routes import router as kyber_router  # noqa: E402
+from graph.operational_intelligence.routes import router as graph_router  # noqa: E402
+from ingestion.silver.reconciliation import SilverReconciliationWorker  # noqa: E402
 
 MINE = "tenant_mine"
 OTHER = "tenant_other"

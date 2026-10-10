@@ -50,4 +50,4 @@ ensure consistency and accuracy.
 ## Enforcement
 
 Surface copy rules are enforced by the naming-truth document
-(`docs/source-of-truth/naming-truth.md`) and validated during doc review.
+(`docs/reference/source-of-truth/naming-truth.md`) and validated during doc review.

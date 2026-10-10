@@ -18,13 +18,13 @@ from datetime import datetime
 
 import pytest
 
-from services.ingestion.adapters.replay import (
+from ingestion.ingestion.adapters.replay import (
     DEFAULT_REPLAY_INGRESS_PATH,
     REPLAY_CONTEXT_KEY,
     ReplayIngressAdapter,
 )
 from shared.observation.envelope import UniversalObservationEnvelope
-from services.ingestion.observation_envelope import (
+from ingestion.ingestion.observation_envelope import (
     build_sdk_observation_envelope as sdk_build,
 )
 
@@ -74,7 +74,7 @@ def test_replay_adapter_declares_operator_identity() -> None:
 
 
 def test_replay_adapter_is_the_registry_identity_for_replay_family() -> None:
-    from services.ingestion.adapters.registry import REGISTERED_ADAPTERS
+    from ingestion.ingestion.adapters.registry import REGISTERED_ADAPTERS
 
     assert REGISTERED_ADAPTERS["replay"] is ReplayIngressAdapter
 

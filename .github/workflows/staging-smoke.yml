@@ -235,7 +235,7 @@ jobs:
   # pass.
   #
   # The smoke report is uploaded as an artifact to
-  # reports/release-readiness/ for review by the release process.
+  # docs/reference/reports/release-readiness/ for review by the release process.
   # -------------------------------------------------------------------
   smoke-staging:
     name: Smoke Test Staging
@@ -374,17 +374,17 @@ jobs:
           TF_KYBER_GOOGLE_HOSTED_DOMAIN: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
         run: |
           set -euo pipefail
-          mkdir -p reports/release-readiness
+          mkdir -p docs/reference/reports/release-readiness
           python scripts/release/probe_kyber_staging_identity.py \
             --base-url "$AETHER_API_URL" \
-            --evidence-out reports/release-readiness/kyber-identity-probe.json
+            --evidence-out docs/reference/reports/release-readiness/kyber-identity-probe.json
 
       - name: Upload smoke report artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aether-smoke-report-${{ github.run_id }}
-          path: reports/release-readiness/
+          path: docs/reference/reports/release-readiness/
           retention-days: 30
           if-no-files-found: warn
 
@@ -444,6 +444,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: aether-functionality-proof-report-${{ steps.date.outputs.date }}
-          path: reports/release-readiness/aether-functionality-proof-report-*.md
+          path: docs/reference/reports/release-readiness/aether-functionality-proof-report-*.md
           retention-days: 90
           if-no-files-found: warn

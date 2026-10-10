@@ -6,7 +6,7 @@
 #
 #   route            -> a known_prefixes entry in config/route_registry.yaml
 #   runtime_role     -> an ALL_ROLES token from
-#                       services/backend/services/runtime/roles.py
+#                       services/api/workers/runtime/roles.py
 #                       (read via the release gate's AST reader, never imported)
 #   release_flag     -> a required_controls.feature_flags key or rollouts key in
 #                       config/founding_tenant_release.yaml
@@ -153,7 +153,7 @@ capabilities:
       production-lean: required_enabled
 
   # In production-lean the worker roles co-host in the single lean-worker
-  # execution group token (services/runtime/roles.py EXECUTION_GROUPS).
+  # execution group token (services/api/workers/runtime/roles.py EXECUTION_GROUPS).
   - id: workers
     route: null
     runtime_role: lean-worker

@@ -19,7 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -70,7 +70,7 @@ def _run(coro):
 
 def test_find_and_inspect_shortest_path() -> None:
     """POST /paths with mode=shortest returns a valid RelationshipPath."""
-    from services.operational_intelligence.routes import graph_paths, PathQuery
+    from graph.operational_intelligence.routes import graph_paths, PathQuery
     from shared.common.common import ForbiddenError
 
     async def run():
@@ -98,7 +98,7 @@ def test_find_and_inspect_shortest_path() -> None:
 
 def test_k_shortest_returns_alternative_paths() -> None:
     """POST /paths with mode=k_shortest and k=2 returns 2 distinct paths when graph has alternatives."""
-    from services.operational_intelligence.routes import graph_paths, PathQuery
+    from graph.operational_intelligence.routes import graph_paths, PathQuery
     from shared.graph.path_scoring import make_path_id
 
     async def run():
@@ -125,7 +125,7 @@ def test_k_shortest_returns_alternative_paths() -> None:
 
 def test_save_snapshot_and_compare() -> None:
     """POST /paths with save_snapshot=True produces a snapshot_id; POST /snapshots/{id}/compare runs."""
-    from services.operational_intelligence.routes import (
+    from graph.operational_intelligence.routes import (
         graph_paths, graph_compare_snapshots, graph_get_snapshot,
         PathQuery, SnapshotCreateRequest, graph_create_snapshot,
     )
@@ -155,7 +155,7 @@ def test_save_snapshot_and_compare() -> None:
         assert snap_res["data"]["tenant_id"] == "t1"
 
         # Compare snapshot against current graph state
-        from services.operational_intelligence.models import SnapshotCompareRequest
+        from graph.operational_intelligence.models import SnapshotCompareRequest
         compare_body = SnapshotCompareRequest(tenantId="t1", snapshot_id=snap_id)
         compare_res = await graph_compare_snapshots(snap_id, compare_body, request, client)
         assert "data" in compare_res
@@ -167,10 +167,10 @@ def test_save_snapshot_and_compare() -> None:
 
 def test_link_snapshot_to_investigation_and_get_paths() -> None:
     """Attach a snapshot to an investigation case; GET /{case_id}/paths returns path_ids."""
-    from services.operational_intelligence.routes import (
+    from graph.operational_intelligence.routes import (
         graph_paths, graph_create_snapshot, PathQuery, SnapshotCreateRequest,
     )
-    from services.investigation.routes import (
+    from governance.investigation.routes import (
         attach_snapshot_to_investigation,
         get_investigation_paths,
         create_case,

@@ -8,9 +8,9 @@ Erasability of mobile data is expressed in four otherwise-disconnected places:
   1. a repository erase hook that physically deletes the rows — a
      ``delete_by_principal`` hook for tenant-keyed stores, or a
      ``delete_by_operator`` hook for the operator-keyed kyber device stores;
-  2. a ``DSR_COMPONENT`` (``services/dsr_propagation/models.py``) that a DSR seeds
+  2. a ``DSR_COMPONENT`` (``services/api/governance/dsr_propagation/models.py``) that a DSR seeds
      and rolls up to ``completed``;
-  3. the ``consent.erasure`` job (``services/consent/erasure_jobs.py``) actually
+  3. the ``consent.erasure`` job (``services/api/governance/consent/erasure_jobs.py``) actually
      erasing that store and marking its component with a real count;
   4. a ``config/storage_policies.yaml`` policy whose ``delete_behavior`` permits the
      erasure and whose ``legal_hold_supported`` is declared.
@@ -24,7 +24,7 @@ erasure handler, and have coherent storage policies. Removing a store from
 
 Each entry maps a component to the repo that holds its erase hook (a path relative
 to the backend root — tenant stores live under ``repositories/``, the kyber device
-stores live in ``services/kyber/devices/repository.py``) and the hook NAME it must
+stores live in ``services/api/governance/kyber/devices/repository.py``) and the hook NAME it must
 expose. ``hook`` defaults to ``delete_by_principal``.
 
 Usage: python scripts/release/check_dsr_coverage.py
@@ -39,7 +39,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
-_BACKEND_REL = Path("services") / "backend"
+_BACKEND_REL = Path("services") / "api"
 
 # The mobile principal-scoped stores that MUST be reachable by a DSR erasure, each
 # mapped to (repo file exposing the erase hook, hook name, storage-policy tables it
@@ -62,17 +62,17 @@ MOBILE_DSR_COVERAGE: dict[str, dict[str, object]] = {
         "tables": ["sync_change_log"],
     },
     "kyber_trusted_devices": {
-        "repo": "services/kyber/devices/repository.py",
+        "repo": "governance/kyber/devices/repository.py",
         "hook": "delete_by_operator",
         "tables": ["kyber_trusted_devices"],
     },
     "kyber_webauthn_credentials": {
-        "repo": "services/kyber/devices/repository.py",
+        "repo": "governance/kyber/devices/repository.py",
         "hook": "delete_by_operator",
         "tables": ["kyber_webauthn_credentials"],
     },
     "kyber_device_proof_keys": {
-        "repo": "services/kyber/devices/repository.py",
+        "repo": "governance/kyber/devices/repository.py",
         "hook": "delete_by_operator",
         "tables": ["kyber_device_proof_keys"],
     },
@@ -101,7 +101,7 @@ def _dsr_components(root: Path) -> set[str]:
     ``DSR_COMPONENTS`` is an *annotated* assignment (``DSR_COMPONENTS: tuple[...] =
     (...)``), so both ``ast.Assign`` and ``ast.AnnAssign`` must be handled.
     """
-    tree = ast.parse(_read(root, "services/dsr_propagation/models.py"))
+    tree = ast.parse(_read(root, "governance/dsr_propagation/models.py"))
     for node in ast.walk(tree):
         value = None
         if isinstance(node, ast.Assign) and any(
@@ -122,7 +122,7 @@ def _dsr_components(root: Path) -> set[str]:
 def _repo_defines_hook(root: Path, repo: str, hook: str) -> bool:
     """Whether the backend repo file at ``repo`` (backend-root-relative) defines
     an ``async def <hook>`` erase method. Tenant stores live in ``repositories/``;
-    the operator-keyed kyber device stores live in ``services/kyber/devices/``."""
+    the operator-keyed kyber device stores live in ``services/api/governance/kyber/devices/``."""
     path = root / _BACKEND_REL / repo
     if not path.exists():
         return False
@@ -136,7 +136,7 @@ def _repo_defines_hook(root: Path, repo: str, hook: str) -> bool:
 def _handler_marked_components(root: Path) -> set[str]:
     """Component name-constants the erasure handler references (assignments whose
     value is a string literal), used to prove each mobile component is wired."""
-    text = _read(root, "services/consent/erasure_jobs.py")
+    text = _read(root, "governance/consent/erasure_jobs.py")
     tree = ast.parse(text)
     literals = {
         n.value for n in ast.walk(tree)
@@ -166,13 +166,13 @@ def run(root: Path) -> int:
     # job. A component seeded ``pending`` on every request but referenced by no
     # executor can never roll up to ``completed`` — and its store's subject data
     # silently survives (fifteen components sat in exactly that state until the
-    # DSR-completeness program wired them in services/consent/erasure_planes.py).
+    # DSR-completeness program wired them in services/api/governance/consent/erasure_planes.py).
     for component in sorted(components):
         r.require(
             component in handler_literals,
             f"{component}: executed by the consent.erasure job",
             f"{component}: in DSR_COMPONENTS but NOT referenced by "
-            f"services/consent/erasure_jobs.py — every erasure would leave it "
+            f"services/api/governance/consent/erasure_jobs.py — every erasure would leave it "
             f"pending forever",
         )
 
@@ -192,7 +192,7 @@ def run(root: Path) -> int:
         r.require(
             component in handler_literals,
             f"{component}: marked by the consent.erasure handler",
-            f"{component}: NOT referenced by services/consent/erasure_jobs.py — seeded "
+            f"{component}: NOT referenced by services/api/governance/consent/erasure_jobs.py — seeded "
             f"but never marked, so the DSR never rolls up to completed",
         )
         for table in spec["tables"]:  # type: ignore[union-attr]

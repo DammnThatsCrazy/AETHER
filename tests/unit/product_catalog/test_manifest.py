@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.product_catalog.manifest import dry_run_diff, manifest_to_nodes, validate_manifest
+from billing.product_catalog.manifest import dry_run_diff, manifest_to_nodes, validate_manifest
 
 
 def _manifest() -> dict:

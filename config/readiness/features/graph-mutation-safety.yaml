@@ -27,8 +27,8 @@ repository_ceiling:
   remaining_is_repository_controlled: false
   evidence:
   - services/agents/README.md
-  - services/backend/services/agent/mutation_commit.py
-  - services/backend/services/agent/runtime_repository.py
+  - services/api/actions/agent/mutation_commit.py
+  - services/api/actions/agent/runtime_repository.py
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)
@@ -109,7 +109,7 @@ operational_ownership:
   technical_owner: agent-platform
   operational_owner: platform-ops
   escalation: pagerduty:agent-platform
-  runbook: docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md
+  runbook: docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md
   dashboards:
   - grafana:agent-platform
   alerts:

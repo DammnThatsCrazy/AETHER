@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-MAIN_TF = ROOT / "deploy/aws/terraform/main.tf"
+MAIN_TF = ROOT / "infra/aws/terraform/main.tf"
 
 
 def _custom_rules() -> str:

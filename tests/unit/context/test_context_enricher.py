@@ -25,7 +25,7 @@ def _config(monkeypatch, *, cidrs=(), cloudflare=False):
         ),
     )
     # trusted-network cache keys off settings — reset between tests
-    from services.ingestion import context_enricher
+    from ingestion.ingestion import context_enricher
 
     context_enricher._trusted_networks.cache_clear()
 
@@ -33,14 +33,14 @@ def _config(monkeypatch, *, cidrs=(), cloudflare=False):
 class TestResolveClientIp:
     def test_untrusted_peer_headers_ignored(self, monkeypatch):
         _config(monkeypatch, cidrs=())
-        from services.ingestion.context_enricher import resolve_client_ip
+        from ingestion.ingestion.context_enricher import resolve_client_ip
 
         ip, source = resolve_client_ip("203.0.113.7", "8.8.8.8, 1.1.1.1", "9.9.9.9")
         assert (ip, source) == ("203.0.113.7", "peer")  # spoofed XFF/CF ignored
 
     def test_trusted_proxy_walks_chain_right_to_left(self, monkeypatch):
         _config(monkeypatch, cidrs=("10.0.0.0/8",))
-        from services.ingestion.context_enricher import resolve_client_ip
+        from ingestion.ingestion.context_enricher import resolve_client_ip
 
         ip, source = resolve_client_ip(
             "10.0.0.5", "198.51.100.9, 10.0.0.3, 10.0.0.4", None
@@ -52,13 +52,13 @@ class TestResolveClientIp:
         # proxies count, so the attacker-controlled left side is never reached
         # past the first untrusted hop.
         _config(monkeypatch, cidrs=("10.0.0.0/8",))
-        from services.ingestion.context_enricher import resolve_client_ip
+        from ingestion.ingestion.context_enricher import resolve_client_ip
 
         ip, _ = resolve_client_ip("10.0.0.5", "1.2.3.4, 198.51.100.9", None)
         assert ip == "198.51.100.9"  # rightmost untrusted hop wins, not 1.2.3.4
 
     def test_cloudflare_header_requires_flag_and_trusted_peer(self, monkeypatch):
-        from services.ingestion.context_enricher import resolve_client_ip
+        from ingestion.ingestion.context_enricher import resolve_client_ip
 
         _config(monkeypatch, cidrs=("103.21.244.0/22",), cloudflare=True)
         ip, source = resolve_client_ip("103.21.244.1", None, "198.51.100.77")
@@ -70,7 +70,7 @@ class TestResolveClientIp:
 
     def test_malformed_chain_falls_back_safely(self, monkeypatch):
         _config(monkeypatch, cidrs=("10.0.0.0/8",))
-        from services.ingestion.context_enricher import resolve_client_ip
+        from ingestion.ingestion.context_enricher import resolve_client_ip
 
         ip, source = resolve_client_ip("10.0.0.5", "<script>, junk", None)
         assert (ip, source) == ("10.0.0.5", "peer")
@@ -78,14 +78,14 @@ class TestResolveClientIp:
 
 class TestGeoProviders:
     def test_null_provider_is_honestly_not_provisioned(self):
-        from services.ingestion.geo_provider import NullGeoProvider
+        from ingestion.ingestion.geo_provider import NullGeoProvider
 
         provider = NullGeoProvider()
         assert provider.capability_state() == "not_provisioned"
         assert provider.lookup("198.51.100.9").state == "not_provisioned"
 
     def test_private_and_invalid_addresses_classified(self):
-        from services.ingestion.geo_provider import NullGeoProvider
+        from ingestion.ingestion.geo_provider import NullGeoProvider
 
         provider = NullGeoProvider()
         assert provider.lookup("10.1.2.3").state == "private_address"
@@ -93,7 +93,7 @@ class TestGeoProviders:
         assert provider.lookup("not-an-ip").state == "invalid_address"
 
     def test_deterministic_provider_serves_fixtures(self):
-        from services.ingestion.geo_provider import DeterministicTestGeoProvider, GeoLookup
+        from ingestion.ingestion.geo_provider import DeterministicTestGeoProvider, GeoLookup
 
         provider = DeterministicTestGeoProvider(
             {"198.51.100.9": GeoLookup(state="ready", country_code="US", city="Miami")}
@@ -102,7 +102,7 @@ class TestGeoProviders:
         assert (hit.country_code, hit.city) == ("US", "Miami")
 
     def test_maxmind_fails_closed_without_databases(self, tmp_path):
-        from services.ingestion.geo_provider import MaxMindGeoProvider
+        from ingestion.ingestion.geo_provider import MaxMindGeoProvider
 
         provider = MaxMindGeoProvider(
             city_db_path=str(tmp_path / "missing.mmdb"),
@@ -137,8 +137,8 @@ class TestIpHmac:
 class TestEnrichRequestContext:
     def test_payload_never_contains_raw_ip(self, monkeypatch):
         _config(monkeypatch, cidrs=())
-        from services.ingestion.context_enricher import enrich_request_context
-        from services.ingestion.geo_provider import DeterministicTestGeoProvider, GeoLookup
+        from ingestion.ingestion.context_enricher import enrich_request_context
+        from ingestion.ingestion.geo_provider import DeterministicTestGeoProvider, GeoLookup
 
         context = enrich_request_context(
             tenant_id="tenant-a",
@@ -156,7 +156,7 @@ class TestEnrichRequestContext:
 
     def test_missing_peer_yields_explicit_state(self, monkeypatch):
         _config(monkeypatch, cidrs=())
-        from services.ingestion.context_enricher import enrich_request_context
+        from ingestion.ingestion.context_enricher import enrich_request_context
 
         context = enrich_request_context(tenant_id="t", at=AT, peer_ip=None)
         assert context.enrichment_state == "no_client_address"
@@ -167,7 +167,7 @@ class TestEnrichRequestContext:
 async def test_batch_hook_disabled_by_default_costs_nothing(monkeypatch):
     import config.settings as settings_module
     from config.settings import ContextIntelligenceConfig
-    from services.ingestion import batch
+    from ingestion.ingestion import batch
 
     monkeypatch.setattr(
         settings_module.settings,

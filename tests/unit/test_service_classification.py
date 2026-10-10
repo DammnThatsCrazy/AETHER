@@ -17,14 +17,14 @@ _spec.loader.exec_module(registry)
 
 def _tree(tmp_path, dirs, services, ledger_paths=(), **registry_overrides):
     for d in dirs:
-        package = tmp_path / "services/backend/services" / d
+        package = tmp_path / "services/api/tenancy" / d
         package.mkdir(parents=True)
         (package / "__init__.py").write_text("", encoding="utf-8")
     reg = tmp_path / "registry.yaml"
     document = {
         "schema_version": 1,
         "authority": "service-classification",
-        "root": "services/backend/services",
+        "root": "services/api",
         "services": services,
     }
     document.update(registry_overrides)
@@ -70,7 +70,7 @@ def test_deprecated_requires_a_debt_ledger_row(tmp_path):
     services = {"a": _svc("deprecated")}
     assert any("need a row in the debt retirement ledger" in e for e in _tree(tmp_path, ["a"], services))
     assert _tree(
-        tmp_path / "ok", ["a"], services, ["services/backend/services/a"]
+        tmp_path / "ok", ["a"], services, ["services/api/tenancy/a"]
     ) == []
 
 
@@ -86,8 +86,8 @@ def test_the_committed_registry_is_valid_and_its_deprecated_services_are_in_the_
 def test_a_cache_only_directory_is_not_a_service(tmp_path):
     # A deleted package can leave __pycache__ behind on a developer machine; the
     # registry must not demand a class for a directory that holds no source.
-    (tmp_path / "services/backend/services/ghost/__pycache__").mkdir(parents=True)
-    (tmp_path / "services/backend/services/ghost/__pycache__/m.cpython-313.pyc").write_bytes(b"")
+    (tmp_path / "services/api/tenancy/ghost/__pycache__").mkdir(parents=True)
+    (tmp_path / "services/api/tenancy/ghost/__pycache__/m.cpython-313.pyc").write_bytes(b"")
     assert _tree(tmp_path, ["a"], {"a": _svc()}) == []
 
 
@@ -110,7 +110,7 @@ def test_reason_must_be_a_non_empty_string(tmp_path):
 
 def test_ledger_paths_tolerate_malformed_rows_and_trailing_slashes(tmp_path):
     services = {"a": _svc("deprecated")}
-    ok = _tree(tmp_path / "slash", ["a"], services, ["services/backend/services/a/"])
+    ok = _tree(tmp_path / "slash", ["a"], services, ["services/api/tenancy/a/"])
     assert ok == []
     ledger_only = tmp_path / "bad_ledger.yaml"
     ledger_only.write_text(yaml.safe_dump({"entries": ["junk", {"current": "not-a-list", "duplicates": [7]}]}), encoding="utf-8")

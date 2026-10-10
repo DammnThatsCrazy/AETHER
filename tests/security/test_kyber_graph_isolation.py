@@ -1,6 +1,6 @@
 """The scoped tenant graph gateway must not be reachable outside its scope.
 
-This suite attacks the headline claim of ``services/kyber/graph``: an operator
+This suite attacks the headline claim of ``services/api/governance/kyber/graph``: an operator
 holding a live scope on tenant A reaches tenant A and nothing else. Every test
 asserts the *denial reason* rather than merely that something was raised —
 "it raised" is compatible with an unrelated crash, and a security property that
@@ -40,23 +40,23 @@ from uuid import uuid4
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "kyber-graph-test")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.kyber.access.contracts import AccessScope  # noqa: E402
-from services.kyber.access.disclosure import DisclosureLevel  # noqa: E402
-from services.kyber.graph import scoped_gateway  # noqa: E402
-from services.kyber.graph.contracts import (  # noqa: E402
+from governance.kyber.access.contracts import AccessScope  # noqa: E402
+from governance.kyber.access.disclosure import DisclosureLevel  # noqa: E402
+from governance.kyber.graph import scoped_gateway  # noqa: E402
+from governance.kyber.graph.contracts import (  # noqa: E402
     TENANT_SCOPED_NODE_TYPES,
     KyberGraphNode,
     KyberNodeType,
 )
-from services.kyber.graph.repository import KyberGraphStore  # noqa: E402
-from services.kyber.graph.routes import read_tenant_entity_neighborhood  # noqa: E402
-from services.kyber.graph.scoped_gateway import (  # noqa: E402
+from governance.kyber.graph.repository import KyberGraphStore  # noqa: E402
+from governance.kyber.graph.routes import read_tenant_entity_neighborhood  # noqa: E402
+from governance.kyber.graph.scoped_gateway import (  # noqa: E402
     EVIDENCE_CAPABILITY,
     MINIMUM_DISCLOSURE,
     TENANT_GRAPH_CAPABILITY,

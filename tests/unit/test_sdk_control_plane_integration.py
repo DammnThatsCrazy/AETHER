@@ -26,13 +26,13 @@ from types import SimpleNamespace
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
-from services.sdk_distribution.control_plane import (  # noqa: E402
+from ingestion.sdk_distribution.control_plane import (  # noqa: E402
     INTEGRATION_KIND_SITE,
     SOURCE_ORIGIN_SITE,
     SOURCE_OWNER_SITE,
@@ -104,7 +104,7 @@ def test_the_site_id_is_the_integration_id_and_survives_re_prefixing():
 def test_the_registered_kind_and_origin_are_declared_vocabulary():
     """A kind or origin outside the plane's §6/§16 vocabulary is rejected by
     the plane's own admission, so naming one here would fail at runtime."""
-    from services.managed_integrations.contracts import (
+    from connectors.managed_integrations.contracts import (
         INTEGRATION_SOURCE_ORIGINS,
         MANAGED_INTEGRATION_KINDS,
     )
@@ -135,7 +135,7 @@ def test_the_observed_version_is_the_field_the_drift_verdict_uses():
     plane read sdk_version instead, a site whose loader is current but whose
     bundle is pinned would reconcile against a different fact than the one the
     install page shows."""
-    from services.sdk_distribution.versions import describe_install_version
+    from ingestion.sdk_distribution.versions import describe_install_version
 
     snap = site_install_observation(
         site=_site(),
@@ -156,10 +156,10 @@ def test_a_site_that_never_installed_observes_as_missing_not_as_drift():
 @pytest.fixture(autouse=True)
 def _reset_stores():
     """Both stores the seam writes to, emptied between tests."""
-    from services.managed_integrations.admission_repository import (
+    from connectors.managed_integrations.admission_repository import (
         reset_admission_record_stores,
     )
-    from services.managed_integrations.repository import (
+    from connectors.managed_integrations.repository import (
         reset_managed_integration_in_memory_store,
     )
 
@@ -212,7 +212,7 @@ def plane_off(plane_flags):
 def test_a_site_install_writes_nothing_while_the_plane_is_off(plane_off):
     """The default path. A deploy that has not adopted the plane must not
     accumulate control-plane rows from tenants installing the SDK."""
-    from services.managed_integrations.repository import (
+    from connectors.managed_integrations.repository import (
         get_managed_integration_repository,
     )
 
@@ -225,10 +225,10 @@ def test_a_site_install_writes_nothing_while_the_plane_is_off(plane_off):
 
 
 def test_registering_a_site_registers_the_integration_and_opens_its_admission(plane_on):
-    from services.managed_integrations.admission_repository import (
+    from connectors.managed_integrations.admission_repository import (
         get_admission_record_repository,
     )
-    from services.managed_integrations.repository import (
+    from connectors.managed_integrations.repository import (
         get_managed_integration_repository,
     )
 
@@ -264,7 +264,7 @@ def test_an_explicit_release_channel_is_honoured_and_never_invented(plane_on):
 
 
 def test_registering_twice_is_one_integration_and_one_admission(plane_on):
-    from services.managed_integrations.admission_repository import (
+    from connectors.managed_integrations.admission_repository import (
         get_admission_record_repository,
     )
 
@@ -284,7 +284,7 @@ def test_registering_twice_is_one_integration_and_one_admission(plane_on):
 
 def test_a_site_without_identity_is_refused_rather_than_guessed(plane_on):
     """A guessed key is how one tenant's install lands on another's surface."""
-    from services.managed_integrations.repository import (
+    from connectors.managed_integrations.repository import (
         get_managed_integration_repository,
     )
 
@@ -302,7 +302,7 @@ def test_a_control_plane_failure_never_fails_the_install_path(plane_on, monkeypa
         raise RuntimeError("plane store unavailable")
 
     monkeypatch.setattr(
-        "services.managed_integrations.repository."
+        "connectors.managed_integrations.repository."
         "ManagedIntegrationRepository.register",
         _boom,
     )

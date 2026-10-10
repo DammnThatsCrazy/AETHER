@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from services.profile.composer import ProfileComposer
+from identity.profile.composer import ProfileComposer
 from shared.dimension_state import DIMENSION_STATES
 from shared.graph.graph import Edge, GraphClient, Vertex, VertexType
 

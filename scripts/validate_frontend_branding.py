@@ -34,33 +34,33 @@ TEST_FILENAME_RE = re.compile(r"\.(?:test|spec|stories)\.(?:[cm]?[jt]sx?)$", re.
 # behavior-preserving work on the rest of Aether and Kyber.
 NAVIGATION_TARGETS = frozenset(
     {
-        "frontend/aether/src/components/app-shell.tsx",
-        "frontend/kyber/src/components/layout/sidebar.tsx",
-        "frontend/kyber/src/components/layout/top-bar.tsx",
+        "apps/aether-web/src/components/app-shell.tsx",
+        "apps/kyber-web/src/components/layout/sidebar.tsx",
+        "apps/kyber-web/src/components/layout/top-bar.tsx",
     }
 )
 PROVIDER_TARGETS = frozenset(
     {
-        "frontend/shared/src/components/social-provider-icon.tsx",
-        "frontend/kyber/src/features/notifications/channel-type-icon.tsx",
+        "packages/ui/core/src/components/social-provider-icon.tsx",
+        "apps/kyber-web/src/features/notifications/channel-type-icon.tsx",
     }
 )
 CANONICAL_MARK_TARGETS = frozenset(
-    {"frontend/aether/src/components/aether-logo.tsx"}
+    {"apps/aether-web/src/components/aether-logo.tsx"}
 )
 MOTION_SURFACE_ROOTS = (
-    "frontend/aether-marketing/src/components/",
-    "frontend/aether-marketing/src/pages/",
-    "frontend/aether-marketing/src/styles/",
-    "frontend/aether/src/components/",
-    "frontend/kyber/src/components/layout/",
-    "frontend/kyber/src/styles/",
-    "frontend/olympus-marketing/src/components/",
-    "frontend/olympus-marketing/src/pages/",
-    "frontend/olympus-marketing/src/styles/",
-    "frontend/shared/src/components/",
+    "apps/marketing-aether/src/components/",
+    "apps/marketing-aether/src/pages/",
+    "apps/marketing-aether/src/styles/",
+    "apps/aether-web/src/components/",
+    "apps/kyber-web/src/components/layout/",
+    "apps/kyber-web/src/styles/",
+    "apps/marketing-olympus/src/components/",
+    "apps/marketing-olympus/src/pages/",
+    "apps/marketing-olympus/src/styles/",
+    "packages/ui/core/src/components/",
 )
-GLYPH_COMPATIBILITY_PATH = "frontend/shared/src/components/glyph-icon.tsx"
+GLYPH_COMPATIBILITY_PATH = "packages/ui/core/src/components/glyph-icon.tsx"
 
 # Navigation icon glyphs documented by the pre-migration audit.  Scanning this
 # known set avoids flagging ordinary non-ASCII product copy (for example a
@@ -228,13 +228,22 @@ def _finding(path: Path, text: str, offset: int, rule: str, reason: str, root: P
     return Finding(_relative(path, root), _line_number(text, offset), rule, reason)
 
 
+#: The web applications that live under apps/ (the mobile shells are not part of this gate).
+WEB_APP_NAMES = ("aether-web", "marketing-aether", "demo", "docs", "kyber-web", "marketing-olympus", "public-site", "status")
+# The shared UI/marketing libraries live under packages/ui (formerly apps/shared and apps/marketing).
+SHARED_UI_ROOT = ("packages", "ui")
+
+
 def is_runtime_path(path: Path, root: Path = ROOT) -> bool:
     """Return whether a file is production frontend source rather than test/docs output."""
     if path.suffix not in SOURCE_SUFFIXES:
         return False
     rel = _relative(path, root)
     parts = Path(rel).parts
-    if not parts or parts[0] != "frontend" or "src" not in parts:
+    is_app = len(parts) >= 2 and parts[0] == "apps" and parts[1] in WEB_APP_NAMES
+    # brand/ (the renderer itself) and mobile/ were never part of the scanned web surface.
+    is_shared_ui = parts[:2] == SHARED_UI_ROOT and len(parts) >= 3 and parts[2] in ("core", "marketing")
+    if not (is_app or is_shared_ui) or "src" not in parts:
         return False
     if "docs" in parts or "generated" in parts:
         return False
@@ -245,12 +254,12 @@ def is_runtime_path(path: Path, root: Path = ROOT) -> bool:
 
 
 def _runtime_files(root: Path) -> Iterable[Path]:
-    frontend = root / "frontend"
-    if not frontend.exists():
-        return ()
+    bases = [root / "apps" / name for name in WEB_APP_NAMES if (root / "apps" / name).exists()]
+    bases += [root.joinpath(*SHARED_UI_ROOT, name) for name in ("core", "marketing") if root.joinpath(*SHARED_UI_ROOT, name).exists()]
     return (
         path
-        for path in sorted(frontend.rglob("*"))
+        for base in bases
+        for path in sorted(base.rglob("*"))
         if path.is_file() and is_runtime_path(path, root)
     )
 
@@ -270,7 +279,7 @@ def _is_approved_exception(
 
 def _registered_provider_ids(root: Path) -> set[str]:
     """Read IDs from the visual registry without making it a validator input API."""
-    registry = root / "packages/brand/src/providers/registry.ts"
+    registry = root / "packages/ui/brand/src/providers/registry.ts"
     if not registry.exists():
         return set()
     return set(REGISTRY_PROVIDER_RE.findall(registry.read_text(encoding="utf-8")))
@@ -450,7 +459,7 @@ def _scan_assets_and_registry(
                         text,
                         match.start(),
                         "unregistered-provider",
-                        f"ProviderMark references {provider_id!r}, which is absent from packages/brand/src/providers/registry.ts",
+                        f"ProviderMark references {provider_id!r}, which is absent from packages/ui/brand/src/providers/registry.ts",
                         root,
                     )
                 )

@@ -47,7 +47,7 @@ import sys
 from pathlib import Path
 
 # ── backend import bootstrap (mirrors scripts/credentialless_certification.py) ─
-BACKEND_ROOT = Path(__file__).parent.parent / "services" / "backend"
+BACKEND_ROOT = Path(__file__).parent.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -179,7 +179,7 @@ def payment_operational_checks() -> list[dict]:
 
     # 2. Supervised workers registered + claimed by a runtime role.
     try:
-        from services.runtime.roles import ROLE_TO_SPEC_NAMES
+        from workers.runtime.roles import ROLE_TO_SPEC_NAMES
 
         class _S:  # a stand-in settings with the attrs build_worker_specs reads
             def __getattr__(self, _):  # pragma: no cover - never actually read
@@ -211,9 +211,9 @@ def payment_operational_checks() -> list[dict]:
 
     # 4. Typed operator contract + receipt/repair modules importable.
     for mod, label in (
-        ("services.integrations.providers.payment_rails.kyber_contract", "kyber_contract"),
-        ("services.integrations.providers.payment_rails.receipts", "receipt_lifecycle"),
-        ("services.integrations.providers.payment_rails.repair_worker", "repair_worker"),
+        ("connectors.integrations.providers.payment_rails.kyber_contract", "kyber_contract"),
+        ("connectors.integrations.providers.payment_rails.receipts", "receipt_lifecycle"),
+        ("connectors.integrations.providers.payment_rails.repair_worker", "repair_worker"),
     ):
         try:
             __import__(mod)

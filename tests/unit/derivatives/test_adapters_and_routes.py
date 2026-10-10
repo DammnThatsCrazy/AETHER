@@ -6,14 +6,15 @@ from __future__ import annotations
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from services.derivatives.adapters.base import DerivativesAdapter
-from services.derivatives.adapters.conformance import run_conformance
-from services.derivatives.adapters.simulator import SimulatorAdapter
-from services.derivatives.runtime_reconciliation import DerivativesReconciliation
+from value.derivatives.adapters.base import DerivativesAdapter
+from value.derivatives.adapters.conformance import run_conformance
+from value.derivatives.adapters.simulator import SimulatorAdapter
+from value.derivatives.runtime_reconciliation import DerivativesReconciliation
 
 TENANT = "t-deriv-a"
 OTHER_TENANT = "t-deriv-b"
@@ -123,8 +124,24 @@ class _FakeTenant:
         return None
 
 
+@pytest.fixture(autouse=True)
+def _entitled_tenants(monkeypatch):
+    """Grant ``derivatives.enabled`` to the test tenants via the billing authority.
+
+    The entitlement check itself stays live: any other tenant is still denied.
+    """
+    from billing.billing.revops import TenantEntitlementRepository
+
+    async def _list_for_tenant(self, tenant_id, limit=1000):
+        if tenant_id in {TENANT, OTHER_TENANT}:
+            return [{"tenant_id": tenant_id, "feature_key": "derivatives.enabled", "enabled": True}]
+        return []
+
+    monkeypatch.setattr(TenantEntitlementRepository, "list_for_tenant", _list_for_tenant)
+
+
 def _build_app(tenant_id: str) -> TestClient:
-    from services.derivatives.runtime_routes import router
+    from value.derivatives.runtime_routes import router
 
     app = FastAPI()
 
@@ -270,3 +287,16 @@ def test_fills_carry_no_transition(monkeypatch):
                     "price": "1", "quantity": "1", "executed_at": "2026-07-08T12:00:00Z"},
     })
     assert "transition" not in fill.json()
+
+
+def test_unentitled_tenant_is_denied(monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
+    client = _build_app("t-not-entitled")
+    denied = client.post("/v1/derivatives/runtime/accounts/link", json={
+        "venue_id": "venue:simulated",
+        "external_account_ref": "acct-xyz",
+    })
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["code"] == "derivatives_not_entitled"

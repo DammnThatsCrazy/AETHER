@@ -10,6 +10,12 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 
 
+#: npm workspace names of the web applications under apps/ (mobile shells are not part of the
+#: shared-runtime-contract rebuild).
+WEB_APP_WORKSPACES = frozenset(f"apps/{name}" for name in (
+    "aether-web", "marketing-aether", "demo", "docs", "kyber-web", "marketing-olympus", "public-site", "status"))
+
+
 def _under(paths: set[str], prefix: str) -> bool:
     return any(path == prefix or path.startswith(prefix + "/") for path in paths)
 
@@ -109,13 +115,13 @@ def _selected_workspaces(
     else:
         selected = {path for path in buildable if _under(changed, path)}
         application_paths = {
-            "aether": "frontend/aether",
-            "kyber": "frontend/kyber",
-            "docs": "frontend/docs",
-            "demo": "frontend/demo",
-            "olympus-marketing": "frontend/olympus-marketing",
-            "aether-marketing": "frontend/aether-marketing",
-            "site": "frontend/site",
+            "aether": "apps/aether-web",
+            "kyber": "apps/kyber-web",
+            "docs": "apps/docs",
+            "demo": "apps/demo",
+            "olympus-marketing": "apps/marketing-olympus",
+            "aether-marketing": "apps/marketing-aether",
+            "site": "apps/public-site",
         }
         selected.update(
             path
@@ -124,10 +130,10 @@ def _selected_workspaces(
         )
         package_paths = {
             "shared": "packages/shared",
-            "web": "packages/web",
-            "server": "packages/server",
-            "react-native": "packages/react-native",
-            "mobile-core": "packages/mobile-core",
+            "web": "packages/sdk/web",
+            "server": "packages/sdk/server",
+            "react-native": "packages/sdk/react-native",
+            "mobile-core": "packages/sdk/mobile-core",
         }
         selected.update(
             path
@@ -138,7 +144,7 @@ def _selected_workspaces(
             selected.update(buildable)
         elif "shared_runtime_contract" in global_scopes:
             selected.update(
-                path for path in buildable if path.startswith(("packages/", "frontend/"))
+                path for path in buildable if path.startswith("packages/") or path in WEB_APP_WORKSPACES
             )
 
     return _topological_build_order(selected, dependencies)
@@ -162,41 +168,41 @@ def select_builds(
     applications: set[str] = set()
     packages: set[str] = set()
     sdk = {"ios": False, "android": False, "js": False}
-    backend_image = _under(changed, "services/backend")
+    backend_image = _under(changed, "services/api")
 
     for prefix, application in (
-        ("frontend/aether", "aether"),
-        ("frontend/kyber", "kyber"),
-        ("frontend/aether-marketing", "aether-marketing"),
-        ("frontend/olympus-marketing", "olympus-marketing"),
-        ("frontend/site", "site"),
-        ("frontend/docs", "docs"),
-        ("frontend/demo", "demo"),
+        ("apps/aether-web", "aether"),
+        ("apps/kyber-web", "kyber"),
+        ("apps/marketing-aether", "aether-marketing"),
+        ("apps/marketing-olympus", "olympus-marketing"),
+        ("apps/public-site", "site"),
+        ("apps/docs", "docs"),
+        ("apps/demo", "demo"),
     ):
         if _under(changed, prefix):
             applications.add(application)
     for prefix, package in (
         ("packages/shared", "shared"),
-        ("packages/web", "web"),
-        ("packages/server", "server"),
-        ("packages/react-native", "react-native"),
-        ("packages/mobile-core", "mobile-core"),
-        ("packages/mobile-ui", "mobile-ui"),
-        ("packages/brand", "brand"),
+        ("packages/sdk/web", "web"),
+        ("packages/sdk/server", "server"),
+        ("packages/sdk/react-native", "react-native"),
+        ("packages/sdk/mobile-core", "mobile-core"),
+        ("packages/ui/mobile", "mobile-ui"),
+        ("packages/ui/brand", "brand"),
         ("packages/config", "config"),
     ):
         if _under(changed, prefix):
             packages.add(package)
-    if _under(changed, "frontend/aether") or _under(changed, "frontend/kyber"):
+    if _under(changed, "apps/aether-web") or _under(changed, "apps/kyber-web"):
         packages.add("shared")
-    # frontend/site serves packages/brand's marks as its Vite publicDir, a
+    # apps/public-site serves packages/ui/brand's marks as its Vite publicDir, a
     # filesystem dependency that no workspace manifest declares.
-    if _under(changed, "packages/brand"):
+    if _under(changed, "packages/ui/brand"):
         applications.add("site")
-    if _under(changed, "packages/web") or _under(changed, "packages/react-native"):
+    if _under(changed, "packages/sdk/web") or _under(changed, "packages/sdk/react-native"):
         sdk["js"] = True
-    sdk["ios"] = _under(changed, "packages/ios")
-    sdk["android"] = _under(changed, "packages/android")
+    sdk["ios"] = _under(changed, "packages/sdk/ios")
+    sdk["android"] = _under(changed, "packages/sdk/android")
 
     if global_change and not scopes:
         backend_image = True
@@ -217,7 +223,7 @@ def select_builds(
     if backend_image or any(
         _under(changed, prefix)
         for prefix in (
-            "services/backend",
+            "services/api",
             "services/agents",
             "services/compliance",
             "docs/archive/legacy-architecture/backend",

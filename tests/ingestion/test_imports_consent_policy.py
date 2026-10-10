@@ -1,5 +1,5 @@
 """Regression tests for the WS-B3 tenant-import T-class consent-policy seam
-(``services/imports/commit.py::_enforce_imports_consent_policy``).
+(``services/api/ingestion/imports/commit.py::_enforce_imports_consent_policy``).
 
 Covers the post-review finding #3 (Consent Policy Bypass / Fail-open Gate):
 policy data classes must never be derived from the client-supplied mapping
@@ -25,8 +25,8 @@ import uuid
 import pytest
 
 from config.settings import settings
-from services.imports.commit import _enforce_imports_consent_policy
-from services.imports.contracts import FieldMapping
+from ingestion.imports.commit import _enforce_imports_consent_policy
+from ingestion.imports.contracts import FieldMapping
 from shared.common.common import ConflictError
 
 

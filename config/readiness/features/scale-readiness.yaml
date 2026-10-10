@@ -27,7 +27,7 @@ repository_ceiling:
   evidence:
   - tests/load/
   - scripts/load_smoke.py
-  - docs/LOAD-BASELINES.md
+  - docs/operations/LOAD-BASELINES.md
 implementation:
   state: RUNTIME_INTEGRATED
   denominator: in-scope repository controls (migration-derived)
@@ -117,7 +117,7 @@ operational_ownership:
   technical_owner: platform
   operational_owner: platform-ops
   escalation: pagerduty:platform
-  runbook: docs/runbooks/STAGING_PREFLIGHT.md
+  runbook: docs/operations/runbooks/STAGING_PREFLIGHT.md
   dashboards:
   - grafana:platform
   alerts:

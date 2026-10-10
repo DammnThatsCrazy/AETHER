@@ -51,7 +51,7 @@
 | `access_granted` | `commerce` | commerce | financial | financial_7y | Resource access granted |
 | `access_denied` | `commerce` | commerce | financial | financial_7y | Resource access denied |
 | `wallet` | `wallet` | web3 | financial | standard_365d | Wallet connect/disconnect observation |
-| `transaction` | `wallet` | web3 | financial | standard_365d | On-chain transaction observation |
+| `transaction` | `wallet` | web3 | financial | standard_365d | SDK-reported on-chain transaction reference; chain verification establishes execution and finality |
 | `contract_action` | `wallet` | web3 | financial | standard_365d | Smart contract action observation |
 | `agent_task` *(deprecated)* | `agent` | agent | behavioral | standard_90d | [Legacy] Agent task — prefer agent_task_created/started/completed |
 | `agent_decision` *(deprecated)* | `agent` | agent | behavioral | standard_90d | [Legacy] Agent decision — prefer agent_policy_evaluated |

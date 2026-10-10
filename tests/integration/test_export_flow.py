@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 
 from repositories import artifacts as artifacts_mod  # noqa: E402
-from services.export import service as export_service  # noqa: E402
-from services.export.service import (  # noqa: E402
+from ingestion.export import service as export_service  # noqa: E402
+from ingestion.export.service import (  # noqa: E402
     expire_export_artifacts,
     generate_export_artifact,
 )
-from services.jobs.handlers import JobContext  # noqa: E402
+from workers.jobs.handlers import JobContext  # noqa: E402
 from shared.common.common import BadRequestError  # noqa: E402
 
 TENANT = "tenant-export-flow"

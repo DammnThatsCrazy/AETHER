@@ -26,7 +26,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
@@ -56,7 +56,7 @@ def _percentile(latencies: list[float], p: int) -> float:
 
 def _make_service_with_mocks(existing_decision=None):
     """Return a FraudEvaluationService whose repositories are all mocked."""
-    from services.fraud.evaluation import FraudEvaluationService
+    from intelligence.fraud.evaluation import FraudEvaluationService
 
     svc = FraudEvaluationService.__new__(FraudEvaluationService)
 
@@ -195,7 +195,7 @@ async def test_concurrent_evaluation_throughput():
 async def test_failure_never_becomes_clear():
     """When repository raises, the decision must FAIL CLOSED — routed to human
     review, never a benign/cleared outcome (allow/monitor/clear)."""
-    from services.fraud.evaluation import FraudEvaluationService
+    from intelligence.fraud.evaluation import FraudEvaluationService
 
     svc = FraudEvaluationService.__new__(FraudEvaluationService)
     svc._decisions = AsyncMock()

@@ -102,7 +102,7 @@ def _overlay_errors(tmp_path, spec, name="enable-thing"):
     reg.write_text(
         yaml.safe_dump({
             "schema_version": 1,
-            "flags_source": "services/backend/config/settings.py",
+            "flags_source": "services/api/config/settings.py",
             "overlays": {name: spec},
         }),
         encoding="utf-8",
@@ -152,7 +152,7 @@ def test_a_capability_cannot_hide_behind_the_enable_prefix(tmp_path):
     reg.write_text(
         yaml.safe_dump({
             "schema_version": 1,
-            "flags_source": "services/backend/config/settings.py",
+            "flags_source": "services/api/config/settings.py",
             "overlays": {
                 "enable-communications": {"class": "beta", "status": "bound", "flags": ["AETHER_COMMS_INGESTION_ENABLED"]}
             },

@@ -154,7 +154,7 @@ def test_staging_blocks_local_fallbacks():
 
 
 def test_release_candidate_schema_accepts_builder_shape():
-    schema = json.loads((ROOT / "contracts/delivery/release-candidate.schema.json").read_text())
+    schema = json.loads((ROOT / "packages/contracts/delivery/release-candidate.schema.json").read_text())
     assert schema["properties"]["artifact_digest"]["pattern"].startswith("^sha256:")
     assert {"artifact_digest", "component_digests", "deployment_profiles"} <= set(schema["required"])
 

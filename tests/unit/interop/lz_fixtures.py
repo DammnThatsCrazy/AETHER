@@ -1,14 +1,14 @@
 """LayerZero V2 fixture builder.
 
 Fixtures are generated with the SAME encoders the adapter decodes with
-(services.interop.providers.layerzero_abi), so decoder and fixtures can
+(graph.interop.providers.layerzero_abi), so decoder and fixtures can
 never drift: the guid embedded in PacketSent is computed by compute_guid,
 and the verify/deliver legs recompute it from the origin tuple.
 """
 
 from __future__ import annotations
 
-from services.interop.providers.layerzero_abi import (
+from graph.interop.providers.layerzero_abi import (
     TOPIC_PACKET_DELIVERED,
     TOPIC_PACKET_SENT,
     TOPIC_PACKET_VERIFIED,

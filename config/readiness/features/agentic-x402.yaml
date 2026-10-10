@@ -99,7 +99,7 @@ operational_ownership:
   technical_owner: agent-platform
   operational_owner: platform-ops
   escalation: pagerduty:agent-platform
-  runbook: docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md
+  runbook: docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md
   dashboards:
   - grafana:agent-platform
   alerts:

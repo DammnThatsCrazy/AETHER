@@ -51,5 +51,5 @@ graph event / schedule trigger
 ## Current State
 
 Agent lifecycle is partially implemented. See the backend agent runtime at
-`services/backend/services/agent/`, the internal broker-coupled worker service
+`services/api/actions/agent/`, the internal broker-coupled worker service
 at `services/agents/`, and `services/ml/` for current runtime components.

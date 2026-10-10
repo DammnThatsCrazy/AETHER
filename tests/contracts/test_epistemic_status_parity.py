@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -39,7 +39,7 @@ from shared.graph.graph_contract import (  # noqa: E402
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     PROJECTION_SECTION_STATES,
 )
-from services.identity.models import ConflictStatus  # noqa: E402
+from identity.identity.models import ConflictStatus  # noqa: E402
 
 TS_PATH = REPO_ROOT / "packages" / "shared" / "epistemic-status.ts"
 

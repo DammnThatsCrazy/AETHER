@@ -113,8 +113,7 @@ function loadFixtureJson(filename: string): unknown {
     scriptDir,
     '..',
     '..',
-    'packages',
-    'proof-fixtures',
+    "tests", "e2e", "proof", "packages", "fixtures",
     'fixtures',
     'email',
     filename

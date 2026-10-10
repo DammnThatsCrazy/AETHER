@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-PACKAGE_DIRS = [ROOT / "packages" / "shared", ROOT / "packages" / "web", ROOT / "packages" / "react-native"]
+PACKAGE_DIRS = [ROOT / "packages" / "shared", ROOT / "packages" / "sdk" / "web", ROOT / "packages" / "sdk" / "react-native"]
 PRIVATE_IMPORT_PATTERNS = [
     re.compile(r"import\(['\"]\.\/src/"),
     re.compile(r"from ['\"]\.\/src/"),

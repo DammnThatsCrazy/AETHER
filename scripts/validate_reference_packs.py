@@ -3,7 +3,7 @@
 
 Validates every pack in ``config/agent_access_reference_packs/`` against the pack
 schema owned by
-``services/backend/services/agent_access_intelligence/reference_packs.py``.
+``services/api/actions/agent_access_intelligence/reference_packs.py``.
 The schema is imported from that loader rather than restated here, so the CI gate
 and the runtime loader can never drift apart about what a valid pack is.
 
@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 DEFAULT_PACK_DIR = ROOT / "config" / "agent_access_reference_packs"
 
 
@@ -48,7 +48,7 @@ def _load_schema_module():
     """
     sys.path.insert(0, str(BACKEND))
     os.environ.setdefault("AETHER_ENV", "local")
-    from services.agent_access_intelligence import reference_packs  # noqa: E402
+    from actions.agent_access_intelligence import reference_packs  # noqa: E402
 
     return reference_packs
 

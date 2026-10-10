@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 for _mod in ("jwt", "cryptography", "cryptography.hazmat"):
     if _mod not in sys.modules:
@@ -32,9 +32,9 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.identity.models import IdentitySignalType, SubjectStatus  # noqa: E402
-from services.identity.redirects import redirect_fields, resolve_entity_redirect  # noqa: E402
-from services.identity.repository import IdentityResolutionRepository  # noqa: E402
+from identity.identity.models import IdentitySignalType, SubjectStatus  # noqa: E402
+from identity.identity.redirects import redirect_fields, resolve_entity_redirect  # noqa: E402
+from identity.identity.repository import IdentityResolutionRepository  # noqa: E402
 
 TENANT = "tenant-merge"
 
@@ -184,8 +184,8 @@ async def test_backfill_is_idempotent(repo):
 
 async def test_consumer_forwards_merge_event_to_durable_restatement_queue(monkeypatch):
     from shared.events.events import Event, Topic
-    from services.measurement.identity_consumer import MeasurementIdentityConsumer
-    from services.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
+    from journeys.measurement.identity_consumer import MeasurementIdentityConsumer
+    from replay.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
 
     consumer = MeasurementIdentityConsumer(producer=MagicMock())
     queued: list[Event] = []
@@ -215,8 +215,8 @@ async def test_consumer_forwards_merge_event_to_durable_restatement_queue(monkey
 
 async def test_non_queueable_legacy_event_does_not_fall_back_to_inline_rebuild(monkeypatch):
     from shared.events.events import Event, Topic
-    from services.measurement.identity_consumer import MeasurementIdentityConsumer
-    from services.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
+    from journeys.measurement.identity_consumer import MeasurementIdentityConsumer
+    from replay.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
 
     consumer = MeasurementIdentityConsumer(producer=MagicMock())
     queued: list[Event] = []

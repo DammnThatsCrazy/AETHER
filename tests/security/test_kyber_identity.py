@@ -12,29 +12,29 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
 from repositories.repos import _IN_MEMORY_STORES  # noqa: E402
-from services.kyber.identity.bootstrap import (  # noqa: E402
+from governance.kyber.identity.bootstrap import (  # noqa: E402
     FounderBootstrapService,
     founder_bootstrap_service,
 )
-from services.kyber.identity.directory_sync import directory_sync_service  # noqa: E402
-from services.kyber.identity.invitations import (  # noqa: E402
+from governance.kyber.identity.directory_sync import directory_sync_service  # noqa: E402
+from governance.kyber.identity.invitations import (  # noqa: E402
     InvitationService,
     hash_invitation_token,
 )
-from services.kyber.identity.lifecycle import offboard_principal  # noqa: E402
-from services.kyber.identity.oidc import (  # noqa: E402
+from governance.kyber.identity.lifecycle import offboard_principal  # noqa: E402
+from governance.kyber.identity.oidc import (  # noqa: E402
     GoogleOidcClient,
     MockOidcProvider,
     OidcConfig,
     OidcError,
     OidcTransactionStore,
 )
-from services.kyber.identity.principals import PrincipalService  # noqa: E402
+from governance.kyber.identity.principals import PrincipalService  # noqa: E402
 from shared.common.common import (  # noqa: E402
     BadRequestError,
     ConflictError,
@@ -206,7 +206,7 @@ async def test_valid_claims_pass_every_check():
 
 async def test_signature_verification_refuses_a_stubbed_jwt_module(monkeypatch):
     """An unverifiable token must be a denial, never a bypass."""
-    import services.kyber.identity.oidc as oidc_module
+    import governance.kyber.identity.oidc as oidc_module
 
     monkeypatch.setattr(oidc_module, "_jwt_module", None)
     client = _oidc_client()
@@ -454,7 +454,7 @@ async def test_invitation_ttl_is_clamped(invitations):
         ttl_hours=1000,
     )
     invitation = (await invitations.list_invitations())[0]
-    from services.kyber.identity.principals import parse_timestamp
+    from governance.kyber.identity.principals import parse_timestamp
 
     from datetime import datetime, timedelta, timezone
 

@@ -10,13 +10,13 @@ import pytest
 pytest.importorskip("httpx", reason="httpx required (pip install -e '.[backend]')")
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
 def backend_module_path():
     original = list(sys.path)
-    for prefix in ("config", "services", "shared"):
+    for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared"):
         sys.modules.pop(prefix, None)
         for name in list(sys.modules):
             if name.startswith(f"{prefix}."):
@@ -26,7 +26,7 @@ def backend_module_path():
         yield
     finally:
         sys.path[:] = original
-        for prefix in ("config", "services", "shared"):
+        for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared"):
             sys.modules.pop(prefix, None)
             for name in list(sys.modules):
                 if name.startswith(f"{prefix}."):
@@ -39,7 +39,7 @@ async def test_rpc_gateway_fails_closed_without_transport(monkeypatch):
     monkeypatch.setenv("PROVIDER_GATEWAY_ENABLED", "0")
 
     with backend_module_path():
-        rpc_module = importlib.import_module("services.onchain.rpc_gateway")
+        rpc_module = importlib.import_module("graph.onchain.rpc_gateway")
         importlib.reload(rpc_module)
 
         gateway = rpc_module.RPCGateway()
@@ -80,7 +80,7 @@ async def test_rpc_gateway_executes_over_http_and_caches(monkeypatch):
             return MockResponse({"jsonrpc": "2.0", "id": json["id"], "result": "0x1"})
 
     with backend_module_path():
-        rpc_module = importlib.import_module("services.onchain.rpc_gateway")
+        rpc_module = importlib.import_module("graph.onchain.rpc_gateway")
         importlib.reload(rpc_module)
         monkeypatch.setattr(rpc_module.httpx, "AsyncClient", MockClient)
 

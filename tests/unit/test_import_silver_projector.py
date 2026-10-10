@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -21,9 +21,9 @@ import os  # noqa: E402
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.imports import commit as cm  # noqa: E402
-from services.imports import service as svc  # noqa: E402
-from services.silver.projectors.import_projector import (  # noqa: E402
+from ingestion.imports import commit as cm  # noqa: E402
+from ingestion.imports import service as svc  # noqa: E402
+from ingestion.silver.projectors.import_projector import (  # noqa: E402
     SILVER_IMPORT_TABLE,
     ImportProjector,
 )
@@ -78,7 +78,7 @@ def test_project_records_row_shape():
 
 
 async def test_writer_persists_and_dedupes():
-    from services.silver.writer import SilverFactWriter, _local_tables, reset_local_tables
+    from ingestion.silver.writer import SilverFactWriter, _local_tables, reset_local_tables
 
     reset_local_tables()
     result = ImportProjector().project_records(
@@ -102,7 +102,7 @@ def clean(monkeypatch):
     from repositories.import_files import get_import_file_repository
     from repositories.imports_repo import get_imports_repository
     from repositories.lake import BronzeRepository
-    from services.silver.writer import reset_local_tables
+    from ingestion.silver.writer import reset_local_tables
     from shared.graph.graph import get_graph_client
 
     r = get_imports_repository()
@@ -135,7 +135,7 @@ async def _seed_approved() -> str:
 
 
 async def test_commit_populates_silver(clean):
-    from services.silver.writer import _local_tables
+    from ingestion.silver.writer import _local_tables
 
     import_id = await _seed_approved()
     record = await cm.commit_import(TENANT, import_id)

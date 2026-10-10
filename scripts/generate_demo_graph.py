@@ -25,7 +25,7 @@ import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "backend"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "api"))
 
 os.environ.setdefault("AETHER_ENV", "local")
 

@@ -20,7 +20,7 @@ Documentation sprawl leads to conflicting information. Multiple docs describing 
 
 ## Decision
 
-Each major system area has one source-of-truth document under `docs/source-of-truth/`. These documents are the canonical reference. All other docs must be consistent with them.
+Each major system area has one source-of-truth document under `docs/reference/source-of-truth/`. These documents are the canonical reference. All other docs must be consistent with them.
 
 ## Consequences
 

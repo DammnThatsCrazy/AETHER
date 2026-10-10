@@ -18,8 +18,8 @@ import pytest
 from tests.chaos.conftest import noop_sleeper
 from tests.unit.derivatives import mock_venues as mv
 
-from services.derivatives.adapters.dydx import DydxAdapter
-from services.derivatives.adapters.hyperliquid import HyperliquidAdapter
+from value.derivatives.adapters.dydx import DydxAdapter
+from value.derivatives.adapters.hyperliquid import HyperliquidAdapter
 
 
 def _hyperliquid(**kw):

@@ -31,7 +31,7 @@ def test_deployment_impact_derives_rollback_and_approval_inputs():
     assert value["rollback_required"] is True
     assert value["approval_required"] is True
     jsonschema.Draft202012Validator(
-        json.loads((ROOT / "contracts/delivery/deployment-impact.schema.json").read_text())
+        json.loads((ROOT / "packages/contracts/delivery/deployment-impact.schema.json").read_text())
     ).validate(value)
 
 
@@ -48,7 +48,7 @@ def test_failure_envelope_redacts_command_secrets_and_is_schema_valid():
     assert "super-secret" not in envelope["message"]
     assert "also-secret" not in envelope["message"]
     jsonschema.Draft202012Validator(
-        json.loads((ROOT / "contracts/delivery/failure-envelope.schema.json").read_text())
+        json.loads((ROOT / "packages/contracts/delivery/failure-envelope.schema.json").read_text())
     ).validate(envelope)
 
 

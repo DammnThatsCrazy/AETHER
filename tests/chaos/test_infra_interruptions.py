@@ -3,13 +3,13 @@
 These scenarios need external infrastructure to validate END TO END (a live
 Redis, a live ClickHouse, a live message bus). That live leg is OUT OF
 credentialless scope — it is exercised by the staging runbooks
-(docs/runbooks/STAGING_PREFLIGHT.md and the per-domain runbooks). What we CAN
+(docs/operations/runbooks/STAGING_PREFLIGHT.md and the per-domain runbooks). What we CAN
 and DO validate credentiallessly here is the RECOVERABLE IN-PROCESS PORTION: the
 retry / degrade / buffer-and-flush / lease-reclaim + idempotent-consume logic
 that must hold regardless of which server sits behind it.
 
 The at-least-once outbox model mirrors the real durable relay
-(``services.ingestion.outbox_relay.EventOutboxRelay``), which is separately
+(``ingestion.ingestion.outbox_relay.EventOutboxRelay``), which is separately
 covered against the in-memory ``event_outbox`` backend by
 tests/unit/test_outbox_relay.py.
 
@@ -153,7 +153,7 @@ def test_clickhouse_interruption_buffers_then_flushes_without_loss():
 class _LeaseOutbox:
     """Minimal model of the durable event-outbox relay: lease -> publish ->
     mark, with a crash-safe lease that another worker reclaims once it expires.
-    Mirrors ``services.ingestion.outbox_relay.EventOutboxRelay`` semantics."""
+    Mirrors ``ingestion.ingestion.outbox_relay.EventOutboxRelay`` semantics."""
 
     def __init__(self, clock: FixedClock, lease_seconds: int = 30):
         self._rows: dict[str, dict] = {}

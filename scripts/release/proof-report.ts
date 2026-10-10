@@ -11,7 +11,7 @@
  * release gate report consumed by the release process.
  *
  * Written to:
- *   reports/release-readiness/aether-functionality-proof-report-{date}.md
+ *   docs/reference/reports/release-readiness/aether-functionality-proof-report-{date}.md
  */
 
 import { execSync } from "child_process";
@@ -31,13 +31,13 @@ import { ProofResult, ProofStepResult } from "@aether/proof-runner";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
-const REPORT_DIR = resolve(REPO_ROOT, "reports", "release-readiness");
+const REPORT_DIR = resolve(REPO_ROOT, "docs", "reference", "reports", "release-readiness");
 const CI_ARTIFACT_PATH = process.env.CI_ARTIFACT_PATH
   ? resolve(process.env.CI_ARTIFACT_PATH)
   : resolve(REPO_ROOT, ".github", "artifacts");
 const REAL_DEVICE_EVIDENCE_PATH = process.env.REAL_DEVICE_EVIDENCE_PATH
   ? resolve(process.env.REAL_DEVICE_EVIDENCE_PATH)
-  : resolve(REPO_ROOT, "reports", "release-readiness", "real-device-verification.md");
+  : resolve(REPO_ROOT, "docs", "reference", "reports", "release-readiness", "real-device-verification.md");
 
 const TODAY = new Date();
 const DATE_STRING = `${TODAY.getFullYear()}-${String(TODAY.getMonth() + 1).padStart(2, "0")}-${String(TODAY.getDate()).padStart(2, "0")}`;

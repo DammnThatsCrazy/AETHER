@@ -38,10 +38,10 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -122,7 +122,7 @@ def _fresh():
     try:
         repos = importlib.import_module("repositories.repos")
         repos.reset_in_memory_stores()
-        batch = importlib.import_module("services.ingestion.batch")
+        batch = importlib.import_module("ingestion.ingestion.batch")
         settings = importlib.import_module("config.settings").settings
 
         env = SimpleNamespace(
@@ -158,11 +158,11 @@ def _toggle_version_compat(settings, *, enabled: bool, mode: str) -> None:
 
 
 def _fresh_obs_module():
-    return importlib.import_module("services.ingestion.ingestion_observability")
+    return importlib.import_module("ingestion.ingestion.ingestion_observability")
 
 
 def _fresh_tiers_module():
-    return importlib.import_module("services.ingestion.sdk_version_tiers")
+    return importlib.import_module("ingestion.ingestion.sdk_version_tiers")
 
 
 def _req_privacy() -> SimpleNamespace:
@@ -332,7 +332,7 @@ def test_spine_compat_shadow_attaches_advisory_sdk_tier_label():
 def test_spine_compat_enforce_rejects_blocked_bands_only_after_block_date():
     with _fresh() as env:
         _toggle_version_compat(env.settings, enabled=True, mode="enforce")
-        import services.ingestion.sdk_version_tiers as st
+        import ingestion.ingestion.sdk_version_tiers as st
         assert st.BLOCKED_AFTER_DATE == "2027-01-31"
         st._utc_today_iso = lambda: "2027-02-01"
 
@@ -361,7 +361,7 @@ def test_spine_compat_enforce_rejects_blocked_bands_only_after_block_date():
 def test_spine_compat_enforce_before_block_date_is_advisory_only():
     with _fresh() as env:
         _toggle_version_compat(env.settings, enabled=True, mode="enforce")
-        import services.ingestion.sdk_version_tiers as st
+        import ingestion.ingestion.sdk_version_tiers as st
         st._utc_today_iso = lambda: "2026-09-05"  # before 2027-01-31
 
         producer = _FakeProducer()
@@ -383,7 +383,7 @@ def test_spine_compat_enforce_before_block_date_is_advisory_only():
 def test_spine_compat_enforce_never_blocks_missing_library():
     with _fresh() as env:
         _toggle_version_compat(env.settings, enabled=True, mode="enforce")
-        import services.ingestion.sdk_version_tiers as st
+        import ingestion.ingestion.sdk_version_tiers as st
         st._utc_today_iso = lambda: "2027-02-01"
 
         producer = _FakeProducer()
@@ -408,7 +408,7 @@ def _enable_observability(monkeypatch: pytest.MonkeyPatch):
     import importlib
     import types
 
-    obs = importlib.import_module("services.ingestion.ingestion_observability")
+    obs = importlib.import_module("ingestion.ingestion.ingestion_observability")
     monkeypatch.setattr(obs, "_funnel", obs.IngestionFunnel())
     monkeypatch.setattr(obs, "_traces", obs.TraceStore())
     monkeypatch.setattr(
@@ -431,7 +431,7 @@ class _CaptureSilverRepo:
 
 
 async def test_worker_silver_normalizer_records_normalized_stage(monkeypatch) -> None:
-    import services.ingestion.workers as workers
+    import ingestion.ingestion.workers as workers
 
     obs = _enable_observability(monkeypatch)
     repo = _CaptureSilverRepo()
@@ -470,9 +470,9 @@ async def test_worker_silver_normalizer_records_normalized_stage(monkeypatch) ->
 
 
 async def test_worker_silver_fact_projector_records_projections_stage(monkeypatch) -> None:
-    import services.ingestion.workers as workers
-    from services.silver import dispatcher as dispatcher_module
-    from services.silver import writer as writer_module
+    import ingestion.ingestion.workers as workers
+    from ingestion.silver import dispatcher as dispatcher_module
+    from ingestion.silver import writer as writer_module
 
     obs = _enable_observability(monkeypatch)
 

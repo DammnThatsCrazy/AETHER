@@ -18,14 +18,14 @@ class TestPostResponseResultFields:
     """Verify PostResponseResult has the correct field name (.output)."""
 
     def test_post_response_result_has_output_field(self):
-        from security.model_extraction_defense.defense_layer import PostResponseResult
+        from governance.model_extraction_defense.defense_layer import PostResponseResult
         result = PostResponseResult(output=0.75, risk_score=0.1)
         assert hasattr(result, "output")
         assert result.output == 0.75
 
     def test_post_response_result_has_no_modified_output(self):
         """The field 'modified_output' must not exist — it was a bug."""
-        from security.model_extraction_defense.defense_layer import PostResponseResult
+        from governance.model_extraction_defense.defense_layer import PostResponseResult
         result = PostResponseResult(output=0.5)
         assert not hasattr(result, "modified_output"), (
             "PostResponseResult must not have 'modified_output'. "
@@ -33,8 +33,8 @@ class TestPostResponseResultFields:
         )
 
     def test_defense_layer_post_response_returns_output(self):
-        from security.model_extraction_defense import ExtractionDefenseLayer
-        from security.model_extraction_defense.config import ExtractionDefenseConfig
+        from governance.model_extraction_defense import ExtractionDefenseLayer
+        from governance.model_extraction_defense.config import ExtractionDefenseConfig
 
         config = ExtractionDefenseConfig(
             enable_extraction_defense=True,
@@ -51,8 +51,8 @@ class TestPostResponseResultFields:
         assert not hasattr(result, "modified_output")
 
     def test_defense_disabled_returns_raw_output(self):
-        from security.model_extraction_defense import ExtractionDefenseLayer
-        from security.model_extraction_defense.config import ExtractionDefenseConfig
+        from governance.model_extraction_defense import ExtractionDefenseLayer
+        from governance.model_extraction_defense.config import ExtractionDefenseConfig
 
         config = ExtractionDefenseConfig(enable_extraction_defense=False)
         defense = ExtractionDefenseLayer(config)
@@ -65,8 +65,8 @@ class TestPreRequestDefense:
     """Verify pre_request defense enforcement."""
 
     def test_pre_request_not_blocked_for_normal_request(self):
-        from security.model_extraction_defense import ExtractionDefenseLayer
-        from security.model_extraction_defense.config import ExtractionDefenseConfig
+        from governance.model_extraction_defense import ExtractionDefenseLayer
+        from governance.model_extraction_defense.config import ExtractionDefenseConfig
 
         config = ExtractionDefenseConfig(enable_extraction_defense=True)
         defense = ExtractionDefenseLayer(config)
@@ -79,9 +79,9 @@ class TestPreRequestDefense:
         assert not result.blocked
 
     def test_pre_request_returns_pre_request_result(self):
-        from security.model_extraction_defense import ExtractionDefenseLayer
-        from security.model_extraction_defense.defense_layer import PreRequestResult
-        from security.model_extraction_defense.config import ExtractionDefenseConfig
+        from governance.model_extraction_defense import ExtractionDefenseLayer
+        from governance.model_extraction_defense.defense_layer import PreRequestResult
+        from governance.model_extraction_defense.config import ExtractionDefenseConfig
 
         config = ExtractionDefenseConfig(enable_extraction_defense=True)
         defense = ExtractionDefenseLayer(config)
@@ -92,8 +92,8 @@ class TestPreRequestDefense:
         assert hasattr(result, "retry_after_seconds")
 
     def test_pre_request_when_defense_disabled(self):
-        from security.model_extraction_defense import ExtractionDefenseLayer
-        from security.model_extraction_defense.config import ExtractionDefenseConfig
+        from governance.model_extraction_defense import ExtractionDefenseLayer
+        from governance.model_extraction_defense.config import ExtractionDefenseConfig
 
         config = ExtractionDefenseConfig(enable_extraction_defense=False)
         defense = ExtractionDefenseLayer(config)
@@ -107,7 +107,7 @@ class TestBackendRoutesFileIntegrity:
     def _read_routes(self):
         import pathlib
         p = pathlib.Path(
-            "services/backend/services/ml_serving/routes.py"
+            "services/api/intelligence/ml_serving/routes.py"
         )
         if not p.exists():
             pytest.skip("Backend routes file not found")

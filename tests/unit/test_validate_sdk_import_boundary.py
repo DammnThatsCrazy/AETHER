@@ -58,7 +58,7 @@ def test_ts_scan_flags_internal_import_and_ignores_relative(tmp_path) -> None:
         'void import("@aether/logger").catch(() => {});\n',
         encoding="utf-8",
     )
-    offenders = gate._scan_file(source, "packages/web/src/sdk.ts", {"aether-backend", "@aether/logger"})
+    offenders = gate._scan_file(source, "packages/sdk/web/src/sdk.ts", {"aether-backend", "@aether/logger"})
     kinds = [o.split(": ", 1)[1] for o in offenders]
     assert any("aether-backend" in k for k in kinds)
     assert any("@aether/logger" in k for k in kinds)

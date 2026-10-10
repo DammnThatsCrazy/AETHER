@@ -1,0 +1,128 @@
+name: aether-durable-integration
+
+x-runtime: &runtime
+  build:
+    context: ../..
+    dockerfile: services/api/Dockerfile
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_healthy}
+    localstack: {condition: service_healthy}
+  environment: &runtime-env
+    AETHER_ENV: integration
+    DATABASE_URL: postgresql://aether:aether@postgres:5432/aether
+    # Integration is non-local: Settings() fail-closed startup checks demand
+    # explicit non-default secrets. These are hermetic, integration-only values.
+    JWT_SECRET: integration-only-jwt-secret-not-production
+    WATERMARK_SECRET_KEY: integration-only-watermark-secret
+    CANARY_SECRET_SEED: integration-only-canary-seed
+    EXTRACTION_CANARY_SEED: integration-only-extraction-canary-seed
+    SDK_CONFIG_SECRET: integration-only-sdk-config-secret
+    CACHE_BACKEND: redis
+    REDIS_URL: redis://redis:6379/0
+    EVENT_BACKEND: sns_sqs
+    AWS_ENDPOINT_URL: http://localstack:4566
+    OBJECT_STORAGE_BACKEND: s3
+    OBJECT_STORAGE_BUCKET: aether-integration-bronze
+    AWS_ACCESS_KEY_ID: test
+    AWS_SECRET_ACCESS_KEY: test
+    AWS_DEFAULT_REGION: us-east-1
+    POLICY_ENFORCEMENT_ENABLED: "true"
+    ROUTE_REGISTRY_ENFORCED: "true"
+    KYBER_OPERATOR_GATE_ENFORCED: "true"
+  restart: "no"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aether
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: aether
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U aether -d aether]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  localstack:
+    image: localstack/localstack:3.5
+    environment:
+      SERVICES: s3,sns,sqs
+      DEFAULT_REGION: us-east-1
+    healthcheck:
+      test: [CMD-SHELL, curl -fsS http://localhost:4566/_localstack/health]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  api:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: api}
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports: ["8000:8000"]
+  # The production image intentionally contains application code, not the
+  # repository's test suite.  Run the durable harness in a separate container
+  # using the same production-shaped runtime image and dependencies, while
+  # preserving the repository source layout required by source-of-truth
+  # registry loaders.
+  integration-tests:
+    <<: *runtime
+    # This harness calls the ingestion validator directly with mocked cache
+    # and producer dependencies; it intentionally exercises the local/snapshot
+    # consent path rather than requiring seeded ConsentReceipt rows. Real
+    # server-authoritative consent is covered by the database-backed suites.
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: api
+      AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED: "false"
+      TENANT_COMPLIANCE_POLICY_ENABLED: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
+    working_dir: /workspace
+    entrypoint: []
+    volumes:
+      - type: bind
+        source: ../..
+        target: /workspace
+        read_only: true
+    command: python -m pytest tests/integration/test_batch_endpoint.py -q -p no:cacheprovider
+  outbox-relay:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: outbox-relay}
+    command: python -m workers.runtime.run_role outbox-relay
+  stream-worker:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: stream-worker}
+    command: python -m workers.runtime.run_role stream-worker
+  identity-worker:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: identity-worker}
+    command: python -m workers.runtime.run_role identity-worker
+  graph-writer:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: graph-writer}
+    command: python -m workers.runtime.run_role graph-writer
+  measurement-worker:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: measurement-worker}
+    command: python -m workers.runtime.run_role measurement-worker
+  # Owns the semantic classification + identity-restatement consumers
+  # (services/api/workers/runtime/consumer_specs.py). Present here so the durable
+  # integration stack covers all nine canonical roles, not eight.
+  semantic-worker:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: semantic-worker}
+    command: python -m workers.runtime.run_role semantic-worker
+  materializer:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: materializer}
+    command: python -m workers.runtime.run_role materializer
+  maintenance:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: maintenance}
+    command: python -m workers.runtime.run_role maintenance

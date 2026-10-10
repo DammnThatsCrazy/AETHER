@@ -1,6 +1,6 @@
 """GovernanceDomain twin parity: backend Literal ↔ TS public union.
 
-``services/security/contracts.py`` (backend ``GovernanceDomain`` Literal) and
+``services/api/governance/security/contracts.py`` (backend ``GovernanceDomain`` Literal) and
 ``packages/shared/security-governance.ts`` (exported ``GovernanceDomain`` union)
 must enumerate the same domain set — the frontend types every governance-domain
 payload (roles, grants, capability surfacing) against the TS union, and the
@@ -22,11 +22,11 @@ from typing import get_args
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.security.contracts import GovernanceDomain  # noqa: E402
+from governance.security.contracts import GovernanceDomain  # noqa: E402
 
 TS_TWIN = Path(__file__).resolve().parents[2] / "packages" / "shared" / "security-governance.ts"
 
@@ -68,7 +68,7 @@ def test_ts_union_matches_backend_literal() -> None:
         "GovernanceDomain twin drift: "
         f"TS-only={sorted(ts - py)} python-only={sorted(py - ts)}. "
         "Update BOTH packages/shared/security-governance.ts and "
-        "services/security/contracts.py GovernanceDomain."
+        "services/api/governance/security/contracts.py GovernanceDomain."
     )
 
 

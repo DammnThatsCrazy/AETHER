@@ -5,7 +5,7 @@ across three distinct ingestion execution paths, all landing the SAME golden
 observation on the canonical bus surface (``Topic.SDK_EVENTS_VALIDATED``):
 
 * Path A — canonical server API batch path: the golden BaseEvent is ingested
-  through ``services.ingestion.batch.ingest_events`` (the shared spine behind
+  through ``ingestion.ingestion.batch.ingest_events`` (the shared spine behind
   POST /v1/batch) → accepted, published once, Bronze-durable.
 * Path C — replay / re-import path: the durable Bronze row Path A wrote is
   re-entered through the WS-B4 replay runner (Bronze scan → replay adapter →
@@ -38,10 +38,10 @@ from types import SimpleNamespace
 from shared.auth.auth import Permissions
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 TENANT = "g-t1"
@@ -130,10 +130,10 @@ def _fresh():
     try:
         repos = importlib.import_module("repositories.repos")
         repos.reset_in_memory_stores()
-        routes = importlib.import_module("services.ingestion.routes")
-        batch = importlib.import_module("services.ingestion.batch")
+        routes = importlib.import_module("ingestion.ingestion.routes")
+        batch = importlib.import_module("ingestion.ingestion.batch")
         settings = importlib.import_module("config.settings").settings
-        from services.ingestion import replay
+        from ingestion.ingestion import replay
 
         env = SimpleNamespace(
             repos=repos, routes=routes, batch=batch, settings=settings,

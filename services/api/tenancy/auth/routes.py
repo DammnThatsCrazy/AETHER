@@ -1,0 +1,1239 @@
+"""
+Aether Service — Authentication
+
+Manual email+password sign-up (OTP-verified) and SSO via Auth0 (Google, Apple,
+Microsoft, Twitter/X, Slack). Also handles tenant deactivation and GDPR deletion.
+
+Public endpoints (no auth required):
+  POST /v1/auth/register              Step 1: email + password → sends 6-digit OTP
+  POST /v1/auth/verify-email          Step 2: confirm OTP → creates tenant + API key
+  POST /v1/auth/resend-verification   Resend OTP (anti-enumeration safe)
+  POST /v1/auth/login                 Email + password → new session API key
+  POST /v1/auth/sso/callback          Auth0 JWT → AETHER tenant + API key
+  GET  /v1/auth/sso/providers         List available SSO providers
+  GET/POST /v1/auth/bootstrap/first-admin  Staging-only, bootstrap-token protected
+
+Authenticated user endpoints:
+  DELETE /v1/me/account               Self-service account-deletion workflow alias
+
+Admin endpoints (require auth):
+  POST   /v1/admin/tenants/{id}/deactivate  Evict Redis keys + mark inactive
+  DELETE /v1/admin/tenants/{id}             GDPR cascade delete
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import re
+import uuid
+from typing import Optional
+
+from fastapi import APIRouter, Request, Response
+from pydantic import BaseModel, Field
+
+from config.settings import settings
+from shared.auth.auth import PlanTier
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    RateLimitedError,
+    UnauthorizedError,
+    utc_now,
+)
+from shared.logger.logger import get_logger, metrics
+from shared.rate_limit import auth_throttle as throttle
+from repositories.repos import (
+    AdminRepository,
+    APIKeyRepository,
+    FirstAdminBootstrapRepository,
+    UserRepository,
+)
+
+logger = get_logger("aether.service.auth")
+
+router = APIRouter(tags=["Auth"])
+admin_auth_router = APIRouter(tags=["Admin — Auth"])
+
+_repo = AdminRepository()
+_key_repo = APIKeyRepository()
+_first_admin_bootstrap_repo = FirstAdminBootstrapRepository()
+
+_FIRST_ADMIN_PERMISSIONS = [
+    "read", "write", "ingest", "analytics", "billing", "admin",
+]
+
+
+class AccountDeletionRequest(BaseModel):
+    """Trusted step-up evidence required by the recovery-window workflow."""
+
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    reauth_evidence: dict = Field(default_factory=dict)
+
+
+class FirstAdminBootstrapRequest(BaseModel):
+    """Inputs for the one-time staging first-admin bootstrap.
+
+    The email is not caller-selectable; it is compared to the server-side
+    allowlist. The response contains the submitted key so an identical
+    idempotent retry can recover from a lost HTTP response; a different key
+    or request cannot take over the durable claim.
+    """
+
+    name: str = Field(..., min_length=1, max_length=200)
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+    api_key: str
+
+
+@router.get("/v1/auth/bootstrap/first-admin")
+async def first_admin_bootstrap_status(request: Request):
+    """Expose only claim/retry state to a holder of the bootstrap token.
+
+    The helper uses this read-only check before replacing the durable GitHub
+    key. A key candidate is compared to the marker hash in constant time; the
+    endpoint never returns the hash or candidate value.
+    """
+    cfg = settings.trust_plane
+    if settings.env.value != "staging" or not cfg.first_admin_bootstrap_enabled:
+        raise ForbiddenError("First-admin bootstrap is disabled")
+    supplied_token = request.headers.get("x-aether-first-admin-bootstrap-token", "")
+    if not supplied_token or not cfg.first_admin_bootstrap_token or not hmac.compare_digest(
+        supplied_token, cfg.first_admin_bootstrap_token
+    ):
+        raise UnauthorizedError("Invalid first-admin bootstrap token")
+    marker = await _first_admin_bootstrap_repo.find_by_id("staging")
+    candidate = request.headers.get("x-aether-first-admin-candidate-key", "")
+    marker_hash = marker.get("key_hash") if isinstance(marker, dict) else None
+    candidate_matches = bool(
+        marker_hash
+        and re.fullmatch(r"ak_[A-Za-z0-9]{24}", candidate)
+        and hmac.compare_digest(
+            str(marker_hash), hashlib.sha256(candidate.encode()).hexdigest()
+        )
+    )
+    return APIResponse(
+        data={"claimed": marker is not None, "candidate_matches": candidate_matches}
+    ).to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Internal helpers
+# ──────────────────────────────────────────────────────────────────────
+
+def _get_redis():
+    try:
+        from dependencies.providers import get_registry
+        registry = get_registry()
+        return getattr(getattr(registry, "cache", None), "_redis", None)
+    except Exception:
+        return None
+
+
+def _caller_ip(request: Optional[Request]) -> Optional[str]:
+    """The caller's address as the load balancer saw it; None for a direct call without a request."""
+    if request is None:
+        return None
+    peer = request.client.host if request.client else None
+    return throttle.client_ip(request.headers, peer)
+
+
+async def _throttle_ip(request: Optional[Request], counter, limit: int, redis) -> None:
+    """Per-IP request cap. A direct call without a request (tests) has no caller to count."""
+    ip = _caller_ip(request)
+    if ip is not None:
+        await throttle.enforce_rate(counter, ip, limit, redis)
+
+
+async def _issue_api_key(tenant_id: str, plan_tier_value: str, label: str) -> str:
+    """Create and register a new API key for a tenant. Returns the raw key."""
+    raw_key = f"ak_{uuid.uuid4().hex[:24]}"
+    hashed = hashlib.sha256(raw_key.encode()).hexdigest()
+    await _key_repo.insert(hashed[:12], {
+        "tenant_id": tenant_id,
+        "name": label,
+        "tier": plan_tier_value,
+        "permissions": ["read", "write", "ingest", "analytics"],
+        "key_hash": hashed,
+        "last_used_at": None,
+    })
+    try:
+        from dependencies.providers import get_registry
+        registry = get_registry()
+        await registry.api_key_validator.register_api_key(
+            api_key=raw_key,
+            tenant_id=tenant_id,
+            role="editor",
+            tier=plan_tier_value,
+            permissions=["read", "write", "ingest", "analytics"],
+        )
+    except Exception as e:
+        logger.warning(f"Auth cache registration failed: tenant={tenant_id} error={e}")
+    return raw_key
+
+
+def _legacy_plan_for_tier(plan_tier: str) -> str:
+    return {"alpha": "free", "beta": "pro", "gamma": "pro", "delta": "enterprise",
+            "epsilon": "enterprise", "omicron": "enterprise", "omega": "enterprise"}.get(
+        plan_tier, "free"
+    )
+
+
+@router.post("/v1/auth/bootstrap/first-admin")
+async def bootstrap_first_admin(body: FirstAdminBootstrapRequest, request: Request):
+    """Create the single staging admin API key after the first apply.
+
+    This route is intentionally public only at the middleware layer so it can
+    be reached before an Aether API key exists. It remains protected by a
+    high-entropy Secrets Manager token, an allowlisted email, staging-only
+    configuration, and a durable single-use claim. The plaintext key is
+    returned only to the authorized caller and is never logged or persisted
+    by this route. An identical retry returns the same candidate key.
+    """
+    cfg = settings.trust_plane
+    if settings.env.value != "staging" or not cfg.first_admin_bootstrap_enabled:
+        raise ForbiddenError("First-admin bootstrap is disabled")
+
+    supplied_token = request.headers.get("x-aether-first-admin-bootstrap-token", "")
+    if not supplied_token or not cfg.first_admin_bootstrap_token or not hmac.compare_digest(
+        supplied_token, cfg.first_admin_bootstrap_token
+    ):
+        raise UnauthorizedError("Invalid first-admin bootstrap token")
+
+    allowlisted_email = cfg.first_admin_bootstrap_email.strip().lower()
+    if not allowlisted_email:
+        raise ForbiddenError("First-admin bootstrap is not configured")
+
+    if not re.fullmatch(r"ak_[A-Za-z0-9]{24}", body.api_key):
+        raise BadRequestError("First-admin API key has an invalid format")
+
+    raw_key = body.api_key
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    plan_tier = body.plan_tier
+    tenant_id = str(uuid.uuid4())
+
+    # The caller creates and durably stores the random API key before calling
+    # this endpoint. The marker binds retries to that key hash and request
+    # metadata, so a dropped HTTP response can safely resume the same writes
+    # without minting a second tenant or credential.
+    claimed = await _first_admin_bootstrap_repo.claim(
+        "staging",
+        email=allowlisted_email,
+        tenant_id=tenant_id,
+        key_hash=key_hash,
+        name=body.name,
+        plan_tier=plan_tier,
+    )
+    if not claimed:
+        existing = await _first_admin_bootstrap_repo.find_by_id("staging")
+        expected = {
+            "email": allowlisted_email,
+            "key_hash": key_hash,
+            "name": body.name,
+            "plan_tier": plan_tier,
+        }
+        if not existing or any(existing.get(key) != value for key, value in expected.items()):
+            raise ConflictError("The staging first-admin bootstrap is already bound to another request")
+        tenant_id = existing["tenant_id"]
+
+    user_id = str(uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f"aether:first-admin:staging:{tenant_id}:{allowlisted_email}",
+    ))
+
+    await _repo.insert(tenant_id, {
+        "name": body.name,
+        "contact_email": allowlisted_email,
+        "plan": _legacy_plan_for_tier(plan_tier),
+        "plan_tier": plan_tier,
+        "status": "active",
+        "auth_method": "first_admin_bootstrap",
+        "settings": {},
+    })
+    await UserRepository().insert(user_id, {
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "email": allowlisted_email,
+        "name": body.name,
+        "status": "active",
+        "email_verified": True,
+        "auth_method": "first_admin_bootstrap",
+        "role": "admin",
+        "permissions": list(_FIRST_ADMIN_PERMISSIONS),
+        "membership_status": "active",
+    })
+    await _key_repo.insert(key_hash[:12], {
+        "tenant_id": tenant_id,
+        "name": "Staging first admin",
+        "tier": _legacy_plan_for_tier(plan_tier),
+        "permissions": list(_FIRST_ADMIN_PERMISSIONS),
+        "key_hash": key_hash,
+        "last_used_at": None,
+    })
+
+    try:
+        registry = __import__("dependencies.providers", fromlist=["get_registry"]).get_registry()
+        await registry.api_key_validator.register_api_key(
+            api_key=raw_key,
+            tenant_id=tenant_id,
+            role="admin",
+            tier=_legacy_plan_for_tier(plan_tier),
+            permissions=list(_FIRST_ADMIN_PERMISSIONS),
+        )
+    except Exception as exc:
+        # Durable storage remains authoritative; the cache will be populated
+        # on the first request after a normal cache miss.
+        logger.warning("First-admin key cache registration failed: %s", exc)
+
+    logger.info("First-admin bootstrap completed: tenant=%s", tenant_id)
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "api_key": raw_key,
+        "permissions": list(_FIRST_ADMIN_PERMISSIONS),
+        "message": "Store this key securely; an identical bootstrap retry returns the same key.",
+    }).to_dict()
+
+
+def _set_session_cookie(response: Optional[Response], issue) -> None:
+    """Set the HttpOnly session cookie when a Response is available."""
+    if response is None:
+        return
+    secure = settings.env.value not in ("local", "dev")
+    response.set_cookie(
+        key=issue.cookie_name,
+        value=issue.token,
+        max_age=issue.cookie_max_age,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+
+
+async def _issue_human_session(
+    response: Optional[Response],
+    tenant_id: str,
+    principal_id: Optional[str],
+    message: str,
+    extra: Optional[dict] = None,
+) -> dict:
+    """Create a durable human session and return a session response.
+
+    This replaces reusable-API-key issuance for human auth under the
+    founding-tenant posture: the response carries a session (cookie + token),
+    never an `api_key`.
+    """
+    from tenancy.auth.sessions import session_service
+    issue = await session_service.create_session(
+        tenant_id,
+        principal_id=principal_id,
+        idle_minutes=settings.trust_plane.session_idle_minutes,
+        absolute_minutes=settings.trust_plane.session_absolute_minutes,
+    )
+    _set_session_cookie(response, issue)
+    data = {
+        "tenant_id": tenant_id,
+        "session": issue.public_dict(),
+        "message": message,
+    }
+    if extra:
+        data.update(extra)
+    return APIResponse(data=data).to_dict()
+
+
+async def _send_otp_email(email: str, otp: str, name: str = "") -> None:
+    try:
+        from shared.email import email_service
+        from shared.email.templates import _base
+        greeting = f"Hi {name}," if name else "Hi,"
+        body_html = _base("Email Verification", f"""
+<p>{greeting}</p>
+<p>Your AETHER verification code is:</p>
+<div style="font-size:36px;font-weight:bold;letter-spacing:8px;text-align:center;
+            padding:24px;background:#f4f4f4;border-radius:8px;margin:24px 0">
+  {otp}
+</div>
+<p>This code expires in <strong>10 minutes</strong>.</p>
+<p>If you did not request this, you can safely ignore this email.</p>
+""")
+        await email_service.send_email(
+            to=email,
+            subject="AETHER — verify your email address",
+            body_html=body_html,
+        )
+    except Exception as e:
+        logger.debug(f"OTP email skipped: {e}")
+
+
+async def _evict_tenant_api_keys(tenant_id: str, *, fail_closed: bool = False) -> int:
+    """Delete all Redis auth-cache entries for a tenant.
+
+    Destructive account operations use ``fail_closed=True``.  A durable key is
+    revoked before this helper runs, but the validator intentionally trusts a
+    cache hit; deleting the database row while a cache entry survives would
+    therefore leave a bearer credential usable until its TTL expires.  Any
+    enumeration, eviction, or post-eviction verification error must stop the
+    destructive operation instead of being reported as a successful cleanup.
+    """
+    evicted = 0
+    failures: list[str] = []
+    try:
+        from shared.cache.cache import CacheKey
+        from dependencies.providers import get_registry
+        cache = get_registry().cache
+        keys = await _key_repo.find_many(filters={"tenant_id": tenant_id}, limit=500)
+        for rec in keys:
+            key_hash = rec.get("key_hash", "")
+            if key_hash:
+                try:
+                    cache_key = CacheKey.api_key(key_hash)
+                    await cache.delete(cache_key)
+                    # Cache hits are trusted by APIKeyValidator, so prove the
+                    # value is gone rather than assuming delete succeeded.
+                    if fail_closed and await cache.get(cache_key) is not None:
+                        failures.append(f"{key_hash[:12]}: cache entry remains after delete")
+                        continue
+                    evicted += 1
+                except Exception as exc:
+                    failures.append(f"{key_hash[:12]}: {exc}")
+    except Exception as e:
+        failures.append(f"tenant cache enumeration: {e}")
+    if failures and fail_closed:
+        raise RuntimeError(
+            "could not invalidate all tenant API-key cache entries: "
+            + "; ".join(failures)
+        )
+    if failures:
+        logger.debug(
+            "Redis eviction errors tolerated for non-destructive operation: "
+            "tenant=%s failures=%s",
+            tenant_id,
+            failures,
+        )
+    return evicted
+
+
+async def _revoke_tenant_api_keys(tenant_id: str) -> int:
+    """Mark every durable tenant API key revoked before cleanup succeeds."""
+    records = await _key_repo.find_many(filters={"tenant_id": tenant_id}, limit=1000)
+    revoked = 0
+    failures: list[str] = []
+    for record in records:
+        key_id = record.get("id")
+        if not key_id or record.get("status") == "revoked" or record.get("revoked_at"):
+            continue
+        try:
+            await _key_repo.update(
+                key_id,
+                {"status": "revoked", "revoked_at": utc_now().isoformat()},
+            )
+            revoked += 1
+        except Exception as exc:
+            failures.append(f"{key_id}: {exc}")
+    if failures:
+        raise RuntimeError(
+            "could not revoke durable tenant API keys: " + "; ".join(failures)
+        )
+    return revoked
+
+
+async def _erase_tenant_scoped_rehearsal_data(tenant_id: str) -> dict[str, int]:
+    """Erase every tenant-scoped surface exercised by the staging rehearsal.
+
+    The account-lifecycle worker is intentionally a recovery-window workflow;
+    the admin DELETE used by a short-lived rehearsal needs an immediate,
+    idempotent path.  Keep its surface list explicit so a new rehearsal write
+    cannot silently become an orphan: it must be added here (and covered by a
+    test) before the cleanup endpoint can report success. Scenario proof rows
+    are immutable during their retention window but erased with their owning
+    tenant. Billing and security-audit evidence is retained by policy and is
+    not included in this operational-data erasure set.
+    """
+    from repositories.lake import BronzeRepository, GoldRepository, SilverRepository
+    from repositories.repos import BaseRepository, ConsentRepository
+    from identity.identity.scenario_evidence import IdentityScenarioEvidenceRepository
+
+    stores = (
+        ("consent_records", ConsentRepository()),
+        # DSR propagation/index rows are operational state for this tenant;
+        # the immutable security/audit ledgers remain retained separately.
+        ("dsr_propagation_records", BaseRepository("dsr_propagation_records")),
+        ("dsr_subject_index", BaseRepository("dsr_subject_index")),
+        ("dsr_artifact_index", BaseRepository("dsr_artifact_index")),
+        ("bronze_feeds", BronzeRepository("feeds")),
+        ("bronze_sdk_events", BronzeRepository("sdk_events")),
+        ("silver_sdk_events", SilverRepository("sdk_events")),
+        ("gold_sdk_events", GoldRepository("sdk_events")),
+        ("analytics_events", BaseRepository("events")),
+        ("analytics_sessions", BaseRepository("sessions")),
+        ("profiles", BaseRepository("profiles")),
+    )
+    counts: dict[str, int] = {}
+    failures: list[str] = []
+    for name, repository in stores:
+        try:
+            counts[name] = await repository.delete_by_entity("tenant_id", tenant_id)
+        except Exception as exc:
+            failures.append(f"{name}: {exc}")
+    try:
+        counts["identity_scenario_execution_evidence"] = (
+            await IdentityScenarioEvidenceRepository().delete_for_tenant(tenant_id)
+        )
+    except Exception as exc:
+        failures.append(f"identity_scenario_execution_evidence: {exc}")
+    if failures:
+        raise RuntimeError(
+            "tenant-scoped rehearsal erasure failed before tenant deletion: "
+            + "; ".join(failures)
+        )
+
+    # Graph observations are stored in the shared graph projection, not in a
+    # JSONB repository.  The graph client drops only vertices/edges carrying
+    # this tenant and fails closed if the configured backend cannot do so.
+    try:
+        from dependencies.providers import get_registry
+        counts["tenant_graph"] = await get_registry().graph.delete_tenant_data(tenant_id)
+    except Exception as exc:
+        raise RuntimeError(
+            f"tenant-scoped rehearsal graph erasure failed before tenant deletion: {exc}"
+        ) from exc
+    return counts
+
+
+async def _cascade_delete_tenant(tenant_id: str) -> dict:
+    """Delete all data for a tenant across every table. Returns per-table counts.
+
+    Public ingest identifiers are revoked before the tenant row is removed so
+    contained registration credentials cannot outlive their owner.
+    """
+    counts: dict = {}
+
+    # 1. Revoke durable credentials, then fail closed while invalidating cache.
+    # APIKeyValidator trusts cache hits, so deleting rows first is unsafe.
+    counts["api_keys_revoked"] = await _revoke_tenant_api_keys(tenant_id)
+    counts["keys_evicted"] = await _evict_tenant_api_keys(tenant_id, fail_closed=True)
+
+    # Public registration can issue a contained ingest identifier before the
+    # tenant is activated. Revoke those identifiers before deleting the tenant
+    # row so an otherwise successful GDPR/cleanup delete cannot leave a live
+    # credential pointing at an owner that no longer exists.
+    from tenancy.auth.sessions import public_ingest_service
+    counts["public_ingest_identifiers_revoked"] = (
+        await public_ingest_service.revoke_all_for_tenant(tenant_id)
+    )
+
+    # 2. Erase every non-retained data surface written by the rehearsal before
+    # removing the owning rows.  Any failure leaves the tenant present and the
+    # API keys revoked, making retry safe and observable.
+    counts["tenant_scoped_data"] = await _erase_tenant_scoped_rehearsal_data(tenant_id)
+
+    # 3. Cancel Stripe subscription (best-effort — never blocks deletion)
+    try:
+        from shared.billing import stripe_client, stripe_repository
+        billing = await stripe_repository.get_billing_account(tenant_id)
+        sub_id = (billing or {}).get("stripe_subscription_id", "")
+        if sub_id:
+            await stripe_client.cancel_subscription(sub_id)
+    except Exception as e:
+        logger.debug(f"Stripe subscription cancel skipped: tenant={tenant_id} error={e}")
+
+    # 4. Delete API key rows
+    counts["api_keys"] = await _key_repo.delete_by_entity("tenant_id", tenant_id)
+
+    # 5. Delete user rows.  Do not swallow errors: a 200 response must mean
+    # cleanup actually completed, not merely that one table was reachable.
+    from repositories.repos import UserRepository
+    counts["users"] = await UserRepository().delete_by_entity("tenant_id", tenant_id)
+
+    # 6. Delete billing account row
+    from repositories.repos import get_pool
+    pool = await get_pool()
+    if pool is not None:
+        result = await pool.execute(
+            "DELETE FROM tenant_billing_accounts WHERE tenant_id = $1", tenant_id
+        )
+        counts["billing_accounts"] = int(result.split()[-1]) if result else 0
+    else:
+        from shared.billing.stripe_repository import _mem_accounts
+        counts["billing_accounts"] = 1 if _mem_accounts.pop(tenant_id, None) else 0
+
+    # 7. Delete the tenant record itself and fail closed if it vanished between
+    # the initial lookup and this point.
+    counts["tenants"] = 1 if await _repo.delete(tenant_id) else 0
+    if counts["tenants"] != 1:
+        raise RuntimeError("tenant row was not deleted; cleanup is incomplete")
+    counts["cleanup_complete"] = True
+    return counts
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /v1/auth/register  — Step 1: email + password → OTP
+# ──────────────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=200)
+    email: str = Field(..., min_length=5, max_length=254)
+    password: str = Field(..., min_length=8, max_length=128)
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+
+
+@router.post("/v1/auth/register")
+async def register(body: RegisterRequest, request: Request = None):
+    """Step 1 of email sign-up: store pending registration and send OTP.
+
+    A tenant is NOT created until /v1/auth/verify-email succeeds, ensuring
+    only addresses that can receive email are provisioned.
+    """
+    if "@" not in body.email:
+        raise BadRequestError("email must be a valid email address")
+    redis = _get_redis()
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    await throttle.enforce_rate(
+        throttle.otp_sends, throttle.email_digest(body.email), throttle.OTP_SENDS_PER_EMAIL, redis,
+    )
+    try:
+        PlanTier(body.plan_tier)
+    except ValueError:
+        raise BadRequestError(f"Invalid plan_tier: {body.plan_tier!r}")
+
+    email = body.email.lower()
+    _SAFE = APIResponse(data={"message": "Check your email for a verification code.", "email": email}).to_dict()
+
+    # If already fully registered, return safe response (anti-enumeration)
+    try:
+        from repositories.repos import UserRepository
+        existing = await UserRepository().find_by_email(email)
+        if existing:
+            return _SAFE
+    except Exception:
+        pass
+
+    from shared.auth.password import hash_password
+    from shared.auth.verification import generate_otp, store_otp
+
+    pw_hash = hash_password(body.password)
+
+    try:
+        from repositories.repos import UserRepository
+        # Upsert: allows retrying registration with a fresh OTP
+        await UserRepository().insert(f"pending:{email}", {
+            "email": email,
+            "name": body.name,
+            "password_hash": pw_hash,
+            "plan_tier": body.plan_tier,
+            "status": "pending",
+        })
+    except Exception as e:
+        logger.warning(f"Pending user store failed: email={email!r} error={e}")
+
+    otp = generate_otp()
+    await store_otp(email, otp, redis)
+
+    import asyncio
+    asyncio.ensure_future(_send_otp_email(email, otp, body.name))
+
+    metrics.increment("auth_register_attempts")
+    logger.info(f"Registration OTP issued: email={email!r}")
+    return _SAFE
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /v1/auth/verify-email  — Step 2: OTP → tenant + API key
+# ──────────────────────────────────────────────────────────────────────
+
+class VerifyEmailRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=254)
+    code: str = Field(..., min_length=6, max_length=6)
+
+
+@router.post("/v1/auth/verify-email")
+async def verify_email(body: VerifyEmailRequest, response: Response = None, request: Request = None):
+    """Step 2 of email sign-up: verify OTP, create tenant.
+
+    Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this starts a
+    durable session instead of returning a reusable API key. Legacy behavior is
+    preserved when the flag is off.
+    """
+    from shared.auth.verification import verify_otp
+
+    verified_user_id: Optional[str] = None
+
+    email = body.email.lower()
+    redis = _get_redis()
+
+    # A 6-digit code is only safe with a cap on wrong guesses: per IP, and per address.
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    email_key = throttle.email_digest(email)
+    # Counted before the code is checked (one atomic increment), so parallel
+    # guesses cannot all pass a check-then-record gap; success clears it below.
+    await throttle.enforce_rate(throttle.verify_failures, email_key, throttle.VERIFY_FAILURES_PER_EMAIL, redis)
+
+    if not await verify_otp(email, body.code, redis):
+        raise BadRequestError("Invalid or expired verification code.")
+    await throttle.verify_failures.clear(email_key, redis)
+
+    # Retrieve pending registration (graceful if missing — re-verify after restart)
+    pending: dict = {}
+    try:
+        from repositories.repos import UserRepository
+        user_repo = UserRepository()
+        pending = await user_repo.find_by_id(f"pending:{email}") or {}
+    except Exception:
+        pass
+
+    name = pending.get("name", "")
+    plan_tier_value = pending.get("plan_tier", "alpha")
+    pw_hash = pending.get("password_hash", "")
+
+    try:
+        plan_tier = PlanTier(plan_tier_value)
+    except ValueError:
+        plan_tier = PlanTier.ALPHA
+
+    tenant_id = str(uuid.uuid4())
+
+    # Create tenant
+    await _repo.insert(tenant_id, {
+        "name": name or email,
+        "contact_email": email,
+        "plan": plan_tier.value,
+        "plan_tier": plan_tier.value,
+        "status": "active",
+        "auth_method": "password",
+        "settings": {},
+    })
+
+    # Create verified user record
+    try:
+        from repositories.repos import UserRepository
+        user_repo = UserRepository()
+        user_id = str(uuid.uuid4())
+        await user_repo.insert(user_id, {
+            "user_id": user_id,
+            "tenant_id": tenant_id,
+            "email": email,
+            "name": name,
+            "password_hash": pw_hash,
+            "status": "active",
+            "email_verified": True,
+            "auth_method": "password",
+            # Authorization is hydrated from this durable principal record on
+            # every session-authenticated request.  The tenant creator is the
+            # explicit owner; sessions themselves carry no mutable authority.
+            "role": "admin",
+            "permissions": ["read", "write", "ingest", "analytics", "billing", "admin"],
+            "membership_status": "active",
+        })
+        verified_user_id = user_id
+        await user_repo.delete(f"pending:{email}")
+    except Exception as e:
+        logger.warning(f"User record creation failed: tenant={tenant_id} error={e}")
+
+    # Billing account (best-effort)
+    try:
+        from shared.billing import stripe_repository
+        await stripe_repository.upsert_billing_account(
+            tenant_id=tenant_id,
+            contact_email=email,
+            plan_tier=plan_tier.value,
+        )
+    except Exception as e:
+        logger.warning(f"Billing account creation failed: tenant={tenant_id} error={e}")
+
+    metrics.increment("tenant_registrations", labels={"plan_tier": plan_tier.value, "method": "password"})
+    logger.info(f"Email-verified tenant created: id={tenant_id} email={email!r}")
+
+    if settings.trust_plane.human_sessions_enabled:
+        # Founding-tenant posture: start a session, do NOT issue a reusable key.
+        # The welcome email is skipped here (it historically carried the key).
+        return await _issue_human_session(
+            response, tenant_id, verified_user_id,
+            "Account created! A secure session has been started.",
+            extra={"name": name or email, "plan_tier": plan_tier.value},
+        )
+
+    # Legacy path (flag off) — reusable API key + key-bearing welcome email.
+    raw_key = await _issue_api_key(tenant_id, plan_tier.value, "Default key")
+    try:
+        import asyncio
+        from shared.email import email_service, templates
+        subject, body_html = templates.welcome(tenant_name=name or email, api_key=raw_key)
+        asyncio.ensure_future(
+            email_service.send_email(to=email, subject=subject, body_html=body_html)
+        )
+    except Exception as e:
+        logger.debug(f"Welcome email skipped: {e}")
+
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "name": name or email,
+        "plan_tier": plan_tier.value,
+        "api_key": raw_key,
+        "message": "Account created! Store your API key securely — it will not be shown again.",
+    }).to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /v1/auth/resend-verification
+# ──────────────────────────────────────────────────────────────────────
+
+class ResendRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=254)
+
+
+@router.post("/v1/auth/resend-verification")
+async def resend_verification(body: ResendRequest, request: Request = None):
+    """Resend a fresh OTP. Always returns the same response (anti-enumeration)."""
+    from shared.auth.verification import generate_otp, store_otp
+
+    email = body.email.lower()
+    redis = _get_redis()
+    await _throttle_ip(request, throttle.public_auth_ip, throttle.PUBLIC_AUTH_REQUESTS_PER_IP_PER_MINUTE, redis)
+    await throttle.enforce_rate(
+        throttle.otp_sends, throttle.email_digest(email), throttle.OTP_SENDS_PER_EMAIL, redis,
+    )
+
+    # Peek at the pending record for the name (best-effort — not required)
+    name = ""
+    try:
+        from repositories.repos import UserRepository
+        pending = await UserRepository().find_by_id(f"pending:{email}") or {}
+        name = pending.get("name", "")
+    except Exception:
+        pass
+
+    otp = generate_otp()
+    await store_otp(email, otp, redis)
+
+    import asyncio
+    asyncio.ensure_future(_send_otp_email(email, otp, name))
+
+    return APIResponse(data={
+        "message": "If a pending registration exists for that email, a new code has been sent."
+    }).to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /v1/auth/login  — email + password → session API key
+# ──────────────────────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=254)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+# Constant-time error to prevent user-enumeration via login
+_LOGIN_ERROR = "Invalid email or password."
+
+
+@router.post("/v1/auth/login")
+async def login(body: LoginRequest, response: Response = None, request: Request = None):
+    """Authenticate with email + password.
+
+    Throttled (all answer 429): 10 attempts per minute per client IP; 5 failed
+    attempts per 15 minutes per address from one client IP, so one caller cannot
+    lock the account holder out; and 25 failed attempts per 15 minutes per address
+    from anywhere, which bounds guessing spread over many networks. A successful
+    login clears both failure counts.
+
+    Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this issues a
+    durable, revocable session — never a reusable API key. When the flag is off
+    (local/dev by default) the legacy API-key response is preserved.
+    """
+    from shared.auth.password import verify_password
+
+    email = body.email.lower()
+    redis = _get_redis()
+    await _throttle_ip(request, throttle.login_ip, throttle.LOGIN_ATTEMPTS_PER_IP_PER_MINUTE, redis)
+    email_key = throttle.email_digest(email)
+    pair_key = throttle.email_ip_digest(email, _caller_ip(request) or "direct")
+    # Each attempt is counted before the password is checked, in one atomic
+    # increment, so parallel guesses cannot all pass a check-then-record gap. A
+    # successful login clears both counts, so only a run of failures reaches a limit.
+    await throttle.enforce_rate(
+        throttle.login_failures_by_ip, pair_key, throttle.LOGIN_FAILURES_PER_EMAIL_AND_IP, redis,
+    )
+    try:
+        await throttle.enforce_rate(throttle.login_failures, email_key, throttle.LOGIN_FAILURES_PER_EMAIL, redis)
+    except RateLimitedError:
+        # Refused by the address-wide ceiling: do not also spend this client's own
+        # budget, or retrying during the lockout would extend it for that client.
+        await throttle.login_failures_by_ip.refund(pair_key, redis)
+        raise
+
+    user_rec: dict = {}
+    try:
+        from repositories.repos import UserRepository
+        users = await UserRepository().find_many(
+            filters={"email": email, "status": "active", "auth_method": "password"},
+            limit=1,
+        )
+        user_rec = users[0] if users else {}
+    except Exception as e:
+        logger.debug(f"User lookup error: {e}")
+
+    # Always run verify_password to avoid timing-based user enumeration
+    stored_hash = user_rec.get("password_hash", "")
+    if not stored_hash or not verify_password(body.password, stored_hash):
+        raise BadRequestError(_LOGIN_ERROR)
+
+    tenant_id = user_rec.get("tenant_id", "")
+    if not tenant_id:
+        raise BadRequestError(_LOGIN_ERROR)
+    await throttle.login_failures_by_ip.clear(pair_key, redis)
+    await throttle.login_failures.clear(email_key, redis)
+
+    # Confirm tenant is active
+    plan_tier_value = "alpha"
+    try:
+        tenant_rec = await _repo.find_by_id(tenant_id) or {}
+        if tenant_rec.get("status") == "inactive":
+            raise BadRequestError("This account has been deactivated.")
+        plan_tier_value = tenant_rec.get("plan_tier", "alpha") or "alpha"
+    except BadRequestError:
+        raise
+    except Exception:
+        pass
+
+    metrics.increment("auth_logins", labels={"method": "password"})
+    logger.info(f"Login: tenant={tenant_id}")
+
+    if settings.trust_plane.human_sessions_enabled:
+        return await _issue_human_session(
+            response, tenant_id, user_rec.get("user_id"),
+            "Authenticated. A secure session has been created.",
+        )
+
+    # Legacy path (flag off) — reusable API key.
+    raw_key = await _issue_api_key(tenant_id, plan_tier_value, "Login session")
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "api_key": raw_key,
+        "message": "Authenticated. Store your API key securely — it will not be shown again.",
+    }).to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /v1/auth/sso/callback  — Auth0 JWT → AETHER API key
+# ──────────────────────────────────────────────────────────────────────
+
+class SSOCallbackRequest(BaseModel):
+    token: str = Field(..., description="Auth0 access token (RS256 JWT)")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+
+
+@router.post("/v1/auth/sso/callback")
+async def sso_callback(body: SSOCallbackRequest, response: Response = None):
+    """Exchange an Auth0 access token for an AETHER session.
+
+    Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this starts a
+    durable session — never a reusable API key — and provisions a first-login
+    tenant as `active_limited` rather than auto-activating a claimed domain.
+    Legacy behavior is preserved when the flag is off.
+    Supported providers: Google, Apple, Microsoft, Twitter/X, Slack — any
+    Auth0 social connection. The `sub` claim is the stable identifier.
+    """
+    from shared.auth.auth0_validator import validate_auth0_token
+
+    try:
+        claims = await validate_auth0_token(body.token)
+    except ValueError as e:
+        # The reason names a mismatched claim or a failed fetch, never the token.
+        logger.warning(f"SSO token rejected: {e}")
+        metrics.increment("sso_token_rejected_total", labels={"stage": "validate"})
+        raise BadRequestError(f"Invalid SSO token: {e}")
+
+    sub: str = claims.get("sub", "")
+    if not claims.get("email") and not claims.get("_local_mode"):
+        # Access tokens for the Aether API audience carry no OIDC profile
+        # claims; the verified email lives behind Auth0 /userinfo.
+        from shared.auth.auth0_validator import fetch_auth0_userinfo
+
+        try:
+            profile = await fetch_auth0_userinfo(body.token)
+        except ValueError as e:
+            logger.warning(f"SSO userinfo rejected: {e}")
+            metrics.increment("sso_token_rejected_total", labels={"stage": "userinfo"})
+            raise BadRequestError(f"Invalid SSO token: {e}")
+        if profile.get("sub") and profile.get("sub") != sub:
+            raise BadRequestError("Invalid SSO token: userinfo subject mismatch")
+        claims = {
+            **claims,
+            **{k: profile[k] for k in ("email", "email_verified", "name", "nickname") if k in profile},
+        }
+    email: str = claims.get("email", "").lower()
+    name: str = claims.get("name", "") or claims.get("nickname", "") or email
+
+    if not sub:
+        raise BadRequestError("Token missing 'sub' claim.")
+
+    try:
+        plan_tier = PlanTier(body.plan_tier)
+    except ValueError:
+        plan_tier = PlanTier.ALPHA
+
+    # Look up existing tenant by Auth0 sub
+    tenant_id: Optional[str] = None
+    principal_user_id: Optional[str] = None
+    plan_tier_value = plan_tier.value
+
+    removed_user: Optional[dict] = None
+    try:
+        from repositories.repos import UserRepository
+        user = await UserRepository().find_by_auth0_sub(sub)
+        if user and user.get("membership_status") == "removed":
+            # A removed member keeps its Auth0 link; a fresh invitation is the
+            # only way back in, so try that path before the old tenant.
+            removed_user = user
+        elif user:
+            tenant_id = user.get("tenant_id")
+            principal_user_id = user.get("user_id") or user.get("id")
+            if tenant_id:
+                rec = await _repo.find_by_id(tenant_id) or {}
+                if rec.get("status") == "inactive":
+                    raise BadRequestError("This account has been deactivated.")
+                plan_tier_value = rec.get("plan_tier", plan_tier.value) or plan_tier.value
+    except BadRequestError:
+        raise
+    except Exception as e:
+        logger.debug(f"SSO user lookup error: {e}")
+
+    if not tenant_id:
+        # An unknown sub may still belong to a known person: link a verified
+        # email to its existing user, or accept a pending invitation. Only
+        # when neither applies is a new tenant provisioned — never in
+        # staging, which is internal-only (SSO_SELF_SIGNUP_ENABLED=false).
+        from tenancy.auth.sso_membership import resolve_sso_membership
+
+        membership = await resolve_sso_membership(
+            sub=sub,
+            email=email,
+            email_verified=bool(claims.get("email_verified")),
+            name=name,
+            user_id=(removed_user.get("user_id") or removed_user.get("id")) if removed_user else None,
+        )
+        if membership is not None:
+            tenant_id = membership.tenant_id
+            principal_user_id = membership.user_id
+            rec = await _repo.find_by_id(tenant_id) or {}
+            if rec.get("status") == "inactive":
+                raise BadRequestError("This account has been deactivated.")
+            plan_tier_value = rec.get("plan_tier", plan_tier.value) or plan_tier.value
+        elif removed_user is not None:
+            # Not re-invited: sign in as before (route policy denies a removed
+            # membership); never self-provision a second user for this sub.
+            tenant_id = removed_user.get("tenant_id")
+            principal_user_id = removed_user.get("user_id") or removed_user.get("id")
+        elif not settings.trust_plane.sso_self_signup_enabled:
+            metrics.increment("sso_signup_refused_total")
+            raise ForbiddenError(
+                "Sign-in is by invitation only in this environment. "
+                "Ask an Olympus administrator to invite this email address."
+            )
+
+    if not tenant_id:
+        # First SSO login — provision a new tenant
+        tenant_id = str(uuid.uuid4())
+
+        # Founding-tenant posture: do not auto-activate a claimed domain — a
+        # first SSO login provisions an active_limited tenant pending review.
+        first_login_status = (
+            "active_limited" if settings.trust_plane.human_sessions_enabled else "active"
+        )
+        await _repo.insert(tenant_id, {
+            "name": name,
+            "contact_email": email,
+            "plan": plan_tier.value,
+            "plan_tier": plan_tier.value,
+            "status": first_login_status,
+            "auth_method": "sso",
+            "settings": {},
+        })
+
+        try:
+            from repositories.repos import UserRepository
+            user_id = str(uuid.uuid4())
+            principal_user_id = user_id
+            await UserRepository().insert(user_id, {
+                "user_id": user_id,
+                "tenant_id": tenant_id,
+                "email": email,
+                "name": name,
+                "auth0_sub": sub,
+                "status": "active",
+                "email_verified": claims.get("email_verified", False),
+                "auth_method": "sso",
+                "role": "admin",
+                "permissions": ["read", "write", "ingest", "analytics", "billing", "admin"],
+                "membership_status": "active",
+            })
+        except Exception as e:
+            logger.warning(f"SSO user record creation failed: tenant={tenant_id} error={e}")
+
+        try:
+            from shared.billing import stripe_repository
+            await stripe_repository.upsert_billing_account(
+                tenant_id=tenant_id,
+                contact_email=email,
+                plan_tier=plan_tier.value,
+            )
+        except Exception as e:
+            logger.warning(f"Billing account creation failed: tenant={tenant_id} error={e}")
+
+        metrics.increment("tenant_registrations", labels={"plan_tier": plan_tier.value, "method": "sso"})
+        logger.info(f"SSO tenant provisioned: id={tenant_id} sub={sub!r}")
+
+        # Welcome email (fire-and-forget)
+        try:
+            import asyncio
+            from shared.email import email_service, templates
+
+            # We issue the key below; include a placeholder here since we need
+            # the key first. Swap order so we can pass the real key.
+        except Exception:
+            pass
+    else:
+        logger.info(f"SSO login: tenant={tenant_id} sub={sub!r}")
+
+    metrics.increment("auth_logins", labels={"method": "sso"})
+
+    if settings.trust_plane.human_sessions_enabled:
+        return await _issue_human_session(
+            response, tenant_id, principal_user_id,
+            "Authenticated via SSO. A secure session has been created.",
+        )
+
+    # Legacy path (flag off) — reusable API key.
+    raw_key = await _issue_api_key(tenant_id, plan_tier_value, "SSO session")
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "api_key": raw_key,
+        "message": "Authenticated via SSO. Store your API key securely — it will not be shown again.",
+    }).to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /v1/auth/sso/providers
+# ──────────────────────────────────────────────────────────────────────
+
+@router.get("/v1/auth/sso/providers")
+async def list_sso_providers():
+    """List SSO providers configured in Auth0."""
+    domain = settings.auth0.domain
+    auth0_configured = bool(domain)
+    providers = [
+        {"id": "google-oauth2",  "name": "Google",             "enabled": auth0_configured},
+        {"id": "apple",          "name": "Apple",               "enabled": auth0_configured},
+        {"id": "twitter",        "name": "X (Twitter)",         "enabled": auth0_configured},
+        {"id": "windowslive",    "name": "Microsoft",           "enabled": auth0_configured},
+        {"id": "slack",          "name": "Slack",               "enabled": auth0_configured},
+        {"id": "auth0",          "name": "Email / Password",    "enabled": auth0_configured},
+    ]
+    return APIResponse(data={
+        "providers": providers,
+        "auth0_domain": domain,
+        "configured": auth0_configured,
+    }).to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# DELETE /v1/me/account  — self-service account deletion
+# ──────────────────────────────────────────────────────────────────────
+
+@router.delete("/v1/me/account")
+async def delete_my_account(body: AccountDeletionRequest, request: Request):
+    """Compatibility alias for the durable 30-day account-deletion workflow."""
+    tenant = getattr(request.state, "tenant", None)
+    if not tenant:
+        raise UnauthorizedError("Authentication required.")
+    tenant.require_permission("admin")
+
+    from tenancy.account_lifecycle.service import account_lifecycle_service
+
+    workflow = await account_lifecycle_service.request_deletion(
+        tenant_id=tenant.tenant_id,
+        actor_id=str(getattr(tenant, "user_id", None) or tenant.tenant_id),
+        idempotency_key=body.idempotency_key,
+        reauth_evidence=body.reauth_evidence,
+    )
+    metrics.increment("tenant_deletion_workflows_requested", labels={"method": "self_service"})
+    logger.info("Self-service account deletion workflow requested: tenant=%s", tenant.tenant_id)
+    return APIResponse(data=workflow).to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Admin: POST /v1/admin/tenants/{tenant_id}/deactivate
+# ──────────────────────────────────────────────────────────────────────
+
+@admin_auth_router.post("/v1/admin/tenants/{tenant_id}/deactivate")
+async def deactivate_tenant(tenant_id: str, request: Request):
+    """Immediately deactivate a tenant and revoke all active credentials.
+
+    Does NOT delete any data. Existing API keys and contained public ingest
+    identifiers stop working on the next request. Re-activation requires
+    manually setting status=active and issuing fresh credentials.
+    """
+    tenant_rec = await _repo.find_by_id(tenant_id)
+    if not tenant_rec:
+        raise NotFoundError("tenant")
+
+    from tenancy.auth.sessions import public_ingest_service
+    ingest_revoked = await public_ingest_service.revoke_all_for_tenant(tenant_id)
+
+    revoked = await _revoke_tenant_api_keys(tenant_id)
+    evicted = await _evict_tenant_api_keys(tenant_id, fail_closed=True)
+
+    if tenant_rec.get("status") == "inactive":
+        return APIResponse(data={
+            "tenant_id": tenant_id,
+            "status": "inactive",
+            "api_keys_revoked": revoked,
+            "keys_evicted": evicted,
+            "public_ingest_identifiers_revoked": ingest_revoked,
+            "message": "Tenant is already inactive.",
+        }).to_dict()
+
+    await _repo.update(tenant_id, {"status": "inactive"})
+
+    metrics.increment("tenant_deactivations")
+    logger.info(f"Tenant deactivated: tenant={tenant_id} keys_evicted={evicted}")
+
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "status": "inactive",
+        "api_keys_revoked": revoked,
+        "keys_evicted": evicted,
+        "public_ingest_identifiers_revoked": ingest_revoked,
+        "message": "Tenant deactivated. All API keys and contained ingest identifiers have been invalidated immediately.",
+    }).to_dict()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Admin: DELETE /v1/admin/tenants/{tenant_id}  — GDPR erasure
+# ──────────────────────────────────────────────────────────────────────
+
+@admin_auth_router.delete("/v1/admin/tenants/{tenant_id}")
+async def gdpr_delete_tenant(tenant_id: str, request: Request):
+    """Permanently delete a tenant and all associated data (GDPR right to erasure).
+
+    Cascade order: durable credential revocation → cache invalidation →
+    contained-ingest revocation → tenant-scoped rehearsal data erasure →
+    Stripe cancellation → owner rows. Irreversible. Billing and security-audit
+    evidence retained under policy is detached rather than erased.
+    """
+    tenant_rec = await _repo.find_by_id(tenant_id)
+    if not tenant_rec:
+        raise NotFoundError("tenant")
+
+    deleted = await _cascade_delete_tenant(tenant_id)
+
+    metrics.increment("tenant_deletions", labels={"method": "admin_gdpr"})
+    logger.info(f"GDPR delete: tenant={tenant_id} counts={deleted}")
+
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "deleted": deleted,
+        "message": "Tenant and all associated data have been permanently deleted.",
+    }).to_dict()

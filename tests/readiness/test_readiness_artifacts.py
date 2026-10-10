@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def test_features_artifact_matches_records():
-    path = ROOT / "artifacts" / "readiness" / "features.json"
+    path = ROOT / ".artifacts" / "readiness" / "features.json"
     assert path.exists(), "run: make readiness-artifacts"
     payload = json.loads(path.read_text())
     committed = {f["feature_id"] for f in payload["features"]}
@@ -24,7 +24,7 @@ def test_features_artifact_matches_records():
 
 
 def test_profiles_artifact_disposition_matches_evaluator():
-    path = ROOT / "artifacts" / "readiness" / "profiles.json"
+    path = ROOT / ".artifacts" / "readiness" / "profiles.json"
     payload = json.loads(path.read_text())
     model = load_model()
     feats = load_features()

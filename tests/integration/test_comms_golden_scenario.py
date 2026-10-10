@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -56,9 +56,9 @@ def _provider_event(event_type: str, provider_event_id: str, props: dict | None 
 
 @pytest.fixture(autouse=True)
 def _clean():
-    from services.comms.repository import reset_local_stores
-    from services.comms.graph_projection import reset_local_relationships
-    from services.silver.writer import reset_local_tables
+    from journeys.comms.repository import reset_local_stores
+    from journeys.comms.graph_projection import reset_local_relationships
+    from ingestion.silver.writer import reset_local_tables
     reset_local_stores()
     reset_local_relationships()
     reset_local_tables()
@@ -78,8 +78,8 @@ def _canonical_campaign(monkeypatch):
     """
     from uuid import uuid5, NAMESPACE_URL
     from decimal import Decimal
-    from services.campaign.registry import CampaignRegistryService
-    from services.campaign.resolver import CampaignResolver, ResolutionResult
+    from journeys.campaign.registry import CampaignRegistryService
+    from journeys.campaign.resolver import CampaignResolver, ResolutionResult
 
     campaign_uuid = uuid5(NAMESPACE_URL, f"{TENANT}:{PROVIDER}:{ACCOUNT}:{CAMPAIGN_EXT_ID}")
 
@@ -105,18 +105,18 @@ def _canonical_campaign(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_customer_reactivation_golden_scenario(_canonical_campaign):
-    from services.silver.dispatcher import SilverDispatcher
-    from services.silver.writer import SilverFactWriter
-    from services.comms.repository import (
+    from ingestion.silver.dispatcher import SilverDispatcher
+    from ingestion.silver.writer import SilverFactWriter
+    from journeys.comms.repository import (
         CampaignMessageRepository, CommsFactsRepository,
     )
-    from services.comms.state import CommunicationStateService
-    from services.comms.graph_projection import CommsGraphProjector, _local_relationships
-    from services.comms.mailbox import build_email_alias
-    from services.comms.click_token import issue_click_token, verify_click_token
-    from services.comms.ingest import ingest_normalized_events
-    from services.comms.attribution_policy import comms_touchpoint_eligibility
-    from services.measurement.silver_adapters import adapt_from_silver
+    from journeys.comms.state import CommunicationStateService
+    from journeys.comms.graph_projection import CommsGraphProjector, _local_relationships
+    from journeys.comms.mailbox import build_email_alias
+    from journeys.comms.click_token import issue_click_token, verify_click_token
+    from journeys.comms.ingest import ingest_normalized_events
+    from journeys.comms.attribution_policy import comms_touchpoint_eligibility
+    from journeys.measurement.silver_adapters import adapt_from_silver
 
     dispatcher = SilverDispatcher()
     writer = SilverFactWriter()
@@ -138,7 +138,7 @@ async def test_customer_reactivation_golden_scenario(_canonical_campaign):
     }])
     assert counts["catalog"] == 1
 
-    from services.campaign.resolver import CampaignResolver
+    from journeys.campaign.resolver import CampaignResolver
     resolution = await CampaignResolver().resolve_one(
         TENANT, platform=PROVIDER, external_account_id=ACCOUNT,
         external_campaign_id=CAMPAIGN_EXT_ID,
@@ -274,7 +274,7 @@ async def test_customer_reactivation_golden_scenario(_canonical_campaign):
     assert not verify_click_token(token, "other-tenant").valid
 
     # ── Kyber: pipeline health reports the processed volume ───────────────────
-    from services.comms.routes import _health_snapshot
+    from journeys.comms.routes import _health_snapshot
     health = await _health_snapshot(TENANT)
     assert health["communication_facts"] == len(rows)
     assert health["campaign_resolution_rate"] > 0

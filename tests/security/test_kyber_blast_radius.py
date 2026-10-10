@@ -18,7 +18,7 @@ walk *drop* something it saw, so it is the only one that sets ``truncated``; the
 other two report through ``missing_inputs``. Both paths lower ``confidence``.
 
 *There is no fleet rollup.*
-``services/agent_access_intelligence/kyber_ops_routes.py`` records why: a blast
+``services/api/actions/agent_access_intelligence/kyber_ops_routes.py`` records why: a blast
 radius is a per-subject exposure answer whose honesty depends on every input for
 that subject being present, so summing it over tenants "would produce a number no
 operator can act on and would hide exactly the tenants whose inputs were
@@ -37,23 +37,23 @@ from typing import Any, Optional
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "kyber-graph-test")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.kyber.graph import blast_radius as blast_radius_module  # noqa: E402
-from services.kyber.graph.blast_radius import (  # noqa: E402
+from governance.kyber.graph import blast_radius as blast_radius_module  # noqa: E402
+from governance.kyber.graph.blast_radius import (  # noqa: E402
     MAX_DEPTH,
     MAX_EDGES_PER_NODE,
     MAX_NODES,
     KyberBlastRadiusService,
     node_key_for,
 )
-from services.kyber.graph.contracts import KyberGraphEdge, KyberGraphNode  # noqa: E402
-from services.kyber.graph.repository import KyberGraphStore  # noqa: E402
-from services.kyber.graph.routes import BlastRadiusRequest, review_blast_radius  # noqa: E402
+from governance.kyber.graph.contracts import KyberGraphEdge, KyberGraphNode  # noqa: E402
+from governance.kyber.graph.repository import KyberGraphStore  # noqa: E402
+from governance.kyber.graph.routes import BlastRadiusRequest, review_blast_radius  # noqa: E402
 
 ENV = "test"
 _COMPLETE_CONFIDENCE = 0.9
@@ -186,7 +186,7 @@ async def test_an_edge_to_an_unreadable_node_is_a_gap_not_an_absence_of_reach():
 async def test_an_unavailable_store_reports_the_gap_rather_than_no_exposure():
     """No store means no answer, not a clean bill of health."""
     service = KyberBlastRadiusService(store=None)
-    import services.kyber.graph.scoped_gateway as gateway_module
+    import governance.kyber.graph.scoped_gateway as gateway_module
 
     gateway_module.set_store(None)
     gateway_module._store_probed = True
@@ -434,7 +434,7 @@ async def test_a_delegated_subject_without_a_tenant_reports_the_gap():
 async def test_the_route_points_a_delegated_subject_at_the_tenant_scoped_surface():
     """The D0 route answers with a pointer, not with a cross-tenant total."""
     store = KyberGraphStore()
-    import services.kyber.graph.scoped_gateway as gateway_module
+    import governance.kyber.graph.scoped_gateway as gateway_module
 
     gateway_module.set_store(store)
     try:
@@ -460,7 +460,7 @@ async def test_the_agent_access_ops_route_still_requires_an_explicit_tenant():
     route ever started answering without a tenant the justification would have
     quietly stopped being true.
     """
-    from services.agent_access_intelligence.kyber_ops_routes import read_kyber_blast_radius
+    from actions.agent_access_intelligence.kyber_ops_routes import read_kyber_blast_radius
 
     exc = await _raises_named(
         "BadRequestError",

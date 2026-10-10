@@ -2,9 +2,9 @@
 
 The exploration fabric derives the tenant-scoped ``ProjectionSubject`` a 360
 projection is asked about in ONE place —
-``services.exploration.projection_subject.projection_subject_for``. Both the
+``journeys.exploration.projection_subject.projection_subject_for``. Both the
 projection-surface adapter data path and the fabric's session composition
-(``services.exploration.service::_compose_projection``) go through that single
+(``journeys.exploration.service::_compose_projection``) go through that single
 helper: no second ``focus → ProjectionSubject`` copy and no ad-hoc
 ``subject_type``/``subject_id`` shape on the projection plane.
 
@@ -29,7 +29,7 @@ from shared.intelligence_projections.generated_registry import (
     PROJECTION_SUBJECT_KINDS,
 )
 
-from services.exploration.projection_subject import projection_subject_for
+from journeys.exploration.projection_subject import projection_subject_for
 
 
 def _context(*, focus: ExplorationAnchor | None = None) -> ExplorationContextV1:
@@ -80,8 +80,8 @@ class TestSingleConversionSurface:
     async def test_surface_adapter_and_session_composition_reference_same_helper(
         self,
     ) -> None:
-        from services.exploration import service as svc
-        from services.exploration.adapters import projection as projection_adapter
+        from journeys.exploration import service as svc
+        from journeys.exploration.adapters import projection as projection_adapter
 
         # Both the surface data path and the fabric's session composition bind
         # to the exact same function object.
@@ -89,8 +89,8 @@ class TestSingleConversionSurface:
         assert svc.projection_subject_for is projection_subject_for
 
     async def test_no_duplicate_conversion_surfaces_remain(self) -> None:
-        from services.exploration import service as svc
-        from services.exploration.adapters import projection as projection_adapter
+        from journeys.exploration import service as svc
+        from journeys.exploration.adapters import projection as projection_adapter
 
         # The old private conversion sites are gone — each module now imports
         # the shared helper instead of re-declaring the mapping.

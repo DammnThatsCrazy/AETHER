@@ -1,7 +1,7 @@
 """TS <-> Python parity for the notification contract (C2).
 
 `packages/shared/notification.ts` is a hand-authored twin of the
-Python-authoritative `services/notification_intelligence/models.py`. The
+Python-authoritative `services/api/journeys/notification_intelligence/models.py`. The
 vocabularies include values outside `[a-z_]` (``P0``..``P3``, ``action-request``),
 so this test scrapes the const arrays with a permissive quote regex and compares
 against `{e.value for e in Enum}`. Event field sets use the standard snake_case
@@ -14,18 +14,18 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.notification_intelligence.models import (  # noqa: E402
+from journeys.notification_intelligence.models import (  # noqa: E402
     IntelligenceNotificationEvent,
     NotificationClass,
     NotificationLifecycleState,
     NotificationSeverity,
     OperatorActionType,
 )
-from services.notification_intelligence.projection import (  # noqa: E402
+from journeys.notification_intelligence.projection import (  # noqa: E402
     PROJECTION_FIELDS,
     MobileNotificationProjection,
 )

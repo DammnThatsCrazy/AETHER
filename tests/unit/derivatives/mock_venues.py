@@ -17,7 +17,7 @@ from typing import Any, Callable, Optional
 
 import httpx
 
-from services.derivatives.connectors.stream import StreamDisconnect
+from value.derivatives.connectors.stream import StreamDisconnect
 
 
 # ── REST request recorder ─────────────────────────────────────────────────────

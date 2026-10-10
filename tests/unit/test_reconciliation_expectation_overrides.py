@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.reconciliation.expectations import (
+from replay.reconciliation.expectations import (
     ExpectationConfigError,
     get_expectation,
     registry_snapshot,

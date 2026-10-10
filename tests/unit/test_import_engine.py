@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -22,7 +22,7 @@ os.environ.setdefault("AETHER_ENV", "local")
 
 from contextlib import contextmanager  # noqa: E402
 
-from services.imports import service as svc  # noqa: E402
+from ingestion.imports import service as svc  # noqa: E402
 
 
 @contextmanager
@@ -250,7 +250,7 @@ class _Req:
 
 
 async def test_route_create_and_list(clean):
-    from services.imports.routes import create_import, list_imports
+    from ingestion.imports.routes import create_import, list_imports
 
     created = await create_import(_Req())
     assert created["status"] == "created"

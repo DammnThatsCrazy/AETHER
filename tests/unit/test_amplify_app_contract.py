@@ -35,6 +35,7 @@ def _client(
     production_repository: str = checker.REPOSITORY,
     production_commit: str | None = COMMIT,
     domain_branch: str = "main",
+    staging_branch: str = checker.STAGING_BRANCH,
     www_branch: str = checker.PRODUCTION_OLYMPUS_BRANCH,
     domain_verified: bool = True,
     domain_dns_record: str | None = None,
@@ -74,7 +75,7 @@ def _client(
             branch_name = args[args.index("--branch-name") + 1]
             production = app_id == "d-production-status"
             olympus = production and branch_name == checker.PRODUCTION_OLYMPUS_BRANCH
-            if branch_name != "main" and not olympus:
+            if branch_name != ("main" if production else staging_branch) and not olympus:
                 raise RuntimeError("AWS Amplify metadata request failed for amplify")
             return {
                 "branch": {
@@ -111,6 +112,8 @@ def _client(
                                     www_branch
                                     if app_id == "d-production-status" and item == "www"
                                     else domain_branch
+                                    if app_id == "d-production-status"
+                                    else staging_branch
                                 ),
                             },
                             "verified": domain_verified,
@@ -213,11 +216,11 @@ def test_production_status_accepts_live_dns_when_legacy_verified_bit_is_stale():
     assert errors == []
 
 
-def test_staging_domain_requires_the_main_branch_mapping():
+def test_staging_domain_requires_the_staging_branch_mapping():
     errors = checker.contract_errors(
         mode="staging",
         expected_commit=COMMIT,
-        client=_client(domain_branch="preview"),
+        client=_client(staging_branch="preview"),
     )
     assert any("staging domain lacks an AVAILABLE" in error for error in errors)
 
@@ -248,7 +251,7 @@ def test_staging_rejects_a_host_that_no_app_serves():
         client=_client(web_hosts=("aether", "www", "status", "app")),
     )
     assert errors == [
-        f"Amplify app {WEB} staging domain lacks an AVAILABLE docs subdomain on main with a live DNS target"
+        f"Amplify app {WEB} staging domain lacks an AVAILABLE docs subdomain on staging with a live DNS target"
     ]
 
 

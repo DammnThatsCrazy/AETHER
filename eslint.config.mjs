@@ -3,7 +3,7 @@ import tsTranspileParser from './scripts/eslint/typescript-transpile-parser.mjs'
 
 const tsFiles = [
   'packages/**/*.{ts,tsx}',
-  'frontend/**/*.{ts,tsx}',
+  'apps/{aether,aether-marketing,demo,docs,kyber,marketing,olympus-marketing,shared,site,status}/**/*.{ts,tsx}',
 ];
 
 export default [

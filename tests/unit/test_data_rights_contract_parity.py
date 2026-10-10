@@ -2,8 +2,8 @@
 
 `packages/shared/data-rights.ts` is the HAND-AUTHORED canonical TypeScript twin
 (never generated) of the Python structured authorities that live in
-`services/backend/services/integrations/data_rights/models.py`
-(frozen in docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md §3 and §5).
+`services/api/connectors/integrations/data_rights/models.py`
+(frozen in docs/reference/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md §3 and §5).
 
 This test fails on drift in either direction:
   - the nine frozen vocabularies (rights derivation classes, learning classes,
@@ -33,9 +33,8 @@ REPO_ROOT = Path(__file__).parents[2]
 TS_PATH = REPO_ROOT / "packages" / "shared" / "data-rights.ts"
 PY_PATH = (
     REPO_ROOT
-    / "services" / "backend"
-    / "services"
-    / "integrations"
+    / "services" / "api"
+    / "connectors" / "integrations"
     / "data_rights"
     / "models.py"
 )

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.managed_integrations import flags
+from connectors.managed_integrations import flags
 
 
 def test_all_flags_default_off() -> None:
@@ -70,7 +70,7 @@ def test_operator_router_is_read_only() -> None:
     # managed-integrations operator surface. Six GETs only (managed
     # integrations list/detail, Phase-1 change-sets list/detail, Phase-3
     # approvals + action-required review lists).
-    from services.managed_integrations.routes import admin_router
+    from connectors.managed_integrations.routes import admin_router
 
     methods: set[str] = set()
     for route in admin_router.routes:
@@ -81,7 +81,7 @@ def test_operator_router_is_read_only() -> None:
 
 
 def test_operator_router_prefix_is_admin_kyber() -> None:
-    from services.managed_integrations.routes import admin_router
+    from connectors.managed_integrations.routes import admin_router
 
     assert admin_router.prefix == "/v1/admin/kyber/managed-integrations"
 
@@ -90,7 +90,7 @@ def test_literal_routes_precede_the_id_capture_route() -> None:
     # ``/change-sets``, ``/approvals`` and ``/action-required`` are literals
     # that must not be swallowed by the ``/{managed_integration_id}`` capture
     # route, so they must be declared first.
-    from services.managed_integrations.routes import admin_router
+    from connectors.managed_integrations.routes import admin_router
 
     prefix = "/v1/admin/kyber/managed-integrations"
     paths = [r.path for r in admin_router.routes]
@@ -104,7 +104,7 @@ def test_desired_state_and_reconcile_import_without_flags_on() -> None:
     # The reconcile skeleton and desired-state policy are importable and pure
     # while every flag is OFF (a caller may invoke reconcile explicitly — the
     # OFF state only means nothing *automatically* triggers it).
-    from services.managed_integrations import build_desired_state, reconcile
+    from connectors.managed_integrations import build_desired_state, reconcile
 
     assert callable(build_desired_state)
     assert callable(reconcile)

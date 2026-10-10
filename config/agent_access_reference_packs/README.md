@@ -2,7 +2,7 @@
 
 Curated, versioned descriptions of agent-access providers, expressed entirely in
 the vocabulary that
-`services/backend/services/agentic_observability/provider_framework.py`
+`services/api/actions/agentic_observability/provider_framework.py`
 already defines. One YAML file per pack.
 
 A pack is **read-only configuration**. It authorizes nothing, calls nothing, and
@@ -25,8 +25,8 @@ looks like, and these are the scopes a grant is approved to hold.*
 outside its baseline as an `unexpected_new_scope` finding.
 
 ```python
-from services.agent_access_intelligence.reference_packs import approved_scope_baselines_for
-from services.agentic_observability.provider_framework import compute_permission_findings
+from actions.agent_access_intelligence.reference_packs import approved_scope_baselines_for
+from actions.agentic_observability.provider_framework import compute_permission_findings
 
 findings = compute_permission_findings(
     tenant_id, grants, actions,
@@ -96,5 +96,5 @@ Optional: `canonical_source`, `description`, `read_only`, `webhook_supported`,
 4. `python -m pytest tests/unit/capability_catalog/test_reference_packs.py -q`
 
 The schema is defined once, in
-`services/agent_access_intelligence/reference_packs.py::pack_violations`, and the
+`services/api/actions/agent_access_intelligence/reference_packs.py::pack_violations`, and the
 validator imports it — the gate and the runtime loader cannot drift apart.

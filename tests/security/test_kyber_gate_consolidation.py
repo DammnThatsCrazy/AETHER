@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
@@ -70,7 +70,7 @@ _OPERATOR = _tenant(["kyber:operator"])
 
 
 def test_canonical_is_kyber_operator_logic():
-    from services.security.request_context import is_kyber_operator
+    from governance.security.request_context import is_kyber_operator
     assert is_kyber_operator(_ADMIN) is False
     assert is_kyber_operator(_ROLE_ADMIN) is False   # Role.ADMIN is NOT an operator
     assert is_kyber_operator(_OPERATOR) is True
@@ -80,10 +80,10 @@ def test_canonical_is_kyber_operator_logic():
 # Each former-pattern gate must now reject tenant admins and accept operators.
 # (Gates without a feature-flag guard — directly callable.)
 _GATES = [
-    ("services.reliability.routes", "_require_kyber_operator"),        # was Pattern C (leak)
-    ("services.ml_serving.kyber_ml_admin", "_require_kyber_operator"), # was Pattern C (leak)
-    ("services.admin.routes", "_require_kyber_operator"),              # was Pattern C (rebound)
-    ("services.kyber_operator.routes", "_require_kyber_operator"),     # was Pattern B (dead flag)
+    ("governance.reliability.routes", "_require_kyber_operator"),        # was Pattern C (leak)
+    ("intelligence.ml_serving.kyber_ml_admin", "_require_kyber_operator"), # was Pattern C (leak)
+    ("governance.admin.routes", "_require_kyber_operator"),              # was Pattern C (rebound)
+    ("governance.kyber_operator.routes", "_require_kyber_operator"),     # was Pattern B (dead flag)
 ]
 
 
@@ -105,5 +105,5 @@ def test_gate_accepts_operator(module_name, gate_name):
 
 def test_gate_requires_authentication():
     import importlib
-    gate = importlib.import_module("services.reliability.routes")._require_kyber_operator
+    gate = importlib.import_module("governance.reliability.routes")._require_kyber_operator
     _assert_denied(gate, _req(None))

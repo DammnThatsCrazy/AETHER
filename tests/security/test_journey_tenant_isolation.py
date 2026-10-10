@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -18,7 +18,7 @@ pytest.importorskip("fastapi", reason="Backend deps not installed")
 
 
 def _act(tenant_id: str, profile_id: str, family: str = "web2") -> dict:
-    from services.measurement.contracts import CanonicalActivity, ActivityFamily, ActivityStatus
+    from journeys.measurement.contracts import CanonicalActivity, ActivityFamily, ActivityStatus
     return CanonicalActivity(
         tenant_id=tenant_id,
         profile_id=profile_id,
@@ -37,7 +37,7 @@ class TestActivityTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_tenant_a_cannot_see_tenant_b_by_profile(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         profile_id = f"iso-prof-{uuid4()}"
         idem_a = str(uuid4())
@@ -52,7 +52,7 @@ class TestActivityTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_tenant_b_cannot_see_tenant_a_by_profile(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         profile_id = f"iso-prof-{uuid4()}"
         idem_a = str(uuid4())
@@ -67,7 +67,7 @@ class TestActivityTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_same_idempotency_key_different_tenants_are_independent(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         shared_key = f"shared-{uuid4()}"
         act_a = {**_act("tenant-a", "profile-shared"), "idempotency_key": shared_key}
@@ -82,8 +82,8 @@ class TestJourneyStepTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_step_list_respects_tenant(self):
-        from services.measurement.repositories.journey_step_repo import JourneyStepRepository
-        from services.measurement.contracts import JourneyStep, ActivityFamily, ActivityStatus
+        from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
+        from journeys.measurement.contracts import JourneyStep, ActivityFamily, ActivityStatus
         repo = JourneyStepRepository()
 
         jvid = str(uuid4())

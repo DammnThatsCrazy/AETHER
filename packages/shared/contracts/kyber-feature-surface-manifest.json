@@ -1,5 +1,5 @@
 {
-  "_comment": "Canonical map of every tenant-visible Aether surface to its Kyber Tenant Mirror counterpart. Generated from frontend/aether/src/app/router.tsx by scripts/generate_feature_surface_manifest.py \u2014 edit the generator or the exception reasons, never the entries by hand. tenant_parity_required=true means the mirror MUST return byte-identical tenantVisible data for the same tenant, query and contract version; the operator is otherwise debugging a different system than the tenant runs. Only 'tenantVisible' participates in the parity digest; operatorDiagnostics is additive and never alters a tenant-visible value.",
+  "_comment": "Canonical map of every tenant-visible Aether surface to its Kyber Tenant Mirror counterpart. Generated from apps/aether-web/src/app/router.tsx by scripts/generate_feature_surface_manifest.py \u2014 edit the generator or the exception reasons, never the entries by hand. tenant_parity_required=true means the mirror MUST return byte-identical tenantVisible data for the same tenant, query and contract version; the operator is otherwise debugging a different system than the tenant runs. Only 'tenantVisible' participates in the parity digest; operatorDiagnostics is additive and never alters a tenant-visible value.",
   "schemaVersion": "1.0.0",
   "surfaces": [
     {
@@ -366,7 +366,7 @@
       "feature_id": "notifications",
       "aether_route": "/notifications",
       "tenant_parity_required": false,
-      "parity_exception_reason": "tenant's own notification inbox is self-scoped attention data not projected into the tenant graph; operator signals have their own ops exception queue (services/kyber/ops/exceptions)",
+      "parity_exception_reason": "tenant's own notification inbox is self-scoped attention data not projected into the tenant graph; operator signals have their own ops exception queue (services/api/governance/kyber/ops/exceptions)",
       "kyber_mirror_route": null,
       "minimum_disclosure": "D0"
     },

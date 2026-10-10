@@ -1,7 +1,7 @@
 """Capability authority tests (PR 2, Phase B1).
 
 Proves the fail-closed invariants documented in
-``services/agent_access_intelligence/authority.py`` against the in-memory backend: a
+``services/api/actions/agent_access_intelligence/authority.py`` against the in-memory backend: a
 written authorization never carries an empty/wildcard resource set, ``actions`` is exactly
 ``["invoke"]``, cross-tenant reads and revokes are indistinguishable from "absent", an
 unobserved capability may be pre-authorized but is never upgraded to observed, an
@@ -16,7 +16,7 @@ import pytest
 from repositories.repos import DelegationRepository
 from shared.common.common import BadRequestError, NotFoundError
 
-from services.agent_access_intelligence.authority import (
+from actions.agent_access_intelligence.authority import (
     AUTHORIZATION_KIND,
     CapabilityAuthorityService,
     authorization_state,
@@ -24,7 +24,7 @@ from services.agent_access_intelligence.authority import (
     server_ref_for,
     validate_capability_scope,
 )
-from services.agent_access_intelligence.catalog_service import CapabilityCatalogService
+from actions.agent_access_intelligence.catalog_service import CapabilityCatalogService
 
 PAST = "2020-01-01T00:00:00+00:00"
 FUTURE = "2999-01-01T00:00:00+00:00"

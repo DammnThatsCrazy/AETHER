@@ -2,7 +2,7 @@
 // Aether SDK — Common Spine Envelope (ADR-011 D3)
 // HAND-MAINTAINED contract — NOT generated (do not run generate_platform_contracts.py
 // against this file). Python twin:
-//   services/backend/shared/spine/spine_envelope.py
+//   services/api/shared/spine/spine_envelope.py
 // Parity is enforced by tests/unit/test_spine_envelope_parity.py.
 //
 // ADR-011 D3: "The common spine envelope composes the canonical primitives —
@@ -14,7 +14,7 @@
 // lineage_refs). Fields with no producer yet (identity_watermark) are declared
 // present-but-unpopulated (@unpopulated); no producer is claimed until one
 // ships. rights_decision_ref LEFT that set when the rights-propagation producer
-// shipped (services/backend/services/rights_authority/propagation.py, blueprint
+// shipped (services/api/tenancy/rights_authority/propagation.py, blueprint
 // §11/§17 Phase 3). Nothing is re-defined."
 //
 // Composition rule honored here: the fields below REUSE the canonical
@@ -109,16 +109,16 @@ export interface SpineEnvelope {
    */
   policy_ref: string | null;
   /**
-   * Opaque id of the `ConsentPolicyDecision` (services/policy) that authorized
+   * Opaque id of the `ConsentPolicyDecision` (services/api/governance/policy) that authorized
    * this interaction. The producer exists (ADR-011 D4 names it as existing
    * machinery); no canonical decision-ref type exists in packages/shared, so
    * typed narrowly as a string id. ADR-011 D3.
    */
   consent_decision_ref: string | null;
   /**
-   * Durable `RightsDecision` id (`rdec_...`, services/rights_authority) that
+   * Durable `RightsDecision` id (`rdec_...`, services/api/tenancy/rights_authority) that
    * governs this interaction. Producer: the rights-propagation composer
-   * (`services/backend/services/rights_authority/propagation.py`), which
+   * (`services/api/tenancy/rights_authority/propagation.py`), which
    * resolves the decision through the authoritative `EffectiveRightsResolver`
    * and stamps its `decision_id` here — never a fabricated or unresolved ref.
    * Still `null` on interactions no rights gate runs for. Blueprint §11/§17

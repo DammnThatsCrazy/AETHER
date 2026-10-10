@@ -29,7 +29,7 @@
 /.github/CODEOWNERS                             @DammnThatsCrazy
 
 # ── Core platform ────────────────────────────────────────────────────────────
-/services/backend/                          @DammnThatsCrazy
+/services/api/                          @DammnThatsCrazy
 /services/agents/                                   @DammnThatsCrazy
 /services/ml/                                     @DammnThatsCrazy
 

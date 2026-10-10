@@ -8,7 +8,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_paymentscan_benchmark_is_benchmark_only(tenant):
-    from services.card_linked_payments.paymentscan import ingest_benchmark
+    from value.card_linked_payments.paymentscan import ingest_benchmark
 
     record = await ingest_benchmark(
         tenant, entity_type="card_program", entity_ref="Redot Pay",
@@ -22,7 +22,7 @@ async def test_paymentscan_benchmark_is_benchmark_only(tenant):
 
 
 async def test_paymentscan_reported_basis_kept_but_never_user_truth(tenant):
-    from services.card_linked_payments.paymentscan import ingest_benchmark
+    from value.card_linked_payments.paymentscan import ingest_benchmark
 
     record = await ingest_benchmark(
         tenant, entity_type="card_program", entity_ref="KAST",
@@ -77,7 +77,7 @@ async def test_sdk_spend_claim_downgraded_to_unknown(tenant, ingestion):
     assert result is not None
     record, _ = result
     assert record["basis"] == "unknown"
-    from services.card_linked_payments.repositories import get_card_linked_repositories
+    from value.card_linked_payments.repositories import get_card_linked_repositories
     warnings = await get_card_linked_repositories().audit.list_for_tenant(tenant, kind="basis_warning")
     assert warnings, "spend-claim downgrade must be audited"
 
@@ -99,7 +99,7 @@ async def test_idempotency_dedupes_replays(tenant, ingestion):
 
 
 async def test_blocked_pii_rejected_and_audited(tenant, ingestion):
-    from services.card_linked_payments.repositories import get_card_linked_repositories
+    from value.card_linked_payments.repositories import get_card_linked_repositories
 
     with pytest.raises(ValueError, match="Blocked"):
         await ingestion.ingest_provider_webhook(tenant, {
@@ -111,7 +111,7 @@ async def test_blocked_pii_rejected_and_audited(tenant, ingestion):
 
 
 async def test_region_policy_strips_user_level_fields(tenant, ingestion):
-    from services.card_linked_payments.repositories import get_card_linked_repositories
+    from value.card_linked_payments.repositories import get_card_linked_repositories
 
     result = await ingestion.ingest_sdk_event(tenant, {
         "type": "payment_completed", "event_id": "sdk_eu_1", "user_id": "u-eu",
@@ -126,7 +126,7 @@ async def test_region_policy_strips_user_level_fields(tenant, ingestion):
 
 
 async def test_consent_refusal_suppresses_user_attribution(tenant, ingestion):
-    from services.card_linked_payments.repositories import get_card_linked_repositories
+    from value.card_linked_payments.repositories import get_card_linked_repositories
 
     result = await ingestion.ingest_sdk_event(tenant, {
         "type": "payment_completed", "event_id": "sdk_nc_1", "user_id": "u-nc",
@@ -149,7 +149,7 @@ async def test_agent_influenced_requires_agent_and_commerce_consent(tenant, inge
 
 
 async def test_reconciliation_matches_onchain_with_provider(tenant, ingestion):
-    from services.card_linked_payments.repositories import get_card_linked_repositories
+    from value.card_linked_payments.repositories import get_card_linked_repositories
 
     await ingestion.ingest_onchain_observation(tenant, {
         "id": "oc_m1", "chain": "base", "tx_hash": "0x111", "asset": "USDC",
@@ -170,7 +170,7 @@ async def test_reconciliation_matches_onchain_with_provider(tenant, ingestion):
 
 
 async def test_tenant_isolation(tenant, ingestion):
-    from services.card_linked_payments.repositories import get_card_linked_repositories
+    from value.card_linked_payments.repositories import get_card_linked_repositories
 
     await ingestion.ingest_provider_webhook(tenant, {
         "id": "pw_iso", "provider": "rain", "provider_event_id": "evt_iso",

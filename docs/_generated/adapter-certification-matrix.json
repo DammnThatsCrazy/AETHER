@@ -1,5 +1,5 @@
 {
-  "generated_from": "services/backend/shared/certification/registry.py",
+  "generated_from": "services/api/shared/certification/registry.py",
   "providers": {
     "communications:braze": {
       "adapter": "BrazeConnector",
@@ -637,6 +637,7 @@
       "adapter": "StripeOnrampAdapter",
       "adapter_version": "1.0.0",
       "capabilities": [
+        "commerce_payment",
         "crypto_onramp",
         "webhook"
       ],

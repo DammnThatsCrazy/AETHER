@@ -31,13 +31,13 @@ from typing import Any, Optional
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
 from shared.common.common import BadRequestError, NotFoundError  # noqa: E402
 
-from services.kyber.mirror import (  # noqa: E402
+from governance.kyber.mirror import (  # noqa: E402
     DIAGNOSTIC_SECTIONS,
     PRESENTATION_KEYS,
     SURFACE_VERTEX_TYPES,
@@ -50,7 +50,7 @@ from services.kyber.mirror import (  # noqa: E402
     reset_gateway,
     set_gateway,
 )
-from services.kyber.mirror.parity import MAX_REPORTED_DIVERGENCES  # noqa: E402
+from governance.kyber.mirror.parity import MAX_REPORTED_DIVERGENCES  # noqa: E402
 
 # ── Refusals, matched by name at call time ───────────────────────────────────
 
@@ -390,7 +390,7 @@ async def test_render_returns_a_two_keyed_envelope_bound_to_the_contract(gateway
 
 async def test_the_service_reads_a_tenant_only_through_the_gateway(gateway, service, monkeypatch):
     """Every other read path in the graph plane is tripwired; none may fire."""
-    from services.kyber.graph import scoped_gateway as real_gateway
+    from governance.kyber.graph import scoped_gateway as real_gateway
 
     def _tripwire(*args: Any, **kwargs: Any):
         raise AssertionError("the mirror reached a tenant outside the scoped gateway")
@@ -455,7 +455,7 @@ async def test_a_masked_rendering_is_not_offered_as_parity(service):
 
 def test_get_gateway_resolves_the_real_scoped_gateway_when_nothing_is_injected():
     reset_gateway()
-    from services.kyber.graph.scoped_gateway import scoped_tenant_graph_gateway
+    from governance.kyber.graph.scoped_gateway import scoped_tenant_graph_gateway
 
     assert get_gateway() is scoped_tenant_graph_gateway
 

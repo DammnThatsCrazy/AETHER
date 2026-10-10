@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
@@ -35,14 +35,14 @@ def test_app():
     # other test modules (e.g. test_api_contracts) reload or remove service
     # modules from sys.modules between collection and fixture execution.
     # The exception handlers must be registered against the classes bound in the
-    # router's own namespace (`services.cluster.routes.ForbiddenError`), because
+    # router's own namespace (`graph.cluster.routes.ForbiddenError`), because
     # that is exactly the class the routes raise — a fresh import of
     # shared.common.common could resolve to a different class object if
     # test_api_contracts reloaded it mid-run, and the handler would never match.
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
     from shared.graph.graph import GraphClient, Vertex, Edge, VertexType, EdgeType
-    from services.cluster.routes import ForbiddenError, NotFoundError, router as cluster_router
+    from graph.cluster.routes import ForbiddenError, NotFoundError, router as cluster_router
     from dependencies.providers import get_graph
 
     app = FastAPI()

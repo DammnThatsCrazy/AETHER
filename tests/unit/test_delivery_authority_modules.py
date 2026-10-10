@@ -107,7 +107,7 @@ def test_plan_capability_discovery_stays_unknown_even_when_resources_exist(tmp_p
 def test_capability_schema_accepts_snapshot(tmp_path):
     path = _write(tmp_path / "capabilities.json", _capability_fixture())
     snapshot = load_fixture(path)
-    schema = json.loads((ROOT / "contracts/delivery/environment-capability-snapshot.schema.json").read_text())
+    schema = json.loads((ROOT / "packages/contracts/delivery/environment-capability-snapshot.schema.json").read_text())
     jsonschema.Draft202012Validator(schema).validate(snapshot.to_dict())
 
 
@@ -206,7 +206,7 @@ def test_effective_iam_evidence_rejects_plaintext_secret_material():
 def test_effective_iam_schema_accepts_comparison():
     manifest, requirements = _iam_manifest()
     report = compare(manifest, requirements, _iam_evidence())
-    schema = json.loads((ROOT / "contracts/delivery/effective-iam-comparison.schema.json").read_text())
+    schema = json.loads((ROOT / "packages/contracts/delivery/effective-iam-comparison.schema.json").read_text())
     jsonschema.Draft202012Validator(schema).validate(report)
 
 
@@ -219,7 +219,7 @@ def test_effective_iam_evidence_schema_accepts_fixture():
         "policy_names": ["reviewed-policy"],
         "source": "offline_fixture",
     }
-    schema = json.loads((ROOT / "contracts/delivery/effective-iam-evidence.schema.json").read_text())
+    schema = json.loads((ROOT / "packages/contracts/delivery/effective-iam-evidence.schema.json").read_text())
     jsonschema.Draft202012Validator(schema).validate(evidence)
 
 
@@ -348,7 +348,7 @@ def test_terraform_reconciliation_accepts_canonical_redaction_marker_and_mask(tm
 def test_terraform_reconciliation_schema_accepts_report(tmp_path):
     desired, state, remote = _terraform_inputs(tmp_path)
     report = reconcile("staging", desired, state, remote)
-    schema = json.loads((ROOT / "contracts/delivery/terraform-reconciliation.schema.json").read_text())
+    schema = json.loads((ROOT / "packages/contracts/delivery/terraform-reconciliation.schema.json").read_text())
     jsonschema.Draft202012Validator(schema).validate(report)
 
 
@@ -366,5 +366,5 @@ def test_terraform_remote_inventory_schema_accepts_fixture(tmp_path):
             "values": dict(item.values),
         } for item in remote.resources],
     }
-    schema = json.loads((ROOT / "contracts/delivery/terraform-remote-inventory.schema.json").read_text())
+    schema = json.loads((ROOT / "packages/contracts/delivery/terraform-remote-inventory.schema.json").read_text())
     jsonschema.Draft202012Validator(schema).validate(raw)

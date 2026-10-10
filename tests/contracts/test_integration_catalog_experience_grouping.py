@@ -17,7 +17,7 @@ integrations under the same headings the tenant sees. Invariants pinned here:
     lists them in no experience group.
 
 Namespaced (test_integration_catalog_*). Spec:
-docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md § experience categories.
+docs/reference/source-of-truth/AETHER_END_USER_LIFECYCLE.md § experience categories.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -36,7 +36,7 @@ from shared.integration_contracts.experience import (  # noqa: E402
     ExperienceCategory,
     experience_category_for,
 )
-from services.integrations.connectors.catalog_endpoints import (  # noqa: E402
+from connectors.integrations.connectors.catalog_endpoints import (  # noqa: E402
     _experience_value,
     _visible_catalog_entries,
 )

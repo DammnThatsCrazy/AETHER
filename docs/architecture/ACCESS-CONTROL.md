@@ -1,0 +1,142 @@
+---
+title: Access Control
+slug: enterprise/access-control
+section: operations
+visibility: I
+audience: [ops, security]
+status: stable
+since_version: "0.1.0"
+---
+
+# Access Control
+
+`AccessControlService` (`services/api/governance/security/access_control.py`) maps `AccessRole`s
+to `PermissionGrant`s and evaluates `domain × action × scope` access checks.
+
+## Implemented controls
+
+- 13 roles: `tenant_owner`, `tenant_admin`, `tenant_operator`, `tenant_analyst`,
+  `tenant_viewer`, `tenant_billing_admin`, `tenant_security_admin`,
+  `olympus_operator`, `olympus_support`, `olympus_admin`, `olympus_security`,
+  `olympus_revops`, `auditor`.
+- 20 domains, 8 actions (`read`/`write`/`approve`/`dispatch`/`export`/`configure`/`delete`/`admin`).
+- 4 scopes: `own_tenant`, `assigned_tenant`, `all_tenants_aggregate`,
+  `all_tenants_admin`. Aggregate scope can authorize aggregate views only — never
+  a single tenant's private records.
+- `evaluate()` returns a `PolicyDecision`; denials and sensitive allows emit a
+  `SecurityAuditEvent`.
+- `require_access()` keeps the legacy `require_permission(...)` gate and layers
+  role evaluation + audit on top (additive).
+
+## Role assignment
+
+Tenant users are mapped from the existing auth `Role` (`admin`/`editor`/`viewer`)
+plus permissions (`tenant_roles_from_context`).
+
+**No Aether tenant may access Kyber.** Kyber security routes are gated by
+`require_kyber_operator()`, which is fail-closed: an operator is recognised ONLY
+by a signal that tenant tokens never carry — the configured `kyber:operator`
+permission (`KYBER_OPERATOR_PERMISSION`) present in the token's **raw permission
+list**, or membership in the operator allowlist (`KYBER_OPERATOR_TENANT_IDS`).
+The check deliberately does **not** use `has_permission()`, which returns `True`
+for every permission when `role == Role.ADMIN`; a role-admin Aether tenant is
+therefore still **denied**. A verified operator with `admin` is mapped to
+`olympus_admin`; other verified operators map to `olympus_operator`.
+
+Within the Kyber security routes, **reads** require operator access while
+**privileged mutations** (retention policy create/update, data-request
+processing, evidence-pack generation, and break-glass approve/deny/revoke)
+additionally require the `admin` permission, so a read-only `kyber:operator`
+token cannot perform privileged actions.
+
+## Platform operators
+
+Olympus staff and invited advisors run the platform; they are not billed
+customers. A **platform operator** tenant resolves to the top plan (`omega`,
+every service) and bypasses the customer controls in the request middleware:
+the per-plan burst rate limit, the monthly quota and its overage metering, and
+the ML extraction-defense budget. Each such request increments
+`platform_operator_request_total`. External tenants keep every control.
+
+A tenant is an operator only through a signal it cannot grant itself:
+`PLATFORM_OPERATOR_TENANT_IDS`, set per environment, or, in staging, the tenant
+bound by the single-use first-admin bootstrap
+(`shared/auth/platform_operator.py`). This does **not** grant Kyber access, which
+stays behind `KYBER_OPERATOR_TENANT_IDS` and the operator permission above.
+
+## Staging sign-in
+
+The staging profile sets `self_signup_enabled = true`, so staging exercises the
+public journey: an Auth0 sign-in from an email the platform has never seen
+provisions its own tenant, as production does. The product app's `/signup`
+opens Auth0's hosted sign-up (Google, or email and password); the site's
+"Create an account" and pricing buttons send `/app/signup?plan=<id>` there, the
+chosen plan survives the Auth0 round trip, and `/callback` lands the new
+account on `/billing?plan=<id>`, which starts that plan's Stripe checkout once
+(Alpha is free and needs none). Terraform always sets
+`SSO_SELF_SIGNUP_ENABLED` explicitly: `self_signup_enabled` when a profile
+sets it, otherwise the backend's own default (on everywhere except staging, so
+production keeps self-serve sign-up). Without it the backend defaults to
+`false` when `AETHER_ENV=staging`, and a sign-in whose `sub` is not yet linked
+then succeeds only when its identity-provider-verified email:
+
+1. matches an existing active user with no Auth0 link (for example the staging
+   first-admin user), which is then linked; or
+2. is on `PLATFORM_OPERATOR_EMAILS` (founders and internal staff), which joins
+   the platform operator tenant as `owner` (the full `admin` grant). Terraform
+   sets the list (`platform_operator_emails`) on the pilot staging lane only,
+   and the task-definition contract rejects it on any other lane. Keeping it
+   in reviewed configuration preserves that access across a database reset.
+   A member an administrator removed from the operator tenant is not re-added;
+   or
+3. has an unexpired pending organization invitation, which is accepted: the
+   person joins the inviting tenant with the invited role.
+
+With self sign-up off, anything else gets `403` ("Sign-in is by invitation
+only"). The same three checks run first with self sign-up on, so a known
+person is linked, an operator joins the operator tenant and an invitation is
+accepted rather than creating a second tenant. A rejected Auth0
+token or `/userinfo` call returns `400` and logs the reason (never the token)
+with `sso_token_rejected_total`. The browser sends an
+access token for the Aether API audience, which carries no email claims, so the
+backend reads the verified email from Auth0 `/userinfo` with that token (and
+rejects a userinfo subject that differs from the token's). Accepting an
+invitation is an atomic pending-to-accepted claim of an invitation that is still
+unexpired at that moment, made **before** any access is provisioned, so a
+revoked, expired or already-claimed invitation grants nothing, and every
+sign-in for one Auth0 identity converges on one principal. The membership and
+then the user are written after the claim; if a sign-in fails in between, the
+same identity's next sign-in finishes the provisioning, unless an
+administrator removed that member after the claim. A human session takes its
+role, permissions and membership status from the user record on every
+request, so changing a member's organization role (`PATCH
+/v1/account/organization/members/{member_id}/role`) rewrites that user's grant
+(owner/admin → `admin`, member → `editor`, viewer → `viewer`), and removing a
+member revokes it (no permissions, `membership_status=removed`) before the
+membership row changes. The privilege-raising write always goes last: a
+demotion lowers the grant first, and a promotion raises the membership first,
+then the grant, restoring the membership role if the grant write fails. A
+removed member keeps its Auth0 link but is let back in only by a fresh
+invitation, which its next sign-in accepts under the same principal; without
+one the sign-in is denied and never self-provisions a second user. A tenant
+admin's first organization request (with a user principal; a bare admin API key
+does not qualify) creates the organization profile, owned by that admin, so the
+operator tenant can invite teammates via
+`POST /v1/account/organization/invitations`. Other environments keep self-serve
+Auth0 sign-up.
+
+## Tenant vs Kyber visibility
+
+Tenants resolve only their own grants via `GET /v1/security/me/permissions`.
+Operator role definitions are visible in Kyber at
+`GET /v1/admin/kyber/security/operator-access`.
+
+## Planned controls
+
+- Unified role provisioning/federation for Olympus operators.
+- Fine-grained per-tenant operator assignment lists.
+
+## Known gaps / not certified
+
+- No certification is claimed. Role assignment provisioning still originates in
+  the existing auth layer; this service evaluates, it does not provision.

@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -53,7 +53,7 @@ def make_request(tenant_id: str = TENANT_ID, **kwargs):
 
 
 async def _seed_touchpoints(n: int = 3):
-    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+    from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
     repo = TouchpointRepository()
     for i in range(n):
         await repo.upsert({
@@ -69,7 +69,7 @@ async def _seed_touchpoints(n: int = 3):
 async def _seed_campaign_local(campaign_id: str = CAMPAIGN_ID, tenant_id: str = TENANT_ID):
     """Seed a campaign in the local campaign store so _require_campaign works."""
     try:
-        from services.campaign.routes import _local_campaigns
+        from journeys.campaign.routes import _local_campaigns
         _local_campaigns[campaign_id] = {
             "campaign_id": campaign_id,
             "tenant_id": tenant_id,
@@ -85,14 +85,14 @@ async def _seed_campaign_local(campaign_id: str = CAMPAIGN_ID, tenant_id: str = 
 
 @pytest.fixture(autouse=True)
 async def clear_stores():
-    from services.measurement.repositories.touchpoint_repo import _local_store as tp
-    from services.measurement.repositories.conversion_repo import _local_store as cv
-    from services.measurement.repositories.attribution_run_repo import _local_credits as cr
+    from journeys.measurement.repositories.touchpoint_repo import _local_store as tp
+    from journeys.measurement.repositories.conversion_repo import _local_store as cv
+    from journeys.measurement.repositories.attribution_run_repo import _local_credits as cr
     tp.clear()
     cv.clear()
     cr.clear()
     try:
-        from services.campaign.routes import _local_campaigns
+        from journeys.campaign.routes import _local_campaigns
         _local_campaigns.clear()
     except (ImportError, AttributeError):
         pass
@@ -101,7 +101,7 @@ async def clear_stores():
     cv.clear()
     cr.clear()
     try:
-        from services.campaign.routes import _local_campaigns
+        from journeys.campaign.routes import _local_campaigns
         _local_campaigns.clear()
     except (ImportError, AttributeError):
         pass
@@ -116,12 +116,12 @@ class TestOverviewEndpoint:
         await _seed_touchpoints(3)
         await _seed_campaign_local()
 
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),
@@ -145,12 +145,12 @@ class TestOverviewEndpoint:
         """Overview for a campaign with no data returns zeroed metrics, not errors."""
         await _seed_campaign_local()
 
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),
@@ -174,12 +174,12 @@ class TestPopulationEndpoint:
         await _seed_touchpoints(3)
         await _seed_campaign_local()
 
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),
@@ -198,12 +198,12 @@ class TestPopulationEndpoint:
         await _seed_touchpoints(5)
         await _seed_campaign_local()
 
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),
@@ -224,7 +224,7 @@ class TestClusterEndpoint:
         """Cluster rollup returns a list of cluster dicts."""
         await _seed_campaign_local()
 
-        from services.measurement.repositories.attribution_run_repo import (
+        from journeys.measurement.repositories.attribution_run_repo import (
             AttributionRunRepository, _local_credits,
         )
         cluster_id = f"cl-int-{uuid.uuid4()}"
@@ -245,7 +245,7 @@ class TestClusterEndpoint:
         """Multiple credits for the same cluster are aggregated into one row."""
         await _seed_campaign_local()
 
-        from services.measurement.repositories.attribution_run_repo import (
+        from journeys.measurement.repositories.attribution_run_repo import (
             AttributionRunRepository, _local_credits,
         )
         cluster_id = f"cl-agg-{uuid.uuid4()}"
@@ -269,7 +269,7 @@ class TestClusterEndpoint:
 class TestConversionEndpoint:
     @pytest.fixture(autouse=True)
     def clear_conv(self):
-        from services.measurement.repositories.conversion_repo import _local_store
+        from journeys.measurement.repositories.conversion_repo import _local_store
         _local_store.clear()
         yield
         _local_store.clear()
@@ -277,7 +277,7 @@ class TestConversionEndpoint:
     @pytest.mark.asyncio
     async def test_conversions_campaign_filter_returns_correct_conversions(self):
         """list_by_campaign returns only conversions for the specified campaign."""
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
         repo = ConversionRepository()
         other_campaign = f"other-camp-{uuid.uuid4()}"
 
@@ -299,7 +299,7 @@ class TestConversionEndpoint:
     @pytest.mark.asyncio
     async def test_missing_campaign_returns_empty(self):
         """list_by_campaign for a non-existent campaign returns empty list."""
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
         repo = ConversionRepository()
         results = await repo.list_by_campaign(TENANT_ID, f"missing-{uuid.uuid4()}")
         assert results == []
@@ -313,12 +313,12 @@ class TestGraphEndpoint:
         """Graph endpoint returns nodes, edges, and truncation status within budget."""
         await _seed_touchpoints(2)
 
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),
@@ -339,12 +339,12 @@ class TestGraphEndpoint:
         """Graph result must include the campaign itself as the anchor node."""
         await _seed_touchpoints(2)
 
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),
@@ -361,12 +361,12 @@ class TestGraphEndpoint:
     @pytest.mark.asyncio
     async def test_graph_rejects_over_budget_request(self):
         """Graph endpoint enforces hard limits and raises ValueError for out-of-budget requests."""
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),
@@ -387,12 +387,12 @@ class TestCrossTenantIsolation:
         """Querying with wrong tenant_id returns zeroed overview, not cross-tenant data."""
         await _seed_touchpoints(3)
 
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),
@@ -410,12 +410,12 @@ class TestCrossTenantIsolation:
     @pytest.mark.asyncio
     async def test_missing_campaign_overview_returns_zeros(self):
         """Overview for a campaign that doesn't exist returns zeroed metrics."""
-        from services.campaign.exploration import CampaignPopulationExplorer
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-        from services.measurement.repositories.journey_repo import JourneyRepository
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.campaign.exploration import CampaignPopulationExplorer
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
 
         explorer = CampaignPopulationExplorer(
             touchpoint_repo=TouchpointRepository(),

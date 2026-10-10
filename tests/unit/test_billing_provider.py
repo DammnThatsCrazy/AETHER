@@ -19,8 +19,8 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -57,8 +57,8 @@ def _clear_billing_env(monkeypatch):
 def billing(monkeypatch):
     _clear_billing_env(monkeypatch)
     with backend_module_path():
-        providers = importlib.import_module("services.billing.providers")
-        base = importlib.import_module("services.billing.providers.base")
+        providers = importlib.import_module("billing.billing.providers")
+        base = importlib.import_module("billing.billing.providers.base")
         yield SimpleNamespace(providers=providers, base=base)
 
 
@@ -71,8 +71,8 @@ def stripe_billing(monkeypatch):
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
     with backend_module_path():
-        providers = importlib.import_module("services.billing.providers")
-        base = importlib.import_module("services.billing.providers.base")
+        providers = importlib.import_module("billing.billing.providers")
+        base = importlib.import_module("billing.billing.providers.base")
         yield SimpleNamespace(providers=providers, base=base)
 
 
@@ -174,7 +174,7 @@ async def test_stripe_webhook_rejects_bad_signature(stripe_billing):
 # ── routes ─────────────────────────────────────────────────────────────────────
 
 async def test_provider_status_route_requires_admin(billing):
-    routes = importlib.import_module("services.billing.routes")
+    routes = importlib.import_module("billing.billing.routes")
 
     class T:
         tenant_id = "ops"
@@ -188,7 +188,7 @@ async def test_provider_status_route_requires_admin(billing):
 
 
 async def test_tenant_payment_status_route(billing):
-    routes = importlib.import_module("services.billing.routes")
+    routes = importlib.import_module("billing.billing.routes")
 
     class T:
         tenant_id = "t1"

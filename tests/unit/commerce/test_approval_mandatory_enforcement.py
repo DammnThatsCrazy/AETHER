@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
-_BACKEND_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+_BACKEND_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 TENANT = "tenant-mandatory-enforcement"
 
@@ -42,12 +42,12 @@ def backend_path(monkeypatch):
 @pytest.fixture()
 def commerce(monkeypatch):
     with backend_path(monkeypatch):
-        from services.x402.commerce_store import reset_commerce_store
+        from value.x402.commerce_store import reset_commerce_store
         reset_commerce_store()
-        from services.x402.approvals import ApprovalService
-        from services.x402.entitlements import EntitlementService
-        from services.x402.resources import ProtectedResourceRegistry
-        from services.x402.commerce_models import (
+        from value.x402.approvals import ApprovalService
+        from value.x402.entitlements import EntitlementService
+        from value.x402.resources import ProtectedResourceRegistry
+        from value.x402.commerce_models import (
             ApprovalPriority, ApprovalStatus, ProtectedResource, ResourceClass,
             Settlement, SettlementState,
         )

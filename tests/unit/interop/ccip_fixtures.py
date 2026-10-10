@@ -1,7 +1,7 @@
 """Chainlink CCIP fixture + mock-server builder.
 
 Fixtures are generated with the SAME encoders the adapter decodes with
-(services.interop.providers.chainlink_ccip). Source CCIPSendRequested, the
+(graph.interop.providers.chainlink_ccip). Source CCIPSendRequested, the
 CommitStore ReportAccepted interval, and OffRamp ExecutionStateChanged all key
 on one messageId (the commit via sequence-interval expansion), so the lifecycle
 correlates on one canonical key.
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from services.interop.providers.chainlink_ccip import (
+from graph.interop.providers.chainlink_ccip import (
     TOPIC_CCIP_SEND_REQUESTED,
     TOPIC_EXECUTION_STATE_CHANGED,
     TOPIC_REPORT_ACCEPTED,

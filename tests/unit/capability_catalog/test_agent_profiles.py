@@ -38,13 +38,13 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import TenantContext
 from shared.common.common import ForbiddenError
 
-import services.agent_access_intelligence.profiles as profiles
-import services.agent_access_intelligence.profile_routes as profile_routes
-from services.agent_access_intelligence.authority_routes import (
+import actions.agent_access_intelligence.profiles as profiles
+import actions.agent_access_intelligence.profile_routes as profile_routes
+from actions.agent_access_intelligence.authority_routes import (
     CapabilityAuthorizationGrant,
     grant_authorization,
 )
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
 
 
 class FakeProducer:
@@ -645,7 +645,7 @@ async def test_graph_null_counts_are_never_replaced_by_a_page_length(_stub_graph
 async def test_real_access_graph_flows_through_unstubbed(monkeypatch):
     """One end-to-end pass with the real access-graph module, so the two lanes are wired
     together and not only against a stub."""
-    from services.agent_access_intelligence.access_graph import (
+    from actions.agent_access_intelligence.access_graph import (
         capability_access_graph_service,
     )
 

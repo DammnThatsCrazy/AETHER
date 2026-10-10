@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 # Stub out heavy optional dependencies so imports resolve without native libs
 _STUBBED: list[str] = []
@@ -144,7 +144,7 @@ def _make_suppress_resolver(tenant_id: str = "tenant-identity-1") -> AsyncMock:
 async def test_suppress_requires_write_permission():
     """suppress endpoint enforces write permission."""
     import unittest.mock as mock
-    from services.identity import routes
+    from identity.identity import routes
     from shared.common.common import ForbiddenError
 
     read_only_request = PermissionedRequest(permissions={"read"})
@@ -159,7 +159,7 @@ async def test_suppress_requires_write_permission():
 async def test_suppress_allowed_with_write_permission():
     """suppress endpoint succeeds when caller has write permission."""
     import unittest.mock as mock
-    from services.identity import routes
+    from identity.identity import routes
 
     write_request = PermissionedRequest(permissions={"read", "write"})
     body = _make_suppress_body()
@@ -179,7 +179,7 @@ async def test_suppress_allowed_with_write_permission():
 @pytest.mark.asyncio
 async def test_identity_health_returns_healthy_status(monkeypatch):
     """GET /v1/identity/health reports healthy with repo metrics."""
-    from services.identity import routes
+    from identity.identity import routes
 
     repo = _make_health_repo()
     monkeypatch.setattr(routes, "_get_resolution_repo", lambda: repo)
@@ -198,7 +198,7 @@ async def test_identity_health_returns_healthy_status(monkeypatch):
 @pytest.mark.asyncio
 async def test_identity_health_is_tenant_scoped(monkeypatch):
     """Health endpoint scopes data to the requesting tenant."""
-    from services.identity import routes
+    from identity.identity import routes
 
     repo = _make_health_repo()
     monkeypatch.setattr(routes, "_get_resolution_repo", lambda: repo)

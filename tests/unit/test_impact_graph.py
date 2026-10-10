@@ -46,7 +46,21 @@ def test_index_is_deterministic_and_transitive():
     assert set(first["impacted_deployables"]) >= {"repository-doctor", "delivery-workflows"}
 
 
-def test_unresolved_paths_are_visible_and_escalate_router_lane():
+def _present(monkeypatch, *paths):
+    """Treat the given paths as still existing (a path that no longer exists has nothing left to verify)."""
+    import scripts.lib.impact_graph as impact_module
+
+    monkeypatch.setattr(impact_module, "_path_exists", lambda path: path in paths)
+
+
+def test_deleted_unresolved_paths_do_not_block(monkeypatch):
+    _present(monkeypatch)
+    result = build_impact_index(["retired-root/old-module.py"])
+    assert result["unresolved_paths"] == []
+
+
+def test_unresolved_paths_are_visible_and_escalate_router_lane(monkeypatch):
+    _present(monkeypatch, "unregistered/new-component.py")
     result = build_impact_index(["unregistered/new-component.py"])
     assert result["direct_nodes"] == []
     assert result["unresolved_paths"] == ["unregistered/new-component.py"]

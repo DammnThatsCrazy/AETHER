@@ -11,13 +11,13 @@ from repositories.repos import _IN_MEMORY_STORES
 from shared.auth.auth import TenantContext
 from shared.common.common import NotFoundError
 
-from services.intelligence.comparison.collection import AnalyticsDimensionCollector
-from services.intelligence.comparison.contracts import (
+from intelligence.intelligence.comparison.collection import AnalyticsDimensionCollector
+from intelligence.intelligence.comparison.contracts import (
     BaselineSpec,
     ComparisonDefinition,
     ComparisonSubject,
 )
-from services.intelligence.comparison.scenarios import ScenarioRunner
+from intelligence.intelligence.comparison.scenarios import ScenarioRunner
 
 TENANT = "t1"
 
@@ -89,7 +89,7 @@ def _request(tenant_id=TENANT, permissions=None):
 
 
 def _enable(monkeypatch, enabled=True):
-    import services.intelligence.comparison.routes as routes
+    import intelligence.intelligence.comparison.routes as routes
 
     monkeypatch.setattr(
         routes, "settings", SimpleNamespace(comparison=SimpleNamespace(enabled=enabled))
@@ -98,7 +98,7 @@ def _enable(monkeypatch, enabled=True):
 
 class TestRouteFlagGating:
     async def test_handlers_404_when_flag_off(self, monkeypatch):
-        import services.intelligence.comparison.routes as routes
+        import intelligence.intelligence.comparison.routes as routes
 
         _enable(monkeypatch, enabled=False)
         request = _request()
@@ -113,7 +113,7 @@ class TestRouteFlagGating:
             await routes.list_watchlists(request, limit=100, offset=0)
 
     async def test_definition_crud_roundtrip_when_enabled(self, monkeypatch):
-        import services.intelligence.comparison.routes as routes
+        import intelligence.intelligence.comparison.routes as routes
 
         _enable(monkeypatch)
         request = _request()
@@ -145,7 +145,7 @@ class TestRouteFlagGating:
         assert deleted.data["deleted"] == definition_id
 
     async def test_incompatible_mode_rejected_at_create(self, monkeypatch):
-        import services.intelligence.comparison.routes as routes
+        import intelligence.intelligence.comparison.routes as routes
         from shared.common.common import BadRequestError
 
         _enable(monkeypatch)
@@ -160,7 +160,7 @@ class TestRouteFlagGating:
             )
 
     async def test_write_requires_write_permission(self, monkeypatch):
-        import services.intelligence.comparison.routes as routes
+        import intelligence.intelligence.comparison.routes as routes
         from shared.common.common import ForbiddenError
 
         _enable(monkeypatch)
@@ -174,12 +174,12 @@ class TestRouteFlagGating:
 class TestJobsPlane:
     async def test_run_executes_via_job_handler(self, monkeypatch, fake_analytics):
         """The comparison.run handler drives a queued run to terminal state."""
-        from services.intelligence.comparison import jobs as comparison_jobs
-        from services.intelligence.comparison.engine import ComparisonEngine
-        from services.intelligence.comparison.store import (
+        from intelligence.intelligence.comparison import jobs as comparison_jobs
+        from intelligence.intelligence.comparison.engine import ComparisonEngine
+        from intelligence.intelligence.comparison.store import (
             ComparisonDefinitionRepository,
         )
-        from services.jobs.handlers import JobContext
+        from workers.jobs.handlers import JobContext
 
         fake_analytics.seed(TENANT, "user-a", make_events(20, spacing_hours=6))
         fake_analytics.seed(TENANT, "user-b", make_events(2, spacing_hours=6))
@@ -222,8 +222,8 @@ class TestJobsPlane:
         ]
 
     async def test_missing_run_id_fails_cleanly(self):
-        from services.intelligence.comparison.jobs import run_comparison_job
-        from services.jobs.handlers import JobContext
+        from intelligence.intelligence.comparison.jobs import run_comparison_job
+        from workers.jobs.handlers import JobContext
 
         async def noop_event(_t, _p):
             return None
@@ -241,11 +241,11 @@ class TestJobsPlane:
         assert "run_id" in outcome.error
 
     def test_handler_registration_is_idempotent(self):
-        from services.intelligence.comparison.jobs import (
+        from intelligence.intelligence.comparison.jobs import (
             COMPARISON_RUN_JOB_TYPE,
             register_comparison_handlers,
         )
-        from services.jobs.handlers import HANDLER_REGISTRY, unregister_handler
+        from workers.jobs.handlers import HANDLER_REGISTRY, unregister_handler
 
         try:
             register_comparison_handlers()

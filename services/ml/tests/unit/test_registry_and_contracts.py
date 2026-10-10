@@ -364,7 +364,7 @@ class TestBackendRegistryAlignment:
         """Backend routes must not have hardcoded identity_gnn."""
         import pathlib
         routes_file = pathlib.Path(
-            "services/backend/services/ml_serving/routes.py"
+            "services/api/services/ml_serving/routes.py"
         )
         if not routes_file.exists():
             pytest.skip("Backend routes not found at expected path")
@@ -381,7 +381,7 @@ class TestBackendRegistryAlignment:
         """Backend routes must not have hardcoded journey_tft."""
         import pathlib
         routes_file = pathlib.Path(
-            "services/backend/services/ml_serving/routes.py"
+            "services/api/services/ml_serving/routes.py"
         )
         if not routes_file.exists():
             pytest.skip("Backend routes not found at expected path")
@@ -396,7 +396,7 @@ class TestBackendRegistryAlignment:
         """Backend must use post_result.output, not post_result.modified_output."""
         import pathlib
         routes_file = pathlib.Path(
-            "services/backend/services/ml_serving/routes.py"
+            "services/api/services/ml_serving/routes.py"
         )
         if not routes_file.exists():
             pytest.skip("Backend routes not found at expected path")

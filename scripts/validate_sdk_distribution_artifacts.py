@@ -8,7 +8,7 @@ because `make ci-check` runs on a fresh checkout where dist/ holds only the
 committed .d.ts declarations.
 
 Actual artifact existence is checked by `npm run verify:artifacts`
-(packages/web/scripts/verify-web-sdk-package.mjs) in the SDK release workflow,
+(packages/sdk/web/scripts/verify-web-sdk-package.mjs) in the SDK release workflow,
 where the build has genuinely run.
 
 When dist/ *has* been built locally, this gate re-checks the runtime artifacts
@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
 NOTES: list[str] = []
 
-WEB = 'packages/web'
+WEB = 'packages/sdk/web'
 VERIFIER = f'{WEB}/scripts/verify-web-sdk-package.mjs'
 
 
@@ -158,9 +158,9 @@ else:
 # layer. It must not hold a stale sdk/v5/loader.js path any more than the web
 # package does — both sides publish to the same canonical origin.
 cicd_python = [
-    'cicd/aether-cicd/stages/sdk/manifest_publisher.py',
-    'cicd/aether-cicd/stages/sdk/sdk_release.py',
-    'cicd/aether-cicd/README.md',
+    'infra/cicd/aether-cicd/stages/sdk/manifest_publisher.py',
+    'infra/cicd/aether-cicd/stages/sdk/sdk_release.py',
+    'infra/cicd/aether-cicd/README.md',
 ]
 for rel in [f'{WEB}/src/loader/aether-loader.ts', f'{WEB}/rollup.loader.mjs', f'{WEB}/README.md'] + cicd_python:
     body = text(rel)

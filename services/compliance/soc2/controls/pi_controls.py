@@ -92,7 +92,7 @@ PI_CONTROLS: list[PIControl] = [
             "Idempotency keys must be UUIDs supplied by the caller."
         ),
         evidence_sources=[
-            "services/backend/services/x402/idempotency.py",
+            "services/api/services/x402/idempotency.py",
             "Ingestion service middleware config",
             "Redis SETNX pattern documented in SUBSYSTEM-CACHE.md",
         ],
@@ -145,7 +145,7 @@ PI_CONTROLS: list[PIControl] = [
             "(features stale if > configured TTL). Quality score attached to every feature batch."
         ),
         evidence_sources=[
-            "services/backend/services/lake/routes.py — GET /quality/{domain} (Bronze quality checks)",
+            "services/api/services/lake/routes.py — GET /quality/{domain} (Bronze quality checks)",
             "services/ml/monitoring/monitor.py",
             "services/ml/ — feature validation pipeline",
             "CloudWatch metric: DataQualityScore (target > 95%)",

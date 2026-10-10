@@ -4,7 +4,7 @@ Three checks against the live database named by DATABASE_URL:
 
 - ``db:connect``            asyncpg connect + ``SELECT 1``
 - ``db:migrations-current`` alembic head revision (alembic.script.ScriptDirectory
-                            over "services/backend/alembic")
+                            over "services/api/alembic")
                             vs ``SELECT version_num FROM alembic_version``
 - ``db:table-shape``        migration-vs-runtime column parity. This repo has a
                             known divergence class: BaseRepository
@@ -26,12 +26,12 @@ from pathlib import Path
 from .preflight_results import CheckResult, failed, passed, skipped
 
 ROOT = Path(__file__).resolve().parents[2]
-ALEMBIC_DIR = ROOT / "services" / "backend" / "alembic"
+ALEMBIC_DIR = ROOT / "services" / "api" / "alembic"
 
 CHECK_NAMES = ("db:connect", "db:migrations-current", "db:table-shape")
 
 MIGRATE_REMEDIATION = (
-    'cd "services/backend" && alembic upgrade head '
+    'cd "services/api" && alembic upgrade head '
     "(with DATABASE_URL exported)"
 )
 
@@ -146,7 +146,7 @@ async def run_db_checks(
                 "db:migrations-current",
                 f"could not resolve alembic head revision: {exc}",
                 "pip install alembic and verify "
-                '"services/backend/alembic/versions" is intact',
+                '"services/api/alembic/versions" is intact',
             ))
         else:
             try:

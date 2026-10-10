@@ -1,6 +1,6 @@
 """Chain-observer chaos — RPC failure, chain reorg, cursor drift.
 
-Drives the REAL Chainlink CCIP interop adapter (``services.interop.providers.
+Drives the REAL Chainlink CCIP interop adapter (``graph.interop.providers.
 chainlink_ccip.ChainlinkCcipAdapter``) against an in-process fake RPC
 (``MockCcipRpc`` from tests/unit/interop/ccip_fixtures.py). NO live RPC.
 
@@ -19,7 +19,7 @@ Scenarios covered here:
 
 from __future__ import annotations
 
-from services.interop.providers.chainlink_ccip import ChainlinkCcipAdapter
+from graph.interop.providers.chainlink_ccip import ChainlinkCcipAdapter
 
 from tests.unit.interop.ccip_fixtures import (
     KEY,

@@ -12,8 +12,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-POLICY = ROOT / "services" / "backend" / "services" / "policy"
-MAIN = ROOT / "services" / "backend" / "main.py"
+POLICY = ROOT / "services" / "api" / "governance" / "policy"
+MAIN = ROOT / "services" / "api" / "main.py"
 
 REQUIRED_FILES = ["__init__.py", "contracts.py", "engine.py", "signal_use_matrix.py",
                   "repositories.py", "routes.py"]
@@ -32,12 +32,12 @@ def fail(m: str) -> None:
 
 def main() -> int:
     if not POLICY.exists():
-        fail("missing services/policy/ (central consent PolicyDecision service)")
+        fail("missing services/api/governance/policy/ (central consent PolicyDecision service)")
         return _report()
 
     for f in REQUIRED_FILES:
         if not (POLICY / f).exists():
-            fail(f"services/policy/{f} missing")
+            fail(f"services/api/governance/policy/{f} missing")
 
     contracts = (POLICY / "contracts.py").read_text() if (POLICY / "contracts.py").exists() else ""
     for field in REQUIRED_DECISION_FIELDS:
@@ -57,7 +57,7 @@ def main() -> int:
         fail("signal_use_matrix.py must load packages/shared/contracts/signal-use-matrix.json")
 
     main_src = MAIN.read_text() if MAIN.exists() else ""
-    if "policy_router" not in main_src or "services.policy.routes" not in main_src:
+    if "policy_router" not in main_src or "governance.policy.routes" not in main_src:
         fail("policy router not wired into main.py")
 
     return _report()

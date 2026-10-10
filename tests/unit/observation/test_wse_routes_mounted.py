@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[3] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[3] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -74,7 +74,7 @@ def test_ws_e_route_policy_classification():
     """Default-deny ratchet: every mounted route classifies; the Kyber
     observability router is operator-required + audited + high risk; the health
     and manifest surfaces are NOT operator-gated (public/tenant surfaces)."""
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     for path in OBSERVABILITY_ROUTES:
         policy = classify(path, method="GET")

@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-BACKEND_ROOT = Path(__file__).parent.parent.parent / "services" / "backend"
+BACKEND_ROOT = Path(__file__).parent.parent.parent / "services" / "api"
 
 
 @contextmanager
@@ -23,7 +23,7 @@ def backend_module_path():
     original = list(sys.path)
     original_modules = dict(sys.modules)
 
-    for prefix in ("config", "services", "shared", "middleware", "dependencies", "repositories"):
+    for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories"):
         sys.modules.pop(prefix, None)
         for name in list(sys.modules):
             if name == prefix or name.startswith(f"{prefix}."):
@@ -47,7 +47,7 @@ def connector_svc(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     with backend_module_path():
-        from services.integrations.connectors.service import ConnectorService
+        from connectors.integrations.connectors.service import ConnectorService
         yield ConnectorService()
 
 
@@ -58,7 +58,7 @@ def connector_svc(monkeypatch):
 def _make_event(external_id: str = "evt-001"):
     """Build a minimal NormalizedEvent-like object."""
     with backend_module_path():
-        from services.integrations.connectors.base import NormalizedEvent
+        from connectors.integrations.connectors.base import NormalizedEvent
         return NormalizedEvent(
             external_id=external_id,
             event_type="purchase",
@@ -76,8 +76,8 @@ async def _run_shopify_pipeline(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
     with backend_module_path():
-        from services.integrations.connectors.service import ConnectorService
-        from services.integrations.connectors.base import NormalizedEvent, SyncResult
+        from connectors.integrations.connectors.service import ConnectorService
+        from connectors.integrations.connectors.base import NormalizedEvent, SyncResult
 
         svc = ConnectorService()
         tenant_id = "test-tenant-shopify"
@@ -110,7 +110,7 @@ async def _run_shopify_pipeline(monkeypatch):
             ingest_calls.append({"source": source, "payload": payload})
             return ("row-id", True)
 
-        import services.integrations.connectors.registry as reg
+        import connectors.integrations.connectors.registry as reg
         shopify = reg.get_connector("shopify")
         original_pull = shopify.pull
         shopify.pull = fake_pull
@@ -136,8 +136,8 @@ async def _run_stripe_pipeline(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
     with backend_module_path():
-        from services.integrations.connectors.service import ConnectorService
-        from services.integrations.connectors.base import NormalizedEvent
+        from connectors.integrations.connectors.service import ConnectorService
+        from connectors.integrations.connectors.base import NormalizedEvent
 
         svc = ConnectorService()
         tenant_id = "test-tenant-stripe"
@@ -168,7 +168,7 @@ async def _run_stripe_pipeline(monkeypatch):
             ingest_calls.append(source)
             return ("row-id", True)
 
-        import services.integrations.connectors.registry as reg
+        import connectors.integrations.connectors.registry as reg
         stripe = reg.get_connector("stripe")
         original_pull = stripe.pull
         stripe.pull = fake_pull
@@ -193,8 +193,8 @@ async def _run_slack_pipeline(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
     with backend_module_path():
-        from services.integrations.connectors.service import ConnectorService
-        from services.integrations.connectors.base import NormalizedEvent
+        from connectors.integrations.connectors.service import ConnectorService
+        from connectors.integrations.connectors.base import NormalizedEvent
 
         svc = ConnectorService()
         tenant_id = "test-tenant-slack"
@@ -225,7 +225,7 @@ async def _run_slack_pipeline(monkeypatch):
             ingest_calls.append(source)
             return ("row-id", True)
 
-        import services.integrations.connectors.registry as reg
+        import connectors.integrations.connectors.registry as reg
         slack = reg.get_connector("slack")
         original_pull = slack.pull
         slack.pull = fake_pull
@@ -267,7 +267,7 @@ def test_disabled_connector_skips_sync(monkeypatch):
 
     async def run():
         with backend_module_path():
-            from services.integrations.connectors.service import ConnectorService
+            from connectors.integrations.connectors.service import ConnectorService
 
             svc = ConnectorService()
             tenant_id = "test-tenant-disabled"

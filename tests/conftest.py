@@ -34,7 +34,7 @@ def pytest_configure(config):
 
 _BACKEND_MODULE_ROOTS = (
     "config",
-    "services",
+    "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing",
     "shared",
     "middleware",
     "dependencies",
@@ -68,7 +68,7 @@ def _restore_backend_module_identity():
     }
     # Import-sandbox tests can evict a child module from ``sys.modules`` while
     # leaving the old child object cached as an attribute on its parent package
-    # (``services.card_linked_payments.partner_feed`` is the common example).
+    # (``value.card_linked_payments.partner_feed`` is the common example).
     # Python's ``from package import child`` may then return that stale
     # attribute even after the canonical sys.modules entry has been restored.
     # Snapshot those package attributes as well; restoring only the mapping is

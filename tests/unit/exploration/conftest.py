@@ -7,14 +7,14 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # ── Force-load the S5 service tree BEFORE collection-finish ─────────────────
-# The exploration SESSION tests import ``services.exploration.service`` (and its
+# The exploration SESSION tests import ``journeys.exploration.service`` (and its
 # closure: ``session``/``operations``, ``shared.projection_engine.runtime``,
 # ``shared.intelligence_projections.registry``, ``repositories.repos``) only
 # INSIDE test bodies, so those modules are absent from the collection-time
@@ -32,8 +32,8 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 # adapters/facets), projection-engine runtime + registry singletons they bind,
 # and the BaseRepository store. Import side effects are limited to constructing
 # the in-memory repos (safe: the module imports cleanly with no AETHER_ENV).
-import services.exploration.service as _exploration_service  # noqa: E402,F401
-import services.exploration.session  # noqa: E402,F401
+import journeys.exploration.service as _exploration_service  # noqa: E402,F401
+import journeys.exploration.session  # noqa: E402,F401
 
 # ── Module-generation pinning ────────────────────────────────────────────────
 # Sibling suites (``tests/unit/`` ``test_ingestion_roundtrip.py``,
@@ -49,7 +49,7 @@ import services.exploration.session  # noqa: E402,F401
 # no test has purged anything yet) and re-pin it before each test.
 #
 # The exploration fabric binds identity across every one of these trees:
-# ``services.exploration.*`` (service/session/operations singletons),
+# ``journeys.exploration.*`` (service/session/operations singletons),
 # ``shared.exploration`` (context/session models), ``shared.projection_engine``
 # (``runtime``, ``lens_registry``, ``LensConflict``/``LensNotFound``),
 # ``shared.intelligence_projections`` (``ProjectionRequest``,
@@ -60,7 +60,7 @@ import services.exploration.session  # noqa: E402,F401
 # to the single collection-time generation so every party stays on one copy.
 _PINNED_PREFIXES = (
     "config",
-    "services",
+    "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing",
     "shared",
     "middleware",
     "dependencies",
@@ -98,9 +98,9 @@ def pytest_collection_finish(session) -> None:  # noqa: ANN001
 # adapters/models) stay pinned — they hold no store and their classes are
 # captured by the test files' top-level imports.
 _STATEFUL_S5_MODULES = (
-    "services.exploration.routes",
-    "services.exploration.service",
-    "services.exploration.session",
+    "journeys.exploration.routes",
+    "journeys.exploration.service",
+    "journeys.exploration.session",
 )
 
 

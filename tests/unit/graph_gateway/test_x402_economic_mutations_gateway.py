@@ -12,7 +12,7 @@ from repositories.graph_mutation_ledger import (
     GraphMutationLedgerRepository,
     reset_graph_ledger_memory,
 )
-from services.x402.economic_mutations import EconomicGraphMutations
+from value.x402.economic_mutations import EconomicGraphMutations
 from shared.graph.graph import GraphClient
 from shared.graph.mutation_gateway import current_graph_digest, replay_ledger
 

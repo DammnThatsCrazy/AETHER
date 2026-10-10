@@ -94,7 +94,7 @@ FARGATE SIZING
   priced number is auditable. An actively-planned service whose sizing cannot
   be resolved fails the gate rather than travelling downstream as a zero.
 
-OUTPUTS (written to --out-dir, default `artifacts/`)
+OUTPUTS (written to --out-dir, default `.artifacts/`)
   profile-resource-inventory.json   canonical machine-readable inventory
                                     (schema_version 1) -- consumed by
                                     check_cost_model.py --inventory
@@ -106,7 +106,7 @@ Usage:
   python scripts/release/check_terraform_plan_policy.py \\
       --profile production-lean --plan-json path/to/plan.json
   python scripts/release/check_terraform_plan_policy.py \\
-      --profile staging --plan-json plan.json --out-dir artifacts/staging
+      --profile staging --plan-json plan.json --out-dir .artifacts/staging
 
 Exit codes:
   0  the plan satisfies the profile's cost policy
@@ -141,7 +141,7 @@ INVENTORY_JSON = "profile-resource-inventory.json"
 INVENTORY_MD = "profile-resource-inventory.md"
 RESULT_JSON = "profile-policy-result.json"
 RESULT_MD = "profile-policy-result.md"
-DEFAULT_OUT_DIR = "artifacts"
+DEFAULT_OUT_DIR = ".artifacts"
 
 # Exit code for "the gate could not run", distinct from "the gate failed".
 EXIT_USAGE = 2

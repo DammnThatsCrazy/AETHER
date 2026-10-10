@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSIONS = ROOT / "services" / "backend" / "alembic" / "versions"
+VERSIONS = ROOT / "services" / "api" / "alembic" / "versions"
 
 
 def _migration_files() -> list[Path]:

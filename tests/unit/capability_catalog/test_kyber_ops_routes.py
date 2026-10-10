@@ -30,12 +30,12 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import TenantContext
 from shared.common.common import AetherError, BadRequestError
 
-import services.agent_access_intelligence.authority as authority_module
-import services.agent_access_intelligence.risk_service as risk_service
-from services.agent_access_intelligence.authority import capability_authority_service
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
-from services.agent_access_intelligence.identity import IDENTITY_FIELDS, artifact_digest_for
-from services.agent_access_intelligence.kyber_ops_routes import (
+import actions.agent_access_intelligence.authority as authority_module
+import actions.agent_access_intelligence.risk_service as risk_service
+from actions.agent_access_intelligence.authority import capability_authority_service
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.identity import IDENTITY_FIELDS, artifact_digest_for
+from actions.agent_access_intelligence.kyber_ops_routes import (
     authority_posture,
     capability_kyber_ops_router,
     drift_posture,
@@ -43,7 +43,7 @@ from services.agent_access_intelligence.kyber_ops_routes import (
     read_drift_posture,
     read_kyber_blast_radius,
 )
-from services.security.route_registry import classify
+from governance.security.route_registry import classify
 
 OPERATOR_PERM = get_settings().security_governance.kyber_operator_permission
 
