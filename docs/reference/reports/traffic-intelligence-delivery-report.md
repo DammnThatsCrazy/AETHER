@@ -81,14 +81,14 @@ append-only immutable revisions (raw evidence never mutated); dry-run supported.
 
 ## 10. Aether surface status
 
-`frontend/aether` user-profile touchpoints render canonical `source_class` labels
+`apps/aether-web` user-profile touchpoints render canonical `source_class` labels
 via `@aether/shared` (`SOURCE_CLASS_DEFAULTS`, `canonicalSourceClass`) with a local
 presentation lib; "Direct / Unknown" shown, never "typed URL"; proof/entry/conflict
 evidence surfaced. Tested.
 
 ## 11. Kyber surface status
 
-`frontend/kyber` measurement-ops page renders traffic-intelligence fields from the
+`apps/kyber-web` measurement-ops page renders traffic-intelligence fields from the
 existing source-classification contract. Tested. (Full operator dashboard suite —
 invalid-proof/replay dedicated panels — scoped to fields already exposed by the
 source-classification kyber route; see limitations.)

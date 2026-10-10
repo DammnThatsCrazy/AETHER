@@ -35,7 +35,7 @@ Evidence collected 2026-09-03. Absolute paths in §8 reference list.
    the LIVE gold store used by the endpoint — `GoldRepository("social_intelligence")`
    (`repositories/lake.py:611`, keyed metric rows). `gold_social = GoldRepository("social")`
    (`lake.py:584`) is separate, used by `composer._compose_lake_data`.
-6. **Aether SocialTab consumes a shape no backend produces**: `frontend/aether/.../
+6. **Aether SocialTab consumes a shape no backend produces**: `apps/aether-web/.../
    user-profile-page.tsx:1029-1099` reads top-level `platforms[]` + `content_count`, which
    neither the stub nor `IntelligenceAggregator.social_intelligence` (which returns `items[]` +
    `summary.platforms` as a list of strings) emits. Speculative/unwired contract.
@@ -63,8 +63,8 @@ Evidence collected 2026-09-03. Absolute paths in §8 reference list.
 | Social Gold (live) | `repositories/lake.py:611` `GoldRepository("social_intelligence")` | Keyed metric-row gold the endpoint reads | **EXTEND** per §57 "reuse existing gold where migration is safer"; reconcile with semantic/relationship Gold ownership | M4 |
 | Social Gold DDL | `docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_social_intelligence.py` | Non-bitemporal ClickHouse DDL; **not imported** | **DEPRECATE** (dead schema) unless M4 decides DDL migration is the safer reuse path (§57) | M4 |
 | TS contract | `packages/shared/social-intelligence.ts` (`SocialProfile`) | `total_followers_deduped`/`influence_level`/`engagement_rate`/`platforms_connected` | **COMPATIBILITY_WRAPPER** + deprecation metadata (§56); new canonical Social360 section added alongside | M1 + M4 |
-| Kyber social panel | `frontend/kyber/.../social-intelligence-panel.tsx` | Reads `items[]`+`summary`; fallback `influence_level:'low'` | **MIGRATE** to canonical Social360 payload (M10), interim compatibility in M4 | M4 + M10 |
-| Aether SocialTab | `frontend/aether/src/pages/user-profile/user-profile-page.tsx:1029` | Consumes speculative top-level `platforms[]` shape no backend emits | **MIGRATE** (rebuild against canonical contract); record shape-mismatch defect | M10 |
+| Kyber social panel | `apps/kyber-web/.../social-intelligence-panel.tsx` | Reads `items[]`+`summary`; fallback `influence_level:'low'` | **MIGRATE** to canonical Social360 payload (M10), interim compatibility in M4 | M4 + M10 |
+| Aether SocialTab | `apps/aether-web/src/pages/user-profile/user-profile-page.tsx:1029` | Consumes speculative top-level `platforms[]` shape no backend emits | **MIGRATE** (rebuild against canonical contract); record shape-mismatch defect | M10 |
 | Profile360 contract | `packages/shared/profile360-contract.ts:207` `social_intelligence?` | Field on profile contract | **COMPATIBILITY** (deprecate) → replaced by canonical section | M1/M10 |
 | Provider catalog entries | `services/api/connectors/provider_catalog/catalog.py` (twitter/reddit/telegram/discord/farcaster/lens/github/ens/snapshot) | Compliance states already honest (`DISABLED_COMPLIANCE_REVIEW`, `CREDENTIAL_GATED`, `SCAFFOLDED`) | **EXTEND** onto UPR social capability registration (M2); keep compliance states | M2 |
 | Social capability registry | `shared/intelligence_projections/generated_registry.py:1073-1132` (`social360` entry) | `in_flight`, `migrationMode:adapter`, requiresHistoricalConsentEvaluation | **REUSE** — the reserved projection contract this program implements | M1 |
@@ -87,8 +87,8 @@ recommended follow-up: fix within this program's M4 (attributed to social360); d
 
 defect: Aether frontend SocialTab consumes a payload shape (top-level platforms[] +
        content_count) that no backend route produces.
-source path: frontend/aether/src/pages/user-profile/user-profile-page.tsx:1029-1099;
-       frontend/aether/src/lib/api/endpoints.ts:1891-1908
+source path: apps/aether-web/src/pages/user-profile/user-profile-page.tsx:1029-1099;
+       apps/aether-web/src/lib/api/endpoints.ts:1891-1908
 impact: the customer-facing social tab can never be populated as written.
 depends on repair? yes — M10 surface wiring.
 recommended follow-up: rebuild SocialTab against the canonical Social360 contract in M10.
@@ -111,9 +111,9 @@ intelligence.py, composer.py, economic.py, read_result.py}` · `shared/dimension
 `tests/profile360/test_intelligence_endpoints.py` ·
 `docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_social_intelligence.py` ·
 `packages/shared/{social-intelligence.ts, targeting-intelligence.ts, profile360-contract.ts,
-entity-extensions.ts}` · `frontend/kyber/src/components/profile360/{social-intelligence-panel.tsx,
-profile360-view.tsx}` · `frontend/kyber/src/lib/api/endpoints.ts` ·
-`frontend/aether/src/pages/user-profile/user-profile-page.tsx` ·
-`frontend/aether/src/features/users/use-user-profile.ts` ·
-`frontend/aether/src/lib/api/endpoints.ts` (all under `/Users/osazehunt/AETHER/`,
+entity-extensions.ts}` · `apps/kyber-web/src/components/profile360/{social-intelligence-panel.tsx,
+profile360-view.tsx}` · `apps/kyber-web/src/lib/api/endpoints.ts` ·
+`apps/aether-web/src/pages/user-profile/user-profile-page.tsx` ·
+`apps/aether-web/src/features/users/use-user-profile.ts` ·
+`apps/aether-web/src/lib/api/endpoints.ts` (all under `/Users/osazehunt/AETHER/`,
 `services/api/` for the Python paths above).

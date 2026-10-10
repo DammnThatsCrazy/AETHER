@@ -10,7 +10,7 @@ Repo roots:
 - Python monolith: `services/api/` — `services/` (one dir per domain),
   `shared/` (cross-domain library), `repositories/`, `alembic/versions/`, `config/`, `main.py`.
 - TypeScript contracts: `packages/shared/` (hand-authored + generated twins of JSON registries).
-- Frontends: `frontend/kyber/` (operator console), `frontend/aether/` (marketing/demo console).
+- Frontends: `apps/kyber-web/` (operator console), `apps/aether-web/` (marketing/demo console).
 - Legacy data-lake schemas: `docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_*.py`.
 - Tooling/validators/generators: `scripts/`; canonical gates in `Makefile`.
 - Program reports: `docs/reference/reports/` (many prior audit/readiness ledgers live here; this program

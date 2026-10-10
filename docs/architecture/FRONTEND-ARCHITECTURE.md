@@ -19,11 +19,11 @@ reviewed_source_commits:
   - commit: "f4ba474e"
     reason: "Reviewed the Kyber empty-state test timing correction; data-bearing pages must await response-backed populated or empty state before asserting content."
   - commit: "436ebec1"
-    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (frontend/aether + frontend/kyber prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
+    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (apps/aether-web + apps/kyber-web prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
   - commit: "5d0a4989"
-    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under frontend/shared; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
+    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under packages/ui/core; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
   - commit: "01d51676"
-    reason: "R0 re-stamp after review (enduser-lifecycle lane). Reviewed against the two newer source commits under source_files: (1) 9620539f — the PR #607 squash; its non-test delta is login/signup ?email/?name prefill (already documented at lines 50-54 as the marketing-threshold handoff) plus frontend/shared motion tokenization (reviewed no-body-change at 5d0a4989), and the squash made the prior 0ebab813 stamp unreachable as an ancestor; (2) 01d51676 — the campaign-source triage touching the tenant Campaign Sources page under frontend/aether, which this doc does not describe (its Kyber /campaign-intelligence/sources bullet remains accurate). No body change required."
+    reason: "R0 re-stamp after review (enduser-lifecycle lane). Reviewed against the two newer source commits under source_files: (1) 9620539f — the PR #607 squash; its non-test delta is login/signup ?email/?name prefill (already documented at lines 50-54 as the marketing-threshold handoff) plus packages/ui/core motion tokenization (reviewed no-body-change at 5d0a4989), and the squash made the prior 0ebab813 stamp unreachable as an ancestor; (2) 01d51676 — the campaign-source triage touching the tenant Campaign Sources page under apps/aether-web, which this doc does not describe (its Kyber /campaign-intelligence/sources bullet remains accurate). No body change required."
   - commit: "95d53f4c"
     reason: "R1 re-stamp after review (enduser-lifecycle lane, contract spine). Reviewed the R1-s4 FE twin under apps/aether-web/src: new features/integrations/** (zod transport schemas for the four /v1 catalog read-model endpoints, useQuery hooks) plus the api.integrationCatalog group added to lib/api/endpoints.ts. This doc makes no exhaustive api-namespace or features/-directory enumeration, so the additions are additive and no body change was required."
   - commit: "3456414b"
@@ -98,13 +98,13 @@ the root.
   the billing page lists only the self-serve plans (contract tiers go through
   Contact sales). Without Auth0 settings, `/signup` is the email form, which
   registers a new tenant on a plan. The
-  Aether public marketing threshold (`frontend/aether-marketing`) hands users
+  Aether public marketing threshold (`apps/marketing-aether`) hands users
   into these pages with optional prefill query params — login accepts `?email`,
   signup accepts `?name` and `?email` — read once via a `useState` initializer
   (never an effect) so the first step arrives pre-filled; nothing is persisted
   and the auth semantics are unchanged
 - **Marketing connect/manage handoff consumers** — the tenant-side half of the
-  marketing shell's app-origin deep links (`frontend/aether-marketing` emits
+  marketing shell's app-origin deep links (`apps/marketing-aether` emits
   `/settings/integrations?family=<canonical>&experience=<category>&intent=connect|manage`
   and `/activate?experience=…&intent=connect|manage`, round-tripped through
   `/login?redirect=…`). Shared consumers in `features/settings/settings-handoff.ts`

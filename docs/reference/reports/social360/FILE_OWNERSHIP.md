@@ -32,7 +32,7 @@ Columns: capability → canonical owner today → owning path → this program's
 | Lens query execution | Exploration Fabric | `services/api/journeys/exploration/`, `shared/exploration/`, `shared/projection_engine/` (branch-only) | CONSUME + EXTEND (register lenses/filters) |
 | Findings/Investigations | Intelligence/Investigation | `services/api/governance/investigation/` | CONSUME |
 | NL explanation | Noesis | `services/api/intelligence/noesis/` | CONSUME (read-only; add read-only intents) |
-| Operator workflow | Kyber Intelligence OS | `services/api/governance/kyber/`, `frontend/kyber/` | EXTEND |
+| Operator workflow | Kyber Intelligence OS | `services/api/governance/kyber/`, `apps/kyber-web/` | EXTEND |
 
 ## Contract/registry ownership (integrator-owned; no shared-file free-for-all)
 

@@ -192,9 +192,9 @@ milestones:
       operator_id, flag-gated OFF like the tenant plane, 15 tests) and the operator client-sync
       read route closed the gap (services/api/ingestion/client_sync/operator_routes.py, /v1/kyber/client-sync
       reading o:{operator_id} via the SAME durable feed — no second sync feed, 3 new tests). Desktop
-      continue-on-phone surfaces: frontend/aether (continue-on-phone + recent-activity on the Noesis
+      continue-on-phone surfaces: apps/aether-web (continue-on-phone + recent-activity on the Noesis
       + notification-center pages, cursor-paged client-sync consumption, flags enableContinuations/
-      enableClientSyncConsumption default OFF, 13 tests) + frontend/kyber (operator continuation
+      enableClientSyncConsumption default OFF, 13 tests) + apps/kyber-web (operator continuation
       create button + panel on the EXISTING /kyber-commands page behind enableKyberContinuations OFF,
       13 tests). Mobile continue-on-desktop: aether-mobile AccountScreen ContinueOnDesktopPanel +
       kyber-mobile AccountScreen OperatorContinuationsPanel via @aether/mobile-core additions
@@ -264,8 +264,8 @@ architecture:
   credential_platform: reuse                # shared/credentials/* (in_memory/local_encrypted/aws_secrets_manager)
   mobile_apps: build                        # NET-NEW: apps/aether-mobile, apps/kyber-mobile (Expo + prebuild)
   mobile_shared_packages: build             # NET-NEW: packages/mobile-* (mobile-ui in M2)
-  desktop_notification_center_kyber: reuse  # frontend/kyber/src/features/notifications/* (mobile push = "Architecture-Ready")
-  desktop_notification_center_aether: build # NET-NEW: M3 inbox + preferences UI landed (frontend/aether/src/pages/notifications + use-inbox/use-notification-preferences)
+  desktop_notification_center_kyber: reuse  # apps/kyber-web/src/features/notifications/* (mobile push = "Architecture-Ready")
+  desktop_notification_center_aether: build # NET-NEW: M3 inbox + preferences UI landed (apps/aether-web/src/pages/notifications + use-inbox/use-notification-preferences)
   mobile_notification_projection: build     # NET-NEW: M1 (redacted push title/body/summary; no raw payload in push)
   delivery_safety_validator: build          # NET-NEW: M1 (scripts/release/validate_delivery_safety.py permanent gate)
   mobile_config_release: build              # NET-NEW: M2 (GET /v1/mobile/config + distribution profiles + app-version registration)
@@ -348,7 +348,7 @@ quality:                                     # updated at each milestone boundar
   provider_adapters: "21 adapter tests (fake path + production guard + injected-transport real-path request/response mapping); registry registers apns/fcm/web_push/email"
   deep_link_resolve: "12 tests (fail-closed unknown/unowned/revoked/cross-scope/cross-plane/expired all uniform; step-up gate)"
   credentials_tooling: "9 tests (env-var derivation, missing/invalid/configured states, --strict blocks required-profile creds, no secret leak)"
-  frontend_tests: "npm typecheck + build + test pass — frontend/aether 55 files/314 tests, frontend/kyber 57 files/498 tests, packages/sdk/mobile-core 46 tests (operator continuation SDK + M6 step-up/proof-keys/actions/receipts + P256 signer); ownership validator + ts public exports green"
+  frontend_tests: "npm typecheck + build + test pass — apps/aether-web 55 files/314 tests, apps/kyber-web 57 files/498 tests, packages/sdk/mobile-core 46 tests (operator continuation SDK + M6 step-up/proof-keys/actions/receipts + P256 signer); ownership validator + ts public exports green"
   migration_single_head: "true (head=20260830_app_version_registration; M2 app-version chained from 20260817_payment_provider_receipts to keep a single head; C1/C3 chain 20260820->20260821->20260822 from 20260812_credential_platform)"
   completion_baseline: "completion program re-based on origin/main head ead4ba6c (#509); pre-existing stale REPO-INDEX (591->592 docs count) repaired (0707e8cb) + 2 pre-existing source-linked stamps reviewed+updated (9d25c42b); make docs-check 38/38 green at completion start"
   ci_note: "intermediate superseded SHAs show a `validate` failure caused solely by E2E_TENANT_RESULT=cancelled (concurrency cancellation from the next push); every real gate passed. Only the final tip SHA is authoritative."

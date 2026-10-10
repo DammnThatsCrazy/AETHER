@@ -43,14 +43,14 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 |---|---|---|---|
 | **M3a** gateway-projections | Bounded redacted projections: today digest, profile summary, campaign summary, alerts inbox, explore briefing | `services/api/ingestion/mobile/projections.py`, `services/api/ingestion/mobile/routes.py` (projection routes), `services/api/tests/unit/test_mobile_projections.py` | mount routes; storage_policies; shared index; feature-surface manifest |
 | **M3b** aether-mobile-screens | Today/Copilot/Explore/Alerts/Account screens + typed navigation + offline consumption | `apps/aether-mobile/src/**`, `packages/ui/mobile/**` (extend if needed) | — (app-internal) |
-| **M3c** desktop-notification-center | Aether desktop NC (inbox UI, badge, filters, read/ack) + preferences persistence (quiet hours/timezone/digest) route+UI + device/session/account-deletion entry points | `frontend/aether/src/features/notifications/**`, `frontend/aether/src/features/account/**`, `services/api/ingestion/mobile/preferences.py` + routes | mount preferences routes in main.py; settings flag; shared index |
+| **M3c** desktop-notification-center | Aether desktop NC (inbox UI, badge, filters, read/ack) + preferences persistence (quiet hours/timezone/digest) route+UI + device/session/account-deletion entry points | `apps/aether-web/src/features/notifications/**`, `apps/aether-web/src/features/account/**`, `services/api/ingestion/mobile/preferences.py` + routes | mount preferences routes in main.py; settings flag; shared index |
 
 ## Wave 4 — M4 (Kyber Mobile + operator surfaces)
 
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
 | **M4a** kyber-mobile-screens | Pulse/Exceptions/Incidents/Runs/Reviews/Briefings + device/session mgmt — read-only, redacted | `apps/kyber-mobile/src/**` | — (app-internal) |
-| **M4b** kyber-desktop-polish | Command-receipt visibility stub + continuation creation hooks in Kyber desktop | `frontend/kyber/src/features/notifications/**`, `frontend/kyber/src/features/continue-on-phone/**`, `frontend/kyber/src/features/command/**` | — (frontend-internal) |
+| **M4b** kyber-desktop-polish | Command-receipt visibility stub + continuation creation hooks in Kyber desktop | `apps/kyber-web/src/features/notifications/**`, `apps/kyber-web/src/features/continue-on-phone/**`, `apps/kyber-web/src/features/command/**` | — (frontend-internal) |
 
 ## Wave 5 — M5 (C6 continue-on-phone + sync completion)
 
@@ -58,7 +58,7 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 |---|---|---|---|
 | **M5a** sync-producers | Wire 9 unwired producers via `enqueue_sync_change` at owning mutation sites | `services/api/journeys/notification_intelligence/lifecycle.py`, `services/api/journeys/exploration/store.py`, `services/api/intelligence/noesis/conversations.py`, `services/api/governance/kyber/ops/command_repository.py`, `services/api/tenancy/auth/sessions/service.py`, `services/api/ingestion/mobile/installations.py` (or existing repo), `services/api/tests/unit/test_sync_producers.py` | emitter signature stays stable; settings flag |
 | **M5b** operator-continuation-router | Kyber continuation router in `services/api/journeys/continuation/` (o: scope) + routes | `services/api/journeys/continuation/operator.py`, `services/api/journeys/continuation/routes.py` (operator router), `services/api/tests/unit/test_operator_continuation_router.py` | mount in main.py; feature-surface manifest |
-| **M5c** desktop-continue-on-phone | Desktop continue-on-phone/recent-activity/resume + copy handoff link (both frontends) | `frontend/aether/src/features/continue-on-phone/**`, `frontend/kyber/src/features/continue-on-phone/**` | — (frontend-internal) |
+| **M5c** desktop-continue-on-phone | Desktop continue-on-phone/recent-activity/resume + copy handoff link (both frontends) | `apps/aether-web/src/features/continue-on-phone/**`, `apps/kyber-web/src/features/continue-on-phone/**` | — (frontend-internal) |
 | **M5d** mobile-continue-on-desktop | Mobile continue-on-desktop/resume/send-to-desktop + client-sync consumption UI | `apps/aether-mobile/src/features/continue-on-desktop/**`, `apps/kyber-mobile/src/features/continue-on-desktop/**`, `packages/sdk/mobile-core/src/sync.ts` | — (app-internal) |
 
 ## Wave 6 — M6 (C7 governed mobile actions)
@@ -66,7 +66,7 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
 | **M6a** mobile-action-adapter | Gateway adapter: action availability + step-up adaptation to existing `services/api/governance/kyber/ops` | `services/api/ingestion/mobile/actions.py`, `services/api/ingestion/mobile/routes.py` (action routes), `packages/shared/mobile-action.ts`, `services/api/tests/unit/test_mobile_action_adapter.py`, `tests/contracts/test_mobile_action_parity.py` | mount routes; shared index; no second command plane |
-| **M6b** kyber-tier-ui | Kyber Mobile Tier 0/1/2/3 UI + step-up flow + command-receipt visibility | `apps/kyber-mobile/src/features/actions/**`, `apps/kyber-mobile/src/features/step-up/**`, `frontend/kyber/src/features/command-receipts/**` | — (app/frontend-internal) |
+| **M6b** kyber-tier-ui | Kyber Mobile Tier 0/1/2/3 UI + step-up flow + command-receipt visibility | `apps/kyber-mobile/src/features/actions/**`, `apps/kyber-mobile/src/features/step-up/**`, `apps/kyber-web/src/features/command-receipts/**` | — (app/frontend-internal) |
 | **M6c** mobile-device-attestation | Mobile-bound device signature/attestation where feasible | `services/api/governance/kyber/devices/device_proof.py` (extend), `services/api/tests/unit/test_mobile_device_attestation.py` | settings flag; storage_policies if new persisted field |
 
 ## Wave 7 — M7 (demo + distribution docs)

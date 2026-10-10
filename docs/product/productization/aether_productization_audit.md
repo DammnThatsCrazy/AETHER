@@ -303,7 +303,7 @@ pilot-ready are deliberately distinguished from production-ready throughout.
 
 ## 7. Recommended Next PR Sequence
 
-1. **Tenant self-serve onboarding** — `frontend/aether` signup →
+1. **Tenant self-serve onboarding** — `apps/aether-web` signup →
    tenant + API-key provisioning against existing `/v1/registration`.
    Accept: a new tenant can sign up, get keys, and send a first event
    without operator SQL. (Clears blocker #1.)

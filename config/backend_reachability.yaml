@@ -34,7 +34,7 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: documented, but no route, worker or import path reaches it
   - package: value.derivatives
-    modules: [connectors.generic_import, graph_mutations, guards, meter, replay]
+    modules: [connectors.generic_import, guards, meter, replay]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
   - package: journeys.exploration
@@ -73,10 +73,6 @@ allow_unreachable:
     modules: [adapters.projection_intelligence_adapter, conversations]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
-  - package: actions.agent
-    modules: [lifecycle_mapper]
-    ledger: product-backend-unmounted-code-pending
-    reason: only the production-status checklist names it; no route, worker or import path reaches it
   - package: journeys.campaign
     modules: [metrics]
     ledger: product-backend-unmounted-code-pending
@@ -117,10 +113,6 @@ allow_unreachable:
     modules: [models]
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
-  - package: value.x402
-    modules: [lifecycle_mapper]
-    ledger: product-backend-unmounted-code-pending
-    reason: documented, but no route, worker or import path reaches it
   - package: shared
     modules: [semantic_context]
     ledger: product-backend-unmounted-code-pending
