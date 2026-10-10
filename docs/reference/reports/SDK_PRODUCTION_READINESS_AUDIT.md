@@ -7,15 +7,15 @@ audience: [dev-senior, architect, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: sdk@aether
-source_files: [packages/shared/events.ts, packages/shared/consent.ts, packages/shared/sdk-version.ts, packages/web/src/index.ts, packages/web/src/core/event-queue.ts, packages/web/src/health/sdk-health-agent.ts, docs/reference/source-of-truth/PLATFORM_PARITY.md]
+source_files: [packages/shared/events.ts, packages/shared/consent.ts, packages/shared/sdk-version.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/core/event-queue.ts, packages/sdk/web/src/health/sdk-health-agent.ts, docs/reference/source-of-truth/PLATFORM_PARITY.md]
 source_hashes:
   "docs/reference/source-of-truth/PLATFORM_PARITY.md": "sha256:abb0660e91963d129b1f5d4a5b472c24bfb55001cd336952b709fdf9dbf13771"
+  "packages/sdk/web/src/core/event-queue.ts": "sha256:839b25762ec01f03c4f5faa12c73fbfd31d41551dde584fa32c46b7305c6c8c1"
+  "packages/sdk/web/src/health/sdk-health-agent.ts": "sha256:3cca664a5ca1b53a50bed15af670685bdc22840451a95d330dda572345348c20"
+  "packages/sdk/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:79883c251f1b5e9cd493fe08983da78a204f2af69e91d1e2a61036d67e338363"
   "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
-  "packages/web/src/core/event-queue.ts": "sha256:051105933fa4b11add2ab8d5548a18400bcb5f592b8b70dd42197363f885121d"
-  "packages/web/src/health/sdk-health-agent.ts": "sha256:3cca664a5ca1b53a50bed15af670685bdc22840451a95d330dda572345348c20"
-  "packages/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
 ---
 
 # Aether SDK Production Readiness Audit
@@ -55,12 +55,12 @@ their respective platforms.
 
 ## 1. Current State Per Platform
 
-### 1.1 Web SDK (`packages/web/`)
+### 1.1 Web SDK (`packages/sdk/web/`)
 
 | Component | Status | Notes |
 |---|---|---|
 | Transport: `POST /v1/batch` | SHIPPED | EventQueue targets `/v1/batch` exclusively |
-| Version: 8.11.0 | SHIPPED | `SDK_VERSION = '8.11.0'` in `packages/shared/sdk-version.ts` and `packages/web/src/index.ts` |
+| Version: 8.11.0 | SHIPPED | `SDK_VERSION = '8.11.0'` in `packages/shared/sdk-version.ts` and `packages/sdk/web/src/index.ts` |
 | Core analytics (track/page/screen) | SHIPPED | All emit canonical event types |
 | Error event type | SHIPPED | `error()` public API added in this PR |
 | Performance event type | SHIPPED | PerformanceModule emits `performance` canonical type |
@@ -73,14 +73,14 @@ their respective platforms.
 | x402 emitters (14 granular) | SHIPPED | `aether.x402.*` namespace |
 | Rewards client | SHIPPED | `aether.rewards.*` thin emitters |
 | Ecommerce full workflow | SHIPPED | EcommerceModule; `removeFromCart`/`applyCoupon`/`beginCheckout` |
-| React browser wrapper | SHIPPED | `packages/web/src/react.tsx` (created in this PR) |
+| React browser wrapper | SHIPPED | `packages/sdk/web/src/react.tsx` (created in this PR) |
 | `error()` public API | SHIPPED | Added in this PR |
 | Sensitive field scrubber | SHIPPED | Web collects no payment/key fields; scrubber in queue |
 | Plugin hooks | SHIPPED | Tier C; Web-only |
 | Heatmaps/funnels/form analytics | SHIPPED | Tier C; Web-only |
 | Auto-discovery | SHIPPED | Tier C; Web-only |
 
-### 1.2 iOS SDK (`packages/ios/`)
+### 1.2 iOS SDK (`packages/sdk/ios/`)
 
 | Component | Status | Notes |
 |---|---|---|
@@ -101,7 +101,7 @@ their respective platforms.
 | Sensitive field scrubber | SHIPPED | `SENSITIVE_KEYS` set in queue |
 | Apple Pay tracking | SHIPPED | Tier C; iOS-only |
 
-### 1.3 Android SDK (`packages/android/`)
+### 1.3 Android SDK (`packages/sdk/android/`)
 
 | Component | Status | Notes |
 |---|---|---|
@@ -122,7 +122,7 @@ their respective platforms.
 | Sensitive field scrubber | SHIPPED | `SENSITIVE_KEYS` set in queue |
 | Google Pay tracking | SHIPPED | Tier C; Android-only |
 
-### 1.4 React Native SDK (`packages/react-native/`)
+### 1.4 React Native SDK (`packages/sdk/react-native/`)
 
 | Component | Status | Notes |
 |---|---|---|
@@ -196,7 +196,7 @@ Source: `docs/reference/source-of-truth/PLATFORM_PARITY.md` (annotated with this
 ### 3.1 Canonical `/v1/batch` Transport
 
 **Evidence:**
-- `packages/web/src/core/event-queue.ts` line 11: `SDK_VERSION = '8.11.0'`; all fetch calls use `${endpoint}/v1/batch`
+- `packages/sdk/web/src/core/event-queue.ts` line 11: `SDK_VERSION = '8.11.0'`; all fetch calls use `${endpoint}/v1/batch`
 - `packages/shared/sdk-version.ts` line 9: `export const SDK_INGESTION_PATH = '/v1/batch' as const;`
 
 **Test:**
@@ -207,8 +207,8 @@ Source: `docs/reference/source-of-truth/PLATFORM_PARITY.md` (annotated with this
 
 **Evidence:**
 - `packages/shared/sdk-version.ts`: `SDK_VERSION = '8.11.0'`
-- `packages/web/src/index.ts` line 42: `const SDK_VERSION = '8.11.0';`
-- `packages/web/src/core/event-queue.ts` line 11: `SDK_VERSION = '8.11.0';`
+- `packages/sdk/web/src/index.ts` line 42: `const SDK_VERSION = '8.11.0';`
+- `packages/sdk/web/src/core/event-queue.ts` line 11: `SDK_VERSION = '8.11.0';`
 
 **Test:**
 - `packages/shared/events-registry.test.ts`: asserts `SDK_VERSION === '8.11.0'`
@@ -219,55 +219,55 @@ Source: `docs/reference/source-of-truth/PLATFORM_PARITY.md` (annotated with this
 ### 3.3 Core Analytics
 
 **Evidence:**
-- `packages/web/src/index.ts`: `track()`, `pageView()`, `conversion()` methods
+- `packages/sdk/web/src/index.ts`: `track()`, `pageView()`, `conversion()` methods
 - All emit canonical `EventType` values from `packages/shared/events.ts`
 
 **Test:**
-- `packages/web/test/event-queue.test.ts`: tests `track` events queue and flush
+- `packages/sdk/web/test/event-queue.test.ts`: tests `track` events queue and flush
 
 ### 3.4 Error/Performance Event Types
 
 **Evidence:**
-- `packages/web/src/index.ts` (this PR): `error()` emits `'error'` canonical type
-- `packages/web/src/modules/performance.ts`: emits `'performance'` type
+- `packages/sdk/web/src/index.ts` (this PR): `error()` emits `'error'` canonical type
+- `packages/sdk/web/src/modules/performance.ts`: emits `'performance'` type
 - iOS/Android MetricKit: fixed in this PR — now emits `'performance'` instead of `'track'`
 
 **Test:**
-- `packages/web/test/error-emitter.test.ts`: asserts `event.type === 'error'`
+- `packages/sdk/web/test/error-emitter.test.ts`: asserts `event.type === 'error'`
 
 ### 3.5 Journey Lifecycle API
 
 **Evidence:**
-- `packages/web/src/index.ts`: `startJourney()`, `pauseJourney()`, `resumeJourney()`, `continueJourney()`, `completeJourney()`, `abandonJourney()`, `checkpointJourney()`, `getCurrentJourney()`
+- `packages/sdk/web/src/index.ts`: `startJourney()`, `pauseJourney()`, `resumeJourney()`, `continueJourney()`, `completeJourney()`, `abandonJourney()`, `checkpointJourney()`, `getCurrentJourney()`
 - All emit canonical `JourneyLifecycleEventType` values
 
 **Test:**
-- `packages/web/test/journey-lifecycle.test.ts`: tests all 7 journey event types
+- `packages/sdk/web/test/journey-lifecycle.test.ts`: tests all 7 journey event types
 - `packages/shared/journey-events.test.ts`: tests consent gate and family for all journey types
 
 ### 3.6 Identity Hydration
 
 **Evidence:**
-- `packages/web/src/index.ts`: `hydrateIdentity()`, `getIdentity()`, `reset()`
+- `packages/sdk/web/src/index.ts`: `hydrateIdentity()`, `getIdentity()`, `reset()`
 - iOS/Android: `hydrateIdentity()` + email hashing; this PR adds `fingerprint_signals` to resolve POST body
 
 **Test:**
-- `packages/web/test/event-queue.test.ts`: identity fields on events
+- `packages/sdk/web/test/event-queue.test.ts`: identity fields on events
 
 ### 3.7 Consent Pre-Send Enforcement
 
 **Evidence:**
-- `packages/web/src/core/event-queue.ts`: registry-derived consent map (from `generated-consent-map`) + `setConsent()` + `allowedByConsent()` in flush
+- `packages/sdk/web/src/core/event-queue.ts`: registry-derived consent map (from `generated-consent-map`) + `setConsent()` + `allowedByConsent()` in flush
 - `EVENT_CONSENT_PURPOSE` in `packages/shared/events.ts` is the canonical source
 
 **Test:**
-- `packages/web/test/event-queue.test.ts`: consent filtering tests
-- `packages/web/test/consent-gating.test.ts` (this PR): GDPR mode tests, consent event pass-through
+- `packages/sdk/web/test/event-queue.test.ts`: consent filtering tests
+- `packages/sdk/web/test/consent-gating.test.ts` (this PR): GDPR mode tests, consent event pass-through
 
 ### 3.8 Health Heartbeat
 
 **Evidence:**
-- `packages/web/src/health/sdk-health-agent.ts`: fleet heartbeat with `queue_depth`, `endpoint_latency_ms`, `schema_hash`, `ingestion_success_rate`
+- `packages/sdk/web/src/health/sdk-health-agent.ts`: fleet heartbeat with `queue_depth`, `endpoint_latency_ms`, `schema_hash`, `ingestion_success_rate`
 - iOS: `AetherHealthAgent.swift` added in this PR — same payload fields
 - Android: `AetherHealthAgent.kt` added in this PR — same payload fields
 
@@ -300,17 +300,17 @@ Requires Android SDK/Gradle build environment
 ### 3.9 Remote Manifest/Config
 
 **Evidence:**
-- `packages/web/src/health/sdk-health-agent.ts`: `onManifestUpdate()` callback
-- `packages/web/src/index.ts`: `applyRemoteManifest()` applies feature gates from manifest
+- `packages/sdk/web/src/health/sdk-health-agent.ts`: `onManifestUpdate()` callback
+- `packages/sdk/web/src/index.ts`: `applyRemoteManifest()` applies feature gates from manifest
 
 ### 3.10 Retry/Backoff/429 Handling
 
 **Evidence:**
-- `packages/web/src/core/event-queue.ts`: retry logic with exponential backoff
+- `packages/sdk/web/src/core/event-queue.ts`: retry logic with exponential backoff
 - Default config: `maxRetries: 3`, `baseDelay: 1000ms`, `backoffMultiplier: 2`
 
 **Test:**
-- `packages/web/test/event-queue.test.ts`: retry on 5xx, re-queue on 4xx
+- `packages/sdk/web/test/event-queue.test.ts`: retry on 5xx, re-queue on 4xx
 
 ---
 
@@ -384,9 +384,9 @@ Added to iOS, Android, and React Native bridges:
 }
 ```
 
-Web SDK reference: `packages/web/src/index.ts` lines 986–991.
+Web SDK reference: `packages/sdk/web/src/index.ts` lines 986–991.
 
-### 4.8 React Browser Wrapper (`packages/web/src/react.tsx`)
+### 4.8 React Browser Wrapper (`packages/sdk/web/src/react.tsx`)
 
 Created in this PR. Provides:
 - `AetherProvider`: React context provider wrapping SDK init/destroy lifecycle
@@ -399,7 +399,7 @@ Created in this PR. Provides:
 
 ### 4.9 Public `error()` API on Web SDK
 
-Added to `packages/web/src/index.ts` (this PR):
+Added to `packages/sdk/web/src/index.ts` (this PR):
 
 ```typescript
 error(message: string, error?: Error | unknown, properties?: Record<string, unknown>): void
@@ -410,7 +410,7 @@ error(message: string, error?: Error | unknown, properties?: Record<string, unkn
 - Passes non-Error throwables through as `properties.thrown`
 - Merges additional `properties` argument
 
-**Test:** `packages/web/test/error-emitter.test.ts`
+**Test:** `packages/sdk/web/test/error-emitter.test.ts`
 
 ---
 
@@ -425,7 +425,7 @@ error(message: string, error?: Error | unknown, properties?: Record<string, unkn
 | Auto-discovery | Web | SHIPPED — `AutoDiscoveryModule` |
 | Apple Pay tracking | iOS | SHIPPED — `trackApplePayPayment()` |
 | Google Pay tracking | Android | SHIPPED — `trackGooglePayPayment()` |
-| React browser wrapper | Web | SHIPPED — `packages/web/src/react.tsx` |
+| React browser wrapper | Web | SHIPPED — `packages/sdk/web/src/react.tsx` |
 
 ---
 
@@ -463,12 +463,12 @@ Advisory items (no blocking impact):
 | `packages/shared/events.ts` | Canonical `EventType` union, `EVENT_FAMILY`, `EVENT_CONSENT_PURPOSE`, `BaseEvent`, `BatchPayload` |
 | `packages/shared/consent.ts` | `CONSENT_PURPOSES`, `ConsentState`, `ConsentPurpose` |
 | `packages/shared/sdk-version.ts` | `SDK_VERSION`, `SDK_INGESTION_PATH` |
-| `packages/web/src/index.ts` | Main Web SDK class, all public methods including new `error()` |
-| `packages/web/src/core/event-queue.ts` | `EventQueue`, registry-derived consent map, flush/retry/persistence logic |
-| `packages/web/src/health/sdk-health-agent.ts` | Fleet health heartbeat agent |
+| `packages/sdk/web/src/index.ts` | Main Web SDK class, all public methods including new `error()` |
+| `packages/sdk/web/src/core/event-queue.ts` | `EventQueue`, registry-derived consent map, flush/retry/persistence logic |
+| `packages/sdk/web/src/health/sdk-health-agent.ts` | Fleet health heartbeat agent |
 | `docs/reference/source-of-truth/PLATFORM_PARITY.md` | Tier A/B/C parity matrix |
 | `packages/shared/journey-events.test.ts` | Journey event contract tests (pre-existing) |
-| `packages/web/test/event-queue.test.ts` | EventQueue tests (pre-existing) |
+| `packages/sdk/web/test/event-queue.test.ts` | EventQueue tests (pre-existing) |
 
 ---
 
@@ -491,14 +491,14 @@ AetherHealthAgentTests, AetherDurableQueueTests, AetherAgentEmittersTests pass
 Requires macOS + Xcode 15+ + iOS Simulator toolchain; not available on Linux runners
 
 # Workflow
-.github/workflows/ios.yml (path filter: packages/ios/**)
+.github/workflows/ios.yml (path filter: packages/sdk/ios/**)
 ```
 
 ### iOS — pod spec lint
 
 ```bash
 # Command
-pod spec lint packages/ios/AetherSDK.podspec --allow-warnings
+pod spec lint packages/sdk/ios/AetherSDK.podspec --allow-warnings
 
 # Expected result
 AetherSDK.podspec passed validation
@@ -514,7 +514,7 @@ Requires macOS + CocoaPods + iOS Simulator
 
 ```bash
 # Command
-cd packages/android && ./gradlew test
+cd packages/sdk/android && ./gradlew test
 
 # Expected result
 AetherHealthAgentTest, AetherDurableQueueTest, AetherAgentEmittersTest pass
@@ -523,14 +523,14 @@ AetherHealthAgentTest, AetherDurableQueueTest, AetherAgentEmittersTest pass
 Requires Android SDK (ANDROID_HOME), Gradle 8.x, JDK 17+
 
 # Workflow
-.github/workflows/android.yml (path filter: packages/android/**)
+.github/workflows/android.yml (path filter: packages/sdk/android/**)
 ```
 
 ### Android — Maven publish dry-run
 
 ```bash
 # Command
-cd packages/android && ./gradlew publishToMavenLocal
+cd packages/sdk/android && ./gradlew publishToMavenLocal
 
 # Expected result
 io.aether:aether-android:8.9.0 published to local Maven repository
@@ -555,7 +555,7 @@ npm run test --workspace=packages/shared
 # Expected: events-registry, consent-model, ingestion-envelope, journey-events tests pass
 
 # 2. Verify Web SDK tests
-npm run test --workspace=packages/web
+npm run test --workspace=packages/sdk/web
 
 # Expected: event-queue, error-emitter, consent-gating, journey-lifecycle tests pass
 

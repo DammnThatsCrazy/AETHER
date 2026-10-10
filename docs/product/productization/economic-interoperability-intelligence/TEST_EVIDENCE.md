@@ -26,8 +26,8 @@ source_hashes:
 - `npm test` (packages/shared + workspaces) — passing, including
   `stablecoin.test.ts`, `interoperability.test.ts`, and updated
   `events-registry.test.ts` / `consent-model.test.ts` counts.
-- `apps/aether`: typecheck + vitest (79 tests / 21 files).
-- `apps/kyber`: typecheck + vitest (179 tests / 26 files).
+- `apps/aether-web`: typecheck + vitest (79 tests / 21 files).
+- `apps/kyber-web`: typecheck + vitest (179 tests / 26 files).
 
 ## Domain coverage highlights
 

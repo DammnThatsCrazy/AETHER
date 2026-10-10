@@ -37,7 +37,7 @@ resolved**, and an HTTP 200 is not proof of anything.
 | Attention / routing policy | `services/backend/services/notification_intelligence/policy_engine.py` |
 | Delivery (intent → job → adapter → receipt) | `services/backend/services/delivery/` (leased worker, backoff, dead-letter) |
 | Channel gateways (Slack/Discord/Telegram/webhook) | `services/backend/services/notification_intelligence/channel_gateway.py` |
-| Operator notification center (desktop) | `apps/kyber/src/features/notifications/` |
+| Operator notification center (desktop) | `apps/kyber-web/src/features/notifications/` |
 
 Desktop and mobile read the **same** `notification_inbox` records — a
 notification opened on mobile is opened on desktop. Client-specific copies are not

@@ -15,7 +15,7 @@ import re
 from typing import Optional
 
 # Request headers the first-party browser apps send on every API call
-# (apps/aether and apps/kyber REST clients). A header missing here
+# (apps/aether-web and apps/kyber-web REST clients). A header missing here
 # fails the CORS preflight with 400 "Disallowed CORS headers", which the
 # browser reports as "Failed to fetch" for every request, sign-in included.
 CORS_ALLOW_HEADERS: tuple[str, ...] = (

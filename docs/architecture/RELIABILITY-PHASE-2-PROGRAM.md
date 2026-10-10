@@ -278,7 +278,7 @@ tenant, on two independent feature flags, and on whether the relay worker
 described as a later deliverable has since been turned on.
 
 Separately, on the client side, the Node server SDK's queue
-(`packages/server/src/queue.ts`, `EventQueue`) is a bare in-process array:
+(`packages/sdk/server/src/queue.ts`, `EventQueue`) is a bare in-process array:
 
 ```
 private readonly queue: QueuedEvent[] = [];
@@ -299,9 +299,9 @@ transactional-outbox pattern in V2) but the reference server SDK has not.
   attempts are already configurable (`OUTBOX_RELAY_*` env vars), i.e. the
   relay's operational shape is designed, but its `enabled` default is
   `False`.
-- `packages/server/src/queue.ts` — bounded (`maxSize`, default 1000),
+- `packages/sdk/server/src/queue.ts` — bounded (`maxSize`, default 1000),
   exponential-backoff retry with jitter, but entirely in-process memory;
-  `packages/server/src/transport.ts` already parses structured
+  `packages/sdk/server/src/transport.ts` already parses structured
   accepted/duplicate/rejected counters from the V1/V2-compatible
   `BatchResponse`, so the transport layer already expects the durable
   backend contract — only the client-side queue is the gap.
@@ -338,7 +338,7 @@ implementations requires no change to `client.ts` or `transport.ts`:
 - **M2** — Expand `canary_tenants` to 100% of tenants once M1 is stable.
 - **M3** — Delete the V1 ingestion path and the `IngestionV2Config` flag
   surface entirely.
-- **M4** — Implement `DurableEventQueue` in `packages/server`, matching the
+- **M4** — Implement `DurableEventQueue` in `packages/sdk/server`, matching the
   existing `EventQueue` interface.
 - **M5** — Ship `DurableEventQueue` as opt-in, then default, in the Node
   SDK client, with startup replay and a documented disk-space bound.
@@ -359,7 +359,7 @@ by a full observation window — the canary flag is the rollback mechanism
 for M2, so V1 code cannot be deleted until that safety net is no longer
 needed. M4 is independent of the backend milestones and can ship on its
 own schedule. M5 depends on M4 plus the Node SDK's existing version/
-changelog process (`packages/server/package.json`).
+changelog process (`packages/sdk/server/package.json`).
 
 ### Risks
 

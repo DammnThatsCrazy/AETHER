@@ -16,11 +16,11 @@ Proof apps are minimal consumer apps that exercise an SDK through a real UI. The
 
 Each proof app targets one SDK platform. The proof apps are:
 
-- `apps/proof-web` — Web SDK proof app.
-- `apps/proof-react` — React SDK proof app.
-- `apps/proof-ios` — iOS SDK proof app.
-- `apps/proof-android` — Android SDK proof app.
-- `apps/proof-connectors` — Connector proof app (where a connector needs a UI to exercise its flow).
+- `tests/e2e/proof/apps/web` — Web SDK proof app.
+- `tests/e2e/proof/apps/react` — React SDK proof app.
+- `tests/e2e/proof/apps/ios` — iOS SDK proof app.
+- `tests/e2e/proof/apps/android` — Android SDK proof app.
+- `tests/e2e/proof/apps/connectors` — Connector proof app (where a connector needs a UI to exercise its flow).
 
 The SDK proof apps are described here. The connector proof app is described in [Connector Testing](./testing/connector-testing.md) where relevant.
 

@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/agent-deployment.ts, packages/server/src/agent-telemetry.ts, packages/python/aether_agentic/agentic.py, services/backend/services/agent/deployments.py, services/backend/services/agent/deployment_routes.py, services/backend/services/ingestion/batch.py]
+source_files: [packages/shared/agent-deployment.ts, packages/sdk/server/src/agent-telemetry.ts, packages/sdk/python/aether_agentic/agentic.py, services/backend/services/agent/deployments.py, services/backend/services/agent/deployment_routes.py, services/backend/services/ingestion/batch.py]
 last_synced_commit: HEAD
 ---
 
@@ -95,7 +95,7 @@ SDK-supplied `canonical_entity_id` is always stripped regardless of flags.
 
 ## Server-side Agent Telemetry SDK
 
-TypeScript (`packages/server`): `AgentTelemetryClient extends AetherServerSDK`
+TypeScript (`packages/sdk/server`): `AgentTelemetryClient extends AetherServerSDK`
 — inherits `/v1/batch` batching, retry/backoff, scrubbing, consent handling.
 Construction requires a validated `AgentDeploymentContext`; every event gets
 `context.agentDeployment` attached. Helpers → canonical events:
@@ -110,7 +110,7 @@ Construction requires a validated `AgentDeploymentContext`; every event gets
 | `outcomeRecorded(...)` | `agent_outcome_recorded` |
 | `riskSignal(...)` | `agent_risk_signal_observed` |
 
-Python (`packages/python/aether_agentic`): `build_deployment_context(...)`
+Python (`packages/sdk/python/aether_agentic`): `build_deployment_context(...)`
 plus an optional `deployment=` parameter on all envelope builders; emits the
 same camelCase `agentDeployment` wire shape. `execution_by_aether` remains
 hard-`False`.
@@ -275,8 +275,8 @@ Backend: `BE/tests/agent/test_deployments.py` (state machine, tenant
 isolation, audit, sanitization), `test_deployment_routes.py` (routes,
 Kyber permission), `BE/tests/unit/test_ingestion_deployment_context.py`
 (accept/reject/strip, flag-off unchanged), identity merge-policy guards.
-SDK: `packages/server/src/agent-telemetry.test.ts` (15 tests),
-`packages/python/aether_agentic/test_agentic.py` (20 tests).
+SDK: `packages/sdk/server/src/agent-telemetry.test.ts` (15 tests),
+`packages/sdk/python/aether_agentic/test_agentic.py` (20 tests).
 Frontend: aether deployments feature tests; Kyber agent-telemetry page tests.
 
 ## Known limitations / non-goals

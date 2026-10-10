@@ -18,13 +18,13 @@ validation work. It is not a production-readiness statement.
 
 | Acceptance area | Evidence inspected on this checkout |
 | --- | --- |
-| Brand source of truth | `packages/brand/` is the `@olympus/brand` workspace package. Its public barrel exports identity, providers, iconography, tokens, motion, surfaces, and responsive metadata. |
-| Official identity ownership | The reviewed Aether/Olympus SVGs are under `packages/brand/src/identity/marks/`. Aether and Kyber Vite configs use that directory as `publicDir`. |
+| Brand source of truth | `packages/ui/brand/` is the `@olympus/brand` workspace package. Its public barrel exports identity, providers, iconography, tokens, motion, surfaces, and responsive metadata. |
+| Official identity ownership | The reviewed Aether/Olympus SVGs are under `packages/ui/brand/src/identity/marks/`. Aether and Kyber Vite configs use that directory as `publicDir`. |
 | Hierarchy and responsive lockups | Olympus, Aether, Kyber, and combined manifests exist. `lockupResponsiveRules` defines full/compact/mark behavior, including Aether compact at 72px. |
 | Provider safety | Provider registry and attribution modules exist. The package test verifies every current provider mark is a neutral fallback without remote or invented asset paths. |
 | Semantic taxonomies | Distinct navigation, action, entity, domain, status, severity, freshness, confidence, and provenance modules are present. |
 | Interaction rules | Typed icon-size, typography, spacing, radius, border, focus, elevation, shadow, motion, surface, and responsive modules are present. |
-| React adapter | `apps/shared/src/index.ts` exports brand lockups/marks, navigation icons, provider renderers, entity renderers, semantic indicators, and surface components. |
+| React adapter | `packages/ui/core/src/index.ts` exports brand lockups/marks, navigation icons, provider renderers, entity renderers, semantic indicators, and surface components. |
 | Documentation guidance | This directory contains linked operational references for each requested topic plus the migration playbook. |
 | Aether ownership and adoption | [Aether context and consumer matrix](./aether-consumer-matrix.md) records the context, value, layer owners, dependency sequence, and consumer-specific evidence without asserting completion. |
 | Branch reconciliation | The delivery branch was rebased onto current `main`; the documentation index and source-linked anchors were reconciled before the remaining consumer work was evaluated. |

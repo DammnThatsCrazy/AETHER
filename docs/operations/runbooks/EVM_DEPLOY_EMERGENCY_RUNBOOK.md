@@ -7,14 +7,14 @@ audience: [ops, dev-senior, security]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - contracts/smart-contracts/contracts/AnalyticsRewards.sol
-  - contracts/smart-contracts/audit/DEPLOYMENT.md
-  - contracts/smart-contracts/audit/KNOWN_LIMITATIONS.md
+  - packages/contracts/smart-contracts/contracts/AnalyticsRewards.sol
+  - packages/contracts/smart-contracts/audit/DEPLOYMENT.md
+  - packages/contracts/smart-contracts/audit/KNOWN_LIMITATIONS.md
 canonical_owner: platform@aether
 source_hashes:
-  "contracts/smart-contracts/audit/DEPLOYMENT.md": "sha256:e728330b15261c786e1b195a882ba3997e8f3e12cf871f3e46cc9543821d945b"
-  "contracts/smart-contracts/audit/KNOWN_LIMITATIONS.md": "sha256:4b0d06c0e8a27f62731e308482f5c201c786b638d7c65fc61571fcd777a0d34e"
-  "contracts/smart-contracts/contracts/AnalyticsRewards.sol": "sha256:899d5684ce989049b36863123e9fa0c44fc9b1d01f16c2ef0838d408e7b0832f"
+  "packages/contracts/smart-contracts/audit/DEPLOYMENT.md": "sha256:8023486cb0ab1379fcc47f37e463c11d8ca475cfcc3a86cf790a3498776d58f1"
+  "packages/contracts/smart-contracts/audit/KNOWN_LIMITATIONS.md": "sha256:4b0d06c0e8a27f62731e308482f5c201c786b638d7c65fc61571fcd777a0d34e"
+  "packages/contracts/smart-contracts/contracts/AnalyticsRewards.sol": "sha256:899d5684ce989049b36863123e9fa0c44fc9b1d01f16c2ef0838d408e7b0832f"
 ---
 
 # EVM Deploy & Emergency Runbook
@@ -23,13 +23,13 @@ This runbook is the operational entry point for the EVM reward contracts. It
 does **not** restate the audit package — it points to it and covers the
 break-glass steps. Authoritative references:
 
-- Deployment + verification procedure: `contracts/smart-contracts/audit/DEPLOYMENT.md`
-- Threat model: `contracts/smart-contracts/audit/THREAT_MODEL.md`
-- Known limitations (read before any mainnet action): `contracts/smart-contracts/audit/KNOWN_LIMITATIONS.md`
-- Deploy scripts: `contracts/smart-contracts/scripts/deploy.js`,
-  `contracts/smart-contracts/scripts/post_deploy_verify.js`,
-  `contracts/smart-contracts/deploy/multichain_deployer.py`
-- Signer/registry: `contracts/smart-contracts/deploy/registry/`
+- Deployment + verification procedure: `packages/contracts/smart-contracts/audit/DEPLOYMENT.md`
+- Threat model: `packages/contracts/smart-contracts/audit/THREAT_MODEL.md`
+- Known limitations (read before any mainnet action): `packages/contracts/smart-contracts/audit/KNOWN_LIMITATIONS.md`
+- Deploy scripts: `packages/contracts/smart-contracts/scripts/deploy.js`,
+  `packages/contracts/smart-contracts/scripts/post_deploy_verify.js`,
+  `packages/contracts/smart-contracts/deploy/multichain_deployer.py`
+- Signer/registry: `packages/contracts/smart-contracts/deploy/registry/`
 
 ## Mainnet gate (do not skip)
 

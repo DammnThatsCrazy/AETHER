@@ -24,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "packages"
+SDK_PKG = PKG / "sdk"
 
 ERRORS: list[str] = []
 
@@ -34,7 +35,7 @@ def fail(msg: str) -> None:
 
 def _sdk_text(sdk_rel: str, exts: tuple[str, ...]) -> str:
     """Concatenate the source of one SDK subtree (best-effort)."""
-    base = PKG / sdk_rel
+    base = SDK_PKG / sdk_rel
     if not base.exists():
         return ""
     chunks: list[str] = []
@@ -152,10 +153,10 @@ def main() -> int:
     # iOS fingerprint must be consent+ATT gated, and the App Store privacy
     # manifest must ship with the package.
     _require("ios", ios, ["gatedFingerprint"], "consent/ATT-gated fingerprint")
-    xcprivacy = PKG / "ios" / "Sources" / "AetherSDK" / "PrivacyInfo.xcprivacy"
+    xcprivacy = SDK_PKG / "ios" / "Sources" / "AetherSDK" / "PrivacyInfo.xcprivacy"
     if not xcprivacy.exists():
         fail("ios: missing PrivacyInfo.xcprivacy privacy manifest")
-    pkg_swift = PKG / "ios" / "Package.swift"
+    pkg_swift = SDK_PKG / "ios" / "Package.swift"
     if pkg_swift.exists() and "PrivacyInfo.xcprivacy" not in pkg_swift.read_text(encoding="utf-8"):
         fail("ios: Package.swift does not bundle PrivacyInfo.xcprivacy as a resource")
 

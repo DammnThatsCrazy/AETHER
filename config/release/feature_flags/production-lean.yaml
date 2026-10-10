@@ -294,7 +294,7 @@ mobile:
     required_gates:
       - scripts/validate_sdk_release_alignment.py
       - scripts/release/sdk_conformance.py
-      - npm run typecheck --workspace=packages/react-native
+      - npm run typecheck --workspace=packages/sdk/react-native
       - native compile on hosted macOS/Android toolchains
   apps:
     - aether-mobile: design_partner_dev_only

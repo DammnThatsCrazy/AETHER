@@ -78,7 +78,7 @@ flags only switch transport/storage/surface availability, never semantics.
 
 | M | Theme | Blueprint § | Ships (dark until) | Exit gate |
 |---|---|---|---|---|
-| **M0** | Scaffold + contracts + mapping | 3, 39 | `services/backend/services/data_exchange/` contracts/policy/events skeleton, `packages/shared/data-exchange.ts` twin + parity, `DataExchangeConfig` flags OFF, this plan, ownership registration | `make ci-check` green |
+| **M0** | Scaffold + contracts + mapping | 3, 39 | `services/backend/services/data_exchange/` packages/contracts/policy/events skeleton, `packages/shared/data-exchange.ts` twin + parity, `DataExchangeConfig` flags OFF, this plan, ownership registration | `make ci-check` green |
 | **M1** | Storage-plane migration | 4, 36 | `ObjectStoreImportStorage`, ObjectStore artifact path, `data_artifacts` table + repo, `data_exchange.migrate_legacy_artifact` idempotent job; BYTEA retained through compat window | green + migration tests |
 | **M2** | Signed transfers | 5, 27 | `ObjectTransferService`, upload-url / upload-complete / download endpoints, server-side verify (size/hash/tenant prefix/token), short-TTL signed URLs | green + security tests |
 | **M3** | Import control plane | 6–14, 21–22 | `/v1/data-exchange/imports*` envelope over the existing engine, identity-preview + graph-preview adapters, saved-mappings CRUD, capabilities/usage/settings adapters | green |
@@ -170,8 +170,8 @@ M6 is the tenant **Settings → Data Exchange** surface: feature module + sectio
 mounts + export/report dialogs + capability-driven controls, verified by unit /
 component tests and a Playwright E2E spec at the deferred gate.
 
-- `apps/aether/src/features/data-exchange/` (`api.ts`, `use-*.ts`, `index.ts`), `apps/aether/src/pages/settings/data-exchange-section.tsx` + `settings-page.tsx` mount, `apps/aether/src/app/router.tsx` nav, `docs/reference/audits/FRONTEND-ROUTE-STATE-MATRIX.md` rows.
-- `apps/aether/src/test/unit/data-exchange.test.ts`, `apps/aether/src/test/component/data-exchange-section.test.tsx`, `apps/aether/src/test/e2e/data-exchange.spec.ts`.
+- `apps/aether-web/src/features/data-exchange/` (`api.ts`, `use-*.ts`, `index.ts`), `apps/aether-web/src/pages/settings/data-exchange-section.tsx` + `settings-page.tsx` mount, `apps/aether-web/src/app/router.tsx` nav, `docs/reference/audits/FRONTEND-ROUTE-STATE-MATRIX.md` rows.
+- `apps/aether-web/src/test/unit/data-exchange.test.ts`, `apps/aether-web/src/test/component/data-exchange-section.test.tsx`, `apps/aether-web/src/test/e2e/data-exchange.spec.ts`.
 - Exit: unit/component/e2e at the deferred gate (repo precedent: network-enabled run).
 
 ## M7 ledger (shipped — ops/hardening)

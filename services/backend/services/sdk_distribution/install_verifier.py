@@ -6,7 +6,7 @@ who copies the snippet, ships it, and sees no data cannot tell whether they got
 the key wrong, whether a CSP header blocked the loader, or whether they are
 simply looking at a dashboard before the first event arrived.
 
-So the loader reports its own milestones (see ``packages/web/src/loader/
+So the loader reports its own milestones (see ``packages/sdk/web/src/loader/
 heartbeat.ts``): ``sdk_loaded`` when the bundle ran, ``sdk_initialized`` when
 the SDK accepted its config, and ``sdk_init_failed`` when it did not. Those ride
 the ordinary ``/v1/batch`` contract as ``core``-family events. This module reads

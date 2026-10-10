@@ -19,7 +19,7 @@ def _scan(tmp_path: Path, relative: str, text: str, *, exceptions=()):
 def test_nav_glyphs_and_deprecated_primitive_are_reported_with_lines(tmp_path: Path) -> None:
     findings, applied = _scan(
         tmp_path,
-        "apps/aether/src/components/app-shell.tsx",
+        "apps/aether-web/src/components/app-shell.tsx",
         "import { GlyphIcon } from '@aether/ui';\nconst nav = [{ glyph: '[u]' }];\n",
     )
 
@@ -33,7 +33,7 @@ def test_nav_glyphs_and_deprecated_primitive_are_reported_with_lines(tmp_path: P
 def test_raw_unicode_and_escaped_icon_glyphs_are_limited_to_migrated_nav(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/kyber/src/components/layout/top-bar.tsx",
+        "apps/kyber-web/src/components/layout/top-bar.tsx",
         "const icon = '\\u2709';\nconst second = '◈';\n",
     )
 
@@ -47,7 +47,7 @@ def test_raw_unicode_and_escaped_icon_glyphs_are_limited_to_migrated_nav(tmp_pat
 def test_navigation_glyphs_mentioned_in_comments_are_not_runtime_violations(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/kyber/src/components/layout/sidebar.tsx",
+        "apps/kyber-web/src/components/layout/sidebar.tsx",
         "// Deprecated glyph: ◈ → NavigationIcon\nconst entries = [];\n",
     )
 
@@ -57,7 +57,7 @@ def test_navigation_glyphs_mentioned_in_comments_are_not_runtime_violations(tmp_
 def test_legacy_paths_outside_migration_targets_do_not_fail_nav_rule(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/aether/src/pages/legacy-panel.tsx",
+        "apps/aether-web/src/pages/legacy-panel.tsx",
         "const nav = [{ glyph: '◈' }];\n",
     )
 
@@ -67,7 +67,7 @@ def test_legacy_paths_outside_migration_targets_do_not_fail_nav_rule(tmp_path: P
 def test_provider_svg_and_local_map_are_blocked_only_at_migrated_provider_seams(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/kyber/src/features/notifications/channel-type-icon.tsx",
+        "apps/kyber-web/src/features/notifications/channel-type-icon.tsx",
         "const SlackIcon = () => <svg><path d='M0 0' /></svg>;\nconst ICON_MAP = {};\n",
     )
 
@@ -80,7 +80,7 @@ def test_provider_svg_and_local_map_are_blocked_only_at_migrated_provider_seams(
 def test_provider_renderer_component_name_is_not_mistaken_for_a_local_map(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/kyber/src/features/notifications/channel-type-icon.tsx",
+        "apps/kyber-web/src/features/notifications/channel-type-icon.tsx",
         "export const ChannelTypeIcon = () => <ProviderMark provider=\"slack\" />;\n",
     )
 
@@ -90,7 +90,7 @@ def test_provider_renderer_component_name_is_not_mistaken_for_a_local_map(tmp_pa
 def test_new_feature_local_provider_svg_is_detected_without_scanning_unrelated_icons(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/aether/src/pages/connectors/provider-icon.tsx",
+        "apps/aether-web/src/pages/connectors/provider-icon.tsx",
         "const SlackIcon = () => <svg><path d='M0 0' /></svg>;\n",
     )
 
@@ -100,7 +100,7 @@ def test_new_feature_local_provider_svg_is_detected_without_scanning_unrelated_i
 def test_direct_provider_urls_and_feature_local_canonical_assets_are_rejected(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/aether/src/pages/connectors/card.tsx",
+        "apps/aether-web/src/pages/connectors/card.tsx",
         """
         const provider = <img src=\"https://cdn.example.com/slack-logo.svg\" />;
         const mark = <img src=\"/assets/logo-aether-layers.svg\" />;
@@ -118,7 +118,7 @@ def test_analytics_script_endpoints_are_not_flagged_but_remote_google_marks_are(
 ) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/aether-marketing/src/lib/analytics.ts",
+        "apps/marketing-aether/src/lib/analytics.ts",
         """
         script.src = `https://www.googletagmanager.com/gtag/js?id=${id}`;
         const mark = <img src=\"https://cdn.example.com/google-mark.svg\" />;
@@ -130,21 +130,21 @@ def test_analytics_script_endpoints_are_not_flagged_but_remote_google_marks_are(
 
 def test_registry_backed_provider_mark_rejects_unknown_static_id(tmp_path: Path) -> None:
     _write(
-        tmp_path / "packages/brand/src/providers/registry.ts",
+        tmp_path / "packages/ui/brand/src/providers/registry.ts",
         "export const providerRegistry = { slack: provider('slack', 'Slack') };\n",
     )
     findings, _ = _scan(
         tmp_path,
-        "apps/aether/src/pages/connectors/card.tsx",
+        "apps/aether-web/src/pages/connectors/card.tsx",
         "export const Card = () => <ProviderMark provider=\"unknown-vendor\" />;\n",
     )
 
     assert findings == [
         {
-            "path": "apps/aether/src/pages/connectors/card.tsx",
+            "path": "apps/aether-web/src/pages/connectors/card.tsx",
             "line": 1,
             "rule": "unregistered-provider",
-            "reason": "ProviderMark references 'unknown-vendor', which is absent from packages/brand/src/providers/registry.ts",
+            "reason": "ProviderMark references 'unknown-vendor', which is absent from packages/ui/brand/src/providers/registry.ts",
         }
     ]
 
@@ -152,7 +152,7 @@ def test_registry_backed_provider_mark_rejects_unknown_static_id(tmp_path: Path)
 def test_canonical_mark_geometry_and_fixed_icon_dimensions_are_rejected(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/aether/src/components/aether-logo.tsx",
+        "apps/aether-web/src/components/aether-logo.tsx",
         "export const AetherLogo = () => <svg width={16}><path d='M0' fill='#3a6896' /></svg>;\n",
     )
 
@@ -165,7 +165,7 @@ def test_canonical_mark_geometry_and_fixed_icon_dimensions_are_rejected(tmp_path
 def test_raw_motion_shadow_and_unnamed_icon_only_controls_are_reported(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/kyber/src/components/layout/top-bar.tsx",
+        "apps/kyber-web/src/components/layout/top-bar.tsx",
         """
         const Button = () => <button><svg /></button>;
         const css = 'transition-duration: 175ms; box-shadow: 0 1px 2px black;';
@@ -182,7 +182,7 @@ def test_raw_motion_shadow_and_unnamed_icon_only_controls_are_reported(tmp_path:
 def test_escaped_unicode_icon_only_control_still_needs_a_name(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/kyber/src/components/layout/top-bar.tsx",
+        "apps/kyber-web/src/components/layout/top-bar.tsx",
         "const Button = () => <button>{'\\u2709'}</button>;\n",
     )
 
@@ -195,12 +195,12 @@ def test_escaped_unicode_icon_only_control_still_needs_a_name(tmp_path: Path) ->
 def test_reduced_motion_baseline_and_deprecated_compatibility_are_allowed(tmp_path: Path) -> None:
     style_findings, _ = _scan(
         tmp_path,
-        "apps/kyber/src/styles/index.css",
+        "apps/kyber-web/src/styles/index.css",
         "@media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; } }\n",
     )
     glyph_findings, _ = _scan(
         tmp_path,
-        "apps/shared/src/components/glyph-icon.tsx",
+        "packages/ui/core/src/components/glyph-icon.tsx",
         "/** @deprecated Use Icon or NavIcon. */\nexport const GlyphIcon = () => null;\n",
     )
 
@@ -210,13 +210,13 @@ def test_reduced_motion_baseline_and_deprecated_compatibility_are_allowed(tmp_pa
 
 def test_exact_path_rule_exception_suppresses_only_the_documented_finding(tmp_path: Path) -> None:
     exception = validator.BrandException(
-        path="apps/aether/src/components/app-shell.tsx",
+        path="apps/aether-web/src/components/app-shell.tsx",
         rule="deprecated-nav-glyph",
         reason="Migration rollout is blocked on a downstream renderer release.",
     )
     findings, applied = _scan(
         tmp_path,
-        "apps/aether/src/components/app-shell.tsx",
+        "apps/aether-web/src/components/app-shell.tsx",
         "const nav = [{ glyph: '[u]' }];\n",
         exceptions=(exception,),
     )
@@ -231,7 +231,7 @@ def test_docs_and_tests_are_not_runtime_validator_input(tmp_path: Path) -> None:
         "const nav = [{ glyph: '◈' }];\n",
     )
     test = _write(
-        tmp_path / "apps/aether/src/test/shell.test.tsx",
+        tmp_path / "apps/aether-web/src/test/shell.test.tsx",
         "const nav = [{ glyph: '◈' }];\n",
     )
 
@@ -243,7 +243,7 @@ def test_docs_and_tests_are_not_runtime_validator_input(tmp_path: Path) -> None:
 def test_marketing_pages_enforce_raw_motion_literals(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/aether-marketing/src/pages/home-page.tsx",
+        "apps/marketing-aether/src/pages/home-page.tsx",
         "const css = 'transition-duration: 300ms';\n",
     )
 
@@ -255,7 +255,7 @@ def test_marketing_pages_enforce_raw_motion_literals(tmp_path: Path) -> None:
 def test_marketing_interaction_transition_utilities_are_allowed(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/olympus-marketing/src/components/marketing-section.tsx",
+        "apps/marketing-olympus/src/components/marketing-section.tsx",
         (
             "const cls = 'transition-colors transition-opacity transition-transform "
             "translate-x-0 hover:translate-x-1 duration-[var(--aether-motion-standard)]';\n"
@@ -268,7 +268,7 @@ def test_marketing_interaction_transition_utilities_are_allowed(tmp_path: Path) 
 def test_marketing_reduced_motion_literal_is_exempt(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/aether-marketing/src/styles/index.css",
+        "apps/marketing-aether/src/styles/index.css",
         "@media (prefers-reduced-motion: reduce) {\n"
         "  *,\n"
         "  *::before,\n"
@@ -287,7 +287,7 @@ def test_marketing_reduced_motion_literal_is_exempt(tmp_path: Path) -> None:
 def test_marketing_decorative_animation_is_reported(tmp_path: Path) -> None:
     findings, _ = _scan(
         tmp_path,
-        "apps/olympus-marketing/src/pages/home-page.css",
+        "apps/marketing-olympus/src/pages/home-page.css",
         "@keyframes float-in {\n"
         "  from { opacity: 0; }\n"
         "}\n"

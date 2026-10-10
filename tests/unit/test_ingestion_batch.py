@@ -205,7 +205,7 @@ def test_web_sdk_no_api_key_in_query_param():
     Regression guard: ensures ?token= is not present in event-queue.ts.
     """
     event_queue_path = (
-        ROOT / "packages" / "web" / "src" / "core" / "event-queue.ts"
+        ROOT / "packages" / "sdk" / "web" / "src" / "core" / "event-queue.ts"
     )
     source = event_queue_path.read_text(encoding="utf-8")
     assert "?token=" not in source, (
@@ -220,7 +220,7 @@ def test_web_sdk_no_api_key_in_query_param():
 def test_web_sdk_uses_authorization_header():
     """fetch() calls must use Authorization: Bearer header, not query params."""
     event_queue_path = (
-        ROOT / "packages" / "web" / "src" / "core" / "event-queue.ts"
+        ROOT / "packages" / "sdk" / "web" / "src" / "core" / "event-queue.ts"
     )
     source = event_queue_path.read_text(encoding="utf-8")
     assert "Authorization" in source

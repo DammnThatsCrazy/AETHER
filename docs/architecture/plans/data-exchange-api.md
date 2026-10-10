@@ -181,7 +181,7 @@ PDF renderer (reportlab; M5 adds the dependency). PDF is an `artifact_type=
 
 ## M6 — frontend Settings → Data Exchange
 
-New feature module `apps/aether/src/features/data-exchange/` following the
+New feature module `apps/aether-web/src/features/data-exchange/` following the
 `{api.ts, use-*.ts, index.ts}` pattern; `api.ts` zod-schema shapes match the
 request/response tables above. New Settings section (stacked page sections +
 sub-views) surfaces: capability-driven import/export/report/transfer controls;
@@ -191,7 +191,7 @@ artifact history (`GET /artifacts`, `GET /exports`, `GET /imports`,
 existing canonical download route). Every control is gated by
 `GET /data-exchange/capabilities` and the tenant capability surface. Route/
 nav rows are added to `docs/reference/audits/FRONTEND-ROUTE-STATE-MATRIX.md`. E2E:
-`apps/aether/src/test/e2e/data-exchange.spec.ts`.
+`apps/aether-web/src/test/e2e/data-exchange.spec.ts`.
 
 ## M7 — ops & hardening
 

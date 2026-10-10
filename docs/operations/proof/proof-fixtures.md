@@ -14,14 +14,14 @@ since_version: 0.1.0
 
 Proof fixtures are the fixture data used to test connectors and normalizers in isolation. They provide a known set of provider-shaped records and the expected canonical Aether output after normalization. Fixtures let connector tests run locally and in CI without hitting a real provider, and they let the proof spine validate connector behavior against a known baseline.
 
-Proof fixtures are not provider-specific test data. Provider-specific fixtures live alongside the connector that consumes them. The proof fixture package at `packages/proof-fixtures` provides shared stubs and scaffolding for FPS test construction, not the full provider fixture sets.
+Proof fixtures are not provider-specific test data. Provider-specific fixtures live alongside the connector that consumes them. The proof fixture package at `tests/e2e/proof/packages/fixtures` provides shared stubs and scaffolding for FPS test construction, not the full provider fixture sets.
 
 ## Package location
 
 The shared proof fixture package lives at:
 
 ```
-packages/proof-fixtures
+tests/e2e/proof/packages/fixtures
 ```
 
 It is a pnpm workspace package with the name `@aether/proof-fixtures`. It ships TypeScript types and stubs used by connector fixture tests and by the proof runner when constructing test scenarios.
@@ -31,7 +31,7 @@ It is a pnpm workspace package with the name `@aether/proof-fixtures`. It ships 
 A representative fixture package directory tree looks like this:
 
 ```
-packages/proof-fixtures
+tests/e2e/proof/packages/fixtures
 ├── fixtures
 │   ├── sdk
 │   │   ├── heartbeat.json

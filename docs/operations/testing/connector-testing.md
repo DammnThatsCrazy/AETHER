@@ -31,7 +31,7 @@ Fixture tests cover:
 - Deduplication: duplicate provider records produce a single canonical event.
 - Error handling: malformed fixture records produce the expected failure mode, not a crash.
 
-Fixture tests are owned by the connector's implementing team and live alongside the connector code. The proof fixture package at `packages/proof-fixtures` provides shared stubs for FPS scaffolding, not provider-specific fixture data.
+Fixture tests are owned by the connector's implementing team and live alongside the connector code. The proof fixture package at `tests/e2e/proof/packages/fixtures` provides shared stubs for FPS scaffolding, not provider-specific fixture data.
 
 ### 2. Sandbox tests
 

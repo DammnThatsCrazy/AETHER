@@ -139,7 +139,7 @@ Independent workflow for updating OTA data modules (chain registry, DeFi protoco
 | 2 | **Publish**            | Upload versioned + latest JSON to S3 CDN, generate SDK manifests |
 | 3 | **Verify**             | Verify published URLs return HTTP 200, check hash integrity      |
 
-**Triggers:** `workflow_dispatch` (manual) or push to `packages/web/src/web3/chains/**`, `packages/web/src/web3/defi/protocol-registry.ts`, `packages/web/src/web3/wallet/**`.
+**Triggers:** `workflow_dispatch` (manual) or push to `packages/sdk/web/src/web3/chains/**`, `packages/sdk/web/src/web3/defi/protocol-registry.ts`, `packages/sdk/web/src/web3/wallet/**`.
 
 **CDN structure:**
 ```\ns3://cdn.aether.network/\n  v1.js                              # Stable auto-loader (canonical)\n  manifests/{web,ios,android,react-native}/latest.json\n  data/chain-registry/{version}.json + latest.json\n  data/protocol-registry/{version}.json + latest.json\n  data/wallet-labels/{version}.json + latest.json\n  data/wallet-classification/{version}.json + latest.json\n```
@@ -255,10 +255,10 @@ The pipeline manages the following Aether monorepo layout:
 
 | Path                         | Language   | Build Tool |
 | ---------------------------- | ---------- | ---------- |
-| `packages/web`               | TypeScript | esbuild    |
-| `packages/ios`               | Swift      | xcodebuild |
-| `packages/android`           | Kotlin     | gradle     |
-| `packages/react-native`      | TypeScript | metro      |
+| `packages/sdk/web`               | TypeScript | esbuild    |
+| `packages/sdk/ios`               | Swift      | xcodebuild |
+| `packages/sdk/android`           | Kotlin     | gradle     |
+| `packages/sdk/react-native`      | TypeScript | metro      |
 | `packages/shared`            | TypeScript | esbuild    |
 
 **Services (9)**

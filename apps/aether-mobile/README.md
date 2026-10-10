@@ -1,7 +1,7 @@
 # Aether Mobile
 
 The Aether **intelligence companion** app (Expo + React Native). It consumes
-[`@aether/mobile-core`](../../packages/mobile-core) and is bound to the `aether`
+[`@aether/mobile-core`](../../packages/sdk/mobile-core) and is bound to the `aether`
 product plane — a distinct bundle id (`com.aether.mobile`), auth audience, and secure
 store from Kyber Mobile. **No Kyber code ships in this binary.**
 

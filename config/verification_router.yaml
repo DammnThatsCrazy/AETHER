@@ -188,16 +188,16 @@ domains:
     paths: [apps/**]
     checks: [frontend-aether, frontend-kyber, frontend-shared]
     path_checks:
-      apps/aether/**: [frontend-aether]
-      apps/kyber/**: [frontend-kyber]
-      apps/shared/**: [frontend-shared]
+      apps/aether-web/**: [frontend-aether]
+      apps/kyber-web/**: [frontend-kyber]
+      packages/ui/core/**: [frontend-shared]
       apps/docs/**: [frontend-docs]
       apps/demo/**: [frontend-demo]
-      apps/aether-marketing/**: [frontend-aether-marketing]
-      apps/olympus-marketing/**: [frontend-olympus-marketing]
-      apps/marketing/**: [frontend-aether-marketing, frontend-olympus-marketing]
+      apps/marketing-aether/**: [frontend-aether-marketing]
+      apps/marketing-olympus/**: [frontend-olympus-marketing]
+      packages/ui/marketing/**: [frontend-aether-marketing, frontend-olympus-marketing]
       apps/status/**: [frontend-status]
-      apps/site/**: [frontend-site]
+      apps/public-site/**: [frontend-site]
     minimum_lane: pr
   sdk:
     owner: sdk
@@ -205,13 +205,13 @@ domains:
     checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, contracts]
     path_checks:
       packages/shared/**: [sdk-shared, functionality-proof-ts]
-      packages/web/**: [sdk-web, functionality-proof-ts]
-      packages/server/**: [sdk-server]
-      packages/react-native/**: [sdk-react-native, functionality-proof-ts]
+      packages/sdk/web/**: [sdk-web, functionality-proof-ts]
+      packages/sdk/server/**: [sdk-server]
+      packages/sdk/react-native/**: [sdk-react-native, functionality-proof-ts]
       vitest.config.fps.ts: [functionality-proof-ts]
       tests/fixtures/sdk/**: [functionality-proof-ts]
-      packages/proof-contracts/**: [functionality-proof-ts]
-      packages/proof-fixtures/**: [functionality-proof-ts]
+      tests/e2e/proof/packages/contracts/**: [functionality-proof-ts]
+      tests/e2e/proof/packages/fixtures/**: [functionality-proof-ts]
     minimum_lane: pr
   machine_learning:
     owner: ml
@@ -242,7 +242,7 @@ global_scopes:
       - config/dependency_profiles.yaml
       - config/ci_performance_policy.yaml
       - config/telemetry_contracts.json
-      - contracts/delivery/**
+      - packages/contracts/delivery/**
       - scripts/check_router.py
       - scripts/impact_graph.py
       - scripts/verification_disposition.py

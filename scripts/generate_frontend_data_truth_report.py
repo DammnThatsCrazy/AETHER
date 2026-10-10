@@ -112,8 +112,8 @@ def main() -> int:
         checks[f"{profile}_build"] = run(
             f"{profile} frontend builds",
             [
-                "npm", "run", "build", "--workspace=apps/aether",
-                "--workspace=apps/kyber", "--workspace=apps/demo",
+                "npm", "run", "build", "--workspace=apps/aether-web",
+                "--workspace=apps/kyber-web", "--workspace=apps/demo",
                 "--if-present",
             ],
             env=profile_env,

@@ -12,7 +12,7 @@ over-the-air (OTA) updates:
   - wallet-classification -- classification rules (RDNS sets, wallet types)
 
 Workflow:
-  1. Read pre-generated JSON from packages/web/src/web3/data-modules/ (or
+  1. Read pre-generated JSON from packages/sdk/web/src/web3/data-modules/ (or
      extract from TypeScript sources as a fallback).
   2. Stamp each module with a date-based version (e.g. "2026.03.04").
   3. Calculate SHA-256 integrity hashes.
@@ -111,7 +111,7 @@ def extract_data_modules(web_src_dir: str) -> dict[str, dict[str, Any]]:
     the exportable data structures into JSON.
 
     Args:
-        web_src_dir:  Path to ``packages/web/src`` (the root of the web
+        web_src_dir:  Path to ``packages/sdk/web/src`` (the root of the web
                       package source tree).
 
     Returns:
@@ -257,7 +257,7 @@ def publish_data_modules(
     data modules.
 
     Args:
-        web_src_dir:  Path to ``packages/web/src``.
+        web_src_dir:  Path to ``packages/sdk/web/src``.
         cdn_base:     CDN base URL.
         version:      Override version string.  Defaults to date-stamp
                       (e.g. "2026.03.04").
@@ -414,10 +414,10 @@ def _regenerate_manifests(
 
 def _read_sdk_version() -> str:
     """
-    Read the current SDK version from packages/web/package.json.
+    Read the current SDK version from packages/sdk/web/package.json.
     Falls back to "0.0.0" if unavailable.
     """
-    pkg_path = "packages/web/package.json"
+    pkg_path = "packages/sdk/web/package.json"
     try:
         with open(pkg_path, "r") as f:
             pkg = json.load(f)

@@ -1,10 +1,10 @@
 # React Native Example
 
-Adapted from `apps/proof-react-native/` — demonstrates the Aether React Native SDK in an Expo app that exercises the full first-value journey: install → init → heartbeat → consent → event → identify → journey → commerce → flush.
+Adapted from `tests/e2e/proof/apps/react-native/` — demonstrates the Aether React Native SDK in an Expo app that exercises the full first-value journey: install → init → heartbeat → consent → event → identify → journey → commerce → flush.
 
 ## Structure
 
-This example is a minimal Expo/React Native app that mirrors the proof harness in `apps/proof-react-native/`. It uses `@aether/react-native` and walks through every signal in the canonical first-value lifecycle.
+This example is a minimal Expo/React Native app that mirrors the proof harness in `tests/e2e/proof/apps/react-native/`. It uses `@aether/react-native` and walks through every signal in the canonical first-value lifecycle.
 
 ## First-value journey (React Native path)
 
@@ -50,6 +50,6 @@ Create two env files (or copy the `.example` templates):
 
 ## Related
 
-- `apps/proof-react-native/` — the full proof harness this example is adapted from.
-- `apps/proof-ios/` and `apps/proof-android/` — native surfaces that share the same `@aether/react-native` bridge.
+- `tests/e2e/proof/apps/react-native/` — the full proof harness this example is adapted from.
+- `tests/e2e/proof/apps/ios/` and `tests/e2e/proof/apps/android/` — native surfaces that share the same `@aether/react-native` bridge.
 - `scripts/smoke/ios-sdk.ts` and `scripts/smoke/android-sdk.ts` — automated smoke tests for the mobile SDKs.

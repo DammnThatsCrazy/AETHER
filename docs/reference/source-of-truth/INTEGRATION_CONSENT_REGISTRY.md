@@ -25,8 +25,8 @@ Generated surfaces include:
 
 - `packages/shared/integration-consent.ts`
 - `services/backend/shared/privacy/generated_integration_consent.py`
-- `packages/ios/Sources/AetherSDK/GeneratedIntegrationConsent.swift`
-- `packages/android/src/main/java/com/aether/sdk/GeneratedIntegrationConsent.kt`
+- `packages/sdk/ios/Sources/AetherSDK/GeneratedIntegrationConsent.swift`
+- `packages/sdk/android/src/main/java/com/aether/sdk/GeneratedIntegrationConsent.kt`
 - `docs/_generated/integration-consent-registry-table.md`
 
 The feature flags defined by this registry are default-off and support a controlled canary rollout:

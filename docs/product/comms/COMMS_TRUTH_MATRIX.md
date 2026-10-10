@@ -105,9 +105,9 @@ unwired · `MISS` missing · `CONF` conflict with intended behavior.
 
 | # | Requirement | State | Evidence | Work | Priority / Depends on | Recommended change |
 |---|---|---|---|---|---|---|
-| 9.1 | Tenant Campaign 360 Messages tab | MISS | `apps/aether/src/features/campaigns/` has no comms surface | Frontend, tests | P1 / 8.3 | Messages tab + funnel toggle + engagement labels |
-| 9.2 | Tenant Profile360 comms card/timeline | MISS | `apps/aether/src/features/profile360/` | Frontend, tests | P1 / 8.1-8.2 | Communication summary + state cards, timeline |
-| 9.3 | Kyber comms health surfaces | MISS | `apps/kyber/src/features/` has no comms ops | Frontend, tests | P2 / 5.x | Connector fleet + projection/resolution health panels |
+| 9.1 | Tenant Campaign 360 Messages tab | MISS | `apps/aether-web/src/features/campaigns/` has no comms surface | Frontend, tests | P1 / 8.3 | Messages tab + funnel toggle + engagement labels |
+| 9.2 | Tenant Profile360 comms card/timeline | MISS | `apps/aether-web/src/features/profile360/` | Frontend, tests | P1 / 8.1-8.2 | Communication summary + state cards, timeline |
+| 9.3 | Kyber comms health surfaces | MISS | `apps/kyber-web/src/features/` has no comms ops | Frontend, tests | P2 / 5.x | Connector fleet + projection/resolution health panels |
 
 ## 10. Consent, privacy, observability
 

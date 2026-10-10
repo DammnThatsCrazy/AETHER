@@ -22,10 +22,10 @@ Tickets referenced: FPS-011 (web SDK smoke), FPS-012 (iOS SDK smoke), FPS-013 (A
 
 Proof apps are minimal consumer apps that exercise an SDK through a real UI. They exist so a human or automated step can observe SDK behavior in a runtime that matches a real integration, not just through unit-test mocks.
 
-- `apps/proof-web` — Web SDK proof app.
-- `apps/proof-react` — React SDK proof app.
-- `apps/proof-ios` — iOS SDK proof app.
-- `apps/proof-android` — Android SDK proof app.
+- `tests/e2e/proof/apps/web` — Web SDK proof app.
+- `tests/e2e/proof/apps/react` — React SDK proof app.
+- `tests/e2e/proof/apps/ios` — iOS SDK proof app.
+- `tests/e2e/proof/apps/android` — Android SDK proof app.
 
 Each proof app is described in detail in [Proof Apps](../proof/proof-apps.md). The short version: every proof app must expose the controls needed to initialize the SDK, emit a heartbeat, track an event, identify a user, and surface the visible state a tester can verify.
 

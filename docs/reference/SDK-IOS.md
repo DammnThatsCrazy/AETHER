@@ -6,12 +6,12 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/ios/Sources/AetherSDK/Aether.swift, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/ios/Sources/AetherSDK/Aether.swift, packages/shared/events.ts, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:06f27d5201fde11faf35e157e9b1f47302cd82afdd34d22cccbee606a36ce6be"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:444e4efe97deab83c6656abab7973c207740b91c0d11c20ec9c13c8b8182a028"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:79883c251f1b5e9cd493fe08983da78a204f2af69e91d1e2a61036d67e338363"
 ---

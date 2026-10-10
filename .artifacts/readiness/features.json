@@ -1203,7 +1203,7 @@
       "confidence": {
         "level": "HIGH",
         "reasons": [
-          "repository evidence: apps/aether/"
+          "repository evidence: apps/aether-web/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -3469,7 +3469,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: apps/kyber/"
+          "repository evidence: apps/kyber-web/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -5208,7 +5208,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: packages/web/"
+          "repository evidence: packages/sdk/web/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -5788,7 +5788,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: contracts/smart-contracts/contracts/AnalyticsRewards.sol"
+          "repository evidence: packages/contracts/smart-contracts/contracts/AnalyticsRewards.sol"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"

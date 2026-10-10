@@ -31,7 +31,7 @@ from services.identity.resolver import IdentityResolutionService  # noqa: E402
 from services.identity.source_identity_registry import SourceIdentityRegistry  # noqa: E402
 
 TENANT = "tenant_phase9_recovery"
-FIXTURES = Path(__file__).resolve().parents[4] / "packages/proof-fixtures/fixtures/identity"
+FIXTURES = Path(__file__).resolve().parents[4] / "tests/e2e/proof/packages/fixtures/fixtures/identity"
 
 
 @pytest.fixture(autouse=True)

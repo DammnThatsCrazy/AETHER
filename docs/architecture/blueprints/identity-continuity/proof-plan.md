@@ -69,7 +69,7 @@ Additional required scenarios (Iota §Iota, Gate 3–7):
 
 | Scenario | Fixture(s) required | Gate that enforces it |
 |---|---|---|
-| A: import-first SDK-later | `packages/proof-fixtures/fixtures/identity/` + `fixtures/shopify/` + `fixtures/sdk-events/` + `services/backend/tests/identity/test_import_first_sdk_later.py` | Gate 3 (merge safety) + Gate 5 (projection) |
+| A: import-first SDK-later | `tests/e2e/proof/packages/fixtures/fixtures/identity/` + `fixtures/shopify/` + `fixtures/sdk-events/` + `services/backend/tests/identity/test_import_first_sdk_later.py` | Gate 3 (merge safety) + Gate 5 (projection) |
 | Anonymous→known | `fixtures/sdk-events/identify.json` + `alias.json` | Gate 3 + Gate 5 |
 | B: shared device | synthetic device fixture (two users, one `device_id`) | Gate 3 (shared device veto) |
 | C: bad merge/split | merge ledger + split service fixtures; `test_bad_merge_split.py` | Gate 4 (split) |
@@ -95,7 +95,7 @@ Detail for each fixture file: see `fixtures.md`.
 | **4** | Split gate | Bad merge can be split without deleting raw records; source identities move correctly; affected projections restate under new graph version; audit preserved; graph version increments | Split mutates raw events or fails to move source identity or loses audit | `test_bad_merge_split.py` + `resolver.operator_split` / `preview_fragment_split` |
 | **5** | Projection gate | Profile 360, Journey, Campaign (gated), Communications, Value (no duplicate revenue), Signals, Syndicates all update after merge/split; restatement observable + retryable; `TOPIC_PROJECTION_RESTATEMENT_QUEUED` emitted | Drift: pre/post `expected_profile_360.json` mismatch, duplicate value, missing restatement job | `test_projection_restatement.py` + `projection_restatement_orchestrator` assertions + `expected_*_360.json` diff |
 | **6** | UX explainability gate | Tenant/admin can see: what imported, what resolved/merged/not-merged, what needs review, why profile exists, why sources were stitched, what projections restated, current `graph_version` + change | Missing explanation field or `review-queue` / `activation-status` empty when conflicts exist | `test_resolution_replay.py` + `GET /v1/profiles/{id}/identity/explanation` + `GET /v1/admin/identity/{review-queue,activation-status}` + frontend component smoke (`TenantActivationDashboard`, `Profile360IdentityPanel`) |
-| **7** | Proof-pack gate (staging) | Staging produces full proof pack (see §7 below) containing contract inventory, decisions, graph versions, projection snapshots, and gate verdicts | Pack missing or hash mismatch | `packages/proof-reporting` runner on staging; artifact uploaded to CI; validated in `staging-smoke.yml` / `functionality-proof.yml` |
+| **7** | Proof-pack gate (staging) | Staging produces full proof pack (see §7 below) containing contract inventory, decisions, graph versions, projection snapshots, and gate verdicts | Pack missing or hash mismatch | `tests/e2e/proof/packages/reporting` runner on staging; artifact uploaded to CI; validated in `staging-smoke.yml` / `functionality-proof.yml` |
 
 Gates are **fail-closed**: if a veto type or decision path is unexercised, the gate fails rather than vacuously passing.
 
@@ -135,7 +135,7 @@ python scripts/validate_identity_gates.py --local  # if wired; else pytest gates
 
 ## 7. Staging proof pack (authoritative)
 
-Produced on the `staging` environment after deploy, before promotion to production. Artifact is a versioned JSON bundle assembled by `packages/proof-reporting` (or equivalent runner).
+Produced on the `staging` environment after deploy, before promotion to production. Artifact is a versioned JSON bundle assembled by `tests/e2e/proof/packages/reporting` (or equivalent runner).
 
 **Pack contents:**
 ```json
@@ -155,7 +155,7 @@ Produced on the `staging` environment after deploy, before promotion to producti
   },
   "gates": { "1_contract": "pass", "2_routing": "pass", "3_merge_safety": "pass", "4_split": "pass", "5_projection": "pass", "6_explainability": "pass", "7_proof_pack": "pass" },
   "observability": { "metrics_emitted": [], "traces": [], "logs_sampled": [] },
-  "fixtures_used": ["packages/proof-fixtures/fixtures/identity/*", "services/backend/tests/identity/*"]
+  "fixtures_used": ["tests/e2e/proof/packages/fixtures/fixtures/identity/*", "services/backend/tests/identity/*"]
 }
 ```
 
@@ -164,7 +164,7 @@ Produced on the `staging` environment after deploy, before promotion to producti
 # On staging (or via workflow dispatch):
 AETHER_ENV=staging \
 PROOF_TENANT=aether-proof-tenant \
-python packages/proof-reporting/scripts/generate_staging_pack.py --out proof-pack.staging.json
+python tests/e2e/proof/packages/reporting/scripts/generate_staging_pack.py --out proof-pack.staging.json
 
 # Or: trigger the staging workflow that publishes the pack
 gh workflow run staging-smoke.yml -f proof_pack=true

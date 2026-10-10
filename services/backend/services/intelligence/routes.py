@@ -172,7 +172,7 @@ def _delivery_required_checks() -> frozenset[str]:
     """Load the canonical evidence check set, with a safe package fallback."""
 
     try:
-        schema_path = Path(__file__).resolve().parents[4] / "contracts/delivery/release-evidence-bundle.schema.json"
+        schema_path = Path(__file__).resolve().parents[4] / "packages/contracts/delivery/release-evidence-bundle.schema.json"
     except IndexError:
         return _DELIVERY_REQUIRED_CHECKS_FALLBACK
     try:

@@ -62,10 +62,10 @@ BRANCH_CONFIG = BranchConfig()
 # --------------------------------------------------------------------------- #
 
 REPO_PACKAGES: dict[str, dict[str, str]] = {
-    "packages/web":              {"lang": "typescript", "tool": "esbuild"},
-    "packages/ios":              {"lang": "swift",      "tool": "xcodebuild"},
-    "packages/android":          {"lang": "kotlin",     "tool": "gradle"},
-    "packages/react-native":     {"lang": "typescript", "tool": "metro"},
+    "packages/sdk/web":              {"lang": "typescript", "tool": "esbuild"},
+    "packages/sdk/ios":              {"lang": "swift",      "tool": "xcodebuild"},
+    "packages/sdk/android":          {"lang": "kotlin",     "tool": "gradle"},
+    "packages/sdk/react-native":     {"lang": "typescript", "tool": "metro"},
     "packages/shared":           {"lang": "typescript", "tool": "esbuild"},
 }
 
@@ -83,7 +83,7 @@ REPO_SERVICES: dict[str, dict[str, str]] = {
 REPO_OTHER: dict[str, str] = {
     "infra/aws/terraform/": "Terraform IaC for all AWS resources",
     "services/ml/":          "ML training pipelines, serving, and model configs",
-    "apps/aether/":      "Customer-facing React application",
+    "apps/aether-web/":      "Customer-facing React application",
 }
 
 

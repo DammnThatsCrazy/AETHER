@@ -15,8 +15,8 @@ toc_depth: 3
 
 Deployment contract for the public marketing and service surfaces built by the
 [Web Ecosystem program](../../architecture/plans/WEB_ECOSYSTEM_PHASES.md):
-`apps/olympus-marketing`, `apps/aether-marketing`, `apps/docs`,
-`apps/status`, and the protected `apps/aether` application.
+`apps/marketing-olympus`, `apps/marketing-aether`, `apps/docs`,
+`apps/status`, and the protected `apps/aether-web` application.
 
 This document is an engineering contract, not marketing copy. Read it as the
 spec a deployer must satisfy and the honest inventory of what does **not** exist
@@ -42,12 +42,12 @@ is explicit; public marketing never links to it.
 
 | Workspace | Advertised host | Surface |
 | --- | --- | --- |
-| `apps/aether-marketing` (`@aether/aether-marketing`) | `https://aether.olympuslabsml.com` | Aether public marketing: platform, solutions, developers, integrations, security, pricing, resources, public auth-threshold routes |
-| `apps/olympus-marketing` (`@olympus/olympus-marketing`) | `https://www.olympuslabsml.com` (apex redirects here) | Olympus Labs corporate marketing |
+| `apps/marketing-aether` (`@aether/aether-marketing`) | `https://aether.olympuslabsml.com` | Aether public marketing: platform, solutions, developers, integrations, security, pricing, resources, public auth-threshold routes |
+| `apps/marketing-olympus` (`@olympus/olympus-marketing`) | `https://www.olympuslabsml.com` (apex redirects here) | Olympus Labs corporate marketing |
 | `apps/docs` | `https://docs.olympuslabsml.com` | Public documentation |
 | `apps/status` | `https://status.olympuslabsml.com` | Public status page backed by the verified API health payload |
-| `apps/aether` | `https://app.olympuslabsml.com` | Protected end-user tenant application |
-| `apps/kyber` | No public host by default | Internal operator application; no public DNS or marketing link |
+| `apps/aether-web` | `https://app.olympuslabsml.com` | Protected end-user tenant application |
+| `apps/kyber-web` | No public host by default | Internal operator application; no public DNS or marketing link |
 
 The two marketing shell builds run the same pipeline:
 
@@ -91,7 +91,7 @@ and publishes that workspace's `dist/` directory. The managed apps are:
 Staging sets `amplify_custom_domain_enabled = true` for
 `staging.olympuslabsml.com` and records each app's default domain plus the
 reviewed association outputs in SSM. On staging one app (`AETHER-staging-web`) answers for
-`aether`, `www`, `docs`, `status` and `app`: its `apps/site` build also
+`aether`, `www`, `docs`, `status` and `app`: its `apps/public-site` build also
 builds the product with `VITE_BASE_PATH=/app/` into `dist/app`, and the site
 sends the `docs`, `status` and `app` hosts to `/docs`, `/status` and `/app` on
 the Aether host. The old `olympus-marketing`, `docs`, `status` and
@@ -114,9 +114,9 @@ The prerendered marketing bundles retain the following delivery guarantees:
   therefore fall through to the host's own 404 — the honest default for a fully
   prerendered site.
 - **Only the required client fallbacks are rewired.** Terraform gives
-  `apps/aether` and `apps/docs` their SPA fallback because those apps
+  `apps/aether-web` and `apps/docs` their SPA fallback because those apps
   resolve route content at runtime. On staging, the Aether host serves the
-  unified site (`apps/site`), a client-routed app. `/app/signin` and the
+  unified site (`apps/public-site`), a client-routed app. `/app/signin` and the
   legacy `/login` and `/forgot-password` paths redirect (302) to the product's
   `/app/login`, and the legacy `/signup` to `/app/signup` (Auth0 sign-up with
   the chosen `?plan=`); `/app` redirects to `/app/`, and product routes
@@ -133,7 +133,7 @@ The prerendered marketing bundles retain the following delivery guarantees:
   `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
 - **Immutable caching** for `/assets/(.*)`: Vite content-hashes those filenames,
   so `Cache-Control: public, max-age=31536000, immutable` is safe. Cache rules
-  mirror the tenant app config (`apps/aether/vercel.json`) for `/assets/*`.
+  mirror the tenant app config (`apps/aether-web/vercel.json`) for `/assets/*`.
 - No API rewrite, no `framework` field, no trailing-slash/clean-url mutation.
 
 Known limitation recorded here rather than hidden: the Aether marketing
@@ -175,7 +175,7 @@ Notes:
 ## 5. Analytics contract
 
 `frontend/<shell>/src/lib/analytics.ts` (near-identical copies per workspace —
-duplicated by convention, not lifted to `apps/shared`) is the whole of the
+duplicated by convention, not lifted to `packages/ui/core`) is the whole of the
 analytics story:
 
 - **OFF by default.** `resolveAnalytics` enables analytics only when the

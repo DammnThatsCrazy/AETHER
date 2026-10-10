@@ -5,9 +5,9 @@ Surfaces the model-runtime package as an externally-servable HTTP API under
 entitlements, usage, traces) and the two Aether tenant surfaces (model list,
 tenant-default) are typed to the landed frontend clients:
 
-* ``apps/aether/src/features/model-selection/types.ts`` — ``GET
+* ``apps/aether-web/src/features/model-selection/types.ts`` — ``GET
   /v1/model-runtime/models`` + ``PUT /v1/model-runtime/tenant-default``.
-* ``apps/kyber/src/features/model-runtime/types.ts`` — ``GET
+* ``apps/kyber-web/src/features/model-runtime/types.ts`` — ``GET
   /v1/model-runtime/registry|health|entitlements|usage|traces``.
 
 Security contract (D9):

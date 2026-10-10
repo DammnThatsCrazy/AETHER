@@ -12,7 +12,7 @@ since_version: 0.1.0
 
 Aether distributes two mobile apps — **Aether** (`apps/aether-mobile`) and
 **Kyber** (`apps/kyber-mobile`) — from a single shared SDK
-(`packages/mobile-core`) and a single mobile gateway
+(`packages/sdk/mobile-core`) and a single mobile gateway
 (`services/backend/services/mobile/`, `GET /v1/mobile/config`). This document is the
 distribution reference: the profile vocabulary, the per-build enforcement,
 the version-support policy, and the honest release posture. It does **not**

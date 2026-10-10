@@ -41,17 +41,17 @@ Use a manifest lockup rather than re-composing a wordmark:
 | Kyber operator shell | Kyber `full` | `compact` at 84px+; `mark` in collapsed navigation with an accessible Kyber name. |
 
 The exact responsive thresholds are exported by
-`packages/brand/src/responsive/lockup.ts`. Do not squeeze a wordmark smaller
+`packages/ui/brand/src/responsive/lockup.ts`. Do not squeeze a wordmark smaller
 than its policy; select the next manifest variant instead.
 
 ## Typography, spacing, and surfaces
 
 Geist is the product sans. Geist Mono is for IDs, structured data, code, and
 compact operational labels—not a replacement body typeface. The typed scale is
-in `packages/brand/src/tokens/typography.ts`.
+in `packages/ui/brand/src/tokens/typography.ts`.
 
 Keep the established warm/stone CSS surfaces from
-`apps/shared/src/styles/tokens.css`. A card is generally border-led:
+`packages/ui/core/src/styles/tokens.css`. A card is generally border-led:
 `surfaceRecipes` reserves stronger shadows for floating layers, modals, and
 tooltips. Use the named spacing, radius, border, focus, elevation, and shadow
 tokens rather than selecting a visual value in a feature.
@@ -64,7 +64,7 @@ compact keyboard-oriented controls).
 
 The icon taxonomy is semantic and renderer-independent. It has separate
 navigation, action, domain, entity, status, severity, freshness, confidence,
-and provenance registries under `packages/brand/src/iconography/`.
+and provenance registries under `packages/ui/brand/src/iconography/`.
 
 Do not use a provider mark, accent color, icon, or animation to blur these
 questions together:

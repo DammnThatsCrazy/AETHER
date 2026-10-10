@@ -11,8 +11,8 @@ canonical_owner: frontend@aether
 
 # Typography and spacing
 
-Use the metadata in `packages/brand/src/tokens/typography.ts` and the existing
-shared CSS variables in `apps/shared/src/styles/tokens.css`.
+Use the metadata in `packages/ui/brand/src/tokens/typography.ts` and the existing
+shared CSS variables in `packages/ui/core/src/styles/tokens.css`.
 
 | Use | Token rule |
 | --- | --- |

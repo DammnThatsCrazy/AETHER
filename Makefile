@@ -615,15 +615,15 @@ mobile-compliance-check: ## CI gate — mobile compliance umbrella: privacy mani
 	$(GATE_PY) scripts/release/sdk_conformance.py --quiet
 
 mobile-typecheck: ## CI gate — TypeScript typecheck of the mobile SDK packages
-	npm run typecheck --workspace=packages/mobile-core --if-present
-	npm run typecheck --workspace=packages/mobile-ui --if-present
+	npm run typecheck --workspace=packages/sdk/mobile-core --if-present
+	npm run typecheck --workspace=packages/ui/mobile --if-present
 
 mobile-test: ## CI gate — unit tests for the mobile SDK packages
-	npm run test --workspace=packages/mobile-core --if-present
-	npm run test --workspace=packages/mobile-ui --if-present
+	npm run test --workspace=packages/sdk/mobile-core --if-present
+	npm run test --workspace=packages/ui/mobile --if-present
 
 mobile-app-typecheck: ## CI gate — TypeScript typecheck of the Expo app shells (needs mobile-core dist, gitignored)
-	npm run build --workspace=packages/mobile-core
+	npm run build --workspace=packages/sdk/mobile-core
 	npm run typecheck --workspace=apps/aether-mobile
 	npm run typecheck --workspace=apps/kyber-mobile
 

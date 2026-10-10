@@ -75,14 +75,14 @@ def _write_parity(root: Path, evidence: str) -> None:
 
 
 def test_conformance_fails_closed_when_evidence_file_is_missing(tmp_path):
-    _write_parity(tmp_path, "packages/web/src/index.ts#observe")
+    _write_parity(tmp_path, "packages/sdk/web/src/index.ts#observe")
     _, failures = build_matrix(tmp_path)
     assert any("evidence file missing" in f for f in failures)
 
 
 def test_conformance_fails_closed_when_symbol_is_absent(tmp_path):
-    _write_parity(tmp_path, "packages/web/src/index.ts#observe")
-    src = tmp_path / "packages/web/src/index.ts"
+    _write_parity(tmp_path, "packages/sdk/web/src/index.ts#observe")
+    src = tmp_path / "packages/sdk/web/src/index.ts"
     src.parent.mkdir(parents=True, exist_ok=True)
     src.write_text("export const somethingElse = 1;", encoding="utf-8")
     _, failures = build_matrix(tmp_path)
@@ -90,8 +90,8 @@ def test_conformance_fails_closed_when_symbol_is_absent(tmp_path):
 
 
 def test_conformance_verifies_when_evidence_resolves(tmp_path):
-    _write_parity(tmp_path, "packages/web/src/index.ts#observe")
-    src = tmp_path / "packages/web/src/index.ts"
+    _write_parity(tmp_path, "packages/sdk/web/src/index.ts#observe")
+    src = tmp_path / "packages/sdk/web/src/index.ts"
     src.parent.mkdir(parents=True, exist_ok=True)
     src.write_text("export function observe(event) {}", encoding="utf-8")
     matrix, failures = build_matrix(tmp_path)

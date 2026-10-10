@@ -34,7 +34,7 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
 | **M2a** mobile-config | `GET /v1/mobile/config`, DistributionProfile enum, app-version registration (alembic `20260830`), typed twin | `services/backend/services/mobile/config.py`, `services/backend/services/mobile/routes.py` (config routes), `alembic/versions/20260830_app_version_registration.py`, `packages/shared/mobile-config.ts`, `services/backend/tests/unit/test_mobile_config.py`, `tests/contracts/test_mobile_config_parity.py` | mount routes in main.py; shared index; storage_policies entry; Makefile |
-| **M2b** mobile-ui-offline | `packages/mobile-ui` (theme, typed nav, shared components) + read-only offline cache framework in mobile-core + apps | `packages/mobile-ui/**`, `packages/mobile-core/src/offline.ts`, `packages/mobile-core/src/config.ts` (extend), `apps/aether-mobile/src/offline/**`, `apps/kyber-mobile/src/offline/**`, `packages/mobile-ui/**/__tests__/**` | workspace wiring; root typecheck chain; shared index |
+| **M2b** mobile-ui-offline | `packages/ui/mobile` (theme, typed nav, shared components) + read-only offline cache framework in mobile-core + apps | `packages/ui/mobile/**`, `packages/sdk/mobile-core/src/offline.ts`, `packages/sdk/mobile-core/src/config.ts` (extend), `apps/aether-mobile/src/offline/**`, `apps/kyber-mobile/src/offline/**`, `packages/ui/mobile/**/__tests__/**` | workspace wiring; root typecheck chain; shared index |
 | **M2c** compliance-umbrella | `make mobile-compliance-check` umbrella + SDK/permission inventory gate | `scripts/release/check_mobile_compliance.py` (or extend existing), `docs/reference/reports/mobile-productization/mobile-sdk-inventory.json` (regen) | Makefile target; fold into docs |
 
 ## Wave 3 — M3 (C5 projections + Aether Mobile + desktop NC)
@@ -42,7 +42,7 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
 | **M3a** gateway-projections | Bounded redacted projections: today digest, profile summary, campaign summary, alerts inbox, explore briefing | `services/backend/services/mobile/projections.py`, `services/backend/services/mobile/routes.py` (projection routes), `services/backend/tests/unit/test_mobile_projections.py` | mount routes; storage_policies; shared index; feature-surface manifest |
-| **M3b** aether-mobile-screens | Today/Copilot/Explore/Alerts/Account screens + typed navigation + offline consumption | `apps/aether-mobile/src/**`, `packages/mobile-ui/**` (extend if needed) | — (app-internal) |
+| **M3b** aether-mobile-screens | Today/Copilot/Explore/Alerts/Account screens + typed navigation + offline consumption | `apps/aether-mobile/src/**`, `packages/ui/mobile/**` (extend if needed) | — (app-internal) |
 | **M3c** desktop-notification-center | Aether desktop NC (inbox UI, badge, filters, read/ack) + preferences persistence (quiet hours/timezone/digest) route+UI + device/session/account-deletion entry points | `frontend/aether/src/features/notifications/**`, `frontend/aether/src/features/account/**`, `services/backend/services/mobile/preferences.py` + routes | mount preferences routes in main.py; settings flag; shared index |
 
 ## Wave 4 — M4 (Kyber Mobile + operator surfaces)
@@ -59,7 +59,7 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 | **M5a** sync-producers | Wire 9 unwired producers via `enqueue_sync_change` at owning mutation sites | `services/backend/services/notification_intelligence/lifecycle.py`, `services/backend/services/exploration/store.py`, `services/backend/services/noesis/conversations.py`, `services/backend/services/kyber/ops/command_repository.py`, `services/backend/services/auth/sessions/service.py`, `services/backend/services/mobile/installations.py` (or existing repo), `services/backend/tests/unit/test_sync_producers.py` | emitter signature stays stable; settings flag |
 | **M5b** operator-continuation-router | Kyber continuation router in `services/backend/services/continuation/` (o: scope) + routes | `services/backend/services/continuation/operator.py`, `services/backend/services/continuation/routes.py` (operator router), `services/backend/tests/unit/test_operator_continuation_router.py` | mount in main.py; feature-surface manifest |
 | **M5c** desktop-continue-on-phone | Desktop continue-on-phone/recent-activity/resume + copy handoff link (both frontends) | `frontend/aether/src/features/continue-on-phone/**`, `frontend/kyber/src/features/continue-on-phone/**` | — (frontend-internal) |
-| **M5d** mobile-continue-on-desktop | Mobile continue-on-desktop/resume/send-to-desktop + client-sync consumption UI | `apps/aether-mobile/src/features/continue-on-desktop/**`, `apps/kyber-mobile/src/features/continue-on-desktop/**`, `packages/mobile-core/src/sync.ts` | — (app-internal) |
+| **M5d** mobile-continue-on-desktop | Mobile continue-on-desktop/resume/send-to-desktop + client-sync consumption UI | `apps/aether-mobile/src/features/continue-on-desktop/**`, `apps/kyber-mobile/src/features/continue-on-desktop/**`, `packages/sdk/mobile-core/src/sync.ts` | — (app-internal) |
 
 ## Wave 6 — M6 (C7 governed mobile actions)
 

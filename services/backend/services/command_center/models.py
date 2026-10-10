@@ -6,7 +6,7 @@ state of its own — every section carries the underlying sub-service payload
 verbatim, plus an honest :class:`SectionState` describing whether that read
 produced live data, was empty, is not configured, timed out, or errored.
 
-``SectionState`` mirrors the apps/shared capability-state vocabulary so the
+``SectionState`` mirrors the packages/ui/core capability-state vocabulary so the
 tenant UI can render each section without re-interpreting per-service shapes.
 A section NEVER fabricates a forward value: a failed read degrades to
 ``unavailable``/``error`` with ``data=None`` rather than inventing a stand-in.

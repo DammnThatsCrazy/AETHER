@@ -191,7 +191,7 @@ def test_every_attribute_the_snippet_emits_is_one_the_loader_reads():
     linking them at runtime, so the check has to be made against the loader's
     own source. `scripts/validate_sdk_quickstart_snippet.py` is the same check
     as a repo gate; this one fails in the unit suite, next to the code."""
-    loader_src = (ROOT / "packages/web/src/loader/auto-init.ts").read_text(encoding="utf-8")
+    loader_src = (ROOT / "packages/sdk/web/src/loader/auto-init.ts").read_text(encoding="utf-8")
     block = re.search(r"const ATTRIBUTE_MAP = \{(.*?)\} as const;", loader_src, re.DOTALL)
     assert block, "loader ATTRIBUTE_MAP not found — the contract cannot be checked"
     loader_attributes = set(re.findall(r"""['"](data-[a-z-]+)['"]\s*:""", block.group(1)))
@@ -211,7 +211,7 @@ def test_every_attribute_the_snippet_emits_is_one_the_loader_reads():
 def test_loader_url_is_the_one_the_shipping_bundle_advertises():
     """Snippets are pasted into customer HTML and outlive the deploy that
     rendered them, so a URL that 404s is not a typo — it is every install."""
-    bundle = (ROOT / "packages/web/rollup.loader.mjs").read_text(encoding="utf-8")
+    bundle = (ROOT / "packages/sdk/web/rollup.loader.mjs").read_text(encoding="utf-8")
     advertised = set(re.findall(r"https://cdn\.aether\.network/[A-Za-z0-9._/-]*\.js", bundle))
     assert advertised, "the loader bundle advertises no CDN URL"
     assert LOADER_URL in advertised

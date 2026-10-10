@@ -22,16 +22,16 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:dfd499508092941b77887900ebd59063986e10deaba52d6dd676e9d4860d1e67"
+  ".github/workflows/repo-health.yml": "sha256:4447a2146cb718267a99291fa0b4d7630bba9ddadd28960429da9633aae1af93"
   ".pre-commit-config.yaml": "sha256:e1c5169ee1d1f2923709f37a21c664cf898cb4c3b40ab908be2f9068dd7a0aca"
-  "Makefile": "sha256:c9532c0026244007080913f09ca1995f8a127f84846f30e7624461bbeff39ae1"
+  "Makefile": "sha256:8dc718ec76147cd8caa527730e4b7e45a87e1a76e49439487b80dbeebe4193e0"
   "scripts/docs_drift.py": "sha256:6ff727e23ae244f41c014307b4a3361ebe521508bd74a7161a745394db12022c"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
   "scripts/docs_schema.json": "sha256:1a062b35ae5b18e85a10efedaa56708de3d9a332808cac699456ce6bb112fc74"
   "scripts/sync_docs.py": "sha256:7d204e746dd583d1839d2f86a44bc7fa212c3a8c5b9d5f46a062a04f586be457"
-  "scripts/validate_contracts.py": "sha256:1c7768cabc38a9a51b4ccf1513e9b1169e17d005ec17aeb16422ade36e4f6a23"
-  "scripts/validate_docs.py": "sha256:4962795f8ae70974f0b0e02e301a01e27251a6ab76fb98290d45b4d06a9d77e3"
+  "scripts/validate_contracts.py": "sha256:0f513914786f81f8545d7725c3b9f7e4af22fd01e1d8b0b7c271f193c1da7c93"
+  "scripts/validate_docs.py": "sha256:d356c8c0c5c8337cbf6a69d58015bf168ea17c6ed8b49d3527915f67c4351592"
   "scripts/validate_frontmatter.py": "sha256:bca720067d28914df95e3b34b78551aec334d1bfc09a085515728fe55900325b"
 ---
 

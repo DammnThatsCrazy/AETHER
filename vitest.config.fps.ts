@@ -5,10 +5,10 @@ const alias = [
   { find: /^react-native$/, replacement: fileURLToPath(new URL('./tests/mocks/react-native.ts', import.meta.url)) },
   { find: /^@aether\/shared\/(.+)$/, replacement: fileURLToPath(new URL('./packages/shared/$1.ts', import.meta.url)) },
   { find: /^@aether\/shared$/, replacement: fileURLToPath(new URL('./packages/shared/index.ts', import.meta.url)) },
-  { find: /^@aether\/web$/, replacement: fileURLToPath(new URL('./packages/web/src/index.ts', import.meta.url)) },
-  { find: /@aether\/react-native/, replacement: fileURLToPath(new URL('./packages/react-native/src/bridge.ts', import.meta.url)) },
-  { find: /@aether\/proof-contracts/, replacement: fileURLToPath(new URL('./packages/proof-contracts/src/index.ts', import.meta.url)) },
-  { find: /@aether\/proof-fixtures/, replacement: fileURLToPath(new URL('./packages/proof-fixtures/src/index.ts', import.meta.url)) },
+  { find: /^@aether\/web$/, replacement: fileURLToPath(new URL('./packages/sdk/web/src/index.ts', import.meta.url)) },
+  { find: /@aether\/react-native/, replacement: fileURLToPath(new URL('./packages/sdk/react-native/src/bridge.ts', import.meta.url)) },
+  { find: /@aether\/proof-contracts/, replacement: fileURLToPath(new URL('./tests/e2e/proof/packages/contracts/src/index.ts', import.meta.url)) },
+  { find: /@aether\/proof-fixtures/, replacement: fileURLToPath(new URL('./tests/e2e/proof/packages/fixtures/src/index.ts', import.meta.url)) },
 ];
 
 export default defineConfig({

@@ -817,7 +817,7 @@ resource "aws_ssm_parameter" "static_frontend_bucket" {
 # ---------------------------------------------------------------------------
 
 locals {
-  # Staging's Aether host serves the unified site (apps/site). Other
+  # Staging's Aether host serves the unified site (apps/public-site). Other
   # environments keep the prerendered aether-marketing build until the site
   # prerenders its own per-route metadata, sitemap and robots file.
   aether_host_serves_site = var.environment == "staging"
@@ -833,7 +833,7 @@ locals {
   site_host_owner_apps = local.aether_host_serves_site ? ["olympus-marketing", "docs", "status", "aether-app"] : []
 
   # One app per environment: on staging the site app also serves the product
-  # under /app (built by the apps/site entry in amplify.yml), so the
+  # under /app (built by the apps/public-site entry in amplify.yml), so the
   # product's public URL is aether.<domain>/app and the app host redirects
   # there. Elsewhere the product keeps its own app and var.aether_app_url.
   product_under_site = local.aether_host_serves_site && var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
@@ -852,15 +852,15 @@ locals {
   amplify_app_catalog = local.enable_static_frontends ? {
     olympus-marketing = {
       name        = "${var.project}-${var.environment}-olympus-marketing"
-      app_root    = "apps/olympus-marketing"
+      app_root    = "apps/marketing-olympus"
       description = "Olympus Labs corporate marketing site"
       subdomain   = "www"
     }
-    # On staging, the unified Olympus + Aether site (apps/site), which
+    # On staging, the unified Olympus + Aether site (apps/public-site), which
     # keeps this app's key and name.
     aether-marketing = {
       name        = local.aether_host_serves_site ? "${var.project}-${var.environment}-web" : "${var.project}-${var.environment}-aether-marketing"
-      app_root    = local.aether_host_serves_site ? "apps/site" : "apps/aether-marketing"
+      app_root    = local.aether_host_serves_site ? "apps/public-site" : "apps/marketing-aether"
       description = local.aether_host_serves_site ? "Unified Olympus Labs and Aether site" : "Aether product marketing site"
       subdomain   = "aether"
     }
@@ -872,7 +872,7 @@ locals {
     }
     aether-app = {
       name        = "${var.project}-${var.environment}-aether-app"
-      app_root    = "apps/aether"
+      app_root    = "apps/aether-web"
       description = "Aether customer application dashboard"
       subdomain   = "app"
     }

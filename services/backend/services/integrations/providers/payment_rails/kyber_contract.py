@@ -2,7 +2,7 @@
 
 One source of truth for the Kyber payment-rail operator surface, shared by the
 backend routes and mirrored by the frontend zod schema
-(``apps/kyber/src/types/payment-rails.ts``). Every field is explicit so the
+(``apps/kyber-web/src/types/payment-rails.ts``). Every field is explicit so the
 operator console can distinguish ``zero`` (a real 0 count) from ``unknown`` (a
 value we cannot compute yet, encoded as ``null``) and from ``not_configured`` /
 ``disabled`` / ``degraded`` (encoded in ``status``). Aggregates never carry

@@ -10,5 +10,5 @@ since_version: "0.1.0"
 
 # Marketing Sites
 
-- Aether marketing: `apps/aether-marketing`
-- Olympus marketing: `apps/olympus-marketing`
+- Aether marketing: `apps/marketing-aether`
+- Olympus marketing: `apps/marketing-olympus`

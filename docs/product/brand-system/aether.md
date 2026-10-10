@@ -21,7 +21,7 @@ import { AetherLockup } from '@aether/ui';
 ```
 
 - Use the Aether manifest and package-owned marks; Aether app builds serve the
-  same reviewed files from `packages/brand/src/identity/marks/`.
+  same reviewed files from `packages/ui/brand/src/identity/marks/`.
 - Select `full` at 112px+, `compact` at 72px+, and `mark` in collapsed/mobile
   navigation. Keep an accessible Aether label for a mark-only shell.
 - Do not create a second wordmark or duplicate the layer paths in JSX.

@@ -158,7 +158,7 @@ production, and production; capabilities are overlays, not new environments.
 This layout is a destination, not an instruction to copy code into parallel
 packages or deploy more microservices. Today `services/backend/` is the
 deployed Python authority, `packages/shared/contracts/` is the contract source,
-`apps/aether/` is the customer web app, `apps/kyber/` is the operator
+`apps/aether-web/` is the customer web app, `apps/kyber-web/` is the operator
 web app, and `infra/aws/` contains the active AWS implementation. A physical
 move occurs only after the target owner, import/API adapters, deployment paths,
 generated artifacts, docs ownership, and rollback have been verified together.

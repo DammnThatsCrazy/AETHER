@@ -243,11 +243,11 @@ def test_result_status_and_mutation_are_bound_to_operation():
 
 def test_contract_schemas_validate_sample_request_and_closure(tmp_path: Path):
     request_value = request().as_dict()
-    request_schema = json.loads((ROOT / "contracts/delivery/profile-delivery-operation.schema.json").read_text())
+    request_schema = json.loads((ROOT / "packages/contracts/delivery/profile-delivery-operation.schema.json").read_text())
     jsonschema.Draft202012Validator(request_schema, resolver=jsonschema.RefResolver.from_schema(request_schema)).validate(request_value)
     archive = tmp_path / "backend.tar"
     archive.write_bytes(b"runtime")
     digest = "sha256:" + __import__("hashlib").sha256(archive.read_bytes()).hexdigest()
     evidence = verify_closure(candidate(component_digest=digest), {"backend": ArtifactSpec("backend", archive)})
-    closure_schema = json.loads((ROOT / "contracts/delivery/artifact-closure.schema.json").read_text())
+    closure_schema = json.loads((ROOT / "packages/contracts/delivery/artifact-closure.schema.json").read_text())
     jsonschema.Draft202012Validator(closure_schema).validate(evidence)

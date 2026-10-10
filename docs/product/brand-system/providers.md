@@ -11,7 +11,7 @@ canonical_owner: frontend@aether
 
 # Provider identity and attribution
 
-Provider metadata is in `packages/brand/src/providers/`. It maps identity only;
+Provider metadata is in `packages/ui/brand/src/providers/`. It maps identity only;
 the owning backend/shared contracts keep runtime IDs, eligibility, and health.
 
 ```tsx
@@ -32,7 +32,7 @@ const attribution = providerAttribution(resolved.identity);
 - Resolve every server value. Unknown input uses neutral initials, not a guessed
   brand or a failure state.
 - A third-party mark is shown only when it is committed locally under
-  `packages/brand/src/identity/marks/providers/` and listed in `REVIEWED_MARKS`
+  `packages/ui/brand/src/identity/marks/providers/` and listed in `REVIEWED_MARKS`
   in `registry.ts`; never remote-load or recreate one. Every other provider
   renders the initials fallback.
 - The 22 committed files (21 providers; X ships a dark and a light variant)

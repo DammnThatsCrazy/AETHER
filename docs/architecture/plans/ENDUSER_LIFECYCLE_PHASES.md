@@ -94,8 +94,8 @@ Paths relative to repo root.
    notification channels/prefs + webhooks as stacked sections; `/settings/notifications`
    re-renders the whole page. Account/security/billing/team/users are separate routes.
    No nested settings shell.
-7. **Marketing source is only on `origin/main`.** `apps/aether-marketing` +
-   `apps/olympus-marketing` (PR #607) are absent from older branches. Public
+7. **Marketing source is only on `origin/main`.** `apps/marketing-aether` +
+   `apps/marketing-olympus` (PR #607) are absent from older branches. Public
    integrations directory = hand-maintained static snapshot of the 21-connector
    registry ("DERIVED SNAPSHOT — NOT A LIVE QUERY"), all `credential_waiting`,
    pinned by an allowlist test. No provider/intent prefill exists (only name/email).
@@ -246,7 +246,7 @@ recorded GREEN 72/0 at the R1 head this lane is cut from (`a32f63a0`).
    `test_integration_catalog_twin_parity.py`,
    `test_integration_catalog_readiness_honesty.py`,
    `test_integration_catalog_experience_grouping.py`.
-3. **Lifecycle E2E suites A–E** (`apps/aether/src/test/e2e/`,
+3. **Lifecycle E2E suites A–E** (`apps/aether-web/src/test/e2e/`,
    `lifecycle-A-…` … `lifecycle-E-…` + shared `lifecycle.harness.ts`), gated on
    `E2E_TENANT_EMAIL[_A.._E]`/`E2E_TENANT_PASSWORD[_A.._E]` so they skip honestly
    without the R3/R4 integration env.
@@ -258,7 +258,7 @@ recorded GREEN 72/0 at the R1 head this lane is cut from (`a32f63a0`).
    extended.
 5. **Operations runbook** `docs/operations/ENDUSER_LIFECYCLE_E2E.md` (env vars,
    seed preconditions, run commands, skip semantics, troubleshooting).
-6. **`docs/architecture/FRONTEND-ARCHITECTURE.md`** reviewed against the `apps/aether/src`
+6. **`docs/architecture/FRONTEND-ARCHITECTURE.md`** reviewed against the `apps/aether-web/src`
    e2e additions and re-stamped (no body change — additive test surfaces only).
 
 **router.tsx decision (leased, additive-only):** no WS-6 change. The tenant

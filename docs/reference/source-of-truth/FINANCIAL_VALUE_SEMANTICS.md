@@ -158,7 +158,7 @@ bringing it to the same nullable-rate contract is tracked separately.
 
 ## Display contract
 
-The frontend renders values through `apps/shared` value components
+The frontend renders values through `packages/ui/core` value components
 (`ValueDisplay`, `formatUSD`, `formatAetherValue`) — never a per-file currency
 formatter (enforced by `validate_frontend_value_display.py`).
 

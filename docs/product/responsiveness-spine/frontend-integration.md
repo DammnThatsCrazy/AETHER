@@ -44,7 +44,7 @@ All endpoints return `APIResponse(data=...)` envelopes. Missing data is honest �
 
 ### API client
 
-The aether API client lives at `apps/aether/src/lib/api/endpoints.ts` under `api.responsiveness.*`:
+The aether API client lives at `apps/aether-web/src/lib/api/endpoints.ts` under `api.responsiveness.*`:
 
 ```ts
 import { api } from '@aether/lib/api';
@@ -89,7 +89,7 @@ The envelope type is `ResponsivenessEnvelope` (imported from `@aether/types/resp
 
 ### Hooks
 
-The following hooks consume the responsiveness API and provide reactive state to components. This is the hook surface as designed — implementations are in `apps/aether/src/hooks/`.
+The following hooks consume the responsiveness API and provide reactive state to components. This is the hook surface as designed — implementations are in `apps/aether-web/src/hooks/`.
 
 | Hook | Purpose | Key return values |
 |------|---------|-------------------|
@@ -150,7 +150,7 @@ Kyber is the all-tenant aggregate layer. It consumes the same backend endpoints 
 
 ### API client
 
-Kyber's API client lives at `apps/kyber/src/lib/api/endpoints.ts`. As of the current commit, Kyber does not yet have a dedicated `api.responsiveness.*` section — it consumes the endpoints via the shared `restClient` directly or through the aether API client where Kyber has tenant-scoped access.
+Kyber's API client lives at `apps/kyber-web/src/lib/api/endpoints.ts`. As of the current commit, Kyber does not yet have a dedicated `api.responsiveness.*` section — it consumes the endpoints via the shared `restClient` directly or through the aether API client where Kyber has tenant-scoped access.
 
 When wired, the Kyber client will look like:
 

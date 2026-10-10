@@ -12,7 +12,7 @@ canonical_owner: frontend@aether
 # Motion
 
 Motion is purposeful feedback, not decoration or evidence. Use named recipes
-from `packages/brand/src/motion/`.
+from `packages/ui/brand/src/motion/`.
 
 ```ts
 import { motionDuration, motionRecipes, transitionFor } from '@olympus/brand';

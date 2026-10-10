@@ -26,8 +26,8 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - packages/web/
-  - packages/react-native/
+  - packages/sdk/web/
+  - packages/sdk/react-native/
   - packages/shared/
 implementation:
   state: VERIFIED
@@ -111,7 +111,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: packages/web/'
+  - 'repository evidence: packages/sdk/web/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

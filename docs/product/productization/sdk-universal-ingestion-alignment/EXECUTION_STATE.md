@@ -292,9 +292,9 @@ code — only the marker bodies are generated, and hand-editing them is not supp
 
 | Surface | Location | Content |
 |---|---|---|
-| iOS event enum | `packages/ios/Sources/AetherSDK/Aether.swift` — `@generated-start/end aether-event-types/ios-enum` | `AetherEventType` case list, grouped by registry family |
+| iOS event enum | `packages/sdk/ios/Sources/AetherSDK/Aether.swift` — `@generated-start/end aether-event-types/ios-enum` | `AetherEventType` case list, grouped by registry family |
 | iOS consent map | same file — `aether-consent-purposes/ios-map` | per-event `type → primary-purpose` dict |
-| Android consent map | `packages/android/src/main/java/com/aether/sdk/Aether.kt` — `aether-consent-purposes/android-map` | per-event `"type" to "purpose"` mapOf |
+| Android consent map | `packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt` — `aether-consent-purposes/android-map` | per-event `"type" to "purpose"` mapOf |
 
 Primary purpose = `requiredPurposes[0]`, defaulting to `analytics` when empty (same rule
 the TS/Python twins use). Regions are byte-stable, so `python scripts/generate_contracts.py --check`
@@ -674,7 +674,7 @@ legacy path is byte-identical while OFF. Items map to gap rows 4/6/12/15/28.
 - **Native identity → subject hints (`AETHER_SUBJECT_HINTS_ONLY_ENABLED`, default OFF; Invariant #4, gap row 6).** `SubjectHintsConfig` on `Settings`; `validation.py` neutralizes client-asserted `identityConfidence`/`identitySignals` at the single Bronze-write normalization point; `touchpoint_projector.py` nulls `identity_resolution_method`/`_confidence`/`_version`; iOS/Android `AetherConfig.subjectHintsOnly` (default false) stops client `/sdk/identity/resolve` re-stamping. Legacy values preserved when OFF.
 - **Native encrypted durable queues (`AetherConfig.encryptedDurableQueue`, default OFF; gap row 12).** Replaces delete-before-ack with a durable AES-GCM ack queue: Keychain / Android-Keystore cipher key, `AETHERQ1` envelope magic, 2xx-acknowledge / transient-retry-retain / ≥400 acknowledge-drop (poison-pill protection). Honest boundary: iOS verified to `swiftc -parse`; Android not compilable in CI — a device/emulator build + integration test is required before enablement.
 - **Shared-barrel delist (`packages/shared` no longer star-ships `commerce-bridge.ts`/`economic-metrics.ts`; Invariant #3, gap row 28).** Canonical backend homes documented on both files; consumers import via explicit subpath; `validate_sdk_import_boundary.py` gains a regression lock forbidding re-adding either star-export (validator not weakened). Full physical relocation off the SDK graph is deferred (no governed non-SDK TS home yet) — tracked, not faked.
-- **`packages/web/src/types.ts` EventType re-point (Invariant #16, gap row 4).** Hand-mirror union removed; re-export from the Contract Spine; `generate_contracts.py` `validate_web_eventtype_reimport()` guard fails on local re-declaration or lost re-export.
+- **`packages/sdk/web/src/types.ts` EventType re-point (Invariant #16, gap row 4).** Hand-mirror union removed; re-export from the Contract Spine; `generate_contracts.py` `validate_web_eventtype_reimport()` guard fails on local re-declaration or lost re-export.
 - **Native correlation fields, end-to-end (Invariant #12, gap row 8).** iOS/Android `CorrelationContext` (camelCase, shared-shaped with `packages/shared/events.ts`); `observation_envelope.py` additively maps a `span_id` flat fallback + `parent_observation_id`; nothing re-stamps a source-provided id.
 
 Lane evidence (pre-integration; coordinator gate deferred to the program tip):
@@ -773,7 +773,7 @@ lane is above; each row records its slice commit(s) and content.
 
 | Item | Why | Where tracked |
 |---|---|---|
-| Physical root-tree realignment of the two legacy TS trees + orphaned backend modules | **Completed after PR #627**: active trees moved to `services/`, `infra/aws/`, and `contracts/smart-contracts/`; historical material retained under `docs/archive/legacy-architecture/` and guarded by ownership/impact gates | `docs/reference/source-of-truth/repo-truth.md`, `scripts/allowlists/repo_tree_ownership.json` |
+| Physical root-tree realignment of the two legacy TS trees + orphaned backend modules | **Completed after PR #627**: active trees moved to `services/`, `infra/aws/`, and `packages/contracts/smart-contracts/`; historical material retained under `docs/archive/legacy-architecture/` and guarded by ownership/impact gates | `docs/reference/source-of-truth/repo-truth.md`, `scripts/allowlists/repo_tree_ownership.json` |
 | Envelope B + field-trust implementation | Deliberately out of Phase 0 | WS-A |
 | Consent/privacy on every ingress path | Server-authoritative on `/v1/batch` only today | WS-B |
 | Single observation model / normalization spine | ≥5 Bronze/Silver pipelines at baseline | WS-B |

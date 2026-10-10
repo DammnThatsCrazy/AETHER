@@ -19,10 +19,10 @@ with the hosting/config contract.
 ## Build artifacts
 
 - Backend: `services/backend/Dockerfile`
-- Aether tenant frontend: `apps/aether/Dockerfile`
-- Kyber operator frontend: `apps/kyber/Dockerfile` (private artifact path)
-- Olympus Labs marketing: `apps/olympus-marketing`
-- Aether marketing: `apps/aether-marketing`
+- Aether tenant frontend: `apps/aether-web/Dockerfile`
+- Kyber operator frontend: `apps/kyber-web/Dockerfile` (private artifact path)
+- Olympus Labs marketing: `apps/marketing-olympus`
+- Aether marketing: `apps/marketing-aether`
 - Public status: `apps/status`
 - ML serving: `services/ml/docker/Dockerfile`
 

@@ -263,7 +263,7 @@ entries:
       not applicable: the routes never returned data; the page section rendered its
       empty state on every request
     usage_evidence: >-
-      the only caller was apps/aether api.graph.cluster behind useUserCluster,
+      the only caller was apps/aether-web api.graph.cluster behind useUserCluster,
       used by the profile page's Relationships tab; Kyber and the SDKs never called
       it (2026-10-09)
     rollback: restore the package, its mount and the page section from git history
@@ -381,8 +381,8 @@ entries:
       ValuePanel, LensPanel, ConfidencePanel, ExplanationDrawer, ActionPanel)
       composed per entity by thin adapters
     current:
-      - apps/kyber/src/components/profile360
-      - apps/kyber/src/features/profile360
+      - apps/kyber-web/src/components/profile360
+      - apps/kyber-web/src/features/profile360
     duplicates: []
     retire: >-
       remaining per-entity 360 presentation (the campaign360 overview, the
@@ -414,58 +414,58 @@ entries:
     classification: removed
     state: removed
     authority: >-
-      the import graph of apps/kyber/src/app/main.tsx; code no route mounts
+      the import graph of apps/kyber-web/src/app/main.tsx; code no route mounts
       is not product surface
     current:
       - config/frontend_reachability.yaml
       - scripts/validate_frontend_reachability.py
     duplicates:
-      - apps/kyber/src/components/approvals
-      - apps/kyber/src/components/charts
-      - apps/kyber/src/components/diagnostics
-      - apps/kyber/src/components/economics
-      - apps/kyber/src/components/entitlements
-      - apps/kyber/src/components/notifications
-      - apps/kyber/src/features/agent
-      - apps/kyber/src/features/attribution
-      - apps/kyber/src/features/automation
-      - apps/kyber/src/features/behavior
-      - apps/kyber/src/features/behavioral
-      - apps/kyber/src/features/brief
-      - apps/kyber/src/features/campaigns
-      - apps/kyber/src/features/commerce
-      - apps/kyber/src/features/consent
-      - apps/kyber/src/features/consent-governance
-      - apps/kyber/src/features/crossdomain
-      - apps/kyber/src/features/data-pipeline
-      - apps/kyber/src/features/delegation
-      - apps/kyber/src/features/entitlements
-      - apps/kyber/src/features/facilitators
-      - apps/kyber/src/features/flows
-      - apps/kyber/src/features/governance
-      - apps/kyber/src/features/identity
-      - apps/kyber/src/features/intelligence
-      - apps/kyber/src/features/investigation
-      - apps/kyber/src/features/lab
-      - apps/kyber/src/features/lake
-      - apps/kyber/src/features/onchain
-      - apps/kyber/src/features/operator
-      - apps/kyber/src/features/oracle
-      - apps/kyber/src/features/policies
-      - apps/kyber/src/features/population
-      - apps/kyber/src/features/profile
-      - apps/kyber/src/features/providers
-      - apps/kyber/src/features/resolution
-      - apps/kyber/src/features/resources
-      - apps/kyber/src/features/rewards
-      - apps/kyber/src/features/rwa
-      - apps/kyber/src/features/scoring
-      - apps/kyber/src/features/settlement
-      - apps/kyber/src/features/traffic
-      - apps/kyber/src/features/web3
-      - apps/kyber/src/features/x402
-      - apps/kyber/src/lib/query
-      - apps/kyber/src/lib/replay
+      - apps/kyber-web/src/components/approvals
+      - apps/kyber-web/src/components/charts
+      - apps/kyber-web/src/components/diagnostics
+      - apps/kyber-web/src/components/economics
+      - apps/kyber-web/src/components/entitlements
+      - apps/kyber-web/src/components/notifications
+      - apps/kyber-web/src/features/agent
+      - apps/kyber-web/src/features/attribution
+      - apps/kyber-web/src/features/automation
+      - apps/kyber-web/src/features/behavior
+      - apps/kyber-web/src/features/behavioral
+      - apps/kyber-web/src/features/brief
+      - apps/kyber-web/src/features/campaigns
+      - apps/kyber-web/src/features/commerce
+      - apps/kyber-web/src/features/consent
+      - apps/kyber-web/src/features/consent-governance
+      - apps/kyber-web/src/features/crossdomain
+      - apps/kyber-web/src/features/data-pipeline
+      - apps/kyber-web/src/features/delegation
+      - apps/kyber-web/src/features/entitlements
+      - apps/kyber-web/src/features/facilitators
+      - apps/kyber-web/src/features/flows
+      - apps/kyber-web/src/features/governance
+      - apps/kyber-web/src/features/identity
+      - apps/kyber-web/src/features/intelligence
+      - apps/kyber-web/src/features/investigation
+      - apps/kyber-web/src/features/lab
+      - apps/kyber-web/src/features/lake
+      - apps/kyber-web/src/features/onchain
+      - apps/kyber-web/src/features/operator
+      - apps/kyber-web/src/features/oracle
+      - apps/kyber-web/src/features/policies
+      - apps/kyber-web/src/features/population
+      - apps/kyber-web/src/features/profile
+      - apps/kyber-web/src/features/providers
+      - apps/kyber-web/src/features/resolution
+      - apps/kyber-web/src/features/resources
+      - apps/kyber-web/src/features/rewards
+      - apps/kyber-web/src/features/rwa
+      - apps/kyber-web/src/features/scoring
+      - apps/kyber-web/src/features/settlement
+      - apps/kyber-web/src/features/traffic
+      - apps/kyber-web/src/features/web3
+      - apps/kyber-web/src/features/x402
+      - apps/kyber-web/src/lib/query
+      - apps/kyber-web/src/lib/replay
     retire: >-
       139 Kyber source files (5,433 lines) that no entry point reaches: 85
       feature hooks, 38 components, 16 lib files across the approvals,
@@ -497,14 +497,14 @@ entries:
       config/frontend_reachability.yaml can only shrink
     current:
       - config/frontend_reachability.yaml
-      - apps/kyber/src/components/entities/agent-profile.tsx
-      - apps/kyber/src/pages/fraud/fraud-decisions-page.tsx
-      - apps/kyber/src/pages/measurement/campaign-registry-health-page.tsx
-      - apps/kyber/src/pages/customer-success/index.ts
-      - apps/kyber/src/components/graph/path-inspector.tsx
-      - apps/kyber/src/features/graph/use-graph-health.ts
-      - apps/kyber/src/lib/schemas/index.ts
-      - apps/kyber/src/components/commerce/lifecycle-trace-view.tsx
+      - apps/kyber-web/src/components/entities/agent-profile.tsx
+      - apps/kyber-web/src/pages/fraud/fraud-decisions-page.tsx
+      - apps/kyber-web/src/pages/measurement/campaign-registry-health-page.tsx
+      - apps/kyber-web/src/pages/customer-success/index.ts
+      - apps/kyber-web/src/components/graph/path-inspector.tsx
+      - apps/kyber-web/src/features/graph/use-graph-health.ts
+      - apps/kyber-web/src/lib/schemas/index.ts
+      - apps/kyber-web/src/components/commerce/lifecycle-trace-view.tsx
     duplicates: []
     retire: >-
       eight Kyber files no entry point reaches, kept because deleting them is a
@@ -529,30 +529,30 @@ entries:
     classification: removed
     state: removed
     authority: >-
-      the import graph of apps/aether/src/app/main.tsx; code no route mounts
+      the import graph of apps/aether-web/src/app/main.tsx; code no route mounts
       is not product surface
     current:
       - config/frontend_reachability.yaml
       - scripts/validate_frontend_reachability.py
     duplicates:
-      - apps/aether/src/features/account-health
-      - apps/aether/src/features/analytics
-      - apps/aether/src/features/attribution
-      - apps/aether/src/features/automation
-      - apps/aether/src/features/behavioral
-      - apps/aether/src/features/consent
-      - apps/aether/src/features/data-quality
-      - apps/aether/src/features/experience-friction
-      - apps/aether/src/features/flows
-      - apps/aether/src/features/governance
-      - apps/aether/src/features/ingest
-      - apps/aether/src/features/investigation
-      - apps/aether/src/features/oracle
-      - apps/aether/src/features/providers
-      - apps/aether/src/features/realtime
-      - apps/aether/src/features/revenue-intelligence
-      - apps/aether/src/features/web3
-      - apps/aether/src/features/x402
+      - apps/aether-web/src/features/account-health
+      - apps/aether-web/src/features/analytics
+      - apps/aether-web/src/features/attribution
+      - apps/aether-web/src/features/automation
+      - apps/aether-web/src/features/behavioral
+      - apps/aether-web/src/features/consent
+      - apps/aether-web/src/features/data-quality
+      - apps/aether-web/src/features/experience-friction
+      - apps/aether-web/src/features/flows
+      - apps/aether-web/src/features/governance
+      - apps/aether-web/src/features/ingest
+      - apps/aether-web/src/features/investigation
+      - apps/aether-web/src/features/oracle
+      - apps/aether-web/src/features/providers
+      - apps/aether-web/src/features/realtime
+      - apps/aether-web/src/features/revenue-intelligence
+      - apps/aether-web/src/features/web3
+      - apps/aether-web/src/features/x402
     retire: >-
       50 Aether app source files (1,704 lines) that no entry point reaches:
       feature hooks for graph, web3, behavioral, investigation, governance, x402 and
@@ -581,9 +581,9 @@ entries:
       config/frontend_reachability.yaml can only shrink
     current:
       - config/frontend_reachability.yaml
-      - apps/aether/src/features/identity/index.ts
-      - apps/aether/src/pages/connectors/index.ts
-      - apps/aether/src/pages/graph/index.ts
+      - apps/aether-web/src/features/identity/index.ts
+      - apps/aether-web/src/pages/connectors/index.ts
+      - apps/aether-web/src/pages/graph/index.ts
     duplicates: []
     retire: >-
       three Aether barrels no entry point reaches. The identity barrel exports the

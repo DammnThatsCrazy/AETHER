@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 #: npm workspace names of the web applications under apps/ (mobile shells are not part of the
 #: shared-runtime-contract rebuild).
 WEB_APP_WORKSPACES = frozenset(f"apps/{name}" for name in (
-    "aether", "aether-marketing", "demo", "docs", "kyber", "marketing", "olympus-marketing", "shared", "site", "status"))
+    "aether-web", "marketing-aether", "demo", "docs", "kyber-web", "marketing-olympus", "public-site", "status"))
 
 
 def _under(paths: set[str], prefix: str) -> bool:
@@ -115,13 +115,13 @@ def _selected_workspaces(
     else:
         selected = {path for path in buildable if _under(changed, path)}
         application_paths = {
-            "aether": "apps/aether",
-            "kyber": "apps/kyber",
+            "aether": "apps/aether-web",
+            "kyber": "apps/kyber-web",
             "docs": "apps/docs",
             "demo": "apps/demo",
-            "olympus-marketing": "apps/olympus-marketing",
-            "aether-marketing": "apps/aether-marketing",
-            "site": "apps/site",
+            "olympus-marketing": "apps/marketing-olympus",
+            "aether-marketing": "apps/marketing-aether",
+            "site": "apps/public-site",
         }
         selected.update(
             path
@@ -130,10 +130,10 @@ def _selected_workspaces(
         )
         package_paths = {
             "shared": "packages/shared",
-            "web": "packages/web",
-            "server": "packages/server",
-            "react-native": "packages/react-native",
-            "mobile-core": "packages/mobile-core",
+            "web": "packages/sdk/web",
+            "server": "packages/sdk/server",
+            "react-native": "packages/sdk/react-native",
+            "mobile-core": "packages/sdk/mobile-core",
         }
         selected.update(
             path
@@ -171,11 +171,11 @@ def select_builds(
     backend_image = _under(changed, "services/backend")
 
     for prefix, application in (
-        ("apps/aether", "aether"),
-        ("apps/kyber", "kyber"),
-        ("apps/aether-marketing", "aether-marketing"),
-        ("apps/olympus-marketing", "olympus-marketing"),
-        ("apps/site", "site"),
+        ("apps/aether-web", "aether"),
+        ("apps/kyber-web", "kyber"),
+        ("apps/marketing-aether", "aether-marketing"),
+        ("apps/marketing-olympus", "olympus-marketing"),
+        ("apps/public-site", "site"),
         ("apps/docs", "docs"),
         ("apps/demo", "demo"),
     ):
@@ -183,26 +183,26 @@ def select_builds(
             applications.add(application)
     for prefix, package in (
         ("packages/shared", "shared"),
-        ("packages/web", "web"),
-        ("packages/server", "server"),
-        ("packages/react-native", "react-native"),
-        ("packages/mobile-core", "mobile-core"),
-        ("packages/mobile-ui", "mobile-ui"),
-        ("packages/brand", "brand"),
+        ("packages/sdk/web", "web"),
+        ("packages/sdk/server", "server"),
+        ("packages/sdk/react-native", "react-native"),
+        ("packages/sdk/mobile-core", "mobile-core"),
+        ("packages/ui/mobile", "mobile-ui"),
+        ("packages/ui/brand", "brand"),
         ("packages/config", "config"),
     ):
         if _under(changed, prefix):
             packages.add(package)
-    if _under(changed, "apps/aether") or _under(changed, "apps/kyber"):
+    if _under(changed, "apps/aether-web") or _under(changed, "apps/kyber-web"):
         packages.add("shared")
-    # apps/site serves packages/brand's marks as its Vite publicDir, a
+    # apps/public-site serves packages/ui/brand's marks as its Vite publicDir, a
     # filesystem dependency that no workspace manifest declares.
-    if _under(changed, "packages/brand"):
+    if _under(changed, "packages/ui/brand"):
         applications.add("site")
-    if _under(changed, "packages/web") or _under(changed, "packages/react-native"):
+    if _under(changed, "packages/sdk/web") or _under(changed, "packages/sdk/react-native"):
         sdk["js"] = True
-    sdk["ios"] = _under(changed, "packages/ios")
-    sdk["android"] = _under(changed, "packages/android")
+    sdk["ios"] = _under(changed, "packages/sdk/ios")
+    sdk["android"] = _under(changed, "packages/sdk/android")
 
     if global_change and not scopes:
         backend_image = True

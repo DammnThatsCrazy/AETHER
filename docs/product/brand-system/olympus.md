@@ -21,7 +21,7 @@ import { OlympusLockup } from '@aether/ui';
 <OlympusLockup variant="full" label="Olympus Labs" size={28} />
 ```
 
-- Use the manifest in `packages/brand/src/identity/olympus/manifest.ts`.
+- Use the manifest in `packages/ui/brand/src/identity/olympus/manifest.ts`.
 - Use `full` for headers at 144px+ of inline space; reduce to `mark` only when
   another accessible Olympus Labs label remains.
 - Keep Olympus attribution distinct from Aether or Kyber product labels.

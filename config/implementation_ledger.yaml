@@ -1340,11 +1340,11 @@ items:
     current_behavior: Not implemented. No Aether UI surfaces for agent access intelligence.
     required_behavior: Aether tenant UI surfaces consuming the profiles/journeys and graph APIs.
     affected_paths:
-      - "apps/aether/src/features/agent-access"
-      - "apps/aether/src/pages/agent-access"
-      - "apps/aether/src/app/router.tsx"
+      - "apps/aether-web/src/features/agent-access"
+      - "apps/aether-web/src/pages/agent-access"
+      - "apps/aether-web/src/app/router.tsx"
     tests_required:
-      - "apps/aether/src/test/unit/agent-access-page.test.tsx"
+      - "apps/aether-web/src/test/unit/agent-access-page.test.tsx"
     evidence_required: ["aether vitest -> 174 passed (38 files); tsc --noEmit exit 0"]
     docs_required: [docs/reference/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: frontend
@@ -1370,12 +1370,12 @@ items:
     required_behavior: Kyber operator surfaces (operator-gated) for authority, drift, and blast-radius review.
     affected_paths:
       - "services/backend/services/agent_access_intelligence/kyber_ops_routes.py"
-      - "apps/kyber/src/features/agent-access"
-      - "apps/kyber/src/pages/agent-access"
-      - "apps/kyber/src/app/router.tsx"
+      - "apps/kyber-web/src/features/agent-access"
+      - "apps/kyber-web/src/pages/agent-access"
+      - "apps/kyber-web/src/app/router.tsx"
     tests_required:
       - "tests/unit/capability_catalog/test_kyber_ops_routes.py"
-      - "apps/kyber/src/test/component/agent-access-page.test.tsx"
+      - "apps/kyber-web/src/test/component/agent-access-page.test.tsx"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 358 passed; kyber vitest -> 246 passed"]
     docs_required: [docs/reference/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: ops
@@ -1515,7 +1515,7 @@ items:
       every session bound to it. No company-owned hardware is required.
     affected_paths:
       - "services/backend/services/kyber/devices/"
-      - "apps/kyber/src/features/device-trust/"
+      - "apps/kyber-web/src/features/device-trust/"
       - "pyproject.toml"
       - "docs/reference/source-of-truth/KYBER_DEVICE_TRUST.md"
       - "docs/operations/runbooks/KYBER_DEVICE_LOSS.md"
@@ -1601,7 +1601,7 @@ items:
       - "services/backend/services/security/request_context.py"
       - "services/backend/services/security/policy_engine.py"
       - "config/route_registry.yaml"
-      - "apps/kyber/src/features/permissions/"
+      - "apps/kyber-web/src/features/permissions/"
       - "docs/reference/source-of-truth/KYBER_ACCESS_CONTROL.md"
     tests_required:
       - "tests/security/test_kyber_gate_migration.py"
@@ -1791,10 +1791,10 @@ items:
       - "services/backend/services/billing/revops.py"
       - "services/backend/services/onchain/rpc_gateway.py"
       - "services/backend/services/stablecoins/registry.py"
-      - "apps/aether/src/pages/payment-rails/payment-rails-page.tsx"
-      - "apps/aether/src/features/payment-rails/api.ts"
-      - "apps/aether/src/lib/env/config.ts"
-    tests_required: ["tests/payment_rails/test_canonical_delivery.py", "tests/payment_rails/test_repair_worker.py", "tests/payment_rails/test_canonical_event_ids.py", "tests/payment_rails/test_canonical_outbox.py", "tests/unit/test_stablecoin_intelligence_connectors.py", "tests/payment_rails/test_usage_metering.py", "tests/unit/test_stablecoin_usage_metering.py", "tests/unit/test_stablecoin_byok_rpc_scoping.py", "apps/aether/src/test/unit/payment-rails-page.test.tsx"]
+      - "apps/aether-web/src/pages/payment-rails/payment-rails-page.tsx"
+      - "apps/aether-web/src/features/payment-rails/api.ts"
+      - "apps/aether-web/src/lib/env/config.ts"
+    tests_required: ["tests/payment_rails/test_canonical_delivery.py", "tests/payment_rails/test_repair_worker.py", "tests/payment_rails/test_canonical_event_ids.py", "tests/payment_rails/test_canonical_outbox.py", "tests/unit/test_stablecoin_intelligence_connectors.py", "tests/payment_rails/test_usage_metering.py", "tests/unit/test_stablecoin_usage_metering.py", "tests/unit/test_stablecoin_byok_rpc_scoping.py", "apps/aether-web/src/test/unit/payment-rails-page.test.tsx"]
     evidence_required:
       - "retry creates no duplicate projection/billing; relay outage produces repairable backlog that recovers"
       - "canonical event ids are deterministic uuid5 over (tenant, funding session, event_type) replacing the fresh uuid4 per publish: a provider redelivery or a crash between publish and the emitted_canonical checkpoint re-emits the SAME id, so the validated-events bus dedupes downstream instead of double-counting"

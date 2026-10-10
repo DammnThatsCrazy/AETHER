@@ -18,11 +18,11 @@ Aether SDKs are thin observation clients. They collect local observations, batch
 
 | Package | Platform | Path |
 |---|---|---|
-| Web SDK | Browser | `packages/web` |
-| React Native | Mobile (cross-platform) | `packages/react-native` |
-| iOS | Native iOS | `packages/ios` |
-| Android | Native Android | `packages/android` |
-| Mobile Core | Shared mobile logic | `packages/mobile-core` |
+| Web SDK | Browser | `packages/sdk/web` |
+| React Native | Mobile (cross-platform) | `packages/sdk/react-native` |
+| iOS | Native iOS | `packages/sdk/ios` |
+| Android | Native Android | `packages/sdk/android` |
+| Mobile Core | Shared mobile logic | `packages/sdk/mobile-core` |
 
 ## Event Flow
 

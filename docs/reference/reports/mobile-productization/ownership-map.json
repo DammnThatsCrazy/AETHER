@@ -45,8 +45,8 @@
     "C4_mobile_platform": [
       "apps/aether-mobile/**",
       "apps/kyber-mobile/**",
-      "packages/mobile-core/**",
-      "packages/mobile-ui/**",
+      "packages/sdk/mobile-core/**",
+      "packages/ui/mobile/**",
       "packages/mobile-auth/**",
       "packages/mobile-api/**",
       "packages/mobile-notifications/**",

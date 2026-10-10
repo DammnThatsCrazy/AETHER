@@ -915,7 +915,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         stop_on_failure=stop,
         remediation=(
             "keep the publish-cdn job running the manifest generator and layout verifier, "
-            "derive CDN paths from packages/web/package.json, and preserve the dry_run guard"
+            "derive CDN paths from packages/sdk/web/package.json, and preserve the dry_run guard"
         ),
     )
     run(
@@ -979,7 +979,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Temporal integrity static gates (naive datetimes, ad-hoc frontend formatting, CH DateTime64, single Alembic head)",
         results=results,
         stop_on_failure=stop,
-        remediation="use shared/temporal (Py) or apps/shared/src/time (TS); shrink scripts/allowlists/* only",
+        remediation="use shared/temporal (Py) or packages/ui/core/src/time (TS); shrink scripts/allowlists/* only",
     )
     run(
         [sys.executable, "scripts/validate_computation_substrate.py"],
@@ -1084,7 +1084,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Frontend value-display guardrail (canonical ValueDisplay/formatUSD)",
         results=results,
         stop_on_failure=stop,
-        remediation="render financial values via apps/shared ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
+        remediation="render financial values via packages/ui/core ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
     )
     run(
         [sys.executable, "scripts/validate_cross360_monetary_fx.py"],
@@ -1107,8 +1107,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         stop_on_failure=stop,
         remediation=(
             "run python scripts/generate_contracts.py to regenerate the marker-delimited native "
-            "regions (AetherEventType enum / eventConsentPurpose in packages/ios/Sources/AetherSDK/Aether.swift "
-            "and EVENT_CONSENT_PURPOSE in packages/android/src/main/java/com/aether/sdk/Aether.kt) from "
+            "regions (AetherEventType enum / eventConsentPurpose in packages/sdk/ios/Sources/AetherSDK/Aether.swift "
+            "and EVENT_CONSENT_PURPOSE in packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt) from "
             "packages/shared/contracts/event-registry.json; hand-editing the regions is not supported"
         ),
     )

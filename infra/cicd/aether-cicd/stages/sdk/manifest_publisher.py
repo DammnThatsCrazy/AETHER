@@ -180,7 +180,7 @@ def generate_manifest(
         # Try to resolve actual bundle hash if the file exists locally
         # Build artifact path for hash/size resolution — not a public install URL;
         # the canonical loader the browser fetches is {cdn_base}/v1.js (see loaderUrl/sdkBundleUrl above).
-        local_bundle = "packages/web/dist/aether-sdk.esm.min.js"
+        local_bundle = "packages/sdk/web/dist/aether-sdk.esm.min.js"
         if os.path.isfile(local_bundle):
             manifest["downloads"]["sdkBundleHash"] = f"sha256:{_sha256_file(local_bundle)}"
             manifest["downloads"]["sdkBundleSize"] = _file_size(local_bundle)

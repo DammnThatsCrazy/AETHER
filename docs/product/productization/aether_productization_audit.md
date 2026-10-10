@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:fc9a0f38d79acce2518afc6f86780faedead29fae8519685059bee483be02883"
+  "scripts/production_status.py": "sha256:d817c3c651468f7d2cf3a92e0867218504c6890501214941fd7e40f321c8bd9a"
 ---
 
 # AETHER Productization Audit
@@ -303,7 +303,7 @@ pilot-ready are deliberately distinguished from production-ready throughout.
 
 ## 7. Recommended Next PR Sequence
 
-1. **Tenant self-serve onboarding** — `apps/aether` signup →
+1. **Tenant self-serve onboarding** — `apps/aether-web` signup →
    tenant + API-key provisioning against existing `/v1/registration`.
    Accept: a new tenant can sign up, get keys, and send a first event
    without operator SQL. (Clears blocker #1.)

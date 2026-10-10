@@ -11,7 +11,7 @@ canonical_owner: frontend@aether
 
 # Entity identity
 
-Entity mappings live in `packages/brand/src/iconography/entities.ts`. They
+Entity mappings live in `packages/ui/brand/src/iconography/entities.ts`. They
 describe the base entity type and fallback behavior; an external provider is an
 optional source overlay, never the entity's replacement identity.
 

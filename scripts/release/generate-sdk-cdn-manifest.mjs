@@ -5,7 +5,7 @@
 // Stages the exact tree that gets synced to the SDK CDN bucket and emits the
 // version manifests the CDN auto-loader reads at runtime.
 //
-// Inputs:  packages/web/dist/ (run `npm run build --workspace=packages/web`)
+// Inputs:  packages/sdk/web/dist/ (run `npm run build --workspace=packages/sdk/web`)
 // Outputs: .artifacts/sdk/cdn/... (gitignored; synced to the bucket by CI)
 //
 // TWO HASH FORMATS, ON PURPOSE — do not "simplify" these into one:
@@ -17,7 +17,7 @@
 //   integrity.sri    `sha384-<base64>` Subresource Integrity, for a
 //                    `<script integrity="...">` attribute in HTML.
 //
-// Version authority is packages/web/package.json. The major-version CDN path is
+// Version authority is packages/sdk/web/package.json. The major-version CDN path is
 // derived from it, never hand-written, so a version bump cannot leave the CDN
 // layout behind.
 // =============================================================================
@@ -28,7 +28,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const WEB = join(ROOT, 'packages', 'web');
+const WEB = join(ROOT, "packages", "sdk", "web");
 const DIST = join(WEB, 'dist');
 const OUT = join(ROOT, '.artifacts', 'sdk', 'cdn');
 
@@ -76,8 +76,8 @@ function readArtifact(rel) {
     return buf;
   } catch (error) {
     throw new Error(
-      `cannot read ${rel} from packages/web/dist (${error.message}). ` +
-        'Run `npm run build --workspace=packages/web` first.',
+      `cannot read ${rel} from packages/sdk/web/dist (${error.message}). ` +
+        'Run `npm run build --workspace=packages/sdk/web` first.',
     );
   }
 }

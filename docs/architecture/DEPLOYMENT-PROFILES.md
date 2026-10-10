@@ -15,7 +15,7 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
-  "infra/aws/terraform/main.tf": "sha256:8f99fbbd2f3293a93a94af68742b18c5fe8a2c3a073772ecb1f6bf78716fe27e"
+  "infra/aws/terraform/main.tf": "sha256:68861b95a57c75d22bb0594b4bc758aa06b789205d2c4a6e771658bf419dd8b2"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
@@ -310,7 +310,7 @@ The public web hosts are `www`, `aether`, `docs`, `app`, and `status`: under
 `staging.olympuslabsml.com` on staging and under `olympuslabsml.com` for
 production-lean. Staging serves them from two Amplify applications: the
 Aether marketing app builds the unified Olympus + Aether site
-(`apps/site`) for the `aether`, `www`, `docs` and `status` hosts, and the
+(`apps/public-site`) for the `aether`, `www`, `docs` and `status` hosts, and the
 end-user app serves `app`; the old Olympus, docs and status staging apps are
 deleted. Production keeps five apps, one per host (Olympus marketing, Aether
 marketing with the prerendered build, docs, the end-user app, and status), for

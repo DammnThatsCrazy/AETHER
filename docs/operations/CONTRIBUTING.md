@@ -18,10 +18,10 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:4e413d9b540e17345bc6ccc38d53a8baee240a3e761d07cf5630c9c8f78b3e89"
-  "Makefile": "sha256:c9532c0026244007080913f09ca1995f8a127f84846f30e7624461bbeff39ae1"
+  "Makefile": "sha256:8dc718ec76147cd8caa527730e4b7e45a87e1a76e49439487b80dbeebe4193e0"
   "config/unread_settings_flags.yaml": "sha256:a2ec165b3a23032bd06e67ce315f694509ead642f7fc7dd6e4c5ad9c61b974b8"
-  "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:b52bd4e06844b20bf4f1378b5d7806a764f17013a77dae395d55c80b45a7b8f4"
-  "scripts/repo_doctor.py": "sha256:e2bdb72b189f774f5ad579d8a670cee5e57002faf1460866d95b3b4209c0386e"
+  "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:d2aa83cdc82f5d6831ff3a2d1ff320b5f2427d6feafad3f2b5e7e00d8056f055"
+  "scripts/repo_doctor.py": "sha256:01d0efa017bf95681166af9f75742ff11ee07e2a177fab0a1c77f39434afea62"
   "scripts/validate_settings_flags.py": "sha256:b54d1d9af6f77fb175e7d1dca840686ac564018a9327e30bc7942ab833831b9d"
 ---
 

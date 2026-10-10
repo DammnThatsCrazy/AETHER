@@ -21,7 +21,7 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:5566683bd1bc60e67fbd0990ee325c650175e9ddc46706ade635e18ff36267cc"
+  "packages/shared/": "sha256:c4d5d00025e7ee23ff43e665d2eceb8c57b2000b7dc584ba86fffe33d18745d5"
   "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
@@ -41,7 +41,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
-4. **Frontend Plane** — Two React/Vite SPAs backed by the same `@aether/ui` shared component library (`packages/ui`). **Kyber** (`apps/kyber`, port 5174) is the internal operator control surface — investigation, live monitoring, entity management, and approvals. **Aether** (`apps/aether`, port 5175) is the customer-facing web app — account management and commerce. Both apps use PKCE OIDC auth and communicate exclusively with the backend REST API. Two **Expo mobile apps** extend the plane — **Aether Mobile** (`apps/aether-mobile`, customer plane) and **Kyber Mobile** (`apps/kyber-mobile`, operator plane, distinct bundle/audience from Aether Mobile) — built on the shared `@aether/mobile-core` (typed SDK: auth/continuation/sync/push over SecureStore PKCE) and `@aether/mobile-ui` (dark theme + typed navigation) packages. The mobile apps are read-only, consuming the mobile gateway's bounded redacted projections; their wire contracts (distribution profiles, install/app-version registration) live in `packages/shared/mobile-config.ts` and `packages/shared/installation.ts`.
+4. **Frontend Plane** — Two React/Vite SPAs backed by the same `@aether/ui` shared component library (`packages/ui`). **Kyber** (`apps/kyber-web`, port 5174) is the internal operator control surface — investigation, live monitoring, entity management, and approvals. **Aether** (`apps/aether-web`, port 5175) is the customer-facing web app — account management and commerce. Both apps use PKCE OIDC auth and communicate exclusively with the backend REST API. Two **Expo mobile apps** extend the plane — **Aether Mobile** (`apps/aether-mobile`, customer plane) and **Kyber Mobile** (`apps/kyber-mobile`, operator plane, distinct bundle/audience from Aether Mobile) — built on the shared `@aether/mobile-core` (typed SDK: auth/continuation/sync/push over SecureStore PKCE) and `@aether/mobile-ui` (dark theme + typed navigation) packages. The mobile apps are read-only, consuming the mobile gateway's bounded redacted projections; their wire contracts (distribution profiles, install/app-version registration) live in `packages/shared/mobile-config.ts` and `packages/shared/installation.ts`.
 
 ### Repository topology and runtime ownership
 
@@ -52,7 +52,7 @@ repositories. `services/ml/` owns model training and serving; `services/agents/`
 owns internal broker-coupled workers and staged graph-mutation workflows; and
 `services/compliance/` owns the GDPR/SOC 2 control implementation. AWS and
 Terraform delivery live under `infra/aws/`, while EVM and multi-chain contract
-code lives under `contracts/smart-contracts/`. Shared contracts remain in
+code lives under `packages/contracts/smart-contracts/`. Shared contracts remain in
 `packages/shared/contracts/`, and product clients (web and mobile) live under `apps/`.
 
 The old space-containing trees are not alternate implementations. The two

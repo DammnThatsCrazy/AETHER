@@ -11,9 +11,9 @@ since_version: "0.1.0"
 # Contract Coverage
 
 This document audits which domain surfaces in Aether are backed by a
-registered contract (schema or registry under `contracts/delivery/` or
+registered contract (schema or registry under `packages/contracts/delivery/` or
 `packages/shared/contracts/`) and which are not. It complements
-[VERSION_POLICY.md](../../../contracts/VERSION_POLICY.md) and the
+[VERSION_POLICY.md](../../../packages/contracts/VERSION_POLICY.md) and the
 [compatibility matrix](./compatibility-matrix.md).
 
 ## Domain surfaces with contract coverage
@@ -52,19 +52,19 @@ registered contract (schema or registry under `contracts/delivery/` or
 | Kyber feature surfaces | `packages/shared/contracts/kyber-feature-surface-manifest.json` | Structural manifest, not cross-checked against a TS/Python twin |
 | Evidence manifest | `packages/shared/contracts/evidence-manifest.schema.json` | JSON Schema for release-evidence content |
 | Incentive context | `packages/shared/contracts/incentive-context.schema.json` | JSON Schema |
-| Release candidates | `contracts/delivery/release-candidate.schema.json` | Immutable release metadata; produced by `scripts/artifact_builder.py` |
-| Staging orchestration | `contracts/delivery/staging-orchestration-state.schema.json`, `staging-lifecycle-result.schema.json` | Fail-closed staging lifecycle |
-| Migration evidence | `contracts/delivery/migration-evidence.schema.json` | Migration rehearsal evidence |
-| Environment resolution | `contracts/delivery/environment-resolution.schema.json`, `environment-capability-snapshot.schema.json` | Canonical profile vs. observed capability |
-| Effective IAM | `contracts/delivery/effective-iam-comparison.schema.json`, `effective-iam-evidence.schema.json` | IAM drift comparison |
-| Terraform reconciliation | `contracts/delivery/terraform-reconciliation.schema.json`, `terraform-remote-inventory.schema.json` | Plan-vs-remote reconciliation |
-| Deployment / impact graph | `contracts/delivery/deployment-impact.schema.json`, `impact-graph-index.schema.json` | Also registered in `config/impact_graph.json` |
-| Change plans | `contracts/delivery/change-plan.schema.json` | Produced by `scripts/change_plan.py` |
-| Failure envelopes | `contracts/delivery/failure-envelope.schema.json` | Shared failure shape across delivery tooling |
-| Hosted adapters | `contracts/delivery/hosted-adapter-request.schema.json`, `hosted-adapter-result.schema.json`, `profile-delivery-operation.schema.json` | Credential-safe hosted delivery |
-| Release evidence bundle | `contracts/delivery/release-evidence-bundle.schema.json` | Wraps `evidence-manifest.schema.json` content for delivery |
-| Artifact closure | `contracts/delivery/artifact-closure.schema.json` | Component/lockfile closure for a release candidate |
-| Telemetry events | `contracts/delivery/telemetry-event.schema.json` | Delivery-pipeline telemetry, distinct from `metric-registry.json` |
+| Release candidates | `packages/contracts/delivery/release-candidate.schema.json` | Immutable release metadata; produced by `scripts/artifact_builder.py` |
+| Staging orchestration | `packages/contracts/delivery/staging-orchestration-state.schema.json`, `staging-lifecycle-result.schema.json` | Fail-closed staging lifecycle |
+| Migration evidence | `packages/contracts/delivery/migration-evidence.schema.json` | Migration rehearsal evidence |
+| Environment resolution | `packages/contracts/delivery/environment-resolution.schema.json`, `environment-capability-snapshot.schema.json` | Canonical profile vs. observed capability |
+| Effective IAM | `packages/contracts/delivery/effective-iam-comparison.schema.json`, `effective-iam-evidence.schema.json` | IAM drift comparison |
+| Terraform reconciliation | `packages/contracts/delivery/terraform-reconciliation.schema.json`, `terraform-remote-inventory.schema.json` | Plan-vs-remote reconciliation |
+| Deployment / impact graph | `packages/contracts/delivery/deployment-impact.schema.json`, `impact-graph-index.schema.json` | Also registered in `config/impact_graph.json` |
+| Change plans | `packages/contracts/delivery/change-plan.schema.json` | Produced by `scripts/change_plan.py` |
+| Failure envelopes | `packages/contracts/delivery/failure-envelope.schema.json` | Shared failure shape across delivery tooling |
+| Hosted adapters | `packages/contracts/delivery/hosted-adapter-request.schema.json`, `hosted-adapter-result.schema.json`, `profile-delivery-operation.schema.json` | Credential-safe hosted delivery |
+| Release evidence bundle | `packages/contracts/delivery/release-evidence-bundle.schema.json` | Wraps `evidence-manifest.schema.json` content for delivery |
+| Artifact closure | `packages/contracts/delivery/artifact-closure.schema.json` | Component/lockfile closure for a release candidate |
+| Telemetry events | `packages/contracts/delivery/telemetry-event.schema.json` | Delivery-pipeline telemetry, distinct from `metric-registry.json` |
 
 ## Domain surfaces WITHOUT a registered contract (gaps)
 
@@ -79,13 +79,13 @@ They are governed only by code review, tests, or narrative docs:
   registered JSON Schema/registry file under either contracts directory.
 - **Data exchange plane** (`services/backend/services/data_exchange/**`, `services/backend/services/reports/**`)
   — has a TS/Python twin (`packages/shared/data-exchange.ts`) but no schema
-  file in `contracts/`.
+  file in `packages/contracts/`.
 - **Reconciled control plane / managed integrations**
   (`services/backend/services/managed_integrations/**`, `services/backend/services/security/**`) — TS/Python
   twins (`packages/shared/managed-integrations.ts`,
   `packages/shared/security-governance.ts`) exist; no JSON Schema.
 - **Computation substrate** (`services/backend/services/computation/**`) — governed by
-  `config/computation_inventory.yaml`, not a `contracts/` schema.
+  `config/computation_inventory.yaml`, not a `packages/contracts/` schema.
 - **Universal asset registry** (`services/backend/services/assets/**`) — governed by
   `docs/reference/BACKEND-API.md` and route tests; no schema file.
 - **Event-time valuation** (`services/backend/services/valuation/**`) — governed by narrative
@@ -103,11 +103,11 @@ They are governed only by code review, tests, or narrative docs:
   (`config/deployment_profiles.yaml`, `config/terraform_resource_contracts.yaml`)
   — YAML-based contracts validated by dedicated Python checkers
   (`scripts/release/check_terraform_plan_policy.py`,
-  `scripts/release/check_cost_model.py`), not JSON Schema under `contracts/`.
+  `scripts/release/check_cost_model.py`), not JSON Schema under `packages/contracts/`.
 
 ## Coverage policy
 
-A domain surface does not require a `contracts/` schema to be considered
+A domain surface does not require a `packages/contracts/` schema to be considered
 "governed" — many of the gaps above have an equivalent enforcement mechanism
 (a TS/Python contract twin plus a parity test, a YAML registry plus a
 dedicated validator, or a source-linked doc plus route tests). This document
@@ -115,5 +115,5 @@ tracks the split so reviewers know which enforcement mechanism to check for a
 given surface, not to imply every gap must be closed. When adding a new
 domain surface that produces or consumes structured data across a
 service/SDK boundary, prefer registering a schema under
-`packages/shared/contracts/` (see [README.md](../../../contracts/README.md),
+`packages/shared/contracts/` (see [README.md](../../../packages/contracts/README.md),
 "Adding a contract") over inventing a new twin-and-test pattern.

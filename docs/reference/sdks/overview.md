@@ -20,11 +20,11 @@ It does not own provider sync, global identity resolution, attribution, financia
 
 | SDK | Package | Status |
 |---|---|---|
-| Web | `packages/web` | Alpha |
+| Web | `packages/sdk/web` | Alpha |
 | React | via Web SDK | Alpha |
-| React Native | `packages/react-native` | Alpha |
-| iOS | `packages/ios` | Alpha |
-| Android | `packages/android` | Alpha |
+| React Native | `packages/sdk/react-native` | Alpha |
+| iOS | `packages/sdk/ios` | Alpha |
+| Android | `packages/sdk/android` | Alpha |
 
 ## Core Concepts
 

@@ -1,7 +1,7 @@
 # Kyber Mobile
 
 The Kyber **operator companion** app (Expo + React Native). It consumes
-[`@aether/mobile-core`](../../packages/mobile-core) and is bound to the `kyber`
+[`@aether/mobile-core`](../../packages/sdk/mobile-core) and is bound to the `kyber`
 product plane with the **workforce auth audience** — a distinct bundle id
 (`com.aether.kyber`), audience, and secure store from Aether Mobile. **No Aether
 tenant code ships in this binary**, and an Aether token cannot call Kyber.

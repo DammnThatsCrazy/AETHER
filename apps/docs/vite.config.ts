@@ -19,7 +19,7 @@ const outDirMap: Record<typeof tier, string> = {
 
 // MDX is processed before React so enforce: 'pre' is required.
 export default defineConfig({
-  publicDir: path.resolve(__dirname, '../../packages/brand/src/identity/marks'),
+  publicDir: path.resolve(__dirname, '../../packages/ui/brand/src/identity/marks'),
   plugins: [
     {
       enforce: 'pre',

@@ -7,7 +7,7 @@ can be forgotten — and an install that half-happened still looks like traffic
 that stopped.
 
 This is the *only* place the attribute contract is written on the server side.
-The loader interprets it in exactly one place too (``packages/web/src/loader/
+The loader interprets it in exactly one place too (``packages/sdk/web/src/loader/
 auto-init.ts``); the two are held to each other by
 ``scripts/validate_sdk_quickstart_snippet.py``, so a snippet this module emits
 cannot name an attribute the loader ignores.

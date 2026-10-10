@@ -12,12 +12,6 @@
     "note": "canonical runtime, impact-graph, readiness, and verification configuration."
   },
   {
-    "path": "contracts",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "canonical contract schemas and smart-contract project container; shared runtime contracts remain under packages/shared/contracts/."
-  },
-  {
     "path": "docs",
     "role": "house",
     "owner": "platform@aether",

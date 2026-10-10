@@ -29,14 +29,14 @@ connecting evidence. They are not the product's identity by themselves.
 - [Glossary](/doc/glossary/aether) — shared public vocabulary.
 ## Public site routes
 The repository also contains the deployable marketing shell in
-`apps/marketing/`. It builds two static targets from one governed content
+`packages/ui/marketing/`. It builds two static targets from one governed content
 system:
 - `build:olympus` → `https://www.olympuslabsml.com` — company, research, resources, and contact.
 - `build:aether` → `https://aether.olympuslabsml.com` — product, connections, perspectives, trust, pricing, developers, stories, and pilot/proof CTAs.
 The product site links to `https://docs.olympuslabsml.com` for the full developer
 journey and to `https://app.olympuslabsml.com` for the authenticated tenant app.
 The page-filling marketing copy is maintained separately from the shell in
-`apps/marketing/content/`. That package contains the full route copy,
+`packages/ui/marketing/content/`. That package contains the full route copy,
 SEO metadata, section text, proof language, CTA library, footer microcopy, and
 legal publication boundaries.
 ## Editorial rule

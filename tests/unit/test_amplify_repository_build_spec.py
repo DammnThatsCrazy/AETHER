@@ -3,7 +3,7 @@
 Amplify uses the repository's amplify.yml over the console build spec. When
 an app's appRoot is missing from it, the build fails before any command runs
 ("Invalid monorepo spec, no matching appRoot found in build spec"), as the
-first staging build of apps/site did.
+first staging build of apps/public-site did.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def _repository_spec() -> dict[str, dict]:
 
 def test_every_terraform_app_root_has_a_repository_build_spec() -> None:
     roots = _terraform_app_roots()
-    assert {"apps/site", "apps/aether-marketing", "apps/aether"} <= roots
+    assert {"apps/public-site", "apps/marketing-aether", "apps/aether-web"} <= roots
     missing = roots - set(_repository_spec())
     assert not missing, f"amplify.yml has no application for {sorted(missing)}"
 
@@ -48,10 +48,10 @@ def test_each_build_spec_builds_and_publishes_its_own_workspace() -> None:
 def test_site_build_publishes_the_product_under_app() -> None:
     """One app per environment: the site's build also builds the product with
     base /app/ and copies it into the site's output at dist/app."""
-    commands = _repository_spec()["apps/site"]["frontend"]["phases"]["build"]["commands"]
-    product = "VITE_BASE_PATH=/app/ npm run build --workspace=apps/aether"
+    commands = _repository_spec()["apps/public-site"]["frontend"]["phases"]["build"]["commands"]
+    product = "VITE_BASE_PATH=/app/ npm run build --workspace=apps/aether-web"
     assert product in commands
-    assert commands.index("npm run build --workspace=apps/site") < commands.index(product)
-    assert "cp -R apps/aether/dist/. apps/site/dist/app/" in commands
-    pre = _repository_spec()["apps/site"]["frontend"]["phases"]["preBuild"]["commands"]
-    assert "npm run build --workspace=packages/web" in pre
+    assert commands.index("npm run build --workspace=apps/public-site") < commands.index(product)
+    assert "cp -R apps/aether-web/dist/. apps/public-site/dist/app/" in commands
+    pre = _repository_spec()["apps/public-site"]["frontend"]["phases"]["preBuild"]["commands"]
+    assert "npm run build --workspace=packages/sdk/web" in pre

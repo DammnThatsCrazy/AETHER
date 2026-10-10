@@ -121,7 +121,7 @@
     "Android SDK",
     "Expo prebuild toolchain"
    ],
-   "implementation_status": "app scaffolds + shared SDK LANDED C4 (apps/*, packages/mobile-core); shared SDK typechecks + tests in make ci-check; scaffold invariants enforced by make mobile-build-check",
+   "implementation_status": "app scaffolds + shared SDK LANDED C4 (apps/*, packages/sdk/mobile-core); shared SDK typechecks + tests in make ci-check; scaffold invariants enforced by make mobile-build-check",
    "activation": "run npx expo prebuild + xcodebuild/gradlew on a macOS/hosted-CI runner; no code change to compile the shell",
    "evidence_required": "app boots on an iOS simulator and an Android emulator in hosted CI"
   },

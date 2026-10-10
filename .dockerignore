@@ -79,7 +79,7 @@ services/ml/**/*.joblib
 services/ml/**/*.pkl
 services/ml/**/model_output/
 services/agents/
-contracts/smart-contracts/
+packages/contracts/smart-contracts/
 Aether Mobile SDK/
 docs/archive/legacy-architecture/aws-deployment/
 docs/archive/legacy-architecture/data-ingestion-layer/

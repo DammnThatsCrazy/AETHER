@@ -6,7 +6,7 @@ import path from 'path';
 export default defineConfig({
   resolve: {
     alias: {
-      '@aether/web': path.resolve(__dirname, '../../web/src/index.ts'),
+      '@aether/web': path.resolve(__dirname, '../web/src/index.ts'),
     },
   },
 });

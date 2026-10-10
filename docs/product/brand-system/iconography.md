@@ -11,7 +11,7 @@ canonical_owner: frontend@aether
 
 # Iconography
 
-Use named semantic descriptors from `packages/brand/src/iconography/`; the
+Use named semantic descriptors from `packages/ui/brand/src/iconography/`; the
 names are renderer-independent and are not SVG paths, Unicode, or ASCII glyphs.
 
 | Need | Data taxonomy | React renderer |

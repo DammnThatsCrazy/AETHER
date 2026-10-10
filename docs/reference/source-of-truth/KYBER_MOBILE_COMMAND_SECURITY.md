@@ -141,7 +141,7 @@ never omitted. A command whose postconditions could not be confirmed is
   and has no POST/DELETE/PUT.
 - `tests/unit/test_kyber_mobile_proof_keys.py` — 11 tests (same-store verify,
   replace-in-place, redacted list, 404-never-403, ES256-only, revoked-not-listed).
-- `packages/mobile-core` vitest (46/46) — step-up / proof-key / actions /
+- `packages/sdk/mobile-core` vitest (46/46) — step-up / proof-key / actions /
   receipts typed methods + pure-TS P256 signer verified against RFC 6979 A.2.5
   and Node crypto.
 - Grep-level read-only invariant in the mobile apps — step-up verify / proof-key

@@ -105,7 +105,7 @@ def stage_lint(gate: QualityGate, workdir: str = ".") -> StageResult:
     # SwiftLint for iOS
     log("Running SwiftLint...", stage="LINT")
     swift_result = run_cmd(
-        "swiftlint lint packages/ios --reporter json 2>&1 || true",
+        "swiftlint lint packages/sdk/ios --reporter json 2>&1 || true",
         cwd=workdir, timeout=120,
     )
     if not swift_result.success:
@@ -115,7 +115,7 @@ def stage_lint(gate: QualityGate, workdir: str = ".") -> StageResult:
     # ktlint for Android
     log("Running ktlint...", stage="LINT")
     kt_result = run_cmd(
-        "ktlint 'packages/android/**/*.kt' --reporter=json 2>&1 || true",
+        "ktlint 'packages/sdk/android/**/*.kt' --reporter=json 2>&1 || true",
         cwd=workdir, timeout=120,
     )
     if not kt_result.success:

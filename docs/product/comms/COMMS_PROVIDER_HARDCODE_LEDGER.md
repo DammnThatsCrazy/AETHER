@@ -49,9 +49,9 @@ over non-adapter code → zero matches.
 
 | Site | What it does | Disposition |
 |---|---|---|
-| `apps/aether/src/pages/onboarding/comms-connect-onboarding-step.tsx:8` | `COMMS_CONNECTOR_TYPE = 'klaviyo'` (+ 8 usages) | **Generalize**: iterate registered comms connectors (commit 11) |
-| `apps/kyber/src/pages/measurement/kyber-measurement-ops-page.tsx:335` | `useState('klaviyo')` provider default | **Generalize**: default from connector list (commit 11) |
-| `apps/aether/src/test/unit/onboarding-page.test.tsx` | Test fixtures keyed to Klaviyo | **Update** alongside commit 11 |
+| `apps/aether-web/src/pages/onboarding/comms-connect-onboarding-step.tsx:8` | `COMMS_CONNECTOR_TYPE = 'klaviyo'` (+ 8 usages) | **Generalize**: iterate registered comms connectors (commit 11) |
+| `apps/kyber-web/src/pages/measurement/kyber-measurement-ops-page.tsx:335` | `useState('klaviyo')` provider default | **Generalize**: default from connector list (commit 11) |
+| `apps/aether-web/src/test/unit/onboarding-page.test.tsx` | Test fixtures keyed to Klaviyo | **Update** alongside commit 11 |
 
 ## Surfaces that must grow (add)
 

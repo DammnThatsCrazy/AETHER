@@ -62,7 +62,7 @@ COPY ["services/backend/alembic.ini", "./services/backend/alembic.ini"]
 # projection, and capability readers load lazily after startup.
 COPY ["config/", "./config/"]
 COPY ["packages/shared/contracts/", "./packages/shared/contracts/"]
-COPY ["contracts/delivery/", "./contracts/delivery/"]
+COPY ["packages/contracts/delivery/", "./contracts/delivery/"]
 COPY ["pyproject.toml", "./pyproject.toml"]
 COPY security/ ./security/
 

@@ -7,16 +7,16 @@ node_modules/
 dist/
 build/
 # Exception: committed type declarations for workspace consumers
-!packages/web/dist/
+!packages/sdk/web/dist/
 # But keep build JS artifacts ignored (only .d.ts is committed)
-packages/web/dist/**/*.js
-packages/web/dist/**/*.js.map
+packages/sdk/web/dist/**/*.js
+packages/sdk/web/dist/**/*.js.map
 # Same for the ESM loader bundle (.mjs is not matched by the .js rules above)
-packages/web/dist/**/*.mjs
-packages/web/dist/**/*.mjs.map
+packages/sdk/web/dist/**/*.mjs
+packages/sdk/web/dist/**/*.mjs.map
 .gradle/
-contracts/smart-contracts/artifacts/
-contracts/smart-contracts/cache/
+packages/contracts/smart-contracts/artifacts/
+packages/contracts/smart-contracts/cache/
 *.tsbuildinfo
 
 # In-place TypeScript compilation artifacts from the archived ingestion/lake duplicates
@@ -32,33 +32,33 @@ docs/**/*.js
 docs/**/*.js.map
 docs/**/*.d.ts
 !docs/_generated/**
-apps/aether/**/*.js
-apps/aether/**/*.js.map
-apps/aether/**/*.d.ts
-apps/aether-marketing/**/*.js
-apps/aether-marketing/**/*.js.map
-apps/aether-marketing/**/*.d.ts
+apps/aether-web/**/*.js
+apps/aether-web/**/*.js.map
+apps/aether-web/**/*.d.ts
+apps/marketing-aether/**/*.js
+apps/marketing-aether/**/*.js.map
+apps/marketing-aether/**/*.d.ts
 apps/demo/**/*.js
 apps/demo/**/*.js.map
 apps/demo/**/*.d.ts
 apps/docs/**/*.js
 apps/docs/**/*.js.map
 apps/docs/**/*.d.ts
-apps/kyber/**/*.js
-apps/kyber/**/*.js.map
-apps/kyber/**/*.d.ts
-apps/marketing/**/*.js
-apps/marketing/**/*.js.map
-apps/marketing/**/*.d.ts
-apps/olympus-marketing/**/*.js
-apps/olympus-marketing/**/*.js.map
-apps/olympus-marketing/**/*.d.ts
-apps/shared/**/*.js
-apps/shared/**/*.js.map
-apps/shared/**/*.d.ts
-apps/site/**/*.js
-apps/site/**/*.js.map
-apps/site/**/*.d.ts
+apps/kyber-web/**/*.js
+apps/kyber-web/**/*.js.map
+apps/kyber-web/**/*.d.ts
+packages/ui/marketing/**/*.js
+packages/ui/marketing/**/*.js.map
+packages/ui/marketing/**/*.d.ts
+apps/marketing-olympus/**/*.js
+apps/marketing-olympus/**/*.js.map
+apps/marketing-olympus/**/*.d.ts
+packages/ui/core/**/*.js
+packages/ui/core/**/*.js.map
+packages/ui/core/**/*.d.ts
+apps/public-site/**/*.js
+apps/public-site/**/*.js.map
+apps/public-site/**/*.d.ts
 apps/status/**/*.js
 apps/status/**/*.js.map
 apps/status/**/*.d.ts
@@ -66,7 +66,7 @@ packages/**/*.js
 packages/**/*.js.map
 packages/**/*.d.ts
 # Keep committed web dist declarations
-!packages/web/dist/**/*.d.ts
+!packages/sdk/web/dist/**/*.d.ts
 *.egg-info/
 __pycache__/
 *.pyc
@@ -162,4 +162,4 @@ Smart Contracts/
 scripts/fix_logger_kwargs.py
 
 # Site prerender server bundle (removed after each build)
-apps/site/dist-ssr/
+apps/public-site/dist-ssr/

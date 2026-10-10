@@ -15,8 +15,8 @@
         "docs/archive/legacy-architecture/data-ingestion-layer/**/package.json",
         "docs/archive/legacy-architecture/data-lake-architecture/**/package.json",
         "docs/**/*.md",
-        "packages/ios/**",
-        "packages/android/**"
+        "packages/sdk/ios/**",
+        "packages/sdk/android/**"
       ],
       "required_commands": [
         "python scripts/bump_version.py --check",
@@ -40,8 +40,8 @@
         "docs/reference/BACKEND-API.md",
         "docs/reference/source-of-truth/**",
         "packages/shared/**",
-        "apps/shared/**",
-        "apps/kyber/**",
+        "packages/ui/core/**",
+        "apps/kyber-web/**",
         "tests/**"
       ],
       "required_commands": [
@@ -58,8 +58,8 @@
       "source_globs": [
         "packages/shared/events.ts",
         "schemas/**",
-        "contracts/**",
-        "!contracts/*.md",
+        "packages/contracts/**",
+        "!packages/contracts/*.md",
         "services/backend/**/events/**/*.py"
       ],
       "required_changed_globs": [
@@ -67,8 +67,8 @@
         "docs/reference/source-of-truth/**",
         "docs/reference/SDK-API-CONTRACTS.md",
         "packages/shared/**",
-        "packages/web/**",
-        "packages/react-native/**",
+        "packages/sdk/web/**",
+        "packages/sdk/react-native/**",
         "tests/**"
       ],
       "required_commands": [
@@ -114,7 +114,7 @@
         "services/backend/**/tenant/**/*.py",
         "services/backend/**/consent/**/*.py",
         "packages/shared/consent.ts",
-        "packages/web/src/consent/**",
+        "packages/sdk/web/src/consent/**",
         "tests/**/tenant*.py",
         "tests/**/auth*.py"
       ],
@@ -123,7 +123,7 @@
         "docs/**/*CONSENT*.md",
         "docs/**/*AUTH*.md",
         "packages/shared/**",
-        "packages/web/**",
+        "packages/sdk/web/**",
         "tests/**"
       ],
       "required_commands": [
@@ -137,10 +137,10 @@
       "id": "sdk_public_api",
       "name": "SDK public method changed",
       "source_globs": [
-        "packages/web/src/index.ts",
-        "packages/web/src/**/*.ts",
-        "packages/react-native/src/index.tsx",
-        "packages/react-native/src/**/*.ts",
+        "packages/sdk/web/src/index.ts",
+        "packages/sdk/web/src/**/*.ts",
+        "packages/sdk/react-native/src/index.tsx",
+        "packages/sdk/react-native/src/**/*.ts",
         "packages/shared/index.ts",
         "packages/shared/*.ts",
         "!packages/**/*.test.ts",
@@ -202,7 +202,7 @@
       ],
       "required_changed_globs": [
         "docs/**",
-        "apps/kyber/**",
+        "apps/kyber-web/**",
         "packages/shared/**",
         "tests/**"
       ],
@@ -217,13 +217,13 @@
       "id": "kyber_operator",
       "name": "Kyber operator route/model changed",
       "source_globs": [
-        "apps/kyber/**",
+        "apps/kyber-web/**",
         "services/backend/**/*operator*",
         "services/backend/**/*kyber*"
       ],
       "required_changed_globs": [
         "docs/**",
-        "apps/kyber/**",
+        "apps/kyber-web/**",
         "packages/shared/**",
         "tests/**",
         "services/backend/**/tests/**"
@@ -325,8 +325,8 @@
         "services/backend/**/repositories/data_artifacts.py",
         "services/backend/**/alembic/versions/*data_exchange*.py",
         "packages/shared/data-exchange.ts",
-        "apps/aether/src/features/data-exchange/**",
-        "apps/aether/src/pages/settings/data-exchange-section.tsx"
+        "apps/aether-web/src/features/data-exchange/**",
+        "apps/aether-web/src/pages/settings/data-exchange-section.tsx"
       ],
       "required_changed_globs": [
         "packages/shared/data-exchange.ts",
@@ -718,8 +718,8 @@
       "source_globs": [
         "scripts/generate_contracts.py",
         "scripts/validate_mobile_event_parity.py",
-        "packages/ios/Sources/AetherSDK/Aether.swift",
-        "packages/android/src/main/java/com/aether/sdk/Aether.kt"
+        "packages/sdk/ios/Sources/AetherSDK/Aether.swift",
+        "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt"
       ],
       "required_changed_globs": [
         "docs/_generated/**",
@@ -787,8 +787,8 @@
         "config/test_suites.schema.json",
         "config/verification_policy.yaml",
         "config/verification_router.yaml",
-        "contracts/delivery/*verification*.schema.json",
-        "contracts/delivery/*performance*.schema.json",
+        "packages/contracts/delivery/*verification*.schema.json",
+        "packages/contracts/delivery/*performance*.schema.json",
         "scripts/aggregate_verification_evidence.py",
         "scripts/lib/ci_performance.py",
         "scripts/lib/processes.py",

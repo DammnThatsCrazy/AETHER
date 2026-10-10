@@ -8,7 +8,7 @@ because `make ci-check` runs on a fresh checkout where dist/ holds only the
 committed .d.ts declarations.
 
 Actual artifact existence is checked by `npm run verify:artifacts`
-(packages/web/scripts/verify-web-sdk-package.mjs) in the SDK release workflow,
+(packages/sdk/web/scripts/verify-web-sdk-package.mjs) in the SDK release workflow,
 where the build has genuinely run.
 
 When dist/ *has* been built locally, this gate re-checks the runtime artifacts
@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
 NOTES: list[str] = []
 
-WEB = 'packages/web'
+WEB = 'packages/sdk/web'
 VERIFIER = f'{WEB}/scripts/verify-web-sdk-package.mjs'
 
 

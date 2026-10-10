@@ -17,35 +17,35 @@ def text(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
 # Version drift
-package_paths = ['package.json','packages/shared/package.json','packages/web/package.json','packages/react-native/package.json','packages/server/package.json']
+package_paths = ['package.json','packages/shared/package.json','packages/sdk/web/package.json','packages/sdk/react-native/package.json','packages/sdk/server/package.json']
 for rel in package_paths:
     version = json.loads(text(rel))['version']
     if version != VERSION:
         fail(f'{rel} version {version} != root {VERSION}')
 
-rn_dep = json.loads(text('packages/react-native/package.json'))['dependencies']['@aether/shared']
-web_dep = json.loads(text('packages/web/package.json'))['dependencies']['@aether/shared']
-for rel, dep in [('packages/react-native/package.json', rn_dep), ('packages/web/package.json', web_dep)]:
+rn_dep = json.loads(text('packages/sdk/react-native/package.json'))['dependencies']['@aether/shared']
+web_dep = json.loads(text('packages/sdk/web/package.json'))['dependencies']['@aether/shared']
+for rel, dep in [('packages/sdk/react-native/package.json', rn_dep), ('packages/sdk/web/package.json', web_dep)]:
     if dep != f'^{VERSION}': fail(f'{rel} @aether/shared dependency {dep} != ^{VERSION}')
 
 version_patterns = {
     'packages/shared/sdk-version.ts': [f"SDK_VERSION = '{VERSION}'"],
-    'packages/android/gradle.properties': [f'sdkVersion={VERSION}'],
-    'packages/android/src/main/java/com/aether/sdk/Aether.kt': [f'VERSION = "{VERSION}"'],
-    'packages/ios/AetherSDK.podspec': [f's.version      = "{VERSION}"', f's.version         = "{VERSION}"'],
-    'packages/ios/Sources/AetherSDK/Aether.swift': [f'v{VERSION}', f'version: "{VERSION}"'],
-    'packages/react-native/aether-react-native.podspec': [f's.version          = "{VERSION}"', f's.version      = "{VERSION}"', f's.version         = "{VERSION}"', "s.version      = package['version']"],
-    'packages/react-native/src/modules/HealthAgent.ts': [f"SDK_VERSION = '{VERSION}'"],
-    'packages/react-native/src/context/SemanticContext.ts': [f"version: '{VERSION}'"],
-    'packages/web/src/index.ts': [f"SDK_VERSION = '{VERSION}'"],
-    'packages/web/src/core/event-queue.ts': [f"SDK_VERSION = '{VERSION}'"],
-    'packages/web/src/health/sdk-health-agent.ts': [f"SDK_VERSION = '{VERSION}'"],
+    'packages/sdk/android/gradle.properties': [f'sdkVersion={VERSION}'],
+    'packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt': [f'VERSION = "{VERSION}"'],
+    'packages/sdk/ios/AetherSDK.podspec': [f's.version      = "{VERSION}"', f's.version         = "{VERSION}"'],
+    'packages/sdk/ios/Sources/AetherSDK/Aether.swift': [f'v{VERSION}', f'version: "{VERSION}"'],
+    'packages/sdk/react-native/aether-react-native.podspec': [f's.version          = "{VERSION}"', f's.version      = "{VERSION}"', f's.version         = "{VERSION}"', "s.version      = package['version']"],
+    'packages/sdk/react-native/src/modules/HealthAgent.ts': [f"SDK_VERSION = '{VERSION}'"],
+    'packages/sdk/react-native/src/context/SemanticContext.ts': [f"version: '{VERSION}'"],
+    'packages/sdk/web/src/index.ts': [f"SDK_VERSION = '{VERSION}'"],
+    'packages/sdk/web/src/core/event-queue.ts': [f"SDK_VERSION = '{VERSION}'"],
+    'packages/sdk/web/src/health/sdk-health-agent.ts': [f"SDK_VERSION = '{VERSION}'"],
     # The loader is bundled separately from the SDK and carries its own copy,
     # for the same reason heartbeat.ts carries its own CONTRACT_SCHEMA_VERSION.
     # It is the version the install verifier reads back off an install signal
     # and compares against the shipped one, so a drift here would not fail a
     # build — it would quietly reclassify every tenant's install.
-    'packages/web/src/loader/bootstrap.ts': [f"LOADER_VERSION = '{VERSION}'"],
+    'packages/sdk/web/src/loader/bootstrap.ts': [f"LOADER_VERSION = '{VERSION}'"],
     # The backend mirror of the same fact. It is not a second version authority
     # (pyproject.toml / package.json remain the source); it is the copy the
     # verifier compares against, pinned here so it cannot drift from them.
@@ -60,9 +60,9 @@ for rel, needles in version_patterns.items():
 
 # Endpoint drift
 sdk_files = [
-    'packages/web/src/core/event-queue.ts',
-    'packages/android/src/main/java/com/aether/sdk/Aether.kt',
-    'packages/ios/Sources/AetherSDK/Aether.swift',
+    'packages/sdk/web/src/core/event-queue.ts',
+    'packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt',
+    'packages/sdk/ios/Sources/AetherSDK/Aether.swift',
     'docs/reference/source-of-truth/INGESTION_CONTRACT.md',
     'docs/reference/SDK-API-CONTRACTS.md',
 ]
@@ -91,8 +91,8 @@ if not schema_version_match:
 else:
     contract_schema_version = schema_version_match.group(1)
     for rel in [
-        'packages/web/src/index.ts',
-        'packages/web/src/loader/heartbeat.ts',
+        'packages/sdk/web/src/index.ts',
+        'packages/sdk/web/src/loader/heartbeat.ts',
     ]:
         if f"CONTRACT_SCHEMA_VERSION = '{contract_schema_version}'" not in text(rel):
             fail(
@@ -106,10 +106,10 @@ registry = set(re.findall(r"\| '([^']+)'", events_ts.split('export type EventFam
 if not registry:
     fail('could not parse shared EventType registry')
 # The web consent map is registry-derived and lives in the generated file
-# (packages/web/src/core/generated-consent-map.ts, produced by
+# (packages/sdk/web/src/core/generated-consent-map.ts, produced by
 # scripts/generate_contracts.py). Native iOS/Android event-type + consent-purpose
 # regions are also generated by scripts/generate_contracts.py.
-for rel in ['packages/web/src/core/generated-consent-map.ts','packages/android/src/main/java/com/aether/sdk/Aether.kt','packages/ios/Sources/AetherSDK/Aether.swift']:
+for rel in ['packages/sdk/web/src/core/generated-consent-map.ts','packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt','packages/sdk/ios/Sources/AetherSDK/Aether.swift']:
     body = text(rel)
     for name in registry:
         if name not in body:
@@ -117,10 +117,10 @@ for rel in ['packages/web/src/core/generated-consent-map.ts','packages/android/s
 
 # Prevent raw non-canonical enqueue calls from SDK source.
 for rel in [
-    'packages/web/src/index.ts',
-    'packages/web/src/core/event-queue.ts',
-    'packages/android/src/main/java/com/aether/sdk/Aether.kt',
-    'packages/ios/Sources/AetherSDK/Aether.swift',
+    'packages/sdk/web/src/index.ts',
+    'packages/sdk/web/src/core/event-queue.ts',
+    'packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt',
+    'packages/sdk/ios/Sources/AetherSDK/Aether.swift',
 ]:
     body = text(rel)
     for m in re.finditer(r"enqueueEvent\(\s*(?:type\s*=\s*)?[\"']([a-z0-9_]+)[\"']", body):
@@ -131,14 +131,14 @@ for rel in [
 # Runtime behavior: no stale health routes and no API keys in query strings.
 # Canonical health = /v1/diagnostics/sdk/heartbeat ; manifest = /v1/config/sdk/manifest.
 runtime_files = [
-    'packages/web/src/health/sdk-health-agent.ts',
-    'packages/web/src/index.ts',
-    'packages/react-native/src/modules/HealthAgent.ts',
-    'packages/react-native/src/index.tsx',
-    'packages/ios/Sources/AetherSDK/AetherHealthAgent.swift',
-    'packages/ios/Sources/AetherSDK/Aether.swift',
-    'packages/android/src/main/java/com/aether/sdk/AetherHealthAgent.kt',
-    'packages/android/src/main/java/com/aether/sdk/Aether.kt',
+    'packages/sdk/web/src/health/sdk-health-agent.ts',
+    'packages/sdk/web/src/index.ts',
+    'packages/sdk/react-native/src/modules/HealthAgent.ts',
+    'packages/sdk/react-native/src/index.tsx',
+    'packages/sdk/ios/Sources/AetherSDK/AetherHealthAgent.swift',
+    'packages/sdk/ios/Sources/AetherSDK/Aether.swift',
+    'packages/sdk/android/src/main/java/com/aether/sdk/AetherHealthAgent.kt',
+    'packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt',
 ]
 for rel in runtime_files:
     body = text(rel)
@@ -150,8 +150,8 @@ for rel in runtime_files:
 # Official ecommerce helpers must emit canonical top-level types, never the
 # retired legacy names on the wire.
 ecommerce_files = [
-    'packages/web/src/modules/ecommerce.ts',
-    'packages/react-native/src/bridge.ts',
+    'packages/sdk/web/src/modules/ecommerce.ts',
+    'packages/sdk/react-native/src/bridge.ts',
 ]
 for rel in ecommerce_files:
     p = ROOT / rel
@@ -163,12 +163,12 @@ for rel in ecommerce_files:
             fail(f'{rel} emits legacy ecommerce event {legacy}; emit canonical cart_item_added/cart_item_removed')
 
 # The canonical low-level observe() API must exist on the web SDK.
-if 'observe(' not in text('packages/web/src/index.ts'):
-    fail('packages/web/src/index.ts is missing the canonical observe() API')
+if 'observe(' not in text('packages/sdk/web/src/index.ts'):
+    fail('packages/sdk/web/src/index.ts is missing the canonical observe() API')
 
 # Publish workflow must include every target and artifact checks.
 workflow = text('.github/workflows/publish-sdk.yml')
-for required in ['packages/shared','packages/web','packages/react-native','pod spec lint packages/ios/AetherSDK.podspec','pod spec lint packages/react-native/aether-react-native.podspec','assembleRelease','publishToMavenLocal','npm pack --workspace=packages/web']:
+for required in ['packages/shared','packages/sdk/web','packages/sdk/react-native','pod spec lint packages/sdk/ios/AetherSDK.podspec','pod spec lint packages/sdk/react-native/aether-react-native.podspec','assembleRelease','publishToMavenLocal','npm pack --workspace=packages/sdk/web']:
     if required not in workflow:
         fail(f'publish workflow missing {required}')
 

@@ -24,7 +24,7 @@ import { KyberLockup } from '@aether/ui';
 <KyberLockup variant="responsive" label="Kyber" size={28} />
 ```
 
-- Follow `packages/brand/src/identity/kyber/manifest.ts`.
+- Follow `packages/ui/brand/src/identity/kyber/manifest.ts`.
 - Select `full` at 132px+, `compact` at 84px+, and `mark` only in collapsed
   navigation with an accessible Kyber name.
 - Preserve Kyber's existing operator authority, environment, and forbidden

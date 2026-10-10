@@ -1,4 +1,4 @@
-// packages/sdk/examples/web-next/src/types.ts — adapted from apps/proof-web/src/types.ts
+// packages/sdk/examples/web-next/src/types.ts — adapted from tests/e2e/proof/apps/web/src/types.ts
 import type { ConsentState } from '@aether/shared/consent';
 
 /** Per-batch ingestion health counters. */

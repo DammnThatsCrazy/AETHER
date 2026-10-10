@@ -55,13 +55,13 @@ if ERRORS:
         print(f'  - {err}')
     sys.exit(1)
 
-pkg_version = json.loads(text('packages/web/package.json'))['version']
+pkg_version = json.loads(text('packages/sdk/web/package.json'))['version']
 major = pkg_version.split('.')[0]
 
 # --- 2. Version must derive from the package, never be hardcoded -------------
 generator = text(GENERATOR)
 if "readFileSync(join(WEB, 'package.json'" not in generator:
-    fail(f'{GENERATOR} does not read the version from packages/web/package.json')
+    fail(f'{GENERATOR} does not read the version from packages/sdk/web/package.json')
 for stale in re.findall(r'\b(\d+\.\d+\.\d+)\b', generator):
     # A literal version in the generator would silently pin the CDN layout.
     fail(f'{GENERATOR} contains hardcoded version literal {stale}; derive it from package.json')

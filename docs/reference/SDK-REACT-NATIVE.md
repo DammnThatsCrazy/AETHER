@@ -6,13 +6,13 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/react-native/src/bridge.ts, packages/react-native/src/index.tsx, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/react-native/src/bridge.ts, packages/sdk/react-native/src/index.tsx, packages/shared/events.ts, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/react-native/src/bridge.ts": "sha256:ad3e3d5e9bba01a0bcd1ff8cccd48b7d55a5b97e71f7579c50a741f10c9b6593"
-  "packages/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:ad3e3d5e9bba01a0bcd1ff8cccd48b7d55a5b97e71f7579c50a741f10c9b6593"
+  "packages/sdk/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:79883c251f1b5e9cd493fe08983da78a204f2af69e91d1e2a61036d67e338363"
 ---

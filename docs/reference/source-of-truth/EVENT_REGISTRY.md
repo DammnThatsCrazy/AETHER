@@ -235,7 +235,7 @@ an external party requesting, authorizing, or settling a payment:
 ## Consent mapping (authoritative)
 
 Generated from the registry: `packages/shared/events.ts::EVENT_CONSENT_PURPOSE`,
-`packages/web/src/core/generated-consent-map.ts::EVENT_CONSENT_PURPOSE`, and the
+`packages/sdk/web/src/core/generated-consent-map.ts::EVENT_CONSENT_PURPOSE`, and the
 native iOS/Android consent-purpose regions. The generated map holds each type's
 primary (first) required purpose; events with no required purposes — `consent`
 itself and the `privacy` DSR family — are always allowed at the consent gate and

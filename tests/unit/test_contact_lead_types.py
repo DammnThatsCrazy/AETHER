@@ -1,6 +1,6 @@
 """Public lead capture accepts the unified-site contact topics.
 
-apps/site's Contact page sends one of six topics as `lead_type`. The
+apps/public-site's Contact page sends one of six topics as `lead_type`. The
 endpoint previously accepted only waitlist, early-access and demo-request, so
 every contact-form submission failed with 400.
 """

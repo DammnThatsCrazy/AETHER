@@ -11,7 +11,7 @@ status: beta
 
 **Blueprint:** §17-§18  
 **Proof Plan:** `docs/architecture/blueprints/identity-continuity/proof-plan.md`  
-**Code:** `services/backend/tests/identity/`, `packages/proof-fixtures/fixtures/identity/`
+**Code:** `services/backend/tests/identity/`, `tests/e2e/proof/packages/fixtures/fixtures/identity/`
 
 ---
 
@@ -60,12 +60,12 @@ pytest services/backend/tests/identity/test_import_first_sdk_later.py -vv  # sin
 
 | Path | Contents |
 |---|---|
-| `packages/proof-fixtures/fixtures/identity/import_first/` | `raw_input.json` (CSV + Shopify rows), `expected_normalized.json` (claims), `expected_decisions.json` |
-| `packages/proof-fixtures/fixtures/identity/anonymous_to_known/` | anon events + identify payload |
-| `packages/proof-fixtures/fixtures/identity/multi_sdk/` | web + iOS + Android envelopes with same `user_id` |
-| `packages/proof-fixtures/fixtures/identity/shared_device/` | two users, one `device_id` |
-| `packages/proof-fixtures/fixtures/sdk-events/` | heartbeat, page, track fixtures with `_fixture_version: 1` |
-| `packages/proof-contracts/src/` | TS contract types for SDK payloads (`HeartbeatPayload`, `EventEnvelope`) |
+| `tests/e2e/proof/packages/fixtures/fixtures/identity/import_first/` | `raw_input.json` (CSV + Shopify rows), `expected_normalized.json` (claims), `expected_decisions.json` |
+| `tests/e2e/proof/packages/fixtures/fixtures/identity/anonymous_to_known/` | anon events + identify payload |
+| `tests/e2e/proof/packages/fixtures/fixtures/identity/multi_sdk/` | web + iOS + Android envelopes with same `user_id` |
+| `tests/e2e/proof/packages/fixtures/fixtures/identity/shared_device/` | two users, one `device_id` |
+| `tests/e2e/proof/packages/fixtures/fixtures/sdk-events/` | heartbeat, page, track fixtures with `_fixture_version: 1` |
+| `tests/e2e/proof/packages/contracts/src/` | TS contract types for SDK payloads (`HeartbeatPayload`, `EventEnvelope`) |
 
 JSON fixtures carry `_fixture_version: 1` and full `EventEnvelope` shape (tenant, workspace, sdk, session, device, identity, timestamp).
 
@@ -73,27 +73,27 @@ JSON fixtures carry `_fixture_version: 1` and full `EventEnvelope` shape (tenant
 
 ```bash
 pnpm --filter @aether/proof-fixtures run smoke  # loaders smoke
-node packages/proof-fixtures/smoke.mjs
+node tests/e2e/proof/packages/fixtures/smoke.mjs
 ```
 
 ## 3. SDK fixture apps (minimal surfaces)
 
 | App | Path | Purpose |
 |---|---|---|
-| Web | `apps/proof-web/src/identity-test/` | web SDK `identify` / `alias` canary |
-| React | `apps/proof-react/src/identity-test/` | React SDK variant |
-| iOS (stub) | `apps/proof-ios/src/identity-test/` | envelope shape conformance |
-| Android (stub) | `apps/proof-android/src/identity-test/` | envelope shape conformance |
-| React Native (stub) | `apps/proof-react-native/src/identity-test/` | envelope shape conformance |
+| Web | `tests/e2e/proof/apps/web/src/identity-test/` | web SDK `identify` / `alias` canary |
+| React | `tests/e2e/proof/apps/react/src/identity-test/` | React SDK variant |
+| iOS (stub) | `tests/e2e/proof/apps/ios/src/identity-test/` | envelope shape conformance |
+| Android (stub) | `tests/e2e/proof/apps/android/src/identity-test/` | envelope shape conformance |
+| React Native (stub) | `tests/e2e/proof/apps/react-native/src/identity-test/` | envelope shape conformance |
 
 All apps assert SDK contract field parity against `packages/shared/contracts/identity/sdk-contract.json`.
 
 ## 4. How to add a new fixture
 
-1. Add JSON under `packages/proof-fixtures/fixtures/identity/<scenario>/`.
+1. Add JSON under `tests/e2e/proof/packages/fixtures/fixtures/identity/<scenario>/`.
 2. Add pytest under `services/backend/tests/identity/test_<scenario>.py` using the pattern in `test_import_first_sdk_later.py`.
 3. Register the scenario in `docs/architecture/blueprints/identity-continuity/proof-plan.md` §2 matrix.
-4. Wire the fixture into harness `packages/proof-fixtures/src/index.ts` if staging needs it.
+4. Wire the fixture into harness `tests/e2e/proof/packages/fixtures/src/index.ts` if staging needs it.
 
 ## 5. Invariants every fixture must preserve
 

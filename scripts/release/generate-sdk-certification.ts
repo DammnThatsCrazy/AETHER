@@ -5,8 +5,8 @@
  * Generates docs/reference/reports/SDK_CERTIFICATION_REPORT.md at CI time.
  *
  * Reads:
- *  - package.json versions from packages/web, packages/react-native, packages/server,
- *    packages/ios, packages/android
+ *  - package.json versions from packages/sdk/web, packages/sdk/react-native, packages/sdk/server,
+ *    packages/sdk/ios, packages/sdk/android
  *  - dist/ artifacts presence
  *  - tests/fixtures/sdk/canonical-first-value-journey.json
  *  - test existence in tests/sdk/, tests/sdk/parity/, tests/sdk/ios/, tests/sdk/android/
@@ -27,42 +27,42 @@ const __dirname = resolve(dirname(fileURLToPath(import.meta.url)));
 const ROOT = resolve(__dirname, "..", "..");
 
 const SDK_PACKAGES = [
-  { name: "web", path: join(ROOT, "packages", "web", "package.json"), sdkLabel: "Web" },
+  { name: "web", path: join(ROOT, "packages", "sdk", "web", "package.json"), sdkLabel: "Web" },
   {
     name: "react-native",
-    path: join(ROOT, "packages", "react-native", "package.json"),
+    path: join(ROOT, "packages", "sdk", "react-native", "package.json"),
     sdkLabel: "React Native",
   },
   {
     name: "server",
-    path: join(ROOT, "packages", "server", "package.json"),
+    path: join(ROOT, "packages", "sdk", "server", "package.json"),
     sdkLabel: "Server",
   },
   {
     name: "ios",
-    path: join(ROOT, "packages", "ios", "Package.swift"),
+    path: join(ROOT, "packages", "sdk", "ios", "Package.swift"),
     sdkLabel: "iOS",
   },
   {
     name: "android",
-    path: join(ROOT, "packages", "android", "build.gradle.kts"),
+    path: join(ROOT, "packages", "sdk", "android", "build.gradle.kts"),
     sdkLabel: "Android",
   },
 ];
 
 const DIST_DIRS = [
-  { name: "web", dir: join(ROOT, "packages", "web", "dist") },
-  { name: "react-native", dir: join(ROOT, "packages", "react-native", "dist") },
-  { name: "server", dir: join(ROOT, "packages", "server", "dist") },
+  { name: "web", dir: join(ROOT, "packages", "sdk", "web", "dist") },
+  { name: "react-native", dir: join(ROOT, "packages", "sdk", "react-native", "dist") },
+  { name: "server", dir: join(ROOT, "packages", "sdk", "server", "dist") },
 ];
 
 const CANONICAL_FIXTURE_PATH = join(ROOT, "tests", "fixtures", "sdk", "canonical-first-value-journey.json");
 
 const SAMPLE_APP_DIRS = [
-  { name: "proof-web", dir: join(ROOT, "apps", "proof-web") },
-  { name: "proof-react", dir: join(ROOT, "apps", "proof-react") },
-  { name: "proof-ios", dir: join(ROOT, "apps", "proof-ios") },
-  { name: "proof-android", dir: join(ROOT, "apps", "proof-android") },
+  { name: "proof-web", dir: join(ROOT, "tests", "e2e", "proof", "apps", "web") },
+  { name: "proof-react", dir: join(ROOT, "tests", "e2e", "proof", "apps", "react") },
+  { name: "proof-ios", dir: join(ROOT, "tests", "e2e", "proof", "apps", "ios") },
+  { name: "proof-android", dir: join(ROOT, "tests", "e2e", "proof", "apps", "android") },
 ];
 
 const REPORT_DIR = join(ROOT, "docs", "reference", "reports");
@@ -144,7 +144,7 @@ function readGradleVersion(pkgPath: string): string {
     let raw = readFileSync(pkgPath, "utf-8");
     let match = raw.match(/version\s*=\\s*"([^"]+)"/);
     if (match) return match[1];
-    const gradleProps = join(ROOT, "packages", "android", "gradle.properties");
+    const gradleProps = join(ROOT, "packages", "sdk", "android", "gradle.properties");
     raw = readFileSync(gradleProps, "utf-8");
     match = raw.match(/sdkVersion=([^\s]+)/);
     return match ? match[1] : "unknown";
@@ -177,7 +177,7 @@ function distExists(dirPath: string): boolean {
 function iosDistExists(): boolean {
   // iOS: check for Sources directory (indicates a Swift package with source)
   try {
-    return existsSync(join(ROOT, "packages", "ios", "Sources"));
+    return existsSync(join(ROOT, "packages", "sdk", "ios", "Sources"));
   } catch {
     return false;
   }
@@ -186,7 +186,7 @@ function iosDistExists(): boolean {
 function androidDistExists(): boolean {
   // Android: check for build directory (indicates prior gradle build)
   try {
-    return existsSync(join(ROOT, "packages", "android", "build"));
+    return existsSync(join(ROOT, "packages", "sdk", "android", "build"));
   } catch {
     return false;
   }

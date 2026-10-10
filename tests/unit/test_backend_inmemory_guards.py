@@ -487,7 +487,7 @@ def test_backend_image_preserves_runtime_authority_layout():
     assert 'COPY ["services/ml/serving/", "./serving/"]' in dockerfile
     assert 'COPY ["config/", "./config/"]' in dockerfile
     assert 'COPY ["packages/shared/contracts/", "./packages/shared/contracts/"]' in dockerfile
-    assert 'COPY ["contracts/delivery/", "./contracts/delivery/"]' in dockerfile
+    assert 'COPY ["packages/contracts/delivery/", "./contracts/delivery/"]' in dockerfile
     assert 'COPY ["pyproject.toml", "./pyproject.toml"]' in dockerfile
     assert "ENV PYTHONPATH=/app/services/backend:/app" in dockerfile
     assert "WORKDIR /app/services/backend" in dockerfile
@@ -511,7 +511,7 @@ def test_backend_image_preserves_runtime_authority_layout():
         "packages/shared/contracts/consent-registry.json",
         "packages/shared/contracts/signal-use-matrix.json",
         "packages/shared/contracts/surface-capability-registry.json",
-        "contracts/delivery/release-evidence-bundle.schema.json",
+        "packages/contracts/delivery/release-evidence-bundle.schema.json",
         "pyproject.toml",
     ):
         assert (ROOT / relative).is_file(), relative

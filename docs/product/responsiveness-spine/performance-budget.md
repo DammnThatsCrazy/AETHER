@@ -9,7 +9,7 @@ status: beta
 
 # Responsiveness & Time-to-Value — Performance Budget
 
-> Source of truth: `contracts/performance/aether-performance-contract.yaml` (version 1)
+> Source of truth: `packages/contracts/performance/aether-performance-contract.yaml` (version 1)
 
 The performance budget defines the targets the Responsiveness & Time-to-Value spine measures against. Every target has a surface, an interaction (optional), a metric, a percentile, and a severity. Violations are detected by comparing recorded measurements against these targets.
 
@@ -203,7 +203,7 @@ These gates are enforced by CI budget tests (phase 5). The tests load the contra
 
 ## Relationship to the full contract
 
-The `contracts/performance/aether-performance-contract.yaml` file is the canonical source. The seeded budgets in `service.py` are a runtime-enforced subset. When a new surface or interaction is added:
+The `packages/contracts/performance/aether-performance-contract.yaml` file is the canonical source. The seeded budgets in `service.py` are a runtime-enforced subset. When a new surface or interaction is added:
 
 1. Add the target to the YAML contract (with percentile, target, severity).
 2. Add the corresponding `PerformanceBudget` seed in `seed_performance_budgets()` if the backend needs to enforce it.

@@ -16,10 +16,10 @@ Generated outputs:
   docs/_generated/event-registry-table.md
   docs/_generated/consent-registry-table.md
   docs/_generated/metric-registry-table.md
-  packages/web/src/core/generated-consent-map.ts
+  packages/sdk/web/src/core/generated-consent-map.ts
 
 EventType consumers (guarded, NOT spliced — WS-C row 4 / Invariant #16):
-  packages/web/src/types.ts             re-exports the generated EventType from
+  packages/sdk/web/src/types.ts             re-exports the generated EventType from
                                         '@aether/shared/events' (a local hand-
                                         mirror union is a generator failure)
 
@@ -62,18 +62,18 @@ EVENT_TABLE_MD = ROOT / "docs" / "_generated" / "event-registry-table.md"
 CONSENT_TABLE_MD = ROOT / "docs" / "_generated" / "consent-registry-table.md"
 METRIC_TABLE_MD = ROOT / "docs" / "_generated" / "metric-registry-table.md"
 WEB_CONSENT_MAP_TS = (
-    ROOT / "packages" / "web" / "src" / "core" / "generated-consent-map.ts"
+    ROOT / "packages" / "sdk" / "web" / "src" / "core" / "generated-consent-map.ts"
 )
-WEB_TYPES_TS = ROOT / "packages" / "web" / "src" / "types.ts"
+WEB_TYPES_TS = ROOT / "packages" / "sdk" / "web" / "src" / "types.ts"
 INTEGRATION_CONSENT_TS = ROOT / "packages" / "shared" / "integration-consent.ts"
 INTEGRATION_CONSENT_PY = (
     ROOT / "services" / "backend" / "shared" / "privacy" / "generated_integration_consent.py"
 )
 INTEGRATION_CONSENT_SWIFT = (
-    ROOT / "packages" / "ios" / "Sources" / "AetherSDK" / "GeneratedIntegrationConsent.swift"
+    ROOT / "packages" / "sdk" / "ios" / "Sources" / "AetherSDK" / "GeneratedIntegrationConsent.swift"
 )
 INTEGRATION_CONSENT_KT = (
-    ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "GeneratedIntegrationConsent.kt"
+    ROOT / "packages" / "sdk" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "GeneratedIntegrationConsent.kt"
 )
 INTEGRATION_CONSENT_TABLE_MD = ROOT / "docs" / "_generated" / "integration-consent-registry-table.md"
 TRAFFIC_SOURCE_TS = ROOT / "packages" / "shared" / "traffic-source.ts"
@@ -85,9 +85,9 @@ TRAFFIC_SOURCE_TABLE_MD = ROOT / "docs" / "_generated" / "traffic-source-registr
 # Native SDK sources whose event-type + consent-purpose regions are generated
 # here (WS-A6). The files themselves are hand-authored; only the marker-delimited
 # region bodies below are owned by this generator.
-IOS_AETHER_SWIFT = ROOT / "packages" / "ios" / "Sources" / "AetherSDK" / "Aether.swift"
+IOS_AETHER_SWIFT = ROOT / "packages" / "sdk" / "ios" / "Sources" / "AetherSDK" / "Aether.swift"
 ANDROID_AETHER_KT = (
-    ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "Aether.kt"
+    ROOT / "packages" / "sdk" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "Aether.kt"
 )
 
 # Markers used in events.ts to delimit the generated section
@@ -555,7 +555,7 @@ def _ts_literal(value) -> str:
 def validate_web_eventtype_reimport() -> None:
     """WS-C row 4 / Invariant #16: web must re-export the generated EventType.
 
-    packages/web/src/types.ts used to carry a hand-written EventType union that
+    packages/sdk/web/src/types.ts used to carry a hand-written EventType union that
     silently fell behind the registry (it was missing navigation_intent and later
     registry events). The canonical EventType is generated into
     packages/shared/events.ts (this script); web now imports + re-exports it

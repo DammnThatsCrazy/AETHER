@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "@aether/mobile-core",
-      "path": "packages/mobile-core",
+      "path": "packages/sdk/mobile-core",
       "kind": "shared_sdk",
       "platform_agnostic": true,
       "native_dependencies": [],

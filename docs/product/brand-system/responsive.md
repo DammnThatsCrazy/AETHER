@@ -11,7 +11,7 @@ canonical_owner: frontend@aether
 
 # Responsive behavior
 
-Responsive brand rules are in `packages/brand/src/responsive/`. They define
+Responsive brand rules are in `packages/ui/brand/src/responsive/`. They define
 lockup reduction and density, not a replacement application layout system.
 
 ```ts

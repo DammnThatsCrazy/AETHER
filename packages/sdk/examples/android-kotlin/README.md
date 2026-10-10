@@ -1,10 +1,10 @@
 # Android Kotlin Example
 
-Kotlin wrapper reference for the Aether Android SDK. This directory points to the canonical native SDK usage in `apps/proof-android/`, which is an Expo/React Native app that surfaces the full first-value journey on Android devices.
+Kotlin wrapper reference for the Aether Android SDK. This directory points to the canonical native SDK usage in `tests/e2e/proof/apps/android/`, which is an Expo/React Native app that surfaces the full first-value journey on Android devices.
 
 ## What this is
 
-`apps/proof-android/` is the Android proof harness — it uses `@aether/react-native` (the React Native bridge that wraps the native Android SDK) and exercises every signal in the canonical first-value lifecycle: init, heartbeat, consent, event, identify, journey, commerce, flush, reset.
+`tests/e2e/proof/apps/android/` is the Android proof harness — it uses `@aether/react-native` (the React Native bridge that wraps the native Android SDK) and exercises every signal in the canonical first-value lifecycle: init, heartbeat, consent, event, identify, journey, commerce, flush, reset.
 
 This `packages/sdk/examples/android-kotlin/` directory provides a Kotlin-oriented README that explains how the native SDK is used under the hood, so Kotlin/Android developers can see the native SDK surface without needing to dig through the React Native bridge code.
 
@@ -56,7 +56,7 @@ The native Aether Android SDK exposes the following surface (used by the React N
 
 See `docs/reference/examples/README.md` for the manual device smoke test procedure for Android. In short:
 
-1. Build and run `apps/proof-android/` on a physical Android device or emulator.
+1. Build and run `tests/e2e/proof/apps/android/` on a physical Android device or emulator.
 2. Tap through the first-value journey tabs in the app.
 3. Verify each step delivers an event (check the Debug Console).
 4. Verify the final flush shows `accepted=N` from the backend.
@@ -64,6 +64,6 @@ See `docs/reference/examples/README.md` for the manual device smoke test procedu
 
 ## Related
 
-- `apps/proof-android/` — the full Expo/React Native proof harness for Android.
+- `tests/e2e/proof/apps/android/` — the full Expo/React Native proof harness for Android.
 - `packages/sdk/examples/react-native/` — the shared React Native example.
 - `scripts/smoke/android-sdk.ts` — automated smoke tests for the Android SDK.

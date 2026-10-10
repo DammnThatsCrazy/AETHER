@@ -83,8 +83,8 @@ Key P0 gaps:
 ## Phase 1 — Tenant Isolation Hardening (Complete)
 
 ### Files Changed
-- [x] `apps/aether/src/features/graph/use-graph-data.ts` — fix G11 (string-prefix layer derivation replaced with `classifyEdgeType()` from `@aether/shared`)
-- [x] `apps/aether/vite.config.ts` — extend `commonjsOptions.include` so Rollup resolves `@aether/shared` CJS exports
+- [x] `apps/aether-web/src/features/graph/use-graph-data.ts` — fix G11 (string-prefix layer derivation replaced with `classifyEdgeType()` from `@aether/shared`)
+- [x] `apps/aether-web/vite.config.ts` — extend `commonjsOptions.include` so Rollup resolves `@aether/shared` CJS exports
 - [x] `services/backend/shared/graph/traversal.py` — added `tenant_id` param to BFS/path/temporal; two-set approach (visited + accepted)
 - [x] `services/backend/services/operational_intelligence/routes.py` — `graph_filter` now filters by tenantId; traversal calls pass `tenant_id`
 - [x] `tests/security/test_graph_tenant_isolation.py` — 8 adversarial tests; all pass
@@ -154,10 +154,10 @@ Key P0 gaps:
 ### Files Changed
 - [x] `services/backend/shared/graph/graph.py` — added 15 cluster VertexType constants (IDENTITY_CLUSTER, BEHAVIORAL_CLUSTER, ECONOMIC_SEGMENT, FRAUD_NETWORK_CLUSTER, DORMANT_COHORT, REACTIVATED_COHORT, etc.)
 - [x] `services/backend/services/identity/routes.py` — Cluster360 routes: `GET /v1/clusters/{cluster_id}`, `/members`, `/timeline`, `/graph`, `/economic`, `/campaigns`, `/risk`, `/geography`
-- [x] `apps/aether/src/features/cluster360/` — 6 tab components: Overview, Members, Timeline, Economic, Campaign, Risk, Geography
-- [x] `apps/aether/src/pages/cluster360/cluster-360-page.tsx` — new page at `/clusters/:clusterId`
-- [x] `apps/aether/src/features/graph/use-graph-data.ts` — semantic zoom support (macro aggregates, cluster expand)
-- [x] `apps/aether/src/pages/graph/graph-page.tsx` — Inspector cluster drill-down link
+- [x] `apps/aether-web/src/features/cluster360/` — 6 tab components: Overview, Members, Timeline, Economic, Campaign, Risk, Geography
+- [x] `apps/aether-web/src/pages/cluster360/cluster-360-page.tsx` — new page at `/clusters/:clusterId`
+- [x] `apps/aether-web/src/features/graph/use-graph-data.ts` — semantic zoom support (macro aggregates, cluster expand)
+- [x] `apps/aether-web/src/pages/graph/graph-page.tsx` — Inspector cluster drill-down link
 
 ### Phase 5 Gate
 - [x] All 15 cluster types visible in VertexType enum
@@ -172,8 +172,8 @@ Key P0 gaps:
 ### Files Changed
 - [x] `services/backend/services/operational_intelligence/routes.py` — campaign overlay added to `/v1/graph/overlay`
 - [x] `services/backend/shared/graph/edge_properties.py` — `causality_class` added as optional edge property with 6 valid values
-- [x] `apps/aether/src/features/graph/use-graph-data.ts` — campaign overlay hook and fetchOverlay function
-- [x] `apps/aether/src/pages/graph/graph-page.tsx` — campaign overlay toggle, Inspector drill link to Campaign 360
+- [x] `apps/aether-web/src/features/graph/use-graph-data.ts` — campaign overlay hook and fetchOverlay function
+- [x] `apps/aether-web/src/pages/graph/graph-page.tsx` — campaign overlay toggle, Inspector drill link to Campaign 360
 
 ### Phase 6 Gate
 - [x] `/v1/graph/overlay` accepts `campaign` overlay type
@@ -187,7 +187,7 @@ Key P0 gaps:
 ### Files Changed
 - [x] `services/backend/services/operational_intelligence/routes.py` — `economic` overlay type; `POST /v1/graph/flow` route for money-flow tracing
 - [x] `services/backend/services/operational_intelligence/models.py` — `ECONOMIC_FILTER_FIELDS` constant; economic fields validated in filter language
-- [x] `apps/aether/src/pages/graph/graph-page.tsx` — economic overlay toggle
+- [x] `apps/aether-web/src/pages/graph/graph-page.tsx` — economic overlay toggle
 
 ### Phase 7 Gate
 - [x] Economic filter fields (revenue, spend, ltv, currency, rail) accepted by filter language
@@ -200,8 +200,8 @@ Key P0 gaps:
 
 ### Files Changed
 - [x] `services/backend/services/operational_intelligence/routes.py` — `fraud` overlay type returning risk_score, fraud_network_id, member_role, alert_state
-- [x] `apps/aether/src/pages/graph/graph-page.tsx` — fraud overlay toggle; Inspector "Add to Investigation" action
-- [x] `apps/aether/src/features/cluster360/ClusterRiskTab.tsx` — fraud network detail (type, member roles, evidence refs, timeline)
+- [x] `apps/aether-web/src/pages/graph/graph-page.tsx` — fraud overlay toggle; Inspector "Add to Investigation" action
+- [x] `apps/aether-web/src/features/cluster360/ClusterRiskTab.tsx` — fraud network detail (type, member roles, evidence refs, timeline)
 
 ### Phase 8 Gate
 - [x] Fraud overlay returns fraud_network_id, member_role, risk_score per node
@@ -214,7 +214,7 @@ Key P0 gaps:
 ### Files Changed
 - [x] `services/backend/services/operational_intelligence/routes.py` — `geography` and `consent` overlay types; geography filter fields in filter language
 - [x] `services/backend/services/operational_intelligence/models.py` — `GEOGRAPHY_FILTER_FIELDS` constant
-- [x] `apps/aether/src/pages/graph/graph-page.tsx` — geography/consent/confidence overlay toggles
+- [x] `apps/aether-web/src/pages/graph/graph-page.tsx` — geography/consent/confidence overlay toggles
 
 ### Phase 9 Gate
 - [x] Geography overlay returns primary_country, location_confidence per node
@@ -240,8 +240,8 @@ Key P0 gaps:
 ## Phase 11 — Predictions, Recommendations, ObservationClass (Complete)
 
 ### Files Changed
-- [x] `apps/aether/src/pages/graph/graph-page.tsx` — ObservationClass visual treatment (obs-observed/deterministic/probabilistic/predicted/derived CSS classes); Cytoscape node styles; Recommendation Inspector (accepted/rejected/expired + model_id)
-- [x] `apps/aether/src/features/graph/use-graph-data.ts` — `observation_class` mapped to node CSS class
+- [x] `apps/aether-web/src/pages/graph/graph-page.tsx` — ObservationClass visual treatment (obs-observed/deterministic/probabilistic/predicted/derived CSS classes); Cytoscape node styles; Recommendation Inspector (accepted/rejected/expired + model_id)
+- [x] `apps/aether-web/src/features/graph/use-graph-data.ts` — `observation_class` mapped to node CSS class
 
 ### Phase 11 Gate
 - [x] `observed` nodes render with solid border
@@ -254,9 +254,9 @@ Key P0 gaps:
 ## Phase 12 — Aether Tenant Graph Complete Surface (Complete)
 
 ### Files Changed
-- [x] `apps/aether/src/pages/graph/graph-page.tsx` — summary strip (entity/cluster/economic/risk counts), saved-views list, filter sidebar (FilterGroup builder), facets sidebar, replay control (date picker → `/v1/graph/replay`), comparison mode diff view, empty/partial/error states, accessibility (keyboard nav, ARIA, reduced motion, table alternative view)
-- [x] `apps/aether/src/features/graph/use-graph-replay.ts` — new hook for server-backed replay
-- [x] `apps/aether/src/features/graph/use-graph-compare.ts` — new hook for comparison mode diff
+- [x] `apps/aether-web/src/pages/graph/graph-page.tsx` — summary strip (entity/cluster/economic/risk counts), saved-views list, filter sidebar (FilterGroup builder), facets sidebar, replay control (date picker → `/v1/graph/replay`), comparison mode diff view, empty/partial/error states, accessibility (keyboard nav, ARIA, reduced motion, table alternative view)
+- [x] `apps/aether-web/src/features/graph/use-graph-replay.ts` — new hook for server-backed replay
+- [x] `apps/aether-web/src/features/graph/use-graph-compare.ts` — new hook for comparison mode diff
 - [x] `docs/architecture/FRONTEND-ARCHITECTURE.md` — stamped after Phase 12
 
 ### Phase 12 Gate
@@ -270,10 +270,10 @@ Key P0 gaps:
 ## Phase 13 — Kyber Platform Graph and Operator Experience (Complete)
 
 ### Files Changed
-- [x] `apps/kyber/src/features/noesis/use-fleet-graph.ts` — `useFleetTenantEnvelope`, `useKyberOperatorEntry` hooks
-- [x] `apps/kyber/src/pages/noesis/fleet-graph-page.tsx` — tenant portfolio comparison table, OperatorSessionBanner, OperatorEntryModal
-- [x] `apps/kyber/src/app/router.tsx` — `/noesis/fleet` route
-- [x] `apps/kyber/src/lib/api/endpoints.ts` — `kyberOperator` section (enterTenant, exitTenant, tenantEnvelope)
+- [x] `apps/kyber-web/src/features/noesis/use-fleet-graph.ts` — `useFleetTenantEnvelope`, `useKyberOperatorEntry` hooks
+- [x] `apps/kyber-web/src/pages/noesis/fleet-graph-page.tsx` — tenant portfolio comparison table, OperatorSessionBanner, OperatorEntryModal
+- [x] `apps/kyber-web/src/app/router.tsx` — `/noesis/fleet` route
+- [x] `apps/kyber-web/src/lib/api/endpoints.ts` — `kyberOperator` section (enterTenant, exitTenant, tenantEnvelope)
 - [x] `services/backend/services/operational_intelligence/routes.py` — Kyber operator graph routes with operator_tenant_scope header
 - [x] `services/backend/services/kyber_operator/routes.py` — `POST /v1/kyber/operator/tenant-entry`, `DELETE /v1/kyber/operator/tenant-entry`, `GET /v1/kyber/tenants/{id}/operational-envelope`
 - [x] `docs/architecture/FRONTEND-ARCHITECTURE.md` — stamped after Phase 13

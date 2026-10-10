@@ -33,8 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 _AETHER_TYPES = (
     _REPO_ROOT
-    / "apps"
-    / "aether"
+    / "apps" / "aether-web"
     / "src"
     / "features"
     / "model-selection"
@@ -42,8 +41,7 @@ _AETHER_TYPES = (
 )
 _KYBER_TYPES = (
     _REPO_ROOT
-    / "apps"
-    / "kyber"
+    / "apps" / "kyber-web"
     / "src"
     / "features"
     / "model-runtime"

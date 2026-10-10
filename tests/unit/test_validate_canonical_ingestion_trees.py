@@ -87,7 +87,7 @@ def test_backend_orphan_unit_mapping_from_synthetic_files() -> None:
         "docs/archive/legacy-architecture/backend/services/web3/web3_service.py",
         "services/backend/services/ingestion/batch.py",
         "docs/archive/legacy-architecture/backend/README.md",
-        "packages/web/src/index.ts",
+        "packages/sdk/web/src/index.ts",
     }
     units = gate._backend_orphan_units(files)
     assert units == {
@@ -101,7 +101,7 @@ def test_backend_orphan_unit_mapping_from_synthetic_files() -> None:
 
 
 def test_present_detects_registered_missing() -> None:
-    files = {"packages/web/src/index.ts", "docs/README.md"}
+    files = {"packages/sdk/web/src/index.ts", "docs/README.md"}
     assert gate._present("packages", files)
     assert gate._present("docs", files)
     assert not gate._present("scripts", files)

@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 sys.path.insert(
     0,
     os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "packages", "python")
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "packages", "sdk", "python")
     ),
 )
 os.environ.setdefault("AETHER_ENV", "local")

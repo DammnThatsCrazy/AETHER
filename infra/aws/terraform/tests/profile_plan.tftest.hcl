@@ -297,7 +297,7 @@ run "staging_profile_plan" {
       local.amplify_custom_rules["aether-app"][0].source == "/<*>",
       length(local.amplify_custom_rules.docs) == 1,
       local.aether_host_serves_site,
-      local.amplify_apps["aether-marketing"].app_root == "apps/site",
+      local.amplify_apps["aether-marketing"].app_root == "apps/public-site",
       [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == [
         "/app/signin", "/app", local.app_route_pattern, "/login", "/signup", "/forgot-password", local.spa_route_pattern,
       ],
@@ -1035,7 +1035,7 @@ run "production_lean_profile_plan" {
   assert {
     condition = alltrue([
       !local.aether_host_serves_site,
-      local.amplify_apps["aether-marketing"].app_root == "apps/aether-marketing",
+      local.amplify_apps["aether-marketing"].app_root == "apps/marketing-aether",
       [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == ["/login", "/signup", "/forgot-password"],
     ])
     error_message = "production-lean switched the Aether host to the unified site before it prerenders route metadata."

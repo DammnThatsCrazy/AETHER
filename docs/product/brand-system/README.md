@@ -48,12 +48,12 @@ a second asset library or a request to redraw product identity.
 
 | Need | Canonical source | Consumer boundary |
 | --- | --- | --- |
-| Brand manifests and reviewed Aether/Olympus geometry | `packages/brand/src/identity/` | Read manifest data or render through `@aether/ui`; never copy/recreate SVG paths. |
-| Provider IDs, aliases, categories, attribution, fallback policy | `packages/brand/src/providers/` | Runtime contracts remain authoritative for operational IDs and visibility. |
-| Navigation, action, entity, status, severity, freshness, confidence, provenance taxonomies | `packages/brand/src/iconography/` | Use the typed UI renderers for React; do not reintroduce ASCII/Unicode glyph systems. |
-| Typography, spacing, icon size, focus, borders, radius, elevation and shadows | `packages/brand/src/tokens/` | Existing shared CSS variables remain the visual CSS layer. |
-| Motion, responsive and surface rules | `packages/brand/src/{motion,responsive,surfaces}/` | Apply by semantic purpose, not by copying literal transition/shadow values. |
-| Accessible React rendering | `apps/shared/src/components/` (`@aether/ui`) | Product apps and a compatible docs surface consume this layer. |
+| Brand manifests and reviewed Aether/Olympus geometry | `packages/ui/brand/src/identity/` | Read manifest data or render through `@aether/ui`; never copy/recreate SVG paths. |
+| Provider IDs, aliases, categories, attribution, fallback policy | `packages/ui/brand/src/providers/` | Runtime contracts remain authoritative for operational IDs and visibility. |
+| Navigation, action, entity, status, severity, freshness, confidence, provenance taxonomies | `packages/ui/brand/src/iconography/` | Use the typed UI renderers for React; do not reintroduce ASCII/Unicode glyph systems. |
+| Typography, spacing, icon size, focus, borders, radius, elevation and shadows | `packages/ui/brand/src/tokens/` | Existing shared CSS variables remain the visual CSS layer. |
+| Motion, responsive and surface rules | `packages/ui/brand/src/{motion,responsive,surfaces}/` | Apply by semantic purpose, not by copying literal transition/shadow values. |
+| Accessible React rendering | `packages/ui/core/src/components/` (`@aether/ui`) | Product apps and a compatible docs surface consume this layer. |
 
 `@olympus/brand` is deliberately framework-free. It exports metadata and asset
 references, contains no React, and never supplies a remote provider logo.
@@ -106,8 +106,8 @@ const provider = resolveProvider(serverProviderId);
    payment IDs live in `packages/shared/payment-rails.ts`. Do not rename an API
    value to make it visually friendlier.
 2. Add the exact ID and any display-only aliases to
-   `packages/brand/src/providers/registry.ts`, with the correct category and
-   attribution guidance. Add coverage in `packages/brand/src/brand.test.ts`.
+   `packages/ui/brand/src/providers/registry.ts`, with the correct category and
+   attribution guidance. Add coverage in `packages/ui/brand/src/brand.test.ts`.
 3. Until legal review approves a committed local mark, leave `mark.kind` as
    `fallback`. The renderer uses neutral initials; it must not fetch a URL,
    recreate a third-party logo, or treat a provider color as a logo.
@@ -122,12 +122,12 @@ invent a third-party trademark treatment.
 ## Add an entity or navigation destination
 
 For an entity, add a semantic identity and aliases in
-`packages/brand/src/iconography/entities.ts`, retain the product's existing
+`packages/ui/brand/src/iconography/entities.ts`, retain the product's existing
 entity/graph contract, and render `EntityIcon` or `EntityAvatar`. A provider
 may appear as a separate source overlay; it is not the entity's base identity.
 
 For a shell destination, add a stable descriptor to
-`packages/brand/src/iconography/navigation.ts`, then use `NavigationIcon` in
+`packages/ui/brand/src/iconography/navigation.ts`, then use `NavigationIcon` in
 the product shell. The route and its capability/permission rule stay in the
 application router and shell. A nav icon must never be used to infer or grant
 authorization.

@@ -76,7 +76,7 @@ It does not fake progress. Every state transition is driven by real integration 
                         │ lifecycle    │
                         └──────────────┘
 
-   Contract: contracts/performance/aether-performance-contract.yaml
+   Contract: packages/contracts/performance/aether-performance-contract.yaml
 ```
 
 ---
@@ -162,7 +162,7 @@ See [integration-guide.md](./integration-guide.md) for code-level detail.
 
 ## Performance budget summary
 
-The contract YAML at `contracts/performance/aether-performance-contract.yaml` defines per-surface and per-action targets. Key budget highlights:
+The contract YAML at `packages/contracts/performance/aether-performance-contract.yaml` defines per-surface and per-action targets. Key budget highlights:
 
 | Surface | Target | Threshold | Severity |
 |---------|--------|-----------|----------|

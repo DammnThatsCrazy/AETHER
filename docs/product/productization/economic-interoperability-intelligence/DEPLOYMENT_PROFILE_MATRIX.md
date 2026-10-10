@@ -11,7 +11,7 @@ source_files:
   - config/environments/.env.example
 canonical_owner: platform@aether
 source_hashes:
-  "config/environments/.env.example": "sha256:95a33e57dab53d07cde25c0d1e537f65d24b63f23f25eef1e0855b6cef347c68"
+  "config/environments/.env.example": "sha256:e23cb524843194e974d5ac68613c594dcb5f0712d8b65310a2123bf4a8271655"
   "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
 ---
 

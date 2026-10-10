@@ -26,17 +26,17 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:816f5205411647f9145a6f0f3b8a2179eac0b08aed2c22c5b44200015b2e067f"
+  ".github/workflows/": "sha256:796250cff3fb2853e19eb3583ec43ac74f01e980fb561ec11cbd163b568b4861"
   "config/delivery_workflow_authority.yaml": "sha256:7a23c16f192c2fcd9d742f25a447ac7a1d85659bdc51a303a1c61765a64332d6"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
-  "infra/cicd/aether-cicd/README.md": "sha256:f63836c2fb797c8ccda029a467948f27e7b002ba0a65fb8931176d9ae57f2731"
+  "infra/cicd/aether-cicd/README.md": "sha256:7a34fb5195c834de93d12fe6f75f48d060ea729cd723b372036f5f2f53a3e609"
   "infra/cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "infra/cicd/aether-cicd/quality_gates/": "sha256:c5f18dd825882b733505e259192deb3fd3293fe308c471a6a0a27ff5c3c4dce9"
-  "infra/cicd/aether-cicd/stages/": "sha256:11b22cae4c56350571c36381f6b1f40dfaeb112b0552d30102089f9fb5951f97"
+  "infra/cicd/aether-cicd/stages/": "sha256:31b31f43238aae825464ef9f0cc8d3b9d81b1acd26cf01b910ae96166517e9bb"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
@@ -80,7 +80,7 @@ JSON/JSONL files only and makes no hosted telemetry claim.
 The classifier now uses the minimal `ci-control` dependency boundary through
 `make bootstrap-ci-control`; it does not install the application runtime merely
 to resolve changed paths. It emits the typed
-`contracts/delivery/verification-execution-plan.schema.json` plan consumed by
+`packages/contracts/delivery/verification-execution-plan.schema.json` plan consumed by
 the workflow's `universal-fast`, dependency-aware suite matrix, build,
 candidate-verification, and `publish-evidence` jobs. Every selected non-universal
 check is represented by a registry-owned suite with one dependency profile and
@@ -417,7 +417,7 @@ enforced by any workflow in `.github/workflows/`.
 - Docker images built and pushed to ECR (tagged with the commit SHA)
 - The shared `@aether/shared` workspace is compiled before the Aether and Kyber
   frontend builds so their local contract imports resolve deterministically
-- TypeScript packages compiled; `packages/web/dist/` populated
+- TypeScript packages compiled; `packages/sdk/web/dist/` populated
 - SDK artefacts staged for release (see SDK Release below)
 - Gate: **all builds succeed, images < 500 MB compressed**
 
@@ -496,7 +496,7 @@ delivery run's evidence instead of mutating those surfaces a second time.
 The public web layer follows the infrastructure topology but has its own
 Amplify build path, connected to the checked-in monorepo build
 configuration. Staging has one app, `AETHER-staging-web` (key `aether-marketing`, building
-`apps/site` with the product under `/app`), which holds the `aether`,
+`apps/public-site` with the product under `/app`), which holds the `aether`,
 `www`, `docs`, `status` and `app` hosts. Production also has one app, `AETHER-production-web`, which holds the same five
 hosts under `olympuslabsml.com` (Squarespace DNS) and is deployed by
 `amplify-status-production.yml`. It has two branches built from the same main
@@ -525,7 +525,7 @@ and release preflights.
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
 | `deploy.yml` | push to `staging`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; a staging dispatch may select `delivery_mode=build-only` to publish the verified immutable artifact without touching ECS, which breaks the asleep-staging/release circular dependency. The pilot full-rehearsal wrapper uses that build-only path when no approved release inputs were supplied. After wake, `staging-lifecycle.yml` dispatches this workflow with the exact source run ID and manifest checksum; this workflow accepts only a successful immutable build for the exact current staging SHA, acquires that artifact without rebuilding, runs its packaged migration, rolls every lane-selected ECS service, publishes the matching SPA artifacts, and uploads deployment evidence. The rehearsal consumes that evidence and verifies the live image, migration readiness, and static-origin bytes without repeating delivery mutations. Because the durable pilot admin key is created only after the new task is live, build-only skips `STAGING_ADMIN_API_KEY` validation; live staging delivery and the full rehearsal still validate the key before mutation. Staging dispatch reuses the successful merged-staging integration authority for the exact SHA (the `Main integration authority` check, which also runs for `staging` pushes) (queried by check name, so the extra check runs that staging dispatches add to that SHA cannot push it off the first API page) and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum; build-only is rejected for production. Before staging mutation, the deploy job verifies the currently registered task definitions already match the requested full/pilot lane, then registers one immutable task-definition revision per declared service. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
-| `frontend-preview.yml` | `pull_request` (`ready_for_review` only); `workflow_dispatch` with a PR number; push to `main`; hourly schedule | Per-PR previews of the Aether app. When a same-repository pull request is marked ready for review, or when a team member dispatches it with a pull request number, it builds `apps/aether` with the staging app's public `VITE_*` settings, deploys it to branch `pr-<N>` of the unconnected preview Amplify app, and links `https://pr-<N>.<preview domain>` on the pull request. Fork pull requests are never deployed (no OIDC token, and the head repository must be this one). Each push to `main` and an hourly sweep delete the previews of closed or merged pull requests. It assumes `vars.FRONTEND_PREVIEW_ROLE_ARN`, scoped by `config/staging_frontend_preview_iam_policy.yaml` to the preview app's `pr-*` branches; until that variable is set, every job skips with a notice. It finds the preview and staging apps by their Terraform names; the build settings come from the staging web app (`AETHER-staging-web`) or, before its first rollout, the product app it replaces. See [Preview Environments](PREVIEW-ENVIRONMENTS.md). | no |
+| `frontend-preview.yml` | `pull_request` (`ready_for_review` only); `workflow_dispatch` with a PR number; push to `main`; hourly schedule | Per-PR previews of the Aether app. When a same-repository pull request is marked ready for review, or when a team member dispatches it with a pull request number, it builds `apps/aether-web` with the staging app's public `VITE_*` settings, deploys it to branch `pr-<N>` of the unconnected preview Amplify app, and links `https://pr-<N>.<preview domain>` on the pull request. Fork pull requests are never deployed (no OIDC token, and the head repository must be this one). Each push to `main` and an hourly sweep delete the previews of closed or merged pull requests. It assumes `vars.FRONTEND_PREVIEW_ROLE_ARN`, scoped by `config/staging_frontend_preview_iam_policy.yaml` to the preview app's `pr-*` branches; until that variable is set, every job skips with a notice. It finds the preview and staging apps by their Terraform names; the build settings come from the staging web app (`AETHER-staging-web`) or, before its first rollout, the product app it replaces. See [Preview Environments](PREVIEW-ENVIRONMENTS.md). | no |
 | `amplify-status-production.yml` | push to `main`; `workflow_dispatch` | Waits for the exact main integration authority, binds the production web app (`AETHER-production-web`, the former `aether-status` app) to the repository with the unified-site build (product under `/app`), production settings and routing rules, and deploys the exact main SHA to its two `PRODUCTION` branches: `main` (the Aether site) and `production-olympus` (the Olympus Labs site, `VITE_SITE=olympus`, no auto-build). It first checks the SHA is on `main` and force-pushes it to the `production-olympus` Git branch, a mirror only this workflow writes (the deploy job holds `contents: write` for that push). It verifies that `www` maps once to `production-olympus` and `aether`, `docs`, `status` and `app` each map once to `main`. Its catch-all rule is a `404-200` rewrite to `/index.html`, so prerendered page files (`/platform` → `platform.html`) are served as files. The workflow performs a read-only state assessment before binding: a clean, unbound historical app (no branches and no domain mappings) gets a one-time repository bootstrap and stops before release, while any remaining legacy branch or live mapping fails closed for reviewed administrative cleanup. The administrator then restores the canonical `status -> main` domain mapping and dispatches the workflow again. Repository-backed runs never delete branches or call `UpdateDomainAssociation`; they verify the AVAILABLE association maps each host exactly once to its branch, deploy the exact commit to both branches, and verify the live CNAME target. Because repository auto-build can already have an active job for the pushed SHA, the workflow reuses that exact-commit job only if it started after the bind step applied the build settings (a job reads its environment variables when it starts, so an earlier auto-build would ship the previous settings). It waits out every other active branch job and starts a release only when needed. Squarespace remains authoritative. | no |
 | `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `Development`, `staging` or `main` / dispatch on `infra/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the shared credential set exists (the ML image digest is additionally required only by production-scale and enterprise-isolated); ephemeral-class is deliberately excluded from remote-plan; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. After a staging apply it rebuilds, at the reviewed commit, any Amplify app whose build spec or build variables the plan changed. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
@@ -760,7 +760,7 @@ bumps every package manifest, and then fans out per registry:
 
 The bump covers more than manifests: `scripts/bump-sdk-version.sh` rewrites the
 SDK runtime constants (web, React Native, Android, iOS), the loader's own
-`LOADER_VERSION` in `packages/web/src/loader/bootstrap.ts`, and the backend
+`LOADER_VERSION` in `packages/sdk/web/src/loader/bootstrap.ts`, and the backend
 mirror `CANONICAL_SDK_VERSION` in
 `services/backend/services/sdk_distribution/versions.py`. The loader and backend
 copies exist because each is bundled or deployed separately from the package
@@ -771,15 +771,15 @@ than publishing a mislabelled install.
 
 | Platform | Registry | Job | Version authority |
 | --- | --- | --- | --- |
-| Web (`packages/web`) | npm (`@aether/web`) | `publish-npm` | `packages/web/package.json` |
-| React Native (`packages/react-native`) | npm (`@aether/react-native`) | `publish-npm` | `packages/react-native/package.json` |
-| iOS (`packages/ios`) | CocoaPods (`AetherSDK`) | `publish-cocoapods` | `AetherSDK.podspec` |
-| Android (`packages/android`) | GitHub Packages, Maven (`com.aether:sdk-android`) | `publish-android` | `gradle.properties` |
-| Web CDN (`packages/web`) | `cdn.aether.network` | `publish-cdn` | `packages/web/package.json` |
+| Web (`packages/sdk/web`) | npm (`@aether/web`) | `publish-npm` | `packages/sdk/web/package.json` |
+| React Native (`packages/sdk/react-native`) | npm (`@aether/react-native`) | `publish-npm` | `packages/sdk/react-native/package.json` |
+| iOS (`packages/sdk/ios`) | CocoaPods (`AetherSDK`) | `publish-cocoapods` | `AetherSDK.podspec` |
+| Android (`packages/sdk/android`) | GitHub Packages, Maven (`com.aether:sdk-android`) | `publish-android` | `gradle.properties` |
+| Web CDN (`packages/sdk/web`) | `cdn.aether.network` | `publish-cdn` | `packages/sdk/web/package.json` |
 
 `publish-cdn` runs after `publish-npm`, because npm is the registry of record and
 the CDN is a delivery mirror of the same build. It derives the CDN layout and the
-version manifests from `packages/web/package.json` — never a hand-written
+version manifests from `packages/sdk/web/package.json` — never a hand-written
 version — via `scripts/release/generate-sdk-cdn-manifest.mjs`, then validates the
 staged tree with `scripts/release/verify-cdn-layout.mjs` before uploading
 anything. The upload is fail-closed on the `AWS_CDN_ROLE_ARN` and
@@ -801,7 +801,7 @@ a pinned hash would break every installed snippet.
 
 `.github/workflows/sdk-release-validation.yml` runs the distribution wiring gates
 (`scripts/validate_sdk_distribution_artifacts.py`, `npm run verify:artifacts
---workspace=packages/web`, and the loader artifact presence check) on SDK-scoped
+--workspace=packages/sdk/web`, and the loader artifact presence check) on SDK-scoped
 pull requests.
 
 ## Hotfix procedure
@@ -865,7 +865,7 @@ external services. The same routine runs locally via
 
 `.github/workflows/smart-contract-analysis.yml` runs Slither static analysis on
 pushes to `main`, manual dispatch, and PR finalization (`ready_for_review`)
-when `contracts/smart-contracts/` is touched. Draft pushes do not start it.
+when `packages/contracts/smart-contracts/` is touched. Draft pushes do not start it.
 Requires Slither to be installed (CI installs it via pip). Results are uploaded
 as an artifact. The pre-audit checklist at
 `scripts/smart_contract_audit_prep.py` runs 9 checks (oracle role, reward

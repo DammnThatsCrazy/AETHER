@@ -189,7 +189,7 @@ def test_missing_migration_metadata_emits_schema_valid_blocked_evidence(tmp_path
     assert orchestrator.migration(args) == 1
     result = json.loads(output.read_text())
     schema = json.loads(
-        (ROOT / "contracts/delivery/migration-evidence.schema.json").read_text()
+        (ROOT / "packages/contracts/delivery/migration-evidence.schema.json").read_text()
     )
     jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker()).validate(result)
     assert result["status"] == "BLOCKED"

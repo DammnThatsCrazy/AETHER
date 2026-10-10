@@ -22,9 +22,9 @@ on:
   push:
     branches: [main]
     paths:
-      - "packages/web/src/web3/chains/**"
-      - "packages/web/src/web3/defi/protocol-registry.ts"
-      - "packages/web/src/web3/wallet/**"
+      - "packages/sdk/web/src/web3/chains/**"
+      - "packages/sdk/web/src/web3/defi/protocol-registry.ts"
+      - "packages/sdk/web/src/web3/wallet/**"
 
 # ---------------------------------------------------------------------------
 # Permissions & concurrency
@@ -102,7 +102,7 @@ jobs:
           from stages.sdk.data_module_publisher import extract_data_modules
           import json, pathlib
 
-          modules = extract_data_modules('../../packages/web/src')
+          modules = extract_data_modules('../../packages/sdk/web/src')
 
           # Write extracted modules to output directory
           out = pathlib.Path('${{ env.DATA_MODULES_DIR }}')

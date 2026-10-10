@@ -61,7 +61,7 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 | **Event bus integration** | Implemented | `shared/events/events.py:115` — `Topic.X402_PAYMENT_CAPTURED = "aether.x402.payment.captured"` |
 | **Audit trail action** | Implemented | `audit/trails/audit_engine.py:46` — `AuditAction.X402_CAPTURED = "x402_captured"` |
 | **GDPR/DSR erasure cascade** | Implemented | `gdpr/data_subject_rights/dsr_engine.py` — x402 in-memory store deletion rules |
-| **SDK event type** | Implemented | `packages/web/src/types.ts:566-575` — `X402PaymentEvent` interface |
+| **SDK event type** | Implemented | `packages/sdk/web/src/types.ts:566-575` — `X402PaymentEvent` interface |
 | **Feature flag** | Implemented | `config/settings.py` — `enable_x402_layer`, `IG_X402_LAYER` env var |
 | **RPC gateway x402 mode** | Implemented | `services/backend/services/onchain/rpc_gateway.py` — `x402_enabled` config for QuickNode pay-per-request |
 | **Permission scoping** | Implemented | `shared/auth/auth.py` — `x402:read`, `x402:write` permission constants |
@@ -254,8 +254,8 @@ Aether's x402 support is now **full-stack**: challenge-side (returning HTTP 402 
 
 | File | Role |
 |---|---|
-| `packages/web/src/types.ts:566-575` | `X402PaymentEvent` TypeScript interface |
-| `packages/web/src/core/event-queue.ts` | x402_payment classified as 'commerce' category |
+| `packages/sdk/web/src/types.ts:566-575` | `X402PaymentEvent` TypeScript interface |
+| `packages/sdk/web/src/core/event-queue.ts` | x402_payment classified as 'commerce' category |
 
 ### Supporting Infrastructure
 

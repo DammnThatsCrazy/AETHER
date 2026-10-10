@@ -165,7 +165,7 @@ def test_native_sdk_validation_runs_on_pr_finalization():
     assert "xcrun simctl list devices available -j" in workflow
     assert "steps.simulator.outputs.udid" in workflow
     assert "name=iPhone 16" not in workflow
-    assert "pod spec lint packages/ios/AetherSDK.podspec" in workflow
+    assert "pod spec lint packages/sdk/ios/AetherSDK.podspec" in workflow
 
 
 def test_shared_sdk_parity_changes_trigger_all_sdk_jobs():
@@ -361,9 +361,9 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     # One production web app: the site build with the product under /app,
     # production settings and the staging routing rules, on every host.
     assert "AMPLIFY_APP_NAME: AETHER-production-web" in workflow
-    assert "appRoot: apps/site" in workflow
-    assert "VITE_BASE_PATH=/app/ npm run build --workspace=apps/aether" in workflow
-    assert "cp -R apps/aether/dist/. apps/site/dist/app/" in workflow
+    assert "appRoot: apps/public-site" in workflow
+    assert "VITE_BASE_PATH=/app/ npm run build --workspace=apps/aether-web" in workflow
+    assert "cp -R apps/aether-web/dist/. apps/public-site/dist/app/" in workflow
     assert '"VITE_STATUS_API_URL": "https://api.olympuslabsml.com/health"' in workflow
     assert '"VITE_SITE_AETHER_URL": "https://aether.olympuslabsml.com"' in workflow
     assert '"VITE_SITE_OLYMPUS_URL": "https://www.olympuslabsml.com"' in workflow
@@ -783,7 +783,7 @@ def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
     assert "secrets.KYBER_GOOGLE_CLIENT_ID" in workflow
     assert "vars.KYBER_API_BASE_URL" in workflow
     assert "vars.KYBER_WS_BASE_URL" in workflow
-    kyber_build = workflow.split("npm --workspace apps/kyber run build")[0]
+    kyber_build = workflow.split("npm --workspace apps/kyber-web run build")[0]
     assert 'VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID"' in kyber_build
     assert 'VITE_KYBER_ENV=staging' in kyber_build
     assert 'VITE_OIDC_AUTHORITY="https://accounts.google.com"' in kyber_build

@@ -70,7 +70,7 @@ goes to every channel. Provider-accepted ≠ delivered ≠ opened ≠ read ≠ a
   JSONB repository cannot do the required compare-and-swap). Stores references + a bounded
   selection + a revision, never a whole graph. Introduces the **backend selection token**
   (`continuation_selections`) that the in-code marker in
-  `apps/aether/src/features/noesis/exploration-context.ts` asks for.
+  `apps/aether-web/src/features/noesis/exploration-context.ts` asks for.
 - **Client-sync feed** (C1) — `services/backend/services/client_sync/`, a durable append-only change log with a
   gapless per-scope cursor. `GET /v1/client-sync?cursor=` emits ten change types for read-state /
   continuation / saved-view / conversation / watchlist / incident / command-receipt / preference /

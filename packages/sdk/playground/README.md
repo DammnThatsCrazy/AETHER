@@ -1,6 +1,6 @@
 # Aether SDK Playground
 
-An interactive **multi-VM Web3 wallet simulation** environment for the [Aether Web SDK](../packages/web) (`@aether/web` v8.7.0). Simulate wallet connections across all 7 VM families (EVM, Solana, Bitcoin, SUI, NEAR, TRON, Cosmos), trigger DeFi protocol interactions (Uniswap, AAVE, Jupiter, Marinade, Wormhole, Ref Finance, and more), view cross-chain portfolios, and inspect SDK event capture -- all from a single-page demo interface served by Vite.
+An interactive **multi-VM Web3 wallet simulation** environment for the [Aether Web SDK](../packages/sdk/web) (`@aether/web` v8.7.0). Simulate wallet connections across all 7 VM families (EVM, Solana, Bitcoin, SUI, NEAR, TRON, Cosmos), trigger DeFi protocol interactions (Uniswap, AAVE, Jupiter, Marinade, Wormhole, Ref Finance, and more), view cross-chain portfolios, and inspect SDK event capture -- all from a single-page demo interface served by Vite.
 
 ## Tech Stack
 
@@ -9,7 +9,7 @@ An interactive **multi-VM Web3 wallet simulation** environment for the [Aether W
 | Markup    | HTML                      |
 | Logic     | Vanilla JavaScript (ES Modules) |
 | Dev Server| [Vite](https://vitejs.dev/) 5.x (port **5173**) |
-| SDK       | `@aether/web` v8.7.0 (linked locally via `file:../packages/web`) |
+| SDK       | `@aether/web` v8.7.0 (linked locally via `file:../packages/sdk/web`) |
 
 ## Features
 

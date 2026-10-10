@@ -91,7 +91,7 @@ Several categories are directly about contracts:
 
 | Category id | Trigger | Required commands |
 |---|---|---|
-| `event_schema` | `packages/shared/events.ts`, `schemas/**`, `contracts/**` (excluding `*.md`), backend event sources | `validate_contracts.py`, `validate_sdk_release_alignment.py`, `npm run typecheck` |
+| `event_schema` | `packages/shared/events.ts`, `schemas/**`, `packages/contracts/**` (excluding `*.md`), backend event sources | `validate_contracts.py`, `validate_sdk_release_alignment.py`, `npm run typecheck` |
 | `event_field_trust_schema` | `packages/shared/contracts/event-registry.json`, its generator/gate | `generate_contracts.py --check`, `validate_field_trust_parity.py`, `validate_contracts.py`, `docs_drift.py --strict`, field-trust/semantic-boundary pytest suites |
 | `intelligence_projection_architecture` | `packages/shared/contracts/intelligence-projection-registry.json` and its TS/Python twins | `generate_platform_contracts.py --check`, `validate_intelligence_projections.py`, `docs_drift.py --strict`, `make intelligence-projection-check` |
 | `relationship_spine_registries` | `relationship-predicate-registry.json`, `relationship-motif-registry.json` | `generate_platform_contracts.py --check` |
@@ -133,7 +133,7 @@ the same checks.
 
 ## Practical validation sequence
 
-For a change that touches any file under `contracts/delivery/` or
+For a change that touches any file under `packages/contracts/delivery/` or
 `packages/shared/contracts/`:
 
 ```bash

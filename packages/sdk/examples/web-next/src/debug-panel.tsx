@@ -1,4 +1,4 @@
-// packages/sdk/examples/web-next/src/debug-panel.tsx — adapted from apps/proof-web/src/debug-panel.tsx
+// packages/sdk/examples/web-next/src/debug-panel.tsx — adapted from tests/e2e/proof/apps/web/src/debug-panel.tsx
 import type { SDKState } from './types';
 import type { ReactElement } from 'react';
 import React from 'react';

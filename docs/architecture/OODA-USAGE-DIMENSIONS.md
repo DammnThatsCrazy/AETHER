@@ -62,7 +62,7 @@ secrets are ever written to metering metadata.
 
 ## Where they surface
 
-- Tenant: Aether **Usage & Plan** (`apps/aether/src/pages/usage-plan`) shows
+- Tenant: Aether **Usage & Plan** (`apps/aether-web/src/pages/usage-plan`) shows
   included vs. current usage per dimension.
 - Operator: Kyber **Revenue Operations** surfaces usage, entitlements, invoice
   previews, and revenue-leakage signals across dimensions.

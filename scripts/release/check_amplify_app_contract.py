@@ -36,7 +36,7 @@ DEFAULT_JOB_TIMEOUT_SECONDS = 900.0
 DEFAULT_JOB_POLL_SECONDS = 15.0
 
 STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
-    # The one staging app: the unified site (apps/site) for the aether,
+    # The one staging app: the unified site (apps/public-site) for the aether,
     # www, docs, status and app hosts, and the product built under /app.
     "AETHER-staging-web": {
         "AETHER_ENV": "staging",

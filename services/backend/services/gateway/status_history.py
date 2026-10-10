@@ -1,6 +1,6 @@
 """Aether Gateway — public status history (90-day per-component uptime).
 
-The public status page (``apps/site/src/pages/status-page.tsx``) draws live
+The public status page (``apps/public-site/src/pages/status-page.tsx``) draws live
 state from ``/v1/health`` and, separately, one bar per day per component from
 ``GET /v1/status/history?days=90``. This module owns both halves of that feed.
 
@@ -167,7 +167,7 @@ def build_history(
     today: date,
     generated_at: datetime,
 ) -> dict[str, Any]:
-    """The public payload ``apps/site/src/site/status.ts`` parses.
+    """The public payload ``apps/public-site/src/site/status.ts`` parses.
 
     Every published component is listed (in :data:`HISTORY_COMPONENTS` order),
     each with only the days that have observed samples, oldest first.

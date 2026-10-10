@@ -16,7 +16,7 @@ canonical_owner: frontend@aether
 ```text
 packages/shared and backend contracts  -> exact IDs, authority, capability truth
 @olympus/brand                         -> manifests, taxonomy, token metadata
-@aether/ui (apps/shared)           -> React/SVG renderers and a11y behavior
+@aether/ui (packages/ui/core)           -> React/SVG renderers and a11y behavior
 apps, docs, demo, mobile                -> render or consume the canonical source
 ```
 
@@ -29,7 +29,7 @@ For the Aether-specific context, ownership, dependency sequence, and consumer
 acceptance matrix, see [Aether context and consumer matrix](./aether-consumer-matrix.md).
 
 Reviewed Aether/Olympus asset geometry lives once in
-`packages/brand/src/identity/marks/`. The Aether and Kyber Vite public
+`packages/ui/brand/src/identity/marks/`. The Aether and Kyber Vite public
 directories point there, so a manifest `publicPath` resolves without duplicating
 the SVGs in application public folders.
 
@@ -54,7 +54,7 @@ available; otherwise use a responsive product lockup. Lockup policy uses inline
 space, not a guessed device class.
 
 The common breakpoints are `compact: 480`, `tablet: 720`, `desktop: 980`, and
-`wide: 1180` in `packages/brand/src/responsive/logo.ts`. They guide layout
+`wide: 1180` in `packages/ui/brand/src/responsive/logo.ts`. They guide layout
 coordination; an app still owns its actual responsive layout.
 
 In narrow layouts:
@@ -64,7 +64,7 @@ In narrow layouts:
 3. Use compact density/mark sizing before removing identity.
 4. Keep primary interactive targets at 44px even when the visual icon is 16–24px.
 
-Use a named recipe from `packages/brand/src/motion/recipes.ts`. The duration
+Use a named recipe from `packages/ui/brand/src/motion/recipes.ts`. The duration
 scale is 0/120/180/240/320ms (`instant` through `complex`). Under
 `prefers-reduced-motion: reduce`, use `motionDuration` or the renderer's
 reduced-motion handling: animations reduce to 1ms, preserve focus/loading

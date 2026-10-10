@@ -6,11 +6,11 @@ visibility: I
 audience: [architect, dev-senior, ops, buyer]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/admin/kyber_strategic.py, services/backend/services/admin/routes.py, apps/kyber/src/components/recommendation-observability-panel.tsx]
+source_files: [services/backend/services/admin/kyber_strategic.py, services/backend/services/admin/routes.py, apps/kyber-web/src/components/recommendation-observability-panel.tsx]
 flags: []
 related: [ai/kyber-strategic-observability, ai/playbooks, ai/recommendation-families]
 source_hashes:
-  "apps/kyber/src/components/recommendation-observability-panel.tsx": "sha256:7aa4bfb78ced06b43c567563ca81a208a9e2f85e53bd184265e736758318bae1"
+  "apps/kyber-web/src/components/recommendation-observability-panel.tsx": "sha256:7aa4bfb78ced06b43c567563ca81a208a9e2f85e53bd184265e736758318bae1"
   "services/backend/services/admin/kyber_strategic.py": "sha256:53235e2711b40308c0fe42c96b4f442290c9c73c054931ad1c5683f69123151f"
   "services/backend/services/admin/routes.py": "sha256:afde854e3e99a713735396a7308ad6a79517f8b80237fb38b2dcfd0aceb67187"
 ---

@@ -12,7 +12,7 @@ canonical_owner: frontend@aether
 # Surfaces, borders, and focus
 
 The visual system is warm/stone and border-led. Named recipes in
-`packages/brand/src/surfaces/` and tokens in `packages/brand/src/tokens/` keep
+`packages/ui/brand/src/surfaces/` and tokens in `packages/ui/brand/src/tokens/` keep
 surfaces consistent without a second palette.
 
 | Use | Recipe/token |

@@ -18,7 +18,7 @@ Social Silver facts      (NEW service + contracts → M1 contracts, M3 facts; ta
         └──▶ Data rights / consent gates   (present authorities ✅ CONSUME)
         │
         ▼
-RELATIONAL SPINE (NEW — M1 contracts/registries ⇒ M6 promotion/motifs ⇒ M5 incentive ⇒ M7 fidelity)
+RELATIONAL SPINE (NEW — M1 packages/contracts/registries ⇒ M6 promotion/motifs ⇒ M5 incentive ⇒ M7 fidelity)
         │            all computation via shared/computation/ ✅ (definitions M7)
         ▼
 Graph Mutation Gateway   (present: shared/graph/mutation_gateway.py ✅ — SOLE write path, §52)
@@ -72,7 +72,7 @@ Legend: ✅ present on base · NEW created by this program · ⚠️ branch-only
 
 ```
 M0 (recon/ledger)                    ← in progress; gate: authority map complete
-  └─▶ M1 contracts/registries        ← prerequisite for all code
+  └─▶ M1 packages/contracts/registries        ← prerequisite for all code
         ├─▶ M2 UPR social            (provider plugins; honest status)
         ├─▶ M3 Social Silver plane
         ├─▶ M4 Legacy honesty migration   (after minimal M3 read path)

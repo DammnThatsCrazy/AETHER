@@ -6,16 +6,16 @@ visibility: I
 audience: [dev-senior, architect]
 status: beta
 since_version: 0.1.0
-source_files: [packages/shared/contracts/event-registry.json, packages/shared/commerce.ts, packages/shared/commerce-bridge.ts, packages/web/src/modules/commerce-detection.ts, packages/web/src/bridges/, services/backend/shared/commerce_contracts/order.py, services/backend/shared/integration_contracts/events.py, services/backend/shared/integration_contracts/commerce_bridge.py]
+source_files: [packages/shared/contracts/event-registry.json, packages/shared/commerce.ts, packages/shared/commerce-bridge.ts, packages/sdk/web/src/modules/commerce-detection.ts, packages/sdk/web/src/bridges/, services/backend/shared/commerce_contracts/order.py, services/backend/shared/integration_contracts/events.py, services/backend/shared/integration_contracts/commerce_bridge.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "packages/shared/commerce-bridge.ts": "sha256:b052f7b3df53c934250acaefebefedaf49d9a06d3062d8c75617f308372ed665"
+  "packages/sdk/web/src/bridges/": "sha256:47160b084e5269f5460a203f9ede3852ea8740aebf10c760c0ef9acde33dae2d"
+  "packages/sdk/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
+  "packages/shared/commerce-bridge.ts": "sha256:baa6f584ec1f3decf3e4d1c212a91933c73f83279aa9134430646468708463b8"
   "packages/shared/commerce.ts": "sha256:a2e6ae5be860985cd8265972f12c38da18d4475bbece666ca4ea332877c40bb3"
   "packages/shared/contracts/event-registry.json": "sha256:29f3cdefd685a1ec296a96e9f705830ef09efd7865f67a1a6c1f2e4685e17c89"
-  "packages/web/src/bridges/": "sha256:3ceea9d41cd65bfc6442fc6c7809165e4bf651b3625edde1a5cdeebe755c74ba"
-  "packages/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
   "services/backend/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"
   "services/backend/shared/integration_contracts/commerce_bridge.py": "sha256:bc2dd396267ac6902568ad055c633d2de906c7cdd83f7020c0fe100caa67c9e8"
   "services/backend/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
@@ -25,8 +25,8 @@ source_hashes:
 
 **Status (follow-on program, shipped):** the web SDK **detection engine** and
 **commerce bridges** shipped in the UPR follow-on program (PR-C): the
-detection engine at `packages/web/src/modules/commerce-detection.ts`, the
-bridges at `packages/web/src/bridges/*`, the shared mapping at
+detection engine at `packages/sdk/web/src/modules/commerce-detection.ts`, the
+bridges at `packages/sdk/web/src/bridges/*`, the shared mapping at
 `packages/shared/commerce-bridge.ts`, and the server-side bridge contract at
 `shared/integration_contracts/commerce_bridge.py`. The acceptance criteria in
 §4 below describe the shipped contract and its evidence. SDK event-registry
@@ -42,7 +42,7 @@ the backend Python
 `shared/commerce_contracts/money.py`). The web SDK consumes only the
 source-observable signal types + schema version via the explicit subpath
 `@aether/shared/commerce-bridge`
-(`packages/web/src/modules/commerce-detection.ts`); no new interpreter logic is
+(`packages/sdk/web/src/modules/commerce-detection.ts`); no new interpreter logic is
 added on the SDK side, and the module must not be re-added to the SDK public
 surface.
 
@@ -71,7 +71,7 @@ Detect commerce frames on the web — product pages, carts, checkout — and emi
 a minimal, stable SDK signal that a commerce interaction occurred. The
 detection engine lives in the SDK plane and produces raw SDK events only; it
 does NOT emit runtime `commerce.*` types itself. Shipped at
-`packages/web/src/modules/commerce-detection.ts`.
+`packages/sdk/web/src/modules/commerce-detection.ts`.
 
 ### 2.2 Commerce bridges
 
@@ -156,7 +156,7 @@ landed:
 
 - [x] The web SDK detection engine emits a stable, versioned SDK signal, with
       tests covering product-page / cart / checkout / confirmation flows
-      (`packages/web/src/modules/commerce-detection.ts`).
+      (`packages/sdk/web/src/modules/commerce-detection.ts`).
 - [x] Envelope + payload bridges are deterministic, provider-neutral,
       idempotent, tenant-scoped, and drop-safe (contract §3 above), with a
       parity test against the canonical `AetherEvent` shapes

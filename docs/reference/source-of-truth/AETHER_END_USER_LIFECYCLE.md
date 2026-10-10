@@ -7,7 +7,7 @@ audience: [architect, dev-senior]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [services/backend/shared/integration_contracts/catalog.py, services/backend/shared/integration_contracts/experience.py, services/backend/shared/certification/readiness.py, services/backend/services/integrations/connectors/catalog_endpoints.py, apps/aether/src/test/e2e/lifecycle.harness.ts, packages/shared/connector-taxonomy.ts]
+source_files: [services/backend/shared/integration_contracts/catalog.py, services/backend/shared/integration_contracts/experience.py, services/backend/shared/certification/readiness.py, services/backend/services/integrations/connectors/catalog_endpoints.py, apps/aether-web/src/test/e2e/lifecycle.harness.ts, packages/shared/connector-taxonomy.ts]
 last_synced_commit: 8b1ca3dc
 estimated_read_minutes: 12
 toc_depth: 3
@@ -206,7 +206,7 @@ graph-ready → first insight.
 
 Stable data markers let acceptance suites assert on state without depending on
 layout text. The lifecycle surfaces implement these; the suites consume them via
-`apps/aether/src/test/e2e/lifecycle.harness.ts` `MARKERS`.
+`apps/aether-web/src/test/e2e/lifecycle.harness.ts` `MARKERS`.
 
 | Marker | Value semantics |
 |---|---|
@@ -220,7 +220,7 @@ layout text. The lifecycle surfaces implement these; the suites consume them via
 ## 9. Acceptance suites (E2E A–E)
 
 The executable acceptance spec is the Playwright lifecycle suites under
-`apps/aether/src/test/e2e/` (`lifecycle-A-…` … `lifecycle-E-…`), one serial
+`apps/aether-web/src/test/e2e/` (`lifecycle-A-…` … `lifecycle-E-…`), one serial
 journey per seeded scenario tenant. They are gated on
 `E2E_TENANT_EMAIL[_A.._E]` / `E2E_TENANT_PASSWORD[_A.._E]` (fallback to the
 shared pair) and skip honestly without the R3/R4 integration environment. See

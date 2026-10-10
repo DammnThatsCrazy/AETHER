@@ -4,7 +4,7 @@ from scripts.verification_execution_plan import build_execution_plan
 
 
 def test_frontend_plan_uses_node_profile_without_backend_image() -> None:
-    plan = build_execution_plan(["apps/aether/src/pages/profile.tsx"])
+    plan = build_execution_plan(["apps/aether-web/src/pages/profile.tsx"])
 
     assert plan["status"] == "READY"
     assert plan["build"]["node_required"] is True
@@ -57,10 +57,10 @@ def test_functionality_proof_suite_is_selected_only_by_the_paths_it_imports() ->
     # test directories, the mocks and fixtures they load, and its vitest config.
     for path in (
         "packages/shared/consent-receipt.ts",
-        "packages/web/src/index.ts",
-        "packages/react-native/src/index.ts",
-        "packages/proof-contracts/index.ts",
-        "packages/proof-fixtures/index.json",
+        "packages/sdk/web/src/index.ts",
+        "packages/sdk/react-native/src/index.ts",
+        "tests/e2e/proof/packages/contracts/index.ts",
+        "tests/e2e/proof/packages/fixtures/index.json",
         "tests/sdk/web/web-offline.test.ts",
         "tests/mocks/react-native.ts",
         "tests/fixtures/sdk/canonical-first-value-journey.json",
@@ -76,9 +76,9 @@ def test_functionality_proof_suite_is_not_a_domain_wide_default() -> None:
     # suite must not be in those defaults or unrelated SDK, mobile and backend
     # changes would pay for a Node install and an 84-file run.
     for path in (
-        "packages/ios/Sources/AetherSDK/Aether.swift",
-        "packages/mobile-core/src/index.ts",
-        "packages/brand/src/index.ts",
+        "packages/sdk/ios/Sources/AetherSDK/Aether.swift",
+        "packages/sdk/mobile-core/src/index.ts",
+        "packages/ui/brand/src/index.ts",
         "services/backend/config/settings.py",
     ):
         plan = build_execution_plan([path])

@@ -36,7 +36,7 @@ Created with `X402LifecycleBase` interface and 14 typed payload interfaces:
 
 Added `export * from './x402-lifecycle';`.
 
-### GAP 5 — `packages/web/src/types.ts` — CLOSED
+### GAP 5 — `packages/sdk/web/src/types.ts` — CLOSED
 
 - Added all 33 new EventType strings to the local mirror union.
 - Added 19 `AgentXxxEvent` interfaces + 14 `X402XxxEvent` interfaces (each extending `BaseEvent`).
@@ -44,7 +44,7 @@ Added `export * from './x402-lifecycle';`.
 - Extended `X402Interface` with 14 new typed methods (keeping legacy `payment`).
 - Updated `AetherEvent` discriminated union.
 
-### GAP 6 — `packages/web/src/index.ts` — CLOSED
+### GAP 6 — `packages/sdk/web/src/index.ts` — CLOSED
 
 Implemented all 19 new `agent.*` emitters and 14 new `x402.*` emitters, each mapping
 to `this.enqueueEvent('event_type', props as Record<string, unknown>)`. Legacy methods unchanged.
@@ -89,7 +89,7 @@ their SDK method names, state machine, and consent rules.
 
 ### SDK surface parity — Android + iOS
 
-`packages/android/.../Aether.kt` and `packages/ios/.../Aether.swift` updated with all 33
+`packages/sdk/android/.../Aether.kt` and `packages/sdk/ios/.../Aether.swift` updated with all 33
 new event types and consent mappings. Required for `validate_sdk_release_alignment.py`.
 
 ### Backend ingestion validator
@@ -128,10 +128,10 @@ reflect the expanded canonical set.
 | `packages/shared/agent.ts` | +19 lifecycle payload interfaces |
 | `packages/shared/x402-lifecycle.ts` | NEW: 14 x402 lifecycle payload interfaces |
 | `packages/shared/index.ts` | +export for x402-lifecycle |
-| `packages/web/src/types.ts` | +33 EventType strings, +19 AgentXxxEvent, +14 X402XxxEvent, expanded interfaces |
-| `packages/web/src/index.ts` | +19 agent emitters, +14 x402 emitters |
-| `packages/android/.../Aether.kt` | +33 event types + consent mappings |
-| `packages/ios/.../Aether.swift` | +33 event cases + consent mappings |
+| `packages/sdk/web/src/types.ts` | +33 EventType strings, +19 AgentXxxEvent, +14 X402XxxEvent, expanded interfaces |
+| `packages/sdk/web/src/index.ts` | +19 agent emitters, +14 x402 emitters |
+| `packages/sdk/android/.../Aether.kt` | +33 event types + consent mappings |
+| `packages/sdk/ios/.../Aether.swift` | +33 event cases + consent mappings |
 | `services/backend/.../repositories/repos.py` | 5 methods: tenant_id required |
 | `services/backend/.../services/delegation/routes.py` | Pass tenant_id to active_for |
 | `services/backend/.../services/delegation/engine.py` | Accept+store tenant_id |

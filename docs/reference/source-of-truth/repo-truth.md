@@ -32,7 +32,7 @@ not alternate service homes.
 | `services/` | Backend runtime services |
 | `packages/` | Shared packages, SDKs, clients, UI, contracts package |
 | `services/backend/services/integrations/connectors/` | Provider connector runtime owned by the backend service |
-| `contracts/` | Canonical event, graph, identity, journey, campaign, communication, value, and agent contracts |
+| `packages/contracts/` | Canonical event, graph, identity, journey, campaign, communication, value, and agent contracts |
 | `docs/` | Human-readable documentation |
 | `scripts/` | Repository validation, generation, release, docs, and contract scripts |
 | `tests/` | Cross-package and system tests |
@@ -53,7 +53,7 @@ root now have one canonical home:
 | Internal broker-coupled agents | `services/agents/` | — |
 | Compliance controls | `services/compliance/` | — |
 | AWS deployment and Terraform | `infra/aws/` | `docs/archive/legacy-architecture/aws-deployment/` |
-| Smart contracts | `contracts/smart-contracts/` | — |
+| Smart contracts | `packages/contracts/smart-contracts/` | — |
 | Deprecated TypeScript ingestion duplicate | — | `docs/archive/legacy-architecture/data-ingestion-layer/` |
 | Deprecated TypeScript lake duplicate | — | `docs/archive/legacy-architecture/data-lake-architecture/` |
 

@@ -203,7 +203,7 @@ Run:
 cd "services/backend" && python -m pytest tests/commerce/ -v --asyncio-mode=auto
 
 # Kyber
-cd apps/kyber && npx vitest run
+cd apps/kyber-web && npx vitest run
 ```
 
 ## 14. Environment axis, per-tenant RPC, and durable persistence

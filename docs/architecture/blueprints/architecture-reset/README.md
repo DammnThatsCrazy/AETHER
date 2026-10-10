@@ -28,7 +28,7 @@ The implementation branch is `codex/aether-architecture-reset`, targeting
 `Development`. This commit is a repository baseline, **not** a verified
 known-good staging or production snapshot; the old/new equivalence ledger
 must obtain that evidence before a destructive cutover. The existing
-`packages/ios/.build/` artifact in the original checkout is untracked and is
+`packages/sdk/ios/.build/` artifact in the original checkout is untracked and is
 not part of the reset.
 
 ## Protected design-partner lane

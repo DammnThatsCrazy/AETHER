@@ -10,10 +10,10 @@ since_version: "0.1.0"
 
 # Contract Compatibility Matrix
 
-This document maps every schema/registry under `contracts/delivery/` and
+This document maps every schema/registry under `packages/contracts/delivery/` and
 `packages/shared/contracts/` to its current version fields, and records which
 contracts must change together (lock-step) versus which can change
-independently. See [VERSION_POLICY.md](../../../contracts/VERSION_POLICY.md) for
+independently. See [VERSION_POLICY.md](../../../packages/contracts/VERSION_POLICY.md) for
 the versioning rules this matrix assumes.
 
 ## How to read this table
@@ -21,11 +21,11 @@ the versioning rules this matrix assumes.
 - **`schemaVersion`** — the structural shape of the JSON document itself.
 - **`contractVersion`** — the semantic version of the data the schema
   describes (bumped per the compatibility rules in `VERSION_POLICY.md`).
-- Delivery schemas (`contracts/delivery/*.schema.json`) use a JSON Schema
+- Delivery schemas (`packages/contracts/delivery/*.schema.json`) use a JSON Schema
   `$id` versioned path (`.../v1`) instead of an in-body `contractVersion`.
 - A dash (`-`) means the field is not present in that file.
 
-## `contracts/delivery/` — delivery pipeline schemas
+## `packages/contracts/delivery/` — delivery pipeline schemas
 
 All delivery schemas are pinned at `$id` version `v1`. They are consumed by
 `scripts/delivery_orchestrator.py`, `scripts/artifact_builder.py`, and the
@@ -93,7 +93,7 @@ checking every consumer that resolves `$id` by string match.
 | `social-provider-capability-vocabulary.json` | 1.0.0 | 1.0.0 | `social-silver-facts.schema.json` |
 | `social-silver-facts.schema.json` | - | - | `social-provider-capability-vocabulary.json` |
 | `temporal-policy-registry.json` | 1.0.0 | - | Consumed by policy enforcement; no registered lock-step registry |
-| `kyber-feature-surface-manifest.json` | 1.0.0 | - | `apps/kyber/**` surfaces (not schema-linked; validated structurally only) |
+| `kyber-feature-surface-manifest.json` | 1.0.0 | - | `apps/kyber-web/**` surfaces (not schema-linked; validated structurally only) |
 | `evidence-manifest.schema.json` | - | - | `scripts/release/evidence_bundle.py`, `release-evidence-bundle.schema.json` (delivery-side sibling) |
 | `incentive-context.schema.json` | - | - | `outcome-type-registry.json` |
 
@@ -102,12 +102,12 @@ checking every consumer that resolves `$id` by string match.
 A few contracts span both directories:
 
 - `evidence-manifest.schema.json` (domain, `packages/shared/contracts/`) and
-  `release-evidence-bundle.schema.json` (delivery, `contracts/delivery/`)
+  `release-evidence-bundle.schema.json` (delivery, `packages/contracts/delivery/`)
   describe adjacent but distinct evidence shapes — the domain manifest is
   produced by application-level release checks, the delivery bundle wraps it
   for the delivery pipeline. They are not currently schema-linked
   (`$ref`); treat any structural change to one as a signal to check the other.
-- `metric-registry.json` and `contracts/delivery/telemetry-event.schema.json`
+- `metric-registry.json` and `packages/contracts/delivery/telemetry-event.schema.json`
   both describe measured signals but serve different planes (product metrics
   vs. delivery-pipeline telemetry) and are versioned independently.
 

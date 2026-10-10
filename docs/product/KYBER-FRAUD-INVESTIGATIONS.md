@@ -6,10 +6,10 @@ visibility: I
 audience: [ops, security]
 status: stable
 since_version: "0.1.0"
-source_files: [apps/kyber/src/pages/fraud/, apps/kyber/src/components/fraud/]
+source_files: [apps/kyber-web/src/pages/fraud/, apps/kyber-web/src/components/fraud/]
 source_hashes:
-  "apps/kyber/src/components/fraud/": "sha256:4debbca821cc5050a892400739ece1962018bc7943d0dc7e401dda62dad45fa8"
-  "apps/kyber/src/pages/fraud/": "sha256:22f0514e8ec9ad86fa9a43655c56f0c34a4a474ea2415e22c849d3a7ec31cdda"
+  "apps/kyber-web/src/components/fraud/": "sha256:d4304a989c3fc9f4c4c358fc8af93e6d4657bfff8e763a8b63d9335e78278c94"
+  "apps/kyber-web/src/pages/fraud/": "sha256:9388f7fd633d3e7165a673f3a9909ba2d856cd040421652094f8efda47f57cd4"
 ---
 
 # Kyber Fraud Investigations Workspace
@@ -149,7 +149,7 @@ The **Risk 360** workbench (`/fraud-networks/risk-360`, nav label **Risk 360**) 
 - **Health probe** — the page header shows the `/v1/risk360/health` plane state, so the operator sees whether the plane is registered and contract-compatible
 - **Not enabled behavior** — the `/v1/risk360` plane is flag-gated server-side (`AETHER_RISK360_ENABLED`, default OFF). When the plane is disabled, the provider is unregistered, or the subject kind is unserved, the API resolves to `null` and the page renders a graceful "plane not enabled / no projection" EmptyState — never an error crash
 
-**Data source:** `GET /v1/risk360/{subject_kind}/{subject_id}` and `GET /v1/risk360/health` via `api.risk360` in `apps/kyber/src/lib/api/endpoints.ts` (hooks in `features/risk360/`, shared projection renderers in `features/projection-plane/`). The projection is `graphMutationPolicy: read_only` and does not own canonical truth.
+**Data source:** `GET /v1/risk360/{subject_kind}/{subject_id}` and `GET /v1/risk360/health` via `api.risk360` in `apps/kyber-web/src/lib/api/endpoints.ts` (hooks in `features/risk360/`, shared projection renderers in `features/projection-plane/`). The projection is `graphMutationPolicy: read_only` and does not own canonical truth.
 
 ---
 
@@ -162,7 +162,7 @@ The **Fraud 360** consolidation page (`/fraud-networks/fraud-360`, nav label **F
 - **Health probe** — the page header shows the `/v1/fraud360/health` plane state
 - **Not enabled behavior** — the `/v1/fraud360` plane is flag-gated server-side (`AETHER_FRAUD360_ENABLED`, default OFF). When the plane is disabled, the provider is unregistered, or the subject kind is unserved, the API resolves to `null` and the page renders a graceful EmptyState — never an error crash
 
-**Data source:** `GET /v1/fraud360/{subject_kind}/{subject_id}` and `GET /v1/fraud360/health` via `api.fraud360` in `apps/kyber/src/lib/api/endpoints.ts` (hooks in `features/fraud360/`, shared projection renderers in `features/projection-plane/`). The projection is `graphMutationPolicy: read_only` and does not own canonical truth.
+**Data source:** `GET /v1/fraud360/{subject_kind}/{subject_id}` and `GET /v1/fraud360/health` via `api.fraud360` in `apps/kyber-web/src/lib/api/endpoints.ts` (hooks in `features/fraud360/`, shared projection renderers in `features/projection-plane/`). The projection is `graphMutationPolicy: read_only` and does not own canonical truth.
 
 ---
 

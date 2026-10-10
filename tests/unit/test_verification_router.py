@@ -16,7 +16,7 @@ from scripts.lib.verification_router import (
 
 
 def test_frontend_change_routes_only_relevant_pr_suites():
-    result = route(["apps/kyber/src/App.tsx"])
+    result = route(["apps/kyber-web/src/App.tsx"])
     ids = {item["check_id"] for item in result["checks"]}
     assert result["minimum_lane"] == "pr"
     assert result["affected_domains"] == ["frontend"]
@@ -65,7 +65,7 @@ def test_change_plan_validator_reports_required_fields():
 
 
 def test_delivery_contract_schemas_are_json():
-    for path in Path("contracts/delivery").glob("*.schema.json"):
+    for path in Path("packages/contracts/delivery").glob("*.schema.json"):
         assert json.loads(path.read_text())["type"] == "object"
 
 

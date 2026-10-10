@@ -1,7 +1,7 @@
 """Pydantic contracts for Data Quality, Drift Detection & Intelligence Reliability.
 
 These mirror the shared TypeScript contracts in
-``apps/shared/src/types/data-quality.ts``. Field names are kept identical
+``packages/ui/core/src/types/data-quality.ts``. Field names are kept identical
 across both layers so payloads round-trip cleanly between backend and frontend.
 
 Scores are normalized 0..1 (1.0 = best). Drift events are graph-native signals

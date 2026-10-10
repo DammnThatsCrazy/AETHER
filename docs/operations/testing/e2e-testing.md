@@ -38,7 +38,7 @@ Tickets referenced: FPS-010 through FPS-015 (smoke), FPS-026 (tenant activation 
 **Purpose.** Confirm that the Web SDK can be initialized against the proof tenant and emits a heartbeat and a canonical event that arrive in staging.
 
 **Steps.**
-1. Initialize the Web SDK in `apps/proof-web` with the proof tenant credentials.
+1. Initialize the Web SDK in `tests/e2e/proof/apps/web` with the proof tenant credentials.
 2. Emit a heartbeat from the proof web app.
 3. Track a canonical event from the proof web app.
 4. Verify the heartbeat and event appear in the proof tenant ingestion surface.

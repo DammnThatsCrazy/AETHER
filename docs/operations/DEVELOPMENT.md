@@ -48,7 +48,7 @@ pip install -e ".[all]" --ignore-installed PyJWT
 npm ci
 ```
 
-This installs all workspace packages (`packages/shared`, `packages/ui`, `packages/web`, `packages/react-native`, `apps/aether`, `apps/kyber`, etc.).
+This installs all workspace packages (`packages/shared`, `packages/ui`, `packages/sdk/web`, `packages/sdk/react-native`, `apps/aether-web`, `apps/kyber-web`, etc.).
 
 ---
 
@@ -76,7 +76,7 @@ All other variables have safe defaults for `AETHER_ENV=local`.
 ### Frontend (customer app)
 
 ```bash
-cp apps/aether/.env.example apps/aether/.env.local
+cp apps/aether-web/.env.example apps/aether-web/.env.local
 ```
 
 The default `VITE_AETHER_ENV=local-mocked` works for UI development without a running backend. Set `VITE_AETHER_ENV=local-live` and `VITE_API_BASE_URL=http://localhost:8000` when running the full stack.
@@ -84,7 +84,7 @@ The default `VITE_AETHER_ENV=local-mocked` works for UI development without a ru
 ### Frontend (operator console)
 
 ```bash
-cp apps/kyber/.env.example apps/kyber/.env.local   # if it exists
+cp apps/kyber-web/.env.example apps/kyber-web/.env.local   # if it exists
 ```
 
 ---
@@ -109,10 +109,10 @@ In separate terminals:
 
 ```bash
 # Customer app — http://localhost:5175
-cd apps/aether && npm run dev
+cd apps/aether-web && npm run dev
 
 # Operator console — http://localhost:5174
-cd apps/kyber && npm run dev
+cd apps/kyber-web && npm run dev
 ```
 
 ---
@@ -174,11 +174,11 @@ services/compliance/            GDPR/SOC 2 controls
 security/                       Model extraction defense package
 packages/shared/                       @aether/shared — canonical TypeScript contracts
 packages/ui/                           @aether/ui — shared React component library
-packages/web/                          @aether/web — Web SDK
-packages/react-native/                 @aether/react-native — React Native SDK
-apps/aether/                       Customer web app (React 19 + Vite, port 5175)
-apps/kyber/                        Operator console (React 19 + Vite, port 5174)
-contracts/smart-contracts/       EVM and multi-chain smart contracts
+packages/sdk/web/                          @aether/web — Web SDK
+packages/sdk/react-native/                 @aether/react-native — React Native SDK
+apps/aether-web/                       Customer web app (React 19 + Vite, port 5175)
+apps/kyber-web/                        Operator console (React 19 + Vite, port 5174)
+packages/contracts/smart-contracts/       EVM and multi-chain smart contracts
 infra/aws/                      AWS/Terraform deployment implementation
 docs/archive/legacy-architecture/ Historical, un-deployed duplicate trees only
 ```
@@ -197,4 +197,4 @@ You haven't created `.env` or left `JWT_SECRET` as the placeholder. See step 4.
 Check `docker compose logs backend`. Most failures are missing env vars or postgres not ready yet — run `docker compose up -d postgres` first, wait a few seconds, then `docker compose up -d backend`.
 
 **Frontend can't reach API**
-Set `VITE_AETHER_ENV=local-live` and `VITE_API_BASE_URL=http://localhost:8000` in `apps/aether/.env.local`, then restart the dev server.
+Set `VITE_AETHER_ENV=local-live` and `VITE_API_BASE_URL=http://localhost:8000` in `apps/aether-web/.env.local`, then restart the dev server.

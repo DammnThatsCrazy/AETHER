@@ -19,7 +19,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = join(ROOT, '.artifacts', 'sdk', 'cdn');
 const CDN_BASE = 'https://cdn.aether.network';
 
-const pkg = JSON.parse(readFileSync(join(ROOT, 'packages', 'web', 'package.json'), 'utf-8'));
+const pkg = JSON.parse(readFileSync(join(ROOT, "packages", "sdk", "web", 'package.json'), 'utf-8'));
 const VERSION = pkg.version;
 const MAJOR = VERSION.split('.')[0];
 

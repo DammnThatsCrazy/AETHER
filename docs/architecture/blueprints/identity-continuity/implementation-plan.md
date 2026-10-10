@@ -47,7 +47,7 @@ status: beta
 | Interaction contract (TS) | `packages/shared/interaction-contract.ts` | Interaction vocabulary |
 | Observation envelope registry | `packages/shared/contracts/observation-envelope-registry.json` | Envelope B field registry |
 | Provider adapters | `services/backend/services/providers/` | Shopify, WooCommerce, eBay, Etsy, TikTok, Walmart |
-| Proof infrastructure | `packages/proof-runner/`, `packages/proof-fixtures/`, `packages/proof-reporting/` | Existing proof harness |
+| Proof infrastructure | `tests/e2e/proof/packages/runner/`, `tests/e2e/proof/packages/fixtures/`, `tests/e2e/proof/packages/reporting/` | Existing proof harness |
 | Feature flags | `config/release/feature_flags/` | Existing flag framework |
 | Tests (identity) | `services/backend/tests/identity/` | verified_email_resolution, resolution_replay, decision_evidence |
 | Tests (restatement) | `services/backend/tests/computation/test_identity_restatement.py` | Restatement + confidence semantics |
@@ -273,11 +273,11 @@ status: beta
 - `packages/shared/contracts/identity/sdk-contract.json` — new contract
   - Required SDK fields per blueprint §14.2
 - SDK fixture apps (minimal):
-  - `apps/proof-web/src/identity-test/` — web SDK test app
-  - `apps/proof-react/src/identity-test/` — React SDK test app
-  - `apps/proof-ios/src/identity-test/` — iOS SDK test app (stub)
-  - `apps/proof-android/src/identity-test/` — Android SDK test app (stub)
-  - `apps/proof-react-native/src/identity-test/` — React Native test app (stub)
+  - `tests/e2e/proof/apps/web/src/identity-test/` — web SDK test app
+  - `tests/e2e/proof/apps/react/src/identity-test/` — React SDK test app
+  - `tests/e2e/proof/apps/ios/src/identity-test/` — iOS SDK test app (stub)
+  - `tests/e2e/proof/apps/android/src/identity-test/` — Android SDK test app (stub)
+  - `tests/e2e/proof/apps/react-native/src/identity-test/` — React Native test app (stub)
 - `services/backend/tests/identity/test_sdk_late_binding.py` — new test
   - Import-first SDK-later scenario
   - Anonymous-to-known scenario
@@ -303,7 +303,7 @@ status: beta
   - `POST /v1/admin/identity/reconcile` — re-run resolution
   - `GET /v1/admin/identity/review-queue` — open conflicts/reviews
   - `GET /v1/admin/identity/activation-status` — tenant activation dashboard data
-- Frontend: `apps/aether/src/features/identity/`
+- Frontend: `apps/aether-web/src/features/identity/`
   - `TenantActivationDashboard.tsx` — activation status surface
   - `Profile360IdentityPanel.tsx` — identity panel component
   - `IdentityReviewQueue.tsx` — review queue page

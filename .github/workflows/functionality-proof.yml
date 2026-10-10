@@ -16,7 +16,7 @@ name: Functionality Proof Spine (CI)
 #                   A contract failure means the functional contract between
 #                   packages is broken; the PR must not land until contracts
 #                   are restored.
-#   - sdk ......... fails the PR if the Aether SDK (packages/web) tests fail
+#   - sdk ......... fails the PR if the Aether SDK (packages/sdk/web) tests fail
 #   - connectors-fixtures ... fails the PR if connector fixture tests fail
 #   - integration . fails the PR if integration tests fail
 #   - graph ........ fails the PR if graph-related tests fail
@@ -200,7 +200,7 @@ jobs:
         run: pnpm --filter '@aether/proof-contracts' run test
 
   # -------------------------------------------------------------------
-  # sdk — SDK-specific tests for packages/web (@aether/web).
+  # sdk — SDK-specific tests for packages/sdk/web (@aether/web).
   # Blocks merge if SDK functionality is broken.
   # -------------------------------------------------------------------
   sdk:
@@ -411,7 +411,7 @@ jobs:
         run: pnpm --filter '@aether/proof-runner' run test
 
   # -------------------------------------------------------------------
-  # e2e — End-to-end browser tests (Playwright/Cypress via apps/kyber).
+  # e2e — End-to-end browser tests (Playwright/Cypress via apps/kyber-web).
   #
   # CONDITIONAL EXECUTION: Only runs when the change comes from the
   # canonical repository (not external PR forks) OR when triggered by a
@@ -541,8 +541,8 @@ jobs:
         run: |
           mkdir -p proof-artifacts
           # Copy any build outputs
-          if [ -d "packages/web/dist" ]; then
-            cp -r packages/web/dist proof-artifacts/web-dist/
+          if [ -d "packages/sdk/web/dist" ]; then
+            cp -r packages/sdk/web/dist proof-artifacts/web-dist/
           fi
           if [ -d "packages/shared/dist" ]; then
             cp -r packages/shared/dist proof-artifacts/shared-dist/

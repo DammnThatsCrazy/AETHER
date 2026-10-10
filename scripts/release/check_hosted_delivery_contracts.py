@@ -26,7 +26,7 @@ SCHEMAS = (
 
 def check() -> dict:
     errors: list[str] = []
-    schema_dir = ROOT / "contracts" / "delivery"
+    schema_dir = ROOT / "packages" / "contracts" / "delivery"
     for name in SCHEMAS:
         path = schema_dir / name
         try:

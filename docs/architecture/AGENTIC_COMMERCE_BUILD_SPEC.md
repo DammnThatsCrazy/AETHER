@@ -181,7 +181,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 **`middleware/middleware.py` (extend)**
 - Wire `ChallengeMiddleware` as optional hook before route dispatch for registered protected resources.
 
-### 3.2 Kyber — `apps/kyber/`
+### 3.2 Kyber — `apps/kyber-web/`
 
 **New feature modules (`src/features/`)**
 - `commerce/` — hooks for revenue, treasury, spend timeline.
@@ -951,7 +951,7 @@ See §14.
 - Kyber adapter Zod parity
 - Permission enforcement per route
 
-### 12.4 Kyber tests (`apps/kyber/src/test/`)
+### 12.4 Kyber tests (`apps/kyber-web/src/test/`)
 
 Per page (Mission, Live, Noesis, Entities, Command, Diagnostics, Review, Lab):
 - Action-capable panels render with correct permissions

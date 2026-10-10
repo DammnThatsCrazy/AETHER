@@ -7,14 +7,14 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - apps/kyber/src/components/profile360/
-  - apps/kyber/src/features/profile360/
+  - apps/kyber-web/src/components/profile360/
+  - apps/kyber-web/src/features/profile360/
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "apps/kyber/src/components/profile360/": "sha256:43705af21ceedd082b13c547c9f947240b6c4da680a96268492c140271690aef"
-  "apps/kyber/src/features/profile360/": "sha256:a3a1c180ccfd9a4016d409584d480cad9efeaa2b15818ccd1336dc54afa4affd"
+  "apps/kyber-web/src/components/profile360/": "sha256:64796c4c115d0a65eb35e0596ee7a7047eb8b8ba3149eae9c206a9fd1156eb05"
+  "apps/kyber-web/src/features/profile360/": "sha256:3e4aac3b435b42d7435bb4af654be3f629cffd824766cc56ba6505e916003716"
 ---
 # Aether Profile360 Frontend Architecture
 
@@ -22,15 +22,15 @@ This document records the incremental Profile360 migration for the existing Kybe
 
 ## 1. Current frontend architecture analysis
 
-- **Routing:** `apps/kyber/src/pages/entities/entities-page.tsx` owns `/entities/:type?/:id?`, switches between the entity table and selected entity surface, and delegates selected profile detail to `Entity360Page`.
-- **Profile page composition:** `apps/kyber/src/pages/entities/entity-360.tsx` (`Entity360Page`) is a thin wrapper that renders the canonical `Profile360View` for the selected entity; `pages/profile360.tsx` mounts the same view for `/profile360/:type/:id`. `Profile360View` loads every dimension through `useProfile360`.
-- **Profile UI:** `apps/kyber/src/components/profile360/profile360-view.tsx` is the only profile view (section 11). An earlier `Entity360View` implementation in `components/entities/` was exported but never rendered once `Profile360View` took over, and it was deleted along with the components only it used.
-- **Entity cards/list:** `apps/kyber/src/components/entities/entity-list-table.tsx` provides compact operational scanning with trust/risk/anomaly/status indicators.
-- **Graph system:** `apps/kyber/src/components/graph/graph-canvas.tsx`, graph controls, toolbar, and inspector provide Cytoscape-backed graph rendering and selection.
-- **Temporal/event components:** `apps/kyber/src/components/timelines/*` and live event hooks provide existing timeline/event-feed patterns that Profile360 can reuse.
-- **State primitives:** `apps/kyber/src/state/store.ts` exposes a small `useSyncExternalStore` helper suitable for normalized Profile360 slices without introducing a new state library.
-- **Realtime primitives:** `apps/kyber/src/hooks/use-websocket.ts` and `apps/kyber/src/lib/api/websocket/client.ts` provide reconnecting websocket subscriptions.
-- **Query system:** `apps/kyber/src/lib/api/endpoints.ts` centralizes REST/GraphQL queries for profile, analytics, intelligence, identity, and agent APIs.
+- **Routing:** `apps/kyber-web/src/pages/entities/entities-page.tsx` owns `/entities/:type?/:id?`, switches between the entity table and selected entity surface, and delegates selected profile detail to `Entity360Page`.
+- **Profile page composition:** `apps/kyber-web/src/pages/entities/entity-360.tsx` (`Entity360Page`) is a thin wrapper that renders the canonical `Profile360View` for the selected entity; `pages/profile360.tsx` mounts the same view for `/profile360/:type/:id`. `Profile360View` loads every dimension through `useProfile360`.
+- **Profile UI:** `apps/kyber-web/src/components/profile360/profile360-view.tsx` is the only profile view (section 11). An earlier `Entity360View` implementation in `components/entities/` was exported but never rendered once `Profile360View` took over, and it was deleted along with the components only it used.
+- **Entity cards/list:** `apps/kyber-web/src/components/entities/entity-list-table.tsx` provides compact operational scanning with trust/risk/anomaly/status indicators.
+- **Graph system:** `apps/kyber-web/src/components/graph/graph-canvas.tsx`, graph controls, toolbar, and inspector provide Cytoscape-backed graph rendering and selection.
+- **Temporal/event components:** `apps/kyber-web/src/components/timelines/*` and live event hooks provide existing timeline/event-feed patterns that Profile360 can reuse.
+- **State primitives:** `apps/kyber-web/src/state/store.ts` exposes a small `useSyncExternalStore` helper suitable for normalized Profile360 slices without introducing a new state library.
+- **Realtime primitives:** `apps/kyber-web/src/hooks/use-websocket.ts` and `apps/kyber-web/src/lib/api/websocket/client.ts` provide reconnecting websocket subscriptions.
+- **Query system:** `apps/kyber-web/src/lib/api/endpoints.ts` centralizes REST/GraphQL queries for profile, analytics, intelligence, identity, and agent APIs.
 
 ## 2. Existing component analysis
 
@@ -38,7 +38,7 @@ Reusable building blocks retained:
 
 - `Card`, `Badge`, `StatusIndicator`, `Tabs`, `ScrollArea`, `Button`, `Input`, `TerminalSeparator` for visual continuity.
 - `GraphCanvas` for node/edge visualization.
-- Runtime fixture files were removed as part of the fail-closed data-truth work; edge-case coverage now lives inline in the Profile360 component tests (`apps/kyber/src/test/component/profile360.test.ts`).
+- Runtime fixture files were removed as part of the fail-closed data-truth work; edge-case coverage now lives inline in the Profile360 component tests (`apps/kyber-web/src/test/component/profile360.test.ts`).
 
 `Profile360View` replaced the earlier `Entity360View`; the unrendered implementation and the components only it used (`EntityScoreCard`, `NeedsHelpPanel`, a second `Profile360DrillStack` and its helpers) were deleted, so Kyber has one Profile360 implementation. `components/entities/` now holds only `EntityListTable`.
 
@@ -116,7 +116,7 @@ The profile timeline is `Profile360TimelinePanel` (the "Causality timeline"):
 - `activeSessionIds`
 - `streamStatus`
 
-This shape is instantiated with `createStore` in `apps/kyber/src/features/profile360/profile360-store.ts` and hydrated by `useProfile360` from the profile API and entity websocket updates.
+This shape is instantiated with `createStore` in `apps/kyber-web/src/features/profile360/profile360-store.ts` and hydrated by `useProfile360` from the profile API and entity websocket updates.
 
 ## 9. Query architecture
 
@@ -148,27 +148,27 @@ The following files implement the complete Profile360 frontend product:
 
 ### Core state and data layer
 
-- `apps/kyber/src/features/profile360/profile360-store.ts`: Normalized Profile360 store with `profile360Actions` covering payload upsert, drill stack, quality/consent/provenance upsert, loading/error/stale tracking, live message application with graph deduplication, and websocket status.
-- `apps/kyber/src/features/profile360/use-profile360.ts`: `useProfile360(type, id, window)` hook — fetches all Profile360 dimensions in parallel (19 simultaneous requests), builds normalized sections, subscribes to the entity websocket, and exposes filtered timeline. The `window` parameter (default `'30d'`) is passed to all window-aware API calls and is a `useEffect` dependency so changing `TimeWindowSelector` triggers a data refetch.
-- `apps/kyber/src/lib/api/endpoints.ts`: Complete API client with 50+ profile sub-routes including quality, consent, cluster, identity-confidence, merge/split history, attribution (window-aware), economic (all sub-routes), agent-executions, actions, events, outcomes, outcome-ledger, recommendations, data-freshness, activation-eligibility.
+- `apps/kyber-web/src/features/profile360/profile360-store.ts`: Normalized Profile360 store with `profile360Actions` covering payload upsert, drill stack, quality/consent/provenance upsert, loading/error/stale tracking, live message application with graph deduplication, and websocket status.
+- `apps/kyber-web/src/features/profile360/use-profile360.ts`: `useProfile360(type, id, window)` hook — fetches all Profile360 dimensions in parallel (19 simultaneous requests), builds normalized sections, subscribes to the entity websocket, and exposes filtered timeline. The `window` parameter (default `'30d'`) is passed to all window-aware API calls and is a `useEffect` dependency so changing `TimeWindowSelector` triggers a data refetch.
+- `apps/kyber-web/src/lib/api/endpoints.ts`: Complete API client with 50+ profile sub-routes including quality, consent, cluster, identity-confidence, merge/split history, attribution (window-aware), economic (all sub-routes), agent-executions, actions, events, outcomes, outcome-ledger, recommendations, data-freshness, activation-eligibility.
 
 ### Profile360 view layer (canonical)
 
-- `apps/kyber/src/components/profile360/profile360-view.tsx`: Canonical Profile360 view with 21 tabs (identity, system, financial, cluster, sessions, journeys, social, wallets, behavioral, attribution, agents, intelligence, recommendations, outcomes, consent, provenance, quality, graph, timeline, analytics, debug). Uses `TimeWindowSelector` and passes `timeWindow` to `useProfile360`. Renders `Profile360DrillStack` and `Profile360GraphPanel`.
-- `apps/kyber/src/components/profile360/profile360-graph-panel.tsx`: Graph panel with Cytoscape rendering, overlay selection (trust/risk/anomaly), node type filter, full-text search, degree-based chunking for large graphs (>150 nodes), and a graph inspector that renders `Profile360SummaryCard` when a node is selected and its metadata includes `profile_links`.
-- `apps/kyber/src/components/profile360/profile360-drill-stack.tsx`: Stackable drill panel. Each push records `kind`, `entityId`, `depth`, `openedAt` and renders a detail panel from the normalized payload.
-- `apps/kyber/src/components/profile360/profile360-section-grid.tsx`: Renders `Profile360Section` arrays with metric tiles, reference links, and data panels.
-- `apps/kyber/src/components/profile360/profile360-timeline-panel.tsx`: Timeline with filter controls and drill-on-click.
-- `apps/kyber/src/components/profile360/profile360-contextual-panels.tsx`: All 13 contextual tab panels (sessions, journeys, wallets, behavioral, attribution, cluster, agents, consent, quality, recommendations, outcomes, intelligence, provenance). The attribution panel (`Profile360AttributionPanel`) accepts a `profileId` prop and includes an **Acquisition** section surfacing `first_campaign`, `campaign_history`, `attributed_conversions`, and `attributed_revenue` from section data; each campaign history row has a **Campaign 360 →** link navigating to `/measurement/campaigns/:id?profile_id={profileId}` so operators can deep-link from a profile straight into the Campaign 360 surface pre-filtered to that entity.
+- `apps/kyber-web/src/components/profile360/profile360-view.tsx`: Canonical Profile360 view with 21 tabs (identity, system, financial, cluster, sessions, journeys, social, wallets, behavioral, attribution, agents, intelligence, recommendations, outcomes, consent, provenance, quality, graph, timeline, analytics, debug). Uses `TimeWindowSelector` and passes `timeWindow` to `useProfile360`. Renders `Profile360DrillStack` and `Profile360GraphPanel`.
+- `apps/kyber-web/src/components/profile360/profile360-graph-panel.tsx`: Graph panel with Cytoscape rendering, overlay selection (trust/risk/anomaly), node type filter, full-text search, degree-based chunking for large graphs (>150 nodes), and a graph inspector that renders `Profile360SummaryCard` when a node is selected and its metadata includes `profile_links`.
+- `apps/kyber-web/src/components/profile360/profile360-drill-stack.tsx`: Stackable drill panel. Each push records `kind`, `entityId`, `depth`, `openedAt` and renders a detail panel from the normalized payload.
+- `apps/kyber-web/src/components/profile360/profile360-section-grid.tsx`: Renders `Profile360Section` arrays with metric tiles, reference links, and data panels.
+- `apps/kyber-web/src/components/profile360/profile360-timeline-panel.tsx`: Timeline with filter controls and drill-on-click.
+- `apps/kyber-web/src/components/profile360/profile360-contextual-panels.tsx`: All 13 contextual tab panels (sessions, journeys, wallets, behavioral, attribution, cluster, agents, consent, quality, recommendations, outcomes, intelligence, provenance). The attribution panel (`Profile360AttributionPanel`) accepts a `profileId` prop and includes an **Acquisition** section surfacing `first_campaign`, `campaign_history`, `attributed_conversions`, and `attributed_revenue` from section data; each campaign history row has a **Campaign 360 →** link navigating to `/measurement/campaigns/:id?profile_id={profileId}` so operators can deep-link from a profile straight into the Campaign 360 surface pre-filtered to that entity.
 
 ### Summary card
 
-- `apps/kyber/src/components/profile360/profile360-summary-card.tsx`: Compact preview card showing avatar initials, trust/wallet/agent tiles, primary metrics with tone colours, tags, and NEEDS HELP badge. `Profile360GraphPanel` renders it in the graph inspector; `profile_links` metadata on graph nodes enables direct profile navigation.
+- `apps/kyber-web/src/components/profile360/profile360-summary-card.tsx`: Compact preview card showing avatar initials, trust/wallet/agent tiles, primary metrics with tone colours, tags, and NEEDS HELP badge. `Profile360GraphPanel` renders it in the graph inspector; `profile_links` metadata on graph nodes enables direct profile navigation.
 
 ### Fixtures and tests
 
-- The runtime `apps/kyber/src/fixtures/entities.ts` fixture file was removed (fail-closed data truth); edge-case fixtures now live inline in `apps/kyber/src/test/component/profile360.test.ts`.
-- `apps/kyber/src/test/component/profile360.test.ts`: Unit tests for `profile360Actions` (upsertPayload, drill stack, quality/consent upsert, loading/error/stale), `applyLiveMessage` (graph deduplication, timeline prepend), and `toTimelineEvent` normalizer.
+- The runtime `apps/kyber-web/src/fixtures/entities.ts` fixture file was removed (fail-closed data truth); edge-case fixtures now live inline in `apps/kyber-web/src/test/component/profile360.test.ts`.
+- `apps/kyber-web/src/test/component/profile360.test.ts`: Unit tests for `profile360Actions` (upsertPayload, drill stack, quality/consent upsert, loading/error/stale), `applyLiveMessage` (graph deduplication, timeline prepend), and `toTimelineEvent` normalizer.
 
 ## 12. Window propagation
 

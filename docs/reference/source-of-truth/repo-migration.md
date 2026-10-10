@@ -27,7 +27,7 @@ only as historical archive material.
 | `Agent Layer/` | `services/agents/` | Internal broker-coupled workers; registered, not independently deployable |
 | `GDPR & SOC2/aether-compliance/` | `services/compliance/` | Compliance control implementation |
 | `AWS Deployment/aether-aws/` | `infra/aws/` | AWS and Terraform deployment implementation |
-| `Smart Contracts/` | `contracts/smart-contracts/` | EVM and multi-chain contract project |
+| `Smart Contracts/` | `packages/contracts/smart-contracts/` | EVM and multi-chain contract project |
 | `Data Ingestion Layer/` | `docs/archive/legacy-architecture/data-ingestion-layer/` | Deprecated, un-deployed TypeScript duplicate |
 | `Data Lake Architecture/` | `docs/archive/legacy-architecture/data-lake-architecture/` | Deprecated, un-deployed TypeScript duplicate |
 | Backend orphan modules and service shells | `docs/archive/legacy-architecture/backend/` | Deprecated historical material |

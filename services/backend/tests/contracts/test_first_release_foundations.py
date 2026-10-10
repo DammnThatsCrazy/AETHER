@@ -61,13 +61,13 @@ class TestAIInvocationObservedRegistration:
     def test_sdk_consent_maps_contain_event(self):
         # The web consent map is registry-derived and lives in the generated file
         # (moved out of event-queue.ts); generated keys are JSON-quoted.
-        web = _read("packages/web/src/core/generated-consent-map.ts")
+        web = _read("packages/sdk/web/src/core/generated-consent-map.ts")
         assert re.search(r'"ai_invocation_observed":\s*"agent"', web)
 
-        android = _read("packages/android/src/main/java/com/aether/sdk/Aether.kt")
+        android = _read("packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt")
         assert '"ai_invocation_observed" to "agent"' in android
 
-        ios = _read("packages/ios/Sources/AetherSDK/Aether.swift")
+        ios = _read("packages/sdk/ios/Sources/AetherSDK/Aether.swift")
         assert "case ai_invocation_observed" in ios
         assert '.ai_invocation_observed: "agent"' in ios
 

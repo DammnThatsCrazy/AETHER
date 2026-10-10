@@ -6,11 +6,11 @@ This directory contains seven sample apps that demonstrate the Aether SDK first-
 
 | Example | Platform | SDK | Description |
 |---------|----------|-----|-------------|
-| `web-next/` | Web (Vite+React) | `@aether/web` | Full first-value journey in a modern React app, adapted from `apps/proof-web/`. |
+| `web-next/` | Web (Vite+React) | `@aether/web` | Full first-value journey in a modern React app, adapted from `tests/e2e/proof/apps/web/`. |
 | `web-script-tag/` | Web (plain HTML) | `@aether/web` (CDN) | Standalone HTML with the one-tag snippet — no bundler, no framework. |
-| `react-native/` | React Native (Expo) | `@aether/react-native` | Adapted from `apps/proof-react-native/`. |
-| `ios-swift/` | iOS (Swift reference) | Native iOS SDK (via `@aether/react-native`) | Swift wrapper README pointing to `apps/proof-ios/` for native SDK usage. |
-| `android-kotlin/` | Android (Kotlin reference) | Native Android SDK (via `@aether/react-native`) | Kotlin wrapper README pointing to `apps/proof-android/` for native SDK usage. |
+| `react-native/` | React Native (Expo) | `@aether/react-native` | Adapted from `tests/e2e/proof/apps/react-native/`. |
+| `ios-swift/` | iOS (Swift reference) | Native iOS SDK (via `@aether/react-native`) | Swift wrapper README pointing to `tests/e2e/proof/apps/ios/` for native SDK usage. |
+| `android-kotlin/` | Android (Kotlin reference) | Native Android SDK (via `@aether/react-native`) | Kotlin wrapper README pointing to `tests/e2e/proof/apps/android/` for native SDK usage. |
 | `server-node/` | Node.js server | `@aether/server` | Server-side first-value journey using the Aether Server SDK. |
 | `ecommerce-full-journey/` | Web (Vite+React) | `@aether/web` | Complete ecommerce flow: product_viewed → cart → checkout → payment → order_completed → conversion → flush. |
 
@@ -62,13 +62,13 @@ For the mobile examples (`ios-swift/`, `android-kotlin/`, `react-native/`), auto
 
 - A physical iOS device or iOS Simulator.
 - Xcode installed.
-- The `apps/proof-ios/` Expo project built and runnable.
+- The `tests/e2e/proof/apps/ios/` Expo project built and runnable.
 
 **Procedure:**
 
-1. Open `apps/proof-ios/` in Xcode or start the Expo dev server:
+1. Open `tests/e2e/proof/apps/ios/` in Xcode or start the Expo dev server:
    ```
-   cd apps/proof-ios
+   cd tests/e2e/proof/apps/ios
    npx expo start
    ```
 2. Run the app on a physical iOS device or simulator.
@@ -90,13 +90,13 @@ For the mobile examples (`ios-swift/`, `android-kotlin/`, `react-native/`), auto
 
 - A physical Android device or Android Emulator.
 - Android Studio or Expo CLI.
-- The `apps/proof-android/` Expo project built and runnable.
+- The `tests/e2e/proof/apps/android/` Expo project built and runnable.
 
 **Procedure:**
 
-1. Open `apps/proof-android/` in Android Studio or start the Expo dev server:
+1. Open `tests/e2e/proof/apps/android/` in Android Studio or start the Expo dev server:
    ```
-   cd apps/proof-android
+   cd tests/e2e/proof/apps/android
    npx expo start
    ```
 2. Run the app on a physical Android device or emulator.
@@ -131,9 +131,9 @@ For both platforms, confirm:
 
 ## Related
 
-- `apps/proof-web/` — the original web proof harness.
-- `apps/proof-react-native/` — the original React Native proof harness.
-- `apps/proof-ios/` — the original iOS proof harness.
-- `apps/proof-android/` — the original Android proof harness.
+- `tests/e2e/proof/apps/web/` — the original web proof harness.
+- `tests/e2e/proof/apps/react-native/` — the original React Native proof harness.
+- `tests/e2e/proof/apps/ios/` — the original iOS proof harness.
+- `tests/e2e/proof/apps/android/` — the original Android proof harness.
 - `scripts/smoke/web-sdk.ts`, `scripts/smoke/ios-sdk.ts`, `scripts/smoke/android-sdk.ts`, `scripts/smoke/staging.ts` — automated smoke tests.
 - `docs/reference/sdks/` — SDK documentation.

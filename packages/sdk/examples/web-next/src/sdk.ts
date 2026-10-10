@@ -1,4 +1,4 @@
-// packages/sdk/examples/web-next/src/sdk.ts — adapted from apps/proof-web/src/sdk.ts
+// packages/sdk/examples/web-next/src/sdk.ts — adapted from tests/e2e/proof/apps/web/src/sdk.ts
 // Canonical first-value journey harness: install → init → manifest → heartbeat →
 // consent → event → identify → journey → commerce → flush → backend acceptance.
 import aether, { type AetherConfig } from '@aether/web';

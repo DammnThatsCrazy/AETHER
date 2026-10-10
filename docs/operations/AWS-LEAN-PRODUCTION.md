@@ -29,11 +29,11 @@ source_hashes:
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
   "infra/aws/terraform/DECOMMISSION.md": "sha256:d6b05d282e02fcd6840078a75312165ca7a808f5344cc9e05f2eb234dcef7238"
-  "infra/aws/terraform/main.tf": "sha256:8f99fbbd2f3293a93a94af68742b18c5fe8a2c3a073772ecb1f6bf78716fe27e"
+  "infra/aws/terraform/main.tf": "sha256:68861b95a57c75d22bb0594b4bc758aa06b789205d2c4a6e771658bf419dd8b2"
   "infra/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "infra/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "infra/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
-  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:e0e9e929e6454d660a3099558c16180ae409e81dbc9bee9e26231f7f2890719b"
+  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:a2332459163543d270b1c7a0bb6157fdd5d11e67f600588eb1df425593f351fb"
   "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
 ---
 

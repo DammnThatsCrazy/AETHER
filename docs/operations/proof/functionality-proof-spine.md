@@ -54,10 +54,10 @@ The proof spine is composed of these components:
 
 These components are backed by packages in the monorepo:
 
-- `packages/proof-fixtures` — shared fixture stubs for FPS scaffolding.
-- `packages/proof-reporting` — report generators for proof results.
-- `packages/proof-runner` — the proof runner that orchestrates the run.
-- `apps/proof-web`, `apps/proof-react`, `apps/proof-ios`, `apps/proof-android`, `apps/proof-connectors` — the proof apps.
+- `tests/e2e/proof/packages/fixtures` — shared fixture stubs for FPS scaffolding.
+- `tests/e2e/proof/packages/reporting` — report generators for proof results.
+- `tests/e2e/proof/packages/runner` — the proof runner that orchestrates the run.
+- `tests/e2e/proof/apps/web`, `tests/e2e/proof/apps/react`, `tests/e2e/proof/apps/ios`, `tests/e2e/proof/apps/android`, `tests/e2e/proof/apps/connectors` — the proof apps.
 
 ## Required proof tenant spec
 

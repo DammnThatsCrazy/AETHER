@@ -73,9 +73,9 @@ Source: `implementation-plan.md` §0 plus on-disk verification on 2026-09-16.
 | Graph/interaction contracts | `packages/shared/graph-contract.ts`, `interaction-contract.ts` | H2H/H2A/A2H/A2A, interaction vocab |
 | Observation envelope registry | `packages/shared/contracts/observation-envelope-registry.json` | field registry (Envelope B) |
 | Provider adapters | `services/backend/services/providers/` | Shopify, WooCommerce, eBay, Etsy, TikTok, Walmart |
-| Proof harness | `packages/proof-runner/`, `packages/proof-fixtures/`, `packages/proof-reporting/` | existing harness |
+| Proof harness | `tests/e2e/proof/packages/runner/`, `tests/e2e/proof/packages/fixtures/`, `tests/e2e/proof/packages/reporting/` | existing harness |
 | Feature flag framework | `config/release/feature_flags/` | alpha/staging/production-lean profiles |
-| Frontend identity | `apps/aether/src/features/identity/` | TenantActivationDashboard, Profile360IdentityPanel, IdentityReviewQueue, ConflictDetail, MergeSplitAudit, SdkHealth |
+| Frontend identity | `apps/aether-web/src/features/identity/` | TenantActivationDashboard, Profile360IdentityPanel, IdentityReviewQueue, ConflictDetail, MergeSplitAudit, SdkHealth |
 
 ---
 
@@ -92,8 +92,8 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 | **Epsilon** | Split/Unmerge Engine (PR 5) | `split_service.py`, split_policy, graph_writer reversal | `split_service.py` (295 LOC), `split_policy.py`, `graph_writer.py` edge reversal + reassignment | **Done** | Split preserves raw records, moves source identities, reverses edges, increments version, queues restatement, audit preserved. |
 | **Zeta** | Projection Restatement Orchestrator (PR 6) | `projection_restatement_orchestrator.py`, durable jobs-platform queue, worker registration, merge/split/resolver wiring | `services/backend/services/projections/projection_restatement_orchestrator.py`, `services/backend/services/projections/syndicates_restatement.py`, `main.py`, `merge_ledger.py`, `split_service.py`, `resolver.py` | **Partial; staging proof pending** | Merge/split decisions and resolver decisions enqueue idempotent tenant-scoped jobs. Syndicates merge restatement uses explicitly tagged Population 360 groups; split moves only memberships whose full alias/observation evidence resolves to one fragment. Unattributed memberships remain unchanged with structured per-membership reasons. |
 | **Eta** | SDK Late Binding & Contract Parity (PR 7) | SDK routes, ingestion adapter, `sdk-contract.json`, fixture apps, `test_sdk_late_binding.py` | `sdk/routes.py` (heartbeat/identify/alias/reset/consent), `ingestion/adapters/sdk.py` (anon/user/session/device/installation/traits/consent → claims), `packages/shared/contracts/identity/sdk-contract.json`, `services/backend/tests/identity/test_sdk_late_binding.py` (11 tests) | **Done** | Import-first SDK-later + anonymous-to-known tests pass; web SDK exercised; iOS/Android/React-Native stubs scaffolded. |
-| **Theta** | Tenant UX & Explainability (PR 8) | `explainability.py`, route extensions, tenant activation and review surfaces | `explainability.py`, `routes.py`, `apps/aether/src/features/identity/` | **Implemented; local proof present** | Gated activation and review routes are wired to tenant-scoped capability and identity APIs. Fixture-backed UI tests are separate from authenticated staging UI evidence. |
-| **Iota** | Proof Harness, Observability & Release Gates (PR 9) | Fixtures, observability, flags, CI gates (§17–§22), docs (§21) | `packages/proof-reporting/`, `scripts/identity_staging_capture.py`, `.github/workflows/identity-continuity-gates.yml`, staging lifecycle workflow | **Implemented; staging proof pending** | Capture, validation, redaction, and pack generation fail closed and are wired into staging. Real connector sync and authenticated live UI evidence have not been captured because required provider secrets are not configured. |
+| **Theta** | Tenant UX & Explainability (PR 8) | `explainability.py`, route extensions, tenant activation and review surfaces | `explainability.py`, `routes.py`, `apps/aether-web/src/features/identity/` | **Implemented; local proof present** | Gated activation and review routes are wired to tenant-scoped capability and identity APIs. Fixture-backed UI tests are separate from authenticated staging UI evidence. |
+| **Iota** | Proof Harness, Observability & Release Gates (PR 9) | Fixtures, observability, flags, CI gates (§17–§22), docs (§21) | `tests/e2e/proof/packages/reporting/`, `scripts/identity_staging_capture.py`, `.github/workflows/identity-continuity-gates.yml`, staging lifecycle workflow | **Implemented; staging proof pending** | Capture, validation, redaction, and pack generation fail closed and are wired into staging. Real connector sync and authenticated live UI evidence have not been captured because required provider secrets are not configured. |
 
 ---
 
@@ -101,7 +101,7 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 
 | Item | Location | Status |
 |---|---|---|
-| Identity fixtures | `packages/proof-fixtures/fixtures/identity/` | **Expanded** — includes import-first/SDK-later, shared-device no-merge, bad-merge/split, reimport idempotency, cross-tenant, deletion suppression, and multi-SDK cases |
+| Identity fixtures | `tests/e2e/proof/packages/fixtures/fixtures/identity/` | **Expanded** — includes import-first/SDK-later, shared-device no-merge, bad-merge/split, reimport idempotency, cross-tenant, deletion suppression, and multi-SDK cases |
 | Backend identity tests | `services/backend/tests/identity/` | **Expanded** — focused modules cover resolver policy, tenant/consent boundaries, recovery, provider candidate evidence, SDK lifecycle, projections, staging capture, and calibration evaluation |
 | Observability service | `services/backend/services/identity/observability.py` + `metrics.py` | **Done** — metrics `identity.source_identity.created`, `identity.resolve.*`, `identity.merge.*`, `identity.split.*`, `identity.veto.*`, `identity.cross_tenant_block.*`, `identity.projection_restatement.*`; traces ingestion→…→profile_360.update; logs per §19.1 |
 | Feature-flag wiring | `config/release/feature_flags/` + backend settings and routes | **Wired and locally exercised** — retain runtime confidence as uncalibrated |
@@ -129,9 +129,9 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 ```bash
 ls services/backend/services/identity/*.py | wc -l   # 27 files, ~12k LOC
 ls packages/shared/contracts/identity/*.json          # 9 contracts + index.json
-ls apps/aether/src/features/identity/*.tsx        # 6 components
+ls apps/aether-web/src/features/identity/*.tsx        # 6 components
 ls services/backend/tests/identity/*.py               # 9 test modules
-cat packages/proof-fixtures/fixtures/identity/raw_input.json
+cat tests/e2e/proof/packages/fixtures/fixtures/identity/raw_input.json
 pytest services/backend/tests/identity/ -v            # run on finalization
 ```
 

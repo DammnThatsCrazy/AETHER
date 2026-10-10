@@ -6,13 +6,13 @@ visibility: I
 audience: [security, architect, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [contracts/smart-contracts/audit/README.md, contracts/smart-contracts/programs/solana/audit/README.md]
+source_files: [packages/contracts/smart-contracts/audit/README.md, packages/contracts/smart-contracts/programs/solana/audit/README.md]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
 source_hashes:
-  contracts/smart-contracts/audit/README.md: sha256:771ccec6cb43f5489a40c252119ed29a2c70f970e81190414e1ba06216e94712
-  contracts/smart-contracts/programs/solana/audit/README.md: sha256:8ef631a3b5de32d2b9ae4a87d1265dc91b6581d67bfd3d1560e950edb350140e
+  packages/contracts/smart-contracts/audit/README.md: sha256:771ccec6cb43f5489a40c252119ed29a2c70f970e81190414e1ba06216e94712
+  packages/contracts/smart-contracts/programs/solana/audit/README.md: sha256:8ef631a3b5de32d2b9ae4a87d1265dc91b6581d67bfd3d1560e950edb350140e
 ---
 
 # External Audit Preparation Guide
@@ -23,12 +23,12 @@ not duplicate them here.
 
 ## The audit packages (authoritative)
 
-- **EVM:** `contracts/smart-contracts/audit/` — `README.md`, `SCOPE.md`, `docs/architecture/ARCHITECTURE.md`,
+- **EVM:** `packages/contracts/smart-contracts/audit/` — `README.md`, `SCOPE.md`, `docs/architecture/ARCHITECTURE.md`,
   `THREAT_MODEL.md`, `TRUST_ASSUMPTIONS.md`, `STATE_TRANSITIONS.md`,
   `INVARIANTS.md`, `TEST_PLAN.md`, `EIP712_SIGNATURE_SPEC.md`, `DEPLOYMENT.md`,
   `SLITHER.md` (+ `slither-output.txt`), `KNOWN_LIMITATIONS.md`,
   `DEPENDENCIES.md`, `REPRODUCIBLE_BUILD.md`, `AUDIT_FINDING_TEMPLATE.md`.
-- **SVM (Solana):** `contracts/smart-contracts/programs/solana/audit/` — architecture,
+- **SVM (Solana):** `packages/contracts/smart-contracts/programs/solana/audit/` — architecture,
   threat model, trust assumptions, privileged roles, state transitions,
   invariants, test commands, deployment, pause/rotation, known limitations,
   clippy/build, dependency inventory, reproducible build, scope manifest,

@@ -116,8 +116,8 @@ AREAS: list[Area] = [
         "forwarding, heartbeats; iOS/Android native cores; release alignment enforced "
         "by validate_sdk_release_alignment.py and publish workflow.",
         [
-            "packages/web/",
-            "packages/react-native/",
+            "packages/sdk/web/",
+            "packages/sdk/react-native/",
             "packages/shared/",
             "scripts/validate_sdk_release_alignment.py",
         ],
@@ -216,7 +216,7 @@ AREAS: list[Area] = [
         "routes (/v1/admin/kyber, fleet, drift, intelligence quality), Playwright E2E "
         "in CI. Operator data never mounted on tenant-facing routers.",
         [
-            "apps/kyber/",
+            "apps/kyber-web/",
             ".github/workflows/kyber-e2e.yml",
             "services/backend/services/intelligence/routes.py",
         ],
@@ -231,7 +231,7 @@ AREAS: list[Area] = [
         "usage dashboard, and implementation checklist (/v1/onboarding/*). "
         "Playwright E2E suite added (5 scenarios covering root redirect, signup form, "
         "OTP verification, login fields, SSO/plan selector); CI-gated via e2e-tenant job.",
-        ["apps/aether/", "apps/aether/src/test/e2e/", "docs/product/PRODUCTIZATION.md"],
+        ["apps/aether-web/", "apps/aether-web/src/test/e2e/", "docs/product/PRODUCTIZATION.md"],
     ),
     Area(
         "connectors (BYOK / source)",
@@ -282,7 +282,7 @@ AREAS: list[Area] = [
             "services/backend/services/dune_feeder/service.py",
             "services/backend/services/dune_feeder/routes.py",
             "services/backend/services/dune_feeder/models.py",
-            "apps/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
+            "apps/kyber-web/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
     Area(
@@ -304,11 +304,11 @@ AREAS: list[Area] = [
         "persisted receipt; timeout->retry->dead-letter->operator-redeliver is pinned "
         "credentiallessly by tests/chaos. Deploy/emergency (pause, rotateOracle, "
         "upgrade-authority) documented in the EVM/SVM runbooks pointing at the audit "
-        "packages under contracts/smart-contracts/audit and programs/solana/audit. "
+        "packages under packages/contracts/smart-contracts/audit and programs/solana/audit. "
         "NO external certification yet — do not deploy to mainnet until external audit complete.",
         [
-            "contracts/smart-contracts/contracts/AnalyticsRewards.sol",
-            "contracts/smart-contracts/test/AnalyticsRewards.test.js",
+            "packages/contracts/smart-contracts/contracts/AnalyticsRewards.sol",
+            "packages/contracts/smart-contracts/test/AnalyticsRewards.test.js",
             ".github/workflows/smart-contract-analysis.yml",
             "services/backend/services/rewards/policy_engine.py",
             "services/backend/services/rewards/rails.py",
@@ -360,7 +360,7 @@ AREAS: list[Area] = [
             "packages/shared/events.ts",
             "packages/shared/agent.ts",
             "packages/shared/x402-lifecycle.ts",
-            "packages/web/src/index.ts",
+            "packages/sdk/web/src/index.ts",
             "services/backend/services/x402/lifecycle_mapper.py",
             "services/backend/services/agent/lifecycle_mapper.py",
             "services/backend/services/profile/agent.py",
@@ -419,7 +419,7 @@ AREAS: list[Area] = [
             "services/backend/tests/e2e/test_b2b_account_flow.py",
             "services/backend/tests/e2e/test_privacy_consent_flow.py",
             "services/backend/tests/e2e/test_agent_web3_attribution_flow.py",
-            "apps/kyber/src/pages/measurement/",
+            "apps/kyber-web/src/pages/measurement/",
             "infra/clickhouse/schemas/008_measurement_gold.sql",
             "infra/observability/grafana/dashboards/measurement-slos.json",
         ],
@@ -517,11 +517,11 @@ AREAS: list[Area] = [
             "services/backend/tests/e2e/test_campaign_registry_e2e.py",
             "services/backend/tests/security/test_campaign_registry_security.py",
             "packages/shared/acquisition-evidence.ts",
-            "apps/aether/src/pages/campaigns/campaign-sources-page.tsx",
-            "apps/aether/src/pages/campaigns/campaign-registry-page.tsx",
-            "apps/aether/src/pages/campaigns/mapping-review-page.tsx",
-            "apps/aether/src/pages/campaigns/campaign-quality-page.tsx",
-            "apps/kyber/src/pages/measurement/campaign-registry-health-page.tsx",
+            "apps/aether-web/src/pages/campaigns/campaign-sources-page.tsx",
+            "apps/aether-web/src/pages/campaigns/campaign-registry-page.tsx",
+            "apps/aether-web/src/pages/campaigns/mapping-review-page.tsx",
+            "apps/aether-web/src/pages/campaigns/campaign-quality-page.tsx",
+            "apps/kyber-web/src/pages/measurement/campaign-registry-health-page.tsx",
             "scripts/campaign/backfill_campaign_ids.py",
             "scripts/campaign/check_campaign_release_gate.py",
             "docs/product/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
@@ -907,7 +907,7 @@ def _check_agentic_x402_files() -> list[str]:
     """Return list of missing required agentic x402 productization files."""
     required = [
         "packages/shared/x402-lifecycle.ts",
-        "packages/web/src/index.ts",
+        "packages/sdk/web/src/index.ts",
         "services/backend/services/x402/lifecycle_mapper.py",
         "services/backend/services/agent/lifecycle_mapper.py",
         "services/backend/services/profile/agent.py",

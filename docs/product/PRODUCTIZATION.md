@@ -108,7 +108,7 @@ matters, and what it means for the product moving forward.
 ### What was done (themes)
 
 - **Mobile surfaces** — `GET /v1/mobile/config` + distribution profiles;
-  `packages/mobile-ui` (theme, typed navigation); offline cache framework; Aether
+  `packages/ui/mobile` (theme, typed navigation); offline cache framework; Aether
   Mobile screens (Today / Copilot / Explore / Alerts / Account); Kyber Mobile
   operator screens (Pulse / Exceptions / Incidents / Runs / Reviews / Briefings);
   Aether desktop notification center with quiet-hours/timezone preference
@@ -181,7 +181,7 @@ now complete are documented in the "What's Production-Ready" section above.
 
 **What's missing:** No Playwright/Cypress suite covering the signup → OTP → API key reveal → billing portal flow. Without automated coverage this critical path cannot be verified on every deploy.
 
-**Required:** `apps/aether/src/test/e2e/onboarding-critical-path.spec.ts` — signup, OTP verify, API key reveal, SDK snippet rendered, billing redirect. Edge cases: invalid email, expired OTP, plan change.
+**Required:** `apps/aether-web/src/test/e2e/onboarding-critical-path.spec.ts` — signup, OTP verify, API key reveal, SDK snippet rendered, billing redirect. Edge cases: invalid email, expired OTP, plan change.
 
 **Estimated effort:** 1–2 weeks
 

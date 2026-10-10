@@ -271,7 +271,7 @@ These produce variable confidence (0.0-1.0) and are combined using weighted comp
 
 ### Web SDK
 
-The `DeviceFingerprintCollector` in `packages/web/src/core/fingerprint.ts` generates a SHA-256 hash from 17 browser signals:
+The `DeviceFingerprintCollector` in `packages/sdk/web/src/core/fingerprint.ts` generates a SHA-256 hash from 17 browser signals:
 
 | Signal | Uniqueness | Collection Method |
 |---|---|---|

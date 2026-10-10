@@ -9,7 +9,7 @@ def _ids(result: dict) -> set[str]:
 
 
 def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None:
-    result = build_disposition(["apps/aether/src/pages/profile.tsx"])
+    result = build_disposition(["apps/aether-web/src/pages/profile.tsx"])
 
     assert result["authority"] == "verification"
     assert result["blocking"] is True
@@ -20,11 +20,11 @@ def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None
     assert result["build_selection"]["packages"] == ["shared"]
     assert result["build_selection"]["applications"] == ["aether"]
     assert result["build_selection"]["workspaces"] == [
-        "packages/brand",
         "packages/shared",
-        "apps/shared",
-        "packages/web",
-        "apps/aether",
+        "packages/ui/brand",
+        "packages/sdk/web",
+        "packages/ui/core",
+        "apps/aether-web",
     ]
     assert result["build_selection"]["backend_image"] is False
     assert result["build_selection"]["sdk"] == {
@@ -35,19 +35,19 @@ def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None
 
 
 def test_package_workspace_change_selects_its_build_and_dependencies() -> None:
-    result = build_disposition(["packages/server/src/index.ts"])
+    result = build_disposition(["packages/sdk/server/src/index.ts"])
 
     assert result["build_selection"]["workspaces"] == [
         "packages/shared",
-        "packages/server",
+        "packages/sdk/server",
     ]
 
 
 def test_brand_mark_change_rebuilds_the_unified_site() -> None:
-    result = build_disposition(["packages/brand/src/identity/marks/logo-olympus-arch.svg"])
+    result = build_disposition(["packages/ui/brand/src/identity/marks/logo-olympus-arch.svg"])
 
     assert "site" in result["build_selection"]["applications"]
-    assert "apps/site" in result["build_selection"]["workspaces"]
+    assert "apps/public-site" in result["build_selection"]["workspaces"]
 
 
 def test_global_node_dependency_change_selects_every_buildable_workspace() -> None:
@@ -55,16 +55,16 @@ def test_global_node_dependency_change_selects_every_buildable_workspace() -> No
 
     buildable = {
         "packages/shared",
-        "packages/web",
-        "packages/server",
-        "packages/react-native",
-        "packages/mobile-core",
-        "apps/aether",
-        "apps/kyber",
+        "packages/sdk/web",
+        "packages/sdk/server",
+        "packages/sdk/react-native",
+        "packages/sdk/mobile-core",
+        "apps/aether-web",
+        "apps/kyber-web",
         "apps/docs",
         "apps/demo",
-        "apps/olympus-marketing",
-        "apps/aether-marketing",
+        "apps/marketing-olympus",
+        "apps/marketing-aether",
     }
     assert buildable <= set(result["build_selection"]["workspaces"])
 

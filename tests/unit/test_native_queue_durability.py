@@ -8,8 +8,8 @@ regression of the persistence/requeue invariants.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-IOS = ROOT / "packages/ios/Sources/AetherSDK/Aether.swift"
-ANDROID = ROOT / "packages/android/src/main/java/com/aether/sdk/Aether.kt"
+IOS = ROOT / "packages/sdk/ios/Sources/AetherSDK/Aether.swift"
+ANDROID = ROOT / "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt"
 
 
 def test_ios_queue_is_versioned_atomic_bounded_and_corruption_aware():

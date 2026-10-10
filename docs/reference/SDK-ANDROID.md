@@ -6,12 +6,12 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/android/src/main/java/com/aether/sdk/Aether.kt, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt, packages/shared/events.ts, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:09513301edf6ede4d54474b21af499021dc6f2975c5ab962587adc6ed42c1bb7"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:563ae6f6e758996cd0e90210aecaae05511a3f64c5f6f62e7598606c8737e42c"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:79883c251f1b5e9cd493fe08983da78a204f2af69e91d1e2a61036d67e338363"
 ---

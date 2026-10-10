@@ -40,15 +40,15 @@ CLAIMED_STATUSES = {"supported", "partial", "delegated_native"}
 # Per-SDK test manifests: (glob patterns rooted at repo root, test-case regex).
 # These are the real on-disk test corpora — no aspirational entries.
 TEST_CORPUS: dict[str, tuple[tuple[str, ...], str]] = {
-    "web": (("packages/web/test/**/*.test.ts", "packages/web/test/**/*.test.tsx"),
+    "web": (("packages/sdk/web/test/**/*.test.ts", "packages/sdk/web/test/**/*.test.tsx"),
             r"\b(?:it|test)\s*\("),
-    "server": (("packages/server/src/**/*.test.ts",), r"\b(?:it|test)\s*\("),
-    "react-native": (("packages/react-native/src/**/*.test.ts",
-                      "packages/react-native/src/**/*.test.tsx"),
+    "server": (("packages/sdk/server/src/**/*.test.ts",), r"\b(?:it|test)\s*\("),
+    "react-native": (("packages/sdk/react-native/src/**/*.test.ts",
+                      "packages/sdk/react-native/src/**/*.test.tsx"),
                      r"\b(?:it|test)\s*\("),
-    "ios": (("packages/ios/Tests/**/*.swift",), r"\bfunc\s+test"),
-    "android": (("packages/android/src/test/**/*.kt",), r"@Test\b"),
-    "python": (("packages/python/**/test_*.py",), r"\bdef\s+test_"),
+    "ios": (("packages/sdk/ios/Tests/**/*.swift",), r"\bfunc\s+test"),
+    "android": (("packages/sdk/android/src/test/**/*.kt",), r"@Test\b"),
+    "python": (("packages/sdk/python/**/test_*.py",), r"\bdef\s+test_"),
 }
 
 

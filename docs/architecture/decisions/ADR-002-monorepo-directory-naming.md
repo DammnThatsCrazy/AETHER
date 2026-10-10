@@ -34,7 +34,7 @@ Smart Contracts/
 
 PR #627 documented the migration but did not move the implementation tree. The
 follow-up remediation completed that move: active code is now under `services/`,
-`infra/`, and `contracts/`; only historical material remains under
+`infra/`, and `packages/contracts/`; only historical material remains under
 `docs/archive/legacy-architecture/`. The names below are historical labels,
 not live paths.
 
@@ -62,7 +62,7 @@ CI still quotes variable expansions at command boundaries.
 | `Data Lake Architecture/` | `docs/archive/legacy-architecture/data-lake-architecture/` |
 | `GDPR & SOC2/aether-compliance/` | `services/compliance/` |
 | `ML Models/aether-ml/` | `services/ml/` |
-| `Smart Contracts/` | `contracts/smart-contracts/` |
+| `Smart Contracts/` | `packages/contracts/smart-contracts/` |
 
 The migration was atomic across the root tree, import references, CI YAML,
 Makefile paths, test paths, source-linked docs, registries, and readiness

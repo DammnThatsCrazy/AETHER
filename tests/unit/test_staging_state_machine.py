@@ -78,7 +78,7 @@ def test_checkpoint_is_schema_valid_and_resumes_at_first_incomplete_stage(tmp_pa
     assert final_state["phase"] == "complete"
     assert final_state["resume_count"] == 1
     jsonschema.Draft202012Validator(
-        json.loads((ROOT / "contracts/delivery/staging-orchestration-state.schema.json").read_text()),
+        json.loads((ROOT / "packages/contracts/delivery/staging-orchestration-state.schema.json").read_text()),
         format_checker=jsonschema.FormatChecker(),
     ).validate(final_state)
 

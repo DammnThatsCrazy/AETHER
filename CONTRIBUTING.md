@@ -14,18 +14,18 @@ pip install -e ".[backend]" --ignore-installed PyJWT
 npm ci
 
 cp config/environments/.env.example .env
-cp apps/aether/.env.example apps/aether/.env.local
+cp apps/aether-web/.env.example apps/aether-web/.env.local
 
 docker compose up -d postgres
 make serve-backend          # → http://localhost:8000
 
-cd apps/aether && npm run dev   # → http://localhost:5175
-cd apps/kyber  && npm run dev   # → http://localhost:5174
+cd apps/aether-web && npm run dev   # → http://localhost:5175
+cd apps/kyber-web  && npm run dev   # → http://localhost:5174
 ```
 
 ## Environment
 
-Set `AETHER_ENV=local` in `.env` for development. This enables in-memory fallbacks for Kafka and Neptune — only PostgreSQL is required locally. Set `VITE_AETHER_ENV=local-mocked` in `apps/aether/.env.local` to develop the UI without a running backend.
+Set `AETHER_ENV=local` in `.env` for development. This enables in-memory fallbacks for Kafka and Neptune — only PostgreSQL is required locally. Set `VITE_AETHER_ENV=local-mocked` in `apps/aether-web/.env.local` to develop the UI without a running backend.
 
 ## Code Standards
 

@@ -5,10 +5,10 @@ on:
     branches: [main]
     paths:
       - 'packages/shared/**'
-      - 'packages/web/**'
-      - 'packages/react-native/**'
-      - 'packages/ios/**'
-      - 'packages/android/**'
+      - 'packages/sdk/web/**'
+      - 'packages/sdk/react-native/**'
+      - 'packages/sdk/ios/**'
+      - 'packages/sdk/android/**'
       - 'docs/SDK*.md'
       - 'docs/reference/source-of-truth/**'
       - 'docs/reference/reports/**'
@@ -27,10 +27,10 @@ on:
     types: [ready_for_review]
     paths:
       - 'packages/shared/**'
-      - 'packages/web/**'
-      - 'packages/react-native/**'
-      - 'packages/ios/**'
-      - 'packages/android/**'
+      - 'packages/sdk/web/**'
+      - 'packages/sdk/react-native/**'
+      - 'packages/sdk/ios/**'
+      - 'packages/sdk/android/**'
       - 'docs/SDK*.md'
       - 'scripts/validate_sdk_release_alignment.py'
       - 'scripts/release/sdk_conformance.py'
@@ -57,31 +57,31 @@ jobs:
       - name: Shared tests with coverage threshold
         run: npm run test --workspace=packages/shared -- --coverage --coverage.thresholds.lines=95 --coverage.thresholds.branches=80 --coverage.thresholds.functions=95 --coverage.thresholds.statements=95
       - name: Web tests with coverage threshold
-        run: npm run test --workspace=packages/web -- --coverage --coverage.thresholds.lines=65 --coverage.thresholds.branches=65 --coverage.thresholds.functions=55 --coverage.thresholds.statements=65
+        run: npm run test --workspace=packages/sdk/web -- --coverage --coverage.thresholds.lines=65 --coverage.thresholds.branches=65 --coverage.thresholds.functions=55 --coverage.thresholds.statements=65
       - name: React Native tests with coverage threshold
-        run: npm run test --workspace=packages/react-native -- --coverage --coverage.thresholds.lines=75 --coverage.thresholds.branches=73 --coverage.thresholds.functions=55 --coverage.thresholds.statements=75
+        run: npm run test --workspace=packages/sdk/react-native -- --coverage --coverage.thresholds.lines=75 --coverage.thresholds.branches=73 --coverage.thresholds.functions=55 --coverage.thresholds.statements=75
       - name: Build publish artifacts
         run: |
           npm run build --workspace=packages/shared
-          npm run build --workspace=packages/web
-          npm run build --workspace=packages/react-native
+          npm run build --workspace=packages/sdk/web
+          npm run build --workspace=packages/sdk/react-native
           npm pack --workspace=packages/shared --dry-run
-          npm pack --workspace=packages/web --dry-run
-          npm pack --workspace=packages/react-native --dry-run
+          npm pack --workspace=packages/sdk/web --dry-run
+          npm pack --workspace=packages/sdk/react-native --dry-run
       - name: Distribution wiring gate
         run: python scripts/validate_sdk_distribution_artifacts.py
       - name: Verify web SDK package artifacts
         # Guards the tarball npm would actually publish: every declared artifact
         # present and non-empty, entry points resolvable, bundles within budget.
-        run: npm run verify:artifacts --workspace=packages/web
+        run: npm run verify:artifacts --workspace=packages/sdk/web
       - name: Verify CDN loader artifacts
         # Explicit belt-and-braces check. The verifier above asserts the same
         # files, but these fail loudly and early if the verifier itself regresses.
         run: |
-          test -f packages/web/dist/loader.js
-          test -f packages/web/dist/loader.mjs
-          test -f packages/web/dist/aether.umd.js
-          test -f packages/web/dist/aether.esm.js
+          test -f packages/sdk/web/dist/loader.js
+          test -f packages/sdk/web/dist/loader.mjs
+          test -f packages/sdk/web/dist/aether.umd.js
+          test -f packages/sdk/web/dist/aether.esm.js
       - name: Record JS release evidence
         run: |
           mkdir -p release-evidence
@@ -129,10 +129,10 @@ jobs:
         with:
           gradle-version: '8.5'
       - name: Android unit tests
-        working-directory: packages/android
+        working-directory: packages/sdk/android
         run: gradle test
       - name: Android release build and Maven dry run
-        working-directory: packages/android
+        working-directory: packages/sdk/android
         run: gradle assembleRelease publishToMavenLocal
       - name: Record Android release evidence
         run: |
@@ -166,7 +166,7 @@ jobs:
           echo "Using iPhone simulator $simulator_udid"
           echo "udid=$simulator_udid" >> "$GITHUB_OUTPUT"
       - name: Swift package tests with coverage
-        working-directory: packages/ios
+        working-directory: packages/sdk/ios
         run: |
           xcodebuild test \
             -scheme AetherSDK \
@@ -176,8 +176,8 @@ jobs:
       - name: CocoaPods podspec dry-run lint
         run: |
           gem install cocoapods --no-document
-          pod spec lint packages/ios/AetherSDK.podspec --allow-warnings --quick
-          pod spec lint packages/react-native/aether-react-native.podspec --allow-warnings --quick
+          pod spec lint packages/sdk/ios/AetherSDK.podspec --allow-warnings --quick
+          pod spec lint packages/sdk/react-native/aether-react-native.podspec --allow-warnings --quick
       - name: Record iOS release evidence
         run: |
           mkdir -p release-evidence
