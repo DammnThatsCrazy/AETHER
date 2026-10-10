@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:5c09be612dc7f64ca3cc0943fffdbfb2592ec7bf8522e99b8a1b6fd3c6b94aef"
+  ".github/workflows/": "sha256:a755c3d4a9aa029ffc75bd1e221f564f2794d61d01a8697e41b1f96b24feee08"
   "cicd/aether-cicd/README.md": "sha256:4555c23d9f16d1d6882bc1f1d14b23e750d5b08c741ea02d16e504dd866d7e71"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -329,8 +329,8 @@ own environment:
 | Production | `main` | Aether Production (`AETHER-production-web`) | promoted explicitly (`deploy.yml` dispatch with an approved immutable build) |
 
 Feature branches open PRs into `Development` (squash). `Development` is promoted
-to `staging`, and `staging` to `main`, with merge commits so that `main` is an
-ancestor of `staging` and `staging` of `Development`. Every merge to `main`
+to `staging`, and `staging` to `main`, with merge commits, so after a promotion
+`Development` is an ancestor of `staging` and `staging` is an ancestor of `main`. Every merge to `main`
 deploys the production web app (`amplify-status-production.yml`); production
 backend delivery stays a deliberate, approved promotion. Push-time verification
 (`repo-consistency`, `repo-health`, the Aether and Kyber suites, functionality
@@ -338,8 +338,17 @@ proof, infrastructure plan, production-equivalent CI) runs on all three branches
 so each gate has its own evidence.
 
 Staging authority gates (`deploy.yml`, `staging-lifecycle.yml`,
-`pilot-staging.yml`) require the source to be a merged `staging` SHA. The
-plan-role reconciliation workflow keeps its stricter merged-`main` requirement.
+`pilot-staging.yml`, `staging-business-hours.yml`) require the source to be a
+merged `staging` SHA, and `deploy.yml` also refuses to run for a target from the
+wrong ref (staging from `staging`, production from `main`), including on manual
+dispatch. The staging preflight checks the production app against `main`'s own
+head, because production lags the staging commit. The plan-role reconciliation
+workflow keeps its stricter merged-`main` requirement. The staging plan and
+secret-preflight IAM roles must trust the `refs/heads/staging` OIDC subject
+(`config/staging_plan_trust_policy.json`,
+`config/staging_secret_preflight_trust_policy.json`); the live roles are updated
+by running the reconciliation workflow from `main` or an equivalent reviewed
+IAM change, and the staging Amplify branch exists only after the Terraform apply.
 
 ## Reference model — AWS accounts
 

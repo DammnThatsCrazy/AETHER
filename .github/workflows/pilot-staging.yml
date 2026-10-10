@@ -393,8 +393,8 @@ jobs:
             echo '::error::pilot-staging.yml accepts deployment_lane=pilot only; full staging remains on its existing entry points'
             exit 1
           }
-          test "$REF_NAME" = main || {
-            echo "::error::pilot staging must run from main, not ${REF_NAME}"
+          test "$REF_NAME" = staging || {
+            echo "::error::pilot staging must run from staging, not ${REF_NAME}"
             exit 1
           }
 

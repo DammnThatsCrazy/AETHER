@@ -69,6 +69,21 @@ jobs:
     outputs:
       armed: ${{ steps.check.outputs.armed }}
     steps:
+      - name: Require the promotion branch for this target
+        # Staging is delivered only from the persistent staging branch and
+        # production only from main, whichever way the run started (a manual
+        # dispatch cannot select a different ref's authority).
+        env:
+          TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+        run: |
+          set -euo pipefail
+          case "$TARGET_ENV" in
+            staging) want=staging ;;
+            production) want=main ;;
+            *) echo "::error::unknown delivery target ${TARGET_ENV}"; exit 1 ;;
+          esac
+          test "$GITHUB_REF_NAME" = "$want" || {
+            echo "::error::${TARGET_ENV} delivery must run from ${want}, not ${GITHUB_REF_NAME}"; exit 1; }
       - name: Detect whether the deploy role is configured
         id: check
         env:
