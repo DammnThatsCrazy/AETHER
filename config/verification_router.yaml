@@ -201,7 +201,7 @@ domains:
     minimum_lane: pr
   sdk:
     owner: sdk
-    paths: [packages/**, vitest.config.fps.ts, sdk-fixtures/**]
+    paths: [packages/**, vitest.config.fps.ts, tests/fixtures/sdk/**]
     checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, contracts]
     path_checks:
       packages/shared/**: [sdk-shared, functionality-proof-ts]
@@ -209,7 +209,7 @@ domains:
       packages/server/**: [sdk-server]
       packages/react-native/**: [sdk-react-native, functionality-proof-ts]
       vitest.config.fps.ts: [functionality-proof-ts]
-      sdk-fixtures/**: [functionality-proof-ts]
+      tests/fixtures/sdk/**: [functionality-proof-ts]
       packages/proof-contracts/**: [functionality-proof-ts]
       packages/proof-fixtures/**: [functionality-proof-ts]
     minimum_lane: pr
@@ -220,12 +220,12 @@ domains:
     minimum_lane: pr
   infrastructure:
     owner: platform
-    paths: [docs/archive/legacy-architecture/aws-deployment/**, deploy/**, docker-compose.yml]
+    paths: [docs/archive/legacy-architecture/aws-deployment/**, infra/**, infra/local/docker-compose.yml]
     checks: [integration]
     minimum_lane: integration
   documentation:
     owner: docs
-    paths: [docs/**, README.md, DEVELOPMENT.md, CONTRIBUTING.md, ARCHITECTURE.md, RELEASES.md, SECURITY.md, VERSION, CHANGELOG.md, .github/CODEOWNERS, .github/pull_request_template.md, AGENTS.md, CLAUDE.md, .codex/instructions.md]
+    paths: [docs/**, README.md, docs/operations/DEVELOPMENT.md, CONTRIBUTING.md, docs/architecture/ARCHITECTURE.md, docs/operations/RELEASES.md, SECURITY.md, VERSION, CHANGELOG.md, .github/CODEOWNERS, .github/pull_request_template.md, AGENTS.md, CLAUDE.md, .codex/instructions.md]
     checks: [docs]
     minimum_lane: fast
 

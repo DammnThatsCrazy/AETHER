@@ -233,7 +233,7 @@ build time, source-trust/consent/idempotency/lineage stay the WS-B gateway's job
 
 - `ObservationEnvelopeConfig` frozen dataclass + `settings.observation_envelope` root field
   (`services/backend/config/settings.py`); operator-facing flag block in
-  `.env.production.example` next to the Ingestion V2 flags.
+  `config/environments/.env.production.example` next to the Ingestion V2 flags.
 - SDK mapping `services/backend/services/ingestion/observation_envelope.py`:
   normalized SDK dict → envelope; subject `trust_class` derived from `EVENT_FIELD_TRUST`
   (WS-A2) — `user_id` → CLIENT_HINT (fallback), `anonymous_id` → OBSERVED — never above the
@@ -252,7 +252,7 @@ build time, source-trust/consent/idempotency/lineage stay the WS-B gateway's job
 | Field registry | `observation-envelope-registry.json` with §3 blocks, requiredness, vocabularies, naming resolutions, passthrough-block note (acquisition/application/surface/device/network/payload fields NOT re-declared — A-side EventContext/AcquisitionEvidence owns that shape) | ✅ implemented (this slice) |
 | Runtime model | `shared/observation/envelope.py`: ObservationBlock/TenancyBlock/SourceBlock/SubjectRef/TemporalBlock/CorrelationBlock/PrivacyBlock/ProvenanceBlock/QualityBlock/LineageBlock + UniversalObservationEnvelope, extra=forbid, curated-vocab validators, `to_bronze_additive` | ✅ implemented (this slice) |
 | Passive TS twin + barrel | `observation-envelope.ts` (mirror interfaces + SOURCE_TYPES/IDENTIFIER_TYPES/CREDENTIAL_CLASSES/TRUST_CLASSES `as const` + schema-version const), exported from `packages/shared/index.ts` | ✅ implemented (this slice) |
-| Flag-gated adoption | `ObservationEnvelopeConfig` (OFF), mapping module, batch V1 attach point, `.env.production.example` block | ✅ implemented (this slice) |
+| Flag-gated adoption | `ObservationEnvelopeConfig` (OFF), mapping module, batch V1 attach point, `config/environments/.env.production.example` block | ✅ implemented (this slice) |
 | Parity + unit coverage | `tests/contracts/test_observation_envelope_parity.py` (registry↔TS↔Py + TRUST_CLASSES == TRUST_CLASS_ORDER + barrel/passive guards); `tests/unit/observation/{conftest,test_observation_envelope}.py` (construction/extra=forbid/vocab/mapping/trust-override/temporal/degrade/flag-attach) | ✅ implemented (this slice) |
 | Gap matrix / ledger | Point 2 "Two-Envelope Architecture" MISSING → **PARTIAL** (evidence + owning phase WS-A5→WS-B); this ledger section | ✅ implemented (this slice) |
 
@@ -476,7 +476,7 @@ adapter id/version, `source_trust` = adapter-asserted or credential_class) +
 `QualityBlock(validation_state="gateway:accepted")`, returning the stamped
 `to_bronze_additive()` dict. A new default-OFF `ingress_gateway` config block
 (`AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED=false`) is documented in
-`.env.production.example`.
+`config/environments/.env.production.example`.
 
 **Degrade-safe `/v1/batch` adoption (commit `fc0bba24`).** Under the WS-A5
 `observation_envelope.enabled` block, batch.py builds the SDK envelope through
@@ -491,7 +491,7 @@ a warning + metric, preserving the existing V1 contract.
 | Ingress adapter registry | `services/backend/services/ingestion/adapters/` — base ABC + `SdkIngressAdapter` + family registry (7 families in `SOURCE_TYPES` order, 6 `declared`), module-end binds to Envelope-B tuples | ✅ implemented (this slice) |
 | SDK adapter | `SdkIngressAdapter` (PUBLIC_CLIENT, blueprint §11) delegating to `build_sdk_observation_envelope`; provenance block stamps `adapter="sdk"` | ✅ implemented (this slice) |
 | Validated gateway | `services/backend/services/ingestion/gateway.py` `validate_and_stamp` — schema/type/family/tenant rejects + provenance/quality stamping + additive result | ✅ implemented (this slice) |
-| Flag + operator block | `AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED=false` (Settings `ingress_gateway` + `.env.production.example`) | ✅ implemented (this slice) |
+| Flag + operator block | `AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED=false` (Settings `ingress_gateway` + `config/environments/.env.production.example`) | ✅ implemented (this slice) |
 | Batch adoption | flag-gated adapter+gateway adoption under the WS-A5 envelope block; degrade-safe (reject leaves no envelope key, no 500) | ✅ implemented (this slice) |
 | Suites | `tests/unit/observation/test_ingress_adapter_registry.py` (8) + `test_ingress_gateway.py` (7) + updated envelope grep guard | ✅ implemented (this slice) |
 | Ownership | `ingress_adapter_registry` category (JSON) + row (`REPO_CONSISTENCY_OWNERSHIP.md`) + `TARGET_ARCHITECTURE.md` registry/gateway prose | ✅ implemented (this slice) |
@@ -773,7 +773,7 @@ lane is above; each row records its slice commit(s) and content.
 
 | Item | Why | Where tracked |
 |---|---|---|
-| Physical root-tree realignment of the two legacy TS trees + orphaned backend modules | **Completed after PR #627**: active trees moved to `services/`, `deploy/aws/`, and `contracts/smart-contracts/`; historical material retained under `docs/archive/legacy-architecture/` and guarded by ownership/impact gates | `docs/source-of-truth/repo-truth.md`, `scripts/allowlists/repo_tree_ownership.json` |
+| Physical root-tree realignment of the two legacy TS trees + orphaned backend modules | **Completed after PR #627**: active trees moved to `services/`, `infra/aws/`, and `contracts/smart-contracts/`; historical material retained under `docs/archive/legacy-architecture/` and guarded by ownership/impact gates | `docs/source-of-truth/repo-truth.md`, `scripts/allowlists/repo_tree_ownership.json` |
 | Envelope B + field-trust implementation | Deliberately out of Phase 0 | WS-A |
 | Consent/privacy on every ingress path | Server-authoritative on `/v1/batch` only today | WS-B |
 | Single observation model / normalization spine | ≥5 Bronze/Silver pipelines at baseline | WS-B |

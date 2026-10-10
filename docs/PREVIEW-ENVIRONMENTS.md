@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 source_files:
   - .github/workflows/frontend-preview.yml
   - config/staging_frontend_preview_iam_policy.yaml
-  - deploy/aws/terraform/main.tf
+  - infra/aws/terraform/main.tf
   - services/backend/shared/security/cors.py
 ---
 

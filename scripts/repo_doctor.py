@@ -1165,7 +1165,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation=(
             "a compose file is presenting itself as the canonical staging profile "
             "(provisions forbidden MSK/ElastiCache/Prometheus). The stale stack must "
-            "stay quarantined under deploy/legacy-staging/ with the LEGACY marker; "
+            "stay quarantined under infra/legacy-staging/ with the LEGACY marker; "
             "canonical staging is Terraform (profiles/staging.tfvars)"
         ),
     )

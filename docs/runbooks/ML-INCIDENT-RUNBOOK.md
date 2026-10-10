@@ -7,11 +7,11 @@ audience: [architect, dev-senior, ops]
 status: stable
 since_version: 0.1.0
 canonical_owner: ml@aether
-source_files: [services/ml/serving/src/api.py, services/ml/common/artifact_registry.py, services/ml/monitoring/monitor.py, deploy/observability/prometheus/alert_rules.yml]
+source_files: [services/ml/serving/src/api.py, services/ml/common/artifact_registry.py, services/ml/monitoring/monitor.py, infra/observability/prometheus/alert_rules.yml]
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "deploy/observability/prometheus/alert_rules.yml": "sha256:5e8f65fa818bb0d5de947050f6925bac3fd4665facc9e262d16c46a9f3030586"
+  "infra/observability/prometheus/alert_rules.yml": "sha256:5e8f65fa818bb0d5de947050f6925bac3fd4665facc9e262d16c46a9f3030586"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/monitoring/monitor.py": "sha256:dead8fcf2862488278dbfdff89a84a90d068dcc38d5ed750a3d103372589cd08"
   "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"

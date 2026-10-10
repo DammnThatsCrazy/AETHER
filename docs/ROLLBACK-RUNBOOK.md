@@ -7,12 +7,12 @@ audience: [ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - cicd/aether-cicd/stages/cd/
+  - infra/cicd/aether-cicd/stages/cd/
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "cicd/aether-cicd/stages/cd/": "sha256:5ee749c2505c1339950a3edacd226a837b3511864a30f33facab18c736a3ed47"
+  "infra/cicd/aether-cicd/stages/cd/": "sha256:fa388e01d86bc2ee1d8151097d0488b1eb5108318c7bcdc862e2678db91cf3b6"
 ---
 # Rollback Runbook — Aether Platform v0.1.0-alpha.0
 
@@ -71,7 +71,7 @@ If images are pre-built and tagged:
 # Faster: just swap image tags
 docker compose down backend ml-serving
 
-# Edit docker-compose.yml or use override
+# Edit infra/local/docker-compose.yml or use override
 export BACKEND_IMAGE=aether-backend:v8.6.0
 export ML_IMAGE=aether-ml-serving:v8.6.0
 docker compose up -d backend ml-serving
@@ -82,7 +82,7 @@ docker compose up -d backend ml-serving
 **Time to recovery: 5-10 minutes**
 
 ```bash
-cd "deploy/aws"
+cd "infra/aws"
 
 # Roll back to previous task definition revision
 aws ecs update-service \
@@ -105,7 +105,7 @@ watch -n 5 'aws ecs describe-services \
 Alternatively, revert Terraform:
 
 ```bash
-git checkout v8.6.0 -- "deploy/aws/"
+git checkout v8.6.0 -- "infra/aws/"
 terraform plan -var="image_tag=v8.6.0"
 terraform apply -var="image_tag=v8.6.0"
 ```

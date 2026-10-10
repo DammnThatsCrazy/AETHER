@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-OUTPUT = ROOT / "artifacts" / "frontend-data-truth-report.json"
+OUTPUT = ROOT / ".artifacts" / "frontend-data-truth-report.json"
 INVENTORY = ROOT / "docs" / "_generated" / "frontend-data-truth-inventory.json"
 
 BUILD_ENV = {

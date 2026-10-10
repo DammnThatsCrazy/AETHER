@@ -39,13 +39,13 @@ The architecture reset is in progress, so this target describes the intended sha
 | `packages/` | Shared packages, clients, SDKs, and contracts |
 | `packages/shared/contracts/` | Canonical event, consent, observation, and other shared contracts |
 | `docs/` | Architecture, operating guidance, and source-of-truth documentation |
-| `scripts/`, `tests/`, `deploy/` | Repository tooling, tests, and deployment configuration |
+| `scripts/`, `tests/`, `infra/` | Repository tooling, tests, and deployment configuration |
 
 ## Start here
 
 **Understand the system**
 
-- [Current architecture and target direction](ARCHITECTURE.md)
+- [Current architecture and target direction](docs/architecture/ARCHITECTURE.md)
 - [Aether root architecture target](docs/architecture/AETHER_ROOT_ARCHITECTURE.md)
 - [Architecture reset plan and proof requirements](docs/blueprints/architecture-reset/README.md)
 - [Repository truth](docs/source-of-truth/repo-truth.md) and [architecture truth](docs/source-of-truth/architecture-truth.md)

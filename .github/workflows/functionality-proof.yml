@@ -262,7 +262,7 @@ jobs:
 
       - name: Run web SDK smoke tests (web-next + web-script-tag)
         run: |
-          cd examples/web-next
+          cd packages/sdk/examples/web-next
           pnpm install --frozen-lockfile
           if [ -f vitest.smoke.config.ts ]; then
             npx vitest run --config vitest.smoke.config.ts
@@ -309,7 +309,7 @@ jobs:
 
       - name: Run server SDK smoke tests (server-node)
         run: |
-          cd examples/server-node
+          cd packages/sdk/examples/server-node
           if [ -f pnpm-lock.yaml ]; then
             pnpm install --frozen-lockfile
           else

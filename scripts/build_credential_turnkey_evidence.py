@@ -378,7 +378,7 @@ def _walk_terraform_files(root: Path) -> list[str]:
 
 
 def _aggregate_infrastructure_validation() -> tuple[dict[str, Any], list[str]]:
-    tf_root = REPO_ROOT / "deploy" / "aws" / "terraform"
+    tf_root = REPO_ROOT / "infra" / "aws" / "terraform"
     tf_files = _walk_terraform_files(tf_root) if tf_root.exists() else []
     profiles_dir = tf_root / "profiles"
     profiles = sorted(f.name for f in profiles_dir.glob("*.tfvars")) if profiles_dir.exists() else []
@@ -402,7 +402,7 @@ def _aggregate_infrastructure_validation() -> tuple[dict[str, Any], list[str]]:
     deploy_profile_path = REPO_ROOT / "config" / "deploy_profile.yaml"
     deploy_profile = _load_yaml(deploy_profile_path)
 
-    artifact_path = REPO_ROOT / "artifacts" / "profile-policy-result.json"
+    artifact_path = REPO_ROOT / ".artifacts" / "profile-policy-result.json"
     artifact_summary: dict[str, Any] | None = None
     if artifact_path.exists():
         a = json.loads(artifact_path.read_text())

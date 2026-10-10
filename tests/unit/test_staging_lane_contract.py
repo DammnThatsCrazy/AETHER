@@ -200,7 +200,7 @@ def test_staging_profile_turns_on_annual_prices_and_other_profiles_do_not():
         raise AssertionError("an ambiguous double assignment must be rejected")
     # The live Stripe account is out of scope: only the staging sandbox turns
     # yearly prices on.
-    for profile in (ROOT / "deploy/aws/terraform/profiles").glob("*.tfvars"):
+    for profile in (ROOT / "infra/aws/terraform/profiles").glob("*.tfvars"):
         if profile.name == "staging.tfvars":
             continue
         assert "stripe_annual_prices_enabled" not in profile.read_text(encoding="utf-8"), profile.name
@@ -331,7 +331,7 @@ def test_pilot_plan_requires_annual_state_owners_when_the_profile_enables_them()
     start = promote.index("      - name: Create immutable reviewed plan")
     end = promote.index("      - name:", start + 1)
     block = promote[start:end]
-    assert "working-directory: deploy/aws/terraform" in block
+    assert "working-directory: infra/aws/terraform" in block
     flag_gate = block.index("stripe_annual_prices_enabled[[:space:]]*=[[:space:]]*true")
     assert "profiles/staging.tfvars" in block[flag_gate:flag_gate + 200]
     owners = block[flag_gate:block.index('for name in "${required_pilot_secret_names[@]}"', flag_gate)]

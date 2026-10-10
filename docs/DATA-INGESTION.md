@@ -173,7 +173,7 @@ All configuration is supplied via environment variables:
 | `REDIS_URL` | — | Redis connection string |
 | `GEOIP_DB_PATH` | `/data/GeoLite2-City.mmdb` | Path to MaxMind database file |
 
-See `.env.example` for a complete reference with descriptions.
+See `config/environments/.env.example` for a complete reference with descriptions.
 
 ## Dead-letter queue
 

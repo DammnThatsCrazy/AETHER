@@ -1,6 +1,6 @@
 ---
 title: SDK Certification Report
-slug: reports/sdk-certification-report
+slug: docs/reference/reports/sdk-certification-report
 section: architecture
 visibility: P
 audience: [dev-senior, architect]

@@ -4,7 +4,7 @@ Aether is governed by source-of-truth documentation, canonical contracts, and re
 
 ## Development Setup
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the full local setup guide. Quick start:
+See [docs/operations/DEVELOPMENT.md](docs/operations/DEVELOPMENT.md) for the full local setup guide. Quick start:
 
 ```bash
 git clone https://github.com/DammnThatsCrazy/AETHER.git
@@ -13,7 +13,7 @@ cd AETHER
 pip install -e ".[backend]" --ignore-installed PyJWT
 npm ci
 
-cp .env.example .env
+cp config/environments/.env.example .env
 cp apps/aether/.env.example apps/aether/.env.local
 
 docker compose up -d postgres

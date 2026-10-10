@@ -8,11 +8,11 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/backend/config/settings.py
-  - .env.example
+  - config/environments/.env.example
 canonical_owner: platform@aether
 source_hashes:
-  ".env.example": "sha256:93126a782ec704daea5d6c8168c0c38662972f7866c73f00fa3d2d10a9e66e18"
-  "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
+  "config/environments/.env.example": "sha256:d937e5dcf15c4d38913fbfa65ba820c39a536b549b48f4fc82652e3252ce5af2"
+  "services/backend/config/settings.py": "sha256:7f0c4e318f1434a07cd0a8a9803398f37a2e2bdd758a11d94a0040a1c80651f5"
 ---
 
 # Deployment Profile Matrix
@@ -30,7 +30,7 @@ All flags default OFF; enabling is per-capability and per-domain.
 | Gold materialization | in-memory GoldRepository | ClickHouse not provisioned | blocked |
 | Frontend surfaces | ✅ against local backend | flag-gated | flag-gated |
 
-Env blocks are documented in `.env.example`
+Env blocks are documented in `config/environments/.env.example`
 (`AETHER_STABLECOIN_*`, `AETHER_DERIVATIVES_*`, `AETHER_INTEROP_*`,
 `KYBER_*_OPS_ENABLED`); `Settings.__post_init__` rejects incoherent
 combinations (LayerZero without adapters).

@@ -101,7 +101,7 @@ env:
   DELIVERY_WORKFLOW_PATH: .github/workflows/deploy.yml
   AWAKE_LEASE_PARAM: /aether/staging/lifecycle/awake-until
   MAX_AWAKE_HOURS_CAP: "8"
-  TF_DIR: deploy/aws/terraform
+  TF_DIR: infra/aws/terraform
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -1142,8 +1142,8 @@ jobs:
             --profile "$PROFILE" \
             --deployment-lane "$DEPLOYMENT_LANE" \
             --plan-json "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json" \
-            | tee artifacts/wake-plan-policy.txt
-          test -s artifacts/profile-resource-inventory.json
+            | tee .artifacts/wake-plan-policy.txt
+          test -s .artifacts/profile-resource-inventory.json
 
       - name: Validate the staging budget
         env:
@@ -1162,9 +1162,9 @@ jobs:
           PY
           python scripts/release/check_cost_model.py \
             --profile "$PROFILE" \
-            --inventory artifacts/profile-resource-inventory.json \
-            --out-dir "artifacts/cost-${PROFILE}" \
-            | tee artifacts/wake-plan-cost.txt
+            --inventory .artifacts/profile-resource-inventory.json \
+            --out-dir ".artifacts/cost-${PROFILE}" \
+            | tee .artifacts/wake-plan-cost.txt
 
       # The pinned Terraform interface: `awake` gives 1 API task and 1 lean-worker
       # task. This reads the plan itself, so it holds regardless of what any
@@ -1244,9 +1244,9 @@ jobs:
         with:
           name: staging-wake-plan-validation-${{ github.run_id }}
           path: |
-            artifacts/wake-plan-policy.txt
-            artifacts/wake-plan-cost.txt
-            artifacts/profile-resource-inventory.json
+            .artifacts/wake-plan-policy.txt
+            .artifacts/wake-plan-cost.txt
+            .artifacts/profile-resource-inventory.json
           if-no-files-found: error
           retention-days: 14
 
@@ -1639,7 +1639,7 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ needs.wake-apply.outputs.delivery_run_id }}
           name: deployment-evidence-${{ needs.wake-apply.outputs.delivery_run_id }}
-          path: artifacts/rehearsal/delivery
+          path: .artifacts/rehearsal/delivery
 
       - name: Verify the exact immutable application artifact is what staging runs
         env:
@@ -1826,29 +1826,29 @@ jobs:
       - name: Verify delivered migration and resulting database revision
         run: |
           set -euo pipefail
-          mkdir -p artifacts/rehearsal
-          evidence="artifacts/rehearsal/delivery/deployment-evidence.txt"
+          mkdir -p .artifacts/rehearsal
+          evidence=".artifacts/rehearsal/delivery/deployment-evidence.txt"
           test -s "$evidence" || { echo '::error::canonical delivery migration evidence is missing'; exit 1; }
           grep -E '^migrations ' "$evidence" \
-            > artifacts/rehearsal/migrations.txt \
+            > .artifacts/rehearsal/migrations.txt \
             || { echo '::error::successful exact-image migration evidence is missing'; exit 1; }
-          test "$(wc -l < artifacts/rehearsal/migrations.txt | tr -d ' ')" = 1 \
+          test "$(wc -l < .artifacts/rehearsal/migrations.txt | tr -d ' ')" = 1 \
             || { echo '::error::canonical delivery must record exactly one successful migration task'; exit 1; }
           # /v1/ready fails unless the database alembic revision equals the
           # packaged head. Canonical delivery has already run the migration;
           # this read-only probe verifies the resulting database revision.
-          status="$(curl -sS -o artifacts/rehearsal/ready.json -w '%{http_code}' \
+          status="$(curl -sS -o .artifacts/rehearsal/ready.json -w '%{http_code}' \
             "https://${ALB_DNS_NAME}/v1/ready")"
           if [ "$status" != 200 ]; then
             echo "::error::/v1/ready returned ${status} after canonical delivery migrations"
             # The response contains status/detail fields only; retain it as
             # sanitized evidence so the failing dependency is actionable.
-            jq . artifacts/rehearsal/ready.json || true
+            jq . .artifacts/rehearsal/ready.json || true
             exit 1
           fi
           python - <<'PY'
           import json, sys
-          body = json.load(open("artifacts/rehearsal/ready.json"))
+          body = json.load(open(".artifacts/rehearsal/ready.json"))
           blob = json.dumps(body)
           if "alembic" not in blob and "migration" not in blob:
               sys.exit("::error::/v1/ready does not report a migration revision")
@@ -1916,10 +1916,10 @@ jobs:
           apps=(aether)
           if [ "$DEPLOYMENT_LANE" = full ]; then
             python scripts/release/check_kyber_staging_contract.py \
-              --evidence-out artifacts/rehearsal/kyber-contract-live.json
+              --evidence-out .artifacts/rehearsal/kyber-contract-live.json
             python scripts/release/probe_kyber_staging_identity.py \
               --base-url "https://${ALB_DNS_NAME}" \
-              --evidence-out artifacts/rehearsal/kyber-identity-probe.json
+              --evidence-out .artifacts/rehearsal/kyber-identity-probe.json
             apps+=(kyber)
           else
             echo 'Kyber workforce identity and its Google/GCP prerequisites are deferred for the pilot lane.'
@@ -1949,13 +1949,13 @@ jobs:
           set -euo pipefail
           test -n "${ALB_DNS_NAME:-}" || { echo '::error::wake apply did not expose an ALB hostname'; exit 1; }
           test -n "${STAGING_ADMIN_API_KEY:-}" || { echo '::error::STAGING_ADMIN_API_KEY was not passed from the verified admin step'; exit 1; }
-          mkdir -p artifacts/rehearsal
+          mkdir -p .artifacts/rehearsal
           python - <<'PY'
           import json, os, re, sys, urllib.error, urllib.request, uuid
 
           base = f"https://{os.environ['ALB_DNS_NAME']}"
           tenant_pattern = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
-          marker_path = "artifacts/rehearsal/bootstrap-marker.json"
+          marker_path = ".artifacts/rehearsal/bootstrap-marker.json"
           marker = {"run_scoped": True, "tenant_ids": []}
 
           def save_marker():
@@ -2091,7 +2091,7 @@ jobs:
             || { echo '::error::run-scoped rehearsal API key was not bootstrapped'; exit 1; }
           test -n "${ISOLATION_PEER_API_KEY:-}" \
             || { echo '::error::run-scoped isolation API key was not bootstrapped'; exit 1; }
-          mkdir -p artifacts/rehearsal
+          mkdir -p .artifacts/rehearsal
           python - <<'PY'
           import json, os, re, sys, urllib.error, urllib.request, uuid
 
@@ -2140,7 +2140,7 @@ jobs:
               if not isinstance(registration_tenant_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", registration_tenant_id):
                   sys.exit("::error::registration response exposed an invalid tenant_id; refusing unsafe cleanup")
           json.dump({"registration_completed": True, "tenant_id": registration_tenant_id},
-                    open("artifacts/rehearsal/registration-marker.json", "w"))
+                    open(".artifacts/rehearsal/registration-marker.json", "w"))
 
           _, mine = call("GET", "/v1/me", key=os.environ["REHEARSAL_TENANT_API_KEY"], expect={200})
           _, peer = call("GET", "/v1/me", key=os.environ["ISOLATION_PEER_API_KEY"], expect={200})
@@ -2185,21 +2185,21 @@ jobs:
 
           json.dump({"tenant_id": mine_id, "peer_tenant_id": peer_id,
                      "registration_completed": True},
-                    open("artifacts/rehearsal/tenant.json", "w"))
+                    open(".artifacts/rehearsal/tenant.json", "w"))
           print(f"isolated rehearsal tenant {mine_id}, peer {peer_id}")
           PY
 
       - name: Capability checks (auth, consent, ingestion, queue, graph, analytics, ML)
         run: |
           set -euo pipefail
-          python scripts/staging_capability_matrix.py --json > artifacts/rehearsal/capability-matrix.json
+          python scripts/staging_capability_matrix.py --json > .artifacts/rehearsal/capability-matrix.json
           python scripts/smoke_test.py \
             --base-url "https://${ALB_DNS_NAME}" \
             --api-key "$REHEARSAL_TENANT_API_KEY" \
             --admin-api-key "$STAGING_ADMIN_API_KEY" \
             --web2 \
             --timeout 20 \
-            | tee artifacts/rehearsal/smoke.txt
+            | tee .artifacts/rehearsal/smoke.txt
           python - <<'PY'
           import json, os, sys, time, urllib.error, urllib.request, uuid
           from datetime import datetime, timezone
@@ -2318,7 +2318,7 @@ jobs:
           call("GET", "/models", expect={200})
           results["inline_ml"] = "ok"
 
-          json.dump(results, open("artifacts/rehearsal/capabilities.json", "w"), indent=2)
+          json.dump(results, open(".artifacts/rehearsal/capabilities.json", "w"), indent=2)
           print(json.dumps(results, indent=2))
           PY
 
@@ -2326,7 +2326,7 @@ jobs:
         run: |
           set -euo pipefail
           # The staging profile must ship no compiled-in synthetic dataset.
-          python scripts/validate_frontend_data_truth.py | tee artifacts/rehearsal/data-truth.txt
+          python scripts/validate_frontend_data_truth.py | tee .artifacts/rehearsal/data-truth.txt
           python - <<'PY'
           import json, os, sys, urllib.error, urllib.request, uuid
 
@@ -2372,8 +2372,8 @@ jobs:
             --api-key "$REHEARSAL_TENANT_API_KEY" \
             --users 10 \
             --duration 60 \
-            --json-out artifacts/rehearsal/load.json \
-            | tee artifacts/rehearsal/load.txt
+            --json-out .artifacts/rehearsal/load.json \
+            | tee .artifacts/rehearsal/load.txt
 
       - name: Failure and retry checks
         run: |
@@ -2496,7 +2496,7 @@ jobs:
           execution_id="$(python -c 'import uuid; print(uuid.uuid4())')"
           python scripts/identity_continuity_staging_scenarios.py \
             --execution-id "$execution_id" \
-            --output-directory artifacts/rehearsal/identity-continuity-scenarios
+            --output-directory .artifacts/rehearsal/identity-continuity-scenarios
 
       - name: Run identity UI evidence with fixture API
         id: identity_ui_e2e
@@ -2527,7 +2527,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/identity_staging_capture.py \
-            --output artifacts/rehearsal/identity-continuity-capture.json \
+            --output .artifacts/rehearsal/identity-continuity-capture.json \
             --ui-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui" \
             --ui-live-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui-live" \
             --commit-sha "$GITHUB_SHA" \
@@ -2538,19 +2538,19 @@ jobs:
         run: pnpm --filter @aether/proof-reporting build
 
       - name: Collect and validate identity continuity staging proof pack
-        if: always() && steps.identity_ui_dependencies.outcome == 'success' && hashFiles('artifacts/rehearsal/identity-continuity-capture.json') != ''
+        if: always() && steps.identity_ui_dependencies.outcome == 'success' && hashFiles('.artifacts/rehearsal/identity-continuity-capture.json') != ''
         run: |
           set -euo pipefail
           pnpm --filter @aether/proof-reporting proof-pack -- collect \
-            artifacts/rehearsal/identity-continuity-capture.json \
-            artifacts/rehearsal/identity-continuity-proof-pack
+            .artifacts/rehearsal/identity-continuity-capture.json \
+            .artifacts/rehearsal/identity-continuity-proof-pack
 
       - uses: actions/upload-artifact@v4
         name: Upload identity UI artifacts on E2E failure
         if: always() && steps.identity_ui_e2e.outcome == 'failure'
         with:
           name: identity-continuity-ui-failure-${{ github.run_id }}
-          path: artifacts/rehearsal/identity-continuity-ui
+          path: .artifacts/rehearsal/identity-continuity-ui
           if-no-files-found: warn
           retention-days: 30
 
@@ -2559,7 +2559,7 @@ jobs:
         if: always()
         with:
           name: identity-continuity-proof-pack-${{ github.run_id }}
-          path: artifacts/rehearsal/identity-continuity-proof-pack
+          path: .artifacts/rehearsal/identity-continuity-proof-pack
           if-no-files-found: warn
           retention-days: 90
 
@@ -2580,7 +2580,7 @@ jobs:
         if: always()
         with:
           name: identity-continuity-scenarios-${{ github.run_id }}
-          path: artifacts/rehearsal/identity-continuity-scenarios
+          path: .artifacts/rehearsal/identity-continuity-scenarios
           if-no-files-found: warn
           retention-days: 30
 
@@ -2606,7 +2606,7 @@ jobs:
             # Record that rollback is not applicable rather than failing a
             # healthy first run or pretending that a rollback occurred.
             printf 'status=not_applicable\nreason=first approved staging revision; no earlier task definition exists\ncurrent=%s\n' \
-              "$current" > artifacts/rehearsal/rollback.txt
+              "$current" > .artifacts/rehearsal/rollback.txt
             echo '::notice::rollback rehearsal not applicable for the first approved staging revision'
             exit 0
           fi
@@ -2660,7 +2660,7 @@ jobs:
           restore_current
           trap - EXIT
           printf 'rolled_back_to=%s\nrestored=%s\n' "$previous" "$restored" \
-            > artifacts/rehearsal/rollback.txt
+            > .artifacts/rehearsal/rollback.txt
 
       - name: Collect logs, metrics, plans, test output and cost
         if: always()
@@ -2668,7 +2668,7 @@ jobs:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
         run: |
           set -euo pipefail
-          mkdir -p artifacts/rehearsal
+          mkdir -p .artifacts/rehearsal
           if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
             --query 'serviceArns[]' --output text)"; then
             echo '::error::unable to enumerate staging ECS services; evidence is incomplete'
@@ -2679,23 +2679,23 @@ jobs:
             echo '::error::staging ECS service enumeration returned no services; evidence is incomplete'; exit 1;
           }
           aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
-            > artifacts/rehearsal/ecs-services.json
+            > .artifacts/rehearsal/ecs-services.json
           aws logs describe-log-groups --log-group-name-prefix "/ecs/${STAGING_CLUSTER}" \
-            > artifacts/rehearsal/log-groups.json
+            > .artifacts/rehearsal/log-groups.json
           aws cloudwatch list-metrics --namespace AETHER \
-            > artifacts/rehearsal/metrics.json
-          cp -f "${RUNNER_TEMP}/release/release.json" artifacts/rehearsal/release.json
+            > .artifacts/rehearsal/metrics.json
+          cp -f "${RUNNER_TEMP}/release/release.json" .artifacts/rehearsal/release.json
           python scripts/release/check_cost_model.py \
             --profile "$PROFILE" \
-            --inventory artifacts/profile-resource-inventory.json \
-            --out-dir "artifacts/rehearsal/cost" \
-            > artifacts/rehearsal/cost.txt 2>&1
+            --inventory .artifacts/profile-resource-inventory.json \
+            --out-dir ".artifacts/rehearsal/cost" \
+            > .artifacts/rehearsal/cost.txt 2>&1
 
       - name: Delete or expire the rehearsal tenant
         if: always()
         run: |
           set -euo pipefail
-          if [ ! -s artifacts/rehearsal/bootstrap-marker.json ] && [ ! -s artifacts/rehearsal/registration-marker.json ]; then
+          if [ ! -s .artifacts/rehearsal/bootstrap-marker.json ] && [ ! -s .artifacts/rehearsal/registration-marker.json ]; then
             echo 'no run-scoped tenant was created; nothing to remove'
             exit 0
           fi
@@ -2706,13 +2706,13 @@ jobs:
 
           pattern = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
           ids = []
-          bootstrap = "artifacts/rehearsal/bootstrap-marker.json"
+          bootstrap = ".artifacts/rehearsal/bootstrap-marker.json"
           if os.path.exists(bootstrap):
               marker = json.load(open(bootstrap, encoding="utf-8"))
               if marker.get("run_scoped") is not True or not isinstance(marker.get("tenant_ids"), list):
                   sys.exit("::error::bootstrap marker is not a trusted run-scoped marker; refusing tenant cleanup")
               ids.extend(marker["tenant_ids"])
-          registration = "artifacts/rehearsal/registration-marker.json"
+          registration = ".artifacts/rehearsal/registration-marker.json"
           if os.path.exists(registration):
               value = json.load(open(registration, encoding="utf-8")).get("tenant_id")
               if value:
@@ -2730,7 +2730,7 @@ jobs:
           base = f"https://{os.environ['ALB_DNS_NAME']}"
           def request(method, path):
               response = os.path.join(
-                  "artifacts/rehearsal",
+                  ".artifacts/rehearsal",
                   "cleanup-" + path.rsplit("/", 1)[-1] + ".json",
               )
               completed = subprocess.run([
@@ -2783,7 +2783,7 @@ jobs:
         if: always()
         with:
           name: staging-rehearsal-${{ github.run_id }}
-          path: artifacts/rehearsal
+          path: .artifacts/rehearsal
           if-no-files-found: warn
           retention-days: 30
 
@@ -3175,7 +3175,7 @@ jobs:
             --profile "$PROFILE" \
             --deployment-lane "$DEPLOYMENT_LANE" \
             --plan-json "${plan_dir}/reviewed.tfplan.json" \
-            | tee artifacts/sleep-plan-policy.txt
+            | tee .artifacts/sleep-plan-policy.txt
           PLAN_JSON="${plan_dir}/reviewed.tfplan.json" python - <<'PY'
           import json, os, sys, yaml
 
@@ -3308,7 +3308,7 @@ jobs:
           set -euo pipefail
           test "$STAGING_CLUSTER" = "AETHER-staging" \
             || { echo '::error::sleep enforcement refused outside the staging cluster'; exit 1; }
-          mkdir -p artifacts/sleep
+          mkdir -p .artifacts/sleep
           failure=0
           scaled=0
           targets_clamped=0
@@ -3362,7 +3362,7 @@ jobs:
             failure=1
             targets_raw='[]'
           fi
-          printf '%s' "$targets_raw" > artifacts/sleep/autoscaling-before.json
+          printf '%s' "$targets_raw" > .artifacts/sleep/autoscaling-before.json
           if TARGETS_JSON="$targets_raw" EXPECTED_TARGETS="$expected_targets_file" python - <<'PY' > "$RUNNER_TEMP/staging-targets-to-clamp.tsv"
           import json, os, sys
           expected = {line.strip() for line in open(os.environ["EXPECTED_TARGETS"]) if line.strip()}
@@ -3394,7 +3394,7 @@ jobs:
                 targets_clamped=$((targets_clamped + 1))
                 outside_actions=$((outside_actions + 1))
                 printf 'autoscaling_bounds_zeroed=%s at=%s\n' \
-                  "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/sleep/actions.log
+                  "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .artifacts/sleep/actions.log
               else
                 echo "::error::could not clamp autoscaling target ${target} to [0,0]"
                 failure=1
@@ -3411,16 +3411,16 @@ jobs:
             failure=1
             services_raw='[]'
           fi
-          printf '%s' "$services_raw" > artifacts/sleep/service-arns-before.json
-          mapfile -t services < <(jq -r '.[]?' artifacts/sleep/service-arns-before.json)
+          printf '%s' "$services_raw" > .artifacts/sleep/service-arns-before.json
+          mapfile -t services < <(jq -r '.[]?' .artifacts/sleep/service-arns-before.json)
           if [ "${#services[@]}" -gt 10 ]; then
             echo '::error::staging service count exceeds the safe single-call describe limit'
             failure=1
           elif [ "${#services[@]}" -gt 0 ]; then
             if aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
               --query 'services[].{arn:serviceArn,name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
-              --output json > artifacts/sleep/services-before.json; then
-              if SERVICE_ROWS=artifacts/sleep/services-before.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY' > "$RUNNER_TEMP/staging-services-to-scale.tsv"
+              --output json > .artifacts/sleep/services-before.json; then
+              if SERVICE_ROWS=.artifacts/sleep/services-before.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY' > "$RUNNER_TEMP/staging-services-to-scale.tsv"
           import json, os, sys
           rows = json.load(open(os.environ["SERVICE_ROWS"]))
           expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
@@ -3449,7 +3449,7 @@ jobs:
                   scaled=$((scaled + 1))
                   outside_actions=$((outside_actions + 1))
                   printf 'scaled_to_zero=%s at=%s\n' "$service_name" \
-                    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/sleep/actions.log
+                    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .artifacts/sleep/actions.log
                 else
                   echo "::error::could not set staging service ${service_name} to desired-count 0"
                   failure=1
@@ -3470,8 +3470,8 @@ jobs:
             failure=1
             task_arns_raw='[]'
           fi
-          printf '%s' "$task_arns_raw" > artifacts/sleep/tasks-before.json
-          mapfile -t requested_tasks < <(jq -r '.[]?' artifacts/sleep/tasks-before.json)
+          printf '%s' "$task_arns_raw" > .artifacts/sleep/tasks-before.json
+          mapfile -t requested_tasks < <(jq -r '.[]?' .artifacts/sleep/tasks-before.json)
           for task_arn in "${requested_tasks[@]:-}"; do
             test -n "$task_arn" || continue
             if aws ecs stop-task --cluster "$STAGING_CLUSTER" --task "$task_arn" \
@@ -3479,7 +3479,7 @@ jobs:
               tasks_stopped=$((tasks_stopped + 1))
               outside_actions=$((outside_actions + 1))
               printf 'stop_requested=%s at=%s\n' "$task_arn" \
-                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/sleep/actions.log
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .artifacts/sleep/actions.log
             else
               echo "::error::could not stop staging task ${task_arn}"
               failure=1
@@ -3492,14 +3492,14 @@ jobs:
             poll_ready=true
             if services_now="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
               --query 'serviceArns[]' --output json)"; then
-              printf '%s' "$services_now" > artifacts/sleep/service-arns-after.json
-              mapfile -t services_now_list < <(jq -r '.[]?' artifacts/sleep/service-arns-after.json)
+              printf '%s' "$services_now" > .artifacts/sleep/service-arns-after.json
+              mapfile -t services_now_list < <(jq -r '.[]?' .artifacts/sleep/service-arns-after.json)
               if [ "${#services_now_list[@]}" -eq 0 ] || [ "${#services_now_list[@]}" -gt 10 ]; then
                 poll_ready=false
               elif aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services_now_list[@]}" \
                 --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
-                --output json > artifacts/sleep/services-after.json; then
-                if SERVICE_ROWS=artifacts/sleep/services-after.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
+                --output json > .artifacts/sleep/services-after.json; then
+                if SERVICE_ROWS=.artifacts/sleep/services-after.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
           import json, os, sys
           rows = json.load(open(os.environ["SERVICE_ROWS"]))
           expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
@@ -3522,7 +3522,7 @@ jobs:
               --service-namespace ecs \
               --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity,max:MaxCapacity}" \
               --output json)"; then
-              printf '%s' "$targets_now" > artifacts/sleep/autoscaling-after.json
+              printf '%s' "$targets_now" > .artifacts/sleep/autoscaling-after.json
               if TARGETS_JSON="$targets_now" EXPECTED_TARGETS="$expected_targets_file" python - <<'PY'
           import json, os, sys
           expected = {line.strip() for line in open(os.environ["EXPECTED_TARGETS"]) if line.strip()}
@@ -3540,8 +3540,8 @@ jobs:
 
             if tasks_now="$(aws ecs list-tasks --cluster "$STAGING_CLUSTER" \
               --desired-status RUNNING --query 'taskArns[]' --output json)"; then
-              printf '%s' "$tasks_now" > artifacts/sleep/tasks-after.json
-              if [ "$(jq 'length' artifacts/sleep/tasks-after.json)" -ne 0 ]; then
+              printf '%s' "$tasks_now" > .artifacts/sleep/tasks-after.json
+              if [ "$(jq 'length' .artifacts/sleep/tasks-after.json)" -ne 0 ]; then
                 poll_ready=false
               fi
             else
@@ -3641,8 +3641,8 @@ jobs:
         if: always() && needs.select-profile.outputs.apply_sleep == 'true'
         run: |
           set -euo pipefail
-          mkdir -p artifacts/sleep
-          echo '[]' > artifacts/sleep/desired-counts.json
+          mkdir -p .artifacts/sleep
+          echo '[]' > .artifacts/sleep/desired-counts.json
           residual_tasks=unknown
           zero_ok=true
           # FAIL CLOSED, twice over. This step reports whether staging is at
@@ -3690,14 +3690,14 @@ jobs:
           fi
           if services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
             --query 'serviceArns[]' --output json)"; then
-            printf '%s' "$services_raw" > artifacts/sleep/service-arns-after.json
-            mapfile -t services < <(jq -r '.[]?' artifacts/sleep/service-arns-after.json)
+            printf '%s' "$services_raw" > .artifacts/sleep/service-arns-after.json
+            mapfile -t services < <(jq -r '.[]?' .artifacts/sleep/service-arns-after.json)
             residual_tasks=0
             if [ "${#services[@]}" -gt 0 ]; then
               if aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
                 --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}' \
-                --output json > artifacts/sleep/desired-counts.json; then
-                if SERVICE_ROWS=artifacts/sleep/desired-counts.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
+                --output json > .artifacts/sleep/desired-counts.json; then
+                if SERVICE_ROWS=.artifacts/sleep/desired-counts.json EXPECTED_SERVICES="$expected_services_file" python - <<'PY'
           import json, os, sys
           rows = json.load(open(os.environ["SERVICE_ROWS"]))
           expected = {line.strip() for line in open(os.environ["EXPECTED_SERVICES"]) if line.strip()}
@@ -3715,7 +3715,7 @@ jobs:
                   zero_ok=false
                   echo '::error::staging service set or desired/running/pending counts do not match the exact asleep contract'
                 fi
-                if counts="$(python -c "import json;d=json.load(open('artifacts/sleep/desired-counts.json'));print(sum(1 for s in d if s['desired'] or s['running'] or s['pending']), sum(s['running']+s['pending'] for s in d))")"; then
+                if counts="$(python -c "import json;d=json.load(open('.artifacts/sleep/desired-counts.json'));print(sum(1 for s in d if s['desired'] or s['running'] or s['pending']), sum(s['running']+s['pending'] for s in d))")"; then
                   read -r nonzero residual_tasks <<< "$counts"
                   if [ "$nonzero" != 0 ]; then
                     zero_ok=false
@@ -3729,7 +3729,7 @@ jobs:
               else
                 zero_ok=false
                 residual_tasks=unknown
-                echo '[]' > artifacts/sleep/desired-counts.json
+                echo '[]' > .artifacts/sleep/desired-counts.json
                 echo '::error::could not describe staging ECS services; residual staging compute is UNKNOWN and must not be reported as zero'
               fi
             else
@@ -3745,8 +3745,8 @@ jobs:
           # runtime target set and both bounds, not just the minimum floor.
           if aws application-autoscaling describe-scalable-targets --service-namespace ecs \
             --query "ScalableTargets[?starts_with(ResourceId, 'service/${STAGING_CLUSTER}/')].{id:ResourceId,min:MinCapacity,max:MaxCapacity}" \
-            --output json > artifacts/sleep/autoscaling.json; then
-            if TARGETS_JSON=artifacts/sleep/autoscaling.json EXPECTED_TARGETS="$expected_targets_file" python - <<'PY'
+            --output json > .artifacts/sleep/autoscaling.json; then
+            if TARGETS_JSON=.artifacts/sleep/autoscaling.json EXPECTED_TARGETS="$expected_targets_file" python - <<'PY'
           import json, os, sys
           expected = {line.strip() for line in open(os.environ["EXPECTED_TARGETS"]) if line.strip()}
           rows = json.load(open(os.environ["TARGETS_JSON"]))
@@ -3766,19 +3766,19 @@ jobs:
             fi
           else
             zero_ok=false
-            echo '[]' > artifacts/sleep/autoscaling.json
+            echo '[]' > .artifacts/sleep/autoscaling.json
             echo '::error::could not read staging autoscaling targets; a target policy could revive staging and cannot be ruled out'
           fi
           residual_task_arns=unknown
           standalone_tasks=unknown
           if aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status RUNNING \
-            --output json > artifacts/sleep/running-task-arns.json; then
-            mapfile -t task_arns < <(jq -r '.taskArns[]?' artifacts/sleep/running-task-arns.json)
+            --output json > .artifacts/sleep/running-task-arns.json; then
+            mapfile -t task_arns < <(jq -r '.taskArns[]?' .artifacts/sleep/running-task-arns.json)
             residual_task_arns="${#task_arns[@]}"
             if [ "$residual_task_arns" -gt 0 ]; then
               if aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "${task_arns[@]}" \
-                --output json > artifacts/sleep/running-tasks.json; then
-                standalone_tasks="$(jq '[.tasks[] | select(((.group // "") | startswith("service:")) | not)] | length' artifacts/sleep/running-tasks.json)"
+                --output json > .artifacts/sleep/running-tasks.json; then
+                standalone_tasks="$(jq '[.tasks[] | select(((.group // "") | startswith("service:")) | not)] | length' .artifacts/sleep/running-tasks.json)"
                 zero_ok=false
                 echo "::error::${residual_task_arns} ECS task(s) remain running or pending after sleep (${standalone_tasks} standalone)"
               else
@@ -3787,27 +3787,27 @@ jobs:
                 echo '::error::could not describe residual ECS tasks; staging compute is UNKNOWN and must not be reported as zero'
               fi
             else
-              echo '[]' > artifacts/sleep/running-tasks.json
+              echo '[]' > .artifacts/sleep/running-tasks.json
               standalone_tasks=0
             fi
           else
             zero_ok=false
-            echo '[]' > artifacts/sleep/running-task-arns.json
+            echo '[]' > .artifacts/sleep/running-task-arns.json
             echo '::error::could not enumerate residual ECS tasks; staging compute is UNKNOWN and must not be reported as zero'
           fi
           # A stop request changes desiredStatus before lastStatus reaches
           # STOPPED, so the RUNNING-filtered list above is not sufficient.
           if aws ecs list-tasks --cluster "$STAGING_CLUSTER" --desired-status STOPPED \
-            --query 'taskArns[]' --output json > artifacts/sleep/stopped-desired-task-arns.json \
-            && jq -e 'type == "array"' artifacts/sleep/stopped-desired-task-arns.json >/dev/null; then
-            mapfile -t stopping_arns < <(jq -r '.[]' artifacts/sleep/stopped-desired-task-arns.json)
+            --query 'taskArns[]' --output json > .artifacts/sleep/stopped-desired-task-arns.json \
+            && jq -e 'type == "array"' .artifacts/sleep/stopped-desired-task-arns.json >/dev/null; then
+            mapfile -t stopping_arns < <(jq -r '.[]' .artifacts/sleep/stopped-desired-task-arns.json)
             for ((offset=0; offset<${#stopping_arns[@]}; offset+=100)); do
               chunk=("${stopping_arns[@]:offset:100}")
               if aws ecs describe-tasks --cluster "$STAGING_CLUSTER" --tasks "${chunk[@]}" \
-                --output json > "artifacts/sleep/stopped-desired-tasks-${offset}.json"; then
+                --output json > ".artifacts/sleep/stopped-desired-tasks-${offset}.json"; then
                 if ! jq -e --argjson expected "${#chunk[@]}" \
                   '(.failures | length) == 0 and (.tasks | length) == $expected and all(.tasks[]; .lastStatus == "STOPPED")' \
-                  "artifacts/sleep/stopped-desired-tasks-${offset}.json" >/dev/null; then
+                  ".artifacts/sleep/stopped-desired-tasks-${offset}.json" >/dev/null; then
                   zero_ok=false
                   echo '::error::a desired-stopped ECS task has not reached lastStatus STOPPED'
                 fi
@@ -3821,7 +3821,7 @@ jobs:
             echo '::error::could not enumerate desired-stopped ECS tasks; staging compute is UNKNOWN'
           fi
           # Residual cost, priced from the canonical price book rather than a guess.
-          RESIDUAL_JSON=artifacts/sleep/desired-counts.json python - <<'PY'
+          RESIDUAL_JSON=.artifacts/sleep/desired-counts.json python - <<'PY'
           import json, os, yaml
           book = (yaml.safe_load(open("config/aws_price_book.yaml")) or {})
           ecs = ((book.get("usage_variable_resources") or {}).get("aws_ecs_service")
@@ -3980,11 +3980,11 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p artifacts/sleep
+          mkdir -p .artifacts/sleep
           (cd artifacts && find . -type f ! -name 'evidence.sha256' -print0 \
             | sort -z | xargs -0 sha256sum > evidence.sha256)
-          sha256sum artifacts/evidence.sha256 > artifacts/evidence.sha256.sha256
-          cat artifacts/evidence.sha256
+          sha256sum .artifacts/evidence.sha256 > .artifacts/evidence.sha256.sha256
+          cat .artifacts/evidence.sha256
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -1,6 +1,6 @@
 ---
 title: "Unified Web2/Web3 + Fraud Intelligence — Gap Recovery Ledger"
-slug: reports/unified-web2-web3-fraud-gap-recovery
+slug: docs/reference/reports/unified-web2-web3-fraud-gap-recovery
 section: reference
 visibility: I
 audience: [dev-senior]

@@ -6,7 +6,7 @@
 // version manifests the CDN auto-loader reads at runtime.
 //
 // Inputs:  packages/web/dist/ (run `npm run build --workspace=packages/web`)
-// Outputs: artifacts/sdk/cdn/... (gitignored; synced to the bucket by CI)
+// Outputs: .artifacts/sdk/cdn/... (gitignored; synced to the bucket by CI)
 //
 // TWO HASH FORMATS, ON PURPOSE — do not "simplify" these into one:
 //
@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WEB = join(ROOT, 'packages', 'web');
 const DIST = join(WEB, 'dist');
-const OUT = join(ROOT, 'artifacts', 'sdk', 'cdn');
+const OUT = join(ROOT, '.artifacts', 'sdk', 'cdn');
 
 const pkg = JSON.parse(readFileSync(join(WEB, 'package.json'), 'utf-8'));
 const VERSION = pkg.version;

@@ -17,7 +17,7 @@ is a readiness gate, not a certification.
 
 ## Gates
 
-- [ ] **Config**: staging `.env` from `.env.staging.example`; required secrets in
+- [ ] **Config**: staging `.env` from `config/environments/.env.staging.example`; required secrets in
       the secret manager; `AETHER_ENV=staging`.
 - [ ] **Health**: `GET /v1/health` green; `GET /v1/status` responds; container
       healthchecks pass.

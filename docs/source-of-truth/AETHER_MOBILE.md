@@ -25,7 +25,7 @@ Account) and governed mobile actions are **C5–C7, not this session**.
 The native iOS-simulator / Android-emulator compile requires macOS + Xcode + the
 Android SDK + the Expo toolchain, which are **not present in the Linux CI container**;
 the native build is `externally_blocked` here and runs in the hosted (macOS) CI. See
-`reports/mobile-productization/external-blockers.json`. The shared SDK typechecks and
+`docs/reference/reports/mobile-productization/external-blockers.json`. The shared SDK typechecks and
 tests in `make ci-check`; scaffold invariants are enforced by `make mobile-build-check`.
 
 ## Composition

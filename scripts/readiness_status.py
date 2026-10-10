@@ -46,7 +46,7 @@ from scripts.lib.readiness_model import (  # noqa: E402
     load_model,
 )
 
-ARTIFACT_DIR = ROOT / "artifacts" / "readiness"
+ARTIFACT_DIR = ROOT / ".artifacts" / "readiness"
 FEATURE_DOC = ROOT / "docs" / "_generated" / "FEATURE-READINESS.md"
 PROFILE_DOC = ROOT / "docs" / "_generated" / "RELEASE-PROFILE-READINESS.md"
 

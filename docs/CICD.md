@@ -7,10 +7,10 @@ audience: [ops, dev-senior, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - cicd/aether-cicd/README.md
-  - cicd/aether-cicd/main.py
-  - cicd/aether-cicd/stages/
-  - cicd/aether-cicd/quality_gates/
+  - infra/cicd/aether-cicd/README.md
+  - infra/cicd/aether-cicd/main.py
+  - infra/cicd/aether-cicd/stages/
+  - infra/cicd/aether-cicd/quality_gates/
   - .github/workflows/
   - config/delivery_workflow_authority.yaml
   - scripts/release/verify_effective_staging_apply_policy.py
@@ -18,28 +18,28 @@ source_files:
   - scripts/release/check_staging_lane_contract.py
   - scripts/release/check_staging_runtime_iam.py
   - config/staging_apply_iam_policy.yaml
-  - deploy/aws/terraform/modules/secrets/main.tf
-  - deploy/aws/terraform/modules/ecr/main.tf
-  - deploy/aws/terraform/modules/aurora/main.tf
-  - deploy/aws/terraform/modules/kms_credentials/main.tf
+  - infra/aws/terraform/modules/secrets/main.tf
+  - infra/aws/terraform/modules/ecr/main.tf
+  - infra/aws/terraform/modules/aurora/main.tf
+  - infra/aws/terraform/modules/kms_credentials/main.tf
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:a5236efc268dffbb00e5bc46826cdbab9f545f6fcc4de58bffe9730484c49cbe"
-  "cicd/aether-cicd/README.md": "sha256:4555c23d9f16d1d6882bc1f1d14b23e750d5b08c741ea02d16e504dd866d7e71"
-  "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
-  "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
-  "cicd/aether-cicd/stages/": "sha256:f26f7a608ed0d1cf1aff849650848b64958eba563c69ccb7f7d120726c767619"
+  ".github/workflows/": "sha256:09bcd7b3b31d09f6c086182495ddc06f3d35cd96ecd6069549bb35ca76e4b83d"
   "config/delivery_workflow_authority.yaml": "sha256:7a23c16f192c2fcd9d742f25a447ac7a1d85659bdc51a303a1c61765a64332d6"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
-  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:fcc3e84f90f6fb49d57f6e81bb31b5d5bb0c0febe1195c61512d45b40f23cb1c"
-  "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
-  "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
-  "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
+  "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
+  "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
+  "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
+  "infra/cicd/aether-cicd/README.md": "sha256:f63836c2fb797c8ccda029a467948f27e7b002ba0a65fb8931176d9ae57f2731"
+  "infra/cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
+  "infra/cicd/aether-cicd/quality_gates/": "sha256:c5f18dd825882b733505e259192deb3fd3293fe308c471a6a0a27ff5c3c4dce9"
+  "infra/cicd/aether-cicd/stages/": "sha256:11b22cae4c56350571c36381f6b1f40dfaeb112b0552d30102089f9fb5951f97"
+  "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
+  "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
 ---
 
@@ -304,7 +304,7 @@ roll-forward.
 
 ## Scope — two different things
 
-`cicd/aether-cicd/` is a **Python demo runner**, not the pipeline. `main.py`
+`infra/cicd/aether-cicd/` is a **Python demo runner**, not the pipeline. `main.py`
 prints a CI → CD → SDK-release model from constants in
 `config/pipeline_config.py`; it does not drive GitHub Actions, and
 `.github/workflows/ci.yml` does not exist. The branch strategy, six-account
@@ -527,7 +527,7 @@ and release preflights.
 | `deploy.yml` | push to `staging`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; a staging dispatch may select `delivery_mode=build-only` to publish the verified immutable artifact without touching ECS, which breaks the asleep-staging/release circular dependency. The pilot full-rehearsal wrapper uses that build-only path when no approved release inputs were supplied. After wake, `staging-lifecycle.yml` dispatches this workflow with the exact source run ID and manifest checksum; this workflow accepts only a successful immutable build for the exact current staging SHA, acquires that artifact without rebuilding, runs its packaged migration, rolls every lane-selected ECS service, publishes the matching SPA artifacts, and uploads deployment evidence. The rehearsal consumes that evidence and verifies the live image, migration readiness, and static-origin bytes without repeating delivery mutations. Because the durable pilot admin key is created only after the new task is live, build-only skips `STAGING_ADMIN_API_KEY` validation; live staging delivery and the full rehearsal still validate the key before mutation. Staging dispatch reuses the successful merged-staging integration authority for the exact SHA (the `Main integration authority` check, which also runs for `staging` pushes) (queried by check name, so the extra check runs that staging dispatches add to that SHA cannot push it off the first API page) and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum; build-only is rejected for production. Before staging mutation, the deploy job verifies the currently registered task definitions already match the requested full/pilot lane, then registers one immutable task-definition revision per declared service. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
 | `frontend-preview.yml` | `pull_request` (`ready_for_review` only); `workflow_dispatch` with a PR number; push to `main`; hourly schedule | Per-PR previews of the Aether app. When a same-repository pull request is marked ready for review, or when a team member dispatches it with a pull request number, it builds `apps/aether` with the staging app's public `VITE_*` settings, deploys it to branch `pr-<N>` of the unconnected preview Amplify app, and links `https://pr-<N>.<preview domain>` on the pull request. Fork pull requests are never deployed (no OIDC token, and the head repository must be this one). Each push to `main` and an hourly sweep delete the previews of closed or merged pull requests. It assumes `vars.FRONTEND_PREVIEW_ROLE_ARN`, scoped by `config/staging_frontend_preview_iam_policy.yaml` to the preview app's `pr-*` branches; until that variable is set, every job skips with a notice. It finds the preview and staging apps by their Terraform names; the build settings come from the staging web app (`AETHER-staging-web`) or, before its first rollout, the product app it replaces. See [Preview Environments](PREVIEW-ENVIRONMENTS.md). | no |
 | `amplify-status-production.yml` | push to `main`; `workflow_dispatch` | Waits for the exact main integration authority, binds the production web app (`AETHER-production-web`, the former `aether-status` app) to the repository with the unified-site build (product under `/app`), production settings and routing rules, and deploys the exact main SHA to its two `PRODUCTION` branches: `main` (the Aether site) and `production-olympus` (the Olympus Labs site, `VITE_SITE=olympus`, no auto-build). It first checks the SHA is on `main` and force-pushes it to the `production-olympus` Git branch, a mirror only this workflow writes (the deploy job holds `contents: write` for that push). It verifies that `www` maps once to `production-olympus` and `aether`, `docs`, `status` and `app` each map once to `main`. Its catch-all rule is a `404-200` rewrite to `/index.html`, so prerendered page files (`/platform` → `platform.html`) are served as files. The workflow performs a read-only state assessment before binding: a clean, unbound historical app (no branches and no domain mappings) gets a one-time repository bootstrap and stops before release, while any remaining legacy branch or live mapping fails closed for reviewed administrative cleanup. The administrator then restores the canonical `status -> main` domain mapping and dispatches the workflow again. Repository-backed runs never delete branches or call `UpdateDomainAssociation`; they verify the AVAILABLE association maps each host exactly once to its branch, deploy the exact commit to both branches, and verify the live CNAME target. Because repository auto-build can already have an active job for the pushed SHA, the workflow reuses that exact-commit job only if it started after the bind step applied the build settings (a job reads its environment variables when it starts, so an earlier auto-build would ship the previous settings). It waits out every other active branch job and starts a release only when needed. Squarespace remains authoritative. | no |
-| `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `Development`, `staging` or `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the shared credential set exists (the ML image digest is additionally required only by production-scale and enterprise-isolated); ephemeral-class is deliberately excluded from remote-plan; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
+| `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `Development`, `staging` or `main` / dispatch on `infra/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the shared credential set exists (the ML image digest is additionally required only by production-scale and enterprise-isolated); ephemeral-class is deliberately excluded from remote-plan; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. After a staging apply it rebuilds, at the reviewed commit, any Amplify app whose build spec or build variables the plan changed. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
 | `reconcile-staging-plan-role.yml` | `workflow_dispatch` only | Confirmation-gated, exact-main reconciliation for the externally managed `AetherStagingPlan` inline read-only policy. It uses the dedicated `AWS_STAGING_PLAN_RECONCILE_ROLE_ARN` bootstrap role only for the exact policy update, then switches to `AetherStagingPlan` for effective coverage including Terraform state access. It does not read secret values or apply Terraform. | no |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every infrastructure mutation and independently re-verifies the reviewed plan first. Each handoff uses the exact run URL returned by GitHub and fails closed if no run ID is returned; it never guesses from a concurrent-run watermark. After a successful wake, a full rehearsal dispatches canonical `deploy.yml` with the exact immutable source run and manifest checksum, waits for that exact delivery run, and consumes its deployment evidence. The delivery authority—not Terraform—runs migrations, updates ECS services, and publishes the lane-selected private SPA origins. Rehearsal verifies the live image, delivery evidence, migration/readiness result, and static-origin bytes without repeating delivery mutations; it revalidates the awake lease before admin/tenant smoke mutations, provisions a disposable provider connection, runs ten live identity-continuity API scenarios plus fixture-backed and authenticated live UI evidence, and emits redacted scenario transcripts and a proof pack. Cleanup removes the run-scoped provider credential and tenants; tenant erasure also deletes their scenario evidence rows after the workflow captures artifacts. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. | no (delegates) |
@@ -744,7 +744,7 @@ component usage are documented in [`docs/brand-system/`](brand-system/README.md)
 | Error rate | < 0.1% | Performance / Canary |
 | Image size | < 500 MB | Build |
 
-These thresholds live in `cicd/aether-cicd/quality_gates/`, which is part of the
+These thresholds live in `infra/cicd/aether-cicd/quality_gates/`, which is part of the
 reference model — they are not enforced by any workflow in
 `.github/workflows/`. The normal pull-request gate that actually blocks a merge
 is the `verification / disposition` status published by
@@ -883,5 +883,5 @@ enforcement, nonce protection, etc.) and must pass 9/9 before external audit.
    `config/required_release_checks.yaml` if it is a required check.
 4. Document it here and in the relevant operations page.
 
-Adding a stage class under `cicd/aether-cicd/stages/` changes the reference
+Adding a stage class under `infra/cicd/aether-cicd/stages/` changes the reference
 model's printed output and gates nothing.

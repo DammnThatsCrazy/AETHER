@@ -220,7 +220,7 @@ class TestFirstReleaseFlagsDefaultOff:
         assert hasattr(settings, "one_person_ops")
 
     def test_env_example_documents_all_flags(self):
-        env_example = _read(".env.example")
+        env_example = _read("config/environments/.env.example")
         for flag in (
             "AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED",
             "KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED",

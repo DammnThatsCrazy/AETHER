@@ -48,7 +48,7 @@ faked) until a credentialed operator runs it.
    (release_surface: enabled_route_prefixes, runtime_roles, consumers,
    required_controls.feature_flags) and `config/route_registry.yaml` are in
    sync; `scripts/release/check_route_registry.py` passes.
-4. **Secrets blueprint known.** `.env.staging.example` lists every var staging
+4. **Secrets blueprint known.** `config/environments/.env.staging.example` lists every var staging
    needs; `config/credential_contracts.yaml` declares the machine-readable
    credential slots (by reference name only — no secret values).
 5. **A credentialed operator is available** for the LIVE steps (Terraform
@@ -59,15 +59,15 @@ faked) until a credentialed operator runs it.
 
 Infrastructure is promoted by the **reviewed Terraform promotion** workflow
 (`.github/workflows/terraform-promote.yml`), never by an un-reviewed apply.
-The canonical root is `deploy/aws/terraform`; staging is selected by
-`deploy/aws/terraform/profiles/staging.tfvars` and uses the isolated state key
+The canonical root is `infra/aws/terraform`; staging is selected by
+`infra/aws/terraform/profiles/staging.tfvars` and uses the isolated state key
 `profiles/staging/terraform.tfstate`. The bucket and lock-table names are
 resolved from the `TF_STATE_BUCKET` and `TF_LOCK_TABLE` GitHub environment
 secrets; the reviewed plan records both names and the apply refuses a mismatch.
 
 1. Validate and plan (no mutation):
    ```bash
-   cd "deploy/aws/terraform"
+   cd "infra/aws/terraform"
    terraform validate
    terraform plan -var-file=profiles/staging.tfvars
    ```
@@ -133,7 +133,7 @@ Secrets are **referenced by name only**. No secret value ever appears in
 `config/pilot/`, `config/deploy_profile.yaml`, or `.env*.example`; the
 credentialless gate (`no-forbidden-secret`) fails closed on inline material.
 
-1. **Runtime secrets** from the secret manager, per `.env.staging.example`:
+1. **Runtime secrets** from the secret manager, per `config/environments/.env.staging.example`:
    required in non-local are `JWT_SECRET`, `DATABASE_URL`,
    `BYOK_ENCRYPTION_KEY`. Pin the staging selectors (staging forbids
    msk/elasticache/neptune/clickhouse):
@@ -329,7 +329,7 @@ asserted by hand:
 ```bash
 python scripts/pilot_evidence.py \
   --manifest config/pilot/examples/financial-observation.yaml \
-  --out artifacts/pilot-evidence
+  --out .artifacts/pilot-evidence
 ```
 
 `scripts/pilot_evidence.py` writes a checksummed, tenant-scoped bundle

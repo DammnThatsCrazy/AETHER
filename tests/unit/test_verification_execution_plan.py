@@ -30,11 +30,13 @@ def test_control_plane_plan_is_typed_and_does_not_fan_out_builds() -> None:
 
 
 def test_environment_authority_templates_are_classified() -> None:
-    plan = build_execution_plan([".env.production.example", ".env.staging.example"])
+    plan = build_execution_plan(["config/environments/.env.production.example", "config/environments/.env.staging.example"])
 
     assert plan["status"] == "READY"
     assert plan["domains"] == ["delivery"]
-    assert plan["selected_components"] == ["workspace-root"]
+    # config/** also owns the templates now that they live under config/environments;
+    # the delivery domain and the (no-node) build plan are unchanged.
+    assert plan["selected_components"] == ["verification-and-documentation", "workspace-root"]
     assert plan["build"]["node_required"] is False
 
 
@@ -61,7 +63,7 @@ def test_functionality_proof_suite_is_selected_only_by_the_paths_it_imports() ->
         "packages/proof-fixtures/index.json",
         "tests/sdk/web/web-offline.test.ts",
         "tests/mocks/react-native.ts",
-        "sdk-fixtures/canonical-first-value-journey.json",
+        "tests/fixtures/sdk/canonical-first-value-journey.json",
         "vitest.config.fps.ts",
     ):
         plan = build_execution_plan([path])

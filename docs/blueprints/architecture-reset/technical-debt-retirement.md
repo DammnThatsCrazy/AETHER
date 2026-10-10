@@ -201,9 +201,9 @@ These are measurements, each tied to a ledger row.
   not prove equal selection or evidence. Row `delivery-pr-workflows-into-one-plan`.
 - **Six profile registries** (1,295 lines) plus `config/readiness_model.yaml`
   each carry their own environment vocabulary. Row `delivery-profile-registries`.
-- **A quarantined local stack** under `deploy/legacy-staging` that contradicts
+- **A quarantined local stack** under `infra/legacy-staging` that contradicts
   the canonical staging profile but is still mounted by the root
-  `docker-compose.yml`. Row `delivery-legacy-staging-compose`.
+  `infra/local/docker-compose.yml`. Row `delivery-legacy-staging-compose`.
 
 ## Retirement rules
 

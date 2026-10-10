@@ -164,7 +164,7 @@ stale before this work) + Risk360/Fraud360 read-only projection-plane domain
 bullet; `docs/BACKEND-API.md` — `/v1/risk360` + `/v1/fraud360` classified
 read-only projection surfaces documented beside the `/v1/infrastructure`
 precedent in the Intelligence Projection Plane section. The remaining 8 docs
-stamped-only after review as out of scope: `ARCHITECTURE.md` (19-row /
+stamped-only after review as out of scope: `docs/architecture/ARCHITECTURE.md` (19-row /
 3-implemented claims remain accurate — risk360/fraud360 still `in_flight`),
 `OPERATIONS-RUNBOOK.md` (run-control mount inventory for the projection planes
 lands in Phase 6 with the flip, not now), `UNIVERSAL-PROVIDER-RUNTIME.md`

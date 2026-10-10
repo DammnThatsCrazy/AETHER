@@ -54,8 +54,8 @@ All flags live on `Settings.backend_interpretation`
 (`services/backend/config/settings.py`,
 `BackendInterpretationConfig`) and are read through function-local helpers in
 `shared/backend_interpretation/flags.py` (import-defensive; never drags the full
-settings graph into a projector). Declared in `.env.example` and
-`.env.production.example`.
+settings graph into a projector). Declared in `config/environments/.env.example` and
+`config/environments/.env.production.example`.
 
 | # | Flag env var | Settings attr | Blueprint item |
 |---|---|---|---|
@@ -324,7 +324,7 @@ Modified: `services/backend/services/ingestion/workers.py` (items 3/5),
 `services/backend/services/measurement/outcome/provider.py` (item 3 read),
 `services/backend/services/silver/projectors/revenue_projector.py` + `outcome_projector.py`
 (item 7), `shared/relationship_spine/promotion.py` (items 1/6),
-`config/settings.py` + `.env.example` + `.env.production.example`
+`config/settings.py` + `config/environments/.env.example` + `config/environments/.env.production.example`
 (`BackendInterpretationConfig` + flags), and the item-7 Alembic migration.
 
 Tests: `tests/unit/backend_interpretation/` (`test_core.py`, `test_episodes.py`,
@@ -359,7 +359,7 @@ default path is affected by any of these boundaries.
   (correlation/observation envelope). WS-D changes there are additive and
   compose; a reviewer from the envelope-owning lane should confirm the combined
   seam.
-- `config/settings.py` + `.env.example`/`.env.production.example` receive the
+- `config/settings.py` + `config/environments/.env.example`/`config/environments/.env.production.example` receive the
   additive `BackendInterpretationConfig` block and seven flag lines.
 - The migration `down_revision` is a single lane head; combining with sibling WS
   lanes requires a tuple-merge revision (see section 6).

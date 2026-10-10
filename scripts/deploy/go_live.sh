@@ -34,7 +34,7 @@ PROFILE="${PROFILE:-production-lean}"
 REGION="${AWS_REGION:-us-east-1}"
 DOMAIN="olympuslabsml.com"
 API_DOMAIN="api.${DOMAIN}"
-TF_DIR="deploy/aws/terraform"
+TF_DIR="infra/aws/terraform"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 while [ $# -gt 0 ]; do

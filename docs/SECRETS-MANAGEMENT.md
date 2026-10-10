@@ -32,7 +32,7 @@ estimated_read_minutes: 5
 defense material, including `JWT_SECRET`, `BYOK_ENCRYPTION_KEY` (Fernet),
 `WATERMARK_SECRET_KEY`, `CANARY_SECRET_SEED`, `EXTRACTION_CANARY_SEED`,
 `SDK_CONFIG_SECRET`, and `ORACLE_SIGNER_PRIVATE_KEY`. The optional
-self-hosted Grafana password belongs to `deploy/observability/` and is not an
+self-hosted Grafana password belongs to `infra/observability/` and is not an
 AWS staging ECS secret. The AWS bootstrap additionally accepts the manual
 `FIRST_ADMIN_BOOTSTRAP_TOKEN`, Stripe key/webhook/price identifiers, and the
 deferred Kyber Google credentials.

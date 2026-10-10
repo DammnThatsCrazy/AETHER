@@ -30,7 +30,7 @@ milestone.
 Intelligence Spine — Full Development & Implementation Blueprint.md`
 (md5 `29210bc8fb2ee5d766d697e01a8fd424`). Machine-readable program state,
 gap ledger, dependency map, ownership map, legacy-social truth matrix and
-open-PR collision log live in [`reports/social360/`](../../reports/social360/).
+open-PR collision log live in [`docs/reference/reports/social360/`](../reference/reports/social360/).
 
 ## What this is
 
@@ -126,12 +126,12 @@ are extended, never duplicated.
 
 ## Milestones
 
-Full program ledger and dependency map: [`reports/social360/PROGRAM_STATE.yaml`](../../reports/social360/PROGRAM_STATE.yaml)
-and [`reports/social360/DEPENDENCY_MAP.md`](../../reports/social360/DEPENDENCY_MAP.md).
+Full program ledger and dependency map: [`docs/reference/reports/social360/PROGRAM_STATE.yaml`](../reference/reports/social360/PROGRAM_STATE.yaml)
+and [`docs/reference/reports/social360/DEPENDENCY_MAP.md`](../reference/reports/social360/DEPENDENCY_MAP.md).
 
 | # | Milestone | Status |
 |---|---|---|
-| M0 | Reconnaissance and truth ledger (`reports/social360/`) | complete |
+| M0 | Reconnaissance and truth ledger (`docs/reference/reports/social360/`) | complete |
 | M1 | Canonical contracts and registries (Social360 facts, IncentiveContext, predicate + motif registries, fidelity schema; py/ts parity; ownership/tests) | complete — ci-check 63/0 (76e1ab56) |
 | M2 | UPR social provider convergence | implemented as library code — 63/0 gate (b89edb3f); no runner invokes `evidence` / `motifs` / `promotion` yet, so `AETHER_RELATIONSHIP_PROMOTION_ENABLED` and `AETHER_RELATIONSHIP_MOTIFS_ENABLED` have no effect until the Social360 write path is wired |
 | M3 | Social Silver plane (deterministic normalization, identity + data-rights integration) | implemented — 63/0 gate (b89edb3f) |
@@ -151,10 +151,10 @@ integrated and validated by the canonical gate `make ci-check` (env-stripped)
 **63 passed / 0 failed** at `b89edb3f`. Per-milestone targeted-test counts and the
 recorded residual seams (M6↔M7 independence resolver; historical-consent evaluation
 on the legacy social aggregator) live in
-[`reports/social360/PROGRAM_STATE.yaml`](../../reports/social360/PROGRAM_STATE.yaml)
+[`docs/reference/reports/social360/PROGRAM_STATE.yaml`](../reference/reports/social360/PROGRAM_STATE.yaml)
 (key decisions D-04/D-05). M11 (migration/decommission) and M12 (hardening/release
 evidence) were closed out 2026-09-04 with a static guardrail validator (gate #64) and
-close-out reports under `reports/social360/` (`M11_MIGRATION_DECOMMISSION.md`,
+close-out reports under `docs/reference/reports/social360/` (`M11_MIGRATION_DECOMMISSION.md`,
 `M12_HARDENING_EVIDENCE.md`); the §154 source-of-truth doc decision is recorded D-06. "Implemented" here means code + honesty tests landed flag-gated OFF —
 it is **not** a vertical-slice convergence claim; the `social360` projection row
 remains `in_flight`.

@@ -34,7 +34,7 @@ remaining direct service/repository writers.
 | SDK event | Creates / updates | Notes |
 |---|---|---|
 | `wallet` | No active mapping documented here | connect/disconnect event; no lake projection builder is present |
-| `transaction` | No automatic SDK-to-graph mapping established here | The separate on-chain action route writes `ActionRecord` and, for deploy/call actions, `Contract` or `DEPLOYED`/`CALLED` facts through the gateway |
+| `transaction` | No automatic SDK-to-graph mapping established here | The separate on-chain action route writes `ActionRecord` and, for infra/call actions, `Contract` or `DEPLOYED`/`CALLED` facts through the gateway |
 | `contract_action` | No automatic SDK-to-graph mapping established here | An explicit on-chain action request uses the gateway; this SDK event alone is not a graph-write guarantee |
 
 ## Layer L2 — agent behavioral (`IG_AGENT_LAYER`)

@@ -23,7 +23,7 @@ not duplicate them here.
 
 ## The audit packages (authoritative)
 
-- **EVM:** `contracts/smart-contracts/audit/` — `README.md`, `SCOPE.md`, `ARCHITECTURE.md`,
+- **EVM:** `contracts/smart-contracts/audit/` — `README.md`, `SCOPE.md`, `docs/architecture/ARCHITECTURE.md`,
   `THREAT_MODEL.md`, `TRUST_ASSUMPTIONS.md`, `STATE_TRANSITIONS.md`,
   `INVARIANTS.md`, `TEST_PLAN.md`, `EIP712_SIGNATURE_SPEC.md`, `DEPLOYMENT.md`,
   `SLITHER.md` (+ `slither-output.txt`), `KNOWN_LIMITATIONS.md`,

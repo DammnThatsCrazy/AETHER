@@ -7,13 +7,13 @@ audience: [ops, architect, dev-senior, security]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - deploy/aws/terraform/profiles.tf
-  - deploy/aws/terraform/main.tf
-  - deploy/aws/terraform/variables.tf
-  - deploy/aws/terraform/moved.tf
-  - deploy/aws/terraform/profiles/production-lean.tfvars
-  - deploy/aws/terraform/tests/profile_plan.tftest.hcl
-  - deploy/aws/terraform/DECOMMISSION.md
+  - infra/aws/terraform/profiles.tf
+  - infra/aws/terraform/main.tf
+  - infra/aws/terraform/variables.tf
+  - infra/aws/terraform/moved.tf
+  - infra/aws/terraform/profiles/production-lean.tfvars
+  - infra/aws/terraform/tests/profile_plan.tftest.hcl
+  - infra/aws/terraform/DECOMMISSION.md
   - config/runtime_deployment.yaml
   - config/deployment_profiles.yaml
   - config/terraform_resource_contracts.yaml
@@ -23,18 +23,18 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:79363dfaa2103283b55b0e0afbe58f2b5fe70db35d3307f58985884f59546701"
-  ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
-  "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
+  ".github/workflows/infrastructure.yml": "sha256:a30a86c08edcb57316ccd388659c7d832c9a3e542f8e40c44ace2206482dcc5e"
+  ".github/workflows/terraform-promote.yml": "sha256:b493d4250ab5da8cb183f579924e13692588091c4c2daf43f20311d62e6e23d3"
+  "config/deployment_profiles.yaml": "sha256:c894e2449ae528dcee1632d07b414727220e74c9621c0a8f1a5e18e2929487a3"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
-  "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/DECOMMISSION.md": "sha256:f1199d32b3e315cd78dcc4beaf3589ac46fc69134ea7083ce5698c270ab2f377"
-  "deploy/aws/terraform/main.tf": "sha256:e6079c3516bd2517835aa34c34276c367c8041f3d5737702e8c62b32a506dc54"
-  "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
-  "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
-  "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
-  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:e0e9e929e6454d660a3099558c16180ae409e81dbc9bee9e26231f7f2890719b"
-  "deploy/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
+  "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
+  "infra/aws/terraform/DECOMMISSION.md": "sha256:d6b05d282e02fcd6840078a75312165ca7a808f5344cc9e05f2eb234dcef7238"
+  "infra/aws/terraform/main.tf": "sha256:e6079c3516bd2517835aa34c34276c367c8041f3d5737702e8c62b32a506dc54"
+  "infra/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
+  "infra/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
+  "infra/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
+  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:e0e9e929e6454d660a3099558c16180ae409e81dbc9bee9e26231f7f2890719b"
+  "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
 ---
 
 # AWS Lean Production
@@ -56,7 +56,7 @@ into and out of it.
 ## Selecting the profile
 
 ```bash
-cd "deploy/aws/terraform"
+cd "infra/aws/terraform"
 terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
 ```
 
@@ -500,7 +500,7 @@ plan** from the previous commit:
 
 If the rollback plan would destroy a **stateful** resource — Aurora, DynamoDB,
 SQS holding messages, S3, KMS keys, Secrets Manager secrets — stop. Follow
-`deploy/aws/terraform/DECOMMISSION.md` instead. A profile flip
+`infra/aws/terraform/DECOMMISSION.md` instead. A profile flip
 showing `Plan: … 1 to destroy` on a data store is a stop-the-line event.
 
 ### Migration rollback
@@ -686,5 +686,5 @@ recorded as blocked rather than counted as done:
 - [Deployment Profiles](DEPLOYMENT-PROFILES.md)
 - [AWS Deployment — Infrastructure Reference](AWS-DEPLOYMENT.md)
 - [Backend Execution Model](BACKEND-EXECUTION-MODEL.md)
-- `deploy/aws/terraform/README.md`
-- `deploy/aws/terraform/DECOMMISSION.md`
+- `infra/aws/terraform/README.md`
+- `infra/aws/terraform/DECOMMISSION.md`

@@ -98,7 +98,7 @@ typed `MobileConfig` with:
   `config/settings.py` flags (mobile_gateway, continuation, client_sync,
   exploration, delivery, command_center, data_quality). No second flag system.
 - **externally_blocked_providers** — the honest static mirror of
-  `reports/mobile-productization/external-blockers.json` ids. A provider
+  `docs/reference/reports/mobile-productization/external-blockers.json` ids. A provider
   listed there is **not live**, and no config claim flips that.
 
 The TS twin (`packages/shared/mobile-config.ts`) mirrors the Python contract

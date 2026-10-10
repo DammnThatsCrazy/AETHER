@@ -564,14 +564,14 @@ which is precisely the "false certainty" this document is named for:
 `make ci-check` passing is not evidence that the transactional code paths
 those other four programs rely on actually work under real infrastructure.
 
-`docker-compose.yml` at the repo root already defines the exact
+`infra/local/docker-compose.yml` at the repo root already defines the exact
 production-shaped topology — `postgres`, `redis`, `kafka`/`zookeeper`,
 `clickhouse`, `backend`, `outbox-relay`, `stream-worker`, and the rest —
 that nothing in CI stands up today.
 
 ### What exists today
 
-- `docker-compose.yml` — full local topology, already used for manual
+- `infra/local/docker-compose.yml` — full local topology, already used for manual
   local development, not wired into any GitHub Actions workflow.
 - `AETHER_ENV=local` in-memory fallbacks throughout the ingestion and
   measurement repositories, explicitly documented in code as the
@@ -592,7 +592,7 @@ existing fast local-mode lane, which stays as the quick-feedback default for
 the finalization check; focused local feedback remains available while a PR is
 in draft:
 
-1. Stand up a bounded subset of `docker-compose.yml`'s services as GitHub
+1. Stand up a bounded subset of `infra/local/docker-compose.yml`'s services as GitHub
    Actions service containers (or via `docker compose up -d` in a CI job) —
    starting with `postgres` + `redis` only.
 2. Point the backend test run at that real stack (`DATABASE_URL` set, so

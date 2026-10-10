@@ -16,8 +16,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
-ALERT_RULES = ROOT / "deploy/observability/prometheus/alert_rules.yml"
-DASHBOARD = ROOT / "deploy/observability/grafana/dashboards/semantic-pipeline.json"
+ALERT_RULES = ROOT / "infra/observability/prometheus/alert_rules.yml"
+DASHBOARD = ROOT / "infra/observability/grafana/dashboards/semantic-pipeline.json"
 
 # The complete metric contract emitted by
 # services/backend/services/semantic_intelligence.

@@ -19,7 +19,7 @@ toc_depth: 3
 reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
-  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:ce5b0adf5540b1db84a211caed88e356cb0603237923ef6c5ba98277addef24c"
+  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:1f881aa8bf833bf141864ea95a37e95fcdb650171ae0ab455e58d5e7d12fe573"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:1a4fae607b1eccdee38ec5bac42ebbcd57d28cb9ef0dfabe3d7a70bdbfcae91d"
   "services/backend/services/web3/classifier.py": "sha256:ab4186e37c2e058401d4303559ca66db49659f93d60389729933777c6fca6061"

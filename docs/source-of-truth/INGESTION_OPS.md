@@ -41,7 +41,7 @@ surface reporting the feature disabled).
 
 Declared in `config/settings.py`
 (`IngestionObservabilityConfig` / `SdkVersionCompatibilityConfig` under the root
-`Settings`), `.env.example`, and `.env.production.example`. Gate H validator
+`Settings`), `config/environments/.env.example`, and `config/environments/.env.production.example`. Gate H validator
 checks all three declarations + both env examples on every run.
 
 ## 2. Ingestion funnel telemetry + Observation Inspector (blueprint §17)
@@ -227,5 +227,5 @@ Both gates are real, fail-closed repo-doctor validators dispatched from the
 | Worker recording seams (NORMALIZED / PROJECTIONS) | `services/backend/services/ingestion/workers.py` |
 | Pipeline health route | `services/backend/services/gateway/routes.py` |
 | Capability-manifest route | `services/backend/services/sdk_config/routes.py` |
-| Flags | `services/backend/config/settings.py` · `.env.example` · `.env.production.example` |
+| Flags | `services/backend/config/settings.py` · `config/environments/.env.example` · `config/environments/.env.production.example` |
 | Gate validators | `scripts/validate_kyber_ops_surface.py` · `scripts/validate_sdk_compat_tiers.py` |

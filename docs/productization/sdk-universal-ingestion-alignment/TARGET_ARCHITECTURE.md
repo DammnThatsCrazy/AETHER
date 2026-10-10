@@ -52,7 +52,7 @@ observation-only invariant (`execution_by_aether = false`) that ADR-011 fixes.
 
 | Tree | Role | Evidence |
 |---|---|---|
-| `services/backend/` | **CANONICAL deployed backend** — the only tree Docker/ECR build and reference | root `docker-compose.yml` (builds this service only), `.github/workflows/deploy.yml` (ECR), `deploy/aws/terraform/main.tf`, `config/runtime_deployment.yaml` |
+| `services/backend/` | **CANONICAL deployed backend** — the only tree Docker/ECR build and reference | root `infra/local/docker-compose.yml` (builds this service only), `.github/workflows/deploy.yml` (ECR), `infra/aws/terraform/main.tf`, `config/runtime_deployment.yaml` |
 | `packages/*` (`web`, `server`, `react-native`, `mobile-core`, `mobile-ui`, `android`, `ios`, `python`) + `packages/shared` | **CANONICAL SDK surface** — thin, observation-only clients over `api.aether.io` / `ingest.aether.so` | SDK endpoints never target port `3001`; `packages/web/src/index.ts` default endpoint `https://api.aether.io`; SDK dependency graph imports only `@aether/shared` + sibling SDKs |
 | `packages/shared/contracts/event-registry.json` | **CANONICAL event registry** (Contract Spine source) | generated TS/Python twins + gated docs declare this one JSON as source |
 | `docs/archive/legacy-architecture/data-ingestion-layer/` | **LEGACY / UN-DEPLOYED duplicate** — TypeScript; `package.json` `name` is literally `"aether-backend"`; port `:3001`; kept alive only by version-sync/fallback/test-suite config | `docs/archive/legacy-architecture/data-ingestion-layer/README.md` (versioned H1, no deprecation marker pre-Phase-0) |

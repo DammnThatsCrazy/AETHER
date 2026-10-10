@@ -16,7 +16,7 @@ The native iOS-simulator / Android-emulator compile (`expo prebuild` → `xcodeb
 `gradlew`) requires **macOS + Xcode + the Android SDK + the Expo toolchain**, which are
 **not present in this Linux CI container** — the native build is `externally_blocked`
 here and runs in the hosted (macOS) CI. See
-`reports/mobile-productization/external-blockers.json`. TypeScript type-checking of the
+`docs/reference/reports/mobile-productization/external-blockers.json`. TypeScript type-checking of the
 shared SDK (`@aether/mobile-core`) is verified in `make ci-check`.
 
 ## Run (in a macOS / Expo environment)

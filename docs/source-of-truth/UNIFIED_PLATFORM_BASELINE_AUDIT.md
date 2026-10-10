@@ -35,7 +35,7 @@ Program baseline recorded before PR 1 implementation began.
 | `FilterGroup` parity-tested but no UI constructs one; divergent duplicate `apps/shared/src/types/graph-layers.ts` | `packages/shared/graph-contract.ts` / frontend | PR 4 |
 | No ContextCapsule/session-context service; no sessionization | repo-wide: zero hits | PR 1 (contracts) → PR 2 (lifecycle) |
 | No comparison engine / findings / watchlists; no projector-ownership registry; no stage receipts | repo-wide: zero hits | PR 1 (contracts) → PR 2/3 |
-| ClickHouse DDL split-brain (`DateTime64(3,'UTC')` vs bare `DateTime`) | `deploy/clickhouse/schemas/` vs `docs/archive/legacy-architecture/data-lake-architecture/**/schemas/gold_*.py` (15 files frozen by allowlist) | PR 2 |
+| ClickHouse DDL split-brain (`DateTime64(3,'UTC')` vs bare `DateTime`) | `infra/clickhouse/schemas/` vs `docs/archive/legacy-architecture/data-lake-architecture/**/schemas/gold_*.py` (15 files frozen by allowlist) | PR 2 |
 
 ## Spec-claimed defects SUPERSEDED by main before this program (do NOT re-fix)
 

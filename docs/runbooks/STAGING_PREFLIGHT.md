@@ -15,7 +15,7 @@ source_hashes:
   "scripts/lib/preflight_env.py": "sha256:f2b8a4efc17d0923f5e3f844907e1c576ab3dbf368de35dc9edfca8094ec8012"
   "scripts/lib/preflight_redis.py": "sha256:418ac3a2e776cfb96572e3b78864a65e96c34c70cfdd838fb3a90b2bf18ee117"
   "scripts/lib/preflight_results.py": "sha256:ce8f40edac30f24e6be3a9840d43c906436059055525cb2fba8df44c5165da86"
-  "scripts/staging_preflight.py": "sha256:961ec8e350c05fdb548801e946c27a7385f376331fffec6d5de6d8ea14557c84"
+  "scripts/staging_preflight.py": "sha256:d18e7929deaedc6ad3ecf261d6cde3d3e59136f49515642dfc87b8e8f7026e28"
   "services/backend/services/gateway/readiness.py": "sha256:76a97f3b23bdbc35dfed9909b13fbc4de56c3e509e43ea950b60b8855d7c1c3e"
 ---
 
@@ -55,7 +55,7 @@ exits 0 only if **all** pass.
 
 | Command | Use |
 |---|---|
-| `staging_preflight.py --env-file deploy/legacy-staging.env` | validate a real env file |
+| `staging_preflight.py --env-file infra/legacy-staging.env` | validate a real env file |
 | `staging_preflight.py --base-url https://api.staging…` | add live HTTP readiness probes |
 | `staging_preflight.py --dry-run` | self-test the gate itself (what CI runs) |
 | `staging_preflight.py --json` | machine-readable report |

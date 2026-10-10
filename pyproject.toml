@@ -193,7 +193,7 @@ line-length = 100
 extend-exclude = [
     "docs/archive/legacy-architecture/aws-deployment/mnt/**",
     "docs/archive/legacy-architecture/backend/mnt/**",
-    "cicd/**",
+    "infra/cicd/**",
     "**/node_modules/**",
 ]
 

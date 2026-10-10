@@ -105,7 +105,7 @@ A running checklist of the productization surfaces and their readiness. See
 ## Deployment & Local Dev
 
 - [x] Env-driven config, safe-by-default feature flags, documented local commands
-- [x] `.env.example` covers all new flags and placeholders
+- [x] `config/environments/.env.example` covers all new flags and placeholders
 - [x] Normal local startup is backend-backed and never seeds automatically
 - [x] Backend seed policy refuses production and requires an explicit staging
       policy and tenant allowlist (merged in PR #494)

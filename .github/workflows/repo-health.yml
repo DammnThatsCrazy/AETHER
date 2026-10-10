@@ -50,7 +50,7 @@ jobs:
               - 'security/model_extraction_defense/**'
               - 'scripts/validate_ml_registry.py'
               - 'scripts/generate_ml_manifest.py'
-              - 'deploy/**'
+              - 'infra/**'
               - 'docs/archive/legacy-architecture/aws-deployment/**'
               - 'apps/kyber/src/features/ml/**'
               - 'apps/kyber/src/pages/ml/**'

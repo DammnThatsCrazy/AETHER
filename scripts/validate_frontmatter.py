@@ -33,6 +33,9 @@ DOCS_ROOT = ROOT / "docs"
 # Subtrees skipped entirely.
 SKIP_DIRS = {
     DOCS_ROOT / "archive",
+    # Evidence and audit reports (formerly the repo-root reports/ tree) are
+    # committed evidence, not published pages; they never carried frontmatter.
+    DOCS_ROOT / "reference" / "reports",
     DOCS_ROOT / "_generated",
     DOCS_ROOT / "_templates",
     DOCS_ROOT / "diagrams",

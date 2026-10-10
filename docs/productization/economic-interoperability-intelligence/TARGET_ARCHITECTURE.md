@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [services/backend/main.py, services/backend/config/settings.py]
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
+  "services/backend/config/settings.py": "sha256:7f0c4e318f1434a07cd0a8a9803398f37a2e2bdd758a11d94a0040a1c80651f5"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
 ---
 

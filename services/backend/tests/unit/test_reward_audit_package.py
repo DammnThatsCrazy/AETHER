@@ -13,7 +13,7 @@ Asserts two things about the external-audit readiness package under
    - ``audit/AUDIT_EVIDENCE.json`` (the file that actually unblocks mainnet)
      does NOT exist at this build state; only the ``...template.json`` exists and
      its ``signoff.approved`` is ``false``.
-   - Both deploy-time gates (``deploy/evm_guards.py`` and
+   - Both deploy-time gates (``infra/evm_guards.py`` and
      ``scripts/lib/audit_gate.js``) reference the evidence file and fail closed
      on mainnet-class networks — verified by running the Python gate's
      ``validate_evidence`` against the template and asserting it is REJECTED.
@@ -55,7 +55,7 @@ REQUIRED_AUDIT_FILES: tuple[str, ...] = (
     "INVARIANTS.md",                   # properties that must always hold
     "EIP712_SIGNATURE_SPEC.md",        # signature scheme / domain separation
     "TEST_PLAN.md",                    # test inventory + commands
-    "DEPLOYMENT.md",                   # deploy/verify + runbooks
+    "DEPLOYMENT.md",                   # infra/verify + runbooks
     "DEPLOYMENT_GUARDS.md",            # summary of the fail-closed deploy gates
     "CODE_REVIEW_CHECKLIST.md",        # what the external auditor must verify
     "KNOWN_LIMITATIONS.md",            # accepted limitations / trade-offs

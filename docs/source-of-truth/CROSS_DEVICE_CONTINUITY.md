@@ -116,6 +116,6 @@ Milestone C1 lands the **contract twins** (parity-green), the **dual-mode persis
 engine**, the **tenant continuation routes**, and the **client-sync feed** (durable log
 + gap-free cursor + `continuation_changed` as the first wired producer) — this page is
 the design of record. The operator router and the remaining sync producers follow within
-the same program (see `reports/mobile-productization/PROGRAM_STATE.yaml`). Flags default
+the same program (see `docs/reference/reports/mobile-productization/PROGRAM_STATE.yaml`). Flags default
 OFF (`continuation.enabled`, `client_sync.enabled`), so disabled surfaces answer 404 — no
 runtime behavior change until enabled.

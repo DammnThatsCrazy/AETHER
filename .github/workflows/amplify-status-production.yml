@@ -273,7 +273,7 @@ jobs:
           # when the production backend and sign-in exist. Until then the site
           # is pilot-only (no sign-in, sign-up or status links; plan choices
           # become pilot requests) and its contact form posts to the always-on
-          # lead intake (deploy/aws/lead-intake). The API values are the ones
+          # lead intake (infra/aws/lead-intake). The API values are the ones
           # production will use; the pilot-only site does not call them.
           cat > "$web_environment" <<'JSON'
           {

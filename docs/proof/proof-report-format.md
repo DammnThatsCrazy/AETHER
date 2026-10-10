@@ -129,13 +129,13 @@ When a proof run has failures, the failure output section lists each failure wit
 
 ```
 FAIL  connector activation — SYNC_NOT_HEALTHY — Connector implementation
-       Evidence: reports/proof-2026-09-15T14-00-00Z/connector-activation.log
+       Evidence: docs/reference/reports/proof-2026-09-15T14-00-00Z/connector-activation.log
 
 FAIL  Profile 360 — BLOCKED — Depends on connector activation
-       Evidence: reports/proof-2026-09-15T14-00-00Z/profile-360.log
+       Evidence: docs/reference/reports/proof-2026-09-15T14-00-00Z/profile-360.log
 
 BLOCKED  iOS SDK smoke — BLOCKED_MISSING_DEVICE — Mobile / QA
-         Evidence: reports/proof-2026-09-15T14-00-00Z/ios-smoke.log
+         Evidence: docs/reference/reports/proof-2026-09-15T14-00-00Z/ios-smoke.log
 ```
 
 The failure output is not a log. It is a structured record of the failures in the run, with enough detail to reproduce the decision and route the fix.
@@ -147,7 +147,7 @@ The proof report is written to a timestamped directory under the run's output lo
 A representative output location:
 
 ```
-reports/proof-2026-09-15T14-00-00Z/
+docs/reference/reports/proof-2026-09-15T14-00-00Z/
 ├── report.md
 ├── staging-smoke.log
 ├── web-sdk-smoke.log

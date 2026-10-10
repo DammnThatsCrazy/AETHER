@@ -30,7 +30,7 @@ Honesty invariants under test:
 
 Full replay/backfill *machinery*, the live provider pull and the enforce-flag
 flip remain release-gated residuals (recorded in
-``reports/social360/PROGRAM_STATE.yaml``); this suite proves the activated plane
+``docs/reference/reports/social360/PROGRAM_STATE.yaml``); this suite proves the activated plane
 is real, hermetic and read-back-correct.
 """
 

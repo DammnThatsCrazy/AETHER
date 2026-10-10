@@ -24,7 +24,7 @@ Tier-0–3 actions (challenge / step-up / device-sign over the Kyber command pla
 
 The native compile is `externally_blocked` in the Linux CI container (needs macOS +
 Xcode + Android SDK + Expo); it runs in the hosted (macOS) CI. See
-`reports/mobile-productization/external-blockers.json`.
+`docs/reference/reports/mobile-productization/external-blockers.json`.
 
 ## Identity & isolation invariants
 

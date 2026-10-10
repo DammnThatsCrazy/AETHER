@@ -463,10 +463,10 @@
       "id": "deployment_profiles",
       "name": "deployment profile / Terraform topology changed",
       "source_globs": [
-        "deploy/aws/terraform/**",
-        "!deploy/aws/terraform/environments/**",
-        "!deploy/aws/terraform/bootstrap/**",
-        "!deploy/aws/terraform/**/*.md",
+        "infra/aws/terraform/**",
+        "!infra/aws/terraform/environments/**",
+        "!infra/aws/terraform/bootstrap/**",
+        "!infra/aws/terraform/**/*.md",
         "config/deployment_profiles.yaml",
         "config/runtime_deployment.yaml",
         "config/terraform_resource_contracts.yaml",
@@ -474,7 +474,7 @@
       ],
       "required_changed_globs": [
         "config/aws_price_book.yaml",
-        "deploy/aws/terraform/tests/**",
+        "infra/aws/terraform/tests/**",
         "tests/fixtures/terraform_plans/**",
         "tests/unit/test_terraform_plan_policy.py",
         "tests/unit/test_terraform_resource_contracts.py",
@@ -679,7 +679,7 @@
         "services/backend/services/ingestion/adapters/**",
         "services/backend/services/ingestion/gateway.py",
         "services/backend/config/settings.py",
-        ".env.production.example",
+        "config/environments/.env.production.example",
         "tests/**",
         "services/backend/**/tests/**"
       ],
@@ -702,8 +702,8 @@
         "docs/source-of-truth/**",
         "docs/productization/sdk-universal-ingestion-alignment/**",
         "services/backend/config/settings.py",
-        ".env.example",
-        ".env.production.example",
+        "config/environments/.env.example",
+        "config/environments/.env.production.example",
         "tests/**",
         "services/backend/**/tests/**"
       ],

@@ -1,4 +1,4 @@
-"""Assert the ADR-008 Model Runtime config is documented in .env.example (D8/D9).
+"""Assert the ADR-008 Model Runtime config is documented in config/environments/.env.example (D8/D9).
 
 The model runtime (services/model_runtime) reads the MODEL_RUNTIME_* variables
 documented below. Every variable the module reads must appear here, the
@@ -15,7 +15,7 @@ from pathlib import Path
 # or, when that file is absent, at the repo root .env.example. Resolve from this
 # test file's own location and use whichever exists.
 _BACKEND_ENV_EXAMPLE = Path(__file__).resolve().parents[2] / ".env.example"
-_ROOT_ENV_EXAMPLE = Path(__file__).resolve().parents[4] / ".env.example"
+_ROOT_ENV_EXAMPLE = Path(__file__).resolve().parents[4] / "config/environments/.env.example"
 
 _SECTION_HEADER = "# === Model Runtime — Multi-Model Intelligence Harness (ADR-008) ==="
 
@@ -84,7 +84,7 @@ def _model_runtime_section(text: str) -> list[str]:
 
 
 def test_env_example_is_reachable():
-    assert _env_example().is_file(), f"no .env.example found at {_env_example()}"
+    assert _env_example().is_file(), f"no config/environments/.env.example found at {_env_example()}"
 
 
 def test_all_documented_vars_present():

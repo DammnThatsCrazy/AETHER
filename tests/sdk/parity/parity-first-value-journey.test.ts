@@ -30,7 +30,7 @@ import {
   type DroppedEventDiagnostics,
 } from '@aether/proof-fixtures';
 
-const CANONICAL_FIXTURE_PATH = join(__dirname, '..', '..', '..', 'sdk-fixtures', 'canonical-first-value-journey.json');
+const CANONICAL_FIXTURE_PATH = join(__dirname, '..', '..', '..', 'tests', 'fixtures', 'sdk', 'canonical-first-value-journey.json');
 
 describe('PR D: Cross-Platform Payload Snapshot Parity — Canonical First-Value Journey', () => {
   const fixture = canonicalFirstValueJourney;
@@ -42,7 +42,7 @@ describe('PR D: Cross-Platform Payload Snapshot Parity — Canonical First-Value
 
   // ─── Canonical fixture structure ────────────────────────────────────────
 
-  it('should have a valid canonical fixture at sdk-fixtures/canonical-first-value-journey.json', () => {
+  it('should have a valid canonical fixture at tests/fixtures/sdk/canonical-first-value-journey.json', () => {
     const raw = readFileSync(CANONICAL_FIXTURE_PATH, 'utf-8');
     const parsed = JSON.parse(raw);
     expect(parsed._fixture_version).toBe(1);

@@ -60,7 +60,7 @@ Do not flip production-lean to ON in one commit. One flag group per PR with proo
 - [ ] Gates 1-7 green on staging ephemeral (`identity-continuity-gates.yml`)
 - [ ] `verification / disposition` green (`repo-consistency.yml`)
 - [ ] `scripts/production_status.py` not degraded
-- [ ] `reports/release-readiness/identity-continuity-proof.json` produced and committed if required
+- [ ] `docs/reference/reports/release-readiness/identity-continuity-proof.json` produced and committed if required
 - [ ] Docs restamped: `make docs-generate-changed` and hashes committed
 - [ ] Cost guardrails: `seven_consecutive_observed_days_required` satisfied if flipping cost-impacting flags
 

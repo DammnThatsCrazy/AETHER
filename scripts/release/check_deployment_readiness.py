@@ -252,7 +252,7 @@ PLACEHOLDER_ACCOUNTS = frozenset({
 })
 
 # Source-path markers that disqualify an artifact from counting as credentialed
-# evidence. reports/cost/cost-report.json in this very repo was generated from
+# evidence. docs/reference/reports/cost/cost-report.json in this very repo was generated from
 # a scratchpad inventory — real output, synthetic input — which is exactly the
 # thing that must never be mistaken for a plan against a real account.
 UNTRUSTED_SOURCE_MARKERS = (

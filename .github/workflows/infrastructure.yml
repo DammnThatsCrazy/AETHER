@@ -16,7 +16,7 @@ on:
   pull_request:
     types: [ready_for_review]
     paths:
-      - 'deploy/aws/**'
+      - 'infra/aws/**'
       - '.github/workflows/infrastructure.yml'
   workflow_dispatch:
     inputs:
@@ -37,7 +37,7 @@ on:
   push:
     branches: [Development, staging, main]
     paths:
-      - 'deploy/aws/**'
+      - 'infra/aws/**'
       - '.github/workflows/infrastructure.yml'
 
 concurrency:
@@ -49,7 +49,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  TF_DIR: deploy/aws/terraform
+  TF_DIR: infra/aws/terraform
   TF_IN_AUTOMATION: true
 
 jobs:
@@ -150,7 +150,7 @@ jobs:
           - preview
     defaults:
       run:
-        working-directory: deploy/aws/terraform
+        working-directory: infra/aws/terraform
     steps:
       - uses: actions/checkout@v4
         with:
@@ -242,7 +242,7 @@ jobs:
           - enterprise-isolated
     defaults:
       run:
-        working-directory: deploy/aws/terraform
+        working-directory: infra/aws/terraform
     env:
       DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'pilot' }}
       TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
@@ -447,7 +447,7 @@ jobs:
           # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
           # verbatim in the top-level `variables` block of the artifact uploaded
           # below, on every push to main and every same-repo pull request that
-          # touches `deploy/aws/**`. The raw document is written to a name
+          # touches `infra/aws/**`. The raw document is written to a name
           # that is never uploaded, sanitised, and deleted.
           terraform show -json "tfplan-${PROFILE}" > plan-raw.json
           python "${GITHUB_WORKSPACE}/scripts/release/sanitize_terraform_plan_json.py" \
@@ -462,7 +462,7 @@ jobs:
             "remote-plan-${PROFILE}.json" > "remote-plan-${PROFILE}.sha256"
 
       # check_terraform_plan_policy.py reads the plan JSON and emits the
-      # canonical artifacts/profile-resource-inventory.json; check_cost_model.py
+      # canonical .artifacts/profile-resource-inventory.json; check_cost_model.py
       # consumes that inventory. Neither exit status is swallowed.
       - name: Validate plan JSON against policy and cost model
         working-directory: ${{ github.workspace }}
@@ -476,26 +476,26 @@ jobs:
           python scripts/release/check_terraform_plan_policy.py \
             --profile "${PROFILE}" \
             --plan-json "${plan_json}" \
-            | tee "artifacts/plan-policy-report-${PROFILE}.txt"
-          test -s artifacts/profile-resource-inventory.json
+            | tee ".artifacts/plan-policy-report-${PROFILE}.txt"
+          test -s .artifacts/profile-resource-inventory.json
           # The numeric cost ceiling only exists for profiles that declare a
           # `budget` in the canonical policy data; asking for one where none is
           # declared is a usage error, not a cost failure.
           if python -c "import os, yaml; p = (yaml.safe_load(open('config/deployment_profiles.yaml')) or {}).get('profiles') or {}; raise SystemExit(0 if (p.get(os.environ['PROFILE']) or {}).get('budget') else 1)"; then
             python scripts/release/check_cost_model.py \
               --profile "${PROFILE}" \
-              --inventory artifacts/profile-resource-inventory.json \
-              --out-dir "artifacts/cost-${PROFILE}" \
-              | tee "artifacts/cost-model-report-${PROFILE}.txt"
+              --inventory .artifacts/profile-resource-inventory.json \
+              --out-dir ".artifacts/cost-${PROFILE}" \
+              | tee ".artifacts/cost-model-report-${PROFILE}.txt"
           else
             echo "::notice title=No cost budget::${PROFILE} declares no budget in config/deployment_profiles.yaml; no numeric ceiling to enforce." \
-              | tee "artifacts/cost-model-report-${PROFILE}.txt"
+              | tee ".artifacts/cost-model-report-${PROFILE}.txt"
           fi
           sha256sum \
-            artifacts/profile-resource-inventory.json \
-            "artifacts/plan-policy-report-${PROFILE}.txt" \
-            "artifacts/cost-model-report-${PROFILE}.txt" \
-            > "artifacts/plan-validation-${PROFILE}.sha256"
+            .artifacts/profile-resource-inventory.json \
+            ".artifacts/plan-policy-report-${PROFILE}.txt" \
+            ".artifacts/cost-model-report-${PROFILE}.txt" \
+            > ".artifacts/plan-validation-${PROFILE}.sha256"
 
       - name: Upload immutable remote-plan evidence
         uses: actions/upload-artifact@v4
@@ -505,11 +505,11 @@ jobs:
             ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.txt
             ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.json
             ${{ env.TF_DIR }}/remote-plan-${{ matrix.profile }}.sha256
-            artifacts/profile-resource-inventory.json
-            artifacts/plan-policy-report-${{ matrix.profile }}.txt
-            artifacts/cost-model-report-${{ matrix.profile }}.txt
-            artifacts/plan-validation-${{ matrix.profile }}.sha256
-            artifacts/cost-${{ matrix.profile }}/
+            .artifacts/profile-resource-inventory.json
+            .artifacts/plan-policy-report-${{ matrix.profile }}.txt
+            .artifacts/cost-model-report-${{ matrix.profile }}.txt
+            .artifacts/plan-validation-${{ matrix.profile }}.sha256
+            .artifacts/cost-${{ matrix.profile }}/
           if-no-files-found: error
           retention-days: 30
 

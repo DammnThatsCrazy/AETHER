@@ -2,7 +2,7 @@
 // =============================================================================
 // Aether SDK — CDN RELEASE LAYOUT VERIFICATION
 //
-// Validates the staged tree in artifacts/sdk/cdn/ before anything is uploaded.
+// Validates the staged tree in .artifacts/sdk/cdn/ before anything is uploaded.
 // Publishing a manifest whose hashes do not match the bytes it points at is
 // worse than publishing nothing: every client that trusts the hash rejects the
 // bundle and the failure surfaces as a silent install failure in the field.
@@ -16,7 +16,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const OUT = join(ROOT, 'artifacts', 'sdk', 'cdn');
+const OUT = join(ROOT, '.artifacts', 'sdk', 'cdn');
 const CDN_BASE = 'https://cdn.aether.network';
 
 const pkg = JSON.parse(readFileSync(join(ROOT, 'packages', 'web', 'package.json'), 'utf-8'));

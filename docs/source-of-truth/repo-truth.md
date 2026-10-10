@@ -19,8 +19,8 @@ parallel architecture or runtime implementation trees.
 
 Architecture, design, SDK, connector, release, and operational documents belong under `docs/`.
 Validation and generation code belongs under `scripts/`; runtime configuration
-under `config/`; tests under `tests/`; deployment under `deploy/`; and
-generated evidence under `artifacts/`, `reports/`, or `release-evidence/` as
+under `config/`; tests under `tests/`; deployment under `infra/`; and
+generated evidence under `.artifacts/`, `docs/reference/reports/`, or `release-evidence/` as
 declared by the ownership registries. These are intentional support roots,
 not alternate service homes.
 
@@ -37,7 +37,7 @@ not alternate service homes.
 | `scripts/` | Repository validation, generation, release, docs, and contract scripts |
 | `tests/` | Cross-package and system tests |
 | `apps/` | Product applications: the web apps (Aether, Kyber, demo, marketing, status, docs, site, shared UI) and the mobile shells |
-| `deploy/` | Deployment configurations |
+| `infra/` | Deployment configurations |
 | `config/` | Runtime configuration |
 
 ## Canonical service and deployment mapping
@@ -52,7 +52,7 @@ root now have one canonical home:
 | ML training and serving | `services/ml/` | — |
 | Internal broker-coupled agents | `services/agents/` | — |
 | Compliance controls | `services/compliance/` | — |
-| AWS deployment and Terraform | `deploy/aws/` | `docs/archive/legacy-architecture/aws-deployment/` |
+| AWS deployment and Terraform | `infra/aws/` | `docs/archive/legacy-architecture/aws-deployment/` |
 | Smart contracts | `contracts/smart-contracts/` | — |
 | Deprecated TypeScript ingestion duplicate | — | `docs/archive/legacy-architecture/data-ingestion-layer/` |
 | Deprecated TypeScript lake duplicate | — | `docs/archive/legacy-architecture/data-lake-architecture/` |

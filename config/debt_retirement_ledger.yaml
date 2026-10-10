@@ -672,16 +672,16 @@ entries:
     domain: delivery
     classification: deprecated
     state: deprecated
-    authority: deploy/aws/terraform/profiles/staging.tfvars via staging-lifecycle.yml
+    authority: infra/aws/terraform/profiles/staging.tfvars via staging-lifecycle.yml
     current:
-      - deploy/aws/terraform
+      - infra/aws/terraform
     duplicates:
-      - deploy/legacy-staging
+      - infra/legacy-staging
     retire: >-
       the quarantined Redis + Kafka + Prometheus local stack that contradicts
       the canonical staging profile
     consumers:
-      - docker-compose.yml
+      - infra/local/docker-compose.yml
       - docs/DEPLOYMENT-RUNBOOK.md
       - docs/SMOKE-TEST-CHECKLIST.md
       - scripts/release/check_delivery_compose_parity.py
@@ -719,8 +719,8 @@ entries:
       identity-merge "safety" flags, pool sizes and ports (including the
       OpenSearch endpoint and port), Jira credentials, a duplicate stablecoin
       Profile360 flag, and five tuning thresholds the code hardcodes. Their lines are removed from
-      .env.example, .env.local.example, .env.staging.example,
-      .env.production.example and the production-lean and staging release flag
+      config/environments/.env.example, config/environments/.env.local.example, config/environments/.env.staging.example,
+      config/environments/.env.production.example and the production-lean and staging release flag
       lists, and the capability overlays no longer bind them.
     consumers: []
     compatibility: >-
@@ -771,7 +771,7 @@ entries:
     consumers:
       - tests/unit/test_release_profile_enforcement.py
       - scripts/release/check_resolved_feature_flags.py
-    compatibility: .env.production.example and .env.staging.example keep ML_MODE, and the posture and release files keep TRUST_PLANE_ENABLED, until the contracts are retired
+    compatibility: config/environments/.env.production.example and config/environments/.env.staging.example keep ML_MODE, and the posture and release files keep TRUST_PLANE_ENABLED, until the contracts are retired
     mechanism: delete
     parity_evidence: null
     usage_evidence: >-

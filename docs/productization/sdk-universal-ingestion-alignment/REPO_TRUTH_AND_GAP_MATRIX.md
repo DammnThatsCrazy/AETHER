@@ -22,8 +22,8 @@ executive-directive preamble, not a requirement row) against the repository.
 **Authority rules** (how "repo truth" is established when trees conflict):
 
 1. **Deployed beats un-deployed.** Only the Python monolith is built/referenced
-   by deployment authority: root `docker-compose.yml`, `.github/workflows/deploy.yml`
-   (ECR), `docs/archive/legacy-architecture/aws-deployment/main.tf` (+ `deploy/aws/terraform/…`),
+   by deployment authority: root `infra/local/docker-compose.yml`, `.github/workflows/deploy.yml`
+   (ECR), `docs/archive/legacy-architecture/aws-deployment/main.tf` (+ `infra/aws/terraform/…`),
    `config/runtime_deployment.yaml`. Neither TypeScript duplicate tree appears in
    any of them.
 2. **Live ingress beats README claims.** Canonical SDK ingress is `POST /v1/batch`
@@ -56,7 +56,7 @@ into these frozen rows — they are tracked live in
 
 | Blueprint § | Classification | File evidence | Owning phase |
 |---|---|---|---|
-| 1 — Target end-to-end architecture | **MISALIGNED** | Two `/v1/batch` acceptors + two lake stacks; canonical path exists only in Python: `services/backend/services/ingestion/batch.py`, root `docker-compose.yml`; duplicate claims in `docs/archive/legacy-architecture/data-ingestion-layer/README.md` (:3001) and `docs/archive/legacy-architecture/data-lake-architecture/README.md` | Phase 0 (deprecate duplicates) → WS-B |
+| 1 — Target end-to-end architecture | **MISALIGNED** | Two `/v1/batch` acceptors + two lake stacks; canonical path exists only in Python: `services/backend/services/ingestion/batch.py`, root `infra/local/docker-compose.yml`; duplicate claims in `docs/archive/legacy-architecture/data-ingestion-layer/README.md` (:3001) and `docs/archive/legacy-architecture/data-lake-architecture/README.md` | Phase 0 (deprecate duplicates) → WS-B |
 | 2 — Point 1: Observation Boundary | **MISALIGNED** | No single observation model after adapters; heterogeneous envelopes on one validated topic; five+ Bronze/Silver pipelines — `…/services/ingestion/workers.py`, `…/bronze_bulk.py`, `docs/archive/legacy-architecture/backend/migrations/…/20260720_silver_import_facts.py` (synthesized `TEXT source_event_id`) | WS-B |
 | 3 — Point 2: Two-Envelope Architecture | **PARTIAL** | Envelope B = canonical field registry + pydantic runtime model + passive TS twin + flag-gated /v1/batch adoption (WS-A5, default OFF) — `packages/shared/contracts/observation-envelope-registry.json`, `services/backend/shared/observation/envelope.py`, `packages/shared/observation-envelope.ts`, `…/services/ingestion/observation_envelope.py`, `…/batch.py`; `BaseEvent` (Envelope A) still the client envelope and the flat dict still the consumption surface until WS-B converges adapters | WS-A5 (model, flag) → WS-B (universal) |
 | 4 — Point 3: Contract Spine as Generator | **MISALIGNED** | Spine real + drift-gated, but native iOS/Android registries are hand-maintained and documented never-generated; `packages/web/src/types.ts` is a drifted hand-mirror; only consent is generated — `packages/shared/contracts/event-registry.json`, `scripts/generate_contracts.py`, `packages/ios/Sources/AetherSDK/Aether.swift`, `scripts/validate_mobile_event_parity.py` | WS-A (+ Phase 0 drift gates) |

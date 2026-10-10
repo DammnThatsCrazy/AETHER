@@ -117,7 +117,7 @@ All default OFF. Backend settings sections in
 | `targeting_intelligence` | `AETHER_CLUSTER_TARGETING_INTELLIGENCE_ENABLED`, `AETHER_TARGETING_EXPORTS_ENABLED`, `AETHER_TARGETING_OODA_SUGGESTIONS_ENABLED`, `KYBER_TARGETING_INTELLIGENCE_ENABLED` |
 | `one_person_ops` | `AETHER_AGENT_RUNTIME_DURABLE_ENABLED`, `AETHER_AGENT_WORKER_BRIDGE_ENABLED`, `AETHER_STAGED_GRAPH_MUTATION_REVIEW_ENABLED`, `AETHER_CATALYST_CYCLE_AUTOMATION_ENABLED`, `KYBER_AGENT_COMMAND_CENTER_ENABLED`, `KYBER_ONE_PERSON_OPS_ENABLED` |
 
-All are documented in `.env.example`. The exact mandate flag names are used
+All are documented in `config/environments/.env.example`. The exact mandate flag names are used
 verbatim — no mapping layer was needed.
 
 ## Security and privacy invariants
@@ -170,7 +170,7 @@ verbatim — no mapping layer was needed.
 - **Slice 1 (this document's introduction):** version 8.12.0;
   `ai_invocation_observed` registered (268 events); four shared contract
   files added and exported; five backend settings sections added (28 flags,
-  default OFF); `.env.example` documented.
+  default OFF); `config/environments/.env.example` documented.
 - **Slice 2 (merged, PR #411):** External Agent Telemetry Plane — durable
   AgentDeployment registry + lifecycle routes, /v1/batch deployment-context
   validation + canonical_entity_id stripping, identity non-merge denylist,

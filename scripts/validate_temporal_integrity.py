@@ -100,7 +100,7 @@ def scan_frontend() -> set[str]:
 
 def scan_clickhouse() -> set[str]:
     paths: list[Path] = []
-    paths.extend((ROOT / "deploy" / "clickhouse").rglob("*.sql"))
+    paths.extend((ROOT / "infra" / "clickhouse").rglob("*.sql"))
     lake_schemas = ROOT / "docs/archive/legacy-architecture/data-lake-architecture"
     if lake_schemas.exists():
         paths.extend(lake_schemas.rglob("schemas/*.py"))

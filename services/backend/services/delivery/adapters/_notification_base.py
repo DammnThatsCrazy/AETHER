@@ -17,7 +17,7 @@ APNs, FCM, Web Push (VAPID) and email share one honesty contract:
 The network transport is **injectable** so the request-construction and
 response-mapping logic is unit-testable without a live provider. Live sends to
 Apple/Google/SES are externally blocked (no provider credentials/reachability in
-this session) — see ``reports/mobile-productization/external-blockers.json``.
+this session) — see ``docs/reference/reports/mobile-productization/external-blockers.json``.
 """
 from __future__ import annotations
 

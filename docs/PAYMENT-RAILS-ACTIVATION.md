@@ -191,7 +191,7 @@ confirmed — the code path is complete.
 ## Alerts
 
 Prometheus rules (group `aether_payment_rails` in
-`deploy/observability/prometheus/alert_rules.yml`). Meanings:
+`infra/observability/prometheus/alert_rules.yml`). Meanings:
 
 | Alert | Meaning |
 |---|---|

@@ -13,7 +13,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
+  "services/backend/config/settings.py": "sha256:7f0c4e318f1434a07cd0a8a9803398f37a2e2bdd758a11d94a0040a1c80651f5"
   "services/backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
   "services/backend/services/intelligence/ooda_engine.py": "sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486"
   "services/backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"

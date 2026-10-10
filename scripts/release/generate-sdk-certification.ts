@@ -8,7 +8,7 @@
  *  - package.json versions from packages/web, packages/react-native, packages/server,
  *    packages/ios, packages/android
  *  - dist/ artifacts presence
- *  - sdk-fixtures/canonical-first-value-journey.json
+ *  - tests/fixtures/sdk/canonical-first-value-journey.json
  *  - test existence in tests/sdk/, tests/sdk/parity/, tests/sdk/ios/, tests/sdk/android/
  *  - apps/proof-asterisk for sample apps
  *
@@ -56,7 +56,7 @@ const DIST_DIRS = [
   { name: "server", dir: join(ROOT, "packages", "server", "dist") },
 ];
 
-const CANONICAL_FIXTURE_PATH = join(ROOT, "sdk-fixtures", "canonical-first-value-journey.json");
+const CANONICAL_FIXTURE_PATH = join(ROOT, "tests", "fixtures", "sdk", "canonical-first-value-journey.json");
 
 const SAMPLE_APP_DIRS = [
   { name: "proof-web", dir: join(ROOT, "apps", "proof-web") },
@@ -529,7 +529,7 @@ function generateMarkdownReport(data: CertificationData): string {
 
   lines.push("---");
   lines.push("title: SDK Certification Report");
-  lines.push("slug: reports/sdk-certification-report");
+  lines.push("slug: docs/reference/reports/sdk-certification-report");
   lines.push("section: architecture");
   lines.push("visibility: P");
   lines.push("audience: [dev-senior, architect]");

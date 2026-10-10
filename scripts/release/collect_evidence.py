@@ -91,7 +91,7 @@ EVIDENCE_CHECK_ARGS: dict[str, list[str]] = {
     # With no real plan present the check fails, and that is the honest result.
     "terraform_plan_policy": [
         "--profile", "production-lean",
-        "--plan-json", "artifacts/reviewed.tfplan.json",
+        "--plan-json", ".artifacts/reviewed.tfplan.json",
     ],
     # Scored against the inventory a credentialed plan produced. The path is the
     # same one `make validate-cost-model` writes the FIXTURE-derived inventory
@@ -103,11 +103,11 @@ EVIDENCE_CHECK_ARGS: dict[str, list[str]] = {
     # was pointed at a path a fixture never occupies.
     "cost_model": [
         "--profile", "production-lean",
-        "--inventory", "artifacts/profile-resource-inventory.json",
+        "--inventory", ".artifacts/profile-resource-inventory.json",
     ],
 }
 
-COST_INVENTORY = "artifacts/profile-resource-inventory.json"
+COST_INVENTORY = ".artifacts/profile-resource-inventory.json"
 
 
 def synthetic_inventory_reason(inventory_rel: str = COST_INVENTORY) -> str | None:

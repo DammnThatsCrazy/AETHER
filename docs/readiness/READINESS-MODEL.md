@@ -34,7 +34,7 @@ Canonical sources:
 | `scripts/readiness_status.py` | Status cards, profile reports, artifacts, docs |
 | `scripts/validate_readiness_model.py` | Fail-closed validator |
 | `scripts/migrate_readiness_data.py` | Legacy migration + report |
-| `artifacts/readiness/{features,profiles,migration-report}.json` | Machine-readable outputs |
+| `.artifacts/readiness/{features,profiles,migration-report}.json` | Machine-readable outputs |
 | `docs/_generated/{FEATURE-READINESS,RELEASE-PROFILE-READINESS}.md` | Generated reports |
 
 ## Platform coverage
@@ -226,7 +226,7 @@ buy credentialed verification.
 
 `scripts/production_status.py`'s 0-5 average is retained as
 `historical_maturity_index` and is **non-authoritative**. Run
-`make readiness-migrate` to produce `artifacts/readiness/migration-report.json`,
+`make readiness-migrate` to produce `.artifacts/readiness/migration-report.json`,
 which lists what mapped automatically, what needs manual classification, the old
 score, and the new per-dimension states with explicit assumptions. Never
 silently reinterpret a legacy score as implementation-incompleteness — separate

@@ -39,9 +39,9 @@ STRICT_BASH_ELSEWHERE = ("staging-lifecycle.yml", "staging-ttl-guard.yml")
 # They are enumerated so a NEW apply site anywhere in the repository fails the
 # exclusivity test, rather than being tolerated by a root-only glob's silence.
 QUARANTINED_APPLY_SITES = {
-    "cicd/aether-cicd/.github/workflows/cd.yml",
-    "cicd/aether-cicd/.github/workflows/demo-management.yml",
-    "cicd/aether-cicd/.github/workflows/infrastructure.yml",
+    "infra/cicd/aether-cicd/.github/workflows/cd.yml",
+    "infra/cicd/aether-cicd/.github/workflows/demo-management.yml",
+    "infra/cicd/aether-cicd/.github/workflows/infrastructure.yml",
 }
 # Every profile the promotion workflow can dispatch, matching the parity
 # restatement (cloud ∪ ephemeral-class). demo/preview are ephemeral-class and
@@ -1063,7 +1063,7 @@ def test_terraform_promote_uses_remote_backend_in_plan_and_apply():
     # the account-level ECS role bootstrap, in addition to plan and apply.
     assert workflow.count('-backend-config="bucket=${TF_STATE_BUCKET}"') == 3
     assert workflow.count('-backend-config="key=profiles/${PROFILE}/terraform.tfstate"') == 3
-    versions = (ROOT / "deploy/aws/terraform/versions.tf").read_text(
+    versions = (ROOT / "infra/aws/terraform/versions.tf").read_text(
         encoding="utf-8"
     )
     assert 'backend "s3" {}' in versions
@@ -1078,7 +1078,7 @@ def test_terraform_promote_requires_release_digest_inputs():
 
 
 def test_image_digest_variables_have_no_mutable_defaults():
-    variables = (ROOT / "deploy/aws/terraform/variables.tf").read_text(
+    variables = (ROOT / "infra/aws/terraform/variables.tf").read_text(
         encoding="utf-8"
     )
     assert 'default     = "sha256:' not in variables
@@ -1106,7 +1106,7 @@ def test_founding_release_gate_requires_durable_suites_or_hosted_evidence():
 
 
 def test_durable_integration_uses_read_only_repository_test_runner():
-    compose = (ROOT / "deploy/integration/docker-compose.durable.yml").read_text(encoding="utf-8")
+    compose = (ROOT / "infra/integration/docker-compose.durable.yml").read_text(encoding="utf-8")
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
     assert "integration-tests:" in compose
@@ -1341,10 +1341,10 @@ def test_infrastructure_remote_plan_validates_plan_json_for_policy_and_cost():
     policy = run.split("check_terraform_plan_policy.py", 1)[1].split("python", 1)[0]
     assert '--profile "${PROFILE}"' in policy
     assert '--plan-json "${plan_json}"' in policy
-    assert "test -s artifacts/profile-resource-inventory.json" in run
+    assert "test -s .artifacts/profile-resource-inventory.json" in run
     cost = run.split("check_cost_model.py", 1)[1]
     assert '--profile "${PROFILE}"' in cost
-    assert "--inventory artifacts/profile-resource-inventory.json" in cost
+    assert "--inventory .artifacts/profile-resource-inventory.json" in cost
     # The cost model only applies where a budget is declared, and that decision
     # is read from the canonical policy data rather than hardcoded here.
     assert "config/deployment_profiles.yaml" in run
@@ -1363,9 +1363,9 @@ def test_infrastructure_remote_plan_validates_plan_json_for_policy_and_cost():
     paths = uploads[0]["with"]["path"]
     for retained in (
         "remote-plan-${{ matrix.profile }}.json",
-        "artifacts/profile-resource-inventory.json",
-        "artifacts/plan-policy-report-${{ matrix.profile }}.txt",
-        "artifacts/cost-model-report-${{ matrix.profile }}.txt",
+        ".artifacts/profile-resource-inventory.json",
+        ".artifacts/plan-policy-report-${{ matrix.profile }}.txt",
+        ".artifacts/cost-model-report-${{ matrix.profile }}.txt",
     ):
         assert retained in paths, f"remote-plan evidence drops {retained}"
 
@@ -1524,7 +1524,7 @@ def test_promotion_plan_records_the_full_plan_provenance():
     # Reports retained alongside the plan: the policy validator's canonical
     # inventory becomes the reviewed resource inventory.
     assert (
-        'cp artifacts/profile-resource-inventory.json "${TF_DIR}/reviewed.resources.json"'
+        'cp .artifacts/profile-resource-inventory.json "${TF_DIR}/reviewed.resources.json"'
         in plan_script
     )
     assert 'tee "${TF_DIR}/reviewed.policy.txt"' in plan_script
@@ -2015,14 +2015,14 @@ def test_the_binary_plan_is_treated_as_a_secret_bearing_artifact():
         s for s in _steps(doc, "plan")
         if str(s.get("uses", "")).startswith("actions/upload-artifact")
     ]
-    binary_path = "deploy/aws/terraform/reviewed.tfplan"
+    binary_path = "infra/aws/terraform/reviewed.tfplan"
     evidence = [u for u in uploads if "reviewed.*" in u["with"]["path"]]
     binary = [u for u in uploads if u["with"]["path"].strip() == binary_path]
     assert len(evidence) == 1 and len(binary) == 1, (
         "the binary plan is not uploaded separately from the reviewable evidence"
     )
     # The long-lived evidence artifact must NOT contain the binary plan.
-    assert "!deploy/aws/terraform/reviewed.tfplan" in evidence[0]["with"]["path"]
+    assert "!infra/aws/terraform/reviewed.tfplan" in evidence[0]["with"]["path"]
     # A reviewed plan is only legal to apply for 24h, so one day is the whole
     # window the apply path can use.
     assert int(binary[0]["with"]["retention-days"]) == 1, (

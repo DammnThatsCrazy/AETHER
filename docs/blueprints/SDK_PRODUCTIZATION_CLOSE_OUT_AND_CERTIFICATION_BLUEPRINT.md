@@ -169,7 +169,7 @@ It must not expose:
 
 ### Problem
 
-PR #648 explicitly leaves `cicd/aether-cicd/` with a competing legacy CDN convention:
+PR #648 explicitly leaves `infra/cicd/aether-cicd/` with a competing legacy CDN convention:
 
 <!-- Legacy paths quoted here; use zero-width joiners to avoid the CI CDN-path scanner -->
 ```txt
@@ -196,7 +196,7 @@ Either:
 
 - No repo path references `sdk/v5/loader​.js` as a live install path.
 - No public docs reference `sdk/{version}/aether-sdk.esm​.min.js` unless marked legacy.
-- Domain gate scans `cicd/aether-cicd/`.
+- Domain gate scans `infra/cicd/aether-cicd/`.
 - SDK install docs show one canonical CDN loader URL.
 
 ## 3.3 Convert parity from claims into generated release evidence
@@ -257,7 +257,7 @@ The SDKs may expose similar helpers, but you still need proof that the same busi
 Create one fixture:
 
 ```txt
-sdk-fixtures/canonical-first-value-journey.json
+tests/fixtures/sdk/canonical-first-value-journey.json
 ```
 
 It should represent:
@@ -357,13 +357,13 @@ Unit tests do not prove tenant installability.
 Add or validate:
 
 ```txt
-examples/web-next
-examples/web-script-tag
-examples/react-native
-examples/ios-swift
-examples/android-kotlin
-examples/server-node
-examples/ecommerce-full-journey
+packages/sdk/examples/web-next
+packages/sdk/examples/web-script-tag
+packages/sdk/examples/react-native
+packages/sdk/examples/ios-swift
+packages/sdk/examples/android-kotlin
+packages/sdk/examples/server-node
+packages/sdk/examples/ecommerce-full-journey
 ```
 
 ### Required sample behavior
@@ -538,7 +538,7 @@ Remove competing CDN/install conventions.
 
 ### Work
 
-- Scan `cicd/aether-cicd/`.
+- Scan `infra/cicd/aether-cicd/`.
 - Retire or rewrite legacy SDK CDN paths.
 - Extend domain/CDN validator.
 - Update docs/reports referencing legacy paths.

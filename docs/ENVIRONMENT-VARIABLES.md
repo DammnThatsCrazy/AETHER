@@ -20,10 +20,10 @@ optional is required for local startup unless its feature flag is enabled.
 
 | File | Purpose |
 | --- | --- |
-| `.env.example` | Canonical reference — every backend var `settings.py` reads (CI checks coverage) |
-| `.env.local.example` | Local dev: live FastAPI backend, in-memory repositories, no browser mocks |
-| `.env.staging.example` | Staging: real DB/cache/queue + required secrets |
-| `.env.production.example` | Production: required secrets + secret-manager refs, flags safe |
+| `config/environments/.env.example` | Canonical reference — every backend var `settings.py` reads (CI checks coverage) |
+| `config/environments/.env.local.example` | Local dev: live FastAPI backend, in-memory repositories, no browser mocks |
+| `config/environments/.env.staging.example` | Staging: real DB/cache/queue + required secrets |
+| `config/environments/.env.production.example` | Production: required secrets + secret-manager refs, flags safe |
 | `apps/aether/.env.example` | Aether `VITE_*` (`VITE_AETHER_ENV`, `VITE_API_BASE_URL`, Auth0/OIDC, Stripe publishable) |
 | `apps/kyber/.env.example` | Kyber `VITE_*` (`VITE_KYBER_ENV`, `VITE_API_BASE_URL`, feature flags) |
 

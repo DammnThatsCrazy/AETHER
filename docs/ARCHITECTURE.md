@@ -22,7 +22,7 @@ reviewed_source_commits:
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
   "packages/shared/": "sha256:e38b928ba8341ec5657a3c5d6651a0257e960b66fe336f86fde233daac21fa82"
-  "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
+  "services/backend/config/settings.py": "sha256:7f0c4e318f1434a07cd0a8a9803398f37a2e2bdd758a11d94a0040a1c80651f5"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
   "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
   "services/backend/services/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
@@ -51,7 +51,7 @@ ingestion, lake coordination, graph access, intelligence routes, and backend
 repositories. `services/ml/` owns model training and serving; `services/agents/`
 owns internal broker-coupled workers and staged graph-mutation workflows; and
 `services/compliance/` owns the GDPR/SOC 2 control implementation. AWS and
-Terraform delivery live under `deploy/aws/`, while EVM and multi-chain contract
+Terraform delivery live under `infra/aws/`, while EVM and multi-chain contract
 code lives under `contracts/smart-contracts/`. Shared contracts remain in
 `packages/shared/contracts/`, and product clients (web and mobile) live under `apps/`.
 

@@ -22,7 +22,7 @@ estimated_read_minutes: 3
 | `GET /v1/status` | tenant-safe | Single-tenant system status (no infra internals, no other tenants). |
 | `GET /v1/admin/kyber/reliability/*` | operator | Service/pipeline/queue health, SLOs (operator-gated). |
 
-## Container healthchecks (`docker-compose.yml`)
+## Container healthchecks (`infra/local/docker-compose.yml`)
 
 - Backend: `curl -sf http://localhost:8000/v1/health` (30s interval, 5s timeout,
   3 retries, 15s start period).

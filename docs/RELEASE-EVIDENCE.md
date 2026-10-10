@@ -50,7 +50,7 @@ Assembles the bundle from **real repo state** — nothing is asserted by hand:
   `check_cost_policy_terraform` (Terraform locals encode the profile policy),
   `check_delivery_topology` (every worker role owned by exactly one service),
   `check_terraform_plan_policy` and `check_cost_model`. The plan-policy check is
-  pointed at `artifacts/reviewed.tfplan.json` — the plan a credentialed
+  pointed at `.artifacts/reviewed.tfplan.json` — the plan a credentialed
   promotion writes — **not** at the committed test fixture. With no real plan
   present it fails, and that is the honest result. A validator that is not on
   disk is recorded `absent` with exit code 127 and counts against the summary
@@ -169,7 +169,7 @@ attestation verifier registered, by design, because nothing here can prove an
 artifact came from an AWS account.
 
 The scores are also no longer path-dependent. They used to change depending on
-whether gitignored `artifacts/` and `reports/` happened to be present, so two
+whether gitignored `.artifacts/` and `docs/reference/reports/` happened to be present, so two
 engineers could read different readiness numbers from the same commit;
 artifacts derived from a test fixture now earn nothing, traced one hop
 (cost-report → inventory).

@@ -9,7 +9,7 @@ ContinuationCanonicalContext composes the canonical ExplorationContextV1 by
 reference (`filters`), never a second context language.
 
 Wire fields are snake_case so the (camelCase-blind) scraper actually captures
-them — see reports/mobile-productization/decision-log.md (D6).
+them — see docs/reference/reports/mobile-productization/decision-log.md (D6).
 """
 from __future__ import annotations
 

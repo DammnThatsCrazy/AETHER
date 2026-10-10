@@ -11,7 +11,7 @@ matches the registry.
 
 Deliberately NOT scanned (historical or machine-managed records):
 generated docs (``docs/_generated/``), changelogs, ``docs/archive/``,
-``docs/plans/``, and point-in-time ``reports/``. Those legitimately describe a
+``docs/plans/``, and point-in-time ``docs/reference/reports/``. Those legitimately describe a
 count at a moment in time and must not be rewritten to erase history.
 """
 from __future__ import annotations

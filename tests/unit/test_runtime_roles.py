@@ -368,7 +368,7 @@ def test_run_role_main_requires_role_or_env(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Environment.INTEGRATION (deploy/integration compose environment)
+# Environment.INTEGRATION (infra/integration compose environment)
 # ---------------------------------------------------------------------------
 
 

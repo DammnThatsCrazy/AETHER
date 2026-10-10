@@ -158,9 +158,9 @@ else:
 # layer. It must not hold a stale sdk/v5/loader.js path any more than the web
 # package does — both sides publish to the same canonical origin.
 cicd_python = [
-    'cicd/aether-cicd/stages/sdk/manifest_publisher.py',
-    'cicd/aether-cicd/stages/sdk/sdk_release.py',
-    'cicd/aether-cicd/README.md',
+    'infra/cicd/aether-cicd/stages/sdk/manifest_publisher.py',
+    'infra/cicd/aether-cicd/stages/sdk/sdk_release.py',
+    'infra/cicd/aether-cicd/README.md',
 ]
 for rel in [f'{WEB}/src/loader/aether-loader.ts', f'{WEB}/rollup.loader.mjs', f'{WEB}/README.md'] + cicd_python:
     body = text(rel)

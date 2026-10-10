@@ -43,7 +43,7 @@ _REFERENCE_NAMES = ("Dockerfile", "Makefile")
 # Descriptive registries (config/, the debt ledger, readiness evidence, reports) list
 # paths without running them, and the allowlist itself names modules, so none of
 # them can keep code reachable.
-_IGNORED_REFERENCE_DIRS = ("docs/", "node_modules/", "packages/", "apps/", "reports/", "config/", "artifacts/", ".claude/", ".codex/")
+_IGNORED_REFERENCE_DIRS = ("docs/", "node_modules/", "packages/", "apps/", "docs/reference/reports/", "config/", ".artifacts/", ".claude/", ".codex/")
 
 
 def _is_test(rel: str) -> bool:

@@ -14,7 +14,7 @@ The mobile / notification program is built so that supplying a provider credenti
 is a **configuration** act — secret insertion, environment binding, and provider
 verification — never a source-code change. This page is the activation contract; the
 machine-readable registry is `config/credential_contracts.yaml` and the external
-blockers are tracked in `reports/mobile-productization/external-blockers.json`.
+blockers are tracked in `docs/reference/reports/mobile-productization/external-blockers.json`.
 
 ## Principle
 
@@ -87,5 +87,5 @@ provider adapters + fakes and the `make credentials-inventory` /
 `credentials-preflight` / `credentials-activation-smoke` tooling
 (`scripts/credentials_status.py`) landed in C3. Until real credentials and accounts
 are supplied, every provider above reports `missing` / `externally_blocked` — see
-`reports/mobile-productization/external-blockers.json`. `externally_blocked` is
+`docs/reference/reports/mobile-productization/external-blockers.json`. `externally_blocked` is
 neither implementation-incomplete nor production-ready.

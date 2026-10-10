@@ -18,10 +18,10 @@ importantly, what the program **does not** build because it already exists.
 The living program state, the classified reuse map, and the external-blocker registry are the
 machine-readable companions to this page:
 
-- `reports/mobile-productization/PROGRAM_STATE.yaml` — single-authority milestone + migration ledger
-- `reports/mobile-productization/repo-baseline.json` — every system, classified reuse/extend/build
-- `reports/mobile-productization/external-blockers.json` — credential/account/infra blockers
-- `reports/mobile-productization/decision-log.md` — reuse statements + architectural decisions
+- `docs/reference/reports/mobile-productization/PROGRAM_STATE.yaml` — single-authority milestone + migration ledger
+- `docs/reference/reports/mobile-productization/repo-baseline.json` — every system, classified reuse/extend/build
+- `docs/reference/reports/mobile-productization/external-blockers.json` — credential/account/infra blockers
+- `docs/reference/reports/mobile-productization/decision-log.md` — reuse statements + architectural decisions
 - `config/credential_contracts.yaml` — credential registry (references the credential platform)
 
 ## Scope of this session (Commits 0–4)
@@ -112,4 +112,4 @@ goes to every channel. Provider-accepted ≠ delivered ≠ opened ≠ read ≠ a
 Every new surface ripples into `make ci-check` registries — a single alembic head, a storage policy
 per table, feature-surface classification per route, TS public-export boundaries, and a clean
 generated-docs tree. Each milestone commit is driven to `make ci-check` green before the next
-begins; the ripple registries are enumerated in `reports/mobile-productization/dependency-map.json`.
+begins; the ripple registries are enumerated in `docs/reference/reports/mobile-productization/dependency-map.json`.

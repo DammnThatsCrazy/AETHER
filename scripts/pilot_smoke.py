@@ -51,7 +51,7 @@ FOUNDING = ROOT / "config" / "founding_tenant_release.yaml"
 ROLES_PY = BACKEND_ROOT / "services" / "runtime" / "roles.py"
 CONSUMER_SPECS = BACKEND_ROOT / "services" / "runtime" / "consumer_specs.py"
 GRAPH_REPLAY = ROOT / "scripts" / "graph" / "replay_relationship_layers.py"
-GOLD_SCHEMA = ROOT / "deploy" / "clickhouse" / "schemas" / "008_measurement_gold.sql"
+GOLD_SCHEMA = ROOT / "infra" / "clickhouse" / "schemas" / "008_measurement_gold.sql"
 CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
 DEFAULT_MANIFEST = ROOT / "config" / "pilot" / "examples" / "usdc-observation.yaml"
 

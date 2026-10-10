@@ -366,17 +366,17 @@ items:
       that produced it, so a local that stops being wired into `count` fails
       rather than passes.
     affected_paths:
-      - deploy/aws/terraform/profiles.tf
-      - deploy/aws/terraform/main.tf
-      - deploy/aws/terraform/variables.tf
-      - deploy/aws/terraform/moved.tf
-      - deploy/aws/terraform/profiles/
-      - deploy/aws/terraform/modules/vpc/main.tf
-      - deploy/aws/terraform/modules/ecs/main.tf
-      - deploy/aws/terraform/modules/alb/main.tf
-      - deploy/aws/terraform/modules/monitoring/main.tf
-      - deploy/aws/terraform/tests/profile_plan.tftest.hcl
-      - deploy/aws/terraform/DECOMMISSION.md
+      - infra/aws/terraform/profiles.tf
+      - infra/aws/terraform/main.tf
+      - infra/aws/terraform/variables.tf
+      - infra/aws/terraform/moved.tf
+      - infra/aws/terraform/profiles/
+      - infra/aws/terraform/modules/vpc/main.tf
+      - infra/aws/terraform/modules/ecs/main.tf
+      - infra/aws/terraform/modules/alb/main.tf
+      - infra/aws/terraform/modules/monitoring/main.tf
+      - infra/aws/terraform/tests/profile_plan.tftest.hcl
+      - infra/aws/terraform/DECOMMISSION.md
       - config/terraform_resource_contracts.yaml
     tests_required:
       - "make test-terraform-profiles (terraform validate + terraform test over tests/profile_plan.tftest.hcl)"
@@ -388,7 +388,7 @@ items:
     docs_required:
       - docs/DEPLOYMENT-PROFILES.md
       - docs/AWS-LEAN-PRODUCTION.md
-      - deploy/aws/terraform/DECOMMISSION.md
+      - infra/aws/terraform/DECOMMISSION.md
     owner: platform
     status: subsystem_tests_pass
     blocked_by: [FT-COST-POLICY-DATA]
@@ -440,7 +440,7 @@ items:
       - "make validate-terraform-profile-policy against the committed lean fixture"
     evidence_required:
       - "check_terraform_plan_policy.py --profile production-lean: PASS — 54 checks passed"
-      - "artifacts/profile-resource-inventory.json + profile-policy-result.json emitted from the plan"
+      - ".artifacts/profile-resource-inventory.json + profile-policy-result.json emitted from the plan"
       - "eleven mutation fixtures, each of which the gate rejects"
     docs_required:
       - docs/DEPLOYMENT-PROFILES.md
@@ -495,8 +495,8 @@ items:
       outbox-relay.
     affected_paths:
       - config/runtime_deployment.yaml
-      - deploy/aws/terraform/profiles.tf
-      - deploy/aws/terraform/modules/ecs/main.tf
+      - infra/aws/terraform/profiles.tf
+      - infra/aws/terraform/modules/ecs/main.tf
       - services/backend/services/runtime/roles.py
       - services/backend/services/runtime/consumer_runner.py
       - services/backend/services/runtime/consumer_specs.py
@@ -571,7 +571,7 @@ items:
       - "check_cost_model.py --profile production-lean: PASS — 6 checks passed"
       - "fixed USD 184.13/mo separated from usage-variable USD 107.22/mo (expected scenario); 17 fixed, 15 usage-variable, 29 zero-cost resources all resolved"
       - "warning recorded: fixed cost exceeds the USD 150.00 target, under the USD 200.00 ceiling"
-      - reports/cost/cost-report.json
+      - docs/reference/reports/cost/cost-report.json
     docs_required:
       - docs/COST-OPTIMIZATION.md
       - docs/DEPLOYMENT-PROFILES.md
@@ -661,7 +661,7 @@ items:
       - .github/workflows/staging-lifecycle.yml
       - .github/workflows/staging-ttl-guard.yml
       - config/runtime_deployment.yaml
-      - deploy/aws/terraform/profiles.tf
+      - infra/aws/terraform/profiles.tf
       - tests/unit/test_staging_lifecycle_controls.py
     tests_required:
       - "make test-staging-lifecycle (tests/unit/test_staging_lifecycle_controls.py)"
@@ -731,11 +731,11 @@ items:
       - config/deployment_profiles.yaml
       - config/runtime_deployment.yaml
       - config/terraform_resource_contracts.yaml
-      - deploy/aws/terraform/variables.tf
-      - deploy/aws/terraform/profiles.tf
-      - deploy/aws/terraform/profiles/demo.tfvars
-      - deploy/aws/terraform/profiles/preview.tfvars
-      - deploy/aws/terraform/tests/profile_plan.tftest.hcl
+      - infra/aws/terraform/variables.tf
+      - infra/aws/terraform/profiles.tf
+      - infra/aws/terraform/profiles/demo.tfvars
+      - infra/aws/terraform/profiles/preview.tfvars
+      - infra/aws/terraform/tests/profile_plan.tftest.hcl
       - scripts/release/ephemeral_ttl_guard.py
       - scripts/release/ephemeral_env.py
       - .github/workflows/ephemeral-ttl-guard.yml
@@ -1664,7 +1664,7 @@ items:
       - "services/backend/services/providers/routes.py"
       - "services/backend/shared/privacy/retention.py"
       - "config/storage_policies.yaml"
-      - "deploy/aws/terraform/modules/kms_credentials"
+      - "infra/aws/terraform/modules/kms_credentials"
     tests_required:
       - "tests/unit/test_credential_cipher.py"
       - "tests/unit/test_credential_slot_registry.py"

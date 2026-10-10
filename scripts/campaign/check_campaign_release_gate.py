@@ -87,7 +87,7 @@ def check_required_files() -> list[CheckResult]:
         REPO_ROOT / "docs/campaign/CAMPAIGN_MIGRATION.md",
         REPO_ROOT / "docs/campaign/CAMPAIGN_KYBER_GUIDE.md",
         REPO_ROOT / "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
-        REPO_ROOT / "deploy/observability/prometheus/alert_rules.yml",
+        REPO_ROOT / "infra/observability/prometheus/alert_rules.yml",
     ]
     results = []
     for path in required:
@@ -101,7 +101,7 @@ def check_required_files() -> list[CheckResult]:
 
 
 def check_alert_rules_present() -> CheckResult:
-    alert_file = REPO_ROOT / "deploy/observability/prometheus/alert_rules.yml"
+    alert_file = REPO_ROOT / "infra/observability/prometheus/alert_rules.yml"
     if not alert_file.exists():
         return CheckResult("campaign alert rules", False, "alert_rules.yml missing")
     content = alert_file.read_text()

@@ -23,7 +23,7 @@ session**.
 The native iOS-simulator / Android-emulator compile requires **macOS + Xcode + the
 Android SDK + the Expo toolchain**, which are **not present in this Linux CI
 container** — the native build is `externally_blocked` here and runs in the hosted
-(macOS) CI. See `reports/mobile-productization/external-blockers.json`.
+(macOS) CI. See `docs/reference/reports/mobile-productization/external-blockers.json`.
 
 ## Run (in a macOS / Expo environment)
 

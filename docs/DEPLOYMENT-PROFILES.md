@@ -6,27 +6,27 @@ visibility: I
 audience: [ops, architect]
 status: stable
 since_version: 0.1.0
-source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, deploy/aws/terraform/profiles.tf, deploy/aws/terraform/main.tf, deploy/aws/terraform/modules/alb/main.tf, deploy/aws/terraform/modules/aurora/main.tf, deploy/aws/terraform/modules/ecr/main.tf, deploy/aws/terraform/modules/secrets/main.tf, deploy/aws/terraform/modules/secrets/rotation.tf, deploy/aws/terraform/modules/kms_credentials/main.tf, deploy/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py, config/capability_overlays.yaml, scripts/validate_capability_overlays.py]
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, infra/aws/terraform/profiles.tf, infra/aws/terraform/main.tf, infra/aws/terraform/modules/alb/main.tf, infra/aws/terraform/modules/aurora/main.tf, infra/aws/terraform/modules/ecr/main.tf, infra/aws/terraform/modules/secrets/main.tf, infra/aws/terraform/modules/secrets/rotation.tf, infra/aws/terraform/modules/kms_credentials/main.tf, infra/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py, config/capability_overlays.yaml, scripts/validate_capability_overlays.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
   "config/capability_overlays.yaml": "sha256:a5f005b0c7e2e8494d328c951bffd47842b24cc6f3ac8acaa439003eb3d2f091"
-  "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
+  "config/deployment_profiles.yaml": "sha256:c894e2449ae528dcee1632d07b414727220e74c9621c0a8f1a5e18e2929487a3"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
-  "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:e6079c3516bd2517835aa34c34276c367c8041f3d5737702e8c62b32a506dc54"
-  "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
-  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:fcc3e84f90f6fb49d57f6e81bb31b5d5bb0c0febe1195c61512d45b40f23cb1c"
-  "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
-  "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
-  "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:ddc4bacad8ec5aa6047433d330c95afbcda39924c71f3d2c3a2f810ee6437eda"
-  "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
-  "deploy/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
+  "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
+  "infra/aws/terraform/main.tf": "sha256:e6079c3516bd2517835aa34c34276c367c8041f3d5737702e8c62b32a506dc54"
+  "infra/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
+  "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
+  "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
+  "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
+  "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:6870bc21835c9bf28ed674f372ab2a754f1c3b17c0bbb298769d54a2e6fa9cc9"
+  "infra/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
+  "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
   "scripts/release/check_profile_config.py": "sha256:c1a16a2c7342d7be2d16306f1a15915cf4d37ffc4f1c6ea0466e3fe2df71782b"
-  "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
-  "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
+  "scripts/release/check_profile_parity.py": "sha256:c71ee0278e8b58d2178145ac5813fd64d0661ec70a42cfb1930c55e0631586aa"
+  "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/validate_capability_overlays.py": "sha256:b0f1a77dd11bb41da226b33a46a2ce439b62c1c3fcd4c0ccbbcf3398f4812d9e"
 ---
 
@@ -253,7 +253,7 @@ is reserved for WebAuthn relying-party validation.
 | | |
 |---|---|
 | **Purpose** | Temporary live demo against a shared non-production backend. |
-| **Selection** | Terraform-selectable via the same root (`deploy/aws/terraform/profiles/demo.tfvars`); `variables.tf` accepts `demo`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
+| **Selection** | Terraform-selectable via the same root (`infra/aws/terraform/profiles/demo.tfvars`); `variables.tf` accepts `demo`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
 | **Resource inventory** | Shared non-production Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, synthetic tenant. No MSK, ElastiCache, Neptune, ClickHouse or dedicated ML service (`cost_policy` forbids them). |
 | **Runtime topology** | Consolidated `config/runtime_deployment.yaml` entry (api + lean-worker hosting the eight worker roles, both autoscaling) — the same footprint shape as staging, one step down. |
 | **Data behaviour** | Versioned backend-seeded synthetic tenant only. Never real customer data; normal startup remains empty. |
@@ -270,7 +270,7 @@ is reserved for WebAuthn relying-party validation.
 | | |
 |---|---|
 | **Purpose** | PR-specific live environment, created only when explicitly requested. |
-| **Selection** | Terraform-selectable via the same root (`deploy/aws/terraform/profiles/preview.tfvars`); `variables.tf` accepts `preview`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
+| **Selection** | Terraform-selectable via the same root (`infra/aws/terraform/profiles/preview.tfvars`); `variables.tf` accepts `preview`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
 | **Resource inventory** | Shared foundation Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, with a temporary tenant schema/prefix route. No MSK, ElastiCache, Neptune, ClickHouse or dedicated ML service. |
 | **Runtime topology** | Consolidated `config/runtime_deployment.yaml` entry (api + lean-worker hosting the eight worker roles, both autoscaling). |
 | **Data behaviour** | Temporary tenant on the shared foundation; auto-expiring. |
@@ -371,7 +371,7 @@ GitHub PAT. The endpoint uses the configured `domain_name` (cert-backed HTTPS)
 when set. Enabling tfmcp raises the lean fixed baseline by roughly USD 18/month;
 the USD 200 hard ceiling is exceeded and must be reviewed as a cost-policy
 exception. See [AWS Deployment](AWS-DEPLOYMENT.md#tfmcp--terraform-mcp-server)
-and `deploy/aws/terraform/modules/tfmcp`.
+and `infra/aws/terraform/modules/tfmcp`.
 ## `production-scale`
 
 | | |
@@ -485,7 +485,7 @@ Validate with `make test-runtime-topology` and `make validate-delivery-topology`
 
 ## Terraform enforcement
 
-The Terraform root at `deploy/aws/terraform/` selects a profile
+The Terraform root at `infra/aws/terraform/` selects a profile
 through `var.deployment_profile`, validated to one of `staging`,
 `production-lean`, `production-scale`, `enterprise-isolated` (default
 `production-lean`). `profiles.tf` derives `enable_*` locals from it, and
@@ -552,7 +552,7 @@ wired into a `count` is caught rather than passed over. The assertions are
 
 `scripts/release/check_terraform_plan_policy.py` reads an actual
 `terraform show -json` plan, derives a canonical resource inventory
-(`artifacts/profile-resource-inventory.json`) and scores it against
+(`.artifacts/profile-resource-inventory.json`) and scores it against
 `config/terraform_resource_contracts.yaml`, which maps every policy key to the
 module address and cardinality a conforming plan must show. This is the layer
 that catches a resource the locals never modelled.
@@ -675,12 +675,12 @@ from `module.x` to `module.x[0]`, which would otherwise plan a
 destroy-and-recreate of a live cluster — is covered by 14 `moved` blocks in
 `moved.tf`. Do not delete them until every pre-existing workspace has applied at
 least once. Intentional removal of any data store goes through
-`deploy/aws/terraform/DECOMMISSION.md`, never through a profile
+`infra/aws/terraform/DECOMMISSION.md`, never through a profile
 toggle.
 
 ### Dead second Terraform tree
 
-`deploy/aws/terraform/environments/{dev,staging,production,demo}/`
+`infra/aws/terraform/environments/{dev,staging,production,demo}/`
 and `docs/archive/legacy-architecture/aws-deployment/main.tf` are a second, **dead** Terraform tree. Between them
 they reference seven modules that do not exist in this repository —
 `cloudfront`, `opensearch`, `dynamodb`, `sagemaker`, `api_gateway`, `iam`,
@@ -704,7 +704,7 @@ number**, and the code-complete column must never be quoted as "the score".
 | `staging` | 75 / 100 | **0 / 100** | 95 |
 
 † 80 / 100 in a clean checkout. `LEAN-COST-CEILING` requires
-`reports/cost/cost-report.json`, which is generated and gitignored; it reaches
+`docs/reference/reports/cost/cost-report.json`, which is generated and gitignored; it reaches
 100 only after `make validate-cost-model` has written it, as
 `make deployment-profile-gate` does before scoring.
 

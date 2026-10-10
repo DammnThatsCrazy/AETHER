@@ -667,8 +667,8 @@ def test_rehearsal_imports_validation_inventory_and_fails_closed_on_evidence():
         if step.get("name") == "Collect logs, metrics, plans, test output and cost"
     )["run"]
     assert '"/ecs/${STAGING_CLUSTER}"' in collect
-    assert "artifacts/profile-resource-inventory.json" in collect
-    assert '--out-dir "artifacts/rehearsal/cost"' in collect
+    assert ".artifacts/profile-resource-inventory.json" in collect
+    assert '--out-dir ".artifacts/rehearsal/cost"' in collect
     assert "2>&1 || true" not in collect
     assert 'release.json" 2>/dev/null || true' not in collect
 
@@ -906,11 +906,11 @@ def test_identity_ui_fixture_and_authenticated_staging_evidence_feed_proof_pack(
     assert '--ui-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui"' in capture["run"]
     assert '--ui-live-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui-live"' in capture["run"]
     assert upload["if"] == "always() && steps.identity_ui_e2e.outcome == 'failure'"
-    assert upload["with"]["path"] == "artifacts/rehearsal/identity-continuity-ui"
+    assert upload["with"]["path"] == ".artifacts/rehearsal/identity-continuity-ui"
     assert "@aether/proof-reporting build" in proof_build["run"]
     assert "@aether/proof-reporting proof-pack -- collect" in proof_collect["run"]
     assert "identity-continuity-capture.json" in proof_collect["run"]
-    assert proof_upload["with"]["path"] == "artifacts/rehearsal/identity-continuity-proof-pack"
+    assert proof_upload["with"]["path"] == ".artifacts/rehearsal/identity-continuity-proof-pack"
     assert names.index(setup_pnpm["name"]) < names.index(setup_node["name"]) < names.index(install["name"]) < names.index(browser["name"]) < names.index(ui["name"]) < names.index(live_ui["name"])
     assert names.index(live_ui["name"]) < names.index(capture["name"]) < names.index(proof_build["name"]) < names.index(proof_collect["name"]) < names.index(upload["name"]) < names.index(provider_cleanup["name"]) < names.index(tenant_cleanup["name"])
 
@@ -1482,12 +1482,12 @@ def test_ttl_guard_enforcement_only_reduces_and_is_logged():
     assert "--max-capacity 0" in run, "autoscaling can still revive staging"
     assert re.search(r"--min-capacity [1-9]", run) is None
     # Every cleanup action is written to a durable log that ships as evidence.
-    assert "artifacts/ttl-guard/actions.log" in run
+    assert ".artifacts/ttl-guard/actions.log" in run
     assert "scaled_to_zero=" in run
     upload = next(
         s for s in _steps(doc, "guard") if str(s.get("uses", "")).startswith("actions/upload-artifact")
     )
-    assert "artifacts/ttl-guard" in upload["with"]["path"]
+    assert ".artifacts/ttl-guard" in upload["with"]["path"]
     assert str(upload["if"]).strip() == "always()"
 
 
@@ -1501,13 +1501,13 @@ def test_ttl_guard_counts_task_arns_not_response_keys():
     for step_id, artifact in (("state", "tasks.json"), ("verify", "tasks-after.json")):
         run = next(s for s in _steps(doc, "guard") if s.get("id") == step_id)["run"]
         call = re.search(
-            r"aws ecs list-tasks[^\n]*\\\n[^\n]*artifacts/ttl-guard/" + re.escape(artifact), run
+            r"aws ecs list-tasks[^\n]*\\\n[^\n]*.artifacts/ttl-guard/" + re.escape(artifact), run
         )
         assert call, f"{step_id} no longer records running tasks in {artifact}"
         assert "--query 'taskArns[]'" in call.group(0), (
             f"{step_id} counts the list-tasks response object instead of its task ARNs"
         )
-        assert f"jq 'length' artifacts/ttl-guard/{artifact}" in run
+        assert f"jq 'length' .artifacts/ttl-guard/{artifact}" in run
 
     for raw, expected in (('{"taskArns": []}', "0"), ('{"taskArns": ["a", "b"]}', "2")):
         projected = json.dumps(json.loads(raw)["taskArns"])
@@ -1709,7 +1709,7 @@ def test_no_aws_call_that_decides_staging_state_discards_its_stderr():
     """`2>/dev/null` on a state-deciding call hides the reason it failed.
 
     The one legitimate use is best-effort EVIDENCE collection, which is written
-    into `artifacts/` and explicitly tolerated with `|| true`. Nothing reads
+    into `.artifacts/` and explicitly tolerated with `|| true`. Nothing reads
     those files to decide anything, and the exemption is narrow enough that a
     silenced decision cannot borrow it.
     """
@@ -1722,7 +1722,7 @@ def test_no_aws_call_that_decides_staging_state_discards_its_stderr():
                     continue
                 if not re.search(r"\baws (ecs|application-autoscaling) ", stripped):
                     continue
-                best_effort = "|| true" in stripped and "> artifacts/" in stripped
+                best_effort = "|| true" in stripped and "> .artifacts/" in stripped
                 if not best_effort:
                     offenders.append(f"{name}:{job}:{step}: {stripped[:70]}")
     assert offenders == [], (
@@ -1904,7 +1904,7 @@ def test_the_residual_check_never_reports_zero_it_could_not_measure():
     assert "must not be reported as zero" in run
     # The old swallow: `... > file 2>/dev/null || echo '[]' > file` made an
     # unreadable autoscaling namespace look empty.
-    assert "|| echo '[]' > artifacts/sleep/autoscaling.json" not in run
+    assert "|| echo '[]' > .artifacts/sleep/autoscaling.json" not in run
 
 
 def test_the_cleanup_report_fails_on_an_unproven_zero():

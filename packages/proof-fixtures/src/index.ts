@@ -1409,7 +1409,7 @@ export const communications360Fixture = {
 // PR D: Cross-Platform Payload Snapshot Parity (Blueprint §3.4)
 // ─────────────────────────────────────────────
 
-import canonicalFirstValueJourneyRaw from '../../../sdk-fixtures/canonical-first-value-journey.json';
+import canonicalFirstValueJourneyRaw from '../../../tests/fixtures/sdk/canonical-first-value-journey.json';
 
 export type CanonicalJourneyEvent = typeof canonicalFirstValueJourneyRaw.events[number];
 export type CanonicalJourneySchema = typeof canonicalFirstValueJourneyRaw.schema;

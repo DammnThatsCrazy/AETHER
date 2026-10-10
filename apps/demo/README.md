@@ -15,7 +15,7 @@ backend and must not own a canonical operational fixture dataset.
   frontend environment flag.
 
 ```bash
-cp .env.example .env
+cp config/environments/.env.example .env
 npm run dev --workspace=@aether/demo   # http://localhost:5177
 npm run test --workspace=@aether/demo
 ```

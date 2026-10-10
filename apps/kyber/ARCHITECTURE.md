@@ -380,7 +380,7 @@ Fixture data in tests should match the fixtures in `src/fixtures/`.
 Declared and validated in `src/lib/env/config.ts`. To add a new variable:
 
 1. Add it to `envSchema` with a Zod type and default.
-2. Add it to `.env.example` at the repo root.
+2. Add it to `config/environments/.env.example` at the repo root.
 3. Access it via the `env` object — never `import.meta.env` directly.
 
 ---

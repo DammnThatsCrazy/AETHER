@@ -50,7 +50,7 @@ DEMO_DATABASE_URL ?= postgresql://aether:aether_dev_password@localhost:5432/aeth
 DEMO_REDIS_URL ?= redis://localhost:6379/0
 # Lifecycle E2E scenario-seed (see `make lifecycle-seed`): per-suite tenant
 # credentials are sourced from the file named here (default .env.lifecycle-e2e,
-# templated by .env.lifecycle-e2e.example). The seed CLI writes the canonical
+# templated by config/environments/.env.lifecycle-e2e.example). The seed CLI writes the canonical
 # JSONB repos (tenants/users/tenant_implementation_plans/tenant_activations/
 # integration_connector_configs) via BaseRepository, so DATABASE_URL must point
 # at the SAME loopback Postgres the backend API reads — mirroring the demo-seed
@@ -59,7 +59,8 @@ LIFECYCLE_E2E_ENV ?= .env.lifecycle-e2e
 PYTHON ?= python3
 # The live Terraform root. NOT terraform/environments/* — that tree references
 # seven modules that do not exist and `terraform init` fails there.
-TF_DIR      := deploy/aws/terraform
+TF_DIR      := infra/aws/terraform
+COMPOSE     := docker compose -f infra/local/docker-compose.yml $(if $(wildcard .env),--env-file .env)
 
 # Project virtualenv. The system interpreter resolves /usr/lib/python3/dist-packages,
 # where Debian's cryptography build panics under pyo3 and its PyJWT cannot be replaced
@@ -216,7 +217,7 @@ serve-ml: ## Start the ML serving API (port 8080)
 # ---------------------------------------------------------------------------
 
 dev: ## Start minimal dev stack: postgres + backend only (~1.5 GB RAM, ML inline)
-	docker compose up -d
+	$(COMPOSE) up -d
 	@echo ""
 	@echo "  Backend API (+ ML predict routes inline): http://localhost:8000"
 	@echo ""
@@ -228,44 +229,44 @@ dev: ## Start minimal dev stack: postgres + backend only (~1.5 GB RAM, ML inline
 	@echo "    make dev-full        everything"
 
 dev-legacy: ## Start pre-E1/E2 stack with Redis + standalone ml-serving (rollback)
-	docker compose --profile legacy up -d
+	$(COMPOSE) --profile legacy up -d
 	@echo ""
 	@echo "  Backend API:  http://localhost:8000"
 	@echo "  ML Serving:   http://localhost:8080"
 	@echo "  Redis:        localhost:6379"
 
 dev-streaming: ## Add LocalStack SQS+SNS+DynamoDB to the running stack (prod streaming equivalent)
-	docker compose --profile streaming up -d
+	$(COMPOSE) --profile streaming up -d
 	@echo ""
 	@echo "  LocalStack SQS+SNS+DynamoDB:  http://localhost:4566"
 	@echo "  Set AWS_ENDPOINT_URL=http://localhost:4566 for local boto3 calls."
 
 dev-analytics: ## Add ClickHouse to the running stack
-	docker compose --profile analytics up -d
+	$(COMPOSE) --profile analytics up -d
 
 dev-notebooks: ## Start Jupyter Lab for ML exploration (http://localhost:8888)
-	docker compose --profile notebooks up -d
+	$(COMPOSE) --profile notebooks up -d
 	@echo ""
 	@echo "  Jupyter Lab: http://localhost:8888 (no token required)"
 
 dev-full: ## Start full stack with all optional services (~8 GB RAM)
-	docker compose --profile full up -d
+	$(COMPOSE) --profile full up -d
 
 dev-down: ## Stop all dev services and remove containers
-	docker compose --profile full down
+	$(COMPOSE) --profile full down
 
 # ---------------------------------------------------------------------------
 # Docker (legacy aliases — prefer dev/dev-down for daily use)
 # ---------------------------------------------------------------------------
 
 docker-up: ## Start full stack via docker compose
-	docker compose up -d
+	$(COMPOSE) up -d
 
 docker-down: ## Stop all docker services
-	docker compose down
+	$(COMPOSE) down
 
 docker-logs: ## Tail logs from all docker services
-	docker compose logs -f
+	$(COMPOSE) logs -f
 
 # ---------------------------------------------------------------------------
 # Post-deploy verification
@@ -497,7 +498,7 @@ demo-reset: ## Reset only seeded records (requires DEMO_RESET_CONFIRMATION)
 dev-demo: ## Explicitly start local backend with in-process demo seeding
 	AETHER_ENV=local AETHER_DEMO_SEED_ON_START=true \
 	AETHER_DEMO_TENANT_ID="$(DEMO_TENANT_ID)" AETHER_DEMO_SEED_NAMESPACE="$(DEMO_SEED_NAMESPACE)" \
-	docker compose up -d
+	$(COMPOSE) up -d
 	@echo "Demo seed requested explicitly. Run 'make demo-verify' after backend startup."
 
 clean-install-smoke: ## Verify normal startup has no seed run and truthful empty state
@@ -523,7 +524,7 @@ demo-reset-smoke: ## Verify reset isolation, control-record preservation, and au
 lifecycle-seed: ## Stage end-user lifecycle E2E scenario tenants (A-F) from $(LIFECYCLE_E2E_ENV)
 	@if [ ! -f "$(LIFECYCLE_E2E_ENV)" ]; then \
 		echo "No $(LIFECYCLE_E2E_ENV) found."; \
-		echo "Copy .env.lifecycle-e2e.example to $(LIFECYCLE_E2E_ENV), then fill the"; \
+		echo "Copy config/environments/.env.lifecycle-e2e.example to $(LIFECYCLE_E2E_ENV), then fill the"; \
 		echo "E2E_TENANT_EMAIL_<SUITE> / E2E_TENANT_PASSWORD_<SUITE> pairs for the"; \
 		echo "suites you want (unset suites are skipped and reported). Or export them."; \
 		exit 1; \
@@ -542,9 +543,9 @@ lifecycle-seed: ## Stage end-user lifecycle E2E scenario tenants (A-F) from $(LI
 # under AETHER_ENV=local and fail closed outside local/dev. JWT_SECRET here is
 # a local-only demo default; staging/prod still require bootstrap.sh.
 design-partner-demo-up: ## Bring up the design-partner demo stack (postgres + redis + backend + migrations)
-	docker compose --profile migrate run --rm migrate
+	$(COMPOSE) --profile migrate run --rm migrate
 	JWT_SECRET="$${JWT_SECRET:-local-design-partner-demo-secret}" AETHER_ENV=local REDIS_HOST=redis \
-		docker compose up -d
+		$(COMPOSE) up -d
 	@echo "Design-partner demo stack is up. Run 'make design-partner-demo-seed' then 'make design-partner-demo-check'."
 
 design-partner-demo-seed: ## Seed the design-partner demo dataset (idempotent; safe reset via demo-reset)
@@ -556,7 +557,7 @@ design-partner-demo-check: ## Verify the demo dataset is seeded, provenance-clea
 	$(MAKE) demo-reset-smoke
 
 design-partner-demo-down: ## Stop the design-partner demo stack
-	docker compose down
+	$(COMPOSE) down
 	@echo "Design-partner demo stack stopped. Seeded records persist in postgres; reset with 'make demo-reset'."
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
@@ -749,7 +750,7 @@ feature-readiness: ## Status card for one feature: make feature-readiness FEATUR
 profile-readiness: ## Release-profile report: make profile-readiness PROFILE=<profile-id>
 	python scripts/readiness_status.py --profile $(PROFILE)
 
-readiness-artifacts: ## Regenerate readiness artifacts (artifacts/readiness/*.json) + generated docs
+readiness-artifacts: ## Regenerate readiness artifacts (.artifacts/readiness/*.json) + generated docs
 	python scripts/validate_readiness_model.py --update-locks
 	python scripts/readiness_status.py --emit-artifacts
 	python scripts/readiness_status.py --emit-docs
@@ -812,7 +813,7 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	$(GATE_PY) scripts/release/check_terraform_plan_policy.py \
 		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
 	$(GATE_PY) scripts/release/check_cost_model.py \
-		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
+		--profile "$(PLAN_PROFILE)" --inventory .artifacts/profile-resource-inventory.json
 	$(MAKE) validate-staging-budget
 	$(GATE_PY) scripts/release/check_deployment_readiness.py
 	$(GATE_PY) scripts/release/check_route_registry.py
@@ -838,10 +839,10 @@ secret-scan: ## Fail-closed secret scan of tracked files
 secret-scan-advisory: ## Secret scan (advisory; never fails)
 	python scripts/security/secret_scan.py --advisory
 
-sbom: ## Generate a CycloneDX SBOM of the Python environment (reports/sbom/)
-	@mkdir -p reports/sbom
-	$(GATE_PY) -m cyclonedx_py environment --output-file reports/sbom/python-sbom.json --output-format JSON
-	@echo "SBOM: reports/sbom/python-sbom.json"
+sbom: ## Generate a CycloneDX SBOM of the Python environment (docs/reference/reports/sbom/)
+	@mkdir -p docs/reference/reports/sbom
+	$(GATE_PY) -m cyclonedx_py environment --output-file docs/reference/reports/sbom/python-sbom.json --output-format JSON
+	@echo "SBOM: docs/reference/reports/sbom/python-sbom.json"
 
 supply-chain-audit: ## Advisory supply-chain report (never fails)
 	-npm audit --omit=dev --audit-level=high
@@ -904,7 +905,7 @@ validate-cost-model: ## Price a plan inventory against the profile's numeric bud
 	$(GATE_PY) scripts/release/check_terraform_plan_policy.py \
 		--profile "$(PLAN_PROFILE)" --plan-json "$(PLAN_JSON)"
 	$(GATE_PY) scripts/release/check_cost_model.py \
-		--profile "$(PLAN_PROFILE)" --inventory artifacts/profile-resource-inventory.json
+		--profile "$(PLAN_PROFILE)" --inventory .artifacts/profile-resource-inventory.json
 
 # Staging has its own budget (target 25 / hard 50 against a 40h awake month) and
 # its own usage scenario. It was previously exercised only by unit tests, because
@@ -915,16 +916,16 @@ validate-cost-model: ## Price a plan inventory against the profile's numeric bud
 validate-staging-budget: ## Plan-policy + cost gate for staging, awake and asleep
 	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile staging \
 		--plan-json tests/fixtures/terraform_plans/staging-awake.json \
-		--out-dir artifacts/staging-awake
+		--out-dir .artifacts/staging-awake
 	$(GATE_PY) scripts/release/check_cost_model.py --profile staging \
-		--inventory artifacts/staging-awake/profile-resource-inventory.json \
-		--out-dir reports/cost/staging-awake
+		--inventory .artifacts/staging-awake/profile-resource-inventory.json \
+		--out-dir docs/reference/reports/cost/staging-awake
 	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile staging \
 		--plan-json tests/fixtures/terraform_plans/staging-asleep.json \
-		--out-dir artifacts/staging-asleep
+		--out-dir .artifacts/staging-asleep
 	$(GATE_PY) scripts/release/check_cost_model.py --profile staging \
-		--inventory artifacts/staging-asleep/profile-resource-inventory.json \
-		--out-dir reports/cost/staging-asleep
+		--inventory .artifacts/staging-asleep/profile-resource-inventory.json \
+		--out-dir docs/reference/reports/cost/staging-asleep
 
 # demo and preview are the ephemeral-class profiles. They share staging's
 # consolidated footprint (so the fixtures clone staging-awake) but are
@@ -934,16 +935,16 @@ validate-staging-budget: ## Plan-policy + cost gate for staging, awake and aslee
 validate-ephemeral-budget: ## Plan-policy + cost gate for demo and preview, off their committed fixtures
 	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile demo \
 		--plan-json tests/fixtures/terraform_plans/demo-valid.json \
-		--out-dir artifacts/demo
+		--out-dir .artifacts/demo
 	$(GATE_PY) scripts/release/check_cost_model.py --profile demo \
-		--inventory artifacts/demo/profile-resource-inventory.json \
-		--out-dir reports/cost/demo
+		--inventory .artifacts/demo/profile-resource-inventory.json \
+		--out-dir docs/reference/reports/cost/demo
 	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile preview \
 		--plan-json tests/fixtures/terraform_plans/preview-valid.json \
-		--out-dir artifacts/preview
+		--out-dir .artifacts/preview
 	$(GATE_PY) scripts/release/check_cost_model.py --profile preview \
-		--inventory artifacts/preview/profile-resource-inventory.json \
-		--out-dir reports/cost/preview
+		--inventory .artifacts/preview/profile-resource-inventory.json \
+		--out-dir docs/reference/reports/cost/preview
 
 test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile module cardinality
 	cd "$(TF_DIR)" && \
@@ -1055,12 +1056,12 @@ runtime-readiness-gate: ## Validate durable backend, explicit runtime-role, and 
 	python scripts/release/check_runtime_readiness.py
 
 integration-durable: ## Run the production-shaped durable integration suite (requires Docker)
-	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet
-	docker compose -f deploy/integration/docker-compose.durable.yml run --rm integration-tests python -m pytest tests/integration/test_batch_endpoint.py -q -p no:cacheprovider
+	docker compose -f infra/integration/docker-compose.durable.yml config --quiet
+	docker compose -f infra/integration/docker-compose.durable.yml run --rm integration-tests python -m pytest tests/integration/test_batch_endpoint.py -q -p no:cacheprovider
 
 integration-faults: ## Run durable outbox/storage crash, replay, and lifecycle fault tests (requires Docker)
-	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet
-	docker compose -f deploy/integration/docker-compose.durable.yml run --rm api python -m pytest tests/unit/test_outbox_relay.py tests/unit/test_object_backed_bronze.py -q
+	docker compose -f infra/integration/docker-compose.durable.yml config --quiet
+	docker compose -f infra/integration/docker-compose.durable.yml run --rm api python -m pytest tests/unit/test_outbox_relay.py tests/unit/test_object_backed_bronze.py -q
 
 .PHONY: staging-preflight staging-preflight-dry-run \
         staging-preflight-credentialless staging-infra-plan staging-deploy \
@@ -1094,7 +1095,7 @@ staging-deploy: ## Documented apply/helm entrypoint (cloud creds required; docum
 	@echo "  3. make staging-infra-plan                 # review the plan (no apply)"
 	@echo ""
 	@echo "Apply steps (run manually, opt-in):"
-	@echo "  terraform -chdir='deploy/aws/terraform' apply -var-file=profiles/staging.tfvars"
+	@echo "  terraform -chdir='infra/aws/terraform' apply -var-file=profiles/staging.tfvars"
 	@echo "  # migrations: run the RUN_MIGRATIONS=1 one-off ECS task (compose: make dev + 'up migrate')"
 	@echo "  # verify:     make staging-preflight BASE_URL=https://api.staging.aether.io"
 	@if [ "$(STAGING_APPLY)" = "1" ]; then \
@@ -1111,7 +1112,7 @@ pilot-smoke: ## One-command credentialless smoke across the nine platform capabi
 	python scripts/pilot_smoke.py
 
 pilot-evidence: ## Generate the checksummed, tenant-scoped pilot evidence package (credentialless mock)
-	python scripts/pilot_evidence.py --out artifacts/pilot-evidence
+	python scripts/pilot_evidence.py --out .artifacts/pilot-evidence
 
 load-baselines: ## Record staging load baselines via Locust (requires STAGING_URL and running backend)
 	mkdir -p tests/load/results

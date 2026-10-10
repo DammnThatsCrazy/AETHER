@@ -40,8 +40,8 @@ workflows. The canonical boundary is recorded in
 - CI build/push: `.github/workflows/deploy.yml`. A push to `main` builds once
   and targets staging only. Production promotion is manual and requires the
   staged workflow-run ID plus the approved release-manifest checksum.
-- Local/staging stack: `docker-compose.yml` (+ profiles) and
-  `deploy/legacy-staging/{bootstrap.sh,docker-compose.staging.yml,kafka_topics.sh}`.
+- Local/staging stack: `infra/local/docker-compose.yml` (+ profiles) and
+  `infra/legacy-staging/{bootstrap.sh,docker-compose.staging.yml,kafka_topics.sh}`.
 
 ## Pre-deploy checklist
 
@@ -138,7 +138,7 @@ window rather than a routine promotion — the detail is in
 
 If a profile change ever plans a destroy on a data store, **stop**. That is a
 stop-the-line event, not a diff to skim; the sanctioned path is
-`deploy/aws/terraform/DECOMMISSION.md`.
+`infra/aws/terraform/DECOMMISSION.md`.
 
 ## Staging rehearsal
 

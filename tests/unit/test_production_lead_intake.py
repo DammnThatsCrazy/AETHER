@@ -1,4 +1,4 @@
-"""Production lead intake (deploy/aws/lead-intake/template.yaml).
+"""Production lead intake (infra/aws/lead-intake/template.yaml).
 
 The handler lives inline in the CloudFormation template, so these tests run the
 exact code the stack deploys, with DynamoDB and SES replaced by recorders.
@@ -17,7 +17,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = ROOT / "deploy" / "aws" / "lead-intake" / "template.yaml"
+TEMPLATE = ROOT / "infra" / "aws" / "lead-intake" / "template.yaml"
 PRODUCTION_ORIGINS = {
     "https://www.olympuslabsml.com",
     "https://aether.olympuslabsml.com",

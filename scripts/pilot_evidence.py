@@ -29,7 +29,7 @@ Time comes from shared.temporal (no float). Exit 0 on success.
 Usage:
   python scripts/pilot_evidence.py
   python scripts/pilot_evidence.py --manifest config/pilot/examples/usdc-observation.yaml
-  python scripts/pilot_evidence.py --out artifacts/pilot-evidence --format json
+  python scripts/pilot_evidence.py --out .artifacts/pilot-evidence --format json
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = ROOT / "services" / "backend"
 DEFAULT_MANIFEST = ROOT / "config" / "pilot" / "examples" / "usdc-observation.yaml"
-DEFAULT_OUT = ROOT / "artifacts" / "pilot-evidence"
+DEFAULT_OUT = ROOT / ".artifacts" / "pilot-evidence"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
@@ -206,7 +206,7 @@ def build_evidence(manifest_path: Path) -> dict:
         },
         "graph_gold_status": {
             "graph_backend": "postgres (lean profile)",
-            "gold_layer": "measurement gold (deploy/clickhouse/schemas/008_measurement_gold.sql)",
+            "gold_layer": "measurement gold (infra/clickhouse/schemas/008_measurement_gold.sql)",
             "status": "shadow-computed" if shadow else "live",
         },
         "rewards": {

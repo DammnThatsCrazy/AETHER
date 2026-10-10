@@ -82,6 +82,6 @@ Manifest **generation** and DSR **erasure** are complete and gated in `make ci-c
 Store **submission** (App Store Connect / Google Play review) is `externally_blocked` —
 it needs the Apple Developer Program / Google Play Console accounts and signing
 credentials (`store_distribution`, `apple_signing`, `google_play_signing` in
-`reports/mobile-productization/external-blockers.json`). No doc claims the apps are
+`docs/reference/reports/mobile-productization/external-blockers.json`). No doc claims the apps are
 submitted or approved; `externally_blocked` is neither implementation-incomplete nor
 production-ready.

@@ -22,17 +22,17 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:9f12e57a7a0b4fd855ff1ca13cc8b4c8192a5b105e74f1113c7910f6b263c6c9"
+  ".github/workflows/repo-health.yml": "sha256:dfd499508092941b77887900ebd59063986e10deaba52d6dd676e9d4860d1e67"
   ".pre-commit-config.yaml": "sha256:e1c5169ee1d1f2923709f37a21c664cf898cb4c3b40ab908be2f9068dd7a0aca"
-  "Makefile": "sha256:027d381861be2a02e19cdadb1b8fbb122734f64425f945be872fa32c48486312"
+  "Makefile": "sha256:688beca9cf2bdc87ab6bbaf2678d00a629fbc60e47ee66e71071ff2f4c8b55cf"
   "scripts/docs_drift.py": "sha256:3cfbc6413e29f19663e8cc973dfc25bb7847881c47a46c908dae5b3f6beaadd8"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
   "scripts/docs_schema.json": "sha256:1a062b35ae5b18e85a10efedaa56708de3d9a332808cac699456ce6bb112fc74"
-  "scripts/sync_docs.py": "sha256:e427b9e6ba4448313e11c93635e66f05a823d4bd4cd13eb542a6d9027009d152"
+  "scripts/sync_docs.py": "sha256:027ba06172ff6fc0b1e8aabdec8cc8e2a8899edf581ef0e919d558bf4ed0b896"
   "scripts/validate_contracts.py": "sha256:1c7768cabc38a9a51b4ccf1513e9b1169e17d005ec17aeb16422ade36e4f6a23"
   "scripts/validate_docs.py": "sha256:4962795f8ae70974f0b0e02e301a01e27251a6ab76fb98290d45b4d06a9d77e3"
-  "scripts/validate_frontmatter.py": "sha256:1b4ba24575565584f7fc5e01c01a245ee4702f5220c85aa701bc86af2bdaa0c4"
+  "scripts/validate_frontmatter.py": "sha256:e12c02f351e173d8d0823b4695bd7008147131b9fbca7e18cf113dd6b4b7589c"
 ---
 
 # Documentation Pipeline
@@ -105,7 +105,7 @@ drift gate reliable.
 
 | Generator | Source | Output |
 |-----------|--------|--------|
-| `extract_env.py` | `.env.example` | `env.json` |
+| `extract_env.py` | `config/environments/.env.example` | `env.json` |
 | `extract_events.py` | `packages/shared/events.ts` | `events.json` |
 | `extract_consent.py` | `packages/shared/consent.ts` | `consent.json` |
 | `extract_entities.py` | `packages/shared/entities.ts` | `entities.json` |

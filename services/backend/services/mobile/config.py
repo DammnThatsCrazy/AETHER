@@ -11,7 +11,7 @@ Boundaries (reuse-before-build):
   OFF; version-gated rollout is staged behind future gates). No fabricated
   capability is ever surfaced.
 - ``externally_blocked_providers`` is the honest static mirror of
-  reports/mobile-productization/external-blockers.json ids.
+  docs/reference/reports/mobile-productization/external-blockers.json ids.
 - ``latest_version`` must track the platform version (pyproject.toml /
   app package.json / scripts/mobile_build_check.py PLATFORM_VERSION, pinned by
   scripts/check_version_consistency.py). This module declares the version
@@ -175,7 +175,7 @@ def service_capabilities() -> dict[str, bool]:
 
 
 # ── Honest externally-blocked providers ─────────────────────────────────────
-# Static mirror of the ids in reports/mobile-productization/external-blockers.json
+# Static mirror of the ids in docs/reference/reports/mobile-productization/external-blockers.json
 # (the human-maintained source of truth). Kept honest: a provider listed here is
 # NOT live, and no config claim flips that.
 EXTERNALLY_BLOCKED_PROVIDERS: tuple[str, ...] = (

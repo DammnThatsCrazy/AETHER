@@ -302,12 +302,12 @@ Key P0 gaps:
 ## Phase 15 — Environment Readiness (Complete)
 
 ### Files Changed
-- [x] `.env.staging.example` — all 7 IG_* feature flags documented with defaults and descriptions
+- [x] `config/environments/.env.staging.example` — all 7 IG_* feature flags documented with defaults and descriptions
 - [x] `scripts/generate_demo_graph.py` — synthetic demo data generator: 50 humans, 5 agents, 3 campaigns, 10 clusters, 2 fraud networks, 30 days temporal variation; all tagged synthetic=true
 
 ### Phase 15 Gate
 - [x] `AETHER_ENV=local python scripts/generate_demo_graph.py` produces demo data
-- [x] All IG_* flags documented in .env.staging.example
+- [x] All IG_* flags documented in config/environments/.env.staging.example
 - [x] Demo data clearly tagged synthetic=true
 
 ---

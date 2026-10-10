@@ -38,8 +38,8 @@ Every example proves the following sequence:
 
 Create two env files (or copy the `.example` templates):
 
-- **`.env.local`** — local development: uses `http://localhost:8000` as the ingestion endpoint and a placeholder API key (see `.env.local.example`).
-- **`.env.staging`** — staging: uses the staging ingestion endpoint with a placeholder staging key (see `.env.staging.example`).
+- **`.env.local`** — local development: uses `http://localhost:8000` as the ingestion endpoint and a placeholder API key (see `config/environments/.env.local.example`).
+- **`.env.staging`** — staging: uses the staging ingestion endpoint with a placeholder staging key (see `config/environments/.env.staging.example`).
 
 Switch between modes by using the appropriate env file (or by setting the corresponding environment variables in your shell/CI).
 
@@ -47,8 +47,8 @@ Switch between modes by using the appropriate env file (or by setting the corres
 
 The `functionality-proof.yml` workflow includes two smoke jobs that run the first-value journey against the local ingestion endpoint:
 
-- **`smoke-web`** — runs after the SDK tests pass (`needs: sdk`). Installs `examples/web-next`, runs its vitest smoke suite, then runs `scripts/smoke/web-sdk.ts` against `examples/web-script-tag`.
-- **`smoke-server`** — runs after the SDK tests pass (`needs: sdk`). Type-checks `examples/server-node`, runs `scripts/smoke/staging.ts`, then executes `src/index.ts` to exercise the server-side first-value journey.
+- **`smoke-web`** — runs after the SDK tests pass (`needs: sdk`). Installs `packages/sdk/examples/web-next`, runs its vitest smoke suite, then runs `scripts/smoke/web-sdk.ts` against `packages/sdk/examples/web-script-tag`.
+- **`smoke-server`** — runs after the SDK tests pass (`needs: sdk`). Type-checks `packages/sdk/examples/server-node`, runs `scripts/smoke/staging.ts`, then executes `src/index.ts` to exercise the server-side first-value journey.
 
 Both smoke jobs block merge on failure.
 

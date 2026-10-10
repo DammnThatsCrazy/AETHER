@@ -34,7 +34,7 @@ def test_unregistered_path_escalates_to_integration_with_explicit_unknown_domain
 
 
 def test_fast_local_evidence_does_not_replace_required_integration_lane():
-    result = route(["deploy/integration/docker-compose.durable.yml"], "fast")
+    result = route(["infra/integration/docker-compose.durable.yml"], "fast")
     assert result["selected_lane"] == "fast"
     assert result["minimum_lane"] == "integration"
     assert result["followup_required"] is True
@@ -42,7 +42,7 @@ def test_fast_local_evidence_does_not_replace_required_integration_lane():
 
 def test_pr_lane_cannot_replace_required_integration_lane():
     with pytest.raises(ValueError, match="below required minimum"):
-        route(["deploy/integration/docker-compose.durable.yml"], "pr")
+        route(["infra/integration/docker-compose.durable.yml"], "pr")
 
 
 def test_typed_node_dependency_scope_targets_node_consumers_only():
@@ -122,11 +122,11 @@ def test_router_registry_rejects_unknown_keys_and_unresolved_checks():
 def test_classify_impact_is_deterministic_and_preserves_fast_followup():
     registry = load_router_registry("config/verification_router.yaml")
     impact = classify_impact(
-        ["deploy/integration/docker-compose.durable.yml", "deploy/integration/docker-compose.durable.yml"],
+        ["infra/integration/docker-compose.durable.yml", "infra/integration/docker-compose.durable.yml"],
         registry,
         "fast",
     )
-    assert impact.changed_files == ("deploy/integration/docker-compose.durable.yml",)
+    assert impact.changed_files == ("infra/integration/docker-compose.durable.yml",)
     assert impact.affected_domains == ("infrastructure",)
     assert impact.minimum_lane == "integration"
     assert impact.selected_lane == "fast"

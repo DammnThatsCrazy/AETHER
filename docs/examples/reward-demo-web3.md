@@ -1,6 +1,6 @@
 ---
 title: Reward Enablement Demo — Web3 / On-Chain Claim (onchain_claim rail)
-slug: examples/reward-demo-web3
+slug: packages/sdk/examples/reward-demo-web3
 section: developer
 visibility: P
 audience: [dev-junior, dev-senior]

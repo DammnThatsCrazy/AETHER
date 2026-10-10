@@ -139,7 +139,7 @@ stage. Tenant selection comes from `FOUNDING_TENANT_ALLOWLIST`; no tenant ID is
 compiled into source.
 
 The durable integration topology in
-`deploy/integration/docker-compose.durable.yml` runs PostgreSQL, Redis, S3/SNS/
+`infra/integration/docker-compose.durable.yml` runs PostgreSQL, Redis, S3/SNS/
 SQS-compatible LocalStack, the API-only process, and every dedicated runtime
 role. `make integration-durable` and `make integration-faults` require Docker;
 they are distinct from unit evidence and must not be silently skipped for a
@@ -180,7 +180,7 @@ attestation verifier registered, by design, because nothing here can prove an
 artifact came from an AWS account.
 
 The scores are also no longer path-dependent. They used to change depending on
-whether gitignored `artifacts/` and `reports/` happened to be present, so two
+whether gitignored `.artifacts/` and `docs/reference/reports/` happened to be present, so two
 engineers could read different readiness numbers from the same commit;
 artifacts derived from a test fixture now earn nothing, traced one hop
 (cost-report → inventory).

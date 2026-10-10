@@ -6,18 +6,6 @@
     "note": "product web applications (Aether, Kyber, demo, marketing, status, docs, site and their shared UI) and mobile clients; route runtime services into services/ and shared contracts into packages/."
   },
   {
-    "path": "artifacts",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "generated validation, readiness, and release evidence; never a source-of-truth implementation tree."
-  },
-  {
-    "path": "cicd",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "legacy local pipeline fixtures; root Makefile and GitHub Actions are the canonical CI/CD control plane."
-  },
-  {
     "path": "config",
     "role": "house",
     "owner": "platform@aether",
@@ -28,18 +16,6 @@
     "role": "house",
     "owner": "platform@aether",
     "note": "canonical contract schemas and smart-contract project container; shared runtime contracts remain under packages/shared/contracts/."
-  },
-  {
-    "path": "data-modules",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "data-module metadata and fixtures consumed by the canonical services; not an independent runtime."
-  },
-  {
-    "path": "deploy",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "canonical deployment configuration and infrastructure promotion assets."
   },
   {
     "path": "docs",
@@ -184,16 +160,10 @@
     "disposition": "un-deployed TypeScript duplicate of the canonical Python monolith (services/backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend."
   },
   {
-    "path": "examples",
+    "path": "infra",
     "role": "house",
     "owner": "platform@aether",
-    "note": "monorepo house directory; route new work into canonical trees."
-  },
-  {
-    "path": "lambda",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "serverless entrypoint fixtures and handlers governed by deployment configuration."
+    "note": "canonical deployment configuration, local compose, Terraform, serverless handlers, and infrastructure promotion assets."
   },
   {
     "path": "packages",
@@ -202,28 +172,10 @@
     "note": "canonical shared packages, SDKs, UI primitives, and runtime contract twins."
   },
   {
-    "path": "playground",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "non-production experiments and reproducible investigations; no runtime dependency may originate here."
-  },
-  {
-    "path": "reports",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "authored audit and implementation reports; claims must be evidence-backed and do not define runtime behavior."
-  },
-  {
     "path": "scripts",
     "role": "house",
     "owner": "platform@aether",
     "note": "repository validation, generation, release, docs, and contract tooling."
-  },
-  {
-    "path": "sdk-fixtures",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "monorepo house directory; route new work into canonical trees."
   },
   {
     "path": "security",

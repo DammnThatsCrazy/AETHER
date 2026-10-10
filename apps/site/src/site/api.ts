@@ -10,7 +10,7 @@ export function apiBase(env: { VITE_API_BASE_URL?: string } = import.meta.env): 
 
 /**
  * Where the contact form posts. VITE_LEAD_URL names a standalone lead intake
- * (production's, before its backend exists: deploy/aws/lead-intake) that takes
+ * (production's, before its backend exists: infra/aws/lead-intake) that takes
  * the same body and answers like the API; otherwise the API's lead route.
  */
 export function leadUrl(env: { VITE_API_BASE_URL?: string; VITE_LEAD_URL?: string } = import.meta.env): string {

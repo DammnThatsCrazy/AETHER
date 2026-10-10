@@ -6,7 +6,7 @@ local -> staging -> prod:
 
   * every required capability is represented (present / partial / optional /
     or an explicitly documented `gap`);
-  * every declared LOCAL compose service actually exists in docker-compose.yml;
+  * every declared LOCAL compose service actually exists in infra/local/docker-compose.yml;
   * every declared CLOUD terraform module actually exists under the modules dir;
   * every declared runtime role is a real role in services/runtime/roles.py;
   * every non-present capability (`gap`) carries an honest `gap` note.
@@ -88,7 +88,7 @@ from check_delivery_topology import runtime_constants  # noqa: E402
 
 
 def _compose_services() -> set[str]:
-    doc = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8")) or {}
+    doc = yaml.safe_load((ROOT / "infra/local/docker-compose.yml").read_text(encoding="utf-8")) or {}
     return set((doc.get("services") or {}).keys())
 
 
@@ -314,7 +314,7 @@ def check() -> dict:
     matrix = yaml.safe_load(MATRIX.read_text(encoding="utf-8")) or {}
     required = set(matrix.get("required_capabilities") or [])
     caps = matrix.get("capabilities") or []
-    modules_dir = matrix.get("terraform_modules_dir", "deploy/aws/terraform/modules")
+    modules_dir = matrix.get("terraform_modules_dir", "infra/aws/terraform/modules")
 
     compose = _compose_services()
     modules = _terraform_modules(modules_dir)
@@ -338,7 +338,7 @@ def check() -> dict:
         # asserted capabilities: verify declared representations resolve
         for svc in _local_services(cap):
             if svc not in compose:
-                errors.append(f"{cid}: compose service '{svc}' not in docker-compose.yml")
+                errors.append(f"{cid}: compose service '{svc}' not in infra/local/docker-compose.yml")
         mod = _cloud_module(cap)
         if mod and mod not in modules:
             errors.append(f"{cid}: terraform module '{mod}' not found under {modules_dir}")

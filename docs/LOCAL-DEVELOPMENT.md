@@ -30,7 +30,7 @@ npm ci --ignore-scripts
 ## Configure environment
 
 ```bash
-cp .env.example .env
+cp config/environments/.env.example .env
 cp apps/aether/.env.example apps/aether/.env
 cp apps/kyber/.env.example apps/kyber/.env
 ```

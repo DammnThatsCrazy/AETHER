@@ -13,7 +13,7 @@ estimated_read_minutes: 9
 # Production Deployment
 
 Provider-agnostic production deployment guidance. The repo ships Docker images,
-an AWS reference (`deploy/aws/terraform/`,
+an AWS reference (`infra/aws/terraform/`,
 `.github/workflows/deploy.yml`, `.github/workflows/terraform-promote.yml`), and
 `docker-compose` for non-AWS hosts. Choose the target that fits your infra; the
 contract below is what production needs regardless.
@@ -36,7 +36,7 @@ profile in depth, [AWS Lean Production](AWS-LEAN-PRODUCTION.md).
   `deploy.yml`; on any other host it must be set explicitly, because it decides
   which roles that process hosts.
 - `GRAFANA_ADMIN_PASSWORD` is required **only** when you run the optional
-  self-hosted observability stack (`deploy/observability/`, the `docker-compose`
+  self-hosted observability stack (`infra/observability/`, the `docker-compose`
   Grafana service). The AWS profiles are CloudWatch-native and provision no
   Grafana or Prometheus server at any tier — `prometheus_grafana_servers` is a
   forbidden resource for every profile.

@@ -10,13 +10,13 @@ source_files:
   - services/backend/main.py
   - services/backend/config/settings.py
   - services/backend/services/provider_runtime/
-  - deploy/legacy-staging/bootstrap.sh
+  - infra/legacy-staging/bootstrap.sh
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
-  "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
+  "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
+  "services/backend/config/settings.py": "sha256:7f0c4e318f1434a07cd0a8a9803398f37a2e2bdd758a11d94a0040a1c80651f5"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
   "services/backend/services/provider_runtime/": "sha256:4d2b5f1bae274fe1f369d4c294ce936dd917c44b72ef13333c6097fa3285daf3"
 ---
@@ -225,8 +225,8 @@ production-safe credential backend (`MODEL_RUNTIME_CREDENTIAL_BACKEND=env` or
 at startup and the process refuses to serve rather than falling back to an
 insecure default. With `credential_backend=aws_secrets`,
 `MODEL_RUNTIME_CREDENTIAL_AWS_REGION` is also required. All `MODEL_RUNTIME_*`
-variables are declared in `.env.example` and
-`deploy/model-runtime/.env.example`; `services/backend/services/model_runtime/config.py` is the
+variables are declared in `config/environments/.env.example` and
+`infra/model-runtime/.env.example`; `services/backend/services/model_runtime/config.py` is the
 single source for defaults and the fail-closed rules.
 
 **Tenant scoping.** Tenant scope is server-authoritative: the tenant is derived
@@ -272,9 +272,9 @@ recovery < 0) fail closed at startup.
 
 ### Kafka Topic Provisioning
 
-All 135 Kafka topics are provisioned by `deploy/legacy-staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
+All 135 Kafka topics are provisioned by `infra/legacy-staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
 
-1. Run `deploy/legacy-staging/kafka_topics.sh` manually — it uses `--if-not-exists` so re-running is safe
+1. Run `infra/legacy-staging/kafka_topics.sh` manually — it uses `--if-not-exists` so re-running is safe
 2. Required env var: `KAFKA_BOOTSTRAP` (default: `localhost:9092`)
 3. Partitions: 12 for high-throughput topics, 6 for standard, 3 for audit
 4. Retention: 7 days (standard), 14 days (high-throughput), 90 days (audit)

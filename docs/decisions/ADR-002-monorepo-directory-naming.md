@@ -34,12 +34,12 @@ Smart Contracts/
 
 PR #627 documented the migration but did not move the implementation tree. The
 follow-up remediation completed that move: active code is now under `services/`,
-`deploy/`, and `contracts/`; only historical material remains under
+`infra/`, and `contracts/`; only historical material remains under
 `docs/archive/legacy-architecture/`. The names below are historical labels,
 not live paths.
 
 The `apps/`, `packages/`, `scripts/`, `tests/`, `docs/`, `security/`,
-`deploy/`, `lambda/`, and `cicd/` directories use the correct, shell-safe
+`infra/`, `infra/lambda/`, and `infra/cicd/` directories use the correct, shell-safe
 kebab-case convention. These support and evidence roots remain intentionally
 separate from deployable services; the active service boundaries are documented
 in [`repo-migration.md`](../source-of-truth/repo-migration.md).
@@ -48,14 +48,14 @@ in [`repo-migration.md`](../source-of-truth/repo-migration.md).
 
 **Current state (Accepted):** Active implementation directories use shell-safe
 paths. `BACKEND_DIR`, `ML_DIR`, `AGENT_DIR`, and `TF_DIR` point to
-`services/backend`, `services/ml`, `services/agents`, and `deploy/aws/terraform`.
+`services/backend`, `services/ml`, `services/agents`, and `infra/aws/terraform`.
 CI still quotes variable expansions at command boundaries.
 
 **Completed migration map:**
 
 | Historical root-era path | Canonical or archive path |
 |---------|--------|
-| `AWS Deployment/aether-aws/` | `deploy/aws/` |
+| `AWS Deployment/aether-aws/` | `infra/aws/` |
 | `Agent Layer/` | `services/agents/` |
 | `Backend Architecture/aether-backend/` | `services/backend/` |
 | `Data Ingestion Layer/` | `docs/archive/legacy-architecture/data-ingestion-layer/` |

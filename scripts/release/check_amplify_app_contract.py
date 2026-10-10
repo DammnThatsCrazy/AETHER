@@ -101,7 +101,7 @@ PRODUCTION_OLYMPUS_BRANCH = "production-olympus"
 STAGING_BRANCH = "staging"
 PRODUCTION_HOST_BRANCHES = {prefix: (PRODUCTION_OLYMPUS_BRANCH if prefix == "www" else "main") for prefix in PRODUCTION_HOSTS}
 # Until the production backend exists the site is pilot-only and its contact
-# form posts to the always-on lead intake (deploy/aws/lead-intake, stack
+# form posts to the always-on lead intake (infra/aws/lead-intake, stack
 # aether-production-lead-intake, output LeadUrl).
 PRODUCTION_LEAD_URL = "https://cbikbmj7wtuz6atqb62avzcn6e0bpquf.lambda-url.us-east-1.on.aws/"
 PRODUCTION_WEB_ENVIRONMENT = {

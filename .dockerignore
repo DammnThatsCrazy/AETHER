@@ -21,7 +21,7 @@ packages/*
 !packages/shared/contracts/
 !packages/shared/contracts/**
 apps/
-playground/
+packages/sdk/playground/
 RootPackageSDK.json
 package-lock.json
 
@@ -57,7 +57,7 @@ Thumbs.db
 # Environment files (pyproject + security come in explicitly via the Dockerfile)
 .env
 .env.*
-!.env.example
+!config/environments/.env.example
 
 # Subsystems not needed for backend image
 services/ml/
@@ -86,9 +86,9 @@ docs/archive/legacy-architecture/data-ingestion-layer/
 docs/archive/legacy-architecture/data-lake-architecture/
 services/compliance/
 tests/
-deploy/
-cicd/
-data-modules/
+infra/
+infra/cicd/
+config/registries/data-modules/
 
 # Tarballs / archives
 *.zip

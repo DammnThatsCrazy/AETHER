@@ -96,4 +96,4 @@ cross-process store is a later increment.
 Mobile notification projection with redacted push content and an unsafe-routing
 validator (no zero-channel/zero-recipient false success, no simulated receipts, no
 provider-acceptance-as-delivery) follow within the same program. See
-`reports/mobile-productization/PROGRAM_STATE.yaml`.
+`docs/reference/reports/mobile-productization/PROGRAM_STATE.yaml`.

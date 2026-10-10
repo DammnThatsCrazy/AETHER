@@ -23,7 +23,7 @@ Procedures for deploying new versions of the Aether platform with zero or minima
 ## Pre-Migration Checklist
 
 - [ ] All P0 findings from `DEPLOYMENT_ASSESSMENT.md` are resolved
-- [ ] All `[REQUIRED IN PRODUCTION]` environment variables are set (see `.env.example`)
+- [ ] All `[REQUIRED IN PRODUCTION]` environment variables are set (see `config/environments/.env.example`)
 - [ ] Secrets generated and stored in vault (see `docs/SECRET-ROTATION.md`)
 - [ ] Database backups verified (PostgreSQL WAL archiving enabled, Redis RDB snapshot taken)
 - [ ] ML model artifacts trained, versioned, and uploaded to artifact store
@@ -167,7 +167,7 @@ docker compose -f docker-compose.blue.yml down
 For AWS ECS deployments managed via Terraform:
 
 ```bash
-cd "deploy/aws"
+cd "infra/aws"
 
 # Plan changes
 terraform plan -var="image_tag=${VERSION}"

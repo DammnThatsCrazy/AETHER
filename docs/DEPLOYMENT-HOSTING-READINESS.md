@@ -27,7 +27,7 @@ with the hosting/config contract.
 - ML serving: `services/ml/docker/Dockerfile`
 
 `.github/workflows/deploy.yml` builds and pushes images to ECR; infrastructure is
-Terraform-managed under `deploy/aws/terraform/`. `docker-compose.yml`
+Terraform-managed under `infra/aws/terraform/`. `infra/local/docker-compose.yml`
 with profiles (`streaming`, `analytics`, `notebooks`, `full`) runs the stack
 locally.
 

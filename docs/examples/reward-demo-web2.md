@@ -1,6 +1,6 @@
 ---
 title: Reward Enablement Demo — Web2 Rails (recommend_only + tenant_webhook)
-slug: examples/reward-demo-web2
+slug: packages/sdk/examples/reward-demo-web2
 section: developer
 visibility: P
 audience: [dev-junior, dev-senior]

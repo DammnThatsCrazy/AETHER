@@ -154,7 +154,7 @@ for store submission and enterprise trust.
   (release-shaped)**. The release-blockers are all external: smart-contract
   audit, production infra, zero `PARTNER_LIVE` economic providers, and the
   node-tar supply-chain critical (requires the Expo SDK 51→57 bump). They are
-  tracked in `reports/mobile-productization/external-blockers.json`.
+  tracked in `docs/reference/reports/mobile-productization/external-blockers.json`.
 - Next milestones are **activation, not code**: hosted-CI native compile,
   credential provisioning (APNs / FCM / SES), store submission, and the
   documented physical-device matrix.
@@ -201,7 +201,7 @@ now complete are documented in the "What's Production-Ready" section above.
 
 **What's missing:** `services/backend/services/billing/providers/stripe_provider.py` contains a readiness stub — methods raise `ProviderDisabledError` instead of calling the Stripe API. Revenue cannot be collected programmatically.
 
-**Required:** Wire `sync_tenant`, `create_usage_record`, and `export_invoices` to real Stripe API calls. Config keys (`STRIPE_SECRET_KEY`, `STRIPE_PRODUCT_MAPPING_JSON`) already in `.env.example`.
+**Required:** Wire `sync_tenant`, `create_usage_record`, and `export_invoices` to real Stripe API calls. Config keys (`STRIPE_SECRET_KEY`, `STRIPE_PRODUCT_MAPPING_JSON`) already in `config/environments/.env.example`.
 
 **Estimated effort:** 2–3 weeks
 

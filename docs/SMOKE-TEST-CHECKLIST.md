@@ -7,12 +7,12 @@ audience: [ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - deploy/legacy-staging/bootstrap.sh
+  - infra/legacy-staging/bootstrap.sh
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
+  "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
 ---
 # Smoke Test & Post-Deploy Verification Checklist — Aether Platform v0.1.0-alpha.0
 
@@ -119,7 +119,7 @@ curl -sf ${BASE_URL}/v1/health | jq '.dependencies'
 - [ ] Redis connection responsive
 - [ ] Neptune graph (if enabled) reachable
 - [ ] Kafka broker (if enabled) connected
-- [ ] Kafka topics provisioned — run `deploy/legacy-staging/kafka_topics.sh` if missing (114 topics, idempotent via `--if-not-exists`)
+- [ ] Kafka topics provisioned — run `infra/legacy-staging/kafka_topics.sh` if missing (114 topics, idempotent via `--if-not-exists`)
 
 ### 6. Metrics Endpoint
 

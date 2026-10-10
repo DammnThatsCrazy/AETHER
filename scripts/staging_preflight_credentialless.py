@@ -53,8 +53,8 @@ from scripts.lib.preflight_results import (  # noqa: E402
     CheckResult, all_passed, count_by_status, failed, passed, render_results, skipped,
 )
 
-TF_MODULES = ROOT / "deploy" / "aws" / "terraform" / "modules"
-TF_ROOT = ROOT / "deploy" / "aws" / "terraform"
+TF_MODULES = ROOT / "infra" / "aws" / "terraform" / "modules"
+TF_ROOT = ROOT / "infra" / "aws" / "terraform"
 STALE_MNT = ROOT / "docs" / "archive" / "legacy-architecture" / "aws-deployment" / "mnt"
 FOUNDING = ROOT / "config" / "founding_tenant_release.yaml"
 ROUTE_REGISTRY = ROOT / "config" / "route_registry.yaml"
@@ -216,7 +216,7 @@ def check_containers_config() -> list[CheckResult]:
     env = {**os.environ, "JWT_SECRET": "credentialless-parse-only"}
     for label, argv in (
         ("root", ["docker", "compose", "config"]),
-        ("integration", ["docker", "compose", "-f", "deploy/integration/docker-compose.durable.yml", "config"]),
+        ("integration", ["docker", "compose", "-f", "infra/integration/docker-compose.durable.yml", "config"]),
     ):
         proc = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=120, env=env)
         out.append(passed(f"containers-config:{label}", "compose config parses")

@@ -7,7 +7,7 @@
 #   @aether/web    -> packages/web
 #   @aether/ui     -> apps/shared
 #
-# Referenced from the root docker-compose.yml `kyber` service as:
+# Referenced from the root infra/local/docker-compose.yml `kyber` service as:
 #   build: { context: ., dockerfile: apps/kyber/Dockerfile }
 # =============================================================================
 

@@ -3,19 +3,19 @@
 
 The canonical staging profile (``config/deployment_profiles.yaml``) forbids MSK
 (Kafka), ElastiCache (Redis), and self-managed Prometheus/Grafana. A stale
-compose stack that provisions all three once lived at ``deploy/staging/`` and
+compose stack that provisions all three once lived at ``infra/staging/`` and
 contradicted the profile it claimed to represent. That stack is quarantined
-under ``deploy/legacy-staging/`` and must stay there behind a LEGACY marker.
+under ``infra/legacy-staging/`` and must stay there behind a LEGACY marker.
 
 This validator enforces the quarantine and the naming contract:
 
-  1. ``deploy/staging`` must NOT exist — the canonical staging deployment is the
+  1. ``infra/staging`` must NOT exist — the canonical staging deployment is the
      Terraform root (``profiles/staging.tfvars``), never docker-compose.
   2. Every compose file whose name matches ``*staging*`` must live under
-     ``deploy/legacy-staging/`` AND carry the LEGACY marker, so no compose file
+     ``infra/legacy-staging/`` AND carry the LEGACY marker, so no compose file
      can present itself as the staging profile.
   3. No live operational surface (Makefile, ``.github/workflows/``, ``scripts/``,
-     ``config/``) may reference the canonical ``deploy/staging`` path.
+     ``config/``) may reference the canonical ``infra/staging`` path.
 
 Historical changelogs and archived audit docs are exempt by construction: the
 scan targets live surfaces only, because those records describe what existed
@@ -36,9 +36,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, main_guard, repo_root  # noqa: E402
 
 # The canonical staging path is reserved for the Terraform root. A directory of
-# this name in deploy/ is the drift this validator exists to catch.
-DEPLOY_STAGING = "deploy/staging"
-LEGACY_STAGING = "deploy/legacy-staging"
+# this name in infra/ is the drift this validator exists to catch.
+DEPLOY_STAGING = "infra/staging"
+LEGACY_STAGING = "infra/legacy-staging"
 
 # Compose files whose filename carries the staging profile name. Every hit must
 # be quarantined under LEGACY_STAGING and carry this marker in its header.
@@ -84,7 +84,7 @@ def check() -> int:
 
     root = repo_root()
 
-    # 1. Canonical staging path must not exist in deploy/ ----------------------
+    # 1. Canonical staging path must not exist in infra/ ----------------------
     canonical = root / DEPLOY_STAGING
     r.require(
         not canonical.exists(),
@@ -94,7 +94,7 @@ def check() -> int:
     )
 
     # 2. Every staging-named compose is quarantined behind the marker ----------
-    deploy_dir = root / "deploy"
+    deploy_dir = root / "infra"
     staging_composes = []
     if deploy_dir.exists():
         for f in deploy_dir.rglob("*"):
@@ -113,7 +113,7 @@ def check() -> int:
             )
             quarantine_ok = False
     if not staging_composes:
-        r.warn("no *staging* compose files found under deploy/")
+        r.warn("no *staging* compose files found under infra/")
     elif quarantine_ok:
         r.ok(f"all {len(staging_composes)} staging-named compose file(s) quarantined with the LEGACY marker")
 

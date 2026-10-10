@@ -401,7 +401,7 @@ def test_a_missing_inventory_is_refused_as_cost_input(tmp_path, monkeypatch):
 def test_an_inventory_from_a_real_plan_is_accepted(tmp_path, monkeypatch):
     monkeypatch.setattr(collect_evidence, "repo_root", lambda: tmp_path)
     _inventory(tmp_path / collect_evidence.COST_INVENTORY,
-               generated_from="artifacts/reviewed.tfplan.json",
+               generated_from=".artifacts/reviewed.tfplan.json",
                synthetic_input=None)
     assert collect_evidence.synthetic_inventory_reason() is None
 

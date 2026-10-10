@@ -33,7 +33,7 @@ Operational checklist for standing up domains/TLS. Provider-agnostic.
 | Zone | Authoritative DNS | Who edits records |
 | --- | --- | --- |
 | `olympuslabsml.com` (production, Google Workspace mail) | Squarespace | By hand at Squarespace |
-| `staging.olympuslabsml.com` | Route 53 zone `Z01866633FQOV3YDH5J11`, delegated by four `staging` NS records at Squarespace | Terraform (`deploy/aws/terraform`) |
+| `staging.olympuslabsml.com` | Route 53 zone `Z01866633FQOV3YDH5J11`, delegated by four `staging` NS records at Squarespace | Terraform (`infra/aws/terraform`) |
 
 The staging zone was created once, outside the Terraform root. The root's
 resource contract keeps hosted zones out of it (`config/terraform_resource_contracts.yaml`).

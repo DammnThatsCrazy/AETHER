@@ -36,7 +36,7 @@ The following authored docs are expected to stay aligned with code changes:
 
 ### Platform
 - `AGENT-CONTROLLER.md`
-- `ARCHITECTURE.md`
+- `docs/architecture/ARCHITECTURE.md`
 - `BACKEND-API.md`
 - `INTELLIGENCE-GRAPH.md`
 

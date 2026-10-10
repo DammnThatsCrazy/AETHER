@@ -420,8 +420,8 @@ AREAS: list[Area] = [
             "services/backend/tests/e2e/test_privacy_consent_flow.py",
             "services/backend/tests/e2e/test_agent_web3_attribution_flow.py",
             "apps/kyber/src/pages/measurement/",
-            "deploy/clickhouse/schemas/008_measurement_gold.sql",
-            "deploy/observability/grafana/dashboards/measurement-slos.json",
+            "infra/clickhouse/schemas/008_measurement_gold.sql",
+            "infra/observability/grafana/dashboards/measurement-slos.json",
         ],
     ),
     Area(
@@ -526,7 +526,7 @@ AREAS: list[Area] = [
             "scripts/campaign/check_campaign_release_gate.py",
             "docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
             "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
-            "deploy/observability/prometheus/alert_rules.yml",
+            "infra/observability/prometheus/alert_rules.yml",
         ],
     ),
     Area(
@@ -546,7 +546,7 @@ AREAS: list[Area] = [
         "remain: provisioned infra, production secrets, trained ML artifacts.",
         [
             "docs/archive/legacy-architecture/aws-deployment/",
-            "deploy/",
+            "infra/",
             ".github/workflows/deploy.yml",
             "docs/PRODUCTION-READINESS.md",
         ],
@@ -732,8 +732,8 @@ AREAS: list[Area] = [
             "tests/integration/semantic/",
             "tests/chaos/test_semantic_pipeline.py",
             "tests/unit/test_semantic_observability_assets.py",
-            "deploy/observability/prometheus/alert_rules.yml",
-            "deploy/observability/grafana/dashboards/semantic-pipeline.json",
+            "infra/observability/prometheus/alert_rules.yml",
+            "infra/observability/grafana/dashboards/semantic-pipeline.json",
         ],
     ),
     Area(
@@ -930,7 +930,7 @@ TEST_CHECKS: list[LiveCheck] = [
 REQUIRED_ARTIFACTS = [
     ".github/pull_request_template.md",
     ".github/CODEOWNERS",
-    ".env.example",
+    "config/environments/.env.example",
     ".github/workflows/repo-consistency.yml",
     ".github/workflows/repo-health.yml",
     "scripts/repo_doctor.py",

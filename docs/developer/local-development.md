@@ -68,5 +68,5 @@ python -m pytest   # Backend tests only
 
 ## See Also
 
-- [DEVELOPMENT.md](../../DEVELOPMENT.md) for detailed development guide
+- [docs/operations/DEVELOPMENT.md](../../DEVELOPMENT.md) for detailed development guide
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) for contribution requirements

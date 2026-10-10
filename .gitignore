@@ -77,11 +77,11 @@ __pycache__/
 .env.*
 .env.local
 # ...but keep the committed example templates
-!.env.example
-!.env.local.example
-!.env.staging.example
-!.env.production.example
-!.env.lifecycle-e2e.example
+!config/environments/.env.example
+!config/environments/.env.local.example
+!config/environments/.env.staging.example
+!config/environments/.env.production.example
+!config/environments/.env.lifecycle-e2e.example
 
 # IDE
 .vscode/
@@ -128,21 +128,21 @@ mlflow.db
 .claude/settings.local.json
 
 # Generated SBOM artifacts (supply-chain gate output)
-reports/sbom/
+docs/reference/reports/sbom/
 
 # Generated cost model reports (check_cost_model.py output)
-reports/cost/
+docs/reference/reports/cost/
 
 # Terraform plan-policy inventory and policy reports
 # (scripts/release/check_terraform_plan_policy.py --out-dir, and the
 # infrastructure / terraform-promote workflows write here)
-artifacts/
+.artifacts/
 
 # Multidimensional readiness artifacts are committed deliverables, regenerated
 # deterministically by `make readiness-artifacts` (scripts/readiness_status.py
 # --emit-artifacts, scripts/migrate_readiness_data.py --write).
-!artifacts/readiness/
-!artifacts/readiness/**
+!.artifacts/readiness/
+!.artifacts/readiness/**
 
 # Release evidence bundle (scripts/release/collect_evidence.py --bundle-dir).
 # Only created on an explicit flag, but never a committed artifact: it is

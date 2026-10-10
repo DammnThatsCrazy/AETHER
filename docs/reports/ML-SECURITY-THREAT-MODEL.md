@@ -47,7 +47,7 @@ data and model weights.
 | Batch size inspection (all rows examined) | `defense_layer.py` | ✅ |
 | Canary detector (known extraction patterns) | `canary_detector.py` | ✅ |
 | Extraction monitor (event log + summary) | `monitor.ExtractionDefenseMonitor` | ✅ |
-| Prometheus alert: extraction attack | `deploy/observability/prometheus/alert_rules.yml` | ✅ |
+| Prometheus alert: extraction attack | `infra/observability/prometheus/alert_rules.yml` | ✅ |
 
 **Residual risk:** In-memory budget falls back when Redis is unavailable. Multi-replica
 deployments without Redis allow per-replica quota multiplication. Mitigated by

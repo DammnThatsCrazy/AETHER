@@ -6,21 +6,21 @@ visibility: I
 audience: [ops, architect, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [config/deployment_profiles.yaml, config/aws_price_book.yaml, config/cost_exceptions.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, scripts/release/check_cost_model.py, scripts/release/check_cost_policy.py, scripts/release/check_cost_policy_terraform.py, scripts/release/check_terraform_plan_policy.py, deploy/aws/terraform/profiles.tf]
+source_files: [config/deployment_profiles.yaml, config/aws_price_book.yaml, config/cost_exceptions.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, scripts/release/check_cost_model.py, scripts/release/check_cost_policy.py, scripts/release/check_cost_policy_terraform.py, scripts/release/check_terraform_plan_policy.py, infra/aws/terraform/profiles.tf]
 canonical_owner: platform@aether
 estimated_read_minutes: 16
 toc_depth: 3
 source_hashes:
   "config/aws_price_book.yaml": "sha256:b449237c5d4b11622f0f35278b3f5a22a17b39b1cea74a53596b6af94ba2d3dc"
   "config/cost_exceptions.yaml": "sha256:029e003d3340de68c683a2f212edd3ceb13b6de01e5f6e70ddd44bdecda78ce2"
-  "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
+  "config/deployment_profiles.yaml": "sha256:c894e2449ae528dcee1632d07b414727220e74c9621c0a8f1a5e18e2929487a3"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
-  "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
-  "scripts/release/check_cost_model.py": "sha256:389df39c07cf6a679c6802a8926c1759f2c42e645cd53be681c70b52ca724941"
+  "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
+  "infra/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
+  "scripts/release/check_cost_model.py": "sha256:b80c15e6d0ceee9a161ad4259c82284469da10a395ac08c3b0e26f0c44e95aa7"
   "scripts/release/check_cost_policy.py": "sha256:2e547cdb3ce200a9f067b2a930a54ca622f29952fe4138693d942ddc1ec54e12"
-  "scripts/release/check_cost_policy_terraform.py": "sha256:a5f13e165442fecaef55109efbffe2d73897f589235f254a47f8b3185c806594"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:3a86d14efdd35e170d6c389761f087a1f4739b39103cc81e202f38208f8ba52e"
+  "scripts/release/check_cost_policy_terraform.py": "sha256:d43ff5de7727dda5ab8ca23785898accdc7bbcf2f82f4303d0f392b1e81cc4fb"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:3b9c515a552f7e569ea146049bccc7e083b4e0d3dbe2345e503ea8f14597fd4c"
 ---
 
 # Cost Optimization
@@ -467,19 +467,19 @@ make validate-cost-policy
 # Shape — Terraform locals statically encode the policy
 make validate-cost-policy-terraform
 
-# Shape — a real plan realises it (emits artifacts/profile-resource-inventory.json)
+# Shape — a real plan realises it (emits .artifacts/profile-resource-inventory.json)
 python scripts/release/check_terraform_plan_policy.py \
   --profile production-lean --plan-json plan.json
 
 # Magnitude — price the inventory against the budget
 python scripts/release/check_cost_model.py \
   --profile production-lean \
-  --inventory artifacts/profile-resource-inventory.json \
-  --out-dir artifacts/cost-production-lean
+  --inventory .artifacts/profile-resource-inventory.json \
+  --out-dir .artifacts/cost-production-lean
 
 # Magnitude — treat a target breach as fatal instead of a warning
 python scripts/release/check_cost_model.py --profile production-lean \
-  --inventory artifacts/profile-resource-inventory.json --fail-on-target
+  --inventory .artifacts/profile-resource-inventory.json --fail-on-target
 ```
 
 `--fail-on-target` is available and is **not** used in CI: with the accepted

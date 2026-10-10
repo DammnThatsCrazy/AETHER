@@ -383,7 +383,7 @@ def check() -> int:
     r.require(lean.get("static_frontends") is True and lean.get("remote_ml") is False,
               "production-lean uses static frontends and inline ML",
               "production-lean topology violates cost policy")
-    terraform = (repo_root() / "deploy/aws/terraform/modules/ecs/main.tf").read_text(
+    terraform = (repo_root() / "infra/aws/terraform/modules/ecs/main.tf").read_text(
         encoding="utf-8")
     # Terraform still fans out over the ROLE-keyed variable. The services model
     # requires that to become a SERVICE-keyed variable (var.runtime_services);

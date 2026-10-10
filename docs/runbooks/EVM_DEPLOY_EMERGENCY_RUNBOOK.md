@@ -44,7 +44,7 @@ and see `EXTERNAL_AUDIT_PREPARATION_GUIDE`. Testnet deploys follow
    (deploy is fail-closed on an unrecognized network).
 2. `scripts/deploy.js` → `scripts/post_deploy_verify.js` (verifies the contract
    is not left paused and the oracle signer matches the registry).
-3. Record the deployment address in `deploy/registry/` and the multichain
+3. Record the deployment address in `infra/registry/` and the multichain
    deployment JSON.
 
 ## Emergency: pause
@@ -65,7 +65,7 @@ All require `DEFAULT_ADMIN_ROLE`. Estimate gas first with
 ## Never do
 
 - Never deploy to mainnet before the external audit clears the gate.
-- Never rotate the oracle to a key not in `deploy/registry/oracle_signers.json`.
+- Never rotate the oracle to a key not in `infra/registry/oracle_signers.json`.
 - Never `unpause` before the root cause is understood and recorded.
 
 See also: `docs/runbooks/SVM_DEPLOY_EMERGENCY_RUNBOOK.md`,

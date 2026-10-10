@@ -36,5 +36,5 @@ Aether is currently a pre-production private alpha at version `0.1.0-alpha.0`.
 | SDK docs | `docs/sdks/` |
 | Connector docs | `docs/connectors/` |
 | Release policy | `docs/releases/release-policy.md` |
-| Local development | `DEVELOPMENT.md` |
+| Local development | `docs/operations/DEVELOPMENT.md` |
 | Contributing | `CONTRIBUTING.md` |

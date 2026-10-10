@@ -45,8 +45,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "config" / "deployment_profiles.yaml"
 BOOTSTRAP_PATH = ROOT / "scripts" / "bootstrap_aws_secrets.py"
-ECS_PATH = ROOT / "deploy" / "aws" / "terraform" / "modules" / "ecs" / "main.tf"
-STAGING_TFVARS_PATH = ROOT / "deploy" / "aws" / "terraform" / "profiles" / "staging.tfvars"
+ECS_PATH = ROOT / "infra" / "aws" / "terraform" / "modules" / "ecs" / "main.tf"
+STAGING_TFVARS_PATH = ROOT / "infra" / "aws" / "terraform" / "profiles" / "staging.tfvars"
 
 ALLOWED_LANES = frozenset({"full", "pilot"})
 PUBLIC_SURFACES = frozenset({
@@ -259,7 +259,7 @@ def contract_errors(
         errors.append("staging pilot must require populated four self-service Stripe test price secrets")
     if stripe.get("secret_registry_source") != "scripts/bootstrap_aws_secrets.py":
         errors.append("staging pilot Stripe contract must reference the bootstrap secret registry")
-    if stripe.get("ecs_mount_source") != "deploy/aws/terraform/modules/ecs/main.tf":
+    if stripe.get("ecs_mount_source") != "infra/aws/terraform/modules/ecs/main.tf":
         errors.append("staging pilot Stripe contract must reference ECS secret wiring")
 
     return errors

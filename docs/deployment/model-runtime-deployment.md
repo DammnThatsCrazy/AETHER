@@ -199,8 +199,8 @@ The runtime's operational surface (deploy, health/readiness, circuit-breaker
 response, credential rotation, canaries, incident response) is covered by the
 deployment and observability runbooks:
 
-- Deployment guide: [`../../deploy/model-runtime/README.md`](../../deploy/model-runtime/README.md)
-- Observability runbooks: [`../../deploy/observability/`](../../deploy/observability/)
+- Deployment guide: [`../../infra/model-runtime/README.md`](../../infra/model-runtime/README.md)
+- Observability runbooks: [`../../infra/observability/`](../../infra/observability/)
 
 For the design and security rationale, see
 [ADR-008 — Multi-Model Intelligence Harness](../decisions/ADR-008-multi-model-intelligence-harness.md).

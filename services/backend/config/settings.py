@@ -18,7 +18,7 @@ import yaml
 class Environment(str, Enum):
     LOCAL = "local"
     DEV = "dev"
-    # Hermetic CI/compose environment (deploy/integration/*): production-shaped
+    # Hermetic CI/compose environment (infra/integration/*): production-shaped
     # strictness — non-local fail-closed startup checks apply and explicit
     # integration-only secrets/backends must be provided — but never a deploy
     # target, so staging/production-only gates (e.g. mandatory route-policy

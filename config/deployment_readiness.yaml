@@ -311,7 +311,7 @@ exceptions:
     mitigation: >-
       After seven consecutive days of real spend, export Cost Explorer daily
       totals to release-evidence/cost/observed-cost.json and reconcile against
-      reports/cost/cost-report.json.
+      docs/reference/reports/cost/cost-report.json.
     follow_up: FT-COST-POLICY-DATA
 
 # =============================================================================
@@ -339,13 +339,13 @@ controls:
         description: Terraform encodes the profile cost policy declared in deployment_profiles.yaml.
       - id: profile-tests
         kind: repo_file
-        path: deploy/aws/terraform/tests/profile_plan.tftest.hcl
+        path: infra/aws/terraform/tests/profile_plan.tftest.hcl
         contains: run
         external: false
         description: Native terraform test coverage over per-profile planning.
       - id: plan-policy-result
         kind: json_artifact
-        path: artifacts/profile-policy-result.json
+        path: .artifacts/profile-policy-result.json
         require_keys: [profile, passed, violations, checks_total]
         require_true: [passed]
         external: false
@@ -445,7 +445,7 @@ controls:
         description: The price book the cost model prices a plan against.
       - id: cost-report
         kind: json_artifact
-        path: reports/cost/cost-report.json
+        path: docs/reference/reports/cost/cost-report.json
         require_keys: [profile, gated_amount, effective_ceiling, passed]
         external: false
         description: check_cost_model.py priced a concrete inventory against the ceiling.
@@ -512,7 +512,7 @@ controls:
     required_evidence:
       - id: staging-profile
         kind: repo_file
-        path: deploy/aws/terraform/profiles/staging.tfvars
+        path: infra/aws/terraform/profiles/staging.tfvars
         external: false
         description: The staging profile the lifecycle runs against.
       - id: wake-evidence
@@ -556,7 +556,7 @@ controls:
         description: The resource-class contracts each profile is scored against.
       - id: profiles-tf
         kind: repo_file
-        path: deploy/aws/terraform/profiles.tf
+        path: infra/aws/terraform/profiles.tf
         external: false
         description: The Terraform-side profile definitions.
     status: subsystem_tests_pass
@@ -630,7 +630,7 @@ controls:
         description: Terraform encodes the exclusions.
       - id: plan-policy-result
         kind: json_artifact
-        path: artifacts/profile-policy-result.json
+        path: .artifacts/profile-policy-result.json
         require_keys: [profile, passed, violations, checks_total]
         require_true: [passed]
         external: false
@@ -666,7 +666,7 @@ controls:
         description: The required list the plan is scored against.
       - id: plan-policy-result
         kind: json_artifact
-        path: artifacts/profile-policy-result.json
+        path: .artifacts/profile-policy-result.json
         require_keys: [profile, passed, violations, checks_total]
         require_true: [passed]
         external: false
@@ -705,7 +705,7 @@ controls:
         description: Canonical runtime/service topology declaration.
       - id: lean-tfvars
         kind: repo_file
-        path: deploy/aws/terraform/profiles/production-lean.tfvars
+        path: infra/aws/terraform/profiles/production-lean.tfvars
         external: false
         description: The profile inputs that produce the lean topology.
     status: implementation_in_progress
@@ -733,7 +733,7 @@ controls:
         description: The ceiling the model is compared against.
       - id: cost-report
         kind: json_artifact
-        path: reports/cost/cost-report.json
+        path: docs/reference/reports/cost/cost-report.json
         require_keys: [profile, gated_amount, effective_ceiling, passed]
         require_true: [passed]
         external: false
@@ -797,7 +797,7 @@ controls:
     required_evidence:
       - id: monitoring-module
         kind: repo_file
-        path: deploy/aws/terraform/modules/monitoring/main.tf
+        path: infra/aws/terraform/modules/monitoring/main.tf
         external: false
         description: The alarms the profile provisions.
       - id: alarm-evidence
@@ -869,7 +869,7 @@ controls:
     required_evidence:
       - id: staging-tfvars
         kind: repo_file
-        path: deploy/aws/terraform/profiles/staging.tfvars
+        path: infra/aws/terraform/profiles/staging.tfvars
         external: false
         description: The staging profile inputs.
       - id: wake-evidence

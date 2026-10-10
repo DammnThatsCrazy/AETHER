@@ -50,7 +50,7 @@ capabilities:
     migration: "alembic upgrade head (creates tenant_credentials; single head 20260812_credential_platform)"
 
 environments:
-  matrix_source: ".env.example / .env.staging.example / .env.production.example"
+  matrix_source: "config/environments/.env.example / config/environments/.env.staging.example / config/environments/.env.production.example"
   credential_backend_default_local: local_encrypted
 
 remaining_external_work:            # after this program (§1) — infra/creds/registration only

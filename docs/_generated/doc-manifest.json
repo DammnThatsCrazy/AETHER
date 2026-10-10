@@ -6580,7 +6580,7 @@
     {
       "path": "docs/examples/reward-demo-web2.md",
       "title": "Reward Enablement Demo — Web2 Rails (recommend_only + tenant_webhook)",
-      "slug": "examples/reward-demo-web2",
+      "slug": "packages/sdk/examples/reward-demo-web2",
       "section": "developer",
       "visibility": "I",
       "audience": [
@@ -6595,7 +6595,7 @@
     {
       "path": "docs/examples/reward-demo-web3.md",
       "title": "Reward Enablement Demo — Web3 / On-Chain Claim (onchain_claim rail)",
-      "slug": "examples/reward-demo-web3",
+      "slug": "packages/sdk/examples/reward-demo-web3",
       "section": "developer",
       "visibility": "I",
       "audience": [
@@ -9239,7 +9239,7 @@
     {
       "path": "docs/reports/SDK_CERTIFICATION_REPORT.md",
       "title": "SDK Certification Report",
-      "slug": "reports/sdk-certification-report",
+      "slug": "docs/reference/reports/sdk-certification-report",
       "section": "architecture",
       "visibility": "I",
       "audience": [
@@ -9266,7 +9266,7 @@
     {
       "path": "docs/reports/UNIFIED_WEB2_WEB3_FRAUD_GAP_RECOVERY.md",
       "title": "Unified Web2/Web3 + Fraud Intelligence — Gap Recovery Ledger",
-      "slug": "reports/unified-web2-web3-fraud-gap-recovery",
+      "slug": "docs/reference/reports/unified-web2-web3-fraud-gap-recovery",
       "section": "reference",
       "visibility": "I",
       "audience": [

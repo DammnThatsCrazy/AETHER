@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 source_files:
   - services/backend/services/auth/routes.py
   - services/backend/repositories/repos.py
-  - deploy/aws/terraform/modules/ecs/main.tf
+  - infra/aws/terraform/modules/ecs/main.tf
   - .github/workflows/infrastructure.yml
   - .github/workflows/staging-lifecycle.yml
   - .github/workflows/terraform-promote.yml
@@ -21,10 +21,10 @@ reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:79363dfaa2103283b55b0e0afbe58f2b5fe70db35d3307f58985884f59546701"
-  ".github/workflows/staging-lifecycle.yml": "sha256:e95cad6f31907115d5534734a9feaf9f69c405e3b4329b60fb904c075be90c02"
-  ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
-  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
+  ".github/workflows/infrastructure.yml": "sha256:a30a86c08edcb57316ccd388659c7d832c9a3e542f8e40c44ace2206482dcc5e"
+  ".github/workflows/staging-lifecycle.yml": "sha256:f8081113b9e501906c6148cf299c90637b2da6e584583f8a08465b5a41d8b58a"
+  ".github/workflows/terraform-promote.yml": "sha256:b493d4250ab5da8cb183f579924e13692588091c4c2daf43f20311d62e6e23d3"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"

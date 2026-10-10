@@ -20,10 +20,10 @@ source_files:
   - config/runtime_deployment.yaml
   - config/deployment_profiles.yaml
   - config/staging_lifecycle_iam_policy.yaml
-  - deploy/aws/terraform/profiles.tf
-  - deploy/aws/terraform/variables.tf
-  - deploy/aws/terraform/profiles/staging.tfvars
-  - deploy/aws/terraform/modules/ecs/main.tf
+  - infra/aws/terraform/profiles.tf
+  - infra/aws/terraform/variables.tf
+  - infra/aws/terraform/profiles/staging.tfvars
+  - infra/aws/terraform/modules/ecs/main.tf
   - scripts/release/check_staging_lane_contract.py
   - scripts/release/check_staging_credential_contract.py
   - scripts/release/check_staging_runtime_iam.py
@@ -46,16 +46,16 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:5650e91a2230116a613e3e54c55f1994aa2a44be3c169a5a6a109700fef5bd6a"
+  ".github/workflows/amplify-status-production.yml": "sha256:7d212835a17967f1b7dadf01688be39c259095a116875f595a1a184fe21fed8d"
   ".github/workflows/deploy.yml": "sha256:99d17622d986182d8b63ebabc7c39d3c2387ba8b448afebc14cf696f0ff5b093"
   ".github/workflows/pilot-staging.yml": "sha256:62ec13ff1a6f2869aa42a8b2e87c3d49412a33010c5fe8a875baee42cb29cef5"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:88f5054abd8530877c3406c752f48ebab4b272143534984c7025977bc220f00b"
-  ".github/workflows/staging-lifecycle.yml": "sha256:e95cad6f31907115d5534734a9feaf9f69c405e3b4329b60fb904c075be90c02"
-  ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:6db80a1a80262cc60923789c40b233659f495dd026d54585bf20c61db36ddcb2"
-  ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
-  "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
+  ".github/workflows/staging-lifecycle.yml": "sha256:f8081113b9e501906c6148cf299c90637b2da6e584583f8a08465b5a41d8b58a"
+  ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
+  ".github/workflows/terraform-promote.yml": "sha256:b493d4250ab5da8cb183f579924e13692588091c4c2daf43f20311d62e6e23d3"
+  "config/deployment_profiles.yaml": "sha256:c894e2449ae528dcee1632d07b414727220e74c9621c0a8f1a5e18e2929487a3"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
@@ -64,22 +64,22 @@ source_hashes:
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:38c81fbb5674275998114973bd151fccb23e510d999560e14f6c3dbf591e2fc5"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
-  "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
-  "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:13bfa71ca795f6920b6e41eb844bfd6cecb6c6d34c326d69af2a0209eb52003f"
-  "deploy/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
+  "infra/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
+  "infra/aws/terraform/profiles/staging.tfvars": "sha256:13bfa71ca795f6920b6e41eb844bfd6cecb6c6d34c326d69af2a0209eb52003f"
+  "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:a67e551912ea28489862dd166e5200509674b6d612e6d79bc87428855262c9f1"
+  "scripts/release/check_amplify_app_contract.py": "sha256:688c0ed538dd0f172ac2252046037343b4af8d6b93ff504f121129dec01281f7"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
-  "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
+  "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:001a5330f78fb4c334c3ddf56448c464355bee4b16c1640a1cbd5041be499fb5"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:c50654e19fa30de91b78dc954f967301a28aa45c8cef2bbf449eeca5f96f11e9"
   "scripts/release/ensure_staging_autoscaling_target_tags.py": "sha256:2f0733c66a6df555537336d88edf30dab740b1d8c30bbaf8140bab9463cb6b00"
-  "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
+  "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "services/backend/alembic/versions/20260702_delivery_infrastructure.py": "sha256:df8a6bf971bd9db9a907414a8b7e8f0695b6a7c01aa55719e40f869509510916"
 ---
 
@@ -776,11 +776,11 @@ Run `if: always()`, after the stop. It inspects exactly two resource classes in
 the `AETHER-staging` cluster:
 
 - **ECS services** — `desiredCount`, `runningCount`, `pendingCount` for every
-  service, written to `artifacts/sleep/desired-counts.json`. Any service with
+  service, written to `.artifacts/sleep/desired-counts.json`. Any service with
   any of the three non-zero fails the job.
 - **Application Auto Scaling scalable targets** in the `ecs` namespace whose
   `ResourceId` contains `AETHER-staging`, written to
-  `artifacts/sleep/autoscaling.json`. Any non-zero `MinCapacity` or
+  `.artifacts/sleep/autoscaling.json`. Any non-zero `MinCapacity` or
   `MaxCapacity` fails the job.
 
 It then prices the residue: task sizes come from
@@ -802,16 +802,16 @@ bundle.
 
 | Artifact | Contents | Retention |
 |---|---|---|
-| `staging-wake-plan-validation-<run_id>` | `artifacts/wake-plan-policy.txt`, `artifacts/wake-plan-cost.txt`, `artifacts/profile-resource-inventory.json` | 14 days |
-| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — including identity scenario transcripts, redacted identity capture, UI evidence, and proof-pack files, alongside bootstrap, registration, static-origin, migration, readiness, capability, smoke, data-truth, load, rollback, ECS, CloudWatch, release, and cost evidence | 30 days |
-| `staging-lifecycle-evidence-<run_id>` | `artifacts/sleep-plan-policy.txt`, `artifacts/sleep/desired-counts.json`, `artifacts/sleep/autoscaling.json`, `artifacts/evidence.sha256`, `artifacts/evidence.sha256.sha256` | 30 days |
+| `staging-wake-plan-validation-<run_id>` | `.artifacts/wake-plan-policy.txt`, `.artifacts/wake-plan-cost.txt`, `.artifacts/profile-resource-inventory.json` | 14 days |
+| `staging-rehearsal-<run_id>` | everything under `.artifacts/rehearsal/` — including identity scenario transcripts, redacted identity capture, UI evidence, and proof-pack files, alongside bootstrap, registration, static-origin, migration, readiness, capability, smoke, data-truth, load, rollback, ECS, CloudWatch, release, and cost evidence | 30 days |
+| `staging-lifecycle-evidence-<run_id>` | `.artifacts/sleep-plan-policy.txt`, `.artifacts/sleep/desired-counts.json`, `.artifacts/sleep/autoscaling.json`, `.artifacts/evidence.sha256`, `.artifacts/evidence.sha256.sha256` | 30 days |
 | `identity-continuity-scenarios-<run_id>` | Ten redacted live identity API scenario transcripts, uploaded before tenant cleanup | 30 days |
 | `identity-continuity-proof-pack-<run_id>` | Collected and validated identity capture pack with scenario and UI evidence | 90 days |
 | `identity-continuity-ui-failure-<run_id>` | Fixture-backed Playwright artifacts when that UI run fails | 30 days |
 | `staging-ttl-guard-<run_id>` | `services.json`, `services-after.json`, `actions.log` | 30 days |
 
-`artifacts/evidence.sha256` is a deterministic `sha256sum` manifest of every
-file under `artifacts/` on the sleep runner, sorted, with a checksum of the
+`.artifacts/evidence.sha256` is a deterministic `sha256sum` manifest of every
+file under `.artifacts/` on the sleep runner, sorted, with a checksum of the
 manifest itself alongside it. **It covers the sleep job's own files only, not
 the rehearsal artifacts.**
 

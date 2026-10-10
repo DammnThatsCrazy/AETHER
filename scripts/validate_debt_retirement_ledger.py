@@ -260,7 +260,7 @@ def measure(root: Path = ROOT) -> dict[str, int]:
         "files_docs_archive": top("docs/archive/"),
         "files_packages": top("packages/"),
         "files_scripts": top("scripts/"),
-        "files_deploy": top("deploy/"),
+        "files_deploy": top("infra/"),
         "files_config": top("config/"),
         "python_test_files": count(lambda f: f.endswith(".py") and f.rsplit("/", 1)[-1].startswith("test_")),
         "ts_test_files": count(lambda f: f.endswith((".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx"))),

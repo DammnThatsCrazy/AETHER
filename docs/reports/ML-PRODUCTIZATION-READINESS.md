@@ -231,7 +231,7 @@ Drift detection is now fully wired: training saves a `baseline.joblib` sample (u
 
 **Durable monitoring state (G19):** `ExtractionDefenseMonitor` and `DataFreshnessSLATracker` both support Redis write-through via `set_redis()`. When `REDIS_URL` is set, the serving lifespan wires a Redis client (db=3, isolated from rate-limiter db=2 and cache db=0) and restores in-memory state from Redis on startup. This makes monitoring state durable across restarts and consistent across replicas. Fails open in all environments — monitoring loss is not a production blocker.
 
-**Prometheus ML alerts:** `deploy/observability/prometheus/alert_rules.yml` now includes an `aether_ml_health` group with 8 ML-specific rules: `MLModelNotLoaded` (critical), `MLPredictionErrorRate`, `MLPredictionLatencyHigh`, `MLFreshnessViolationRate`, `MLDriftDetected`, `MLArtifactSignatureFailure` (critical), `MLExtractionAttackSustained`, `MLModelRolledBack` (info).
+**Prometheus ML alerts:** `infra/observability/prometheus/alert_rules.yml` now includes an `aether_ml_health` group with 8 ML-specific rules: `MLModelNotLoaded` (critical), `MLPredictionErrorRate`, `MLPredictionLatencyHigh`, `MLFreshnessViolationRate`, `MLDriftDetected`, `MLArtifactSignatureFailure` (critical), `MLExtractionAttackSustained`, `MLModelRolledBack` (info).
 
 ---
 

@@ -7,13 +7,13 @@ audience: [architect, dev-senior, ops]
 status: stable
 since_version: 0.1.0
 canonical_owner: ml@aether
-source_files: [services/ml/common/model_registry.py, services/ml/common/artifact_registry.py, services/ml/common/feature_contracts.py, services/ml/serving/src/api.py, services/ml/docker/Dockerfile, .github/workflows/repo-health.yml, docker-compose.yml, deploy/aws/terraform/modules/s3/main.tf]
+source_files: [services/ml/common/model_registry.py, services/ml/common/artifact_registry.py, services/ml/common/feature_contracts.py, services/ml/serving/src/api.py, services/ml/docker/Dockerfile, .github/workflows/repo-health.yml, infra/local/docker-compose.yml, infra/aws/terraform/modules/s3/main.tf]
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:9f12e57a7a0b4fd855ff1ca13cc8b4c8192a5b105e74f1113c7910f6b263c6c9"
-  "deploy/aws/terraform/modules/s3/main.tf": "sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4"
-  "docker-compose.yml": "sha256:aef0243ba5a694487689bedfe90a1343b3139cadaa36b5e366146ea4090705a9"
+  ".github/workflows/repo-health.yml": "sha256:dfd499508092941b77887900ebd59063986e10deaba52d6dd676e9d4860d1e67"
+  "infra/aws/terraform/modules/s3/main.tf": "sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4"
+  "infra/local/docker-compose.yml": "sha256:9fdb3c05fe34413f9df62f323608841fc4dd889f80307060637268cf42f29453"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
   "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"
@@ -168,12 +168,12 @@ Four new Kyber ML admin endpoints: `/alerts`, `/audit`,
 Prometheus ML alert group (`aether_ml_health`): 8 alerts covering model
 loading, error rate, latency, freshness, drift, signature failure, extraction
 attack, and rollback events. Rules in
-`deploy/observability/prometheus/alert_rules.yml`.
+`infra/observability/prometheus/alert_rules.yml`.
 
 ### Phase 8/9 — CI, Compose, Infrastructure
 
 **CI (G26):** ML path coverage in the verification registries includes
-`ml_serving/`, `model_extraction_defense/`, `deploy/`, `docs/archive/legacy-architecture/aws-deployment/`,
+`ml_serving/`, `model_extraction_defense/`, `infra/`, `docs/archive/legacy-architecture/aws-deployment/`,
 and Kyber ML frontend paths. Once a PR is finalized (`ready_for_review`), normal
 PR verification selects the registered ML suite only when the Impact Graph
 identifies ML impact; draft pushes remain an implementation phase. The broad

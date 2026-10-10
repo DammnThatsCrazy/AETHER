@@ -71,7 +71,7 @@ until they are registered.
 
 ## Deployment profile ownership
 
-A change under `deploy/aws/terraform/**`, or to
+A change under `infra/aws/terraform/**`, or to
 `config/deployment_profiles.yaml`, `config/runtime_deployment.yaml`,
 `config/terraform_resource_contracts.yaml` or `config/aws_price_book.yaml`, is a
 change to the **shape of the plan that would be applied**. The profile selector

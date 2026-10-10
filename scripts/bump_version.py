@@ -95,8 +95,8 @@ README_HEADERS = [
     ROOT / "docs/archive/legacy-architecture/backend" / "README.md",
     ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "README.md",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "README.md",
-    ROOT / "deploy" / "aws" / "README.md",
-    ROOT / "cicd" / "aether-cicd" / "README.md",
+    ROOT / "infra" / "aws" / "README.md",
+    ROOT / "infra" / "cicd" / "aether-cicd" / "README.md",
     ROOT / "services/compliance" / "README.md",
 ]
 
@@ -107,7 +107,7 @@ VERSION_PATTERN = re.compile(r"v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?"
 # existence but are not forced to the pyproject.toml platform version.
 INDEPENDENT_PACKAGE_JSONS = {
     ROOT / "contracts/smart-contracts" / "package.json",
-    ROOT / "playground" / "package.json",
+    ROOT / "packages" / "sdk" / "playground" / "package.json",
 }
 
 

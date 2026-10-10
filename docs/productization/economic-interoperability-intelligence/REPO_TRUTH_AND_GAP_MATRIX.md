@@ -6,10 +6,10 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [reports/economic-interoperability-intelligence/current-state-audit.md]
+source_files: [docs/reference/reports/economic-interoperability-intelligence/current-state-audit.md]
 canonical_owner: platform@aether
 source_hashes:
-  "reports/economic-interoperability-intelligence/current-state-audit.md": "sha256:2c7226396b923b3a106d1dc1bf44780b15e95ea8963c36c05474e617162e7908"
+  "docs/reference/reports/economic-interoperability-intelligence/current-state-audit.md": "sha256:2c7226396b923b3a106d1dc1bf44780b15e95ea8963c36c05474e617162e7908"
 ---
 
 # Repo Truth and Gap Matrix

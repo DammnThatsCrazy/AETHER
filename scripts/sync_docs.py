@@ -26,10 +26,9 @@ TOP_LEVEL_DOC_FOCUS = {
     "scripts",
     "docs",
     "tests",
-    "cicd",
     "services",
     "contracts",
-    "deploy",
+    "infra",
 }
 
 

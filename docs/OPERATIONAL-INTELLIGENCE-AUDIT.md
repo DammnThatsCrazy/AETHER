@@ -232,10 +232,10 @@ CREATE INDEX envelopes_tenant_replay_idx ON event_envelopes ((data->>'tenantId')
 
 ### D3. Replay Worker Process
 
-Add to `docker-compose.yml` and ECS task definitions:
+Add to `infra/local/docker-compose.yml` and ECS task definitions:
 
 ```yaml
-# docker-compose.yml addition
+# infra/local/docker-compose.yml addition
 aether-replay-worker:
   build: ./services/backend
   command: python -m services.events.worker_entrypoint

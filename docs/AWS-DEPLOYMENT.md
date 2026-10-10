@@ -7,11 +7,11 @@ audience: [ops, security, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - deploy/aws/README.md
-  - deploy/aws/main.py
-  - deploy/aws/terraform/
-  - deploy/aws/config/
-  - deploy/aws/lead-intake/template.yaml
+  - infra/aws/README.md
+  - infra/aws/main.py
+  - infra/aws/terraform/
+  - infra/aws/config/
+  - infra/aws/lead-intake/template.yaml
   - scripts/release/verify_terraform_state_role.py
   - .github/workflows/terraform-promote.yml
   - .github/workflows/amplify-status-production.yml
@@ -51,13 +51,13 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:5650e91a2230116a613e3e54c55f1994aa2a44be3c169a5a6a109700fef5bd6a"
+  ".github/workflows/amplify-status-production.yml": "sha256:7d212835a17967f1b7dadf01688be39c259095a116875f595a1a184fe21fed8d"
   ".github/workflows/deploy.yml": "sha256:99d17622d986182d8b63ebabc7c39d3c2387ba8b448afebc14cf696f0ff5b093"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:e95cad6f31907115d5534734a9feaf9f69c405e3b4329b60fb904c075be90c02"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:524912b39e541837d9cdb3b19d3e10053247ada863f50f07302cecc921c3a3e8"
-  ".github/workflows/staging-ttl-guard.yml": "sha256:6db80a1a80262cc60923789c40b233659f495dd026d54585bf20c61db36ddcb2"
-  ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
+  ".github/workflows/staging-lifecycle.yml": "sha256:f8081113b9e501906c6148cf299c90637b2da6e584583f8a08465b5a41d8b58a"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:c08a7521eee7fbe505195ab1e49f27272b6ef144d4ba2e9b0153fe6e2f07f33d"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
+  ".github/workflows/terraform-promote.yml": "sha256:b493d4250ab5da8cb183f579924e13692588091c4c2daf43f20311d62e6e23d3"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -69,24 +69,24 @@ source_hashes:
   "config/staging_secret_preflight_trust_policy.json": "sha256:38c81fbb5674275998114973bd151fccb23e510d999560e14f6c3dbf591e2fc5"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "config/terraform_state_access_policy.yaml": "sha256:474ebd2cd035d8c27e09e6fd20da2b752ba5171225d8c832ab1c1fcb72a724d6"
-  "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
-  "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
-  "deploy/aws/lead-intake/template.yaml": "sha256:2df847eeb6c89621e25d6b905e9fc18cc2071e3add4b1012905d9deeb814e7b0"
-  "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:25a89215fc659b746446ff0034479dfb71a40f3362d40ba138881ea03d13742b"
+  "infra/aws/README.md": "sha256:9cffdb74b5b2afebd56ff112b1a0ee1c1b791880e39755ba212ca39e9778dd5f"
+  "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
+  "infra/aws/lead-intake/template.yaml": "sha256:2df847eeb6c89621e25d6b905e9fc18cc2071e3add4b1012905d9deeb814e7b0"
+  "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
+  "infra/aws/terraform/": "sha256:9022373602176681a4d14c0499e77199f98a95cc398ae28704404cc500d970a8"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:a67e551912ea28489862dd166e5200509674b6d612e6d79bc87428855262c9f1"
+  "scripts/release/check_amplify_app_contract.py": "sha256:688c0ed538dd0f172ac2252046037343b4af8d6b93ff504f121129dec01281f7"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
-  "scripts/release/check_staging_lane_contract.py": "sha256:56860bf211a02366eb0f71b52d5e8dd68a65c95ef7e1f61366b46c5f31462339"
+  "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:001a5330f78fb4c334c3ddf56448c464355bee4b16c1640a1cbd5041be499fb5"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:c50654e19fa30de91b78dc954f967301a28aa45c8cef2bbf449eeca5f96f11e9"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
-  "scripts/release/reconcile_staging_plan_role.py": "sha256:8ed3b16a9e226c5f6ce0551c6c8f086ad40b011f044760d65bd25dd9c9ec735c"
+  "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
@@ -331,11 +331,11 @@ most common way to end up describing infrastructure that does not exist.
 
 | Path | What it is |
 |---|---|
-| `deploy/aws/terraform/` | **The live Terraform root.** One VPC, one account, profile-driven. Everything in this page's *Live infrastructure* sections describes this and only this. |
-| `deploy/aws/{README.md,main.py,config/aws_config.py}` and the `scripts/` package | A **reference/demo model**, not provisioning code. `main.py` is a demo runner that prints a six-account, five-VPC architecture from constants in `config/aws_config.py`. It does not wrap `terraform`, it has no `plan`/`apply` commands, and nothing it prints is provisioned by the live root. See [Reference model](#reference-model--described-not-provisioned). |
-| `deploy/aws/terraform/environments/{dev,staging,production,demo}/` and `docs/archive/legacy-architecture/aws-deployment/main.tf` | A **dead second Terraform tree**. See [Dead second tree](#dead-second-terraform-tree). |
+| `infra/aws/terraform/` | **The live Terraform root.** One VPC, one account, profile-driven. Everything in this page's *Live infrastructure* sections describes this and only this. |
+| `infra/aws/{README.md,main.py,config/aws_config.py}` and the `scripts/` package | A **reference/demo model**, not provisioning code. `main.py` is a demo runner that prints a six-account, five-VPC architecture from constants in `config/aws_config.py`. It does not wrap `terraform`, it has no `plan`/`apply` commands, and nothing it prints is provisioned by the live root. See [Reference model](#reference-model--described-not-provisioned). |
+| `infra/aws/terraform/environments/{dev,staging,production,demo}/` and `docs/archive/legacy-architecture/aws-deployment/main.tf` | A **dead second Terraform tree**. See [Dead second tree](#dead-second-terraform-tree). |
 
-`deploy/aws/main.py` does **not** deploy anything, and there is
+`infra/aws/main.py` does **not** deploy anything, and there is
 no `dr_failover.py` anywhere in the repository.
 
 ---
@@ -380,7 +380,7 @@ including the four non-cloud profiles, is
 Apply a profile with its checked-in variable file:
 
 ```bash
-cd "deploy/aws/terraform"
+cd "infra/aws/terraform"
 terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
 ```
 
@@ -747,7 +747,7 @@ parameter group remains `aurora-postgresql16`.
 
 The production contact and pilot forms post to an always-on lead intake
 (`VITE_LEAD_URL`), not the API. It is the CloudFormation stack
-`aether-production-lead-intake` from `deploy/aws/lead-intake/template.yaml`:
+`aether-production-lead-intake` from `infra/aws/lead-intake/template.yaml`:
 
 - A Lambda function URL accepts the same body as `POST /v1/contact/lead` for
   the site's six contact topics. CORS allows only the three production site
@@ -765,7 +765,7 @@ At pilot volume it costs cents a month. Deploy or update it with:
 
 ```bash
 aws cloudformation deploy --stack-name aether-production-lead-intake \
-  --template-file deploy/aws/lead-intake/template.yaml --capabilities CAPABILITY_IAM \
+  --template-file infra/aws/lead-intake/template.yaml --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset --tags Project=aether Purpose=production-lead-intake
 ```
 
@@ -862,7 +862,7 @@ in `profiles.tf`; the root `main.tf` module call passes that local, not the raw
 root variable (whose default is `false` and which no profile sets).
 
 **Image.** The tfmcp binary is built by
-`deploy/aws/build-tfmcp.sh` into a dedicated ECR repository
+`infra/aws/build-tfmcp.sh` into a dedicated ECR repository
 (`aether-tfmcp`) managed by `terraform/modules/ecr`. The task definition pins
 the immutable `sha256` digest (`var.tfmcp_image_digest`). The runtime image
 includes the Aether Terraform configuration via `docker-entrypoint.sh`, so the
@@ -1224,7 +1224,7 @@ accounts when their names would otherwise collide.
 
 Removing applied infrastructure — including turning a backend off by changing
 the deployment profile — goes through
-`deploy/aws/terraform/DECOMMISSION.md`. **A profile flip that
+`infra/aws/terraform/DECOMMISSION.md`. **A profile flip that
 shows `Plan: … 1 to destroy` on a data store is a stop-the-line event**, not a
 diff to skim.
 
@@ -1295,7 +1295,7 @@ has been run.
 
 ## Reference model — described, not provisioned
 
-`deploy/aws/README.md` and `config/aws_config.py` describe a
+`infra/aws/README.md` and `config/aws_config.py` describe a
 larger target architecture: six AWS accounts under one Organization
 (dev/staging/production/data/security/demo), five VPCs, nine named ECS
 services, eight managed data stores including SageMaker Serverless and Athena,
@@ -1311,7 +1311,7 @@ infrastructure.
 
 ## Dead second Terraform tree
 
-`deploy/aws/terraform/environments/{dev,staging,production,demo}/`
+`infra/aws/terraform/environments/{dev,staging,production,demo}/`
 and `docs/archive/legacy-architecture/aws-deployment/main.tf` are a second, dead Terraform tree. Between them they
 reference seven modules that do not exist in this repository — `cloudfront`,
 `opensearch`, `dynamodb`, `sagemaker`, `api_gateway`, `iam`, `waf` — so
@@ -1320,7 +1320,7 @@ reference seven modules that do not exist in this repository — `cloudfront`,
 They are not the deployment path, nothing applies them, and they describe an
 architecture Aether does not run. Do not modify, extend, "fix" or copy patterns
 out of that tree. The live root is
-`deploy/aws/terraform/`, and the live variable surface is
+`infra/aws/terraform/`, and the live variable surface is
 `variables.tf` plus `profiles/*.tfvars`.
 
 ## What is not claimed
@@ -1335,7 +1335,7 @@ out of that tree. The live root is
 
 ## See also
 
-- [Setup From Zero](../deploy/aws/SETUP.md) — the guided from-scratch procedure that provisions the state backend and drives the live root
+- [Setup From Zero](../infra/aws/SETUP.md) — the guided from-scratch procedure that provisions the state backend and drives the live root
 - [Deployment Profiles](DEPLOYMENT-PROFILES.md)
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md)
 - [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md)

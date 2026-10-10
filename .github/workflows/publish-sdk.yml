@@ -284,7 +284,7 @@ jobs:
       - name: Record CDN release evidence
         run: |
           mkdir -p release-evidence
-          cp artifacts/sdk/cdn/sdk/manifests/web/latest.json release-evidence/sdk-cdn-manifest.json
+          cp .artifacts/sdk/cdn/sdk/manifests/web/latest.json release-evidence/sdk-cdn-manifest.json
           printf '{"sha":"%s","job":"publish-cdn","dry_run":%s}\n' \
             "$GITHUB_SHA" "${{ inputs.dry_run }}" > release-evidence/sdk-cdn.json
 
@@ -299,7 +299,7 @@ jobs:
         if: ${{ inputs.dry_run }}
         run: |
           echo "DRY RUN — CDN layout validated, nothing uploaded:"
-          find artifacts/sdk/cdn -type f | sort
+          find .artifacts/sdk/cdn -type f | sort
 
       - name: Require AWS credentials
         if: ${{ !inputs.dry_run }}
@@ -326,7 +326,7 @@ jobs:
           set -euo pipefail
           # No --delete: versioned prefixes are immutable and accumulate so
           # that pinned installs keep resolving after a new release.
-          aws s3 sync artifacts/sdk/cdn/ "s3://${CDN_BUCKET}/" \
+          aws s3 sync .artifacts/sdk/cdn/ "s3://${CDN_BUCKET}/" \
             --exclude "v1.js" \
             --exclude "sdk/manifests/*" \
             --cache-control "public, max-age=31536000, immutable"
@@ -335,14 +335,14 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: |
           set -euo pipefail
-          aws s3 cp artifacts/sdk/cdn/v1.js "s3://${CDN_BUCKET}/v1.js" \
+          aws s3 cp .artifacts/sdk/cdn/v1.js "s3://${CDN_BUCKET}/v1.js" \
             --cache-control "public, max-age=300, must-revalidate"
 
       - name: Upload CDN manifest
         if: ${{ !inputs.dry_run }}
         run: |
           set -euo pipefail
-          aws s3 cp artifacts/sdk/cdn/sdk/manifests/web/latest.json \
+          aws s3 cp .artifacts/sdk/cdn/sdk/manifests/web/latest.json \
             "s3://${CDN_BUCKET}/sdk/manifests/web/latest.json" \
             --cache-control "public, max-age=60, must-revalidate"
 

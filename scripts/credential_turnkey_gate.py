@@ -22,7 +22,7 @@ relevant rows to FAIL/WARN with an explicit detail rather than crashing):
 * metering / entitlement — ``services/commerce/metering.py``,
   ``services/metering_evidence/``, ``services/x402/entitlements.py``
 * migrations — the ``alembic/versions`` chain
-* deployment — ``config/deployment_profiles.yaml`` + ``deploy/terraform``
+* deployment — ``config/deployment_profiles.yaml`` + ``infra/terraform``
 * test evidence — the unit / chaos / fixture trees
 
 Honesty rules enforced here:
@@ -975,7 +975,7 @@ def _collect_code_evidence(evidence: dict, backend: Path) -> None:
     )
     evidence["fault_injection_tests"] = bool(_files(ROOT, ["tests/chaos/**/*.py"]))
     evidence["infra_declared"] = (ROOT / "config" / "deployment_profiles.yaml").exists() and (
-        ROOT / "deploy" / "terraform"
+        ROOT / "infra" / "terraform"
     ).exists()
 
     docs_present = bool(_files(ROOT, ["docs/**/*.md"]))
