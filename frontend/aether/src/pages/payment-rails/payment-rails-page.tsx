@@ -23,6 +23,7 @@ import type { PaymentRailProvider, ReconciliationState } from '@aether/shared';
 import {
   useFundingSessions,
   useFundingSession,
+  useCommerceOrderEvidence,
   useReconciliationRecords,
   usePaymentRailHealth,
   useTenantDiagnostics,
@@ -172,6 +173,58 @@ function DetailField({ label, value, mono = true }: DetailFieldProps) {
   );
 }
 
+function CommerceOrderEvidence({ commerceOrderRef }: { commerceOrderRef: string | null }) {
+  const { evidence, loading, error, refresh } = useCommerceOrderEvidence(commerceOrderRef);
+  const order = (evidence?.order ?? {}) as Record<string, unknown>;
+  const payments = Object.values((evidence?.payments ?? {}) as Record<string, unknown>);
+  const state = String(evidence?.state ?? 'unmatched');
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Commerce order reconciliation</CardTitle></CardHeader>
+      <CardContent className="space-y-2 text-xs">
+        {loading ? <LoadingState lines={2} /> : error ? (
+          <ErrorState title="Order evidence unavailable" message={error} onRetry={refresh} />
+        ) : !commerceOrderRef ? (
+          <p className="text-text-muted">No explicit order reference was supplied. No order match was attempted.</p>
+        ) : !evidence ? (
+          <p className="text-text-muted">No tenant order evidence is stored for this exact reference.</p>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-text-muted">Evidence state</span>
+              <Badge size="sm">{state}</Badge>
+            </div>
+            <DetailField label="Exact order reference" value={commerceOrderRef} />
+            <DetailField label="Order source" value={order.provider as string | undefined} />
+            <DetailField label="Order ID" value={order.providerOrderId as string | undefined} />
+            <DetailField
+              label="Order total"
+              value={order.amount && order.currency ? `${String(order.amount)} ${String(order.currency)}` : undefined}
+            />
+            <DetailField label="Payment observations" value={String(payments.length)} />
+            {payments.map((item, index) => {
+              const payment = item as Record<string, unknown>;
+              return (
+                <div key={String(payment.providerPaymentId ?? index)} className="rounded border border-border-default p-2 space-y-1">
+                  <DetailField label="Payment source" value={payment.provider as string | undefined} />
+                  <DetailField label="Payment ID" value={payment.providerPaymentId as string | undefined} />
+                  <DetailField
+                    label="Payment amount"
+                    value={payment.amount && payment.currency ? `${String(payment.amount)} ${String(payment.currency)}` : undefined}
+                  />
+                  <DetailField label="Provider status" value={payment.status as string | undefined} />
+                </div>
+              );
+            })}
+            <p className="text-text-muted">A completed processor payment is distinct from payout settlement. Matching uses the exact reference, amount, and currency.</p>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface SessionDetailDrawerProps {
   readonly sessionId: string;
   readonly onClose: () => void;
@@ -230,6 +283,16 @@ function SessionDetailDrawer({ sessionId, onClose }: SessionDetailDrawerProps) {
               </div>
             </CardContent>
           </Card>
+
+          {session.flow_type === 'commerce_payment' && (
+            <CommerceOrderEvidence
+              commerceOrderRef={
+                typeof session.metadata?.commerce_order_ref === 'string'
+                  ? session.metadata.commerce_order_ref
+                  : null
+              }
+            />
+          )}
 
           <Card>
             <CardHeader>

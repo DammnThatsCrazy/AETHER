@@ -2,6 +2,7 @@ import { useQuery, useMutation, queryCache } from '@aether/ui';
 import {
   fetchFundingSessions,
   fetchFundingSession,
+  fetchCommerceOrderEvidence,
   fetchReconciliationRecords,
   fetchPaymentRailHealth,
   fetchProviderStatus,
@@ -82,6 +83,22 @@ export function useFundingSession(id: string | null): {
     error,
     refresh: refetch,
   };
+}
+
+export function useCommerceOrderEvidence(commerceOrderRef: string | null): {
+  readonly evidence: Record<string, unknown> | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly refresh: () => void;
+} {
+  const { data, isLoading, error, refetch } = useQuery<Record<string, unknown> | null>({
+    key: `${KEY_PREFIX}:commerce-order:${commerceOrderRef ?? 'none'}`,
+    fetcher: () => fetchCommerceOrderEvidence(commerceOrderRef ?? ''),
+    staleTime: STALE,
+    enabled: commerceOrderRef !== null,
+  });
+
+  return { evidence: data ?? null, loading: isLoading, error, refresh: refetch };
 }
 
 export function useReconciliationRecords(): {

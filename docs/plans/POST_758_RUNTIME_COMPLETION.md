@@ -102,6 +102,9 @@ and passes PaymentIntent `aether_order_ref` metadata into the ledger. This flow
 does not mean payout settlement, and unsupported three-decimal currencies are
 excluded from reconciliation. The ledger exposes the evidence through
 `GET /v1/commerce/reconciliation/order-payments`, guarded by `commerce:read`.
+The Aether Payment Rails session drawer shows the exact order reference,
+order/payment amounts, source IDs, and evidence state for Stripe merchant
+payment sessions.
 Matching never uses amount, time, email, or customer identity; multiple
 successful payments and mismatched amounts remain explicit conflicts. This
 ledger ignores source-time older order revisions and flags divergent revisions

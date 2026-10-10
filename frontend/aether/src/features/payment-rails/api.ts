@@ -351,6 +351,16 @@ export async function fetchFundingSessions(params?: FundingSessionListParams): P
   }
 }
 
+export async function fetchCommerceOrderEvidence(
+  commerceOrderRef: string,
+): Promise<Record<string, unknown> | null> {
+  const r = await restClient.get(
+    `/v1/commerce/reconciliation/order-payments${buildQS({ commerce_order_ref: commerceOrderRef })}`,
+    wrap(z.record(z.unknown()).nullable()),
+  );
+  return r.data;
+}
+
 export function fetchFundingSession(sessionId: string): Promise<FundingSessionDetail> {
   return restClient
     .get(`${BASE}/sessions/${encodeURIComponent(sessionId)}`, wrap(sessionDetailSchema))
