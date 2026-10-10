@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-junior, dev-senior, architect]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/services/]
+source_files: [services/api/tenancy/, services/api/ingestion/, services/api/identity/, services/api/graph/, services/api/journeys/, services/api/intelligence/, services/api/value/, services/api/actions/, services/api/governance/, services/api/workers/, services/api/connectors/, services/api/replay/, services/api/billing/]
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
@@ -22,7 +22,19 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/api/services/": "sha256:8faec20fdcc8ec4abe978a907e0282649a259f1552c12bc1fa8ede2e38f92cd4"
+  "services/api/actions/": "sha256:bd9f1025f0e2cd570caebf7d0e4cc32e2f3b2eb021c69837ffc56a72e21f8eca"
+  "services/api/billing/": "sha256:276efa35c0e6ed0972e526700167614f4add121a4f16e2bf6a0303f126ffa82f"
+  "services/api/connectors/": "sha256:920c8b9ca32bc7566c6162c76a96eb4942c06a0f8169e7677455415b341b14a1"
+  "services/api/governance/": "sha256:b89a4fd371e186515db0b602be46512a92878526e45fee6c0c9ca4e3a42aea78"
+  "services/api/graph/": "sha256:1e3b9b0b7a5c283c974def90041650fc14fa914afb9992fe94186f308a8c5569"
+  "services/api/identity/": "sha256:0674b3ff88cbd002a293079fca456993c36353a36c4b367b961b0410e4a20e11"
+  "services/api/ingestion/": "sha256:d2167419fe2f3049ca4c00dab967743cb06d42955e28d7ea4b35cad4e7a52674"
+  "services/api/intelligence/": "sha256:60a70fa24de32d56ce0d964ad856ce03e3d436c3502b2522f6f18aaf28c2964d"
+  "services/api/journeys/": "sha256:88f4fce904d6bf33774cb1109b681e4be6621e6f3178977e8981c4ead1b0c26f"
+  "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
+  "services/api/tenancy/": "sha256:b3e28efab538d22bad132a158a150d7ac9872d05a14ce3bf858637dc58e18289"
+  "services/api/value/": "sha256:6957d7c1eb02cef583cb164c4462b8547594551e2f04c038c59d1f1377778b22"
+  "services/api/workers/": "sha256:ca07d8c686c7ee10226c9bf9dff2a350adbbef73d1b63b0bc059f2780a1cfe1c"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
