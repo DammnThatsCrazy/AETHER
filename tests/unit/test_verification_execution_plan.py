@@ -40,7 +40,10 @@ def test_environment_authority_templates_are_classified() -> None:
     assert plan["build"]["node_required"] is False
 
 
-def test_unknown_path_is_blocked_instead_of_emitting_zero_work() -> None:
+def test_unknown_path_is_blocked_instead_of_emitting_zero_work(monkeypatch) -> None:
+    import scripts.lib.impact_graph as impact_module
+
+    monkeypatch.setattr(impact_module, "_path_exists", lambda path: path == "new-runtime-surface/worker.py")
     plan = build_execution_plan(["new-runtime-surface/worker.py"])
 
     assert plan["status"] == "BLOCKED"
