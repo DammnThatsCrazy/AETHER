@@ -123,9 +123,12 @@ chain, and VM fields as source references; Web3 Silver now accepts canonical
 ingestion recognizes `walletAddress`. A wallet-only event now records a
 tenant/chain/VM-scoped hashed source identity without creating a person or
 claiming ownership. Validation enforces the generated SDK-emittable event
-set. Contract generation, Python syntax compilation, and strict documentation
-drift checks pass. Provider-backed transaction
-verification, journey reconciliation, and product evidence remain open.
+set. The Web3 API now verifies only transactions already present in the
+requesting tenant's Silver facts using read-only EVM or Solana RPC, stores a
+separate tenant-scoped verification observation, and updates canonical journey
+status only after RPC verification. A successful or failed chain execution is
+not represented as payment settlement. Provider-backed runtime evidence and
+product proof remain open.
 
 ### Slice 2 — Authoritative agent execution and economic reconciliation
 
@@ -159,7 +162,10 @@ execution history, delegation, and payment/settlement evidence. The page keeps
 missing records explicit and states that executor completion is not settled
 value. Unified Journey steps now expose the verification field even when it is
 absent, link agent activity to Agent 360, and link the journey back to Profile
-360. The mobile Journey and graph reconciliation path remains open.
+360. The mobile verification API now refreshes canonical activity and Journey
+status after checking RPC evidence. The customer surface still needs to expose
+the verification record alongside observed activity, with settlement remaining
+separately sourced.
 
 ### Slice 4 — Journey and release evidence
 
@@ -170,7 +176,7 @@ simulator evidence distinct from production readiness.
 
 | Approved journey | Current implementation evidence | Remaining release evidence |
 |---|---|---|
-| Human mobile financial activity | Android/iOS wallet and transaction observations reach Web3 Silver with source-observed status; identity recognizes wallet-address aliases; Profile and Journey surfaces exist. | Verify a provider-backed chain observation joins on tenant, chain, wallet context, and transaction hash; prove the UI keeps observed activity distinct from verified execution and settlement. |
+| Human mobile financial activity | Android/iOS wallet and transaction observations reach Web3 Silver with source-observed status; identity recognizes wallet-address aliases; the tenant-scoped verifier checks existing Silver observations against read-only EVM/Solana RPC and refreshes canonical Journey status. | Exercise a configured RPC provider with a controlled observation; prove the customer surface shows observation and verification separately from settlement, then cover reorg/correction behavior. |
 | Cross-platform economic identity | SDK identity observations use the existing tenant-scoped source-identity resolver; profile identity review and merge controls already exist. | Pair an authorized provider observation with an SDK source in a controlled tenant; prove provenance, confidence, no false merge, replay safety, and consent withdrawal. |
 | Human → agent → subagent delegation | Server-authored user-agent completion/failure lifecycle now reaches the existing mapper; Agent 360 shows authority, execution, delegation, and existing payment/settlement records. | Run a controlled delegated execution through a real executor callback and an authoritative payment/settlement path; demonstrate child-agent lineage, retry, revoke, and no spend from execution status alone. |
 | Multi-provider commerce | Commerce and x402 lifecycle owners, provider connectors, unified journey, and Value surfaces are present. | Certify one tenant-scoped two-provider golden path (order plus settlement); demonstrate normalized source lineage, deduplication, correction, and consistent Journey/Value output. |

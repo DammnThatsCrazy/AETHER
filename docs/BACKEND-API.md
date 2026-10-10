@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:a84ece4797d2c8df71553dbe7f732cf7e6c1dc8ab5a55dcd2d73dbdce4c52829"
+  "services/backend/services/": "sha256:f8a294c885eb4797d67075ec09dde0f2b1362ba870140dc4640e6497aba79ab5"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1904,6 +1904,22 @@ Registry-first Web3 intelligence system with canonical chain/protocol/app/domain
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/web3/observations/batch` | Bulk ingest Web3 observations (up to 500/batch); graph writes use the authenticated tenant scope |
+
+**SDK Transaction Verification**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/transactions/verify` | Verify an already stored tenant SDK transaction using registered-chain, read-only EVM/Solana RPC evidence |
+| `GET` | `/v1/web3/transactions/{chain_id}/{transaction_hash}/verification` | Read the tenant-scoped verification record |
+
+Verification requires an existing matching row in `silver_web3_transaction_facts`
+and a registered chain whose VM family matches the request. EVM verifies the RPC
+chain ID, transaction sender/hash, receipt, and the server-set confirmation threshold;
+SVM verification requests finalized transaction data and checks a registered
+genesis hash when configured. The result records execution status separately and
+does not establish payment settlement. The verification route refreshes Journey
+activity only after RPC evidence is obtained; a missing transaction remains
+pending and a chain mismatch does not update canonical activity.
 
 When graph construction is requested for an observation, the service requires
 the authenticated tenant's `write` permission and sends vertex and edge
