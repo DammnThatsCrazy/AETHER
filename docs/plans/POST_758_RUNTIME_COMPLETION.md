@@ -13,9 +13,9 @@ canonical_owner: architecture@aether
 ## Baseline and scope
 
 This is the implementation delta for the October 9, 2026 post-#758 assessment.
-The assessed baseline is `Development` at `a8bb030f`; the current implementation
-is stacked on that branch at `ed1cfb53`. The earlier mobile identity work is in
-the same checkout and is retained. The objective is to connect surviving
+The assessed baseline is `Development` at `a8bb030f`; implementation began at
+`ed1cfb53` and is stacked on `Development` through `41a901d1`. The earlier
+mobile identity work in the checkout is retained. The objective is to connect surviving
 contracts to their real runtime owners, then prove the customer-facing path;
 it is not to recreate the original 72 work orders as 72 presumed missing
 features.
@@ -74,6 +74,15 @@ and a controlled delegated-payment journey have end-to-end product evidence;
 design-partner evidence is distinguished from production readiness.
 
 ## Implementation program sequence
+
+### Current implementation commits
+
+| Commit | Scope |
+|---|---|
+| `139f33ca` | Connect mobile wallet observations to Web3 Silver and enforce the public SDK event authority set. |
+| `2ff86443` | Persist trusted user-agent outcomes and publish lifecycle events. |
+| `4830938b` | Add the customer-facing Agent 360 route over the existing tenant API. |
+| `41a901d1` | Link Journey activity to Profile/Agent 360 and record five journey release gates. |
 
 ### Slice 0 — Capability and work-order traceability
 
