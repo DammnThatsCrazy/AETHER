@@ -236,6 +236,23 @@ class _BaseSocialFactsRepository:
             )
         return row
 
+    async def list_for_tenant(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        """Bounded tenant-only read for projection consumers."""
+        if not tenant_id:
+            raise ValueError("tenant_id is required")
+        limit = max(1, min(int(limit), 500))
+        pool = await self._pool()
+        if pool is None:
+            return [dict(row) for row in local_rows(self.table)
+                    if row.get("tenant_id") == tenant_id][:limit]
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT * FROM {self.table} WHERE tenant_id = $1 "
+                "ORDER BY occurred_at DESC NULLS LAST LIMIT $2",
+                tenant_id, limit,
+            )
+        return [dict(row) for row in rows]
+
 
 class SocialIdentityFactsRepository(_BaseSocialFactsRepository):
     """Durable storage over silver_social_identity_facts (social_identity_observed)."""

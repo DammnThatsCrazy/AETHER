@@ -2,8 +2,8 @@
  * Domain mapping constants for the product family.
  *
  * Defaults mirror the origins every app's own `src/lib/env.ts` already
- * defaults to (`frontend/olympus-marketing/src/lib/env.ts`,
- * `frontend/aether-marketing/src/lib/env.ts`) and that `seo-data.json` in each
+ * defaults to (`apps/olympus-marketing/src/lib/env.ts`,
+ * `apps/aether-marketing/src/lib/env.ts`) and that `seo-data.json` in each
  * app declares as its `host` — this module does not introduce a second,
  * inconsistent domain scheme; it centralizes the one already in effect so
  * deploy tooling and app code read the same mapping. Every value stays

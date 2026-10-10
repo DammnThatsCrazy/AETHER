@@ -6,13 +6,18 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/commerce/, services/backend/services/x402/]
+source_files: [services/backend/services/commerce/, services/backend/services/x402/, services/backend/services/agent/economic.py, services/backend/services/economic/economic360_contracts.py, services/backend/services/economic/operation_linkage.py, services/backend/services/profile/agent.py, services/backend/services/ingestion/lifecycle_worker.py]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
-  "services/backend/services/commerce/": "sha256:c2f218555f68084b9d5248ba874d4a55bea4ab8a5c5c02e144cf583faa7d2437"
-  "services/backend/services/x402/": "sha256:a359d4e6f9e54722c053f8b4b7be789bc5748371ecef4ef2f5843cd48ee93d60"
+  "services/backend/services/agent/economic.py": "sha256:2e2737ac4b21dcf54564ad43978d09d0133225a05a488414c7a28c16b1edf56a"
+  "services/backend/services/commerce/": "sha256:44b69df3ae9cd06b6f7f95c36af52e5d512a9c8aad8ba1acbcfdad79580f4201"
+  "services/backend/services/economic/economic360_contracts.py": "sha256:06de628e97ad446722d432701d4850e0b62cb89b38d1f74265d73181b6ae6ba2"
+  "services/backend/services/economic/operation_linkage.py": "sha256:2b7ba5ea6d4f222b6d5aec8bc27e44835ff69f7ef33f496d49d00a4a6ba05dfa"
+  "services/backend/services/ingestion/lifecycle_worker.py": "sha256:2ff252e1d0b87e341769cdfe9054e3523bcfe8a2bf5f94798b5306625cbca5bf"
+  "services/backend/services/profile/agent.py": "sha256:453e149e6afd48cc27de997fdbfed6e0a7712d5ca9514c92e146a11b7546b129"
+  "services/backend/services/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -21,6 +26,17 @@ source_hashes:
 **Status note:** two parts of this spec were not built and were removed as dead code: the typed event layer (`shared/events/economic_topics.py`, `economic_schemas.py`; the commerce lifecycle publishes plain payloads on the existing `EventTopic.COMMERCE_*` topics) and the separate approvals router (`x402/approvals_routes.py`; approvals are served by `approvals_router` in `x402/commerce_routes.py` under `/v1/approvals`). References below to those files describe the original design only.
 **Day-1 GA anchor:** All Aether-native protected resource classes, mandatory approval on all spend classes, USDC on Base + Solana.
 **External providers:** Designed-in, shipped second-wave.
+
+**Current implementation boundary (October 10, 2026):** The repository now
+has a versioned, evidence-only `EconomicOperationLink` for exact-reference
+commerce order/payment evidence and tenant-scoped agent intent, authorization,
+execution, and settlement records. Commerce evidence is knowledge-time
+reconstructable and can flow into Journey/Economic360 only when a persisted
+journey step contains the source-shared order reference. This link does not
+execute payments, assert payout settlement, attach an order to a person, or
+replace the provider-owned lifecycle. Signed Stripe refunds now appear as
+separate facts only when the webhook supplies exact order/payment/refund IDs;
+other provider correction feeds and live provider certification remain open.
 
 ---
 
@@ -107,6 +123,41 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 | Kyber = **dashboard** | Kyber = **operator command surface** with audited actions |
 | Commerce = **record-keeping** | Commerce = **governed workflow** with mandatory approvals |
 | Approval = N/A | Approval = **first-class domain** across all layers |
+
+### 2.4 Cross-domain economic operation linkage
+
+The commerce reconciliation read now adds an `operationLink` projection to
+`GET /v1/commerce/reconciliation/order-payments`. It links the provider-owned
+commerce order and payment records only through their explicit shared
+`commerce_order_ref`, retains provider namespaces and evidence references, and
+surfaces partial, unresolved and conflicting matches. The source ledger retains
+distinct order revisions with source-valid and first-observed timestamps;
+stale revisions remain visible without replacing the current source view.
+Agent reversal relations are included only from an explicit source
+`reverses_settlement_event_id`. The operation link carries no amount or
+independent payment status and does not claim payout settlement.
+
+This linkage is an Aether projection for navigating evidence across domains.
+The existing agent economics read also links `PaymentIntent` records to
+tenant-scoped authorization, executor and settlement records when their
+explicit IDs and ownership fields match. Authorization links additionally
+require the authoritative `PaymentRequirement` to match tenant, challenge and
+agent requester. Missing or mismatched source records remain unlinked. These
+links are also included in the existing Agent 360 `x402_flows` projection.
+Server-authoritative lifecycle events materialize existing PaymentIntent and
+SettlementEvent graph types and registered edges through
+`GraphMutationGateway`; the authorization owner writes the existing
+PaymentRequirement → PaymentAuthorization edge. Agent 360 links exact-matched
+executor records in its evidence view. No execution edge is projected because
+the registered SettlementEvent → Execution edge would assert a causal relation
+that the current source records do not prove. The graph and these projections do not
+become the source of truth for intent, authorization, execution or settlement;
+those remain with their existing control-plane and source-specific authorities.
+Journey and Value propagation, correction/reversal continuity, temporal
+reconstruction and production journey evidence remain open. Linked source
+references retain source event time, validity/revision time where available,
+and first-persisted time where available so later as-of reconstruction can be
+built without conflating source time with ingestion time.
 
 
 ---

@@ -221,6 +221,14 @@ class ByokCredentialResolver:
             reason="no credential configured for provider",
         )
 
+    async def materialize(self, tenant_id: str, ref: str) -> str | None:
+        """Resolve only the tenant-scoped env secret for the provider binding."""
+        if not ref.startswith("llm/"):
+            return None
+        provider = ref.split("/", 1)[1]
+        env_ref = self._tenant_env_ref(tenant_id, provider)
+        return os.getenv(env_ref) if env_ref is not None else None
+
     async def health(self) -> bool:
         """Report source liveness for circuit breakers.
 

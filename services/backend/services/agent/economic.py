@@ -12,10 +12,12 @@ from typing import Any, Optional
 
 from repositories.repos import (
     AgentEconomicIdentityRepository,
+    AgentExecutionRepository,
     DelegationRepository,
     PaymentIntentRepository,
     SettlementEventRepository,
 )
+from services.economic.operation_linkage import agent_intent_operation_link
 from services.value.models import to_decimal
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
@@ -262,11 +264,13 @@ class AgentEconomicViews:
         settlements: Optional[SettlementEventRepository] = None,
         delegations: Optional[DelegationRepository] = None,
         identities: Optional[AgentEconomicIdentityRepository] = None,
+        executions: Optional[AgentExecutionRepository] = None,
     ) -> None:
         self._intents = payment_intents or PaymentIntentRepository()
         self._settlements = settlements or SettlementEventRepository()
         self._delegations = delegations or DelegationRepository()
         self._identities = identities or AgentEconomicIdentityRepository()
+        self._executions = executions or AgentExecutionRepository()
 
     async def budget_view(
         self,
@@ -386,6 +390,66 @@ class AgentEconomicViews:
         budget = await self.budget_view(agent_id, tenant_id, limit=limit)
         delegation = await self.delegation_policy_view(agent_id, tenant_id)
         identity = await self._identities.find_for_agent(agent_id, tenant_id)
+        intents = await self._intents.list_for_agent(agent_id, tenant_id, limit=limit)
+        settlements = await self._settlements.list_for_agent(
+            agent_id, tenant_id, limit=limit
+        )
+        executions = await self._executions.list_for_agent(
+            agent_id, tenant_id, limit=limit
+        )
+        from services.x402.commerce_store import get_commerce_store
+
+        commerce_store = get_commerce_store()
+        authorizations = await commerce_store.list_authorizations(tenant_id)
+        requirements = await commerce_store.list_requirements(tenant_id)
+        executions_by_id = {
+            str(row.get("execution_id") or ""): row for row in executions
+        }
+        authorizations_by_id = {
+            str(
+                row.authorization_id
+                if hasattr(row, "authorization_id")
+                else row.get("authorization_id") or ""
+            ): row
+            for row in authorizations
+        }
+        requirements_by_challenge = {
+            str(
+                row.challenge_id
+                if hasattr(row, "challenge_id")
+                else row.get("challenge_id") or ""
+            ): row
+            for row in requirements
+        }
+        settlements_by_intent: dict[str, list[dict[str, Any]]] = {}
+        for settlement in settlements:
+            intent_id = str(settlement.get("intent_id") or "")
+            if intent_id:
+                settlements_by_intent.setdefault(intent_id, []).append(settlement)
+        operation_links = [
+            agent_intent_operation_link(
+                intent,
+                settlements_by_intent.get(str(intent.get("intent_id") or ""), []),
+                authorization=authorizations_by_id.get(
+                    str(
+                        intent.get("authorization_id")
+                        or (intent.get("metadata") or {}).get("authorization_id")
+                        or ""
+                    )
+                ),
+                execution=executions_by_id.get(
+                    str(
+                        intent.get("execution_id")
+                        or (intent.get("metadata") or {}).get("execution_id")
+                        or ""
+                    )
+                ),
+                requirement=requirements_by_challenge.get(
+                    str(intent.get("intent_id") or "")
+                ),
+            ).model_dump(mode="json")
+            for intent in intents
+        ]
 
         return {
             "agent_id": agent_id,
@@ -393,6 +457,7 @@ class AgentEconomicViews:
             "budget": budget,
             "delegation_policy": delegation,
             "economic_identity": identity,
+            "economic_operation_links": operation_links,
             "computed_at": utc_now().isoformat(),
         }
 

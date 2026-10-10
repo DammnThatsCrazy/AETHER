@@ -237,12 +237,20 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun walletConnect(address: String, options: ReadableMap) {
         val walletType = options.getString("type") ?: "unknown"
-        val chainId = if (options.hasKey("chainId")) options.getInt("chainId").toString() else "unknown"
-        Aether.walletConnected(address, walletType, chainId)
-        resolveWalletIdentity(address, walletType, chainId)
+        val chainId = if (options.hasKey("chainId")) {
+            when (options.getType("chainId")) {
+                com.facebook.react.bridge.ReadableType.Number -> options.getDouble("chainId").toLong().toString()
+                com.facebook.react.bridge.ReadableType.String -> options.getString("chainId") ?: "unknown"
+                else -> "unknown"
+            }
+        } else "unknown"
+        val vm = options.getString("vm") ?: "evm"
+        val provider = if (options.hasKey("provider")) options.getString("provider") else null
+        Aether.walletConnected(address, walletType, chainId, vm, provider)
+        resolveWalletIdentity(address, walletType, chainId, vm)
     }
 
-    private fun resolveWalletIdentity(address: String, walletType: String, chainId: String) {
+    private fun resolveWalletIdentity(address: String, walletType: String, chainId: String, vm: String) {
         if (resolveEndpoint.isEmpty()) return
         Thread {
             try {
@@ -253,6 +261,7 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
                             put("address", address)
                             put("type", walletType)
                             put("chainId", chainId)
+                            put("vm", vm)
                         })
                     })
                     put("anonymousId", Aether.getAnonymousId())
@@ -289,9 +298,16 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun walletTransaction(txHash: String, options: ReadableMap) {
-        val chainId = options.getString("chainId") ?: "unknown"
+        val chainId = if (options.hasKey("chainId")) {
+            when (options.getType("chainId")) {
+                com.facebook.react.bridge.ReadableType.Number -> options.getDouble("chainId").toLong().toString()
+                com.facebook.react.bridge.ReadableType.String -> options.getString("chainId") ?: "unknown"
+                else -> "unknown"
+            }
+        } else "unknown"
         val value = options.getString("value")
-        Aether.walletTransaction(txHash, chainId, value, options.toHashMap().mapValues { it.value as? Any })
+        val vm = options.getString("vm")
+        Aether.walletTransaction(txHash, chainId, value, options.toHashMap().mapValues { it.value as? Any }, vm)
     }
 
 

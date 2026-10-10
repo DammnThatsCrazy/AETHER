@@ -23,6 +23,21 @@ def _now() -> str:
 
 class TestSilverAdapters:
 
+    def test_revenue_adapter_preserves_only_explicit_commerce_order_reference(self):
+        from services.measurement.silver_adapters import adapt_revenue
+
+        base = {
+            "tenant_id": "tenant-a",
+            "fact_id": "revenue-1",
+            "occurred_at": _now(),
+            "order_id": "shopify-order-1",
+            "gross_amount": "12.00",
+            "currency": "USD",
+        }
+        assert adapt_revenue(base).get("commerce_order_ref") is None
+        linked = adapt_revenue({**base, "commerce_order_ref": "shop:store-1:order-1"})
+        assert linked["commerce_order_ref"] == "shop:store-1:order-1"
+
     def test_adapt_from_silver_campaign_touchpoint(self):
         from services.measurement.silver_adapters import adapt_from_silver
         row = {

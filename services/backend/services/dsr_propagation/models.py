@@ -32,13 +32,9 @@ DSR_TYPES: tuple[str, ...] = (
 # ── Components a DSR propagates to (prompt §3.11) ─────────────────────────────
 #
 # Order is stable and load-bearing: open_request() seeds one pending step per
-# component in this exact order so status() output is deterministic. New
-# components are appended: ``analytics_events`` (the analytics ``events`` rows
-# and ``sessions`` rollups written by the ``analytics_event_recorder`` stream
-# projector), then ``silver_facts`` (every Silver fact table, erased through the
-# Silver writer's introspected schemas) and ``bronze_events`` (the hash-chained
-# ``bronze_sdk_events`` tier + ``event_outbox``, erased by chain-preserving
-# tombstone) — the newest tail members. Every component is executed by the
+# component in this exact order so status() output is deterministic. Recent
+# appended components include ``analytics_events``, ``silver_facts``,
+# ``bronze_events``, ``web3_observations``, and ``x402_commerce``. Every component is executed by the
 # ``consent.erasure`` job (services/consent/erasure_jobs.py +
 # erasure_planes.py); scripts/release/check_dsr_coverage.py fails CI when one
 # is not.
@@ -76,6 +72,8 @@ DSRComponent = Literal[
     "analytics_events",
     "silver_facts",
     "bronze_events",
+    "web3_observations",
+    "x402_commerce",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -111,6 +109,8 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "analytics_events",
     "silver_facts",
     "bronze_events",
+    "web3_observations",
+    "x402_commerce",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

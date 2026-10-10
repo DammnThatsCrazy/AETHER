@@ -133,7 +133,7 @@ class BaseProjector:
             return "sensitive"
         if family in ("identity_lc", "b2b"):
             return "behavioral_pii"
-        if family in ("ecommerce", "web3", "web3_lc", "x402"):
+        if family in ("ecommerce", "web3", "web3_lc", "wallet", "x402"):
             return "financial"
         return "behavioral"
 

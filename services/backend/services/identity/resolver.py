@@ -459,14 +459,14 @@ class IdentityResolutionService:
             hashed_signals = []
             # (type, hash, display_redacted)
             for sig in raw_signals:
-                h, display = _hash_signal(sig.type, sig.value, tenant_id)
+                h, display = _hash_signal(sig.type, sig.value, tenant_id, sig.chain_namespace)
                 if h:
                     hashed_signals.append((sig.type, h, display))
                     self._metrics.record_signal_observation(sig.type.value)
 
             # ── 4. Persist signal observations ────────────────────────────────
             for sig in raw_signals:
-                h, display = _hash_signal(sig.type, sig.value, tenant_id)
+                h, display = _hash_signal(sig.type, sig.value, tenant_id, sig.chain_namespace)
                 if h:
                     await self._repo.create_signal_observation(
                         tenant_id=tenant_id,
@@ -517,7 +517,7 @@ class IdentityResolutionService:
         if suppressed_pairs:
             raw_signals = [
                 sig for sig in raw_signals
-                if (sig.type, _hash_signal(sig.type, sig.value, tenant_id)[0])
+                if (sig.type, _hash_signal(sig.type, sig.value, tenant_id, sig.chain_namespace)[0])
                 not in suppressed_pairs
             ]
 
@@ -2691,7 +2691,7 @@ class IdentityResolutionService:
                 IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
             ):
                 is_verified = sig.type == IdentitySignalType.WALLET_SIGNATURE_VERIFIED
-                h, _ = _hash_signal(sig.type, sig.value, tenant_id)
+                h, _ = _hash_signal(sig.type, sig.value, tenant_id, sig.chain_namespace)
                 if h:
                     await self._graph.write_wallet_edge(
                         tenant_id, canonical_entity_id, h,
@@ -2703,7 +2703,7 @@ class IdentityResolutionService:
 # ── Module-level helpers ──────────────────────────────────────────────────────
 
 def _hash_signal(
-    sig_type: IdentitySignalType, value: str, tenant_id: str
+    sig_type: IdentitySignalType, value: str, tenant_id: str, chain_namespace: str = ""
 ) -> tuple[str, str]:
     """
     Hash a signal value and return (hash, display_redacted).
@@ -2730,7 +2730,7 @@ def _hash_signal(
         IdentitySignalType.WALLET_ADDRESS,
         IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
     ):
-        h = hash_wallet(value)
+        h = hash_wallet(value, chain_namespace or "eip155")
         return h, redact_display(value, "wallet_address")
 
     if sig_type == IdentitySignalType.EXTERNAL_ID:

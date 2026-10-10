@@ -46,13 +46,13 @@ since_version: 0.1.0
 - `services/backend/services/measurement/repositories/journey_step_repo.py`
 - `services/backend/services/measurement/silver_adapters.py`
 - `services/backend/services/measurement/metrics.py`
-- `frontend/aether/src/features/journey/use-unified-journey.ts`
-- `frontend/aether/src/features/journey/journey-step-card.tsx`
-- `frontend/aether/src/features/journey/journey-timeline.tsx`
-- `frontend/aether/src/features/journey/journey-filter-bar.tsx`
-- `frontend/aether/src/features/journey/journey-transition-badge.tsx`
-- `frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx`
-- `frontend/aether/src/pages/journey-explorer/index.ts`
+- `apps/aether/src/features/journey/use-unified-journey.ts`
+- `apps/aether/src/features/journey/journey-step-card.tsx`
+- `apps/aether/src/features/journey/journey-timeline.tsx`
+- `apps/aether/src/features/journey/journey-filter-bar.tsx`
+- `apps/aether/src/features/journey/journey-transition-badge.tsx`
+- `apps/aether/src/pages/journey-explorer/journey-explorer-page.tsx`
+- `apps/aether/src/pages/journey-explorer/index.ts`
 - `tests/unit/test_canonical_activity.py`
 - `tests/unit/test_journey_compiler_v2.py`
 - `tests/unit/test_journey_step_repo.py`
@@ -68,8 +68,8 @@ since_version: 0.1.0
 - `services/backend/services/profile/aggregator.py` — added unified_journey() method
 - `services/backend/services/profile/routes.py` — added unified-journey endpoint
 - `services/backend/services/silver/projectors/base.py` — added project_and_emit, _emit_to_canonical_activity
-- `frontend/aether/src/features/journey/index.ts` — extended exports
-- `frontend/kyber/src/features/measurement/use-journey-explorer.ts` — extended with new hooks
-- `frontend/kyber/src/features/measurement/index.ts` — extended exports
-- `frontend/kyber/src/lib/api/endpoints.ts` — extended journeysMeasurement API
-- `frontend/kyber/src/pages/measurement/journey-explorer-page.tsx` — extended with panels
+- `apps/aether/src/features/journey/index.ts` — extended exports
+- `apps/kyber/src/features/measurement/use-journey-explorer.ts` — extended with new hooks
+- `apps/kyber/src/features/measurement/index.ts` — extended exports
+- `apps/kyber/src/lib/api/endpoints.ts` — extended journeysMeasurement API
+- `apps/kyber/src/pages/measurement/journey-explorer-page.tsx` — extended with panels

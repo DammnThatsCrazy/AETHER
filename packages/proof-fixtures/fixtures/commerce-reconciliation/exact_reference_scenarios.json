@@ -1,0 +1,121 @@
+{
+  "schema_version": "1",
+  "fixture_status": "acceptance_contract_only",
+  "tenant_id": "tenant-commerce-proof",
+  "commerce_order_ref": "shopify:gid://shopify/Shop/9001:gid://shopify/Order/41001",
+  "order": {
+    "provider": "shopify",
+    "provider_order_id": "gid://shopify/Order/41001",
+    "amount": "49.95",
+    "currency": "USD",
+    "revision_id": "revision-order-41001-v2",
+    "source_revision_at": "2026-10-10T11:00:00Z"
+  },
+  "payment": {
+    "provider": "stripe",
+    "webhook_event_type": "payment_intent.succeeded",
+    "provider_payment_id": "pi_proof_41001",
+    "commerce_order_ref": "shopify:gid://shopify/Shop/9001:gid://shopify/Order/41001",
+    "amount": "49.95",
+    "stripe_amount_minor_units": 4995,
+    "currency": "USD",
+    "status": "completed",
+    "signature_verification": "required_before_recording"
+  },
+  "expected": {
+    "state": "matched",
+    "matched_payment_ids": ["pi_proof_41001"],
+    "matched_payments": [
+      {"provider": "stripe", "provider_payment_id": "pi_proof_41001"}
+    ],
+    "graph_projection": false,
+    "settlement_claim": false,
+    "join_basis": ["tenant_id", "commerce_order_ref", "currency", "exact_amount"]
+  },
+  "cases": [
+    {
+      "id": "first_order_observation",
+      "prior_order": null,
+      "order_revision_id": "revision-order-41001-v2",
+      "expected_order_persisted": true,
+      "expected_state": "order_only",
+      "reason": "first_seen_order_is_stored_without_a_revision_comparison"
+    },
+    {
+      "id": "same_amount_without_reference",
+      "payment_ref": null,
+      "payment_amount": "49.95",
+      "payment_currency": "USD",
+      "expected_join_state": "none",
+      "expected_order_state": "order_only",
+      "reason": "amount_is_not_a_join_key"
+    },
+    {
+      "id": "different_reference_same_amount",
+      "payment_ref": "shopify:gid://shopify/Shop/9001:gid://shopify/Order/41002",
+      "payment_amount": "49.95",
+      "payment_currency": "USD",
+      "expected_state_for_order_41001": "order_only",
+      "reason": "references_must_match_exactly"
+    },
+    {
+      "id": "exact_reference_amount_mismatch",
+      "payment_ref": "shopify:gid://shopify/Shop/9001:gid://shopify/Order/41001",
+      "payment_amount": "48.95",
+      "payment_currency": "USD",
+      "expected_state": "amount_conflict"
+    },
+    {
+      "id": "duplicate_successful_payment_ids",
+      "payment_ids": ["pi_proof_41001", "pi_proof_41001"],
+      "expected_distinct_successful_payment_count": 1,
+      "reason": "provider_payment_id_upsert_is_idempotent"
+    },
+    {
+      "id": "ledger_failure_then_webhook_retry",
+      "payment_ids": ["pi_proof_41001", "pi_proof_41001"],
+      "first_delivery": "funding_session_persisted_then_evidence_store_unavailable",
+      "retry_behavior": "duplicate_event_retries_idempotent_commerce_evidence_upsert",
+      "expected_distinct_successful_payment_count": 1
+    },
+    {
+      "id": "distinct_successful_payments",
+      "payment_ids": ["pi_proof_41001", "pi_proof_41001_retry"],
+      "expected_state": "multiple_payments",
+      "reason": "never_sum_or_count_distinct_payment_ids_as_one_sale"
+    },
+    {
+      "id": "same_payment_id_from_distinct_providers",
+      "payments": [
+        {"provider": "stripe", "provider_payment_id": "pi_shared"},
+        {"provider": "adyen", "provider_payment_id": "pi_shared"}
+      ],
+      "expected_distinct_successful_payment_count": 2,
+      "expected_state": "multiple_payments",
+      "reason": "provider_transaction_ids_are_provider_scoped"
+    },
+    {
+      "id": "same_provider_payment_id_with_divergent_amount",
+      "deliveries": [
+        {"provider": "stripe", "provider_payment_id": "pi_shared", "amount": "49.95"},
+        {"provider": "stripe", "provider_payment_id": "pi_shared", "amount": "48.95"}
+      ],
+      "expected_state": "conflict",
+      "expected_original_amount_preserved": "49.95",
+      "reason": "provider_payment_identity_cannot_be_silently_rewritten"
+    },
+    {
+      "id": "stale_order_revision_replay",
+      "current_source_revision_at": "2026-10-10T11:00:00Z",
+      "replayed_source_revision_at": "2026-10-10T10:00:00Z",
+      "expected_current_revision_id": "revision-order-41001-v2"
+    },
+    {
+      "id": "equal_time_divergent_order_revision",
+      "current_source_revision_at": "2026-10-10T11:00:00Z",
+      "replayed_source_revision_at": "2026-10-10T11:00:00Z",
+      "different_revision_id": "revision-order-41001-divergent",
+      "expected_state": "conflict"
+    }
+  ]
+}

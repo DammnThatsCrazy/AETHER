@@ -5,9 +5,9 @@ Surfaces the model-runtime package as an externally-servable HTTP API under
 entitlements, usage, traces) and the two Aether tenant surfaces (model list,
 tenant-default) are typed to the landed frontend clients:
 
-* ``frontend/aether/src/features/model-selection/types.ts`` — ``GET
+* ``apps/aether/src/features/model-selection/types.ts`` — ``GET
   /v1/model-runtime/models`` + ``PUT /v1/model-runtime/tenant-default``.
-* ``frontend/kyber/src/features/model-runtime/types.ts`` — ``GET
+* ``apps/kyber/src/features/model-runtime/types.ts`` — ``GET
   /v1/model-runtime/registry|health|entitlements|usage|traces``.
 
 Security contract (D9):
@@ -44,16 +44,17 @@ Backing stores: the model registry is the generated catalog
 (``shared.model_governance.generated_model_registry.MODEL_REGISTRY_MODELS``),
 health is probed via :class:`RuntimeHealthProbe` over the real provider set
 (:mod:`services.model_runtime.providers`; a provider without credentials is
-"waiting on credentials"), and entitlements use the server-authoritative
-:class:`AllowlistEntitlementResolver`. Usage and traces are deterministic seed
-data (no metering/trace store is wired into this surface yet); every route that
-serves seed data says so in its docstring and returns fail-closed shapes that
-match the frontend types exactly.
+"waiting on credentials"), and tenant model entitlements and usage use the
+canonical billing authority. Routing traces remain deterministic seed data;
+the endpoint is content-free and tenant-scoped.
 """
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict
@@ -65,7 +66,6 @@ from services.model_runtime.observability.health import (
     RuntimeHealth,
     RuntimeHealthProbe,
 )
-from services.model_runtime.routing.entitlements import AllowlistEntitlementResolver
 from shared.model_governance.generated_model_registry import (
     MODEL_REGISTRY_MODELS,
     MODEL_REGISTRY_PROVIDERS,
@@ -184,6 +184,63 @@ class TenantDefaultRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     modelId: str
+
+
+class TenantCompletionRequest(BaseModel):
+    """Tenant-scoped provider-neutral model invocation."""
+    model_config = ConfigDict(extra="forbid")
+    modelId: str
+    messages: list[dict[str, str]]
+    systemPrompt: str | None = None
+    maxTokens: int | None = None
+    temperature: float | None = None
+
+
+class TenantCompletionResponse(BaseModel, frozen=True):
+    modelId: str
+    provider: str
+    content: str
+    inputTokens: int
+    outputTokens: int
+    totalTokens: int
+    latencyMs: float
+
+
+async def _tenant_model_entitlement(tenant_id: str, model_id: str) -> dict:
+    """Resolve a model-specific entitlement from billing, failing closed."""
+    from services.billing.revops import TenantEntitlementRepository
+
+    rows = await TenantEntitlementRepository().list_for_tenant(tenant_id)
+    keys = {f"model_runtime.model:{model_id}", "model_runtime.enabled"}
+    enabled = {str(row.get("feature_key")) for row in rows if row.get("enabled") is True}
+    if "model_runtime.enabled" not in enabled or f"model_runtime.model:{model_id}" not in enabled:
+        raise HTTPException(status_code=403, detail={"code": "model_not_entitled"})
+    return {row.get("feature_key"): row for row in rows if row.get("feature_key") in keys}
+
+
+async def _reserve_model_token_budget(tenant_id: str, request_id: str, estimated_tokens: int) -> None:
+    """Reserve against the durable, transaction-serialized tenant token budget."""
+    from services.model_runtime.tenant_state import reserve_token_budget
+
+    if not await reserve_token_budget(tenant_id, request_id, estimated_tokens):
+        raise HTTPException(status_code=429, detail={"code": "model_token_budget_exceeded"})
+
+
+async def _record_model_usage(tenant_id: str, model_id: str, provider: str, input_tokens: int, output_tokens: int) -> None:
+    from services.billing.revops import MeteringService, UsageMeteringEvent
+
+    total = max(0, int(input_tokens)) + max(0, int(output_tokens))
+    await MeteringService().record_event(UsageMeteringEvent(
+        tenant_id=tenant_id,
+        event_type="model_runtime_token_usage",
+        quantity=total,
+        source_type="model_runtime_invocation",
+        source_id=f"{tenant_id}:{uuid4().hex}",
+        metadata={"model_id": model_id, "provider": provider,
+                  "input_tokens": max(0, int(input_tokens)),
+                  "output_tokens": max(0, int(output_tokens)),
+                  "total_tokens": total},
+    ))
 
 
 # ---------------------------------------------------------------------------
@@ -382,12 +439,6 @@ def _sanitize_reason(value: str | None) -> str:
 # Deterministic seed data — clearly marked; a real store plugs in later.
 # ---------------------------------------------------------------------------
 
-# Non-durable in-memory seed for the per-tenant default model (PUT
-# /tenant-default). A real tenant-preference store plugs in here.
-_TENANT_DEFAULT_MODELS: dict[str, str] = {
-    "tenant-demo": "claude-haiku-4-5-20251001",
-}
-
 # Registry model ids, precomputed for fail-closed validation.
 _REGISTRY_MODEL_IDS: frozenset[str] = frozenset(
     str(entry["modelId"]) for entry in MODEL_REGISTRY_MODELS
@@ -457,65 +508,86 @@ def _build_runtime_health() -> RuntimeHealth:
     return probe.status()
 
 
-# Deterministic seed allowlist (non-durable, demo tenant only). Unknown tenants
-# fail closed: every model is denied with a tenant-safe reason.
-_SEED_ENTITLEMENTS: dict[str, set[str]] = {
-    "tenant-demo": {
-        "claude-haiku-4-5-20251001",
-        "claude-sonnet-5",
-        "gpt-4o-mini",
-    },
-}
-
-
 async def _build_entitlement_rows(tenant_id: str) -> list[EntitlementRowOut]:
     """Entitlement rows for ``tenant_id`` across every registry model.
 
-    Backed by the server-authoritative :class:`AllowlistEntitlementResolver`
-    seeded with ``_SEED_ENTITLEMENTS``; unknown tenants are denied for every
-    model with a tenant-safe reason.
+    Backed by tenant model entitlement rows in the billing authority; absent
+    or disabled rows deny a model.
     """
-    resolver = AllowlistEntitlementResolver(_SEED_ENTITLEMENTS)
+    from services.billing.revops import TenantEntitlementRepository
+
+    rows_by_key = {
+        str(row.get("feature_key")): row
+        for row in await TenantEntitlementRepository().list_for_tenant(tenant_id)
+    }
     rows: list[EntitlementRowOut] = []
     for entry in MODEL_REGISTRY_MODELS:
-        decision = await resolver.assert_model_entitled(tenant_id, str(entry["modelId"]))
+        model_id = str(entry["modelId"])
+        row = rows_by_key.get(f"model_runtime.model:{model_id}")
+        enabled = bool(row and row.get("enabled") is True)
         rows.append(
             EntitlementRowOut(
-                tenantId=decision.tenant_id,
-                modelId=decision.model_id,
-                entitled=decision.entitled,
-                reason=_sanitize_reason(decision.reason),
+                tenantId=tenant_id,
+                modelId=model_id,
+                entitled=enabled,
+                reason=None if enabled else "Model is not entitled for this tenant.",
             )
         )
     return rows
 
 
 # Deterministic seed period label; a real metering store will provide actuals.
-_SEED_USAGE_PERIOD = "deterministic-seed-period"
+async def _build_usage() -> UsageResponseOut:
+    """Current-month durable usage from the canonical billing meter."""
+    from services.billing.revops import UsageMeteringEventRepository
 
+    now = datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    repo = UsageMeteringEventRepository()
+    events = await repo.find_many(limit=10000)
+    if len(events) >= 10000:
+        raise HTTPException(status_code=503, detail={"code": "model_usage_window_incomplete"})
+    by_model: dict[str, dict[str, float]] = {}
+    for event in events:
+        if event.get("event_type") != "model_runtime_token_usage":
+            continue
+        try:
+            occurred = datetime.fromisoformat(str(event.get("occurred_at", "")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if occurred.tzinfo is None:
+            occurred = occurred.replace(tzinfo=timezone.utc)
+        if not start <= occurred <= now:
+            continue
+        metadata = event.get("metadata") or {}
+        model_id = str(metadata.get("model_id") or "")
+        values = by_model.setdefault(model_id, {"calls": 0, "input": 0, "output": 0, "cost": 0.0})
+        values["calls"] += 1
+        values["input"] += int(metadata.get("input_tokens") or 0)
+        values["output"] += int(metadata.get("output_tokens") or 0)
 
-def _build_usage() -> UsageResponseOut:
-    """Usage summary — deterministic seed data (all-zero, fail-closed).
-
-    No metering store is wired into this surface yet, so every registry model
-    reports zero calls/tokens/cost. The shape matches the Kyber
-    ``UsageResponse`` exactly; rows are the full registry so the contract is
-    visible. Usage is a global Kyber admin surface — a real metering lookup
-    later derives its scope from the operator's access context, not a legacy
-    tenant binding.
-    """
-    rows = [
-        UsageByModelOut(
-            modelId=str(entry["modelId"]),
-            calls=0,
-            inputTokens=0,
-            outputTokens=0,
-            costUsd=0.0,
-        )
-        for entry in MODEL_REGISTRY_MODELS
-    ]
-    totals = UsageTotalsOut(calls=0, inputTokens=0, outputTokens=0, costUsd=0.0)
-    return UsageResponseOut(period=_SEED_USAGE_PERIOD, totals=totals, byModel=rows)
+    catalog = {str(entry["modelId"]): entry for entry in MODEL_REGISTRY_MODELS}
+    for model_id, values in by_model.items():
+        model = catalog.get(model_id)
+        if model:
+            values["cost"] = (
+                values["input"] * float(model["inputCostPerMTok"])
+                + values["output"] * float(model["outputCostPerMTok"])
+            ) / 1_000_000
+    rows = [UsageByModelOut(
+        modelId=model_id,
+        calls=int(values["calls"]),
+        inputTokens=int(values["input"]),
+        outputTokens=int(values["output"]),
+        costUsd=values["cost"],
+    ) for model_id, values in sorted(by_model.items())]
+    totals = UsageTotalsOut(
+        calls=sum(row.calls for row in rows),
+        inputTokens=sum(row.inputTokens for row in rows),
+        outputTokens=sum(row.outputTokens for row in rows),
+        costUsd=sum(row.costUsd for row in rows),
+    )
+    return UsageResponseOut(period=start.strftime("%Y-%m"), totals=totals, byModel=rows)
 
 
 def _build_traces(tenant_id: str) -> list[RoutingTraceOut]:
@@ -576,13 +648,89 @@ async def get_models(tenant_id: str = Depends(require_tenant_id)) -> ModelListRe
     """GET /v1/model-runtime/models — the model registry + tenant default.
 
     Consumed by the Aether ``ModelSelectionPanel`` (C13). ``tenantDefaultModel``
-    comes from the non-durable in-memory seed (see PUT /tenant-default); an
-    unknown tenant gets ``null``. Registry rows are the generated catalog —
+    comes from the durable tenant preference repository; an unconfigured tenant
+    gets ``null``. Registry rows are the generated catalog —
     never credentials.
     """
+    from services.model_runtime.tenant_state import TenantModelPreferenceRepository
+    default_model = await TenantModelPreferenceRepository().get_default(tenant_id)
     return ModelListResponseOut(
         models=_registry_models_out(),
-        tenantDefaultModel=_TENANT_DEFAULT_MODELS.get(tenant_id),
+        tenantDefaultModel=default_model,
+    )
+
+
+@router.post("/complete", response_model=TenantCompletionResponse, summary="Tenant model completion")
+async def complete_for_tenant(
+    body: TenantCompletionRequest,
+    tenant_id: str = Depends(require_tenant_id),
+) -> TenantCompletionResponse:
+    """Invoke an entitled provider with a durable token allowance and usage record."""
+    entry = next((row for row in MODEL_REGISTRY_MODELS
+                  if str(row["modelId"]) == body.modelId), None)
+    if entry is None:
+        raise HTTPException(status_code=400, detail={"code": "unknown_model"})
+    await _tenant_model_entitlement(tenant_id, body.modelId)
+    prompt_chars = sum(len(message.get("content", "")) for message in body.messages)
+    prompt_chars += len(body.systemPrompt or "")
+    # Reserve an input estimate plus the full output ceiling so the tenant's
+    # maximum response size is included before any provider request is sent.
+    estimate = max(1, prompt_chars) + max(1, int(body.maxTokens or 800))
+    request_id = uuid4().hex
+    await _reserve_model_token_budget(tenant_id, request_id, estimate)
+
+    from services.model_runtime.models import ModelRequest
+    from services.model_runtime.providers import get_runtime
+
+    try:
+        result = await get_runtime().complete(
+            tenant_id,
+            ModelRequest(
+                model=body.modelId,
+                messages=body.messages,
+                system_prompt=body.systemPrompt,
+                max_tokens=body.maxTokens,
+                temperature=body.temperature,
+            ),
+            provider=str(entry["provider"]),
+        )
+    except asyncio.CancelledError:
+        from services.model_runtime.tenant_state import settle_token_budget
+        await settle_token_budget(tenant_id, request_id, 0, release=True)
+        raise
+    except Exception as exc:
+        from services.model_runtime.tenant_state import settle_token_budget
+        await settle_token_budget(tenant_id, request_id, 0, release=True)
+        # Provider messages can contain credentials or request material.
+        from services.model_runtime.models import ModelBudgetExceeded, ModelNotConfigured
+        if isinstance(exc, ModelBudgetExceeded):
+            raise HTTPException(status_code=429, detail={"code": "model_token_budget_exceeded"}) from None
+        if isinstance(exc, ModelNotConfigured):
+            raise HTTPException(status_code=503, detail={"code": "model_provider_unavailable"}) from None
+        raise HTTPException(status_code=502, detail={"code": "model_invocation_failed"}) from None
+
+    try:
+        await _record_model_usage(
+            tenant_id, body.modelId, str(entry["provider"]),
+            result.usage.input_tokens, result.usage.output_tokens,
+        )
+    except Exception:
+        # Keep the reservation charged if durable metering fails. This prevents
+        # retries from escaping the tenant's budget without billing evidence.
+        raise HTTPException(status_code=503, detail={"code": "model_usage_write_failed"}) from None
+    from services.model_runtime.tenant_state import settle_token_budget
+    await settle_token_budget(
+        tenant_id, request_id,
+        max(0, int(result.usage.input_tokens)) + max(0, int(result.usage.output_tokens)),
+    )
+    return TenantCompletionResponse(
+        modelId=body.modelId,
+        provider=str(result.provider.value if hasattr(result.provider, "value") else result.provider),
+        content=result.content,
+        inputTokens=result.usage.input_tokens,
+        outputTokens=result.usage.output_tokens,
+        totalTokens=result.usage.total_tokens,
+        latencyMs=result.latency_ms,
     )
 
 
@@ -598,8 +746,7 @@ async def set_tenant_default(
     """PUT /v1/model-runtime/tenant-default — set the tenant's default model.
 
     Consumed by the Aether ``ModelSelectionPanel`` (C13). Persists to the
-    non-durable in-memory seed only; a real tenant-preference store plugs in
-    here. Unknown model ids are rejected (HTTP 400); a model the tenant is not
+    durable tenant preference repository. Unknown model ids are rejected (HTTP 400); a model the tenant is not
     entitled to is rejected with HTTP 403 (the server-authoritative boundary the
     Aether client detects as "tenant not entitled to model selection").
     """
@@ -612,18 +759,9 @@ async def set_tenant_default(
                 "message": f"unknown model id: {body.modelId}",
             },
         )
-    resolver = AllowlistEntitlementResolver(_SEED_ENTITLEMENTS)
-    decision = await resolver.assert_model_entitled(tenant_id, body.modelId)
-    if not decision.entitled:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "status": "error",
-                "code": "model_not_entitled",
-                "message": _sanitize_reason(decision.reason),
-            },
-        )
-    _TENANT_DEFAULT_MODELS[tenant_id] = body.modelId
+    await _tenant_model_entitlement(tenant_id, body.modelId)
+    from services.model_runtime.tenant_state import TenantModelPreferenceRepository
+    await TenantModelPreferenceRepository().set_default(tenant_id, body.modelId)
     return Response(status_code=204)
 
 
@@ -712,11 +850,10 @@ async def get_usage(
     """GET /v1/model-runtime/usage — aggregate + per-model usage.
 
     Consumed by the Kyber ``UsagePage`` (C14). Operator-authorized (Kyber admin
-    surface). Global surface: aggregate seed data (all-zero, fail-closed) until
-    a metering store is wired; no per-tenant data today, so no tenant scope is
-    required. The shape matches the Kyber ``UsageResponse`` exactly.
+    surface). Global surface: current-month durable billing usage, aggregated
+    without tenant identifiers. The shape matches the Kyber ``UsageResponse``.
     """
-    return _build_usage()
+    return await _build_usage()
 
 
 @router.get(
@@ -743,6 +880,8 @@ __all__ = [
     "ModelListResponseOut",
     "RegistryResponseOut",
     "TenantDefaultRequest",
+    "TenantCompletionRequest",
+    "TenantCompletionResponse",
     "TracesResponseOut",
     "UsageResponseOut",
     "require_operator",

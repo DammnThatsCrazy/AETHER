@@ -6,14 +6,14 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/noesis/service.py, services/backend/services/noesis/routes.py, services/backend/services/noesis/models.py, services/backend/services/noesis/provider.py, services/backend/services/noesis/flags.py, frontend/shared/src/components/noesis-workspace.tsx]
+source_files: [services/backend/services/noesis/service.py, services/backend/services/noesis/routes.py, services/backend/services/noesis/models.py, services/backend/services/noesis/provider.py, services/backend/services/noesis/flags.py, apps/shared/src/components/noesis-workspace.tsx]
 source_hashes:
   services/backend/services/noesis/flags.py: sha256:6069ab729ca23b7a1d4c2be58ef12b39b7761ee7c96d35c0db8253158253f877
   services/backend/services/noesis/models.py: sha256:acfdf6d9368c68ccd7820f22654014242ef04bc3db362a843efd42d059019c42
   services/backend/services/noesis/provider.py: sha256:bf409fc6f81cbbc7775513a0dd7da2a031ecf093058222965884bc0208399495
   services/backend/services/noesis/routes.py: sha256:c92b4fcdf40733cca6ea33c3a4945e0df912d366b3fc6bf8187c739d296d1162
   services/backend/services/noesis/service.py: sha256:2e78614fe0852d24fcf8925aae4feb05b9547909684fcda32dd1b42aba35be29
-  frontend/shared/src/components/noesis-workspace.tsx: sha256:27b447f218b3972453d3ce78d5f6bf4b7c0b0955294b079064611fe071d93fb6
+  apps/shared/src/components/noesis-workspace.tsx: sha256:27b447f218b3972453d3ce78d5f6bf4b7c0b0955294b079064611fe071d93fb6
 ---
 
 # Noesis

@@ -89,6 +89,7 @@ def register_implemented_projection_providers(
     from services.geographic360.provider import (
         register_provider as _register_geographic360,
     )
+    from services.social360.provider import register_provider as _register_social360
 
     for pid, register in (
         ("economic360", _register_economic360),
@@ -97,6 +98,10 @@ def register_implemented_projection_providers(
         ("temporal360", _register_temporal360),
         ("population360", _register_population360),
         ("geographic360", _register_geographic360),
+        # Social360 remains registry-state in_flight until live source
+        # credentials and provider SLOs are deployed; this provider is an
+        # available facts projection over consented Social Silver evidence.
+        ("social360", _register_social360),
     ):
         if registry.get(pid) is None:
             register(registry)

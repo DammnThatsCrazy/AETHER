@@ -4,7 +4,7 @@ from scripts.verification_execution_plan import build_execution_plan
 
 
 def test_frontend_plan_uses_node_profile_without_backend_image() -> None:
-    plan = build_execution_plan(["frontend/aether/src/pages/profile.tsx"])
+    plan = build_execution_plan(["apps/aether/src/pages/profile.tsx"])
 
     assert plan["status"] == "READY"
     assert plan["build"]["node_required"] is True

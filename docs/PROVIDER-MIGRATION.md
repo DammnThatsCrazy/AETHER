@@ -27,7 +27,7 @@ source_hashes:
   "services/backend/services/providers/amazon/": "sha256:775e061ac0c1344aa5ab76585467a510afc063ae6bec1d9fe2f58a32043c75dc"
   "services/backend/services/providers/ebay/": "sha256:36a36b484077e6e4d833ce553a7f80a1f3dab7fefa0b0fc79b143bf19405ec1f"
   "services/backend/services/providers/etsy/": "sha256:3f62869a8e5f1fbdc0e9e3f5d2037a1a2be6539f4b30584176e50f5c8fb7d2d1"
-  "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
+  "services/backend/services/providers/shopify/": "sha256:bd8171dabd1af895c65cfd432611241b436a1255bd0e08f57b2fd8bd1bbbab7c"
   "services/backend/services/providers/tiktok/": "sha256:081c927e0d3bd7ad9dc4610a79005b01949fca195fced6fa8ad7a933f1fb04b3"
   "services/backend/services/providers/walmart/": "sha256:aa3ea9aa3af1b60f59a3e789398e53a89a92c3719e8d32d8b52fc1b6dcb0c186"
   "services/backend/services/providers/woocommerce/": "sha256:2fa57e2e7e797edffe9083feb1462cefb2307de233feed57e60352719805fe4f"

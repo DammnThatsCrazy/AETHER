@@ -817,7 +817,7 @@ resource "aws_ssm_parameter" "static_frontend_bucket" {
 # ---------------------------------------------------------------------------
 
 locals {
-  # Staging's Aether host serves the unified site (frontend/site). Other
+  # Staging's Aether host serves the unified site (apps/site). Other
   # environments keep the prerendered aether-marketing build until the site
   # prerenders its own per-route metadata, sitemap and robots file.
   aether_host_serves_site = var.environment == "staging"
@@ -833,7 +833,7 @@ locals {
   site_host_owner_apps = local.aether_host_serves_site ? ["olympus-marketing", "docs", "status", "aether-app"] : []
 
   # One app per environment: on staging the site app also serves the product
-  # under /app (built by the frontend/site entry in amplify.yml), so the
+  # under /app (built by the apps/site entry in amplify.yml), so the
   # product's public URL is aether.<domain>/app and the app host redirects
   # there. Elsewhere the product keeps its own app and var.aether_app_url.
   product_under_site = local.aether_host_serves_site && var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
@@ -852,33 +852,33 @@ locals {
   amplify_app_catalog = local.enable_static_frontends ? {
     olympus-marketing = {
       name        = "${var.project}-${var.environment}-olympus-marketing"
-      app_root    = "frontend/olympus-marketing"
+      app_root    = "apps/olympus-marketing"
       description = "Olympus Labs corporate marketing site"
       subdomain   = "www"
     }
-    # On staging, the unified Olympus + Aether site (frontend/site), which
+    # On staging, the unified Olympus + Aether site (apps/site), which
     # keeps this app's key and name.
     aether-marketing = {
       name        = local.aether_host_serves_site ? "${var.project}-${var.environment}-web" : "${var.project}-${var.environment}-aether-marketing"
-      app_root    = local.aether_host_serves_site ? "frontend/site" : "frontend/aether-marketing"
+      app_root    = local.aether_host_serves_site ? "apps/site" : "apps/aether-marketing"
       description = local.aether_host_serves_site ? "Unified Olympus Labs and Aether site" : "Aether product marketing site"
       subdomain   = "aether"
     }
     docs = {
       name        = "${var.project}-${var.environment}-docs"
-      app_root    = "frontend/docs"
+      app_root    = "apps/docs"
       description = "Aether developer documentation portal"
       subdomain   = "docs"
     }
     aether-app = {
       name        = "${var.project}-${var.environment}-aether-app"
-      app_root    = "frontend/aether"
+      app_root    = "apps/aether"
       description = "Aether customer application dashboard"
       subdomain   = "app"
     }
     status = {
       name        = "${var.project}-${var.environment}-status"
-      app_root    = "frontend/status"
+      app_root    = "apps/status"
       description = "Aether public service status page"
       subdomain   = "status"
     }
@@ -942,6 +942,13 @@ locals {
 # pr-<N> (https://pr-<N>.<default_domain>), and deletes that branch when the
 # pull request closes or merges. Previews call the staging API and staging
 # Auth0; they hold no data of their own.
+locals {
+  # Work is promoted Development -> staging -> main. The staging profile's web
+  # apps therefore build from `staging`; production web (which is bound by
+  # amplify-status-production.yml, not by this module) builds from `main`.
+  amplify_branch = var.amplify_branch != "" ? var.amplify_branch : (var.environment == "staging" ? "staging" : "main")
+}
+
 locals {
   enable_frontend_previews = var.enable_frontend_previews && local.enable_static_frontends && var.environment == "staging"
   frontend_preview_domains = [for app in aws_amplify_app.frontend_preview : app.default_domain]
@@ -1065,7 +1072,7 @@ resource "aws_amplify_branch" "main" {
   for_each = local.amplify_apps
 
   app_id      = aws_amplify_app.frontend[each.key].id
-  branch_name = var.amplify_branch
+  branch_name = local.amplify_branch
 
   framework = "React"
   stage     = var.environment == "production" ? "PRODUCTION" : "DEVELOPMENT"
@@ -1118,7 +1125,7 @@ resource "aws_amplify_branch" "main" {
   )
 
   tags = {
-    Name        = "${each.value.name}-${var.amplify_branch}"
+    Name        = "${each.value.name}-${local.amplify_branch}"
     Environment = var.environment
   }
 }

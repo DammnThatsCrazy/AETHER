@@ -435,6 +435,19 @@ class ShopifyOrderNormalizer:
                 "raw_provider_payload": raw.payload,
             }
 
+        # Stable cross-provider join key. Payment processors can echo this
+        # exact value in server-created metadata; no PII or fuzzy matching is
+        # involved. V2 is scoped by Shopify shop GID, REST v1 by the selected
+        # provider account.
+        reference_scope = (
+            raw.source_account_key
+            if raw.schema_version == "2"
+            else account_id
+        )
+        context["commerce_order_ref"] = (
+            f"shopify:{reference_scope}:{commerce.order_id}"
+        )
+
         event_revision_fields: dict[str, str] = {}
         if raw.schema_version == "2":
             logical_event_id = _logical_event_id(raw, economic_revision_key)

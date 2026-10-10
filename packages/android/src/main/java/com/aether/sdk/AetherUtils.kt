@@ -34,8 +34,8 @@ private fun scrubNestedValue(value: Any?, depth: Int): Any? {
 
 internal fun normalizeWalletAddress(address: String, vm: String = "evm"): String =
     when (vm.lowercase()) {
-        "evm" -> address.lowercase()
-        else  -> address.trim()
+        "evm", "eip155" -> address.trim().lowercase()
+        else -> address.trim()
     }
 
 // =============================================================================

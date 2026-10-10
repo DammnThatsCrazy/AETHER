@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [packages/shared/contracts/event-registry.json]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/contracts/event-registry.json": "sha256:29f3cdefd685a1ec296a96e9f705830ef09efd7865f67a1a6c1f2e4685e17c89"
+  "packages/shared/contracts/event-registry.json": "sha256:62be9bb37cd7b87cee90914a63abee464838f61074ae02be8baf72a35333fd12"
 ---
 
 # Canonical Event Model

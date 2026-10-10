@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/payment-rails.ts, services/backend/services/integrations/providers/payment_rails/base.py, services/backend/services/integrations/providers/payment_rails/repository.py, services/backend/services/integrations/providers/payment_rails/reconciliation.py, services/backend/services/integrations/providers/payment_rails/service.py, services/backend/services/integrations/providers/payment_rails/routes.py, services/backend/services/integrations/providers/payment_rails/sync_worker.py]
+source_files: [packages/shared/payment-rails.ts, services/backend/services/integrations/providers/payment_rails/base.py, services/backend/services/integrations/providers/payment_rails/stripe_onramp.py, services/backend/services/integrations/providers/payment_rails/repository.py, services/backend/services/integrations/providers/payment_rails/reconciliation.py, services/backend/services/integrations/providers/payment_rails/service.py, services/backend/services/integrations/providers/payment_rails/routes.py, services/backend/services/integrations/providers/payment_rails/sync_worker.py]
 last_synced_commit: HEAD
 ---
 
@@ -33,7 +33,7 @@ webhook fallback**; unknown providers are 404:
 | Provider | Module | Flows | Webhooks | Polling | Notes |
 |---|---|---|---|---|---|
 | Privy | `privy.py` | fiat_onramp, bank_deposit, crypto_deposit | ✓ | — | Underlying processor (Stripe/MoonPay/Coinbase/Meld) preserved as `provider_detail` for cross-provider reconciliation; deposit addresses as side records |
-| Stripe | `stripe_onramp.py` | crypto_onramp | ✓ | — | Crypto onramp sessions; distinct from Aether's own billing Stripe |
+| Stripe | `stripe_onramp.py` | crypto_onramp, commerce_payment | ✓ | — | Crypto onramp sessions and signed `payment_intent.succeeded`; merchant payment joins require explicit `aether_order_ref` metadata and exact amount/currency. This is distinct from Aether's billing Stripe. |
 | Coinbase | `coinbase.py` | fiat_onramp, offramp | ✓ | ✓ (`partnerUserRef`) | in-progress/started→pending/submitted, success→completed, failed→failed |
 | MoonPay | `moonpay.py` | fiat_onramp (buy), offramp (sell) | ✓ | ✓ | Duplicate/out-of-order absorbed; AML/fraud/min-amount rejections → `failed` + `status_reason` |
 | Bridge | `bridge.py` | bank_deposit, settlement, refund | ✓ | ✓ | Virtual accounts as side records; bank account refs stored masked (`****1234`) only |
@@ -84,6 +84,17 @@ emitted at most once per session (tracked in `metadata.emitted_canonical`)
 onto the validated-events bus (`SDK_EVENTS_VALIDATED`) with
 rail/provider/session properties — the same pipeline `/v1/batch` feeds; no
 parallel ingestion API.
+
+Successful merchant PaymentIntents emit a completed funding session with flow
+`commerce_payment`, distinct from payout `settlement`. The Stripe adapter
+converts supported integer minor-unit amounts using `Decimal`; malformed
+amounts and currencies outside the adapter's explicit scale table are excluded
+from order reconciliation. If the signed PaymentIntent metadata includes
+`aether_order_ref`, the canonical payment event
+preserves the exact opaque reference and the tenant commerce ledger checks it
+against the Shopify order reference. No reference is inferred from amount,
+time, or customer fields. Live endpoint certification and merchant-side
+metadata configuration remain required.
 
 ## Background sync worker
 

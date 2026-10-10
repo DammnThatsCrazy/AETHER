@@ -36,6 +36,7 @@ from services.exploration.adapters.projection import (
     Outcome360SurfaceAdapter,
     Population360SurfaceAdapter,
     Risk360SurfaceAdapter,
+    Social360SurfaceAdapter,
     Temporal360SurfaceAdapter,
 )
 from services.exploration.adapters.timeline import TimelineSurfaceAdapter
@@ -53,6 +54,7 @@ _ADAPTER_TYPES: tuple[type[SurfaceAdapter], ...] = (
     Temporal360SurfaceAdapter,
     Population360SurfaceAdapter,
     Geographic360SurfaceAdapter,
+    Social360SurfaceAdapter,
     Risk360SurfaceAdapter,
     Fraud360SurfaceAdapter,
 )

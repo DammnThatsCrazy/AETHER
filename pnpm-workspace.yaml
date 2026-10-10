@@ -1,7 +1,6 @@
 packages:
   - 'packages/*'
   - 'apps/*'
-  - 'frontend/*'
 allowBuilds:
   browser-tabs-lock: true
   esbuild: true

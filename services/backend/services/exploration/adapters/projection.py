@@ -260,6 +260,12 @@ class Geographic360SurfaceAdapter(ProjectionSurfaceAdapter):
     surface_id = "geographic360"
 
 
+class Social360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """social360 exploration surface → tenant-scoped Social Silver facts."""
+
+    surface_id = "social360"
+
+
 class Risk360SurfaceAdapter(ProjectionSurfaceAdapter):
     """risk360 exploration surface → the risk360 intelligence projection."""
 
@@ -281,5 +287,6 @@ __all__ = [
     "Population360SurfaceAdapter",
     "ProjectionSurfaceAdapter",
     "Risk360SurfaceAdapter",
+    "Social360SurfaceAdapter",
     "Temporal360SurfaceAdapter",
 ]

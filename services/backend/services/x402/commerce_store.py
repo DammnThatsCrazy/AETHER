@@ -89,6 +89,19 @@ class TenantCollection:
                 return True
             return False
 
+    async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> int:
+        """Delete this tenant's records that directly name an erased subject."""
+        async with self._lock:
+            bucket = self._data.get(tenant_id, {})
+            doomed = [
+                key for key, obj in bucket.items()
+                if any(str(getattr(obj, field, "")) in refs
+                       for field in ("requester_id", "subject_id", "holder_id"))
+            ]
+            for key in doomed:
+                del bucket[key]
+            return len(doomed)
+
     def all_tenants(self) -> list[str]:
         return list(self._data.keys())
 
@@ -135,6 +148,30 @@ class _RepoCollection:
             return False
         await self._repo.delete(obj_id)
         return True
+
+    async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> int:
+        """Tenant-filter first, then remove only direct subject references."""
+        removed = 0
+        offset = 0
+        while True:
+            rows = await self._repo.find_many(
+                filters={"tenant_id": tenant_id}, limit=500, offset=offset
+            )
+            if not rows:
+                break
+            removed_page = 0
+            for row in rows:
+                if any(str(row.get(field, "")) in refs
+                       for field in ("requester_id", "subject_id", "holder_id")):
+                    count = int(await self.delete(tenant_id, str(row[self._id_field])))
+                    removed += count
+                    removed_page += count
+            if len(rows) < 500:
+                break
+            # Rows are being removed, so keep the offset fixed to avoid skips.
+            if not removed_page:
+                offset += 500
+        return removed
 
     async def tenants(self) -> list[str]:
         """Tenants holding at least one row, read from the durable table."""
@@ -231,6 +268,19 @@ class CommerceStore:
                 BudgetPoliciesRepository(), "policy_id", _BudgetPolicy
             )
 
+    async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> dict[str, int]:
+        """Erase subject-linked x402 rows while preserving unrelated tenant state."""
+        counts: dict[str, int] = {}
+        for name in (
+            "requirements", "policy_decisions", "approvals", "authorizations",
+            "receipts", "settlements", "entitlements", "grants", "fulfillments",
+            "budget_policies",
+        ):
+            collection = getattr(self, name, None)
+            if collection is not None and hasattr(collection, "erase_subject_refs"):
+                counts[name] = await collection.erase_subject_refs(tenant_id, refs)
+        return counts
+
     # ── Resource registry ────────────────────────────────────────────
 
     async def put_resource(self, resource: ProtectedResource) -> ProtectedResource:
@@ -268,6 +318,9 @@ class CommerceStore:
 
     async def get_requirement(self, tenant_id: str, challenge_id: str) -> Optional[PaymentRequirement]:
         return await self.requirements.get(tenant_id, challenge_id)
+
+    async def list_requirements(self, tenant_id: str) -> list[PaymentRequirement]:
+        return await self.requirements.list(tenant_id)
 
     # ── Policy decisions ─────────────────────────────────────────────
 

@@ -41,6 +41,7 @@ class EventBridge:
 
         bronze_rows: list[BronzeSDKEvent] = []
         outbox_rows: list[OutboxEvent] = []
+        commerce_orders: list[AetherEvent] = []
         for candidate in events:
             event = candidate
             if event.schema_version == "2":
@@ -64,6 +65,9 @@ class EventBridge:
                 raise ValueError("provider event requires replay-stable identity")
             if await self._consent_allows(tenant_id, event) is False:
                 continue
+
+            if event.provider == "shopify" and event.event_type.startswith("commerce.order."):
+                commerce_orders.append(event)
 
             # The outbox transports the original AetherEvent envelope. Both
             # Bronze and outbox apply the shared acquisition sanitizer again;
@@ -103,6 +107,40 @@ class EventBridge:
         if not bronze_rows:
             return 0
         result = await ingest_many(bronze_rows, outbox_rows)
+        # Persist reconciliation evidence only after the canonical event and
+        # outbox commit succeeds. This remains a side ledger; it does not write
+        # graph/Silver facts or infer payment settlement from Shopify status.
+        if commerce_orders:
+            from services.commerce.order_payment_reconciliation import (
+                CommerceOrderPaymentLedger,
+            )
+
+            ledger = CommerceOrderPaymentLedger()
+            for event in commerce_orders:
+                reference = str((event.context or {}).get("commerce_order_ref") or "")
+                total = (event.data or {}).get("total") or {}
+                if not reference or not isinstance(total, dict):
+                    continue
+                amount = total.get("amount")
+                currency = total.get("currency") or (event.data or {}).get("currency")
+                order_id = (event.data or {}).get("order_id")
+                if amount is None or currency is None or order_id is None:
+                    continue
+                await ledger.record_order(
+                    tenant_id,
+                    commerce_order_ref=reference,
+                    provider="shopify",
+                    provider_order_id=str(order_id),
+                    amount=str(amount),
+                    currency=str(currency),
+                    revision_id=str(event.revision_id or event.event_id),
+                    source_revision_at=(
+                        str((event.data or {}).get("updated_at"))
+                        if (event.data or {}).get("updated_at")
+                        else None
+                    ),
+                    occurred_at=event.occurred_at,
+                )
         metrics.increment(
             "provider_runtime_bridge_accepted_total",
             value=result.accepted_count,

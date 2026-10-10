@@ -207,6 +207,7 @@ def test_staging_plan_trust_is_limited_to_reviewed_github_subjects() -> None:
     }
     assert set(statement["Condition"]["StringLike"]["token.actions.githubusercontent.com:sub"]) == {
         "repo:DammnThatsCrazy/AETHER:ref:refs/heads/main",
+        "repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging",
         "repo:DammnThatsCrazy/AETHER:environment:staging",
         "repo:DammnThatsCrazy/AETHER:environment:staging-terraform",
     }

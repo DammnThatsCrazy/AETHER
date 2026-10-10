@@ -85,7 +85,7 @@ def test_handoff_correlates_the_returned_run_and_requires_exact_success_outcomes
     assert '"repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}"' in script
     assert '"repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}/jobs?per_page=100"' in script
     assert 'test "$run_path" = \'.github/workflows/deploy.yml\'' in script
-    assert 'test "$run_branch" = main && test "$run_sha" = "$INTENDED_RELEASE_SHA"' in script
+    assert 'test "$run_branch" = staging && test "$run_sha" = "$INTENDED_RELEASE_SHA"' in script
     assert 'test "$conclusion" = success' in script
     assert 'select(.name == "Acquire approved staged release" and .conclusion == "success")' in script
     assert 'select(.name == "Build immutable release once" and .conclusion == "skipped")' in script

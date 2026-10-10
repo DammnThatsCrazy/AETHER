@@ -6996,6 +6996,34 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/plans/OLYMPUS_AETHER_WORK_ORDER_REBASELINE.md",
+      "title": "Olympus Labs / Aether Work-Order Rebaseline",
+      "slug": "plans/olympus-aether-work-order-rebaseline",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "architecture@aether"
+    },
+    {
+      "path": "docs/plans/POST_758_RUNTIME_COMPLETION.md",
+      "title": "Post-#758 Runtime Completion and Expansion",
+      "slug": "plans/post-758-runtime-completion",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "canonical_owner": "architecture@aether"
+    },
+    {
       "path": "docs/plans/RECONCILED_CONTROL_PHASES.md",
       "title": "Reconciled Control Plane — Phases",
       "slug": "plans/reconciled-control-phases",

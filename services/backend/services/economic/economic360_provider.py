@@ -299,12 +299,22 @@ class Economic360Provider:
             for ref in (_evidence_from_record(r) for r in tenant_filtered)
             if ref is not None
         ]
+        operation_evidence = await self._journey_operation_evidence(
+            tenant_id,
+            request.subject,
+            as_of=(
+                request.timeRange.from_
+                if request.temporalMode in {"as_of", "compare"}
+                and request.timeRange is not None
+                else None
+            ),
+        )
 
         dep_state = context.dependencyState
         sections = [
             self._summary_section(request, tenant_filtered, rollup, dep_state),
             self._state_section(tenant_filtered, diagnostic, dep_state),
-            self._evidence_section(evidence),
+            self._evidence_section(evidence, operation_evidence),
             self._outcomes_section(tenant_filtered, dep_state),
             self._findings_section(warnings, evidence),
         ]
@@ -441,17 +451,49 @@ class Economic360Provider:
     def _evidence_section(
         self,
         evidence: list[EvidenceRef],
+        operation_evidence: Optional[dict[str, Any]] = None,
     ) -> ProjectionSection:
         """evidence — the canonical evidence refs grounding this projection."""
+        content: dict[str, Any] = {
+            "count": len(evidence),
+            "evidence": [e.model_dump(mode="json") for e in evidence],
+        }
+        if operation_evidence is not None:
+            content["economic_operations"] = operation_evidence
         return ProjectionSection(
             id="evidence",
-            state="available" if evidence else "empty",
+            state="available" if evidence or operation_evidence else "empty",
             title="Evidence",
-            content={
-                "count": len(evidence),
-                "evidence": [e.model_dump(mode="json") for e in evidence],
-            },
+            content=content,
         )
+
+    async def _journey_operation_evidence(
+        self, tenant_id: str, subject: Any, *, as_of: Optional[str] = None
+    ) -> Optional[dict[str, Any]]:
+        """Attach exact-reference commerce links to Journey-based Value reads.
+
+        Journey steps must already carry an explicit commerce reference in
+        their persisted evidence summary. No identity, amount, time, order-id,
+        or payment-id joins are attempted here.
+        """
+        if getattr(subject, "kind", None) != "journey":
+            return None
+        try:
+            from services.economic.journey_operation_evidence import (
+                journey_commerce_operation_evidence,
+            )
+
+            return await journey_commerce_operation_evidence(
+                tenant_id, subject.id, as_of=as_of
+            )
+        except Exception:
+            # Economic360 is fail-isolated; inability to read Journey evidence
+            # must not hide the canonical value records or fabricate links.
+            return {
+                "join_basis": "explicit_journey_step_commerce_order_ref",
+                "operation_links": [],
+                "reason": "operation_evidence_unavailable",
+            }
 
     def _outcomes_section(
         self,

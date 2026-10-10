@@ -6,15 +6,18 @@ and cross-cutting analytics (revenue, cluster spend, treasury, facilitator perfo
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from shared.common.common import APIResponse
 from shared.logger.logger import get_logger
+from shared.temporal.instant import TemporalError, parse_instant_strict
 
 from .models import AgentHireRecord, PaymentRecord
 from .service import CommerceService
 from .economic_analytics import CommerceEconomicAnalytics
 from services.agent.economic import AgentEconomicViews
+from services.commerce.order_payment_reconciliation import CommerceOrderPaymentLedger
+from services.economic.operation_linkage import commerce_ledger_operation_link
 
 logger = get_logger("aether.service.commerce.routes")
 router = APIRouter(prefix="/v1/commerce", tags=["Commerce"])
@@ -22,6 +25,7 @@ router = APIRouter(prefix="/v1/commerce", tags=["Commerce"])
 _service = CommerceService()
 _agent_economics = AgentEconomicViews()
 _analytics = CommerceEconomicAnalytics()
+_order_payment_ledger = CommerceOrderPaymentLedger()
 
 
 @router.post("/payments")
@@ -46,6 +50,59 @@ async def fee_elimination_report(request: Request, period: str = "all"):
     request.state.tenant.require_permission("commerce:read")
     report = await _service.get_fee_elimination_report(period)
     return APIResponse(data=report.model_dump()).to_dict()
+
+
+@router.get("/reconciliation/order-payments")
+async def order_payment_reconciliation(
+    request: Request,
+    commerce_order_ref: str | None = None,
+    limit: int = 100,
+    as_of: str | None = None,
+):
+    """Read exact-reference order/payment evidence for the current tenant.
+
+    ``as_of`` reconstructs the ledger knowledge available at the supplied
+    ISO-8601 instant. It never changes source-owned payment state.
+    """
+    request.state.tenant.require_permission("commerce:read")
+    tenant_id = request.state.tenant.tenant_id
+    try:
+        as_of_value = parse_instant_strict(as_of).isoformat() if as_of else None
+    except TemporalError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="as_of must be an ISO-8601 timestamp with an explicit timezone",
+        ) from exc
+    if commerce_order_ref:
+        result = (
+            await _order_payment_ledger.get_as_of(tenant_id, commerce_order_ref, as_of_value)
+            if as_of_value
+            else await _order_payment_ledger.get(tenant_id, commerce_order_ref)
+        )
+        if result is not None:
+            result = {
+                **result,
+                "operationLink": commerce_ledger_operation_link(result).model_dump(mode="json"),
+            }
+        return APIResponse(data=result, meta={"as_of": as_of_value}).to_dict()
+    result = await _order_payment_ledger.list_for_tenant(tenant_id, limit=limit)
+    if as_of_value:
+        snapshots = []
+        for record in result:
+            snapshot = await _order_payment_ledger.get_as_of(
+                tenant_id, str(record.get("commerceOrderRef") or ""), as_of_value
+            )
+            if snapshot is not None and (snapshot.get("order") or snapshot.get("payments")):
+                snapshots.append(snapshot)
+        result = snapshots
+    result = [
+        {
+            **record,
+            "operationLink": commerce_ledger_operation_link(record).model_dump(mode="json"),
+        }
+        for record in result
+    ]
+    return APIResponse(data=result, meta={"as_of": as_of_value}).to_dict()
 
 
 @router.get("/agent/{agent_id}/spend")

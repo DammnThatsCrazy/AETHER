@@ -181,7 +181,7 @@ now complete are documented in the "What's Production-Ready" section above.
 
 **What's missing:** No Playwright/Cypress suite covering the signup → OTP → API key reveal → billing portal flow. Without automated coverage this critical path cannot be verified on every deploy.
 
-**Required:** `frontend/aether/src/test/e2e/onboarding-critical-path.spec.ts` — signup, OTP verify, API key reveal, SDK snippet rendered, billing redirect. Edge cases: invalid email, expired OTP, plan change.
+**Required:** `apps/aether/src/test/e2e/onboarding-critical-path.spec.ts` — signup, OTP verify, API key reveal, SDK snippet rendered, billing redirect. Edge cases: invalid email, expired OTP, plan change.
 
 **Estimated effort:** 1–2 weeks
 

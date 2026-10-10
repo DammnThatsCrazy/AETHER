@@ -44,6 +44,7 @@ from services.ingestion.generated_registry import (
     CANONICAL_EVENT_TYPES,
     EVENT_CONSENT_PURPOSE,
     EVENT_FAMILY,
+    SDK_EMITTABLE_EVENT_TYPES,
 )
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
@@ -57,6 +58,7 @@ REJECT_UNKNOWN_TYPE = "unknown_event_type"
 REJECT_CONSENT_DENIED = "consent_denied"
 REJECT_CONSENT_REQUIRED = "consent_required"
 REJECT_EXECUTION_CLAIM = "execution_by_aether_must_be_false"
+REJECT_NON_SDK_EVENT = "event_not_sdk_emittable"
 REJECT_DEPLOYMENT_CONTEXT = "deployment_context_invalid"
 REJECT_ENVELOPE_MISSING = "envelope_missing"
 
@@ -323,6 +325,16 @@ async def validate_event(
     if sdk_event.type not in CANONICAL_EVENT_TYPES:
         metrics.increment("ingestion_validation_failed_total", labels={"reason": "unknown_type"})
         return reject(REJECT_UNKNOWN_TYPE, purpose=None)
+
+    # The canonical registry includes server-authored lifecycle and outcome
+    # events as well as public SDK observations. A tenant SDK credential may
+    # emit only the explicitly declared subset; otherwise a client could claim
+    # that a transaction settled or an agent execution completed.
+    if sdk_event.type not in SDK_EMITTABLE_EVENT_TYPES:
+        metrics.increment(
+            "ingestion_validation_failed_total", labels={"reason": "not_sdk_emittable"}
+        )
+        return reject(REJECT_NON_SDK_EVENT, purpose=None)
 
     if sdk_event.properties and sdk_event.properties.get("execution_by_aether") is True:
         metrics.increment(

@@ -55,6 +55,7 @@ def extract_signals(
         value: str,
         confidence_hint: float = 1.0,
         normalized: str = "",
+        chain_namespace: str = "",
     ) -> IdentitySignal:
         return IdentitySignal(
             type=stype,
@@ -67,6 +68,7 @@ def extract_signals(
             source_platform=source_platform,
             source_sdk=source_sdk,
             consent_snapshot=consent_snapshot,
+            chain_namespace=chain_namespace,
         )
 
     # ── Core identity fields ──────────────────────────────────────────────
@@ -310,7 +312,11 @@ def extract_signals(
             else IdentitySignalType.WALLET_ADDRESS
         )
         confidence_hint = 0.95 if is_verified else 0.6
-        signals.append(_sig(sig_type, normalized_addr, confidence_hint=confidence_hint))
+        signals.append(_sig(
+            sig_type, normalized_addr,
+            confidence_hint=confidence_hint,
+            chain_namespace=chain_ns,
+        ))
 
     # Multi-wallet array
     wallets: list[Any] = props.get("wallets") or []
@@ -329,13 +335,17 @@ def extract_signals(
             else IdentitySignalType.WALLET_ADDRESS
         )
         confidence_hint = 0.95 if is_verified else 0.6
-        signals.append(_sig(sig_type, normalized_addr, confidence_hint=confidence_hint))
+        signals.append(_sig(
+            sig_type, normalized_addr,
+            confidence_hint=confidence_hint,
+            chain_namespace=chain_ns,
+        ))
 
     # Deduplicate: drop signals whose (type, value) pair appears twice
-    seen: set[tuple] = set()
+    seen: set[tuple[IdentitySignalType, str, str]] = set()
     deduped: list[IdentitySignal] = []
     for s in signals:
-        key = (s.type, s.value)
+        key = (s.type, s.value, s.chain_namespace)
         if key not in seen:
             seen.add(key)
             deduped.append(s)

@@ -188,7 +188,10 @@ def test_repo_health_reserves_broad_regression_for_schedule_or_dispatch() -> Non
 def test_repo_health_main_integration_is_bounded_and_fail_closed() -> None:
     jobs = _repo_health_workflow()["jobs"]
     main = jobs["main-integration"]
-    assert str(main["if"]) == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert str(main["if"]) == (
+        "github.event_name == 'push' && "
+        "(github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')"
+    )
     script = "\n".join(step.get("run", "") for step in main["steps"])
     assert "scripts/validate_contracts.py" in script
     assert "make generate-contracts-check" in script

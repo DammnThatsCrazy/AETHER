@@ -266,9 +266,9 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
             ),
         ),
         (
-            "merged-main authority gate",
+            "merged-staging authority gate",
             workflow_text,
-            ("Require merged-main authority", 'GITHUB_REF_NAME" = main'),
+            ("Require merged-staging authority", 'GITHUB_REF_NAME" = staging'),
         ),
         (
             "lifecycle plan-role drift gate",

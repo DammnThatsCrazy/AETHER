@@ -20,8 +20,8 @@ source_hashes:
 Operator surface: `/payments/ops` (Kyber) → `/v1/admin/kyber/payment-rails`.
 Requires the payment-rails operator role; all actions are audited. Aether is
 **observation-only** — it never initiates, modifies, or settles a payment. The
-five first-release adapters (Privy, Stripe crypto onramp, Coinbase, MoonPay,
-Bridge) are `CREDENTIAL_WAITING` in the certification matrix
+five first-release adapters (Privy, Stripe merchant payment/onramp, Coinbase,
+MoonPay, Bridge) are `CREDENTIAL_WAITING` in the certification matrix
 (`docs/_generated/adapter-certification-matrix.json`): code-complete and
 credential-gated, with no live provider validated in staging yet.
 
@@ -35,6 +35,14 @@ in-memory BYOK vault is retired for payment providers outside local dev) and one
 session has been reconciled end to end in staging (see
 `CREDENTIAL_WAITING_PROMOTION_GUIDE`). Full activation/rollback/certification
 steps live in `docs/PAYMENT-RAILS-ACTIVATION.md`.
+
+For Shopify order reconciliation, configure the Stripe webhook endpoint to
+deliver `payment_intent.succeeded` and set PaymentIntent metadata
+`aether_order_ref` to the exact value emitted by the Shopify connector for that
+shop and order. Amount and currency must match the Shopify order exactly. This
+produces a completed merchant payment observation (`commerce_payment`), not a
+payout settlement claim. The merchant metadata wiring and live signed webhook
+remain part of provider certification.
 
 `STALE_AFTER_SECONDS` and the sync cadence are environment-tunable
 (`AETHER_PAYMENT_RECON_STALE_AFTER_SECONDS`, `AETHER_PAYMENT_SYNC_INTERVAL_SECONDS`).

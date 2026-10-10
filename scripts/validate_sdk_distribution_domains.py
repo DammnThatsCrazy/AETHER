@@ -48,8 +48,8 @@ SCANNED_GLOBS = (
     'docs/**/*.md',
     'packages/web/README.md',
     'packages/*/README.md',
-    'frontend/*/src/pages/*.tsx',
-    'frontend/*/src/components/*.tsx',
+    'apps/*/src/pages/*.tsx',
+    'apps/*/src/components/*.tsx',
 )
 EXCLUDED_PARTS = ('docs/archive/', 'docs/_generated/')
 

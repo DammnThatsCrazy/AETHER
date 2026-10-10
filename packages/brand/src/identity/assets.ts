@@ -75,7 +75,7 @@ export const kyberLegacyAssets = {
   icon: {
     id: 'kyber-legacy-icon',
     kind: 'svg',
-    sourcePath: 'frontend/kyber/public/kyber.svg',
+    sourcePath: 'apps/kyber/public/kyber.svg',
     publicPath: '/kyber.svg',
     viewBox: '0 0 32 32',
     label: 'Kyber legacy app icon',

@@ -36,7 +36,7 @@ not alternate service homes.
 | `docs/` | Human-readable documentation |
 | `scripts/` | Repository validation, generation, release, docs, and contract scripts |
 | `tests/` | Cross-package and system tests |
-| `frontend/` | Frontend applications (Aether, Kyber, Demo, marketing) |
+| `apps/` | Product applications: the web apps (Aether, Kyber, demo, marketing, status, docs, site, shared UI) and the mobile shells |
 | `deploy/` | Deployment configurations |
 | `config/` | Runtime configuration |
 

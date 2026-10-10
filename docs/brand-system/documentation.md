@@ -23,7 +23,7 @@ tokens, SVGs, or provider artwork.
   establishes entitlement, integration, operational health, or legal approval.
 - Keep generated evidence such as `docs/_generated/providers.json` generated.
   Do not hand-edit it to satisfy a visual need.
-- Add a docs UI lockup/theme only through a separately owned `frontend/docs`
+- Add a docs UI lockup/theme only through a separately owned `apps/docs`
   migration that declares the existing shared dependency and imports shared
   styling once. Do not copy the product palette into inline styles.
 - Before publishing documentation UI changes, verify typecheck, keyboard focus,

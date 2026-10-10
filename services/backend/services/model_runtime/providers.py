@@ -138,7 +138,41 @@ def get_runtime() -> ModelRuntimeService:
     """The process-wide runtime over the real provider set (built lazily, once)."""
     global _RUNTIME
     if _RUNTIME is None:
-        _RUNTIME = ModelRuntimeService.from_settings(providers=build_providers())
+        from services.model_runtime.config import get_settings
+        from services.model_runtime.credentials.byok import ByokCredentialResolver
+        from services.model_runtime.credentials.interface import CredentialCache, NoopCredentialSource
+        from services.model_runtime.credentials.models import ResolverConfig
+        from services.model_runtime.credentials.service import CredentialService
+
+        settings = get_settings()
+        if settings.credential_backend == "aws_secrets":
+            from services.model_runtime.credentials.aws_secrets import AwsSecretsCredentialResolver
+            from shared.credentials.aws_secrets_manager import AwsSecretsManagerCredentialBackend
+
+            backend = AwsSecretsManagerCredentialBackend(
+                secret_prefix=settings.credential_aws_prefix,
+                region=settings.credential_aws_region,
+            )
+            resolver = AwsSecretsCredentialResolver(backend, aws_region=settings.credential_aws_region)
+        else:
+            # Env resolution is explicitly tenant-scoped by ByokCredentialResolver;
+            # no process-wide provider key can satisfy a tenant request.
+            resolver = ByokCredentialResolver(
+                NoopCredentialSource(), CredentialCache(settings.credential_cache_ttl_seconds)
+            )
+        credential_service = CredentialService(
+            resolver,
+            config=ResolverConfig(
+                enabled=settings.enabled,
+                backend=settings.credential_backend,
+                aws_region=settings.credential_aws_region,
+                aws_secrets_prefix=settings.credential_aws_prefix,
+                cache_ttl_seconds=settings.credential_cache_ttl_seconds,
+            ),
+        )
+        _RUNTIME = ModelRuntimeService.from_settings(
+            settings, providers=build_providers(), credential_service=credential_service
+        )
     return _RUNTIME
 
 

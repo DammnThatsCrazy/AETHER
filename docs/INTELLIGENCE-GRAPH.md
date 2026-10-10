@@ -23,7 +23,7 @@ source_hashes:
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:1a4fae607b1eccdee38ec5bac42ebbcd57d28cb9ef0dfabe3d7a70bdbfcae91d"
   "services/backend/services/web3/classifier.py": "sha256:ab4186e37c2e058401d4303559ca66db49659f93d60389729933777c6fca6061"
-  "services/backend/services/web3/routes.py": "sha256:49be15a983fe82d9c65b4bd3b471d0a0a9e15a012dc8abfc1d8f2a521830df2e"
+  "services/backend/services/web3/routes.py": "sha256:ddd02edd745be172dd20184e41a154895fafd16481d7045949d289cea312237f"
   "services/backend/shared/graph/": "sha256:22bbcaa36938dcdd34a7a33159d312ca4d21aaf4752e799238089f34092a0cd3"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0

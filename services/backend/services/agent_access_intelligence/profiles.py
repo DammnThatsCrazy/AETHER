@@ -71,7 +71,7 @@ graph that answered must not paper over an absent installation row. Collapsing t
 would make one outage silently degrade the other's answer.
 
 Naming note: the ``journey`` vocabulary already exists in this product for the
-*customer/user* journey (``frontend/aether/src/features/journey/``: steps, transitions,
+*customer/user* journey (``apps/aether/src/features/journey/``: steps, transitions,
 touchpoints). This is a different subject — an **agent access journey** — so it is
 composed of ``milestones``, not steps, and never claims a transition between them.
 """

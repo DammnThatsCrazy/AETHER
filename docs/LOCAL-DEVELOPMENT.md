@@ -31,8 +31,8 @@ npm ci --ignore-scripts
 
 ```bash
 cp .env.example .env
-cp frontend/aether/.env.example frontend/aether/.env
-cp frontend/kyber/.env.example frontend/kyber/.env
+cp apps/aether/.env.example apps/aether/.env
+cp apps/kyber/.env.example apps/kyber/.env
 ```
 
 All optional systems default off. The frontend environment name and backend URL
@@ -43,8 +43,8 @@ environment.
 
 ```bash
 make serve-backend                       # FastAPI on :8000
-cd frontend/aether && npm run dev        # Aether (tenant) on :5175
-cd frontend/kyber  && npm run dev        # Kyber (operator) on :5174
+cd apps/aether && npm run dev        # Aether (tenant) on :5175
+cd apps/kyber  && npm run dev        # Kyber (operator) on :5174
 ```
 
 The examples set `VITE_AETHER_ENV=local` and `VITE_KYBER_ENV=local` with a live
@@ -104,8 +104,8 @@ KYBER_INTELLIGENCE_QUALITY_ENABLED=true
 python -m pytest tests/ -n auto
 
 # Frontends
-cd frontend/aether && npm run typecheck && npm test
-cd frontend/kyber  && npm run typecheck && npm run test:component && npm run test:integration && npm run test:e2e
+cd apps/aether && npm run typecheck && npm test
+cd apps/kyber  && npm run typecheck && npm run test:component && npm run test:integration && npm run test:e2e
 
 # Docs validation + generation
 make docs-check

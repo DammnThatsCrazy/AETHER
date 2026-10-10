@@ -6,7 +6,7 @@
 # Schema:       config/pilot/manifest.schema.json
 #
 # This is a READ/COMPUTE-ONLY founding-tenant pilot for the FINANCIAL cohort:
-# the five payment-rail observers (Privy, Stripe crypto onramp, Coinbase,
+# the five payment-rail observers (Privy, Stripe merchant payment/onramp, Coinbase,
 # MoonPay, Bridge) and the two stablecoin-chain observers (EVM + Solana). It
 # OBSERVES funding sessions and on-chain stablecoin receipts, computes derived
 # intelligence in shadow mode (nothing delivered externally, nothing executed,

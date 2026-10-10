@@ -123,7 +123,11 @@ class AgentLifecycleMapper:
         same event still dedups. Off mode is untouched (edge_intent never
         mutates the edge; the derived key only travels on the intent).
         """
-        sid = source_event_id or self._edge_source_event_id(e)
+        sid = (
+            source_event_id
+            or (e.properties or {}).get("source_event_id")
+            or self._edge_source_event_id(e)
+        )
         await self._gateway.apply(edge_intent(
             e, operation="edge_created", actor_id="agent_lifecycle_mapper",
             subject_id=e.from_vertex_id, source_event_id=sid,
@@ -463,7 +467,13 @@ class AgentLifecycleMapper:
             edge_type=EdgeType.STARTED_TASK,
             from_vertex_id=agent_vid,
             to_vertex_id=task_vid,
-            properties={"tenant_id": tenant_id, "started_at": payload.get("timestamp", "")},
+            properties={
+                "tenant_id": tenant_id,
+                "started_at": payload.get("timestamp", ""),
+                "execution_id": payload.get("execution_id", task_id),
+                "source_event_id": payload.get("source_event_id", ""),
+                "evidence_status": payload.get("evidence_status", "observed"),
+            },
         ))
         return {"status": "task_started", "task_vid": task_vid}
 
@@ -484,7 +494,13 @@ class AgentLifecycleMapper:
             edge_type=EdgeType.COMPLETED_TASK,
             from_vertex_id=agent_vid,
             to_vertex_id=task_vid,
-            properties={"tenant_id": tenant_id, "completed_at": payload.get("timestamp", "")},
+            properties={
+                "tenant_id": tenant_id,
+                "completed_at": payload.get("timestamp", ""),
+                "execution_id": payload.get("execution_id", task_id),
+                "source_event_id": payload.get("source_event_id", ""),
+                "evidence_status": payload.get("evidence_status", "observed"),
+            },
         ))
         return {"status": "task_completed", "task_vid": task_vid}
 
@@ -513,6 +529,9 @@ class AgentLifecycleMapper:
             properties={
                 "tenant_id": tenant_id,
                 "failure_reason": payload.get("failure_reason", ""),
+                "execution_id": payload.get("execution_id", task_id),
+                "source_event_id": payload.get("source_event_id", ""),
+                "evidence_status": payload.get("evidence_status", "observed"),
             },
         ))
         return {"status": "task_failed", "task_vid": task_vid}

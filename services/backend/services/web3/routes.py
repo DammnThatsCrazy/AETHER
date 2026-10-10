@@ -5,7 +5,7 @@ Provides registry management, classification, coverage status, and graph
 building endpoints. All routes follow the existing FastAPI router pattern
 with tenant isolation and permission guards.
 
-Endpoints (35 total):
+Endpoints (37 total):
   Registry CRUD (21): chains, protocols, contracts, tokens, apps, domains, governance
   Classification (4): classify contract, attribute domain, classify observation batch
   Coverage (3): status, completeness, health
@@ -16,9 +16,11 @@ Endpoints (35 total):
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, HTTPException, Request, Query
+from pydantic import BaseModel, Field
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
@@ -45,6 +47,7 @@ from services.web3.classifier import (
     build_graph_from_observation,
     detect_migration,
 )
+from services.web3.transaction_verification import SDKTransactionVerifier
 
 logger = get_logger("aether.web3.routes")
 router = APIRouter(prefix="/v1/web3", tags=["web3"])
@@ -63,6 +66,100 @@ bridge_reg = BridgeRouteRegistry()
 deployer_reg = DeployerEntityRegistry()
 migration_reg = MigrationRegistry()
 observation_repo = Web3ObservationRepository()
+transaction_verifier = SDKTransactionVerifier(observations=observation_repo)
+
+
+class SDKTransactionVerificationRequest(BaseModel):
+    chain_id: str = Field(min_length=1, max_length=128)
+    transaction_hash: str = Field(min_length=1, max_length=256)
+
+
+@router.post("/transactions/verify")
+async def verify_sdk_transaction(request: Request, body: SDKTransactionVerificationRequest) -> dict:
+    """Verify a tenant's previously observed SDK transaction against read-only RPC.
+
+    This records chain execution evidence separately from payment settlement.
+    """
+    request.state.tenant.require_permission("write")
+    tenant_id = str(request.state.tenant.tenant_id)
+    from repositories.repos import AnalyticsRepository
+    from dependencies.providers import get_cache
+
+    rows = await AnalyticsRepository(get_cache()).query_silver(
+        "silver_web3_transaction_facts",
+        {"tenant_id": tenant_id, "chain_id": body.chain_id,
+         "tx_hash": body.transaction_hash},
+        limit=100,
+    )
+    sdk_types = {"transaction"}
+    source = next((row for row in rows if row.get("source_event_type") in sdk_types), None)
+    if source is None:
+        raise HTTPException(status_code=404, detail="SDK transaction observation not found")
+    tenant_chains = chain_reg.for_tenant(tenant_id)
+    registered_chain = await tenant_chains.get_by_chain_id(body.chain_id)
+    if registered_chain is None:
+        numeric_chain = body.chain_id.lower()
+        if numeric_chain.startswith("eip155:"):
+            numeric_chain = numeric_chain.split(":", 1)[1]
+        try:
+            evm_chain_id = int(numeric_chain, 16) if numeric_chain.startswith("0x") else int(numeric_chain)
+        except ValueError:
+            evm_chain_id = None
+        if evm_chain_id is not None:
+            registered_chain = await tenant_chains.get_by_evm_chain_id(evm_chain_id)
+    if registered_chain is None:
+        raise HTTPException(status_code=404, detail="Chain is not registered for this tenant")
+    registered_vm = str(registered_chain.get("vm_family") or "").lower()
+    if registered_vm not in {"evm", "svm"}:
+        raise HTTPException(status_code=422, detail="Registered chain does not support transaction verification")
+
+    result = await transaction_verifier.verify(
+        tenant_id=tenant_id,
+        chain_id=str(registered_chain.get("chain_id") or body.chain_id),
+        transaction_hash=body.transaction_hash,
+        vm_family=registered_vm,
+        source_observation=source,
+    )
+    journey_versions_rebuilt = 0
+    if result.status != "mismatch":
+        # Reuse the existing canonical activity/journey lifecycle path only
+        # after RPC verification; the client SDK cannot self-assert this status.
+        from services.measurement.routes.journeys import _compiler
+
+        refreshed = await _compiler.rebuild_affected_by_web3_status_change(
+            tenant_id,
+            body.transaction_hash,
+            result.status,
+            transaction_verification={
+                "status": result.status,
+                "execution_status": result.execution_status,
+                "confirmations": result.confirmations,
+                "verification_record_id": SDKTransactionVerifier.record_id(
+                    tenant_id, result.chain_id, result.transaction_hash,
+                ),
+                "settlement_status": "not_assessed",
+            },
+        )
+        journey_versions_rebuilt = len(refreshed)
+    return {
+        "verification": asdict(result),
+        "journey_versions_rebuilt": journey_versions_rebuilt,
+        "settlement_status": "not_assessed",
+    }
+
+
+@router.get("/transactions/{chain_id}/{transaction_hash}/verification")
+async def get_sdk_transaction_verification(
+    request: Request, chain_id: str, transaction_hash: str,
+) -> dict:
+    """Read the tenant-scoped execution verification record for an SDK transaction."""
+    request.state.tenant.require_permission("read")
+    tenant_id = str(request.state.tenant.tenant_id)
+    record_id = SDKTransactionVerifier.record_id(tenant_id, chain_id, transaction_hash)
+    record = await observation_repo.for_tenant(tenant_id).find_by_id(record_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Transaction verification not found")
+    return {"verification": record}
 
 
 # ═══════════════════════════════════════════════════════════════════════════

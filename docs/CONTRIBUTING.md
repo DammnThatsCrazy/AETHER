@@ -21,7 +21,7 @@ source_hashes:
   "Makefile": "sha256:027d381861be2a02e19cdadb1b8fbb122734f64425f945be872fa32c48486312"
   "config/unread_settings_flags.yaml": "sha256:a2ec165b3a23032bd06e67ce315f694509ead642f7fc7dd6e4c5ad9c61b974b8"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:6e64f14b86dafb2b0b63ef06b763a8580a3c2cce7b76ef1e58eadcbc0734f245"
-  "scripts/repo_doctor.py": "sha256:10f8b54040fac6e71500ccdbfdcd343d7dd816544e2a651baad2dec6b1affc19"
+  "scripts/repo_doctor.py": "sha256:4d293df88d79867a1db0e849ecf7f58370a90ece57fa2ec9c368a492257fbf1f"
   "scripts/validate_settings_flags.py": "sha256:b54d1d9af6f77fb175e7d1dca840686ac564018a9327e30bc7942ab833831b9d"
 ---
 

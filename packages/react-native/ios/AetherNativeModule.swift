@@ -245,16 +245,18 @@ class AetherNativeModule: RCTEventEmitter {
     func walletConnect(_ address: String, options: NSDictionary) {
         let walletType = options["type"] as? String
         let chainId = options["chainId"].map { "\($0)" }
-        Aether.shared.walletConnected(address: address, walletType: walletType, chainId: chainId)
-        resolveWalletIdentity(address: address, walletType: walletType ?? "unknown", chainId: chainId ?? "unknown")
+        let vm = options["vm"] as? String ?? "evm"
+        let provider = options["provider"] as? String
+        Aether.shared.walletConnected(address: address, walletType: walletType, chainId: chainId, vm: vm, provider: provider)
+        resolveWalletIdentity(address: address, walletType: walletType ?? "unknown", chainId: chainId ?? "unknown", vm: vm)
     }
 
-    private func resolveWalletIdentity(address: String, walletType: String, chainId: String) {
+    private func resolveWalletIdentity(address: String, walletType: String, chainId: String, vm: String) {
         guard !resolveEndpoint.isEmpty,
               let url = URL(string: "\(resolveEndpoint)/sdk/identity/resolve") else { return }
 
         let body: [String: Any] = [
-            "wallets": [["address": address, "type": walletType, "chainId": chainId]],
+            "wallets": [["address": address, "type": walletType, "chainId": chainId, "vm": vm]],
             "anonymousId": Aether.shared.getAnonymousId(),
             "deviceFingerprint": Aether.shared.getFingerprintId()
         ]
@@ -282,10 +284,11 @@ class AetherNativeModule: RCTEventEmitter {
 
     @objc
     func walletTransaction(_ txHash: String, options: NSDictionary) {
-        let chainId = options["chainId"] as? String ?? "unknown"
+        let chainId = options["chainId"].map { String(describing: $0) } ?? "unknown"
         let value = options["value"] as? String
+        let vm = options["vm"] as? String
         let extra = (options as? [String: Any])?.mapValues { AnyCodable($0) }
-        Aether.shared.walletTransaction(txHash: txHash, chainId: chainId, value: value, properties: extra)
+        Aether.shared.walletTransaction(txHash: txHash, chainId: chainId, value: value, properties: extra, vm: vm)
     }
 
 

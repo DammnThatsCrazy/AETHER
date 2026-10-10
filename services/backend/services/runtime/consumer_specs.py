@@ -43,6 +43,7 @@ def _attach_stream_ingestion(registry: Any) -> None:
         silver_fact_projector,
         silver_normalizer,
     )
+    from services.ingestion.lifecycle_worker import project_sdk_lifecycle_observation
 
     # analytics_event_recorder is the sole writer of the events/sessions
     # tables the analytics API and Profile 360 timeline read.
@@ -51,6 +52,7 @@ def _attach_stream_ingestion(registry: Any) -> None:
         silver_normalizer,
         silver_fact_projector,
         analytics_event_recorder,
+        project_sdk_lifecycle_observation,
     ):
         registry.consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, handler)
 
@@ -65,10 +67,33 @@ def _attach_identity(registry: Any) -> None:
     )
 
 
+AUTHORITATIVE_X402_TOPICS: tuple[Topic, ...] = (
+    Topic.COMMERCE_CHALLENGE_ISSUED,
+    Topic.COMMERCE_PAYMENT_SUBMITTED,
+    Topic.COMMERCE_SETTLEMENT_COMPLETED,
+    Topic.COMMERCE_SETTLEMENT_FAILED,
+    Topic.COMMERCE_ACCESS_GRANTED,
+)
+
+
+def _attach_x402_lifecycle(registry: Any) -> None:
+    from services.ingestion.lifecycle_worker import project_authoritative_x402_lifecycle
+
+    for topic in AUTHORITATIVE_X402_TOPICS:
+        registry.consumer.subscribe(topic, project_authoritative_x402_lifecycle)
+
+
 def _attach_graph(registry: Any) -> None:
     from services.profile360_workers import attach_profile360_workers
+    from services.agent.lifecycle_consumer import project_agent_execution_lifecycle
 
     attach_profile360_workers(registry.consumer, registry.graph)
+    for topic in (
+        Topic.AGENT_EXECUTION_STARTED,
+        Topic.AGENT_EXECUTION_COMPLETED,
+        Topic.AGENT_EXECUTION_FAILED,
+    ):
+        registry.consumer.subscribe(topic, project_agent_execution_lifecycle)
 
 
 def _attach_measurement(registry: Any) -> None:
@@ -179,6 +204,13 @@ CONSUMER_SPECS: tuple[ConsumerSpec, ...] = (
         topics=(Topic.SDK_EVENTS_VALIDATED,),
         group_id="aether-identity",
         handler_factory=_attach_identity,
+    ),
+    ConsumerSpec(
+        name="x402-lifecycle-projection",
+        role="graph-writer",
+        topics=AUTHORITATIVE_X402_TOPICS,
+        group_id="aether-x402-lifecycle",
+        handler_factory=_attach_x402_lifecycle,
     ),
     ConsumerSpec(
         name="graph-profile-projection",

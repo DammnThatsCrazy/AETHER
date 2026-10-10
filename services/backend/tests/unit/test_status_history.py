@@ -1,7 +1,7 @@
 """Public status history: rollup math, sampling, storage and the HTTP feed.
 
 ``GET /v1/status/history`` feeds the public status page's 90-day bars
-(``frontend/site/src/site/status.ts`` ``parseHistory``/``fillDays``). The
+(``apps/site/src/site/status.ts`` ``parseHistory``/``fillDays``). The
 contract these tests pin:
 
 1. Scoring — unknown samples are unobserved (excluded from the denominator);

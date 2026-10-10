@@ -6,12 +6,19 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/backend/services/x402/, services/backend/services/agent/, packages/shared/events.ts, packages/shared/agentic-observability.ts]
+source_files: [services/backend/services/x402/, services/backend/services/agent/, services/backend/services/commerce/order_payment_reconciliation.py, services/backend/services/economic/economic360_contracts.py, services/backend/services/economic/operation_linkage.py, services/backend/services/integrations/providers/payment_rails/service.py, services/backend/services/integrations/providers/payment_rails/stripe_onramp.py, services/backend/services/profile/agent.py, services/backend/services/ingestion/lifecycle_worker.py, packages/shared/events.ts, packages/shared/agentic-observability.ts]
 source_hashes:
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
-  "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
-  "services/backend/services/agent/": "sha256:f256a85e04a557c38202158cdc1766ddd5da63f7221fcbd80701efe151fac799"
-  "services/backend/services/x402/": "sha256:a359d4e6f9e54722c053f8b4b7be789bc5748371ecef4ef2f5843cd48ee93d60"
+  "packages/shared/events.ts": "sha256:c2c9b0df3d1a018a320981a2dfad443829583e10c399299711a6b76e5bc960ac"
+  "services/backend/services/agent/": "sha256:da45454cbc10f316b0aa43d182d3862fb37e14f1d3e2560a5143df9367299b84"
+  "services/backend/services/commerce/order_payment_reconciliation.py": "sha256:84b3f00bfa6e0c1b4df5405636163a2650edf8651b3b36823a7f2ba26ca7b77e"
+  "services/backend/services/economic/economic360_contracts.py": "sha256:06de628e97ad446722d432701d4850e0b62cb89b38d1f74265d73181b6ae6ba2"
+  "services/backend/services/economic/operation_linkage.py": "sha256:2b7ba5ea6d4f222b6d5aec8bc27e44835ff69f7ef33f496d49d00a4a6ba05dfa"
+  "services/backend/services/ingestion/lifecycle_worker.py": "sha256:2ff252e1d0b87e341769cdfe9054e3523bcfe8a2bf5f94798b5306625cbca5bf"
+  "services/backend/services/integrations/providers/payment_rails/service.py": "sha256:0dce52c51eac480aaf50b9f9dac2ebcf4c0c9ebe0e31a6b83f6ee1149c052dbf"
+  "services/backend/services/integrations/providers/payment_rails/stripe_onramp.py": "sha256:47f274dc3c7b03af9678c5b16f57b8da3b1105faf2cd974c2cf8e1402c565828"
+  "services/backend/services/profile/agent.py": "sha256:453e149e6afd48cc27de997fdbfed6e0a7712d5ca9514c92e146a11b7546b129"
+  "services/backend/services/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
 ---
 
 # Agentic Observability Audit
@@ -28,12 +35,15 @@ source_hashes:
 | `services/backend/services/x402/control_plane.py` | Orchestrates workflow state (issues challenges, routes to approval, records settlement). Does NOT execute transfers. Naming "control plane" is appropriate: it controls AETHER's internal state machine, not external execution. |
 | `services/backend/services/x402/settlement.py` | FSM state tracker only. Records `pending→verifying→settled` transitions. No funds moved. |
 | `services/backend/services/x402/verification.py` | RPC *reads* only (`eth_getTransactionReceipt`, `getTransaction`). Does NOT submit transactions. |
+| `services/backend/services/x402/lifecycle_mapper.py` | Persists source lifecycle references; on submission it stores an authorization ID only when the tenant-scoped authorization record names the same challenge/intent. It does not authorize or execute a transfer. |
 | `services/backend/services/x402/approvals.py` | Approval workflow FSM. Routes and records human operator decisions. No autonomous execution. |
 | `services/backend/services/x402/entitlements.py` | Mints time-bound access tokens after external settlement confirmed. Governance artifact only. |
 | `services/backend/services/x402/policies.py` | Policy engine: evaluates allow/deny/require_approval. Emits decisions; does not enforce them autonomously. |
 | `services/backend/services/x402/interceptor.py` | Header parsing only. Observational. |
 | `services/backend/services/x402/economic_graph.py` | Graph mutations for lifecycle stages. Observational. |
-| `services/backend/services/agent/economic.py` | Agent economic views: budget aggregation. Read-only. |
+| `services/backend/services/agent/economic.py`, `services/backend/services/profile/agent.py` | Agent economic views and Agent 360 expose evidence-only links from tenant-scoped payment intents to exact-match authorization, execution and settlement-event records. Authorization also requires an exact tenant/challenge/agent match to its authoritative PaymentRequirement. Source lifecycle status remains authoritative. |
+| `services/backend/services/economic/operation_linkage.py`, `services/backend/services/commerce/order_payment_reconciliation.py` | Commerce and agent lifecycle links carry source-owned references only. Exact Stripe order/payment evidence can carry a distinct succeeded refund with an explicit `reverses` relation; neither the link nor refund event executes a transfer or changes the original payment's source status. |
+| `services/backend/services/ingestion/lifecycle_worker.py` | Only closed-registry server-authoritative x402 topics project agent PaymentIntent/SettlementEvent records to existing graph vertices and registered edges; SDK terminal claims remain excluded. |
 | `services/backend/services/agent/lifecycle_mapper.py` | Routes agent events to repositories and graph. Observational. |
 | `services/backend/services/agent/worker_bridge.py` (2026-07-10) | Publishes internal objective-step envelopes to AETHER's own Agent Layer Celery broker by task name. Internal work dispatch only — no external execution, no payments, no trades. Hosted modes fail closed when the broker is unreachable. |
 | `services/backend/services/agent/worker_routes.py` (2026-07-10) | Worker status callbacks (`agent:run_update` service credential). Records run state; executes nothing. |
