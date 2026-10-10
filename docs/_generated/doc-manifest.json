@@ -3937,6 +3937,19 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/architecture/ARCHITECTURE.md",
+      "title": "Aether Architecture Overview",
+      "slug": "architecture-overview",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
       "title": "Aether Backend Intelligence Architecture Blueprint",
       "slug": "architecture/backend-intelligence",
@@ -6784,6 +6797,19 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/operations/DEVELOPMENT.md",
+      "title": "Local Development",
+      "slug": "ops-development",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/operations/ENDUSER_LIFECYCLE_E2E.md",
       "title": "End-User Lifecycle E2E Runbook",
       "slug": "operations/enduser-lifecycle-e2e",
@@ -6799,6 +6825,19 @@
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/operations/RELEASES.md",
+      "title": "Aether Releases",
+      "slug": "ops-releases",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/operations/UNIVERSAL_GRAPH_RUNBOOK.md",
@@ -9079,6 +9118,38 @@
       "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/reference/reports/credential-turnkey-capability-matrix.md",
+      "title": "Credential-Turnkey Capability Completion Matrix",
+      "slug": "docs/reference/reports/credential-turnkey-capability-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 20,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/reference/reports/credential-turnkey-external-blockers.md",
+      "title": "Credential-Turnkey External Blocker Matrix",
+      "slug": "docs/reference/reports/credential-turnkey-external-blockers",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 12,
       "canonical_owner": "platform@aether"
     },
     {
