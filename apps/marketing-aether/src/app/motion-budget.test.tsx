@@ -35,7 +35,7 @@ function collectSources(dir: string = SRC_DIR): string[] {
     const stat = statSync(full);
     if (stat.isDirectory()) {
       found.push(...collectSources(full));
-    } else if (/\.(tsx|css)$/.test(entry) && !/\.test\.test(basename(full))) {
+    } else if (/\.(tsx|css)$/.test(entry) && !/\.test\./.test(basename(full))) {
       found.push(full);
     }
   }
