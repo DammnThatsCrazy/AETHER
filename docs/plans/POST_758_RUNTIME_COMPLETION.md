@@ -85,6 +85,7 @@ design-partner evidence is distinguished from production readiness.
 | `41a901d1` | Link Journey activity to Profile/Agent 360 and record five journey release gates. |
 | `bdc4f34c` | Retain wallet-only SDK identities as tenant/chain/VM-scoped unresolved source records. |
 | `4c32605a` | Verify stored SDK transactions against registered tenant-scoped EVM/SVM RPC and refresh Journey status from verified execution evidence. |
+| `9c0b2507` | Expose RPC execution evidence and an explicit verify action in the Journey Explorer, preserving settlement as a separate source. |
 
 ### Slice 0 — Capability and work-order traceability
 
