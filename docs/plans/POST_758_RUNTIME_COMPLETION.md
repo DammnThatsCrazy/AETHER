@@ -86,6 +86,8 @@ design-partner evidence is distinguished from production readiness.
 | `bdc4f34c` | Retain wallet-only SDK identities as tenant/chain/VM-scoped unresolved source records. |
 | `4c32605a` | Verify stored SDK transactions against registered tenant-scoped EVM/SVM RPC and refresh Journey status from verified execution evidence. |
 | `9c0b2507` | Expose RPC execution evidence and an explicit verify action in the Journey Explorer, preserving settlement as a separate source. |
+| `66b7cc50` | Add tenant-scoped exact-reference commerce order/payment evidence and a read surface. |
+| `00eb4d83` | Prevent stale commerce order revisions from regressing ledger evidence; preserve equal-time divergent revisions as conflicts. |
 
 ### Slice 5 — Exact-reference multi-provider commerce evidence
 
@@ -103,7 +105,10 @@ with equal source time for review. This slice does not project payment graph
 facts or claim settlement. No current
 payment adapter emits the commerce metadata contract by default, so provider
 certification, SDK checkout linkage, correction/refund semantics, and the
-two-provider golden path remain release work.
+two-provider golden path remain release work. A contract-only scenario fixture
+now records exact-match, missing-reference, mismatch, duplicate, multiple-
+payment, stale-revision, and equal-time conflict expectations at
+`packages/proof-fixtures/fixtures/commerce-reconciliation/exact_reference_scenarios.json`.
 
 ### Slice 0 — Capability and work-order traceability
 
