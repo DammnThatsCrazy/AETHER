@@ -12,6 +12,7 @@ import hashlib
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from shared.common.common import utc_now
 from shared.store import DurableStore, get_store
 
 
@@ -49,6 +50,7 @@ class CommerceOrderPaymentLedger:
             "revisionId": _required(revision_id, "revision_id"),
             "sourceRevisionAt": source_revision_at or occurred_at,
             "occurredAt": occurred_at,
+            "observedAt": utc_now().isoformat(),
         }
         key = _key(tenant_id, ref)
         record = await self._store.get(key) or {
@@ -57,6 +59,29 @@ class CommerceOrderPaymentLedger:
             "payments": {},
             "createdAt": occurred_at,
         }
+        revision_history = record.get("orderRevisions")
+        if not isinstance(revision_history, list):
+            revision_history = []
+        if not revision_history and isinstance(record.get("order"), dict):
+            revision_history.append(record["order"])
+        record["orderRevisions"] = revision_history
+        prior_revision = next(
+            (
+                row for row in revision_history
+                if row.get("revisionId") == order["revisionId"]
+            ),
+            None,
+        )
+        comparable_fields = (
+            "provider", "providerOrderId", "amount", "currency", "revisionId",
+            "sourceRevisionAt", "occurredAt",
+        )
+        if prior_revision is None:
+            revision_history.append(order)
+        elif any(prior_revision.get(field) != order.get(field) for field in comparable_fields):
+            record["state"] = "conflict"
+            record["conflictReason"] = "order_revision_id_reused_with_divergent_evidence"
+
         prior = record.get("order")
         if not prior:
             record["order"] = order

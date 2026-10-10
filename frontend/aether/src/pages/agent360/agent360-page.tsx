@@ -53,6 +53,7 @@ export function Agent360Page() {
   const executions = list(tasks.recent_executions);
   const intents = list(payments.recent_intents);
   const settlements = list(payments.recent_settlements);
+  const operationLinks = list(payments.economic_operation_links);
   const delegations = list(delegation.active_delegations);
 
   return (
@@ -128,6 +129,26 @@ export function Agent360Page() {
                 </li>
               ))}
             </ul> : <p className="text-sm text-text-secondary">No payment or settlement evidence is available.</p>}
+            <div className="border-t border-border-default pt-3">
+              <h3 className="text-xs font-medium text-text-primary">Linked operation evidence</h3>
+              {operationLinks.length ? <ul className="mt-2 divide-y divide-border-default">
+                {operationLinks.slice(0, 8).map((operation, index) => {
+                  const records = list(operation.records);
+                  const relations = list(operation.relations);
+                  return <li className="space-y-1 py-2 text-xs" key={display(operation.id, String(index))}>
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <span className="font-mono text-text-primary">{display(operation.operation_ref, 'Operation evidence')}</span>
+                      <span className="text-text-secondary">{display(operation.state)} · {display(operation.identity_basis)}</span>
+                    </div>
+                    <p className="text-text-secondary">
+                      Records: {records.map(item => display(item.role)).join(' · ') || 'intent only'}
+                      {relations.length ? ` — ${relations.map(item => display(item.relation)).join(' · ')}` : ''}
+                    </p>
+                    <p className="text-text-secondary">Source-linked evidence; lifecycle and settlement state remain owned by their source records.</p>
+                  </li>;
+                })}
+              </ul> : <p className="mt-2 text-xs text-text-secondary">No cross-record operation links are available yet.</p>}
+            </div>
           </CardContent>
         </Card>
       </div>

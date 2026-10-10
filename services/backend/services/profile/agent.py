@@ -22,6 +22,7 @@ from repositories.repos import (
     SettlementEventRepository,
 )
 from shared.common.common import utc_now
+from services.economic.operation_linkage import agent_intent_operation_link
 
 
 def _decimal(value: Any) -> Optional[Decimal]:
@@ -85,6 +86,45 @@ class AgentProfile360Composer:
         settlements = await self._settlements.list_for_agent(agent_id, tenant_id, limit=limit)
         economic_identity = await self._economic_identities.find_for_agent(agent_id, tenant_id)
         behavior = await self._behavior_profiles.find_by_id(agent_id)
+        from services.x402.commerce_store import get_commerce_store
+
+        commerce_store = get_commerce_store()
+        authorizations = await commerce_store.list_authorizations(tenant_id)
+        requirements = await commerce_store.list_requirements(tenant_id)
+        authorizations_by_id = {
+            str(row.authorization_id): row for row in authorizations
+        }
+        requirements_by_challenge = {
+            str(row.challenge_id): row for row in requirements
+        }
+        executions_by_id = {
+            str(row.get("execution_id") or ""): row for row in executions
+        }
+        settlements_by_intent: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for settlement in settlements:
+            intent_ref = str(settlement.get("intent_id") or "")
+            if intent_ref:
+                settlements_by_intent[intent_ref].append(settlement)
+        operation_links = []
+        for intent in intents:
+            intent_ref = str(intent.get("intent_id") or "")
+            metadata = intent.get("metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            authorization_ref = str(
+                intent.get("authorization_id") or metadata.get("authorization_id") or ""
+            )
+            execution_ref = str(
+                intent.get("execution_id") or metadata.get("execution_id") or ""
+            )
+            operation_links.append(
+                agent_intent_operation_link(
+                    intent,
+                    settlements_by_intent.get(intent_ref, []),
+                    authorization=authorizations_by_id.get(authorization_ref),
+                    execution=executions_by_id.get(execution_ref),
+                    requirement=requirements_by_challenge.get(intent_ref),
+                ).model_dump(mode="json")
+            )
 
         # Ownership guard: only expose config/behavior if they belong to this tenant
         if agent_config and agent_config.get("tenant_id") != tenant_id:
@@ -239,6 +279,7 @@ class AgentProfile360Composer:
                 "spend_by_currency": {k: str(v) for k, v in spend_by_currency.items()},
                 "recent_intents": intents[:10],
                 "recent_settlements": settlements[:10],
+                "economic_operation_links": operation_links,
             },
             "economic_state": {
                 "economic_identity": economic_identity or {},

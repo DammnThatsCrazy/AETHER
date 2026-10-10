@@ -181,6 +181,22 @@ async def project_authoritative_x402_lifecycle(event: Event) -> None:
 
     from services.x402.lifecycle_mapper import X402LifecycleMapper
     result = await X402LifecycleMapper().handle_event(stage, mapped, tenant_id)
+    if mapped.get("agent_id") and mapped.get("payment_intent_id"):
+        # The repositories remain the source of truth; this is an additive
+        # projection into the existing PaymentIntent/SettlementEvent graph
+        # types. Client SDK claims never enter this graph writer.
+        from repositories.repos import PaymentIntentRepository, SettlementEventRepository
+        from services.x402.economic_mutations import EconomicGraphMutations
+
+        intent_id = str(mapped["payment_intent_id"])
+        intent = await PaymentIntentRepository().find_for_tenant(intent_id, tenant_id)
+        if intent is not None:
+            settlements = await SettlementEventRepository().list_for_intent(
+                intent_id, tenant_id
+            )
+            await EconomicGraphMutations().write_agent_payment_operation(
+                intent, settlements
+            )
     metrics.increment("lifecycle_observation_projected_total", labels={"family": "x402", "event_type": stage})
     logger.info("authoritative x402 lifecycle projected", extra={
         "tenant_id": tenant_id, "event_id": event_id, "event_type": stage,

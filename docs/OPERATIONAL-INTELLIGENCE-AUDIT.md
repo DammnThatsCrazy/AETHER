@@ -11,7 +11,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged.'}
   - {'commit': 'f63d631', 'reason': 'Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required.'}
 source_hashes:
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
+  "services/backend/repositories/repos.py": "sha256:026639dd5d10435354cb9a29fdf273ffbd9ed2bce544c4bac52fea859cb92844"
   "services/backend/services/events/routes.py": "sha256:1ede3d12a54845f33a149b13106b001a899c4b77c168c6d990023e836b59101f"
   "services/backend/services/events/worker.py": "sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363"
   "services/backend/services/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"

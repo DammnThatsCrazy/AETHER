@@ -244,21 +244,33 @@ evidence through graph, Journey, Agent 360 and Value; (5) validate replay,
 tenant isolation, temporal reconstruction and no-double-counting. Do not
 expand provider coverage before these seams preserve their source authority.
 
-The first implementation slice defines the strict `EconomicOperationLink`
+The initial implementation slice defines the strict `EconomicOperationLink`
 contract in `services/backend/services/economic/economic360_contracts.py` and
 maps (a) Shopify/Stripe exact-reference order/payment evidence at
 `GET /v1/commerce/reconciliation/order-payments`, and (b) tenant-scoped agent
 `PaymentIntent` → explicitly associated `SettlementEvent` evidence in the
-existing agent economics response. The contract carries provider-namespaced
-source-record references, lifecycle roles, evidence-backed relations, identity
+existing agent economics response and Agent 360 `x402_flows`, plus independently
+loaded authorization and executor records when tenant, agent, challenge,
+requester and stored IDs match exactly. The
+contract carries provider-namespaced source-record references, lifecycle roles,
+evidence-backed relations, identity
 basis and reconciliation state. It forbids extra fields, is explicitly
 versioned, requires identity evidence, rejects a `linked` state with fewer
 than two source records, and does not carry amounts. The routes remain
 tenant-scoped, and processor completion remains distinct from payout
-settlement. Agent authorization/execution references are not independently
-linked until their authoritative records are available. Graph navigation,
-Journey/Agent 360/Value projections and correction/reversal handling remain
-open.
+settlement. Agent views load tenant-scoped authorization and execution records
+in bounded source reads. Authorization additionally requires its authoritative
+PaymentRequirement to match the intent's tenant, challenge, agent requester,
+and authorization ID. The server-authoritative x402 consumer materializes the
+existing PaymentIntent/SettlementEvent graph vertices and `PAYS_FOR`/
+`SETTLED_AS` edges; the authorization owner writes the registered
+PaymentRequirement → PaymentAuthorization edge. Agent 360 displays
+operation-link state, source roles and relations, including exact-matched
+executor evidence. No graph edge is written from settlement to execution
+because the existing edge would assert causality not established by current
+source records. Journey and Value propagation,
+correction/reversal continuity, bitemporal reconstruction and production
+journey evidence remain open.
 
 ## Recommended implementation program
 
@@ -299,9 +311,10 @@ vertical-slice acceptance criteria.
 
 1. Reconcile the enumerated 67 rows in this document with the exact source
    list; add the five missing source items only when recovered.
-2. Complete agent lifecycle linkage by sourcing authoritative authorization
-   and executor records, and distinguish settlement attempts from verified
-   finality before projecting further.
+2. Extend the existing graph pathway to Journey and Value, preserving
+   observed-versus-verified state, source-specific finality and correction
+   history. Agent 360 and the server-authoritative graph path now expose the
+   first evidence-linked segment.
 3. Turn the first three approved customer journeys into evidence checklists
    with owner, source, permissions/credentials, fixture, product surface and
    pass criteria.
@@ -311,10 +324,34 @@ vertical-slice acceptance criteria.
    evidence are linked. Do not mark partner- or production-gated work complete
    from local fixtures or API presence.
 
+## Seven integrated workstreams — current closure status
+
+These are the seven remaining workstreams after the eight post-#758 runtime
+gaps were implemented. Each has a code disposition and an explicit acceptance
+gate so no item disappears into a generic “later” bucket.
+
+| # | Workstream | Repository-side disposition in this build | Acceptance still required |
+|---|---|---|---|
+| 1 | Inventory and authority | Economic-operation authority is recorded as source-owned facts plus an evidence-only link projection; the 67 enumerated rows are preserved. | Recover the five absent source rows from the referenced source before declaring the 72-ID inventory reconciled. |
+| 2 | Canonical evidence contract | Versioned strict operation links now correlate commerce records and agent intent, authoritative authorization, execution and settlement evidence with exact identifiers. Commerce order revisions are retained with source-valid/observed times; agent reversal relations require an explicit source event reference. | End-to-end correction/reversal replay and historical as-of reconstruction must be proven before value attribution expands. |
+| 3 | Mobile observation and identity | Existing SDK, Web3 ingestion, source-identity and RPC verification paths remain the foundation; this build does not add wallet ownership inference. | Physical Android/iOS/RN runs, Sui coverage, and Samsung/Apple account feeds require devices, RPC/provider access and authorized integrations. |
+| 4 | Agent authority and economic outcome | Exact requester/challenge authorization checks, authoritative graph projection, and Agent 360 operation evidence are connected using existing owners and graph types. | A real executor-backed parent/child delegation run must prove effective permission, revoke, retry, payment and settlement. |
+| 5 | Cross-provider graph, Journey and Value | Exact-reference Shopify/Stripe evidence and the agent x402 graph path exist; Agent 360 displays source roles and relations. | Connect commerce operation evidence to Journey and Value only after settlement, refund/correction and deduplication semantics are proven. |
+| 6 | Relationship and exposure intelligence | Consent-gated Social360 providers and explanation surfaces remain connected; no new identity joins are inferred here. | One licensed provider source, evidence-health metrics, consent withdrawal and production SLO evidence are required. |
+| 7 | Trust and commercial readiness | Tenant/challenge/requester checks and server-source authority are enforced in the implemented paths; documentation records all five customer journeys and their gates. | Two-tenant/replay/correction/revocation, device/provider acceptance, legal review, load/cost, incident recovery and partner evidence remain release gates. |
+
+The code-controlled pieces above are implemented where the existing owners
+provide the necessary records. External access and runtime evidence are
+explicitly accounted for and remain open until the required device, provider,
+licensed-source or release environment is available; they are not represented
+as completed by local code presence.
+
 ## Current baseline note
 
-The workspace is on `Development` at `78701bc2`, 20 commits ahead of its
-tracked `origin/Development` base `a8bb030f`, with a clean worktree at the time
-of this review. The post-#758 runtime plan records the eight runtime gaps and
-three product priorities; the items above reconcile that implementation
-program with the source chat's broader capability inventory.
+The checkout's `Development` baseline and stacked implementation commits are
+recorded in Git. The post-#758 runtime plan records the eight runtime gaps and
+their implementation, plus three active product acceptance priorities; this
+rebaseline reconciles that program with the source chat's broader capability
+inventory. Physical-device runs, authorized partner access, licensed
+relationship data and production release evidence remain external acceptance
+dependencies and are not marked complete by code changes.

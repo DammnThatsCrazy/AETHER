@@ -319,6 +319,9 @@ class CommerceStore:
     async def get_requirement(self, tenant_id: str, challenge_id: str) -> Optional[PaymentRequirement]:
         return await self.requirements.get(tenant_id, challenge_id)
 
+    async def list_requirements(self, tenant_id: str) -> list[PaymentRequirement]:
+        return await self.requirements.list(tenant_id)
+
     # ── Policy decisions ─────────────────────────────────────────────
 
     async def put_policy_decision(self, d: PolicyDecision) -> PolicyDecision:

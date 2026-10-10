@@ -12,7 +12,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
-  "services/backend/services/x402/": "sha256:25894ad21bdef715d9efd91c019cb90c66eeda7a0b3153f24f7812a3f3831795"
+  "services/backend/services/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
 ---
 # Commerce Operator Runbook
 

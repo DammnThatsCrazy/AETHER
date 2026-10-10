@@ -14,7 +14,7 @@ source_hashes:
   "services/backend/services/consent/erasure_planes.py": "sha256:892ba3ee1de530952164ba43f3fa3f6a38ddb7e1094ddbb42cb2fc9a82f6f779"
   "services/backend/services/dsr_propagation/models.py": "sha256:e5a4b959a05ac870afaffc328c19ef2be4155648f5fc6e452339a9d2200dd5c6"
   "services/backend/services/web3/registries.py": "sha256:0db03da90f411420455b868e1fb9861b98421937e3fb1901bd727ff32474e7ed"
-  "services/backend/services/x402/commerce_store.py": "sha256:e2a92b1e3c15ce2b77f2c7612e2eb9ac62b9014daa8f119ef27e619aa83a2263"
+  "services/backend/services/x402/commerce_store.py": "sha256:eb7dfaef1c1f02a31b4ce7d7699eab23ebb0f388de35c0220b1f6122be4aa4e2"
   "services/backend/shared/storage/lifecycle.py": "sha256:363902505a04df7228b46faad627ebe0cfc42bbbe8940122cf8ac42b6c93ac40"
 ---
 

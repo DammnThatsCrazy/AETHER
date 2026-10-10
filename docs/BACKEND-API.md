@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:164c04afa0bdc89e41eaeeb642e354b49f5ccaef501bec27090f02aa19e93eae"
+  "services/backend/services/": "sha256:b7755e908c8d81bbf520c5e4f0b0f17d9248de98728c51624a499eca40874c09"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1273,7 +1273,7 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | GET | `/v1/commerce/fees/report` | Fee elimination report for tenant |
 | GET | `/v1/commerce/reconciliation/order-payments` | Tenant-scoped order/payment evidence plus an evidence-only `operationLink`; accepts optional exact `commerce_order_ref` and requires `commerce:read` |
 | GET | `/v1/commerce/agent/{id}/spend` | Agent spend history |
-| GET | `/v1/commerce/agents/{id}/economics` | Full economic profile: budget usage, delegation policy, economic identity, and evidence-only operation links from agent intents to explicitly associated settlement events |
+| GET | `/v1/commerce/agents/{id}/economics` | Full economic profile: budget usage, delegation policy, economic identity, and evidence-only operation links across exact-matched intent, authorization, execution, and settlement records |
 | GET | `/v1/commerce/revenue/{service_id}` | Service revenue over a time window (settled payments attributed to service) |
 | GET | `/v1/commerce/cluster/{id}/spend` | Cluster spend analytics: settled volume and unique agents |
 | GET | `/v1/commerce/treasury` | Treasury balance, preferred rails, and spend runway estimate (`commerce:admin`) |
@@ -1287,9 +1287,22 @@ a claim of payout settlement.
 
 The agent economics response includes `economic_operation_links`. Each link
 references its tenant-scoped `PaymentIntent` and `SettlementEvent` rows only
-when tenant, agent and stored `intent_id` all match. Authorization and execution
-IDs are not presented as independently evidenced records until their source
-records are available to the projection.
+when tenant, agent and stored `intent_id` all match. It includes authorization
+records only when the tenant-scoped authorization challenge and its
+`PaymentRequirement` identify the same tenant, challenge, agent requester, and
+authorization ID. Execution records must match the tenant, agent, and execution
+ID carried by the intent. Missing or mismatched records remain unlinked.
+Lifecycle status remains with each source record. The same evidence links are
+included in the existing Agent 360 `x402_flows` projection; server-authoritative
+x402 events also materialize existing PaymentIntent and SettlementEvent graph
+vertices/edges through the graph mutation gateway.
+Record references preserve source `occurred_at`, source `valid_at` where
+available, and first-persistence `observed_at` where the repository exposes it.
+This provides temporal lineage, but it does not itself provide historical
+as-of reconstruction. The commerce ledger retains each distinct order
+revision, including stale revisions without allowing them to replace the
+current source view. Agent reversal links are emitted only when a settlement
+source supplies the exact `reverses_settlement_event_id` reference.
 
 ### On-Chain Service (L0)
 

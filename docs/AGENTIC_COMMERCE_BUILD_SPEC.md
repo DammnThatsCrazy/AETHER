@@ -6,13 +6,18 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/commerce/, services/backend/services/x402/]
+source_files: [services/backend/services/commerce/, services/backend/services/x402/, services/backend/services/agent/economic.py, services/backend/services/economic/economic360_contracts.py, services/backend/services/economic/operation_linkage.py, services/backend/services/profile/agent.py, services/backend/services/ingestion/lifecycle_worker.py]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
-  "services/backend/services/commerce/": "sha256:e9ceb23751414f2c29484cf2a6c7bbf8ab85ca6e50e68fdbb3716fc07ad918e4"
-  "services/backend/services/x402/": "sha256:25894ad21bdef715d9efd91c019cb90c66eeda7a0b3153f24f7812a3f3831795"
+  "services/backend/services/agent/economic.py": "sha256:2e2737ac4b21dcf54564ad43978d09d0133225a05a488414c7a28c16b1edf56a"
+  "services/backend/services/commerce/": "sha256:3f303279cc6721e738687e4495360107a5eebfe3e9cfe9952ac7bc2cf50dc725"
+  "services/backend/services/economic/economic360_contracts.py": "sha256:06de628e97ad446722d432701d4850e0b62cb89b38d1f74265d73181b6ae6ba2"
+  "services/backend/services/economic/operation_linkage.py": "sha256:16c0aacc4bf52e3dcdd5ad389497540c7faaa17078dd25d9719d924cc4c8efdc"
+  "services/backend/services/ingestion/lifecycle_worker.py": "sha256:2ff252e1d0b87e341769cdfe9054e3523bcfe8a2bf5f94798b5306625cbca5bf"
+  "services/backend/services/profile/agent.py": "sha256:453e149e6afd48cc27de997fdbfed6e0a7712d5ca9514c92e146a11b7546b129"
+  "services/backend/services/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -114,15 +119,34 @@ The commerce reconciliation read now adds an `operationLink` projection to
 `GET /v1/commerce/reconciliation/order-payments`. It links the provider-owned
 commerce order and payment records only through their explicit shared
 `commerce_order_ref`, retains provider namespaces and evidence references, and
-surfaces partial, unresolved and conflicting matches. It carries no amount or
+surfaces partial, unresolved and conflicting matches. The source ledger retains
+distinct order revisions with source-valid and first-observed timestamps;
+stale revisions remain visible without replacing the current source view.
+Agent reversal relations are included only from an explicit source
+`reverses_settlement_event_id`. The operation link carries no amount or
 independent payment status and does not claim payout settlement.
 
 This linkage is an Aether projection for navigating evidence across domains.
-It does not make the graph or this projection the source of truth for an x402
-intent, authorization, execution or settlement. Those remain with their
-existing control-plane and source-specific authorities. Mapping the x402
-lifecycle into the shared linkage and projecting it through Journey, Agent 360
-and Value remain follow-on work.
+The existing agent economics read also links `PaymentIntent` records to
+tenant-scoped authorization, executor and settlement records when their
+explicit IDs and ownership fields match. Authorization links additionally
+require the authoritative `PaymentRequirement` to match tenant, challenge and
+agent requester. Missing or mismatched source records remain unlinked. These
+links are also included in the existing Agent 360 `x402_flows` projection.
+Server-authoritative lifecycle events materialize existing PaymentIntent and
+SettlementEvent graph types and registered edges through
+`GraphMutationGateway`; the authorization owner writes the existing
+PaymentRequirement → PaymentAuthorization edge. Agent 360 links exact-matched
+executor records in its evidence view. No execution edge is projected because
+the registered SettlementEvent → Execution edge would assert a causal relation
+that the current source records do not prove. The graph and these projections do not
+become the source of truth for intent, authorization, execution or settlement;
+those remain with their existing control-plane and source-specific authorities.
+Journey and Value propagation, correction/reversal continuity, temporal
+reconstruction and production journey evidence remain open. Linked source
+references retain source event time, validity/revision time where available,
+and first-persisted time where available so later as-of reconstruction can be
+built without conflating source time with ingestion time.
 
 
 ---

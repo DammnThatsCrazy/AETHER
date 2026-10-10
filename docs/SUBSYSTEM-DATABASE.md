@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
   "services/backend/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
+  "services/backend/repositories/repos.py": "sha256:026639dd5d10435354cb9a29fdf273ffbd9ed2bce544c4bac52fea859cb92844"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -119,7 +119,7 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
 | `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning log, confidence, policy log, task decomposition |
 | `delegations` | `DelegationRepository` | Scoped, time-bound, revocable entity-to-entity delegations (hot-path Redis-cached) |
-| `payment_intents` | `PaymentIntentRepository` | Pre-execution economic decisions: quotes, retries, budget eval, authorizations, settlements — full intent-to-outcome chain, tenant-scoped |
+| `payment_intents` | `PaymentIntentRepository` | Pre-execution economic decisions: quotes, retries, budget eval, authorizations, settlements — full intent-to-outcome chain, tenant-scoped; authorization and execution references are retained on the source row when explicitly supplied |
 | `settlement_events` | `SettlementEventRepository` | Settlement attempts and terminal outcomes for PaymentIntent records, tenant-scoped |
 | `economic_resources` | `EconomicResourceRepository` | Purchasable capabilities: inference, GPU compute, APIs, data, memory |
 | `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |

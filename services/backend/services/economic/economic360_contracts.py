@@ -280,8 +280,15 @@ class EconomicOperationRecordRef(EconomicContract):
     record_id: str = Field(min_length=1, max_length=512)
     role: EconomicOperationRole
     evidence: list[EvidenceRef] = Field(default_factory=list)
-    occurred_at: Optional[str] = None
-    valid_at: Optional[str] = None
+    occurred_at: Optional[str] = Field(
+        default=None, description="Source event time, when supplied by the source."
+    )
+    valid_at: Optional[str] = Field(
+        default=None, description="Source validity/revision time, when exposed."
+    )
+    observed_at: Optional[str] = Field(
+        default=None, description="Aether's first persisted time, when available."
+    )
 
 
 class EconomicOperationRelation(EconomicContract):

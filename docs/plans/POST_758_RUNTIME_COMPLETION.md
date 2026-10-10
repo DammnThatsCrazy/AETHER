@@ -214,6 +214,21 @@ The Journey Explorer now offers an explicit chain verification action and shows
 the RPC result from a separate Journey evidence-summary field. Payment
 settlement remains sourced from payment records.
 
+**Follow-on implementation status (October 10, 2026):** the shared
+`EconomicOperationLink` requires an authoritative tenant/challenge/agent match
+for x402 authorization evidence, and the same evidence-only links are returned
+from the Agent 360 `x402_flows` surface. Server-authoritative x402 events write
+the existing PaymentIntent and SettlementEvent vertices and registered
+`PAYS_FOR`/`SETTLED_AS` relationships through the graph mutation gateway; the
+authorization owner writes `AUTHORIZED_BY` from the payment requirement to its
+authorization. Agent 360 links exact-matched executor records in its evidence
+view, but no graph execution edge is projected because the current record does
+not prove the causal semantics of `RESULTED_IN_EXECUTION`. The product surface
+lists linked record roles and relations without copying
+financial amounts or replacing source lifecycle status. Journey and Value
+propagation, correction/reversal lineage, and full bitemporal reconstruction
+remain open.
+
 ### Slice 4 — Journey and release evidence
 
 Run the five approved journeys against controlled fixtures first and authorized
@@ -225,7 +240,7 @@ simulator evidence distinct from production readiness.
 |---|---|---|
 | Human mobile financial activity | Android/iOS wallet and transaction observations reach Web3 Silver with source-observed status; identity recognizes wallet-address aliases; the tenant-scoped verifier checks existing Silver observations against read-only EVM/Solana RPC and refreshes canonical Journey status. | Exercise a configured RPC provider with a controlled observation; prove the customer surface shows observation and verification separately from settlement, then cover reorg/correction behavior. |
 | Cross-platform economic identity | SDK identity observations use the existing tenant-scoped source-identity resolver; profile identity review and merge controls already exist. | Pair an authorized provider observation with an SDK source in a controlled tenant; prove provenance, confidence, no false merge, replay safety, and consent withdrawal. |
-| Human → agent → subagent delegation | Server-authored user-agent completion/failure lifecycle now reaches the existing mapper; Agent 360 shows authority, execution, delegation, and existing payment/settlement records. | Run a controlled delegated execution through a real executor callback and an authoritative payment/settlement path; demonstrate child-agent lineage, retry, revoke, and no spend from execution status alone. |
+| Human → agent → subagent delegation | Server-authored user-agent completion/failure lifecycle reaches the existing mapper; Agent 360 includes evidence-only links among exact-matched intent, authorization, execution, and settlement records, and authoritative x402 activity reaches existing graph types. | Run a controlled delegated execution through a real executor callback and an authoritative payment/settlement path; demonstrate child-agent lineage, retry, revoke, and no spend from execution status alone. |
 | Multi-provider commerce | Commerce and x402 lifecycle owners, provider connectors, unified journey, and Value surfaces are present. | Certify one tenant-scoped two-provider golden path (order plus settlement); demonstrate normalized source lineage, deduplication, correction, and consistent Journey/Value output. |
 | Relationship and exposure intelligence | Social Silver and Social360 runtime reads are connected; Profile relationship and exposure APIs exist with consent gates. | Use one licensed and authorized source; prove evidence health, consent withdrawal, explainable edge lineage, unknown states, and production SLOs. |
 

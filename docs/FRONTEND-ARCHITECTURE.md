@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:8d16422a0a87eabdb57b89c9d57a3a9f678ddbfd6d5a2d82e561fb3f08cca597"
+  "frontend/aether/src/": "sha256:adfae7d0714daa65096b8453ee2fa814253a8c13566af0dcb0b6bbfe0765785e"
   "frontend/kyber/src/": "sha256:eb8465356dcd45a14b32b4e991f7c388744d16f481f0bbd25ba3df6a26e05316"
   "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
 ---
@@ -519,6 +519,12 @@ Shown only when entity `kind` is `governance_org`, `exchange`, `yield_platform`,
 | **Execution** | Run count, success rate, spending to date, error rate, last active timestamp |
 | **Policy** | Authorized capabilities, spending limits per period, policy log |
 | **Economic** | Revenue and costs attributed to agent actions; PAYS/CONSUMES graph edges |
+
+The Aether Agent 360 route at `/agents/:agentId` also displays linked economic
+operation evidence from the tenant-scoped `x402_flows` projection. It shows the
+source-record roles and evidence relations for exact-matched intent,
+authorization, execution and settlement records; it does not duplicate amounts
+or replace source lifecycle status.
 
 ---
 

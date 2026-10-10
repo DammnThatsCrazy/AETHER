@@ -12,7 +12,7 @@ canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "services/backend/services/x402/": "sha256:25894ad21bdef715d9efd91c019cb90c66eeda7a0b3153f24f7812a3f3831795"
+  "services/backend/services/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -136,6 +136,17 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 - Edge IDs are deterministic: `{tenant_id}:{capture_id}:pays` — idempotent across replays
 - `X402LifecycleMapper` routes 14 canonical lifecycle events to `PaymentIntentRepository` / `SettlementEventRepository` with tenant isolation; settlement state is now: intent_created → submitted → settled|failed|timeout
 - **Partial gap resolved:** Multi-state settlement lifecycle (intent→submitted→settled/failed/timeout) implemented via lifecycle mapper; full distributed retry/dispute flows remain Phase 2
+
+Server-authoritative lifecycle ingestion now also projects agent PaymentIntent
+and SettlementEvent facts into the existing tenant-scoped graph types through
+`GraphMutationGateway`. Registered `PAYS_FOR` and `SETTLED_AS` edges preserve
+their source relationships; the authorization owner uses the existing
+`AUTHORIZED_BY` edge. Agent 360 includes exact-matched execution evidence, but
+no graph execution edge is projected because current records do not prove the
+causal semantics of `RESULTED_IN_EXECUTION`. The evidence-only operation
+contract and Agent 360 view reference source-owned records without creating a
+competing operation vertex or financial aggregate.
+SDK terminal claims remain observational and cannot drive these graph writes.
 
 ### 2.6 Can the graph represent entitlements/access grants?
 

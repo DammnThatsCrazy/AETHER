@@ -38,26 +38,42 @@ def commerce_ledger_operation_link(record: dict[str, Any]) -> EconomicOperationL
 
     refs: list[EconomicOperationRecordRef] = []
     order_ref_id: str | None = None
-    if isinstance(order, dict):
-        order_provider = _required(order.get("provider"), "order.provider")
-        order_id = _required(order.get("providerOrderId"), "order.providerOrderId")
-        order_ref_id = "order"
+    order_revisions = record.get("orderRevisions")
+    if not isinstance(order_revisions, list) or not order_revisions:
+        order_revisions = [order] if isinstance(order, dict) else []
+    for index, order_revision in enumerate(order_revisions):
+        if not isinstance(order_revision, dict):
+            continue
+        order_provider = _required(order_revision.get("provider"), "order.provider")
+        order_id = _required(
+            order_revision.get("providerOrderId"), "order.providerOrderId"
+        )
+        revision_id = _required(order_revision.get("revisionId"), "order.revisionId")
+        is_current_revision = (
+            isinstance(order, dict)
+            and order.get("revisionId") == revision_id
+            and order.get("providerOrderId") == order_id
+        )
+        link_ref_id = "order" if is_current_revision else f"order-revision-{index}"
+        if is_current_revision:
+            order_ref_id = link_ref_id
         refs.append(
             EconomicOperationRecordRef(
-                link_ref_id=order_ref_id,
+                link_ref_id=link_ref_id,
                 source_authority=order_provider,
                 record_type="commerce_order",
                 record_id=order_id,
                 role="order",
                 evidence=[
                     EvidenceRef(
-                        id=_required(order.get("revisionId"), "order.revisionId"),
+                        id=revision_id,
                         type="transaction",
                         source=order_provider,
                     )
                 ],
-                occurred_at=order.get("occurredAt"),
-                valid_at=order.get("sourceRevisionAt"),
+                occurred_at=order_revision.get("occurredAt"),
+                valid_at=order_revision.get("sourceRevisionAt"),
+                observed_at=order_revision.get("observedAt"),
             )
         )
 
@@ -146,16 +162,25 @@ def commerce_ledger_operation_link(record: dict[str, Any]) -> EconomicOperationL
 def agent_intent_operation_link(
     intent: dict[str, Any],
     settlement_events: list[dict[str, Any]],
+    authorization: Any | None = None,
+    execution: dict[str, Any] | None = None,
+    requirement: Any | None = None,
 ) -> EconomicOperationLink:
     """Project an agent intent and explicitly linked settlement events.
 
     ``SettlementEventRepository`` records carry the tenant and ``intent_id``;
-    only events matching both are included. Intent authorization/execution IDs
-    are intentionally omitted until their authoritative evidence records are
-    available to this projection.
+    only events matching both are included. Authorization and execution
+    references are included only when their authoritative tenant-scoped source
+    records are supplied by the caller.
     """
     tenant_id = _required(intent.get("tenant_id"), "intent.tenant_id")
     intent_id = _required(intent.get("intent_id"), "intent.intent_id")
+    raw_metadata = intent.get("metadata")
+    intent_metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+    authorization_ref = (
+        intent.get("authorization_id") or intent_metadata.get("authorization_id")
+    )
+    execution_ref = intent.get("execution_id") or intent_metadata.get("execution_id")
     intent_evidence = EvidenceRef(
         id=intent_id,
         type="transaction",
@@ -170,9 +195,110 @@ def agent_intent_operation_link(
             role="payment_intent",
             evidence=[intent_evidence],
             occurred_at=intent.get("occurred_at"),
+            observed_at=intent.get("created_at"),
         )
     ]
     relations: list[EconomicOperationRelation] = []
+    settlement_ref_ids = {
+        str(settlement.get("settlement_event_id") or ""): f"settlement-{index}"
+        for index, settlement in enumerate(settlement_events)
+        if settlement.get("tenant_id") == tenant_id
+        and settlement.get("intent_id") == intent_id
+        and settlement.get("agent_id") == intent.get("agent_id")
+        and settlement.get("settlement_event_id")
+    }
+
+    if authorization is not None and requirement is not None:
+        auth_data = (
+            authorization.model_dump(mode="json")
+            if hasattr(authorization, "model_dump")
+            else dict(authorization)
+        )
+        requirement_data = (
+            requirement.model_dump(mode="json")
+            if hasattr(requirement, "model_dump")
+            else dict(requirement)
+        )
+        auth_id = _required(
+            auth_data.get("authorization_id"), "authorization.authorization_id"
+        )
+        auth_matches = (
+            auth_data.get("tenant_id") == tenant_id
+            and auth_id == authorization_ref
+            and auth_data.get("challenge_id") == intent_id
+        )
+        requirement_matches = (
+            requirement_data.get("tenant_id") == tenant_id
+            and requirement_data.get("challenge_id") == intent_id
+            and requirement_data.get("requester_type") == "agent"
+            and requirement_data.get("requester_id") == intent.get("agent_id")
+        )
+        if auth_matches and requirement_matches:
+            requirement_evidence = EvidenceRef(
+                id=intent_id,
+                type="transaction",
+                source="x402_payment_requirements",
+            )
+            auth_evidence = EvidenceRef(
+                id=auth_id,
+                type="transaction",
+                source="x402_authorizations",
+            )
+            refs.append(
+                EconomicOperationRecordRef(
+                    link_ref_id="authorization",
+                    source_authority="x402_commerce_store",
+                    record_type="payment_authorization",
+                    record_id=auth_id,
+                    role="authorization",
+                    evidence=[auth_evidence],
+                    occurred_at=auth_data.get("authorized_at"),
+                )
+            )
+            relations.append(
+                EconomicOperationRelation(
+                    from_link_ref_id="intent",
+                    relation="authorized_by",
+                    to_link_ref_id="authorization",
+                    source_authority="x402_commerce_store",
+                    evidence=[intent_evidence, requirement_evidence, auth_evidence],
+                )
+            )
+
+    if execution is not None:
+        execution_id = _required(execution.get("execution_id"), "execution.execution_id")
+        if (
+            execution.get("tenant_id") == tenant_id
+            and execution.get("agent_id") == intent.get("agent_id")
+            and execution_id == execution_ref
+        ):
+            execution_evidence = EvidenceRef(
+                id=str(execution.get("outcome_event_id") or execution_id),
+                type="event",
+                source="agent_executions",
+            )
+            refs.append(
+                EconomicOperationRecordRef(
+                    link_ref_id="execution",
+                    source_authority="agent_execution_repository",
+                    record_type="agent_execution",
+                    record_id=execution_id,
+                    role="execution",
+                    evidence=[execution_evidence],
+                    occurred_at=execution.get("started_at"),
+                    observed_at=execution.get("created_at"),
+                )
+            )
+            relations.append(
+                EconomicOperationRelation(
+                    from_link_ref_id="intent",
+                    relation="executed_as",
+                    to_link_ref_id="execution",
+                    source_authority="payment_intents",
+                    evidence=[intent_evidence, execution_evidence],
+                )
+            )
+
     for index, settlement in enumerate(settlement_events):
         if (
             settlement.get("tenant_id") != tenant_id
@@ -185,12 +311,19 @@ def agent_intent_operation_link(
         )
         link_ref_id = f"settlement-{index}"
         provider = str(settlement.get("provider") or "settlement_events")
+        raw_settlement_metadata = settlement.get("metadata")
+        metadata = raw_settlement_metadata if isinstance(raw_settlement_metadata, dict) else {}
+        evidence_source = str(
+            metadata.get("source_service")
+            or metadata.get("source_kind")
+            or "settlement_events"
+        )
         settlement_evidence = EvidenceRef(
             id=_required(settlement.get("tx_hash"), "settlement.tx_hash")
             if settlement.get("tx_hash")
             else settlement_id,
             type="transaction",
-            source=provider,
+            source=evidence_source,
         )
         refs.append(
             EconomicOperationRecordRef(
@@ -201,17 +334,38 @@ def agent_intent_operation_link(
                 role="settlement",
                 evidence=[settlement_evidence],
                 occurred_at=settlement.get("occurred_at"),
+                observed_at=settlement.get("created_at"),
             )
         )
-        relations.append(
-            EconomicOperationRelation(
-                from_link_ref_id="intent",
-                relation="has_settlement_event",
-                to_link_ref_id=link_ref_id,
-                source_authority="settlement_events",
-                evidence=[intent_evidence, settlement_evidence],
+        reversal_ref = metadata.get("reverses_settlement_event_id")
+        reversed_link_ref = settlement_ref_ids.get(str(reversal_ref or ""))
+        if reversed_link_ref and str(reversal_ref) != settlement_id:
+            relations.append(
+                EconomicOperationRelation(
+                    from_link_ref_id=link_ref_id,
+                    relation="reverses",
+                    to_link_ref_id=reversed_link_ref,
+                    source_authority="settlement_events",
+                    evidence=[
+                        settlement_evidence,
+                        EvidenceRef(
+                            id=str(reversal_ref),
+                            type="transaction",
+                            source="settlement_events",
+                        ),
+                    ],
+                )
             )
-        )
+        else:
+            relations.append(
+                EconomicOperationRelation(
+                    from_link_ref_id="intent",
+                    relation="has_settlement_event",
+                    to_link_ref_id=link_ref_id,
+                    source_authority="settlement_events",
+                    evidence=[intent_evidence, settlement_evidence],
+                )
+            )
 
     digest = hashlib.sha256(
         f"{len(tenant_id)}:{tenant_id}{len(intent_id)}:{intent_id}".encode("utf-8")
@@ -222,7 +376,7 @@ def agent_intent_operation_link(
         operation_ref=intent_id,
         identity_basis="source_shared_identifier",
         identity_evidence=[intent_evidence],
-        state="linked" if relations else "partial",
+        state="linked" if len(refs) > 1 else "partial",
         records=refs,
         relations=relations,
     )
