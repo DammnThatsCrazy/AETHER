@@ -26,7 +26,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:7b01c5a3681fa11b83ea40fdadf36e3879f6bc740dffbf74d60f4da51317232a"
+  ".github/workflows/": "sha256:5c09be612dc7f64ca3cc0943fffdbfb2592ec7bf8522e99b8a1b6fd3c6b94aef"
   "cicd/aether-cicd/README.md": "sha256:4555c23d9f16d1d6882bc1f1d14b23e750d5b08c741ea02d16e504dd866d7e71"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -318,17 +318,28 @@ is authoritative wherever the two disagree.
 
 ## Reference model — branch strategy
 
-Aether uses GitFlow with six permanent branch types:
+Work moves through three persistent branches. They are never deleted (protect
+them and turn off automatic head-branch deletion), and each is a gate with its
+own environment:
 
-| Branch | Purpose |
-|--------|---------|
-| `main` | Production-ready code; only receives merges from `release/*` and `hotfix/*` |
-| `staging` | Pre-production integration; receives from `develop` for staging deploys |
-| `develop` | Integration branch for feature work |
-| `demo` | Stable demo environment; fed from `staging` on explicit promote |
-| `feature/*` | Short-lived feature branches off `develop` |
-| `hotfix/*` | Emergency patches off `main`; merged back to both `main` and `develop` |
-| `release/*` | Release preparation off `develop`; merged to `main` and `develop` on ship |
+| Gate | Branch | Web app | Backend |
+|------|--------|---------|---------|
+| Development | `Development` | Aether Development | shares the staging backend, data and wake/sleep |
+| Staging | `staging` | Aether Staging (`AETHER-staging-web`) | `deploy.yml` / `staging-lifecycle.yml` deliver from `staging` |
+| Production | `main` | Aether Production (`AETHER-production-web`) | promoted explicitly (`deploy.yml` dispatch with an approved immutable build) |
+
+Feature branches open PRs into `Development` (squash). `Development` is promoted
+to `staging`, and `staging` to `main`, with merge commits so that `main` is an
+ancestor of `staging` and `staging` of `Development`. Every merge to `main`
+deploys the production web app (`amplify-status-production.yml`); production
+backend delivery stays a deliberate, approved promotion. Push-time verification
+(`repo-consistency`, `repo-health`, the Aether and Kyber suites, functionality
+proof, infrastructure plan, production-equivalent CI) runs on all three branches
+so each gate has its own evidence.
+
+Staging authority gates (`deploy.yml`, `staging-lifecycle.yml`,
+`pilot-staging.yml`) require the source to be a merged `staging` SHA. The
+plan-role reconciliation workflow keeps its stricter merged-`main` requirement.
 
 ## Reference model — AWS accounts
 
@@ -499,7 +510,7 @@ and release preflights.
 
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
-| `deploy.yml` | push to `main`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; a staging dispatch may select `delivery_mode=build-only` to publish the verified immutable artifact without touching ECS, which breaks the asleep-staging/release circular dependency. The pilot full-rehearsal wrapper uses that build-only path when no approved release inputs were supplied. After wake, `staging-lifecycle.yml` dispatches this workflow with the exact source run ID and manifest checksum; this workflow accepts only a successful immutable build for the exact current main SHA, acquires that artifact without rebuilding, runs its packaged migration, rolls every lane-selected ECS service, publishes the matching SPA artifacts, and uploads deployment evidence. The rehearsal consumes that evidence and verifies the live image, migration readiness, and static-origin bytes without repeating delivery mutations. Because the durable pilot admin key is created only after the new task is live, build-only skips `STAGING_ADMIN_API_KEY` validation; live staging delivery and the full rehearsal still validate the key before mutation. Staging dispatch reuses the successful merged-main integration authority for the exact SHA (queried by check name, so the extra check runs that staging dispatches add to that SHA cannot push it off the first API page) and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum; build-only is rejected for production. Before staging mutation, the deploy job verifies the currently registered task definitions already match the requested full/pilot lane, then registers one immutable task-definition revision per declared service. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
+| `deploy.yml` | push to `staging`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; a staging dispatch may select `delivery_mode=build-only` to publish the verified immutable artifact without touching ECS, which breaks the asleep-staging/release circular dependency. The pilot full-rehearsal wrapper uses that build-only path when no approved release inputs were supplied. After wake, `staging-lifecycle.yml` dispatches this workflow with the exact source run ID and manifest checksum; this workflow accepts only a successful immutable build for the exact current main SHA, acquires that artifact without rebuilding, runs its packaged migration, rolls every lane-selected ECS service, publishes the matching SPA artifacts, and uploads deployment evidence. The rehearsal consumes that evidence and verifies the live image, migration readiness, and static-origin bytes without repeating delivery mutations. Because the durable pilot admin key is created only after the new task is live, build-only skips `STAGING_ADMIN_API_KEY` validation; live staging delivery and the full rehearsal still validate the key before mutation. Staging dispatch reuses the successful merged-main integration authority for the exact SHA (queried by check name, so the extra check runs that staging dispatches add to that SHA cannot push it off the first API page) and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum; build-only is rejected for production. Before staging mutation, the deploy job verifies the currently registered task definitions already match the requested full/pilot lane, then registers one immutable task-definition revision per declared service. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
 | `frontend-preview.yml` | `pull_request` (`ready_for_review` only); `workflow_dispatch` with a PR number; push to `main`; hourly schedule | Per-PR previews of the Aether app. When a same-repository pull request is marked ready for review, or when a team member dispatches it with a pull request number, it builds `frontend/aether` with the staging app's public `VITE_*` settings, deploys it to branch `pr-<N>` of the unconnected preview Amplify app, and links `https://pr-<N>.<preview domain>` on the pull request. Fork pull requests are never deployed (no OIDC token, and the head repository must be this one). Each push to `main` and an hourly sweep delete the previews of closed or merged pull requests. It assumes `vars.FRONTEND_PREVIEW_ROLE_ARN`, scoped by `config/staging_frontend_preview_iam_policy.yaml` to the preview app's `pr-*` branches; until that variable is set, every job skips with a notice. It finds the preview and staging apps by their Terraform names; the build settings come from the staging web app (`AETHER-staging-web`) or, before its first rollout, the product app it replaces. See [Preview Environments](PREVIEW-ENVIRONMENTS.md). | no |
 | `amplify-status-production.yml` | push to `main`; `workflow_dispatch` | Waits for the exact main integration authority, binds the production web app (`AETHER-production-web`, the former `aether-status` app) to the repository with the unified-site build (product under `/app`), production settings and routing rules, and deploys the exact main SHA to its two `PRODUCTION` branches: `main` (the Aether site) and `production-olympus` (the Olympus Labs site, `VITE_SITE=olympus`, no auto-build). It first checks the SHA is on `main` and force-pushes it to the `production-olympus` Git branch, a mirror only this workflow writes (the deploy job holds `contents: write` for that push). It verifies that `www` maps once to `production-olympus` and `aether`, `docs`, `status` and `app` each map once to `main`. Its catch-all rule is a `404-200` rewrite to `/index.html`, so prerendered page files (`/platform` → `platform.html`) are served as files. The workflow performs a read-only state assessment before binding: a clean, unbound historical app (no branches and no domain mappings) gets a one-time repository bootstrap and stops before release, while any remaining legacy branch or live mapping fails closed for reviewed administrative cleanup. The administrator then restores the canonical `status -> main` domain mapping and dispatches the workflow again. Repository-backed runs never delete branches or call `UpdateDomainAssociation`; they verify the AVAILABLE association maps each host exactly once to its branch, deploy the exact commit to both branches, and verify the live CNAME target. Because repository auto-build can already have an active job for the pushed SHA, the workflow reuses that exact-commit job only if it started after the bind step applied the build settings (a job reads its environment variables when it starts, so an earlier auto-build would ship the previous settings). It waits out every other active branch job and starts a release only when needed. Squarespace remains authoritative. | no |
 | `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the shared credential set exists (the ML image digest is additionally required only by production-scale and enterprise-isolated); ephemeral-class is deliberately excluded from remote-plan; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
@@ -781,7 +792,7 @@ pull requests.
 
 ## Hotfix procedure
 
-1. Branch off `main`: `git checkout -b hotfix/description main`
+1. Branch off `main`: `git checkout -b hotfix/description main`, then merge the fix back down into `staging` and `Development` so the branches stay in order.
 2. Apply the fix and increment the patch version.
 3. Open a PR targeting `main`. The adaptive `verification / disposition` gate
    runs universal-fast checks plus the affected suites/builds; the broad full

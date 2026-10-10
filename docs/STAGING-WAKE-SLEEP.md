@@ -47,11 +47,11 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:179a285bb3252c8c3b9d01e189afb910348c52a4356862abf2c277465fda034d"
-  ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
-  ".github/workflows/pilot-staging.yml": "sha256:d58b403e87f22b728f224b9951e51c83032a26d71c23c69809cb729ae573190e"
+  ".github/workflows/deploy.yml": "sha256:cbc74b8d95c4ce2df044c201398b83edeae466310b2b76383f699ecaedf0541e"
+  ".github/workflows/pilot-staging.yml": "sha256:04b2b19e2f75c5c7733ef59fd1aa08bf35fab3354970f44b9c0ab11ad0f6ad09"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:952bc0b2d3b975491df69df71000d04988fc6a087a3f98896f59052b19848247"
-  ".github/workflows/staging-lifecycle.yml": "sha256:91b3012ba7e1985bd5ea5731ee31d3f3ced51bb9b40807420d2b62f0a6077c8f"
+  ".github/workflows/staging-lifecycle.yml": "sha256:a807d47bae3d91fdc044f48701a420bc13b83291521ad914edcb70a062d8b4e2"
   ".github/workflows/staging-smoke.yml": "sha256:bf9c21599a780f84fac02ae320669dc8522b9a9b9e2f35a75aa7ff7bbcb57e68"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6db80a1a80262cc60923789c40b233659f495dd026d54585bf20c61db36ddcb2"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
@@ -67,7 +67,7 @@ source_hashes:
   "deploy/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
   "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:13bfa71ca795f6920b6e41eb844bfd6cecb6c6d34c326d69af2a0209eb52003f"
-  "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
+  "deploy/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:dc15fe4bf6544e97ca419063de64f895b92492a51ce379235cea79884307f87b"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
@@ -151,7 +151,7 @@ Kyber association without running or provisioning Kyber's deferred operator
 workflows.
 
 Before a rehearsal can create a wake plan, it binds the immutable release to
-the exact current `main` SHA and verifies the build run, manifest checksum,
+the exact current `staging` SHA and verifies the build run, manifest checksum,
 staging profile/lane, every packaged SPA/migration/configuration digest, and
 the explicit lane identity evidence. It then validates delivery and rehearsal
 credentials, assumes the exact `AetherStagingDeploy` role through the staging
@@ -290,7 +290,7 @@ reconcile path can re-encrypt it with an explicit
 the migration uses metadata-only Secrets Manager calls and does not read the
 secret value.
 
-The staging Amplify preflight is also race-safe for a merged `main` push. The
+The staging Amplify preflight is also race-safe for a merged `staging` push. The
 staging web app can auto-start its reviewed-commit build before
 the pilot wrapper reaches its provenance gate, so the gate waits for an active
 job only when its commit is exactly the reviewed SHA. It polls for up to 15
@@ -408,7 +408,7 @@ otherwise, in New York time:
 
 | When (Mon–Fri) | What it starts |
 |---|---|
-| 08:15 | `plan-wake` for the newest release built from `main`, then `apply-wake` with that run's reviewed `plan_run_id`/`plan_checksum` and `max_awake_hours=8`. Staging is ready at about 08:45. |
+| 08:15 | `plan-wake` for the newest release built from `staging`, then `apply-wake` with that run's reviewed `plan_run_id`/`plan_checksum` and `max_awake_hours=8`. Staging is ready at about 08:45. |
 | 17:00 | `apply-sleep` |
 
 It holds no AWS credentials and runs no Terraform. It dispatches the same
@@ -425,11 +425,11 @@ For a demo outside these hours, dispatch the workflow with
 
 **Holding the scheduled wake.** While the repository variable
 `STAGING_WAKE_HOLD` is `true`, the 08:15 timer skips its wake and reports a
-notice, so a new release on `main` is not deployed to staging by the schedule.
+notice, so a new release on `staging` is not deployed to staging by the schedule.
 The 17:00 sleep is never held, and a manual dispatch with `transition=wake` is
 never held. Unset the variable or set it to anything other than `true` to
 resume the weekday wake. Separately, `deploy.yml` only mutates ECS on a push to
-`main` when `STAGING_RUNTIME_ENABLED` is `true`; a push otherwise builds the
+`staging` when `STAGING_RUNTIME_ENABLED` is `true`; a push otherwise builds the
 release without rolling it out.
 
 ## The TTL guard
@@ -537,7 +537,7 @@ Steps, in order, with what each proves:
 
 1. **Exact-artifact delivery.** Before any wake plan is dispatched, the
    lifecycle has verified that the immutable source run is a successful build
-   for the exact current `main` SHA, and that its manifest profile/lane,
+   for the exact current `staging` SHA, and that its manifest profile/lane,
    checksum, packaged artifacts, and lane evidence match the selected run.
    After the reviewed wake applies and services are ready, it dispatches
    canonical `deploy.yml` with the same immutable source run ID and approved
@@ -562,7 +562,7 @@ Steps, in order, with what each proves:
    failed when `delivery_jobs` already existed; the current migration adopts
    a pre-existing table only after validating its required columns and creates
    missing indexes idempotently. Canonical delivery now rolls the exact
-   manifest-bound main image before this migration runs, so the rehearsal
+   manifest-bound staging image before this migration runs, so the rehearsal
    cannot migrate with the stale task-definition image that caused that
    failure.
 4. **Backend readiness.** The rehearsal checks `/v1/ready` to prove the

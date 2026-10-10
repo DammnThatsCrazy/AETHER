@@ -845,7 +845,7 @@ def test_staging_delivery_can_acquire_only_the_exact_main_release_without_rebuil
     assert "inputs.source_run_id != ''" in acquire["if"]
     assert "acquire-release" in build["needs"]
     assert "needs.acquire-release.result == 'skipped'" in build["if"]
-    assert 'test "$run_head_branch" = main' in identity["run"]
+    assert 'test "$run_head_branch" = staging' in identity["run"]
     assert 'test "$run_head_sha" = "$GITHUB_SHA"' in identity["run"]
     assert '"Build immutable release once"' in identity["run"]
     assert '"Deploy exact release"' in identity["run"]

@@ -943,6 +943,13 @@ locals {
 # pull request closes or merges. Previews call the staging API and staging
 # Auth0; they hold no data of their own.
 locals {
+  # Work is promoted Development -> staging -> main. The staging profile's web
+  # apps therefore build from `staging`; production web (which is bound by
+  # amplify-status-production.yml, not by this module) builds from `main`.
+  amplify_branch = var.amplify_branch != "" ? var.amplify_branch : (var.environment == "staging" ? "staging" : "main")
+}
+
+locals {
   enable_frontend_previews = var.enable_frontend_previews && local.enable_static_frontends && var.environment == "staging"
   frontend_preview_domains = [for app in aws_amplify_app.frontend_preview : app.default_domain]
 }
@@ -1065,7 +1072,7 @@ resource "aws_amplify_branch" "main" {
   for_each = local.amplify_apps
 
   app_id      = aws_amplify_app.frontend[each.key].id
-  branch_name = var.amplify_branch
+  branch_name = local.amplify_branch
 
   framework = "React"
   stage     = var.environment == "production" ? "PRODUCTION" : "DEVELOPMENT"
@@ -1118,7 +1125,7 @@ resource "aws_amplify_branch" "main" {
   )
 
   tags = {
-    Name        = "${each.value.name}-${var.amplify_branch}"
+    Name        = "${each.value.name}-${local.amplify_branch}"
     Environment = var.environment
   }
 }

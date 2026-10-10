@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - staging
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
@@ -130,9 +131,11 @@ jobs:
 
   main-integration:
     name: Main integration authority
-    # Main receives bounded cross-PR integration assurance. Full regression
-    # remains isolated to the schedule and explicit workflow dispatch.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The delivery branches (staging, main) receive bounded cross-PR integration
+    # assurance; staging delivery waits on this check for its exact SHA. The job
+    # keeps its original name because deploy.yml and the release controls poll for
+    # it. Full regression remains isolated to the schedule and explicit dispatch.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

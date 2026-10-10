@@ -1,8 +1,11 @@
 name: Immutable delivery
 
 on:
+  # Staging delivery follows the persistent `staging` branch. Work reaches it by
+  # promotion from Development. Production is never deployed by a push: it is an
+  # explicit dispatch of an approved immutable build (see `environment`).
   push:
-    branches: [main]
+    branches: [staging]
   workflow_dispatch:
     inputs:
       environment:
@@ -559,7 +562,7 @@ jobs:
           test -n "$RELEASE_MANIFEST_CHECKSUM" || { echo '::error::release_manifest_checksum is required'; exit 1; }
       - name: Verify source run identity before trusting its artifacts
         # Staging may acquire only a successful immutable build for the exact
-        # current main SHA; production still requires a previously successful
+        # current staging SHA; production still requires a previously successful
         # staging deployment. In both cases the source must be this workflow.
         env:
           GH_TOKEN: ${{ github.token }}
@@ -578,10 +581,10 @@ jobs:
             echo "::error::source run ${SOURCE_RUN_ID} concluded ${run_conclusion}, not success"; exit 1; }
           jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100")
           if [ "$TARGET_ENV" = staging ]; then
-            test "$run_head_branch" = main || {
-              echo "::error::staging source run ${SOURCE_RUN_ID} is not from main"; exit 1; }
+            test "$run_head_branch" = staging || {
+              echo "::error::staging source run ${SOURCE_RUN_ID} is not from staging"; exit 1; }
             test "$run_head_sha" = "$GITHUB_SHA" || {
-              echo "::error::staging source run ${SOURCE_RUN_ID} head ${run_head_sha} is not this exact main SHA ${GITHUB_SHA}"; exit 1; }
+              echo "::error::staging source run ${SOURCE_RUN_ID} head ${run_head_sha} is not this exact staging SHA ${GITHUB_SHA}"; exit 1; }
             build_ok=$(jq -r '[.jobs[] | select(.name == "Build immutable release once" and .conclusion == "success")] | length' <<<"$jobs_json")
             test "$build_ok" -ge 1 || {
               echo "::error::staging source run ${SOURCE_RUN_ID} has no successful immutable build job"; exit 1; }

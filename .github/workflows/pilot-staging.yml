@@ -101,11 +101,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Require merged-main authority
+      - name: Require merged-staging authority
         run: |
           set -euo pipefail
-          test "$GITHUB_REF_NAME" = main || {
-            echo '::error::pilot staging must be dispatched from merged main'; exit 1;
+          test "$GITHUB_REF_NAME" = staging || {
+            echo '::error::pilot staging must be dispatched from merged staging'; exit 1;
           }
       - uses: actions/setup-python@v5
         with:

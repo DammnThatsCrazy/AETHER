@@ -23,18 +23,18 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:3b2faac39d7159a6440fb3552df760bcb9aeebccf5d85c034f5c1fde04185348"
+  ".github/workflows/infrastructure.yml": "sha256:79363dfaa2103283b55b0e0afbe58f2b5fe70db35d3307f58985884f59546701"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
   "config/deployment_profiles.yaml": "sha256:83a99279ced11afe1a79475746ba61b480f3da788a2929b8c33d356f205eaac1"
   "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/DECOMMISSION.md": "sha256:f1199d32b3e315cd78dcc4beaf3589ac46fc69134ea7083ce5698c270ab2f377"
-  "deploy/aws/terraform/main.tf": "sha256:b587c84f2f9c697401aa41a71178866931fe593c19c121c5a1e4a4b5f330a66e"
+  "deploy/aws/terraform/main.tf": "sha256:7c318f5d6d2df786fa3d76b3f6dfb8f68ecfba5486d00d8215db24cd42bf223b"
   "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "deploy/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
   "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
   "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:9137ae8d1c65b753f85662dc8cc5dd5387cf17f31ba0965f2b9b317ffc2e6c9d"
-  "deploy/aws/terraform/variables.tf": "sha256:2a3b1e4347b7195b2e79166ccbb60aece3b243a0f881cad28dcac381c77b86b5"
+  "deploy/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
 ---
 
 # AWS Lean Production

@@ -52,9 +52,9 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:179a285bb3252c8c3b9d01e189afb910348c52a4356862abf2c277465fda034d"
-  ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
+  ".github/workflows/deploy.yml": "sha256:cbc74b8d95c4ce2df044c201398b83edeae466310b2b76383f699ecaedf0541e"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:91b3012ba7e1985bd5ea5731ee31d3f3ced51bb9b40807420d2b62f0a6077c8f"
+  ".github/workflows/staging-lifecycle.yml": "sha256:a807d47bae3d91fdc044f48701a420bc13b83291521ad914edcb70a062d8b4e2"
   ".github/workflows/staging-state-reconcile.yml": "sha256:d598a942c1f156576a9fbb78ac35efdda512be546c720b1ed4cecddf6fe70b8d"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6db80a1a80262cc60923789c40b233659f495dd026d54585bf20c61db36ddcb2"
   ".github/workflows/terraform-promote.yml": "sha256:d23796176033873909392343ead9831a79515a1e7e5c88f9466448b6a7f39d62"
@@ -73,7 +73,7 @@ source_hashes:
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/lead-intake/template.yaml": "sha256:2df847eeb6c89621e25d6b905e9fc18cc2071e3add4b1012905d9deeb814e7b0"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:67a99df2f5c50fd7dde37595acf3810b7052e2e2d4b963c44f61d3be89a1f8e3"
+  "deploy/aws/terraform/": "sha256:efd65d48db877d40ad26c12fa6a29d79aaf909eb82170f86e22d06d3c5a8551a"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:dc15fe4bf6544e97ca419063de64f895b92492a51ce379235cea79884307f87b"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -567,7 +567,8 @@ The public web surfaces are provisioned as five Amplify apps: `olympus-marketing
 (`www.*`), `aether-marketing` (`aether.*`), `docs` (`docs.*`), `aether-app`
 (`app.*`), and `status` (`status.*`). Each app builds
 from the monorepo root with an app-specific `appRoot` in `amplify.yml` and
-targets the main branch. Custom domain associations map each app to its
+builds from the profile's promotion branch (`staging` for the staging profile,
+`main` otherwise; see `amplify_branch`). Custom domain associations map each app to its
 canonical subdomain under `var.amplify_domain_name`. SSM parameters export
 Amplify app IDs and default domains for downstream consumption.
 
