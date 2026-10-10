@@ -40,9 +40,9 @@ name: Functionality Proof Spine (CI)
 on:
   pull_request:
     types: [ready_for_review]
-    branches: [main]
+    branches: [Development, staging, main]
   push:
-    branches: [main]
+    branches: [Development, staging, main]
   workflow_dispatch:
 
 permissions:

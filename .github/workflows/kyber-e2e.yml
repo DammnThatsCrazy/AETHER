@@ -10,7 +10,7 @@ name: Kyber E2E
 #   - Manual dispatch via the Actions tab.
 on:
   push:
-    branches: [main]
+    branches: [Development, staging, main]
     paths:
       - 'frontend/kyber/**'
       - 'packages/shared/**'

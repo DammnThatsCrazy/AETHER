@@ -35,7 +35,7 @@ on:
         default: pilot
         required: false
   push:
-    branches: [main]
+    branches: [Development, staging, main]
     paths:
       - 'deploy/aws/**'
       - '.github/workflows/infrastructure.yml'
