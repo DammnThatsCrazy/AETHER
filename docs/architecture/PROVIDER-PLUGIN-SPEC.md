@@ -19,14 +19,14 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:7fdbf307710d2b880455aa082ea08798976a928b1ef17eba98b80f0b88465eac"
-  "services/api/connectors/providers/shopify/": "sha256:bd8171dabd1af895c65cfd432611241b436a1255bd0e08f57b2fd8bd1bbbab7c"
+  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
+  "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
   "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
   "services/api/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
   "services/api/shared/integration_contracts/normalization.py": "sha256:65fe57419a11f1a4c6a14225a024af6d74425261a7b27296798142abca9d3aeb"
   "services/api/shared/integration_contracts/plugin.py": "sha256:b4cfa2d84da2a47a43f96564d55d4ad63fdad3027feb08e1747cc0788030988c"
-  "services/api/shared/integration_contracts/results.py": "sha256:cf30d4dbed85c68e809a87b0f256f93665d11844b5a983a0b83177d62800e51a"
+  "services/api/shared/integration_contracts/results.py": "sha256:446889d7588994d97cef2e06ba6cbdb0a2e2496a860a9661ef80770fdf89b003"
 ---
 
 # Provider Plugin Spec

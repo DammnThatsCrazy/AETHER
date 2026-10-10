@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
   "services/api/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
-  "services/api/repositories/repos.py": "sha256:026639dd5d10435354cb9a29fdf273ffbd9ed2bce544c4bac52fea859cb92844"
+  "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
 ---
 
 # PostgreSQL / Repository Subsystem

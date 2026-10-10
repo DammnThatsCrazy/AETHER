@@ -23,15 +23,15 @@ estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
   "services/api/connectors/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
-  "services/api/connectors/integrations/connectors/registry.py": "sha256:cbd62d89ef255fbe7097d9778d1adc2f728f7ff98bfade29a98d0620d86238f8"
-  "services/api/connectors/providers/amazon/": "sha256:775e061ac0c1344aa5ab76585467a510afc063ae6bec1d9fe2f58a32043c75dc"
-  "services/api/connectors/providers/ebay/": "sha256:36a36b484077e6e4d833ce553a7f80a1f3dab7fefa0b0fc79b143bf19405ec1f"
-  "services/api/connectors/providers/etsy/": "sha256:3f62869a8e5f1fbdc0e9e3f5d2037a1a2be6539f4b30584176e50f5c8fb7d2d1"
-  "services/api/connectors/providers/shopify/": "sha256:bd8171dabd1af895c65cfd432611241b436a1255bd0e08f57b2fd8bd1bbbab7c"
-  "services/api/connectors/providers/tiktok/": "sha256:081c927e0d3bd7ad9dc4610a79005b01949fca195fced6fa8ad7a933f1fb04b3"
-  "services/api/connectors/providers/walmart/": "sha256:aa3ea9aa3af1b60f59a3e789398e53a89a92c3719e8d32d8b52fc1b6dcb0c186"
-  "services/api/connectors/providers/woocommerce/": "sha256:2fa57e2e7e797edffe9083feb1462cefb2307de233feed57e60352719805fe4f"
-  "services/api/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
+  "services/api/connectors/integrations/connectors/registry.py": "sha256:6930e4008db461965dc9c6e0888b7ce204095872d3a7f038cf65eb75fa89fa17"
+  "services/api/connectors/providers/amazon/": "sha256:96d3a75625cab54ea0f8e395c3bfc9c72a15b6b98a8a8fd0cc9880e4413ee185"
+  "services/api/connectors/providers/ebay/": "sha256:7596f8b9c516ae389f508bc8bad7404839dc1297249bdf7da9280734dea0f5b2"
+  "services/api/connectors/providers/etsy/": "sha256:f4bc4633c778787060215a46a10a5333c9cd8a998d7028243f75f8ec22add3dc"
+  "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
+  "services/api/connectors/providers/tiktok/": "sha256:97db9e114887181397ef7e9e1cf1059fee2ed4f686108d12ee0a16db1cbece83"
+  "services/api/connectors/providers/walmart/": "sha256:09426499055d250d2ceea2a5ed8053dac7d8b68b5445bcfae1b8b2837d3879ed"
+  "services/api/connectors/providers/woocommerce/": "sha256:4f5785952f1ac662b61075d6da093985705be8aba7fce0f948c6e677c2294926"
+  "services/api/shared/integration_contracts/catalog.py": "sha256:76a954865823c7b8d0b9aac98787ed4ea1b0dbcbde1e99f6c58a07025971b63c"
   "services/api/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
 ---
 

@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:777c9c90f8d6a8fa703d31d3994224ba56af90e64d75f54cb1d302250acfa0e4"
+  "scripts/production_status.py": "sha256:6b6badca4741087308e025685c49157426436c57e76ea785b40b5774aaac221b"
 ---
 
 # AETHER × Kyber Release State

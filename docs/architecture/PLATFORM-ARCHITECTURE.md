@@ -21,13 +21,13 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:8dd397b5842e3d1f1110dd069466eb32e5e6b7c662ea11bb302a1ced4e9a5bff"
-  "services/api/config/settings.py": "sha256:f773fff062633f90208b21fcb23d2bab6e66a4457d725bd1e019cb6277707ef4"
-  "services/api/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
-  "services/api/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
-  "services/api/ingestion/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
-  "services/api/ingestion/ingestion/replay_routes.py": "sha256:44e6e89117a8cbbebe2cd45bac315e616e87b2cf823e82c5af3f503de44eea56"
-  "services/api/shared/events/events.py": "sha256:8b8f303710a2d213fdc13f6fed05a900f0d3f50ba698223b1073ddc33dc86ffd"
+  "packages/shared/": "sha256:625e112252988ff4307e93a82786685fb734459369728b8263978800e959c4c3"
+  "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
+  "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
+  "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
+  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/middleware/middleware.py": "sha256:4f984e6a2d3622df9652045c85dd323db990e11bfb4d8cf4af6f08aadfb935d6"
+  "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
 ---
 # Aether vNext — Architecture Guide
 

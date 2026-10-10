@@ -11,13 +11,13 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged.'}
   - {'commit': 'f63d631', 'reason': 'Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required.'}
 source_hashes:
-  "services/api/repositories/repos.py": "sha256:026639dd5d10435354cb9a29fdf273ffbd9ed2bce544c4bac52fea859cb92844"
-  "services/api/ingestion/events/routes.py": "sha256:1ede3d12a54845f33a149b13106b001a899c4b77c168c6d990023e836b59101f"
+  "services/api/governance/governance/routes.py": "sha256:ca87bb59cf8c61661b53d0294d6cee4f5093beb28ae32aca79cbea7a62b708f1"
+  "services/api/governance/investigation/routes.py": "sha256:10904ac8cea009ad26d205ccfdda5387f9ef4777ec55cfee734fe71ff7fbe37f"
+  "services/api/ingestion/events/routes.py": "sha256:7c5fb908eefa9ec1165637ef1cc9d432c3a97a0b0d8b0ca180c03ca64c3623f8"
   "services/api/ingestion/events/worker.py": "sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363"
-  "services/api/governance/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"
-  "services/api/governance/investigation/routes.py": "sha256:885be3f6f0b9592dab4ab7ac2603568a06d6ed7406554202da046ee7facd339a"
   "services/api/ingestion/realtime/channel_hub.py": "sha256:c53cb1a1270ba4d2f19dac8b3db0ebc09ab60118fa7f176afd3e5e45363399c9"
-  "services/api/shared/events/events.py": "sha256:8b8f303710a2d213fdc13f6fed05a900f0d3f50ba698223b1073ddc33dc86ffd"
+  "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
+  "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
 ---
 
 # Operational Intelligence — Stub vs. Production Audit

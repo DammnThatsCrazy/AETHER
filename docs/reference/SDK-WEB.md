@@ -11,11 +11,11 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
-  "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:c2c9b0df3d1a018a320981a2dfad443829583e10c399299711a6b76e5bc960ac"
   "packages/sdk/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
+  "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
+  "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
+  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
 ---
 
 # Aether Web SDK v0.1.0-alpha.0 — Integration Guide

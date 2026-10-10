@@ -11,13 +11,13 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
-  "services/api/actions/agent/economic.py": "sha256:2e2737ac4b21dcf54564ad43978d09d0133225a05a488414c7a28c16b1edf56a"
-  "services/api/value/commerce/": "sha256:44b69df3ae9cd06b6f7f95c36af52e5d512a9c8aad8ba1acbcfdad79580f4201"
-  "services/api/value/economic/economic360_contracts.py": "sha256:06de628e97ad446722d432701d4850e0b62cb89b38d1f74265d73181b6ae6ba2"
-  "services/api/value/economic/operation_linkage.py": "sha256:2b7ba5ea6d4f222b6d5aec8bc27e44835ff69f7ef33f496d49d00a4a6ba05dfa"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:2ff252e1d0b87e341769cdfe9054e3523bcfe8a2bf5f94798b5306625cbca5bf"
-  "services/api/identity/profile/agent.py": "sha256:453e149e6afd48cc27de997fdbfed6e0a7712d5ca9514c92e146a11b7546b129"
-  "services/api/value/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
+  "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
+  "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:43c2ddaea124e2f4996e24bc98fa81ecc134661ff071cc427d253c241df41e05"
+  "services/api/value/commerce/": "sha256:50e5a942d3debd0a6c5aef8fbdab3c56fb95f024dd1e129d457beda76d67b9a8"
+  "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
+  "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
+  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 

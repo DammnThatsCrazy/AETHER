@@ -8,13 +8,13 @@ status: stable
 since_version: 0.1.0
 source_files: [tests/unit/test_canonical_activity.py, tests/unit/test_journey_compiler_v2.py, tests/unit/test_journey_step_repo.py, tests/unit/test_silver_adapters.py, tests/integration/test_unified_journey_e2e.py, tests/security/test_journey_tenant_isolation.py, services/api/tests/unit/test_commerce_reconciliation_as_of.py]
 source_hashes:
-  "services/api/tests/unit/test_commerce_reconciliation_as_of.py": "sha256:dbbc5f7f5d08eaba9fc6c8e221694fa5252a0c6485926e4be5145c6e8953cbb2"
-  "tests/integration/test_unified_journey_e2e.py": "sha256:c1fdeed653886eb93bae110d595708fe0bbbc10c5573407ae740e5e6fa1b3ee2"
-  "tests/security/test_journey_tenant_isolation.py": "sha256:7d774efcd8f50960977fccefa378f35c4b58fd9194202e3943b9587947fb2ef1"
-  "tests/unit/test_canonical_activity.py": "sha256:f0958f74ab606cc90bad5d642a4faf4907b6472ae6644c1fbf68d790cbb43ec6"
-  "tests/unit/test_journey_compiler_v2.py": "sha256:220802be0a4f9f3c56d81d233d215f13f59a6900fafa8129e41b16b7e6f589f6"
-  "tests/unit/test_journey_step_repo.py": "sha256:598b94ad46bb90e743587dc5570b9183e19a1d068346d95c0082fea722b92819"
-  "tests/unit/test_silver_adapters.py": "sha256:a572b15894d55b3200b211eb16911b4052fac9b921969d84be2a0bd9e4590756"
+  "services/api/tests/unit/test_commerce_reconciliation_as_of.py": "sha256:ac6e7e8f1621d25df46801fb4a53a2fe28172b599cdee5ff7239350d9aef09ec"
+  "tests/integration/test_unified_journey_e2e.py": "sha256:62aaddd11e18835842b0dca68228f4fca4357a487e8c303a43b371d829d0c221"
+  "tests/security/test_journey_tenant_isolation.py": "sha256:d6dc20b7b16cfd586cee8114ea4baaf18a7e80b412e8fa0a0114432bd5edb902"
+  "tests/unit/test_canonical_activity.py": "sha256:10e6ad2a87181ef2fd944924016b6b020d114be530a28681e1aa12252fbf9360"
+  "tests/unit/test_journey_compiler_v2.py": "sha256:b7595457cfff4feaf3388d15f0aff45d240297138c4a39f497d2a9016791523f"
+  "tests/unit/test_journey_step_repo.py": "sha256:898f0ea4a696cff851766b359e279a26669aefd560227e23ad78f50e63f7620e"
+  "tests/unit/test_silver_adapters.py": "sha256:be537aeb2071937a5b6792c819e87313fd98b6126016d190b06a216dbc6fa63f"
 ---
 
 # Test Evidence — Unified Canonical Journey

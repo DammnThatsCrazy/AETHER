@@ -22,6 +22,19 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
+  "services/api/actions/": "sha256:cc762b94faad369af1d66f4f3e3ca0728a99860f2d5133a2522ecdcff2413a65"
+  "services/api/billing/": "sha256:dd694b14e890adec41191a54a035ad863d9c14a2183ba5e9888c64c018658e77"
+  "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
+  "services/api/governance/": "sha256:4979f1d68790c9673561b70d97ad0710960603cc7228fd429539160d64db4f1d"
+  "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
+  "services/api/identity/": "sha256:e983d0dc2e0dae26c6254cdc8bcff4fff0cb2a8d4e418eefdbbb37bd8103e253"
+  "services/api/ingestion/": "sha256:cced019a9d58c2b5da76ba38436b3d9b945ba9baefdeaf1676fd521977885d5f"
+  "services/api/intelligence/": "sha256:6f97e244ba5d4ab36c14ce27c6a207ba4e428b61173821f33d0e387411a7c737"
+  "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
+  "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
+  "services/api/tenancy/": "sha256:b3e28efab538d22bad132a158a150d7ac9872d05a14ce3bf858637dc58e18289"
+  "services/api/value/": "sha256:f152a470584719e80d5d398c8e166cf34754b85c4aaae12803a1e3630bfffbc8"
+  "services/api/workers/": "sha256:483bc638eae1311f235c3eae1407f868ab392de4d3788799cbda70c1e477a321"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 

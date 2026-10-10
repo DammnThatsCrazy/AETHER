@@ -11,8 +11,8 @@ canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/api/ingestion/ingestion/validation.py": "sha256:28bd145370097b8957730ba49e48cc618d590cc34ce5233a21eb2d36b4f38cc1"
-  "services/api/shared/events/events.py": "sha256:8b8f303710a2d213fdc13f6fed05a900f0d3f50ba698223b1073ddc33dc86ffd"
+  "services/api/ingestion/ingestion/validation.py": "sha256:3fcbc5123e0c7da5ebad64b7968a6a61095b541644d7c4c2d9eac9c230c210ab"
+  "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
 ---
 
 # Events / Kafka Subsystem

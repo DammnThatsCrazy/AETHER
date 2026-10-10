@@ -10,12 +10,12 @@ canonical_owner: sdk@aether
 source_files: [packages/shared/events.ts, packages/shared/consent.ts, packages/shared/sdk-version.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/core/event-queue.ts, packages/sdk/web/src/health/sdk-health-agent.ts, docs/reference/source-of-truth/PLATFORM_PARITY.md]
 source_hashes:
   "docs/reference/source-of-truth/PLATFORM_PARITY.md": "sha256:abb0660e91963d129b1f5d4a5b472c24bfb55001cd336952b709fdf9dbf13771"
-  "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:c2c9b0df3d1a018a320981a2dfad443829583e10c399299711a6b76e5bc960ac"
-  "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
-  "packages/sdk/web/src/core/event-queue.ts": "sha256:051105933fa4b11add2ab8d5548a18400bcb5f592b8b70dd42197363f885121d"
+  "packages/sdk/web/src/core/event-queue.ts": "sha256:839b25762ec01f03c4f5faa12c73fbfd31d41551dde584fa32c46b7305c6c8c1"
   "packages/sdk/web/src/health/sdk-health-agent.ts": "sha256:3cca664a5ca1b53a50bed15af670685bdc22840451a95d330dda572345348c20"
   "packages/sdk/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
+  "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
+  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
+  "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
 ---
 
 # Aether SDK Production Readiness Audit

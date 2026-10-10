@@ -9,16 +9,16 @@ since_version: 0.1.0
 source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, packages/shared/events.ts, packages/shared/agentic-observability.ts]
 source_hashes:
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
-  "packages/shared/events.ts": "sha256:c2c9b0df3d1a018a320981a2dfad443829583e10c399299711a6b76e5bc960ac"
-  "services/api/actions/agent/": "sha256:da45454cbc10f316b0aa43d182d3862fb37e14f1d3e2560a5143df9367299b84"
+  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
+  "services/api/actions/agent/": "sha256:c299158d9a24384bd4f66ba71c567435d43893a2c8fd5c64514232973c0da986"
+  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
+  "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
+  "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:43c2ddaea124e2f4996e24bc98fa81ecc134661ff071cc427d253c241df41e05"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:84b3f00bfa6e0c1b4df5405636163a2650edf8651b3b36823a7f2ba26ca7b77e"
-  "services/api/value/economic/economic360_contracts.py": "sha256:06de628e97ad446722d432701d4850e0b62cb89b38d1f74265d73181b6ae6ba2"
-  "services/api/value/economic/operation_linkage.py": "sha256:2b7ba5ea6d4f222b6d5aec8bc27e44835ff69f7ef33f496d49d00a4a6ba05dfa"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:2ff252e1d0b87e341769cdfe9054e3523bcfe8a2bf5f94798b5306625cbca5bf"
-  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:0dce52c51eac480aaf50b9f9dac2ebcf4c0c9ebe0e31a6b83f6ee1149c052dbf"
-  "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:47f274dc3c7b03af9678c5b16f57b8da3b1105faf2cd974c2cf8e1402c565828"
-  "services/api/identity/profile/agent.py": "sha256:453e149e6afd48cc27de997fdbfed6e0a7712d5ca9514c92e146a11b7546b129"
-  "services/api/value/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
+  "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
+  "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
+  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
 ---
 
 # Agentic Observability Audit

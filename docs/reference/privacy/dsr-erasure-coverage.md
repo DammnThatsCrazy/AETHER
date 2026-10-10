@@ -9,13 +9,13 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "scripts/release/check_dsr_coverage.py": "sha256:3e7278d5281df87983b69075aa0f701b476c4ec3ab7dca534e31011577b663a0"
-  "services/api/governance/consent/erasure_jobs.py": "sha256:41f5b813d426f3375efa3c3a2c87583db159fe54224fb3b419d83d91418ff38e"
-  "services/api/governance/consent/erasure_planes.py": "sha256:892ba3ee1de530952164ba43f3fa3f6a38ddb7e1094ddbb42cb2fc9a82f6f779"
-  "services/api/governance/dsr_propagation/models.py": "sha256:e5a4b959a05ac870afaffc328c19ef2be4155648f5fc6e452339a9d2200dd5c6"
+  "scripts/release/check_dsr_coverage.py": "sha256:2cca7e381e2c76b5e47e178828a8522cbc0794ffb45cdaad304d01e20f9ae1b4"
+  "services/api/governance/consent/erasure_jobs.py": "sha256:c181535d6b0a3fcc2bf5b7f3d248ca9970845285413c54ac75ba9433a5c6f86c"
+  "services/api/governance/consent/erasure_planes.py": "sha256:bfed1f9c260910ea99f8cd56025e949dd15561ebe87bca63dcc7a71c68fc6c36"
+  "services/api/governance/dsr_propagation/models.py": "sha256:c5afa46e9327a7d48ab0583836932ffb3e8f14ce3f420d7afe404ae5afe3450f"
   "services/api/graph/web3/registries.py": "sha256:0db03da90f411420455b868e1fb9861b98421937e3fb1901bd727ff32474e7ed"
-  "services/api/value/x402/commerce_store.py": "sha256:eb7dfaef1c1f02a31b4ce7d7699eab23ebb0f388de35c0220b1f6122be4aa4e2"
-  "services/api/shared/storage/lifecycle.py": "sha256:363902505a04df7228b46faad627ebe0cfc42bbbe8940122cf8ac42b6c93ac40"
+  "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
+  "services/api/value/x402/commerce_store.py": "sha256:e5bf2b6cffad86e8c21fe08669961e20b74838939bc3f8cc857572b30d0dd5d8"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store

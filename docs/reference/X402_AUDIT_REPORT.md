@@ -12,7 +12,7 @@ canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "services/api/value/x402/": "sha256:21a5d53edbb250a4ecb643a8d5190a9474d6e2dc1090a0c51e00f35c5e0cf4ce"
+  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
 ---
 # x402 Protocol Support Audit — Aether Repository
 

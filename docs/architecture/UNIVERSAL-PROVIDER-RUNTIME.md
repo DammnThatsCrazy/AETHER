@@ -19,14 +19,14 @@ canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "services/api/config/settings.py": "sha256:f773fff062633f90208b21fcb23d2bab6e66a4457d725bd1e019cb6277707ef4"
-  "services/api/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
-  "services/api/connectors/provider_runtime/": "sha256:7fdbf307710d2b880455aa082ea08798976a928b1ef17eba98b80f0b88465eac"
-  "services/api/connectors/providers/": "sha256:faa27d5485906802e22cc8c2289b047ff9094f3cf4f0eaed6e84d7ef0c3e5a3c"
-  "services/api/connectors/providers/shopify/": "sha256:bd8171dabd1af895c65cfd432611241b436a1255bd0e08f57b2fd8bd1bbbab7c"
-  "services/api/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
-  "services/api/shared/integration_contracts/": "sha256:e7cbea51644fe93fb204a21cf8e2ece11833a6aa7803b6fdf2dfc076988e5929"
-  "services/api/shared/rate_limit/feature_gate.py": "sha256:a93ea91270a1d0ca3d8664ddea29b75cbfca8c2180a239cb78a3a61d8facda96"
+  "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
+  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
+  "services/api/connectors/providers/": "sha256:50aef438d20a0f7f3e03428136faa636fb9bfeebc7f434b30b8735a047b22198"
+  "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
+  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
+  "services/api/shared/integration_contracts/": "sha256:54a124b718666f272272a9845ada4e8720cce2b81981b981db40a4e88674149e"
+  "services/api/shared/rate_limit/feature_gate.py": "sha256:52ba44636beee6c43f7dde3b200edfd562bbd70cfd2ed21163d33149b8bab29c"
 ---
 
 # Universal Provider Runtime
