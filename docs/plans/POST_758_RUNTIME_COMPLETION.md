@@ -84,6 +84,7 @@ design-partner evidence is distinguished from production readiness.
 | `4830938b` | Add the customer-facing Agent 360 route over the existing tenant API. |
 | `41a901d1` | Link Journey activity to Profile/Agent 360 and record five journey release gates. |
 | `bdc4f34c` | Retain wallet-only SDK identities as tenant/chain/VM-scoped unresolved source records. |
+| `4c32605a` | Verify stored SDK transactions against registered tenant-scoped EVM/SVM RPC and refresh Journey status from verified execution evidence. |
 
 ### Slice 0 — Capability and work-order traceability
 
@@ -160,12 +161,12 @@ at `/agents/:agentId`, linked from the observed-agent access panel. It consumes
 the existing tenant-scoped Agent 360 API and presents identity/authority,
 execution history, delegation, and payment/settlement evidence. The page keeps
 missing records explicit and states that executor completion is not settled
-value. Unified Journey steps now expose the verification field even when it is
-absent, link agent activity to Agent 360, and link the journey back to Profile
-360. The mobile verification API now refreshes canonical activity and Journey
-status after checking RPC evidence. The customer surface still needs to expose
-the verification record alongside observed activity, with settlement remaining
-separately sourced.
+value. Unified Journey steps expose their source evidence, link agent activity
+to Agent 360, and link the journey back to Profile 360. The mobile verification
+API refreshes canonical activity and Journey status after checking RPC evidence.
+The Journey Explorer now offers an explicit chain verification action and shows
+the RPC result from a separate Journey evidence-summary field. Payment
+settlement remains sourced from payment records.
 
 ### Slice 4 — Journey and release evidence
 

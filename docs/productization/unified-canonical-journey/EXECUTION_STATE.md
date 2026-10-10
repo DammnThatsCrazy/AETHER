@@ -10,9 +10,9 @@ source_files: [services/backend/services/measurement/engine/journey_compiler.py,
 source_hashes:
   "services/backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
   "services/backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
-  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:8727689ddad81c0b06586c538e445d1dafb0cb27ba1cd5e7b3a6c1b3c69ecf7b"
+  "services/backend/services/measurement/engine/journey_compiler.py": "sha256:98e99f5d910664206e0ba6f1e4c33fe9082eba588ec63e25e3c53e82e06905e1"
   "services/backend/services/measurement/repositories/activity_repo.py": "sha256:8ef772fda45e4364b7529e4c4f12724a88116fdc9f9021727c6e9cd91ae6ab06"
-  "services/backend/services/measurement/repositories/journey_step_repo.py": "sha256:b5ded116782e70397b8e3009c15ec8cd30490ecdf52bd7c580f0a81806804ec6"
+  "services/backend/services/measurement/repositories/journey_step_repo.py": "sha256:b6ae724521d9e8aea583549eba3db22d38ca1ef50bcc1be190e0be8eecda9d0d"
   "services/backend/services/measurement/silver_adapters.py": "sha256:1488ee3e52430dcc49ac07a280b54f1297434c8d79bfe1c084e4aa3fd862be92"
 ---
 
@@ -33,6 +33,7 @@ source_hashes:
 | 8 | Tests (unit + integration + security) | ✅ Complete |
 | 9 | Observability (metrics module) | ✅ Complete |
 | 10 | Documentation | ✅ Complete |
+| 11 | SDK transaction verification + Journey surface | ✅ Connected; provider-backed release evidence open |
 
 ## Key Deliverables
 
@@ -45,6 +46,8 @@ source_hashes:
 - **Profile360**: `GET /v1/profile/{user_id}/unified-journey`
 - **Aether UI**: `JourneyExplorerPage`, `JourneyTimeline`, `JourneyStepCard`, `JourneyFilterBar`, `JourneyTransitionBadge`
 - **Kyber UI**: Extended `JourneyExplorerPage` with steps panel, transitions panel, explain panel, rebuild action
+- **Web3 transaction verification**: SDK transaction references are matched to tenant-scoped Silver facts, checked against registered-chain read-only RPC, persisted as separate execution evidence, and reflected in Journey status/evidence summary; settlement is not inferred
+- **Kyber UI verification action**: Journey Explorer can request an RPC check for an observed Web3 step and labels chain execution independently from payment settlement
 - **Tests**: 6 core journey test files covering 57 collected scenarios, including tenant and typed-identity collision isolation
 - **Metrics**: `canonical_activities_ingested_total`, `journey_compile_duration_seconds`, `cross_rail_transition_count`, `web3_reorg_corrections_total`, `late_event_insertions_total`
 

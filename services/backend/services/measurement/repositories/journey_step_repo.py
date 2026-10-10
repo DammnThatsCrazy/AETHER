@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID, uuid4
@@ -259,6 +260,8 @@ class JourneyStepRepository:
         tenant_id: str,
         activity_id: str,
         status: str,
+        *,
+        transaction_verification: Optional[dict[str, Any]] = None,
     ) -> int:
         """Propagate activity status change to all steps referencing this activity."""
         pool = await self._pool()
@@ -270,6 +273,10 @@ class JourneyStepRepository:
                     if (step.get("tenant_id") == tenant_id
                             and str(step.get("activity_id")) == activity_id):
                         step["activity_status"] = status
+                        if transaction_verification:
+                            summary = dict(step.get("evidence_summary") or {})
+                            summary["transaction_verification"] = transaction_verification
+                            step["evidence_summary"] = summary
                         count += 1
             return count
 
@@ -277,10 +284,18 @@ class JourneyStepRepository:
             result = await conn.execute(
                 """
                 UPDATE journey_steps
-                SET activity_status = $3
+                SET activity_status = $3,
+                    evidence_summary = CASE
+                        WHEN $4::jsonb IS NULL THEN evidence_summary
+                        ELSE COALESCE(evidence_summary, '{}'::jsonb)
+                            || jsonb_build_object('transaction_verification', $4::jsonb)
+                    END
                 WHERE tenant_id = $1 AND activity_id = $2::uuid
                 """,
-                tenant_id, activity_id, status,
+                tenant_id,
+                activity_id,
+                status,
+                json.dumps(transaction_verification) if transaction_verification else None,
             )
         try:
             return int(result.split()[-1])

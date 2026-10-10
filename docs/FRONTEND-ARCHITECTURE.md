@@ -44,7 +44,7 @@ reviewed_source_commits:
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
   "frontend/aether/src/": "sha256:6f26f93c0b5c2f207227fe0911169d28dcec49f06c60a6a01dccc19fbec9dad6"
-  "frontend/kyber/src/": "sha256:93032585bc97ec9eadcb73298fbec30da3543d9a6dfa1eb51be8107b9cae22b5"
+  "frontend/kyber/src/": "sha256:eb8465356dcd45a14b32b4e991f7c388744d16f481f0bbd25ba3df6a26e05316"
   "frontend/shared/src/": "sha256:11bcb060b7f9c7c1aadace5af8ee96a4bf05e6ebf28b9db4e62f16ae89cb0d9f"
 ---
 
@@ -151,7 +151,7 @@ the root.
 - **ML Operations** — model fleet health, artifact status, and extraction defense monitoring
 - **Measurement Overview** — spend, attributed revenue, ROAS, data quality, and connector health across all tenants (`/measurement/overview`)
 - **Attribution Studio** — per-conversion attribution runs, model selection, backfill controls; reads `?campaign_id=` URL param to pre-filter runs and surface a "Compare in Campaign 360 →" contextual link (`/measurement/attribution`)
-- **Journey Explorer** — chronological journey timeline with attribution weight annotations (`/measurement/journeys`)
+- **Journey Explorer** — chronological journey timeline with attribution weight annotations and an explicit backend RPC verification action for stored Web3 transaction observations; it keeps execution verification separate from payment settlement (`/measurement/journeys`)
 - **Conversion Explorer** — canonical conversion detail, revenue history, attribution drill-down (`/measurement/conversions`)
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
 - **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel. Also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`) rendering typed projection section states for the campaign focus — never recomputing projection content

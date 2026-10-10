@@ -93,7 +93,7 @@ export function useJourneySteps(
     load(cursorRef.current, true);
   }, [data.hasMore, loading, load]);
 
-  return { data, loading, error, loadMore };
+  return { data, loading, error, loadMore, reload: () => load(null, false) };
 }
 
 export function useJourneyTransitions(journeyId: string | null) {

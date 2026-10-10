@@ -17,7 +17,7 @@ Endpoints (37 total):
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel, Field
@@ -72,7 +72,6 @@ transaction_verifier = SDKTransactionVerifier(observations=observation_repo)
 class SDKTransactionVerificationRequest(BaseModel):
     chain_id: str = Field(min_length=1, max_length=128)
     transaction_hash: str = Field(min_length=1, max_length=256)
-    vm_family: Literal["evm", "svm"]
 
 
 @router.post("/transactions/verify")
@@ -92,16 +91,13 @@ async def verify_sdk_transaction(request: Request, body: SDKTransactionVerificat
          "tx_hash": body.transaction_hash},
         limit=100,
     )
-    sdk_types = {
-        "transaction", "transaction_submitted", "transaction_pending_observed",
-        "transaction_confirmed_observed", "transaction_reverted_observed",
-    }
+    sdk_types = {"transaction"}
     source = next((row for row in rows if row.get("source_event_type") in sdk_types), None)
     if source is None:
         raise HTTPException(status_code=404, detail="SDK transaction observation not found")
     tenant_chains = chain_reg.for_tenant(tenant_id)
     registered_chain = await tenant_chains.get_by_chain_id(body.chain_id)
-    if registered_chain is None and body.vm_family == "evm":
+    if registered_chain is None:
         numeric_chain = body.chain_id.lower()
         if numeric_chain.startswith("eip155:"):
             numeric_chain = numeric_chain.split(":", 1)[1]
@@ -114,24 +110,35 @@ async def verify_sdk_transaction(request: Request, body: SDKTransactionVerificat
     if registered_chain is None:
         raise HTTPException(status_code=404, detail="Chain is not registered for this tenant")
     registered_vm = str(registered_chain.get("vm_family") or "").lower()
-    if registered_vm and registered_vm != body.vm_family:
-        raise HTTPException(status_code=422, detail="vm_family does not match the registered chain")
+    if registered_vm not in {"evm", "svm"}:
+        raise HTTPException(status_code=422, detail="Registered chain does not support transaction verification")
 
     result = await transaction_verifier.verify(
         tenant_id=tenant_id,
         chain_id=str(registered_chain.get("chain_id") or body.chain_id),
         transaction_hash=body.transaction_hash,
-        vm_family=body.vm_family,
+        vm_family=registered_vm,
         source_observation=source,
     )
     journey_versions_rebuilt = 0
-    if result.status in {"pending", "confirmed", "finalized", "failed"}:
+    if result.status != "mismatch":
         # Reuse the existing canonical activity/journey lifecycle path only
         # after RPC verification; the client SDK cannot self-assert this status.
         from services.measurement.routes.journeys import _compiler
 
         refreshed = await _compiler.rebuild_affected_by_web3_status_change(
-            tenant_id, body.transaction_hash, result.status,
+            tenant_id,
+            body.transaction_hash,
+            result.status,
+            transaction_verification={
+                "status": result.status,
+                "execution_status": result.execution_status,
+                "confirmations": result.confirmations,
+                "verification_record_id": SDKTransactionVerifier.record_id(
+                    tenant_id, result.chain_id, result.transaction_hash,
+                ),
+                "settlement_status": "not_assessed",
+            },
         )
         journey_versions_rebuilt = len(refreshed)
     return {

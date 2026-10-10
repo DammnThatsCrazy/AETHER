@@ -163,11 +163,15 @@ class JourneyCompiler:
         new_status: str,
         *,
         chain_confirmed_at: Optional[datetime] = None,
+        transaction_verification: Optional[dict[str, Any]] = None,
     ) -> list[dict[str, Any]]:
         """Update activity status for a tx_hash and rebuild affected profiles."""
         # Update canonical_activity rows
         affected_activity_ids = await self._activity_repo.update_status_by_tx_hash(
-            tenant_id, tx_hash, new_status, chain_confirmed_at=chain_confirmed_at,
+            tenant_id,
+            tx_hash,
+            new_status,
+            chain_confirmed_at=chain_confirmed_at,
         )
 
         if not affected_activity_ids:
@@ -175,7 +179,12 @@ class JourneyCompiler:
 
         # Propagate status to existing journey_steps (no rebuild needed for status-only change)
         for aid in affected_activity_ids:
-            await self._step_repo.update_status_by_activity(tenant_id, aid, new_status)
+            await self._step_repo.update_status_by_activity(
+                tenant_id,
+                aid,
+                new_status,
+                transaction_verification=transaction_verification,
+            )
 
         # If the status change affects finality (reorg/confirmation), trigger a full rebuild
         # to ensure conversion and attribution records are updated correctly
@@ -191,6 +200,16 @@ class JourneyCompiler:
                     tenant_id, pid, trigger_reason=f"web3_status_{new_status}",
                 )
                 results.append(v)
+            # Newly compiled versions are created after the initial status
+            # propagation, so attach the same server-authored RPC evidence to
+            # every current and historical step for the matched activity.
+            for aid in affected_activity_ids:
+                await self._step_repo.update_status_by_activity(
+                    tenant_id,
+                    aid,
+                    new_status,
+                    transaction_verification=transaction_verification,
+                )
             return results
 
         return []
@@ -599,6 +618,7 @@ def _build_steps(
             "evidence_summary": {
                 "source_event_id": activity.get("source_event_id"),
                 "silver_table": activity.get("silver_table"),
+                "transaction_hash": activity.get("tx_hash"),
                 "touchpoint_id": (
                     str(activity.get("silver_fact_id"))
                     if activity.get("silver_table")

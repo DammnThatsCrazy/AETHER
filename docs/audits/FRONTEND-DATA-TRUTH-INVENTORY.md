@@ -18,7 +18,7 @@ reviewed_source_commits:
 source_hashes:
   "frontend/aether/": "sha256:cef729f7e5e5495572c1b8e0d9771bcc5ccc66b8f58bec5fa5ae3602b5c416ac"
   "frontend/demo/": "sha256:3221e3fe4bac2b31ec70ad8d3d4ba11e7a4dd24912ff18f6af560b71cb12a621"
-  "frontend/kyber/": "sha256:121aad604f9addae255c88cd68bc7700c0e1edea76be2f7f6140124c859f7b82"
+  "frontend/kyber/": "sha256:5b89481813c6d7c07d0ad02534c6f8f8cf27d47de3e0adb4848ebd7d15456689"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:d32fbf2cfaccccb7420cf6ba0ef4e25030a27dc43fc03d50a04e168db8c0cc92"
   "scripts/validate_frontend_data_truth.py": "sha256:2447697a49724cf7ddd297f95f2cf6554761993cebe07b30c721c7af9c22ec7a"
 ---
@@ -41,6 +41,11 @@ states the classification and release interpretation.
 - Browser MSW startup paths and public workers: 0.
 - Remaining fixtures are test-only and live under the validator's narrow test
   path allowlist.
+
+The Kyber Journey Explorer's Web3 verification action calls the tenant-scoped
+backend RPC verifier and renders its returned status. It does not infer chain
+execution from local UI state or infer payment settlement from an execution
+receipt.
 
 The generated artifact distinguishes:
 
