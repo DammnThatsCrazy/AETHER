@@ -12,7 +12,7 @@ estimated_read_minutes: 4
 
 # Demo App
 
-`@aether/demo` (`frontend/demo`, port 5177) is the backend seed-status and
+`@aether/demo` (`apps/demo`, port 5177) is the backend seed-status and
 provenance console for the same persisted records consumed by Aether and Kyber.
 It is built with Vite, React 19, and `@aether/ui`, but it is not a
 fixture-backed substitute for the product.
@@ -29,7 +29,7 @@ tenant and Kyber operator applications that render the operational records.
 ## Run
 
 ```bash
-cp frontend/demo/.env.example frontend/demo/.env
+cp apps/demo/.env.example apps/demo/.env
 npm run dev --workspace=@aether/demo     # http://localhost:5177
 npm run test --workspace=@aether/demo
 npm run build --workspace=@aether/demo

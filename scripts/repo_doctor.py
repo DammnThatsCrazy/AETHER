@@ -979,7 +979,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Temporal integrity static gates (naive datetimes, ad-hoc frontend formatting, CH DateTime64, single Alembic head)",
         results=results,
         stop_on_failure=stop,
-        remediation="use shared/temporal (Py) or frontend/shared/src/time (TS); shrink scripts/allowlists/* only",
+        remediation="use shared/temporal (Py) or apps/shared/src/time (TS); shrink scripts/allowlists/* only",
     )
     run(
         [sys.executable, "scripts/validate_computation_substrate.py"],
@@ -1084,7 +1084,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Frontend value-display guardrail (canonical ValueDisplay/formatUSD)",
         results=results,
         stop_on_failure=stop,
-        remediation="render financial values via frontend/shared ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
+        remediation="render financial values via apps/shared ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
     )
     run(
         [sys.executable, "scripts/validate_cross360_monetary_fx.py"],

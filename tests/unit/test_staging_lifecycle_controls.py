@@ -511,12 +511,12 @@ def test_rehearsal_release_must_match_this_main_sha_before_terraform_dispatch():
     assert resolve["env"]["WORKFLOW_SHA"] == "${{ github.sha }}"
     assert resolve["env"]["WORKFLOW_BRANCH"] == "${{ github.ref_name }}"
     assert resolve["env"]["DEPLOYMENT_LANE"] == "${{ needs.select-profile.outputs.deployment_lane }}"
-    assert 'test "$WORKFLOW_BRANCH" = main' in script
+    assert 'test "$WORKFLOW_BRANCH" = staging' in script
     assert 'test "$INTENDED_RELEASE_SHA" = "$WORKFLOW_SHA"' in script
     assert 'test -n "$RELEASE_RUN_ID"' in script
     assert 'test -n "$RELEASE_MANIFEST_CHECKSUM"' in script
     assert 'run_head_branch="$(jq -r \'.head_branch\'' in script
-    assert 'test "$run_head_branch" = main && test "$run_head_sha" = "$WORKFLOW_SHA"' in script
+    assert 'test "$run_head_branch" = staging && test "$run_head_sha" = "$WORKFLOW_SHA"' in script
     assert 'manifest.get("profile") != "staging"' in script
     assert 'manifest.get("deployment_lane", "full")' in script
     assert 'actual_lane != expected_lane' in script

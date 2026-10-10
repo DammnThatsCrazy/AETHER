@@ -24,8 +24,8 @@ optional is required for local startup unless its feature flag is enabled.
 | `.env.local.example` | Local dev: live FastAPI backend, in-memory repositories, no browser mocks |
 | `.env.staging.example` | Staging: real DB/cache/queue + required secrets |
 | `.env.production.example` | Production: required secrets + secret-manager refs, flags safe |
-| `frontend/aether/.env.example` | Aether `VITE_*` (`VITE_AETHER_ENV`, `VITE_API_BASE_URL`, Auth0/OIDC, Stripe publishable) |
-| `frontend/kyber/.env.example` | Kyber `VITE_*` (`VITE_KYBER_ENV`, `VITE_API_BASE_URL`, feature flags) |
+| `apps/aether/.env.example` | Aether `VITE_*` (`VITE_AETHER_ENV`, `VITE_API_BASE_URL`, Auth0/OIDC, Stripe publishable) |
+| `apps/kyber/.env.example` | Kyber `VITE_*` (`VITE_KYBER_ENV`, `VITE_API_BASE_URL`, feature flags) |
 
 ## Required by environment
 

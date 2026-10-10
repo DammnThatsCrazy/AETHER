@@ -47,7 +47,7 @@ def test_selects_only_updates_that_change_build_inputs() -> None:
             _change("aws_route53_record", {"id": "r"}, {"id": "r2"}),
         ]
     }
-    assert rel.changed_branches(plan) == [("app1", "main"), ("app2", "main")]
+    assert rel.changed_branches(plan) == [("app1", "staging"), ("app2", "main")]  # app-level updates default to the staging branch; branch updates keep theirs
 
 
 class FakeAmplify:

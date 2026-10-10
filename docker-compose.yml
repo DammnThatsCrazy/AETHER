@@ -402,10 +402,10 @@ services:
   kyber:
     build:
       # Build context is the repo root (npm workspaces monorepo); the app lives
-      # at frontend/kyber. Cloud equivalent: the inline `static_frontends.kyber`
+      # at apps/kyber. Cloud equivalent: the inline `static_frontends.kyber`
       # S3+CloudFront SPA in deploy/aws/terraform/main.tf.
       context: .
-      dockerfile: frontend/kyber/Dockerfile
+      dockerfile: apps/kyber/Dockerfile
     profiles: ["demo", "frontends", "full"]
     # Host port 8081 avoids collision with ml-serving on 8080.
     # Container still listens on 8080 internally (nginx default).
@@ -427,9 +427,9 @@ services:
   aether-frontend:
     build:
       context: .
-      dockerfile: frontend/kyber/Dockerfile
+      dockerfile: apps/kyber/Dockerfile
       args:
-        # Reuses the kyber image recipe; a dedicated frontend/aether/Dockerfile
+        # Reuses the kyber image recipe; a dedicated apps/aether/Dockerfile
         # can replace this once the aether SPA ships its own nginx image.
         VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000}"
     profiles: ["frontends", "full"]

@@ -29,7 +29,7 @@ def test_staging_source_run_is_the_successful_exact_main_sha_build():
     assert "test \"$run_path\" = '.github/workflows/deploy.yml'" in script
     assert "test \"$run_conclusion\" = 'success'" in script
     assert 'if [ "$TARGET_ENV" = staging ]; then' in script
-    assert 'test "$run_head_branch" = main' in script
+    assert 'test "$run_head_branch" = staging' in script
     assert 'test "$run_head_sha" = "$GITHUB_SHA"' in script
     assert (
         'select(.name == "Build immutable release once" and .conclusion == "success")'

@@ -7,20 +7,20 @@ audience: [dev-senior, architect, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - frontend/aether/
-  - frontend/kyber/
-  - frontend/demo/
+  - apps/aether/
+  - apps/kyber/
+  - apps/demo/
   - scripts/validate_frontend_data_truth.py
   - scripts/docs_extract/extract_frontend_data_truth_inventory.py
 reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the Aether frontend route/history context fixes, explicit shared ESM imports, and Data Exchange E2E graph-scope fixture. Runtime data-truth counts and the test-only fixture classification remain unchanged, so no body update was required."
 source_hashes:
-  "frontend/aether/": "sha256:7f4e9cb93671295f818cacee83b55c08dbab67d5dc7645f2fb5db963fbbfcd11"
-  "frontend/demo/": "sha256:3221e3fe4bac2b31ec70ad8d3d4ba11e7a4dd24912ff18f6af560b71cb12a621"
-  "frontend/kyber/": "sha256:121aad604f9addae255c88cd68bc7700c0e1edea76be2f7f6140124c859f7b82"
-  "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:d32fbf2cfaccccb7420cf6ba0ef4e25030a27dc43fc03d50a04e168db8c0cc92"
-  "scripts/validate_frontend_data_truth.py": "sha256:2447697a49724cf7ddd297f95f2cf6554761993cebe07b30c721c7af9c22ec7a"
+  "apps/aether/": "sha256:0d515be41d2c676baee02e217cebf600d51eef2682bc0a2f4a31ab2af7f79d89"
+  "apps/demo/": "sha256:4a7a730c990d51e5a3bf4dca8894d8f63c0abc923036abc0f15b5e137bde2135"
+  "apps/kyber/": "sha256:595fa4da0bbb46b6d711c8955f45b22feee664ac4b791db4fad5436594f84d8a"
+  "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"
+  "scripts/validate_frontend_data_truth.py": "sha256:b3db593b8648f2cdfa222b4812b447bf292bd9e5657ff57eea4058b6c7a0cd50"
 ---
 
 # Frontend Data Truth Inventory

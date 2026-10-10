@@ -1,8 +1,11 @@
 name: Immutable delivery
 
 on:
+  # Staging delivery follows the persistent `staging` branch. Work reaches it by
+  # promotion from Development. Production is never deployed by a push: it is an
+  # explicit dispatch of an approved immutable build (see `environment`).
   push:
-    branches: [main]
+    branches: [staging]
   workflow_dispatch:
     inputs:
       environment:
@@ -66,6 +69,21 @@ jobs:
     outputs:
       armed: ${{ steps.check.outputs.armed }}
     steps:
+      - name: Require the promotion branch for this target
+        # Staging is delivered only from the persistent staging branch and
+        # production only from main, whichever way the run started (a manual
+        # dispatch cannot select a different ref's authority).
+        env:
+          TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+        run: |
+          set -euo pipefail
+          case "$TARGET_ENV" in
+            staging) want=staging ;;
+            production) want=main ;;
+            *) echo "::error::unknown delivery target ${TARGET_ENV}"; exit 1 ;;
+          esac
+          test "$GITHUB_REF_NAME" = "$want" || {
+            echo "::error::${TARGET_ENV} delivery must run from ${want}, not ${GITHUB_REF_NAME}"; exit 1; }
       - name: Detect whether the deploy role is configured
         id: check
         env:
@@ -450,7 +468,7 @@ jobs:
             VITE_AETHER_ENDPOINT="$AETHER_API_BASE_URL" \
             VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
-            npm --workspace frontend/aether run build
+            npm --workspace apps/aether run build
           if [ "$DEPLOYMENT_LANE" = full ]; then
             VITE_KYBER_ENV=staging \
               VITE_AETHER_ENDPOINT="$KYBER_API_BASE_URL" \
@@ -461,15 +479,15 @@ jobs:
               VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID" \
               VITE_API_BASE_URL="$KYBER_API_BASE_URL" \
               VITE_WS_BASE_URL="$KYBER_WS_BASE_URL" \
-              npm --workspace frontend/kyber run build
+              npm --workspace apps/kyber run build
           else
             rm -rf frontend/kyber-pilot-deferred
             mkdir -p frontend/kyber-pilot-deferred
             printf '%s\n' 'Kyber workforce identity is intentionally deferred in the lean AWS pilot lane.' > frontend/kyber-pilot-deferred/README.txt
           fi
-          tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C frontend/aether/dist .
+          tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C apps/aether/dist .
           if [ "$DEPLOYMENT_LANE" = full ]; then
-            tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber/dist .
+            tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C apps/kyber/dist .
           else
             tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber-pilot-deferred .
           fi
@@ -559,7 +577,7 @@ jobs:
           test -n "$RELEASE_MANIFEST_CHECKSUM" || { echo '::error::release_manifest_checksum is required'; exit 1; }
       - name: Verify source run identity before trusting its artifacts
         # Staging may acquire only a successful immutable build for the exact
-        # current main SHA; production still requires a previously successful
+        # current staging SHA; production still requires a previously successful
         # staging deployment. In both cases the source must be this workflow.
         env:
           GH_TOKEN: ${{ github.token }}
@@ -578,10 +596,10 @@ jobs:
             echo "::error::source run ${SOURCE_RUN_ID} concluded ${run_conclusion}, not success"; exit 1; }
           jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100")
           if [ "$TARGET_ENV" = staging ]; then
-            test "$run_head_branch" = main || {
-              echo "::error::staging source run ${SOURCE_RUN_ID} is not from main"; exit 1; }
+            test "$run_head_branch" = staging || {
+              echo "::error::staging source run ${SOURCE_RUN_ID} is not from staging"; exit 1; }
             test "$run_head_sha" = "$GITHUB_SHA" || {
-              echo "::error::staging source run ${SOURCE_RUN_ID} head ${run_head_sha} is not this exact main SHA ${GITHUB_SHA}"; exit 1; }
+              echo "::error::staging source run ${SOURCE_RUN_ID} head ${run_head_sha} is not this exact staging SHA ${GITHUB_SHA}"; exit 1; }
             build_ok=$(jq -r '[.jobs[] | select(.name == "Build immutable release once" and .conclusion == "success")] | length' <<<"$jobs_json")
             test "$build_ok" -ge 1 || {
               echo "::error::staging source run ${SOURCE_RUN_ID} has no successful immutable build job"; exit 1; }
@@ -589,6 +607,13 @@ jobs:
             staging_ok=$(jq -r '[.jobs[] | select(.name == "Deploy exact release" and .conclusion == "success")] | length' <<<"$jobs_json")
             test "$staging_ok" -ge 1 || {
               echo "::error::production source run ${SOURCE_RUN_ID} has no successful staging deploy job"; exit 1; }
+            # Only staging code that has been promoted into main may go to
+            # production: the staged commit must be contained in this main revision.
+            relation=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${run_head_sha}...${GITHUB_SHA}" --jq .status)
+            case "$relation" in
+              identical|ahead) ;;
+              *) echo "::error::production source run ${SOURCE_RUN_ID} commit ${run_head_sha} is not contained in main ${GITHUB_SHA} (${relation}); promote staging to main first"; exit 1 ;;
+            esac
           fi
       - uses: actions/download-artifact@v4
         if: inputs.environment == 'production'

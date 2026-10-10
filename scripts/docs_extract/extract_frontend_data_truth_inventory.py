@@ -27,7 +27,7 @@ def _is_test_path(path: Path) -> bool:
 def _retained_test_fixture_paths() -> list[str]:
     paths: list[str] = []
     for app in ("aether", "kyber", "demo"):
-        root = ROOT / "frontend" / app
+        root = ROOT / "apps" / app
         if not root.is_dir():
             continue
         for path in root.rglob("*"):
@@ -71,7 +71,7 @@ def main() -> int:
     for relative in _retained_test_fixture_paths():
         if relative in known_paths:
             continue
-        app = relative.split("/")[1] if relative.startswith("frontend/") else "shared"
+        app = relative.split("/")[1] if relative.startswith("apps/") else "shared"
         historical.append(
             {
                 "path": relative,

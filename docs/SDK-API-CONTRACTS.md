@@ -221,7 +221,7 @@ prefer first-class `journey_*` event types so validators do not drop `journey_re
 ## Kyber Commerce Domain Schemas (v8.9.0)
 
 The Kyber operator UI exposes modular Zod schema modules mirroring the x402 control
-plane wire format. All schemas live in `frontend/kyber/src/lib/schemas/` and
+plane wire format. All schemas live in `apps/kyber/src/lib/schemas/` and
 re-export from the consolidated `commerce.ts` module for tree-shaking:
 
 | Module | Key exports |

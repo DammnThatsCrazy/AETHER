@@ -12,7 +12,7 @@ canonical_owner: frontend@aether
 # Typography and spacing
 
 Use the metadata in `packages/brand/src/tokens/typography.ts` and the existing
-shared CSS variables in `frontend/shared/src/styles/tokens.css`.
+shared CSS variables in `apps/shared/src/styles/tokens.css`.
 
 | Use | Token rule |
 | --- | --- |

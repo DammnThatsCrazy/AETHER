@@ -1,6 +1,6 @@
 version: 1
 applications:
-  - appRoot: frontend/olympus-marketing
+  - appRoot: apps/olympus-marketing
     frontend:
       buildPath: /
       phases:
@@ -10,15 +10,15 @@ applications:
             - npm run build --workspace=packages/shared
         build:
           commands:
-            - npm run build --workspace=frontend/olympus-marketing
+            - npm run build --workspace=apps/olympus-marketing
       artifacts:
-        baseDirectory: frontend/olympus-marketing/dist
+        baseDirectory: apps/olympus-marketing/dist
         files:
           - '**/*'
       cache:
         paths:
           - node_modules/**/*
-  - appRoot: frontend/aether-marketing
+  - appRoot: apps/aether-marketing
     frontend:
       buildPath: /
       phases:
@@ -28,15 +28,15 @@ applications:
             - npm run build --workspace=packages/shared
         build:
           commands:
-            - npm run build --workspace=frontend/aether-marketing
+            - npm run build --workspace=apps/aether-marketing
       artifacts:
-        baseDirectory: frontend/aether-marketing/dist
+        baseDirectory: apps/aether-marketing/dist
         files:
           - '**/*'
       cache:
         paths:
           - node_modules/**/*
-  - appRoot: frontend/docs
+  - appRoot: apps/docs
     frontend:
       buildPath: /
       phases:
@@ -45,15 +45,15 @@ applications:
             - npm ci
         build:
           commands:
-            - npm run build --workspace=frontend/docs
+            - npm run build --workspace=apps/docs
       artifacts:
-        baseDirectory: frontend/docs/dist
+        baseDirectory: apps/docs/dist
         files:
           - '**/*'
       cache:
         paths:
           - node_modules/**/*
-  - appRoot: frontend/status
+  - appRoot: apps/status
     frontend:
       buildPath: /
       phases:
@@ -62,34 +62,15 @@ applications:
             - npm ci
         build:
           commands:
-            - npm run build --workspace=frontend/status
+            - npm run build --workspace=apps/status
       artifacts:
-        baseDirectory: frontend/status/dist
+        baseDirectory: apps/status/dist
         files:
           - '**/*'
       cache:
         paths:
           - node_modules/**/*
-  - appRoot: frontend/aether
-    frontend:
-      buildPath: /
-      phases:
-        preBuild:
-          commands:
-            - npm ci
-            - npm run build --workspace=packages/shared
-            - npm run build --workspace=packages/web
-        build:
-          commands:
-            - npm run build --workspace=frontend/aether
-      artifacts:
-        baseDirectory: frontend/aether/dist
-        files:
-          - '**/*'
-      cache:
-        paths:
-          - node_modules/**/*
-  - appRoot: frontend/site
+  - appRoot: apps/aether
     frontend:
       buildPath: /
       phases:
@@ -100,15 +81,34 @@ applications:
             - npm run build --workspace=packages/web
         build:
           commands:
-            - npm run build --workspace=frontend/site
+            - npm run build --workspace=apps/aether
+      artifacts:
+        baseDirectory: apps/aether/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+  - appRoot: apps/site
+    frontend:
+      buildPath: /
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+            - npm run build --workspace=packages/shared
+            - npm run build --workspace=packages/web
+        build:
+          commands:
+            - npm run build --workspace=apps/site
             # One app per environment: the product is built under /app and
             # published inside the site's output (aether.<domain>/app).
-            - VITE_BASE_PATH=/app/ npm run build --workspace=frontend/aether
-            - test -f frontend/aether/dist/index.html
-            - mkdir -p frontend/site/dist/app
-            - cp -R frontend/aether/dist/. frontend/site/dist/app/
+            - VITE_BASE_PATH=/app/ npm run build --workspace=apps/aether
+            - test -f apps/aether/dist/index.html
+            - mkdir -p apps/site/dist/app
+            - cp -R apps/aether/dist/. apps/site/dist/app/
       artifacts:
-        baseDirectory: frontend/site/dist
+        baseDirectory: apps/site/dist
         files:
           - '**/*'
       cache:

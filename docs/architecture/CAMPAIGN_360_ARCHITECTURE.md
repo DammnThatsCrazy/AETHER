@@ -234,18 +234,18 @@ Audit events are emitted for:
 
 ### Kyber (operator)
 
-- Page: `frontend/kyber/src/pages/measurement/campaign-360-page.tsx`
+- Page: `apps/kyber/src/pages/measurement/campaign-360-page.tsx`
 - Route: `/measurement/campaigns/:campaignId`
-- Hooks: `frontend/kyber/src/features/measurement/use-campaign-360.ts`
-- Tab components: `frontend/kyber/src/features/measurement/campaign360/`
+- Hooks: `apps/kyber/src/features/measurement/use-campaign-360.ts`
+- Tab components: `apps/kyber/src/features/measurement/campaign360/`
 - URL state: `?tab=overview&population=observed&start=&end=&attribution_model=`
 - Operator-only tabs: Quality, Attribution diagnostics
 
 ### Aether (tenant)
 
-- Page: `frontend/aether/src/pages/campaigns/campaign-360-page.tsx`
+- Page: `apps/aether/src/pages/campaigns/campaign-360-page.tsx`
 - Route: `/campaigns/:id`
-- Hooks: `frontend/aether/src/features/campaigns/use-campaign-360.ts`
+- Hooks: `apps/aether/src/features/campaigns/use-campaign-360.ts`
 - Same tab structure as Kyber, minus operator diagnostics
 
 ### Cross-feature integration

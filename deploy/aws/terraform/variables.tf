@@ -524,8 +524,8 @@ variable "amplify_github_repository" {
 
 variable "amplify_branch" {
   type        = string
-  description = "Git branch Amplify builds from."
-  default     = "main"
+  description = "Git branch Amplify builds from. Empty selects the environment's promotion branch: staging builds from the persistent `staging` branch; any other profile builds from `main`."
+  default     = ""
 }
 
 variable "amplify_custom_domain_enabled" {

@@ -1203,7 +1203,7 @@
       "confidence": {
         "level": "HIGH",
         "reasons": [
-          "repository evidence: frontend/aether/"
+          "repository evidence: apps/aether/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -3469,7 +3469,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: frontend/kyber/"
+          "repository evidence: apps/kyber/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"

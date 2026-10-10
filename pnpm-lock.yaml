@@ -265,7 +265,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  frontend/aether:
+  apps/aether:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -353,7 +353,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  frontend/aether-marketing:
+  apps/aether-marketing:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -414,7 +414,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  frontend/demo:
+  apps/demo:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -469,7 +469,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  frontend/docs:
+  apps/docs:
     dependencies:
       '@mdx-js/rollup':
         specifier: ^3.1.1
@@ -518,7 +518,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  frontend/kyber:
+  apps/kyber:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -618,7 +618,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  frontend/marketing:
+  apps/marketing:
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -633,7 +633,7 @@ importers:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@20.19.43)(jiti@1.21.7)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1)
 
-  frontend/olympus-marketing:
+  apps/olympus-marketing:
     dependencies:
       '@aether/ui':
         specifier: '*'
@@ -691,7 +691,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  frontend/shared:
+  apps/shared:
     dependencies:
       '@aether/shared':
         specifier: '*'
@@ -725,7 +725,7 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2)
 
-  frontend/site:
+  apps/site:
     dependencies:
       '@olympus/brand':
         specifier: '*'
@@ -780,7 +780,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(jsdom@25.0.1)(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(terser@5.51.2)
 
-  frontend/status:
+  apps/status:
     dependencies:
       react:
         specifier: ^19.0.0

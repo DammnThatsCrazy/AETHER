@@ -234,6 +234,6 @@ POST /v1/graph/reconcile
 
 ## Frontend
 
-- **PathInspector** (`frontend/aether/src/components/graph/path-inspector.tsx`, `frontend/kyber/src/components/graph/path-inspector.tsx`): 4-tab panel (Overview / Hops / Evidence / Score). Classification uses icon + label (not color alone — accessibility requirement).
-- **Graph Toolbar** (`frontend/kyber/src/components/graph/graph-toolbar.tsx`): Shortest / Strongest / K-Shortest mode selector and K input render when path mode is active.
-- **Graph Page** (`frontend/aether/src/pages/graph/graph-page.tsx`): Two-node path mode calls `POST /v1/graph/paths` — no local BFS. K-path results show tabbed "Path 1 / Path 2 …" with confidence per tab. Save to Investigation wires to `POST /v1/investigations/{id}/snapshot`.
+- **PathInspector** (`apps/aether/src/components/graph/path-inspector.tsx`, `apps/kyber/src/components/graph/path-inspector.tsx`): 4-tab panel (Overview / Hops / Evidence / Score). Classification uses icon + label (not color alone — accessibility requirement).
+- **Graph Toolbar** (`apps/kyber/src/components/graph/graph-toolbar.tsx`): Shortest / Strongest / K-Shortest mode selector and K input render when path mode is active.
+- **Graph Page** (`apps/aether/src/pages/graph/graph-page.tsx`): Two-node path mode calls `POST /v1/graph/paths` — no local BFS. K-path results show tabbed "Path 1 / Path 2 …" with confidence per tab. Save to Investigation wires to `POST /v1/investigations/{id}/snapshot`.

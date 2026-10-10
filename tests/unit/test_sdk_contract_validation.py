@@ -46,18 +46,18 @@ def test_workspace_coverage_detects_uncovered_member(tmp_path):
     (tmp_path / "package.json").write_text(
         json.dumps({"workspaces": ["packages/shared"]})
     )
-    member = tmp_path / "frontend" / "aether"
+    member = tmp_path / "apps" / "aether"
     member.mkdir(parents=True)
     (member / "package.json").write_text("{}")
     uncovered = check_workspace_coverage(tmp_path)
-    assert uncovered == ["frontend/aether"]
+    assert uncovered == ["apps/aether"]
 
 
 def test_workspace_coverage_honors_glob_patterns(tmp_path):
     (tmp_path / "package.json").write_text(
-        json.dumps({"workspaces": ["packages/*", "frontend/*"]})
+        json.dumps({"workspaces": ["packages/*", "apps/*"]})
     )
-    for member in ("packages/shared", "frontend/aether"):
+    for member in ("packages/shared", "apps/aether"):
         d = tmp_path / member
         d.mkdir(parents=True)
         (d / "package.json").write_text("{}")

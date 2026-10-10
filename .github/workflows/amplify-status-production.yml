@@ -240,12 +240,12 @@ jobs:
           web_rules="$(mktemp)"
           olympus_environment="$(mktemp)"
           trap 'rm -f "$web_build_spec" "$web_environment" "$web_rules" "$olympus_environment"' EXIT
-          # The frontend/site entry of amplify.yml: the unified site plus the
+          # The apps/site entry of amplify.yml: the unified site plus the
           # product built under /app.
           cat > "$web_build_spec" <<'YAML'
           version: 1
           applications:
-            - appRoot: frontend/site
+            - appRoot: apps/site
               frontend:
                 buildPath: /
                 phases:
@@ -256,13 +256,13 @@ jobs:
                       - npm run build --workspace=packages/web
                   build:
                     commands:
-                      - npm run build --workspace=frontend/site
-                      - VITE_BASE_PATH=/app/ npm run build --workspace=frontend/aether
-                      - test -f frontend/aether/dist/index.html
-                      - mkdir -p frontend/site/dist/app
-                      - cp -R frontend/aether/dist/. frontend/site/dist/app/
+                      - npm run build --workspace=apps/site
+                      - VITE_BASE_PATH=/app/ npm run build --workspace=apps/aether
+                      - test -f apps/aether/dist/index.html
+                      - mkdir -p apps/site/dist/app
+                      - cp -R apps/aether/dist/. apps/site/dist/app/
                 artifacts:
-                  baseDirectory: frontend/site/dist
+                  baseDirectory: apps/site/dist
                   files:
                     - '**/*'
                 cache:

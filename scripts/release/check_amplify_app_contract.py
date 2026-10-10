@@ -36,7 +36,7 @@ DEFAULT_JOB_TIMEOUT_SECONDS = 900.0
 DEFAULT_JOB_POLL_SECONDS = 15.0
 
 STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
-    # The one staging app: the unified site (frontend/site) for the aether,
+    # The one staging app: the unified site (apps/site) for the aether,
     # www, docs, status and app hosts, and the product built under /app.
     "AETHER-staging-web": {
         "AETHER_ENV": "staging",
@@ -97,6 +97,8 @@ PRODUCTION_HOSTS = ("www", "aether", "docs", "status", "app")
 # are prerendered for that site. The production workflow mirrors each released
 # main commit to this branch and releases it there.
 PRODUCTION_OLYMPUS_BRANCH = "production-olympus"
+# The staging profile's web apps build from the persistent staging branch.
+STAGING_BRANCH = "staging"
 PRODUCTION_HOST_BRANCHES = {prefix: (PRODUCTION_OLYMPUS_BRANCH if prefix == "www" else "main") for prefix in PRODUCTION_HOSTS}
 # Until the production backend exists the site is pilot-only and its contact
 # form posts to the always-on lead intake (deploy/aws/lead-intake, stack
@@ -445,6 +447,7 @@ def _staging_host_errors(
             name=owner,
             app_id=app_id,
             subdomain_prefix=prefix,
+            branch_name=STAGING_BRANCH,
             domain_name=None,
             dns_resolver=dns_resolver,
             client=client,
@@ -490,6 +493,7 @@ def contract_errors(
                     branch_stage="DEVELOPMENT",
                     expected_commit=expected_commit,
                     subdomain_prefix=None,
+                    branch_name=STAGING_BRANCH,
                     expected_branch_environment=(
                         STAGING_RUNTIME_ENVIRONMENT[reviewed_name]
                         if check_runtime_environment

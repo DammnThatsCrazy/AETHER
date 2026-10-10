@@ -54,7 +54,7 @@ on:
         type: string
         required: false
       intended_release_sha:
-        description: Exact main SHA the reviewed release/plan must contain
+        description: Exact staging SHA the reviewed release/plan must contain
         type: string
         required: false
       plan_run_id:
@@ -101,11 +101,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Require merged-main authority
+      - name: Require merged-staging authority
         run: |
           set -euo pipefail
-          test "$GITHUB_REF_NAME" = main || {
-            echo '::error::pilot staging must be dispatched from merged main'; exit 1;
+          test "$GITHUB_REF_NAME" = staging || {
+            echo '::error::pilot staging must be dispatched from merged staging'; exit 1;
           }
       - uses: actions/setup-python@v5
         with:
@@ -318,13 +318,16 @@ jobs:
             --job-timeout-seconds 900 \
             --job-poll-seconds 15
       - name: Verify production status provenance and branch stage
+        # Production builds from main, which lags the staging commit, so it is
+        # validated against main's own head, not the staging SHA.
         env:
-          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
           python scripts/release/check_amplify_app_contract.py \
             --mode production-status \
-            --expected-commit "$EXPECTED_COMMIT_SHA" \
+            --expected-commit "$main_sha" \
             --wait-for-current-job \
             --job-timeout-seconds 900 \
             --job-poll-seconds 15
@@ -393,8 +396,8 @@ jobs:
             echo '::error::pilot-staging.yml accepts deployment_lane=pilot only; full staging remains on its existing entry points'
             exit 1
           }
-          test "$REF_NAME" = main || {
-            echo "::error::pilot staging must run from main, not ${REF_NAME}"
+          test "$REF_NAME" = staging || {
+            echo "::error::pilot staging must run from staging, not ${REF_NAME}"
             exit 1
           }
 

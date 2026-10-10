@@ -1,15 +1,26 @@
 {
   "generated_by": "scripts/docs_extract/extract_frontend_data_truth_inventory.py",
   "baseline_finding_count": 714,
-  "total_findings": 715,
+  "total_findings": 716,
   "disposition_counts": {
     "remediated": 492,
     "reviewed_non_operational": 109,
-    "retained_test_only": 114,
+    "retained_test_only": 115,
     "pending": 0
   },
   "runtime_validator": "scripts/validate_frontend_data_truth.py",
   "findings": [
+    {
+      "path": "apps/kyber/src/test/fixtures/commerce.ts",
+      "line": 1,
+      "symbol": "test-only fixture module",
+      "application": "kyber",
+      "domain": "automated test support",
+      "classification": "test-only fixture",
+      "remediation": "retain under the narrow test-path allowlist",
+      "target_pr": "PR1 + combined final PR",
+      "final_status": "retained test-only fixture"
+    },
     {
       "path": "frontend/aether/playwright.config.ts",
       "line": 25,

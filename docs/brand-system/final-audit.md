@@ -24,7 +24,7 @@ validation work. It is not a production-readiness statement.
 | Provider safety | Provider registry and attribution modules exist. The package test verifies every current provider mark is a neutral fallback without remote or invented asset paths. |
 | Semantic taxonomies | Distinct navigation, action, entity, domain, status, severity, freshness, confidence, and provenance modules are present. |
 | Interaction rules | Typed icon-size, typography, spacing, radius, border, focus, elevation, shadow, motion, surface, and responsive modules are present. |
-| React adapter | `frontend/shared/src/index.ts` exports brand lockups/marks, navigation icons, provider renderers, entity renderers, semantic indicators, and surface components. |
+| React adapter | `apps/shared/src/index.ts` exports brand lockups/marks, navigation icons, provider renderers, entity renderers, semantic indicators, and surface components. |
 | Documentation guidance | This directory contains linked operational references for each requested topic plus the migration playbook. |
 | Aether ownership and adoption | [Aether context and consumer matrix](./aether-consumer-matrix.md) records the context, value, layer owners, dependency sequence, and consumer-specific evidence without asserting completion. |
 | Branch reconciliation | The delivery branch was rebased onto current `main`; the documentation index and source-linked anchors were reconciled before the remaining consumer work was evaluated. |
@@ -43,7 +43,7 @@ validation work. It is not a production-readiness statement.
 | Aether workspace typecheck | Passing locally after the Vitest source-subpath resolver was corrected. The full hosted test gate remains a separate acceptance condition. |
 | Aether consumer completion | The consumer matrix is an ownership and evidence plan; it does not certify all shell, entity/graph, shared-state, docs/demo/mobile, or Kyber consumers as migrated. |
 | Kyber consumer adoption | Not certified by this documentation review. The available source/renderer APIs do not prove complete shell, graph/entity, payment, notification, or Intelligence OS adoption. |
-| Docs UI adoption | `frontend/docs` still declares no `@aether/ui` dependency and uses local inline styling. No docs SPA code was changed in this slice. |
+| Docs UI adoption | `apps/docs` still declares no `@aether/ui` dependency and uses local inline styling. No docs SPA code was changed in this slice. |
 | Visual/a11y/responsive enforcement | Screenshots, automated accessibility checks, narrow-viewport matrices, reduced-motion regression tests, raw-glyph scans, token-drift scans, and duplicate-asset enforcement are not verified here. |
 | Canonical integration/remote delivery | `make docs-fix`, `make ci-check`, hosted CI, credentialed/staging evidence, push/PR state, and production readiness are pending and not claimed. |
 

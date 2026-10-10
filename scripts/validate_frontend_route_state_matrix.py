@@ -13,8 +13,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 MATRIX = ROOT / "docs" / "audits" / "FRONTEND-ROUTE-STATE-MATRIX.md"
 ROUTERS = {
-    "aether": ROOT / "frontend" / "aether" / "src" / "app" / "router.tsx",
-    "kyber": ROOT / "frontend" / "kyber" / "src" / "app" / "router.tsx",
+    "aether": ROOT / "apps" / "aether" / "src" / "app" / "router.tsx",
+    "kyber": ROOT / "apps" / "kyber" / "src" / "app" / "router.tsx",
 }
 NON_DATA_ROUTES = {
     "aether": {"/", "/callback", "/login", "/signup", "/legal/data-retention", "*"},

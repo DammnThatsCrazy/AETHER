@@ -2,7 +2,7 @@
 
 Renders a :class:`SynthesisResult` as bounded, grounded markdown for the API
 layer. The frontend Aether/Kyber surface renders sanitized evidence (see
-``frontend/aether/src/features/model-selection/EvidenceReferences.tsx`` for the
+``apps/aether/src/features/model-selection/EvidenceReferences.tsx`` for the
 pattern); this renderer mirrors that discipline server-side so the API never
 emits credential material or unbounded payloads.
 

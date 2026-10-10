@@ -20,7 +20,7 @@
       }
     },
     "typescript": {
-      "path": "frontend/shared/src/status/capability-state.ts",
+      "path": "apps/shared/src/status/capability-state.ts",
       "union": "CapabilityState",
       "members": "capabilityStates",
       "precedence": "capabilityStatePrecedence"

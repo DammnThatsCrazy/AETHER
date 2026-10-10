@@ -38,9 +38,9 @@ health, and a visual migration cannot silently change a capability gate.
 | --- | --- | --- | --- |
 | `@olympus/brand` | Brand architecture | Identity manifests, provider metadata/fallbacks, semantic taxonomies, token/motion/surface/responsive metadata | React rendering, routing, permissions, provider activation, runtime truth |
 | `@aether/ui` | Shared UI | Accessible React/SVG renderers and shared visual primitives | Product feature behavior or backend contracts |
-| `frontend/aether` | Aether product | Customer shell, routes, feature composition, capability-aware presentation | Duplicated logo/provider geometry or a second token system |
-| `frontend/kyber` | Kyber product | Operator shell and feature composition | Customer entitlement semantics or a competing corporate identity |
-| `frontend/docs` | Documentation | Accurate product explanation and, when migrated, a canonical consumer treatment | A copied theme, remote assets, or operational claims unsupported by contracts |
+| `apps/aether` | Aether product | Customer shell, routes, feature composition, capability-aware presentation | Duplicated logo/provider geometry or a second token system |
+| `apps/kyber` | Kyber product | Operator shell and feature composition | Customer entitlement semantics or a competing corporate identity |
+| `apps/docs` | Documentation | Accurate product explanation and, when migrated, a canonical consumer treatment | A copied theme, remote assets, or operational claims unsupported by contracts |
 | QA/enforcement | QA / platform | Focused a11y, responsive, visual, and drift enforcement | Redefining product authority or provider state |
 
 ## Aether consumer matrix
