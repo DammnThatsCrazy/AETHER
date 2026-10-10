@@ -1454,10 +1454,15 @@ EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
     },
     "wallet": {
         "properties.address": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.chainId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.vm": { "trustClass": "SOURCE_REFERENCE" },
         "userId": { "trustClass": "CLIENT_HINT" },
     },
     "transaction": {
         "properties.txHash": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.walletAddress": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.chainId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.vm": { "trustClass": "SOURCE_REFERENCE" },
         "userId": { "trustClass": "CLIENT_HINT" },
     },
     "contract_action": {

@@ -44,7 +44,7 @@ feature-flagged and default OFF.
   marketplace or developer-platform flags: the reserved ones gated nothing and
   were retired.
 - **No generic payment webhook fallback.** Named providers only: Privy,
-  Stripe crypto onramp, Coinbase, MoonPay, Bridge.
+  Stripe merchant payment/onramp, Coinbase, MoonPay, Bridge.
 - **Staged mutation review.** Agents/workers/automation stage and recommend;
   canonical graph mutations pass through staged mutation review with human
   approval where risk or canonical truth is affected.

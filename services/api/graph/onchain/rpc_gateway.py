@@ -28,7 +28,7 @@ ALLOWED_RPC_METHODS = {
     "eth_getBlockTransactionCountByNumber", "eth_getBlockTransactionCountByHash",
     # Solana read methods
     "sol_getBalance", "sol_getAccountInfo", "sol_getTransaction",
-    "sol_getBlock", "sol_getLatestBlockhash", "sol_getSlot",
+    "sol_getBlock", "sol_getLatestBlockhash", "sol_getSlot", "sol_getGenesisHash",
 }
 
 

@@ -18,7 +18,7 @@ source_hashes:
 # Financial Credential-Readiness Runbook
 
 Operator surface for the **financial cohort** credential-readiness certification:
-the five payment-rail observers (Privy, Stripe crypto onramp, Coinbase, MoonPay,
+the five payment-rail observers (Privy, Stripe merchant payment/onramp, Coinbase, MoonPay,
 Bridge) and the two stablecoin-chain observers (EVM + Solana). Aether is
 **observation-only** across this cohort — it never executes, settles, signs, or
 writes any provider or on-chain state. This runbook is how an operator reads the

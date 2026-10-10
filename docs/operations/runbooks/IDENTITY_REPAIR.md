@@ -12,9 +12,9 @@ toc_depth: 2
 source_files: [services/api/identity/identity/resolver.py, services/api/identity/identity/redirects.py, services/api/identity/identity/graph_reconciliation.py, services/api/identity/identity/reconciliation_routes.py]
 source_hashes:
   "services/api/identity/identity/graph_reconciliation.py": "sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a"
-  "services/api/identity/identity/reconciliation_routes.py": "sha256:3fee3e01149f08645f47338505621c3c2f890d2f51ea02ae9388c8505371259c"
+  "services/api/identity/identity/reconciliation_routes.py": "sha256:3ec51df67337edbc420bc50a6d9f8fccbe61b42164ec966ca45ff2c9ceabca76"
   "services/api/identity/identity/redirects.py": "sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0"
-  "services/api/identity/identity/resolver.py": "sha256:85d5cb740491c1aeb516ba668b9fb44ae665a601baafbb39d9e4a2d9abf1f998"
+  "services/api/identity/identity/resolver.py": "sha256:4b8be7904c72908ef003b7ee8a672a2bea7b4df69fbdecb40697815ba3d2145f"
 ---
 
 # Runbook — Identity Repair
@@ -103,6 +103,17 @@ event still does not merge:
 
 Resolver matches follow merge tombstones, so an alias left on a merged fragment
 resolves to the survivor rather than reopening the merged entity.
+
+### Wallet aliases from different chains do not resolve consistently
+
+Wallet signal hashes are chain-scoped using the event's `vm` and `chainId`.
+Events without chain context retain the legacy EVM namespace. The change does
+not rewrite previously stored wallet alias hashes. Before enabling new
+non-EVM wallet identity for tenants with historical wallet events, reconcile
+those aliases against retained source events and use an audited reprocess or
+operator split if prior case-folding or cross-chain collisions affected entity
+ownership. Do not manually edit wallet hashes or attach wallets based on address
+text alone.
 
 ### A merged entity's profile/reads resolve to the wrong survivor
 Check the redirect chain. `resolve_entity_redirect(repo, tenant_id, entity_id)`

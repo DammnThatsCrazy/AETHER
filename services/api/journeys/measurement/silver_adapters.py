@@ -230,6 +230,9 @@ def adapt_revenue(row: dict[str, Any]) -> dict[str, Any]:
         "activity_status": "confirmed",
         "gross_amount": row.get("gross_amount") or row.get("amount"),
         "currency": row.get("currency", "USD"),
+        # Preserve only an explicit provider shared reference. This is a
+        # navigation key for evidence links, not an identity or value join.
+        "commerce_order_ref": row.get("commerce_order_ref"),
         "privacy_class": row.get("privacy_class", "financial"),
         "silver_fact_id": _uuid(row.get("fact_id")),
         "silver_table": "silver_revenue_facts",

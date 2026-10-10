@@ -205,6 +205,16 @@ class X402LifecycleMapper:
                 intent_id=intent_id,
                 tenant_id=tenant_id,
                 status=new_status,
+                authorization_id=(
+                    str(payload["authorization_id"])
+                    if payload.get("authorization_id")
+                    else None
+                ),
+                execution_id=(
+                    str(payload["execution_id"])
+                    if payload.get("execution_id")
+                    else None
+                ),
                 metadata={
                     **payload.get("metadata", {}),
                     "authorization_id": payload.get("authorization_id", ""),
@@ -247,6 +257,24 @@ class X402LifecycleMapper:
     ) -> dict[str, Any]:
         event_id = _require_settlement_event_id(payload)
         intent_id = _require_intent_id(payload)
+        intent = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
+        authorization_id = str(payload.get("authorization_id") or "")
+        if intent is not None and authorization_id:
+            # A public observation may repeat an authorization identifier, but
+            # only the tenant-scoped x402 source record whose challenge exactly
+            # matches this intent is retained as an authoritative link.
+            from .commerce_store import get_commerce_store
+
+            authorization = await get_commerce_store().get_authorization(
+                tenant_id, authorization_id
+            )
+            if authorization is not None and authorization.challenge_id == intent_id:
+                await self._payment_intents.update_status(
+                    intent_id=intent_id,
+                    tenant_id=tenant_id,
+                    status="submitted",
+                    authorization_id=authorization_id,
+                )
         record = await self._settlements.record_event(
             settlement_event_id=event_id,
             tenant_id=tenant_id,

@@ -637,6 +637,7 @@
       "adapter": "StripeOnrampAdapter",
       "adapter_version": "1.0.0",
       "capabilities": [
+        "commerce_payment",
         "crypto_onramp",
         "webhook"
       ],

@@ -1,7 +1,7 @@
 """Payment rail adapter contract — provider-safe seam for payment observability.
 
 ``PaymentRailAdapter`` is the blueprint every named payment rail adapter
-(Privy, Stripe crypto onramp, Coinbase, MoonPay, Bridge) implements.
+(Privy, Stripe merchant payment/onramp, Coinbase, MoonPay, Bridge) implements.
 
 INVARIANTS
 - Aether OBSERVES payments. Adapters never execute, settle, originate, or
@@ -991,6 +991,7 @@ class PaymentRailAdapter(ABC):
             "provider_session_id": session.provider_session_id,
             "provider_transaction_id": session.provider_transaction_id,
             "provider_customer_ref": session.provider_customer_ref,
+            "commerce_order_ref": (session.metadata or {}).get("commerce_order_ref"),
             "tx_hash": session.tx_hash,
             "schema_version": PAYMENT_RAILS_SCHEMA_VERSION,
         })

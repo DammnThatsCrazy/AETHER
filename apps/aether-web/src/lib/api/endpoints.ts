@@ -455,6 +455,14 @@ export const api = {
     nextSteps: () => restClient.get('/v1/value-review/next-steps', wrap(unknownSchema)).then(r => r.data),
   },
 
+  economicOperations: {
+    journey: (journeyId: string, asOf?: string) =>
+      restClient.get(
+        `/v1/journeys/${encodeURIComponent(journeyId)}/economic-operations${buildQS({ as_of: asOf })}`,
+        wrap(unknownSchema),
+      ).then(r => r.data),
+  },
+
   // ─── Security & Governance (tenant-scoped only) ────────────────────────────
   security: {
     myPermissions: () => restClient.get('/v1/security/me/permissions', wrap(unknownSchema)).then(r => r.data),

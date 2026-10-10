@@ -19,11 +19,11 @@ reviewed_source_commits:
   - commit: "f4ba474e"
     reason: "Reviewed the Kyber empty-state test timing correction; data-bearing pages must await response-backed populated or empty state before asserting content."
   - commit: "436ebec1"
-    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (apps/aether-web + apps/kyber-web prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
+    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (frontend/aether + frontend/kyber prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
   - commit: "5d0a4989"
-    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under packages/ui/core; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
+    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under frontend/shared; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
   - commit: "01d51676"
-    reason: "R0 re-stamp after review (enduser-lifecycle lane). Reviewed against the two newer source commits under source_files: (1) 9620539f — the PR #607 squash; its non-test delta is login/signup ?email/?name prefill (already documented at lines 50-54 as the marketing-threshold handoff) plus packages/ui/core motion tokenization (reviewed no-body-change at 5d0a4989), and the squash made the prior 0ebab813 stamp unreachable as an ancestor; (2) 01d51676 — the campaign-source triage touching the tenant Campaign Sources page under apps/aether-web, which this doc does not describe (its Kyber /campaign-intelligence/sources bullet remains accurate). No body change required."
+    reason: "R0 re-stamp after review (enduser-lifecycle lane). Reviewed against the two newer source commits under source_files: (1) 9620539f — the PR #607 squash; its non-test delta is login/signup ?email/?name prefill (already documented at lines 50-54 as the marketing-threshold handoff) plus frontend/shared motion tokenization (reviewed no-body-change at 5d0a4989), and the squash made the prior 0ebab813 stamp unreachable as an ancestor; (2) 01d51676 — the campaign-source triage touching the tenant Campaign Sources page under frontend/aether, which this doc does not describe (its Kyber /campaign-intelligence/sources bullet remains accurate). No body change required."
   - commit: "95d53f4c"
     reason: "R1 re-stamp after review (enduser-lifecycle lane, contract spine). Reviewed the R1-s4 FE twin under apps/aether-web/src: new features/integrations/** (zod transport schemas for the four /v1 catalog read-model endpoints, useQuery hooks) plus the api.integrationCatalog group added to lib/api/endpoints.ts. This doc makes no exhaustive api-namespace or features/-directory enumeration, so the additions are additive and no body change was required."
   - commit: "3456414b"
@@ -43,9 +43,9 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "apps/aether-web/src/": "sha256:3f1578047c1f710f1db49350caa571e61b96560dc20ba873ba6c67ceea1d666f"
-  "apps/kyber-web/src/": "sha256:b1fd4a7dd4120ed552281e749d2467cdfaa7ec58829f9842bca118bc67c48928"
-  "packages/ui/core/src/": "sha256:75ba669073aebf48fe1bb982913d32019b79b5fdcfe8dce5266f95412325f2b9"
+  "apps/aether-web/src/": "sha256:41fb8cf93e2b486aba6b44116b2f62745227f59e1b9e9c4e2c87da794459f7e0"
+  "apps/kyber-web/src/": "sha256:e181fef119de07d6d3300ae1ac3cccfd56416519c80f079c1f8d4d5228d1a78f"
+  "packages/ui/core/src/": "sha256:6bfcb3ee7c0d0371918d5b738b179cf3c82b4d71b4d34b6bfd89593d2408e7d6"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -98,13 +98,13 @@ the root.
   the billing page lists only the self-serve plans (contract tiers go through
   Contact sales). Without Auth0 settings, `/signup` is the email form, which
   registers a new tenant on a plan. The
-  Aether public marketing threshold (`apps/marketing-aether`) hands users
+  Aether public marketing threshold (`frontend/aether-marketing`) hands users
   into these pages with optional prefill query params — login accepts `?email`,
   signup accepts `?name` and `?email` — read once via a `useState` initializer
   (never an effect) so the first step arrives pre-filled; nothing is persisted
   and the auth semantics are unchanged
 - **Marketing connect/manage handoff consumers** — the tenant-side half of the
-  marketing shell's app-origin deep links (`apps/marketing-aether` emits
+  marketing shell's app-origin deep links (`frontend/aether-marketing` emits
   `/settings/integrations?family=<canonical>&experience=<category>&intent=connect|manage`
   and `/activate?experience=…&intent=connect|manage`, round-tripped through
   `/login?redirect=…`). Shared consumers in `features/settings/settings-handoff.ts`
@@ -128,7 +128,7 @@ the root.
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
 - Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample. Campaign 360 also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`): they render typed projection section states for the campaign focus (available/degraded/empty …), never recomputing projection content
-- Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata
+- Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata. Journey Explorer also renders exact-reference commerce operation links with source roles and relations, and explicitly states that the evidence does not imply settlement or add operation amounts to journey value.
 - API key management, plan management, usage metering
 - Webhook endpoint management — add/test/delete outbound delivery endpoints
 - **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)
@@ -151,7 +151,7 @@ the root.
 - **ML Operations** — model fleet health, artifact status, and extraction defense monitoring
 - **Measurement Overview** — spend, attributed revenue, ROAS, data quality, and connector health across all tenants (`/measurement/overview`)
 - **Attribution Studio** — per-conversion attribution runs, model selection, backfill controls; reads `?campaign_id=` URL param to pre-filter runs and surface a "Compare in Campaign 360 →" contextual link (`/measurement/attribution`)
-- **Journey Explorer** — chronological journey timeline with attribution weight annotations (`/measurement/journeys`)
+- **Journey Explorer** — chronological journey timeline with attribution weight annotations and an explicit backend RPC verification action for stored Web3 transaction observations; it keeps execution verification separate from payment settlement (`/measurement/journeys`)
 - **Conversion Explorer** — canonical conversion detail, revenue history, attribution drill-down (`/measurement/conversions`)
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
 - **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel. Also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`) rendering typed projection section states for the campaign focus — never recomputing projection content
@@ -519,6 +519,12 @@ Shown only when entity `kind` is `governance_org`, `exchange`, `yield_platform`,
 | **Execution** | Run count, success rate, spending to date, error rate, last active timestamp |
 | **Policy** | Authorized capabilities, spending limits per period, policy log |
 | **Economic** | Revenue and costs attributed to agent actions; PAYS/CONSUMES graph edges |
+
+The Aether Agent 360 route at `/agents/:agentId` also displays linked economic
+operation evidence from the tenant-scoped `x402_flows` projection. It shows the
+source-record roles and evidence relations for exact-matched intent,
+authorization, execution and settlement records; it does not duplicate amounts
+or replace source lifecycle status.
 
 ---
 

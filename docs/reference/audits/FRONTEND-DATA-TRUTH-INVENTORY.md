@@ -9,18 +9,18 @@ since_version: "0.1.0"
 source_files:
   - apps/aether-web/
   - apps/kyber-web/
-  - apps/demo/
+  - frontend/demo/
   - scripts/validate_frontend_data_truth.py
   - scripts/docs_extract/extract_frontend_data_truth_inventory.py
 reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the Aether frontend route/history context fixes, explicit shared ESM imports, and Data Exchange E2E graph-scope fixture. Runtime data-truth counts and the test-only fixture classification remain unchanged, so no body update was required."
 source_hashes:
-  "apps/aether-web/": "sha256:83bc2b82c35ea3f1d4e3b1483df7dd656e5a2394b99abc435b4bd7dbd6f72d64"
-  "apps/demo/": "sha256:68e3f82d5ac29330519e833dc50bca0023c83e9d6e5b448f09129917617d1b7c"
-  "apps/kyber-web/": "sha256:49988be919252fb42d240d7b51ba96a842da6a8ba4d629b9c44c6e10b2574d5f"
+  "apps/aether-web/": "sha256:ac965cce5d0d77357541429b0fe69c186434311330b970dc25261b6ab8fee6da"
+  "apps/kyber-web/": "sha256:3e59889b8e3577802ef423eae62bcb7141ab4c176de87a24d7c40cc5a2f04aca"
+  "frontend/demo/": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"
-  "scripts/validate_frontend_data_truth.py": "sha256:25de73c82ac07cdc52b7a9be8d7f8ef69ff50ca7ba735c1e8d51652dcf92636c"
+  "scripts/validate_frontend_data_truth.py": "sha256:b3db593b8648f2cdfa222b4812b447bf292bd9e5657ff57eea4058b6c7a0cd50"
 ---
 
 # Frontend Data Truth Inventory
@@ -41,6 +41,16 @@ states the classification and release interpretation.
 - Browser MSW startup paths and public workers: 0.
 - Remaining fixtures are test-only and live under the validator's narrow test
   path allowlist.
+
+The Kyber Journey Explorer's Web3 verification action calls the tenant-scoped
+backend RPC verifier and renders its returned status. It does not infer chain
+execution from local UI state or infer payment settlement from an execution
+receipt.
+
+The Aether Journey Explorer's economic-operation panel calls the tenant-scoped
+Journey evidence endpoint. It displays only explicit source-linked operation
+references and reports an empty state when the journey contains no shared
+commerce reference; it does not synthesize a match or copy operation value.
 
 The generated artifact distinguishes:
 

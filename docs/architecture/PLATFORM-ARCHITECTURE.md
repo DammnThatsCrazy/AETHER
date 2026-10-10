@@ -21,13 +21,13 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:2ab95280d3f14a3327070be39325db11b698b30e03acb7c82e9641c85e016c89"
-  "services/api/config/settings.py": "sha256:d55bef95d2e6d1f13c003fe7289e4309d8299ab783b3d58b7660c6519bdaeadb"
-  "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
-  "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
-  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
-  "services/api/middleware/middleware.py": "sha256:4f984e6a2d3622df9652045c85dd323db990e11bfb4d8cf4af6f08aadfb935d6"
-  "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
+  "packages/shared/": "sha256:8dd397b5842e3d1f1110dd069466eb32e5e6b7c662ea11bb302a1ced4e9a5bff"
+  "services/api/config/settings.py": "sha256:f773fff062633f90208b21fcb23d2bab6e66a4457d725bd1e019cb6277707ef4"
+  "services/api/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
+  "services/api/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
+  "services/api/ingestion/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
+  "services/api/ingestion/ingestion/replay_routes.py": "sha256:44e6e89117a8cbbebe2cd45bac315e616e87b2cf823e82c5af3f503de44eea56"
+  "services/api/shared/events/events.py": "sha256:8b8f303710a2d213fdc13f6fed05a900f0d3f50ba698223b1073ddc33dc86ffd"
 ---
 # Aether vNext — Architecture Guide
 
@@ -53,7 +53,8 @@ owns internal broker-coupled workers and staged graph-mutation workflows; and
 `services/compliance/` owns the GDPR/SOC 2 control implementation. AWS and
 Terraform delivery live under `infra/aws/`, while EVM and multi-chain contract
 code lives under `packages/contracts/smart-contracts/`. Shared contracts remain in
-`packages/shared/contracts/`, and product clients (web and mobile) live under `apps/`.
+`packages/shared/contracts/`, and product clients remain under `apps/` and
+`frontend/`.
 
 The old space-containing trees are not alternate implementations. The two
 un-deployed TypeScript duplicates are retained under
@@ -492,6 +493,9 @@ the context-360 time leaf `temporal360`, the context-360 WHO/SET leaf
 `population360` and the context-360 WHERE leaf `geographic360` — are now
 implemented native providers) and the shared request/context/result contracts
 (TS + Python) that every future 360 provider implements against.
+Economic360 accepts `journey` subjects so its Evidence section can expose
+source-linked commerce operation records carried by Journey steps; it does not
+copy operation amounts or claim settlement from those links.
 `implementationState` is repo metadata describing
 
 how far a projection has been converged onto the plane (`in_flight` = an
@@ -577,7 +581,7 @@ surface.
 Provider SDKs live only behind the harness's provider-neutral `AsyncModelProvider`
 contract (`services/api/intelligence/model_runtime/provider.py`); orchestrators such as Noesis
 never import them. Real transport for the first two providers lives in
-`intelligence/model_runtime/adapters/`:
+`services/api/intelligence/model_runtime/adapters/`:
 
 | Adapter | Transport | Env surface |
 |---|---|---|

@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:01c5f7d7d30ec7b5a0a6c293ec8e92d3fd28b4d243b3bfe12cc85f35b4ac25df"
+  "CHANGELOG.md": "sha256:d7d4eac1c5fe2c8ff9e23baedca2c4cc5e6f47bcca9766643a2a9add5386f390"
 ---
 # Changelog
 
@@ -20,6 +20,7 @@ source_hashes:
 
 ### Added
 
+- Exact-reference commerce reconciliation: Shopify order revisions and signed Stripe `payment_intent.succeeded` observations can join on explicit `aether_order_ref` metadata with exact decimal amount/currency checks; payment completion remains distinct from payout settlement.
 - SDK distribution layer: `@aether/web` build artifacts are emitted and guarded on the publish surface, and a CDN release pipeline (`.github/workflows/publish-sdk.yml`) ships verified manifests with a derived version.
 - Publishable (`pk_`) API keys — a site-scoped, ingestion-only key class alongside the existing secret (`ak_`) class, so a key in page HTML cannot reach the rest of the API.
 - One-tag SDK install: quickstart collapses to a single auto-init script tag that is a real install path, with the canonical envelope stamped on the signals it emits.

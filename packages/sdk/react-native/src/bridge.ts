@@ -357,7 +357,7 @@ const Aether = {
 
   // Wallet
   wallet: {
-    connect(address: string, options?: { type?: string; chainId?: number; vm?: string }): void {
+    connect(address: string, options?: { type?: string; chainId?: number | string; vm?: string; provider?: string }): void {
       AetherNative?.walletConnect(address, options ?? {});
     },
     disconnect(address: string): void {

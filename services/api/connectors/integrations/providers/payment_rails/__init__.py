@@ -1,7 +1,8 @@
 """Payment Rail Observability V1 — named provider adapters only.
 
 Aether observes, normalizes, and reconciles funding flows across exactly
-five named providers. There is no generic webhook fallback: an unknown
+five named providers, including Stripe merchant payments and crypto onramp.
+There is no generic webhook fallback: an unknown
 provider is a 404, never a permissive catch-all. Aether never executes or
 settles payments, custodies funds, or signs transactions.
 """

@@ -240,6 +240,9 @@ object Aether : DefaultLifecycleObserver {
     private var userId: String? = null
     private var email: String? = null
     private var walletAddress: String? = null
+    private var walletVm: String = "evm"
+    private var walletChainId: String = "unknown"
+    private var walletType: String = "unknown"
     private var traits: MutableMap<String, Any?> = mutableMapOf()
     private var screenCount = 0
     private var eventCount = 0
@@ -741,6 +744,9 @@ object Aether : DefaultLifecycleObserver {
         this.anonymousId = loadOrCreateAnonymousId()
         this.userId = prefs?.getString("userId", null)
         this.walletAddress = prefs?.getString("walletAddress", null)
+        this.walletVm = prefs?.getString("walletVm", "evm") ?: "evm"
+        this.walletChainId = prefs?.getString("walletChainId", "unknown") ?: "unknown"
+        this.walletType = prefs?.getString("walletType", "unknown") ?: "unknown"
         this.consentState = (prefs?.getStringSet("consentState", emptySet()) ?: emptySet()).toMutableList()
         this.sessionId = UUID.randomUUID().toString()
         this.eventSequence = 0
@@ -822,7 +828,7 @@ object Aether : DefaultLifecycleObserver {
         emitSessionStart(application.applicationContext)
 
         if (config.autoResumeJourney) {
-            scope.launch { resolveIdentity(walletAddress = walletAddress, userId = null, email = null) }
+            scope.launch { resolveIdentity(walletAddress = walletAddress, userId = null, email = null, walletVm = walletVm) }
         }
     }
 
@@ -926,7 +932,7 @@ object Aether : DefaultLifecycleObserver {
         }
         // Multi-wallet: connect each wallet as a proper wallet event
         for (w in data.wallets) {
-            walletConnected(w.address, w.walletType, w.chainId)
+            walletConnected(w.address, w.walletType, w.chainId, w.vm)
         }
 
         val walletsJson = JSONArray().apply {
@@ -952,7 +958,7 @@ object Aether : DefaultLifecycleObserver {
             val uidChanged = userId != null && userId != priorUserId
             val emailChanged = email != null && email != priorEmail
             if (uidChanged || emailChanged) {
-                scope.launch { resolveIdentity(walletAddress = walletAddress, userId = userId, email = email) }
+                scope.launch { resolveIdentity(walletAddress = walletAddress, userId = userId, email = email, walletVm = walletVm) }
             }
         }
     }
@@ -999,6 +1005,9 @@ object Aether : DefaultLifecycleObserver {
         flushJob?.cancel()
         userId = null
         walletAddress = null
+        walletVm = "evm"
+        walletChainId = "unknown"
+        walletType = "unknown"
         email = null
         traits.clear()
         consentState.clear()
@@ -1014,6 +1023,9 @@ object Aether : DefaultLifecycleObserver {
         prefs?.edit()
             ?.remove("userId")
             ?.remove("walletAddress")
+            ?.remove("walletVm")
+            ?.remove("walletChainId")
+            ?.remove("walletType")
             ?.remove("consentState")
             ?.remove(PREF_ACQ_FIRST_TOUCH)
             ?.remove(PREF_ACQ_LATEST_TOUCH)
@@ -1525,27 +1537,57 @@ object Aether : DefaultLifecycleObserver {
     // WALLET TRACKING
     // =========================================================================
 
-    fun walletConnected(address: String, walletType: String = "unknown", chainId: String = "unknown") {
-        val normalized = normalizeWalletAddress(address)
+    fun walletConnected(address: String, walletType: String = "unknown", chainId: String = "unknown", vm: String = "evm", provider: String? = null) {
+        val normalized = normalizeWalletAddress(address, vm)
         walletAddress = normalized
-        prefs?.edit()?.putString("walletAddress", normalized)?.apply()
-        enqueueEvent("wallet", mapOf(
+        walletVm = vm
+        walletChainId = chainId
+        this.walletType = walletType
+        prefs?.edit()?.putString("walletAddress", normalized)
+            ?.putString("walletVm", vm)
+            ?.putString("walletChainId", chainId)
+            ?.putString("walletType", walletType)
+            ?.apply()
+        val walletProperties = mutableMapOf<String, Any?>(
             "action" to "connect", "address" to normalized,
-            "walletType" to walletType, "chainId" to chainId
-        ))
+            "walletType" to walletType, "chainId" to chainId, "vm" to vm
+        )
+        provider?.let { walletProperties["provider"] = it }
+        enqueueEvent("wallet", walletProperties)
         if (config?.autoResumeJourney == true) {
-            scope.launch { resolveIdentity(walletAddress = normalized, userId = userId, email = email) }
+            scope.launch { resolveIdentity(walletAddress = normalized, walletVm = vm, userId = userId, email = email) }
         }
     }
 
     fun walletDisconnected(address: String) {
-        enqueueEvent("wallet", mapOf("action" to "disconnect", "address" to address))
+        val normalized = normalizeWalletAddress(address, walletVm)
+        enqueueEvent("wallet", mapOf(
+            "action" to "disconnect",
+            "address" to normalized,
+            "chainId" to walletChainId,
+            "vm" to walletVm,
+            "walletType" to walletType
+        ))
+        if (walletAddress == normalized) {
+            walletAddress = null
+            walletVm = "evm"
+            walletChainId = "unknown"
+            walletType = "unknown"
+            prefs?.edit()?.remove("walletAddress")
+                ?.remove("walletVm")
+                ?.remove("walletChainId")
+                ?.remove("walletType")
+                ?.apply()
+        }
     }
 
-    fun walletTransaction(txHash: String, chainId: String, value: String? = null, properties: Map<String, Any>? = null) {
+    fun walletTransaction(txHash: String, chainId: String, value: String? = null, properties: Map<String, Any>? = null, vm: String? = null) {
         val props = mutableMapOf<String, Any>(
-            "action" to "transaction", "txHash" to txHash, "chainId" to chainId
+            "action" to "transaction", "txHash" to txHash, "chainId" to chainId, "vm" to (vm ?: walletVm)
         )
+        // This is contextual source evidence only. It does not establish
+        // wallet ownership or transaction finality; the backend verifier does.
+        walletAddress?.let { props["walletAddress"] = it }
         value?.let { props["value"] = it }
         properties?.let { props.putAll(it) }
         enqueueEvent("transaction", props)
@@ -1590,18 +1632,20 @@ object Aether : DefaultLifecycleObserver {
         topic: String,
         address: String? = null,
         chainId: String? = null,
-        properties: Map<String, Any?> = emptyMap()
+        properties: Map<String, Any?> = emptyMap(),
+        vm: String = "evm"
     ) {
         val props = mutableMapOf<String, Any?>(
             "action"   to "walletconnect_session",
             "topic"    to topic,
             "provider" to "walletconnect"
         )
-        address?.let { props["address"] = normalizeWalletAddress(it) }
+        address?.let { props["address"] = normalizeWalletAddress(it, vm) }
         chainId?.let { props["chainId"] = it }
+        props["vm"] = vm
         props.putAll(properties)
         if (address != null) {
-            walletConnected(address, "walletconnect", chainId ?: "unknown")
+            walletConnected(address, "walletconnect", chainId ?: "unknown", vm)
         } else {
             enqueueEvent("wallet", props)
         }
@@ -1615,7 +1659,7 @@ object Aether : DefaultLifecycleObserver {
     fun getWalletCapabilities(): Map<String, Any?> = mapOf(
         "connected"    to (walletAddress != null),
         "addresses"    to listOfNotNull(walletAddress?.let {
-            mapOf("address" to it, "vm" to "evm", "walletType" to "unknown")
+            mapOf("address" to it, "vm" to walletVm, "walletType" to walletType, "chainId" to walletChainId)
         }),
         "supportedVMs" to listOf("evm", "svm", "bitcoin", "movevm", "near", "tvm", "cosmos"),
         "googlePay"    to false,
@@ -2443,7 +2487,7 @@ object Aether : DefaultLifecycleObserver {
             put("canonical_receipt", canonicalConsentReceiptJson(receipt))
         }
 
-    private suspend fun resolveIdentity(walletAddress: String?, userId: String?, email: String?) = withContext(Dispatchers.IO) {
+    private suspend fun resolveIdentity(walletAddress: String?, userId: String?, email: String?, walletVm: String = "evm") = withContext(Dispatchers.IO) {
         val cfg = config ?: return@withContext
         try {
             val url = URL("${cfg.endpoint}/sdk/identity/resolve")
@@ -2457,7 +2501,7 @@ object Aether : DefaultLifecycleObserver {
 
             val wallets = JSONArray()
             if (!walletAddress.isNullOrEmpty()) {
-                wallets.put(JSONObject().apply { put("address", walletAddress); put("vm", "evm") })
+                wallets.put(JSONObject().apply { put("address", walletAddress); put("vm", walletVm) })
             }
             val body = JSONObject().apply {
                 put("wallets", wallets)

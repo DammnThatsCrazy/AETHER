@@ -410,6 +410,8 @@ The Aether SDK is signals-only. It:
 
 - Emits raw identity signals (`userId`, `anonymousId`, `walletAddress`, etc.)
   as fields on canonical events.
+- Carries wallet `vm` and `chainId` as source evidence; the backend uses the
+  resulting chain namespace when normalizing and hashing wallet identifiers.
 - Never receives or emits `canonical_entity_id`.
 - Never makes resolution decisions.
 - Never links cross-device profiles.

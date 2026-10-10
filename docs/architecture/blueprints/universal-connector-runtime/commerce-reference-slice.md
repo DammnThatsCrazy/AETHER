@@ -13,7 +13,7 @@ toc_depth: 3
 
 # Commerce reference slice
 
-This is the first target vertical slice of the [Universal Connector Runtime blueprint](README.md). It describes the customer loop and repository work needed to prove it. The branch implements an opt-in Shopify GraphQL orders reader, raw revision fields, and canonical transport foundations; it has not completed payment/SDK reconciliation, graph projection, tenant cutover, or live certification. `provider_object_refs` is repository-only and is not wired into Shopify events or graph projection. All remaining targets below require their stated evidence.
+This is the first target vertical slice of the [Universal Connector Runtime blueprint](README.md). It describes the customer loop and repository work needed to prove it. The branch implements an opt-in Shopify GraphQL orders reader, raw revision fields, canonical transport foundations, and a tenant-scoped exact-reference order/payment evidence ledger. Shopify order evidence is written after canonical Bronze/outbox persistence, and the ledger exposes a tenant-authorized read route. The retained Stripe webhook adapter now normalizes signed `payment_intent.succeeded` events as `commerce_payment` observations; reconciliation requires PaymentIntent metadata `aether_order_ref`, the exact amount/currency, and completion. The Aether Payment Rails session drawer displays the resulting order/payment evidence. `commerce_payment` remains distinct from payout settlement. Stripe and merchant metadata are not yet certified in staging; SDK checkout links, Journey/Value projection, graph projection, tenant cutover, and live certification remain open. `provider_object_refs` is repository-only and is not wired into graph projection. All remaining targets below require their stated evidence.
 
 ## What exists and what must change
 
@@ -94,6 +94,7 @@ The Shopify slice is not done until tests cover all of these cases against the c
 - Duplicate delivery, pull/webhook overlap, one object with multiple revisions, out-of-order correction, delete/tombstone, and repeated backfill preserve canonical and graph idempotency.
 - A paid order plus processor charge counts once; partial refunds adjust value exactly; chargeback/reversal is not silently treated as a new sale or a zero.
 - SDK checkout without order remains an observation; `commerce.order.created` does not become SDK `order_confirmed`; ambiguous SDK/order and payment/order joins stay pending.
+- The initial ledger slice joins only an exact namespaced order reference (`shopify:<shop-or-account>:<order-id>`), and checks exact decimal amount and currency. It ignores source-time older order revisions and flags divergent revisions with equal source time for review. It does not infer a join from amount, time, email, or customer identity, and it never writes graph facts or claims payout settlement.
 - Source identity merge, split, reconnect, and erasure preserve permitted aliases and audit without resurrecting deleted identities.
 - Tenant A cannot read, dedupe against, link to, replay, or project tenant B's raw, canonical, identity, or graph evidence.
 - Unknown payload versions quarantine with original provenance; unsupported capability is `not_applicable`; missing access or stale data is `unavailable` or `degraded`, not empty or healthy.

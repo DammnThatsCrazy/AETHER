@@ -53,6 +53,7 @@
     "entity",
     "episode",
     "infrastructure",
+    "journey",
     "population",
     "relationship",
     "source"
@@ -623,6 +624,7 @@
       "subjectKinds": [
         "campaign",
         "episode",
+        "journey",
         "source"
       ],
       "canonicalAuthorities": [
@@ -1381,6 +1383,7 @@
       "subjectKinds": [
         "campaign",
         "episode",
+        "journey",
         "source"
       ],
       "canonicalAuthorities": [

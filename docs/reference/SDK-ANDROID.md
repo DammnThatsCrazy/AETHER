@@ -11,9 +11,9 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:563ae6f6e758996cd0e90210aecaae05511a3f64c5f6f62e7598606c8737e42c"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:efaec0a5c1b84c927beae88209e0661797c72c35bd25c4ca3ac8adcd5bd996e8"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:79883c251f1b5e9cd493fe08983da78a204f2af69e91d1e2a61036d67e338363"
+  "packages/shared/events.ts": "sha256:c2c9b0df3d1a018a320981a2dfad443829583e10c399299711a6b76e5bc960ac"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide
@@ -136,22 +136,35 @@ Only the composite hash is sent — raw device signals are never transmitted.
 ```kotlin
 // Wallet connected
 Aether.walletConnected(
-    address = "0x1234...abcd",
-    walletType = "metamask",
-    chainId = "eip155:1"
+    address = "7xKXtg2CW87d97TXJSDpbD5jBkheT3hZ4GZ6gYgk6P3",
+    walletType = "samsung_wallet",
+    chainId = "solana:mainnet",
+    vm = "svm",
+    provider = "samsung_wallet"
 )
 
 // Wallet disconnected
-Aether.walletDisconnected(address = "0x1234...abcd")
+Aether.walletDisconnected(address = "7xKXtg2CW87d97TXJSDpbD5jBkheT3hZ4GZ6gYgk6P3")
 
 // Transaction sent
 Aether.walletTransaction(
     txHash = "0xabc123...",
     chainId = "eip155:1",
+    vm = "evm",
     value = "1.5",
     properties = mapOf("token" to "ETH")
 )
 ```
+
+Call this only from a host-app callback or another authorized source. The SDK
+does not inspect Samsung Wallet or other apps. `vm` keeps address
+normalization and is recorded with the wallet observation. The backend uses
+wallet metadata when processing accepted source-authorized events; its legacy
+`/sdk/identity/resolve` endpoint ignores unverified wallet claims.
+When a connected wallet is present, `walletTransaction` includes its address
+as source context. The backend records this as `source_observed`; chain
+verification is required before the transaction can represent execution,
+payment, or finality in the graph.
 
 ## Consent Management
 

@@ -7,13 +7,15 @@ audience: [architect, security, compliance, dev-senior]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
+source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "scripts/release/check_dsr_coverage.py": "sha256:2cca7e381e2c76b5e47e178828a8522cbc0794ffb45cdaad304d01e20f9ae1b4"
-  "services/api/governance/consent/erasure_jobs.py": "sha256:f2e3e36da76ad506b9b7599829162fcc45617870d6636ea99e8486fe460ec7bf"
-  "services/api/governance/consent/erasure_planes.py": "sha256:b3cd0f2d1208d382634d7092140ea3f4c3bec05f8b19c67c7f586091a98292d3"
-  "services/api/governance/dsr_propagation/models.py": "sha256:8c3c0477ca9434df84b48121679fa11fdf4980b489b0e2ba68bb3451c12b7f3b"
-  "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
+  "scripts/release/check_dsr_coverage.py": "sha256:3e7278d5281df87983b69075aa0f701b476c4ec3ab7dca534e31011577b663a0"
+  "services/api/governance/consent/erasure_jobs.py": "sha256:41f5b813d426f3375efa3c3a2c87583db159fe54224fb3b419d83d91418ff38e"
+  "services/api/governance/consent/erasure_planes.py": "sha256:892ba3ee1de530952164ba43f3fa3f6a38ddb7e1094ddbb42cb2fc9a82f6f779"
+  "services/api/governance/dsr_propagation/models.py": "sha256:e5a4b959a05ac870afaffc328c19ef2be4155648f5fc6e452339a9d2200dd5c6"
+  "services/api/graph/web3/registries.py": "sha256:0db03da90f411420455b868e1fb9861b98421937e3fb1901bd727ff32474e7ed"
+  "services/api/value/x402/commerce_store.py": "sha256:eb7dfaef1c1f02a31b4ce7d7699eab23ebb0f388de35c0220b1f6122be4aa4e2"
+  "services/api/shared/storage/lifecycle.py": "sha256:363902505a04df7228b46faad627ebe0cfc42bbbe8940122cf8ac42b6c93ac40"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store
@@ -81,6 +83,8 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `financial_value_snapshots` | `derivatives_pnl_snapshots` of the subject's trading accounts | hard delete | rows deleted; `artifacts_impacted` = accounts |
 | `silver_facts` | every `silver_*` and projector fact table, via the Silver writer's introspected schemas (typed columns and lake JSONB `data`) | hard delete | rows deleted |
 | `bronze_events` | `bronze_sdk_events` (+ externalized objects), `event_outbox` | chain-preserving tombstone + re-pack; payload redaction | rows affected |
+| `web3_observations` | `web3_observations` | exact subject-ref match in tenant-owned structured fields / payload; hard delete, legal hold respected | rows deleted |
+| `x402_commerce` | commerce challenges, approvals, policies, authorizations, receipts, settlements, entitlements, grants, fulfillments, budget policies | hard delete rows whose requester/subject/holder id equals a subject ref; per-resource legal holds respected | rows deleted by store |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a
@@ -135,3 +139,7 @@ relay never publishes it. The outbox chain still verifies.
 - The ML training pipeline does not yet record artifacts in
   `dsr_artifact_index`. Until it does, `training_datasets` and `model_artifacts`
   complete on the Gold training-eligibility evidence alone.
+- x402 erasure matches direct requester/subject/holder identifiers. Wallet
+  addresses and settlement proofs without a canonical subject reference remain
+  governed by their existing transaction-retention and legal-hold policies;
+  erasure does not infer identity from a wallet address.

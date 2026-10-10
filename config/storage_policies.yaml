@@ -45,6 +45,24 @@ policies:
     requires_consent_invalidation: true
     requires_permission_hash: false
 
+  - resource_type: web3_observations
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+    requires_permission_hash: false
+
   # Raw provider payloads may include subject data. Keep replayable payloads
   # under the same consent-invalidation, legal-hold, and erasure controls as
   # raw SDK events; the runtime may externalize them as compressed JSONL.
@@ -2837,6 +2855,40 @@ policies:
     requires_permission_hash: false
 
   - resource_type: attribution_credits
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: model_runtime_tenant_preferences
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: model_runtime_token_reservations
     authoritative_store: postgres
     metadata_store: postgres
     projection_stores: []

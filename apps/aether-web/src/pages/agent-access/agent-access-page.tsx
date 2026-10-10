@@ -13,6 +13,7 @@
  * Loading, error, empty and unknown are four visually distinct states.
  */
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState,
   ErrorState, LoadingState,
@@ -393,7 +394,14 @@ function AgentProfilePanel({ agentId }: { readonly agentId: string }) {
 
   return (
     <Card>
-      <CardHeader><CardTitle>Access profile</CardTitle></CardHeader>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>Access profile</CardTitle>
+          <Link className="text-xs font-medium text-text-primary underline" to={`/agents/${encodeURIComponent(agentId)}`}>
+            Open Agent 360
+          </Link>
+        </div>
+      </CardHeader>
       <CardContent className="space-y-3">
         {!known ? (
           <UnknownNotice

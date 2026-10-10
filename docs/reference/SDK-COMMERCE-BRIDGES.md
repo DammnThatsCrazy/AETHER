@@ -11,11 +11,11 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/bridges/": "sha256:47160b084e5269f5460a203f9ede3852ea8740aebf10c760c0ef9acde33dae2d"
+  "packages/shared/commerce-bridge.ts": "sha256:b052f7b3df53c934250acaefebefedaf49d9a06d3062d8c75617f308372ed665"
+  "packages/shared/commerce.ts": "sha256:1ecb0f87838e148ddeaeab7458ea7762350f451361eecf9925ba1c09ded0d32d"
+  "packages/shared/contracts/event-registry.json": "sha256:62be9bb37cd7b87cee90914a63abee464838f61074ae02be8baf72a35333fd12"
+  "packages/sdk/web/src/bridges/": "sha256:3ceea9d41cd65bfc6442fc6c7809165e4bf651b3625edde1a5cdeebe755c74ba"
   "packages/sdk/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
-  "packages/shared/commerce-bridge.ts": "sha256:60e4ac490718505e43a1091dc0574bdc84fa4a0318c6ed95f49963e2f3c9ae46"
-  "packages/shared/commerce.ts": "sha256:a2e6ae5be860985cd8265972f12c38da18d4475bbece666ca4ea332877c40bb3"
-  "packages/shared/contracts/event-registry.json": "sha256:29f3cdefd685a1ec296a96e9f705830ef09efd7865f67a1a6c1f2e4685e17c89"
   "services/api/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"
   "services/api/shared/integration_contracts/commerce_bridge.py": "sha256:bc2dd396267ac6902568ad055c633d2de906c7cdd83f7020c0fe100caa67c9e8"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"

@@ -4,7 +4,7 @@
 feature_id: payment-rail-observability
 title: Payment Rail Observability
 owning_system: aether
-summary: Five named adapters (Privy, Stripe crypto onramp, Coinbase, MoonPay, Bridge) with real HMAC webhook
+summary: Five named adapters (Privy, Stripe merchant payment/onramp, Coinbase, MoonPay, Bridge) with real HMAC webhook
   verification (per-provider scheme, constant-time), recursive sensitive-field stripping.
 scope:
   id: payment-rail-observability-v1

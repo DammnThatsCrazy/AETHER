@@ -18,8 +18,34 @@ const FAMILY_COLORS: Record<string, string> = {
 
 function StepsPanel({ journeyId }: { journeyId: string }) {
   const [family, setFamily] = useState('');
+  const [verificationResults, setVerificationResults] = useState<Record<string, string>>({});
+  const [verifyingHash, setVerifyingHash] = useState<string | null>(null);
   const timeCtx = useTimeContext();
-  const { data, loading, error, loadMore } = useJourneySteps(journeyId, family ? { family } : {});
+  const { data, loading, error, loadMore, reload } = useJourneySteps(journeyId, family ? { family } : {});
+
+  async function verifyTransaction(row: Row) {
+    const evidence = (row.evidence_summary ?? {}) as Row;
+    const txHash = String(evidence.transaction_hash ?? '');
+    const chainId = String(row.chain_id ?? '');
+    if (!txHash || !chainId) return;
+    setVerifyingHash(txHash);
+    try {
+      const response = await api.web3.transactions.verify(chainId, txHash) as Row;
+      const verification = (response.verification ?? {}) as Row;
+      setVerificationResults(previous => ({
+        ...previous,
+        [txHash]: String(verification.status ?? 'unavailable'),
+      }));
+      await reload();
+    } catch (cause) {
+      setVerificationResults(previous => ({
+        ...previous,
+        [txHash]: cause instanceof Error ? `error: ${cause.message}` : 'error: verification failed',
+      }));
+    } finally {
+      setVerifyingHash(null);
+    }
+  }
 
   return (
     <div>
@@ -39,6 +65,10 @@ function StepsPanel({ journeyId }: { journeyId: string }) {
       {error && <ErrorState title="Steps error" message={error} />}
       {!loading && data.steps.length === 0 && <EmptyState title="No steps" description="No steps found for these filters." />}
       {data.steps.length > 0 && (
+        <>
+        <p className="mb-2 text-xs text-text-muted">
+          Chain verification checks transaction execution and finality. Payment settlement is shown only when a payment source confirms it.
+        </p>
         <DataTable
           data={data.steps as Row[]}
           keyExtractor={r => String(r.step_id ?? r.step_position)}
@@ -55,11 +85,32 @@ function StepsPanel({ journeyId }: { journeyId: string }) {
                 {String(r.activity_status ?? '—')}
               </Badge>
             )},
+            { key: 'verification', header: 'Chain verification', render: r => {
+              const evidence = (r.evidence_summary ?? {}) as Row;
+              const txHash = String(evidence.transaction_hash ?? '');
+              const verification = (evidence.transaction_verification ?? {}) as Row;
+              const result = verificationResults[txHash];
+              const label = result ?? String(verification.status ?? 'not checked');
+              return r.activity_family === 'web3' && txHash ? (
+                <div className="flex flex-col items-start gap-1">
+                  <span className="text-xs">{label}</span>
+                  <button
+                    type="button"
+                    onClick={() => void verifyTransaction(r)}
+                    disabled={verifyingHash === txHash}
+                    className="text-xs text-accent underline disabled:opacity-50"
+                  >
+                    {verifyingHash === txHash ? 'Checking…' : 'Verify on chain'}
+                  </button>
+                </div>
+              ) : '—';
+            }},
             { key: 'transition', header: 'Transition', render: r => <span className="text-xs text-text-muted">{String(r.transition_type ?? '—')}</span> },
             { key: 'occurred', header: 'When', render: r => r.occurred_at ? formatDateTime(String(r.occurred_at), timeCtx) : '—' },
             { key: 'confidence', header: 'ID conf.', render: r => r.identity_confidence != null ? `${(Number(r.identity_confidence) * 100).toFixed(0)}%` : '—' },
           ]}
         />
+        </>
       )}
       {data.hasMore && (
         <button onClick={loadMore} disabled={loading} className="mt-2 text-xs text-accent underline disabled:opacity-50">

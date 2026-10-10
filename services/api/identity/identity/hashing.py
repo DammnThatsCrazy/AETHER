@@ -97,11 +97,12 @@ def hash_external_id(external_id: str, tenant_id: str) -> str:
 
 
 def hash_wallet(address: str, chain_namespace: str = "eip155") -> str:
-    """Hash a normalized wallet address with chain namespace."""
+    """Hash a normalized wallet address with VM and concrete chain scope."""
     normalized = normalize_wallet(address, chain_namespace)
     if not normalized:
         return ""
-    return hash_value(normalized, scope=f"wallet:{chain_namespace}")
+    namespace = (chain_namespace or "eip155").strip().lower()
+    return hash_value(normalized, scope=f"wallet:{namespace}")
 
 
 def normalize_wallet(address: str, chain_namespace: str = "eip155") -> str:
@@ -109,14 +110,22 @@ def normalize_wallet(address: str, chain_namespace: str = "eip155") -> str:
     if not address:
         return ""
     stripped = address.strip()
-    # EVM addresses: lowercase the 0x-prefixed hex
-    if chain_namespace in ("eip155", "evm") or stripped.startswith("0x"):
+    family = (chain_namespace or "eip155").strip().lower().split(":", 1)[0]
+    # These address families use hex identifiers whose casing is not
+    # semantically significant. Keep this gated by family: Bitcoin Base58,
+    # Substrate SS58, and other textual encodings are case-sensitive.
+    if family in {"eip155", "evm"} or (
+        family in {"sui", "aptos", "movevm", "starknet", "tvm"}
+        and stripped.startswith("0x")
+    ):
         return stripped.lower()
-    # Solana / SVM: base58 is case-sensitive, preserve as-is
-    if chain_namespace in ("solana", "svm"):
-        return stripped
-    # Default: strip and lowercase
-    return stripped.lower()
+    # Bech32-based account identifiers are conventionally represented in
+    # lowercase. Other formats remain untouched unless their format is known.
+    if family in {"cosmos", "near", "hedera", "icp"}:
+        return stripped.lower()
+    # Solana, Bitcoin, Substrate, Stellar, Cardano, Algorand, and unknown
+    # formats can contain case-sensitive base encodings.
+    return stripped
 
 
 def _normalize_email(email: str) -> str:

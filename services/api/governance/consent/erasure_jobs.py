@@ -41,8 +41,8 @@ leaves* (``MEMBER_OF`` edge revoked, membership row -> ``left``, member_count
 recomputed) and the three population components are marked with their own real
 receipts — leaves for ``population_memberships``, and honest zero receipts for
 the aggregate ``population_snapshots`` and tenant-owned ``populations`` rows.
-These components are appended to ``DSR_COMPONENTS`` (29 total) so every erasure
-request seeds a pending step for each from birth.
+These components are declared in ``DSR_COMPONENTS`` so every erasure request
+seeds a pending step for each from birth.
 
 The geographic-intelligence plane closes the same defect for the canonical
 ``location_facts`` store (geographic360 G4.5-C3): a subject's recorded location
@@ -50,15 +50,25 @@ facts are erased as *governed soft-revokes* (``lifecycle_state`` ``active`` ->
 ``revoked`` + ``revoked_at`` stamp — never a hard delete, so provenance stays
 audit-visible while the fact becomes invisible to reads) and the
 ``location_facts`` component is marked with the store's own revoke count.
-Appending the component grows ``DSR_COMPONENTS`` to 30, so every erasure
-request seeds a pending step for it from birth.
+Declaring the component ensures every erasure request seeds a pending step for
+it from birth.
 
 The analytics event store closes the same defect for the ``events`` rows and
 ``sessions`` rollups the ``analytics_event_recorder`` stream projector writes:
-the ``analytics_events`` component (31 total) hard-deletes the subject's rows,
+the ``analytics_events`` component hard-deletes the subject's rows,
 keyed on ``user_id`` and the request's ``anonymous_id`` when present, recomputes
 other identities' session rollups that counted the subject's events, and drops
 the tenant's cached analytics query results.
+
+The ``web3_observations`` and ``x402_commerce`` components also erase exact
+tenant-scoped subject references from raw Web3 observations and x402 lifecycle
+records, while honoring their storage-policy legal holds.
+
+The entity-keyed stores add ``web3_observations`` and ``x402_commerce``: the
+first deletes raw tenant observations whose structured fields contain an exact
+subject reference; the second removes tenant commerce lifecycle rows that
+directly name the subject. Both run through isolated entity planes and return
+their own durable row receipts.
 """
 
 from __future__ import annotations
@@ -471,9 +481,14 @@ async def _run_completeness_planes(
                 "DSR component %s receipt detail=%s", component, receipt.detail
             )
 
-    all_components = tuple(
-        c for _, comps, _ in planes.ENTITY_PLANES for c in comps
-    ) + planes.ML_ARTIFACT_COMPONENTS + planes.IDENTITY_COMPONENTS
+    all_components = tuple(dict.fromkeys(
+        tuple(c for _, comps, _ in planes.ENTITY_PLANES for c in comps)
+        + planes.ML_ARTIFACT_COMPONENTS
+        + planes.IDENTITY_COMPONENTS
+        # Keep explicit names here as well as in ENTITY_PLANES so static
+        # coverage proves both newly connected stores are job-owned.
+        + ("web3_observations", "x402_commerce")
+    ))
     try:
         subject = await planes.resolve_subject(tenant_id, user_id, anonymous_id)
     except Exception as exc:  # noqa: BLE001 — nothing can run without the subject

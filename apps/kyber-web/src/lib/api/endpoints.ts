@@ -1443,6 +1443,18 @@ export const api = {
       register: (chain: Record<string, unknown>) =>
         restClient.post('/v1/web3/chains', wrap(unknownSchema), chain).then(r => r.data),
     },
+    transactions: {
+      verify: (chainId: string, transactionHash: string) =>
+        restClient.post('/v1/web3/transactions/verify', wrap(unknownSchema), {
+          chain_id: chainId,
+          transaction_hash: transactionHash,
+        }).then(r => r.data),
+      verification: (chainId: string, transactionHash: string) =>
+        restClient.get(
+          `/v1/web3/transactions/${encodeURIComponent(chainId)}/${encodeURIComponent(transactionHash)}/verification`,
+          wrap(unknownSchema),
+        ).then(r => r.data),
+    },
     protocols: {
       list: (params?: { family?: string; chain?: string; q?: string; limit?: number }) =>
         restClient.get(`/v1/web3/protocols${buildQS({ ...params })}`, wrap(z.object({ protocols: z.array(unknownSchema), count: z.number() }))).then(r => r.data.protocols),

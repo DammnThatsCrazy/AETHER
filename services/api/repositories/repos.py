@@ -2793,12 +2793,18 @@ class PaymentIntentRepository(BaseRepository):
         tenant_id: str,
         status: str,
         metadata: Optional[dict] = None,
+        authorization_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
     ) -> dict:
         """Update the settlement_status of a payment intent (tenant-scoped)."""
         record = await self.find_for_tenant(intent_id, tenant_id)
         if record is None:
             raise KeyError(f"PaymentIntent {intent_id!r} not found for tenant {tenant_id!r}")
         record["settlement_status"] = status
+        if authorization_id is not None:
+            record["authorization_id"] = authorization_id
+        if execution_id is not None:
+            record["execution_id"] = execution_id
         if metadata:
             record.setdefault("metadata", {}).update(metadata)
         return await self.update(intent_id, record)

@@ -676,7 +676,7 @@ AREAS: list[Area] = [
     Area(
         "payment rail observability",
         3,
-        "Five named adapters (Privy, Stripe crypto onramp, Coinbase, MoonPay, Bridge) "
+        "Five named adapters (Privy, Stripe merchant payment/onramp, Coinbase, MoonPay, Bridge) "
         "with real HMAC webhook verification (per-provider scheme, constant-time), "
         "recursive sensitive-field stripping, status-ordered non-regressing session "
         "upsert, SDK-vs-provider reconciliation, and at-most-once canonical payment_* "

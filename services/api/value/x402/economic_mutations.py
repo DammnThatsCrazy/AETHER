@@ -220,6 +220,109 @@ class EconomicGraphMutations:
         await self._put_vertex(v)
         self._trace("vertex", VertexType.PAYMENT_AUTHORIZATION, v.properties)
 
+        # PaymentAuthorization is scoped to its PaymentRequirement challenge.
+        # Preserve the graph's registered direction and meaning: requirement
+        # AUTHORIZED_BY authorization. Do not infer an agent or principal edge.
+        requirement_id = str(auth.challenge_id or "").strip()
+        if requirement_id:
+            edge = Edge(
+                edge_type=EdgeType.AUTHORIZED_BY,
+                from_vertex_id=_tkey(auth.tenant_id, requirement_id),
+                to_vertex_id=_tkey(auth.tenant_id, auth.authorization_id),
+                properties={"source_authority": "x402_commerce_store"},
+            )
+            await self._put_edge(
+                edge, auth.tenant_id,
+                subject_id=_tkey(auth.tenant_id, requirement_id),
+            )
+            self._trace("edge", EdgeType.AUTHORIZED_BY, edge.properties)
+
+    async def write_agent_payment_operation(
+        self, intent: dict, settlements: list[dict]
+    ) -> None:
+        """Materialize source-owned agent payment facts using existing graph types.
+
+        The repositories remain authoritative. This writes existing
+        PaymentIntent/SettlementEvent vertices and registered PAYS_FOR/
+        SETTLED_AS edges; it does not introduce a second operation vertex or
+        aggregate money values.
+        """
+        tenant_id = str(intent.get("tenant_id") or "").strip()
+        intent_id = str(intent.get("intent_id") or "").strip()
+        if not tenant_id or not intent_id:
+            raise ValueError("agent payment graph projection requires tenant and intent IDs")
+
+        intent_vertex = Vertex(
+            vertex_type=VertexType.PAYMENT_INTENT,
+            vertex_id=_tkey(tenant_id, intent_id),
+            properties={
+                "payment_intent_id": intent_id,
+                "agent_id": str(intent.get("agent_id") or ""),
+                "provider": str(intent.get("provider") or ""),
+                "protocol": str(intent.get("protocol") or ""),
+                "lifecycle_state": str(intent.get("settlement_status") or "unknown"),
+                "occurred_at": intent.get("occurred_at"),
+                "observed_at": intent.get("created_at"),
+                "tenant_id": tenant_id,
+                "source_authority": "agent_payment_intent",
+            },
+        )
+        await self._put_vertex(intent_vertex)
+        self._trace("vertex", VertexType.PAYMENT_INTENT, intent_vertex.properties)
+        agent_id = str(intent.get("agent_id") or "").strip()
+        if agent_id:
+            agent_payment = Edge(
+                edge_type=EdgeType.PAYS_FOR,
+                from_vertex_id=_tkey(tenant_id, agent_id),
+                to_vertex_id=_tkey(tenant_id, intent_id),
+                properties={"source_authority": "agent_payment_intent"},
+            )
+            await self._put_edge(
+                agent_payment, tenant_id,
+                subject_id=_tkey(tenant_id, agent_id),
+            )
+            self._trace("edge", EdgeType.PAYS_FOR, agent_payment.properties)
+
+        for settlement in settlements:
+            settlement_id = str(settlement.get("settlement_event_id") or "").strip()
+            if (
+                not settlement_id
+                or settlement.get("tenant_id") != tenant_id
+                or settlement.get("intent_id") != intent_id
+                or settlement.get("agent_id") != intent.get("agent_id")
+            ):
+                continue
+            settlement_vertex = Vertex(
+                vertex_type=VertexType.SETTLEMENT_EVENT,
+                vertex_id=_tkey(tenant_id, settlement_id),
+                properties={
+                    "settlement_event_id": settlement_id,
+                    "agent_id": str(settlement.get("agent_id") or ""),
+                    "provider": str(settlement.get("provider") or ""),
+                    "lifecycle_state": str(settlement.get("status") or "unknown"),
+                    "occurred_at": settlement.get("occurred_at"),
+                    "observed_at": settlement.get("created_at"),
+                    "tenant_id": tenant_id,
+                    "source_authority": "agent_settlement_event",
+                },
+            )
+            await self._put_vertex(settlement_vertex)
+            self._trace("vertex", VertexType.SETTLEMENT_EVENT, settlement_vertex.properties)
+            edge = Edge(
+                edge_type=EdgeType.SETTLED_AS,
+                from_vertex_id=_tkey(tenant_id, intent_id),
+                to_vertex_id=_tkey(tenant_id, settlement_id),
+                properties={
+                    "lifecycle_state": str(settlement.get("status") or "unknown"),
+                    "source_authority": "agent_settlement_event",
+                },
+            )
+            await self._put_edge(
+                edge, tenant_id, subject_id=_tkey(tenant_id, intent_id)
+            )
+            self._trace("edge", EdgeType.SETTLED_AS, edge.properties)
+
+
     async def write_receipt_and_settlement(self, receipt: PaymentReceipt, settlement: Settlement) -> None:
         rv = Vertex(
             vertex_type=VertexType.PAYMENT_RECEIPT,

@@ -244,6 +244,10 @@ class IdentitySignal:
     source_platform: str = ""
     source_sdk: str = ""
     consent_snapshot: Optional[dict] = None
+    # Wallet identity must be hashed in its chain namespace so equal-looking
+    # addresses on unrelated chains cannot collide and case-sensitive chains
+    # retain their canonical representation.
+    chain_namespace: str = ""
 
 
 @dataclass

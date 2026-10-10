@@ -624,6 +624,9 @@ class CanonicalActivity(BaseModel):
     # Campaign linkage
     campaign_id: Optional[str] = None
     conversion_id: Optional[str] = None
+    # Explicit provider-issued shared reference used only for source-exact
+    # commerce operation navigation; never a customer/order inference key.
+    commerce_order_ref: Optional[str] = None
 
     # Timing
     occurred_at: datetime

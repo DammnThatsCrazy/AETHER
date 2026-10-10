@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [scripts/production_status.py]
 canonical_owner: platform@aether
 source_hashes:
-  "scripts/production_status.py": "sha256:5a5218a6e5176e10a5881978bb096fa65f8da25a50587aed32ffd2da2d679c3c"
+  "scripts/production_status.py": "sha256:777c9c90f8d6a8fa703d31d3994224ba56af90e64d75f54cb1d302250acfa0e4"
 ---
 
 # Pilot Evidence Guide

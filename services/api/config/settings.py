@@ -1498,7 +1498,7 @@ class ExternalAgentTelemetryConfig:
 class PaymentRailsConfig:
     """Payment Rail Observability V1 rollout flags (default OFF).
 
-    Named providers only — Privy, Stripe crypto onramp, Coinbase, MoonPay,
+    Named providers only — Privy, Stripe merchant payment/onramp, Coinbase, MoonPay,
     Bridge. No generic webhook fallback. Aether observes and reconciles;
     it never executes or settles payments or custodies funds.
     """
