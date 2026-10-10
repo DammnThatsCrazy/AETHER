@@ -13,8 +13,8 @@ canonical_owner: architecture@aether
 ## Baseline and scope
 
 This is the implementation delta for the October 9, 2026 post-#758 assessment.
-The working branch is `Development` at `a8bb030f` (also the current
-`origin/Development` head). The earlier mobile identity work is in progress in
+The assessed baseline is `Development` at `a8bb030f`; the current implementation
+is stacked on that branch at `ed1cfb53`. The earlier mobile identity work is in
 the same checkout and is retained. The objective is to connect surviving
 contracts to their real runtime owners, then prove the customer-facing path;
 it is not to recreate the original 72 work orders as 72 presumed missing
@@ -72,6 +72,70 @@ scale, and cost in the release evidence.
 **Acceptance:** at least the human mobile journey, cross-platform identity,
 and a controlled delegated-payment journey have end-to-end product evidence;
 design-partner evidence is distinguished from production readiness.
+
+## Implementation program sequence
+
+### Slice 0 — Capability and work-order traceability
+
+The original 72-work-order inventory is not present in this repository or the
+available conversation context. Its exact item names and IDs therefore cannot
+be reconciled yet. Do not fabricate replacement rows or claim a complete
+traceability audit. Once the original list is restored, create one row per
+source item and map it to the current owner, runtime reachability, the eight
+runtime gaps above, and the three priorities below. Dispositions are
+`implemented_and_reachable`, `implemented_but_unproven`, `disconnected`,
+`missing`, or `superseded`. Each row must carry an evidence path, next action,
+dependency, and acceptance criterion. Existing implementations remain
+authoritative where they already own the capability. Until then, this program
+tracks the eight gaps and three priorities as the available source of truth.
+
+### Slice 1 — Mobile source observation to economic graph
+
+Preserve chain namespace and VM family from SDK calls, attach the connected
+wallet address only as contextual source evidence, project canonical `wallet`
+and `transaction` events into tenant-scoped Web3 Silver facts, and resolve
+identity only when the existing source-identity evidence is present. Public
+SDK ingestion must enforce the registry's `sdkEmitable` set so client keys
+cannot claim server-owned lifecycle or finality event types. Client-reported
+transaction references remain unverified until a chain/provider verifier
+confirms execution and finality. Only verified observations may contribute
+payment or settlement graph semantics.
+
+**Acceptance:** a controlled host-app observation is retained with tenant,
+source event, wallet context, chain namespace/VM, consent, and source-observed
+status; non-SDK-emittable events are rejected at the public SDK boundary. A
+client event alone never creates a `PAID` or settled relationship.
+
+**Implementation status (October 10, 2026):** Android/iOS transaction calls
+include the connected address as context; the event contract marks wallet,
+chain, and VM fields as source references; Web3 Silver now accepts canonical
+`wallet`/`transaction` events and retains their observed status; identity
+ingestion recognizes `walletAddress`; and validation enforces the generated
+SDK-emittable event set. Contract generation, Python syntax compilation, and
+strict documentation drift checks pass. Provider-backed transaction
+verification, journey reconciliation, and product evidence remain open.
+
+### Slice 2 — Authoritative agent execution and economic reconciliation
+
+Connect real executor outcomes to server-authored lifecycle events. Preserve
+principal, agent, sub-agent, delegation, authorization, execution, and settlement
+refs. Reconcile those refs with the existing domain-specific payment, x402,
+stablecoin, commerce, and derivatives contracts before introducing a shared
+cross-domain operation identity.
+
+### Slice 3 — Evidence-backed customer surfaces
+
+Expose the verified operation chain through existing graph and temporal reads,
+then Profile 360, Agent 360, and Value. Extend Journeys, Signals/Lenses,
+Snapshot, and Kyber diagnostics only where they can display source evidence,
+authority, lifecycle state, and limitations.
+
+### Slice 4 — Journey and release evidence
+
+Run the five approved journeys against controlled fixtures first and authorized
+providers where available. Record replay, correction, revocation, consent,
+tenant isolation, latency, scale, and cost results. Keep design-partner or
+simulator evidence distinct from production readiness.
 
 ## Shared architecture decisions carried forward
 

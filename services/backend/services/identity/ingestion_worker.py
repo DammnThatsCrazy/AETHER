@@ -137,7 +137,7 @@ async def resolve_sdk_observation(event: Event, producer: EventProducer) -> None
         session_id=session_id,
         email=_first(properties, "email"),
         phone=_first(properties, "phone"),
-        wallet_address=_first(properties, "wallet_address", "address"),
+        wallet_address=_first(properties, "wallet_address", "walletAddress", "address"),
         external_id=_first(properties, "external_id", "customer_id"),
         agent_id=_first(payload, "agent_id") or _first(properties, "agent_id"),
         org_id=_first(context, "orgId", "tenantId"),

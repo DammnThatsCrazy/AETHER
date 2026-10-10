@@ -11,9 +11,9 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:b51b24d1580032ee11a1b90d217827b6b02b37425eb54c08904c0cbdc2e9e444"
+  "packages/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:efaec0a5c1b84c927beae88209e0661797c72c35bd25c4ca3ac8adcd5bd996e8"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
+  "packages/shared/events.ts": "sha256:c2c9b0df3d1a018a320981a2dfad443829583e10c399299711a6b76e5bc960ac"
 ---
 
 # Aether Android SDK v0.1.0-alpha.0 — Integration Guide
@@ -161,6 +161,10 @@ does not inspect Samsung Wallet or other apps. `vm` keeps address
 normalization and is recorded with the wallet observation. The backend uses
 wallet metadata when processing accepted source-authorized events; its legacy
 `/sdk/identity/resolve` endpoint ignores unverified wallet claims.
+When a connected wallet is present, `walletTransaction` includes its address
+as source context. The backend records this as `source_observed`; chain
+verification is required before the transaction can represent execution,
+payment, or finality in the graph.
 
 ## Consent Management
 

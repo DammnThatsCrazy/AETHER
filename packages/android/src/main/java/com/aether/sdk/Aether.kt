@@ -1585,6 +1585,9 @@ object Aether : DefaultLifecycleObserver {
         val props = mutableMapOf<String, Any>(
             "action" to "transaction", "txHash" to txHash, "chainId" to chainId, "vm" to (vm ?: walletVm)
         )
+        // This is contextual source evidence only. It does not establish
+        // wallet ownership or transaction finality; the backend verifier does.
+        walletAddress?.let { props["walletAddress"] = it }
         value?.let { props["value"] = it }
         properties?.let { props.putAll(it) }
         enqueueEvent("transaction", props)

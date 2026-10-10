@@ -2343,6 +2343,10 @@ public final class Aether: NSObject {
             "chainId": AnyCodable(chainId),
             "vm": AnyCodable(vm ?? walletVm)
         ]
+        // A connected address provides transaction context, not proof of
+        // wallet ownership or transaction finality. The backend's chain
+        // verifier remains authoritative for those claims.
+        if let address = walletAddress { props["walletAddress"] = AnyCodable(address) }
         if let value = value { props["value"] = AnyCodable(value) }
         if let extra = properties { props.merge(extra) { _, new in new } }
         enqueueEvent(type: .transaction, properties: props)

@@ -14,7 +14,7 @@ source_hashes:
   "packages/react-native/src/bridge.ts": "sha256:790445142865418604fbda5b12d7524c3a6df40c8be9065ad3b308b811b1efc9"
   "packages/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
+  "packages/shared/events.ts": "sha256:c2c9b0df3d1a018a320981a2dfad443829583e10c399299711a6b76e5bc960ac"
 ---
 
 # Aether React Native SDK v0.1.0-alpha.0 — Integration Guide
@@ -229,6 +229,10 @@ observation. The backend uses wallet metadata when processing accepted
 source-authorized events; its legacy `/sdk/identity/resolve` endpoint ignores
 unverified wallet claims. A wallet connection does not prove custody,
 ownership, or transaction settlement.
+When a connected wallet is present, `wallet.transaction` includes its address
+as source context. The backend records this as `source_observed`; chain
+verification is required before the transaction can represent execution,
+payment, or finality in the graph.
 
 ## Consent Management
 
