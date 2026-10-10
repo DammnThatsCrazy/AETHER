@@ -94,7 +94,7 @@ The Shopify slice is not done until tests cover all of these cases against the c
 - Duplicate delivery, pull/webhook overlap, one object with multiple revisions, out-of-order correction, delete/tombstone, and repeated backfill preserve canonical and graph idempotency.
 - A paid order plus processor charge counts once; partial refunds adjust value exactly; chargeback/reversal is not silently treated as a new sale or a zero.
 - SDK checkout without order remains an observation; `commerce.order.created` does not become SDK `order_confirmed`; ambiguous SDK/order and payment/order joins stay pending.
-- The initial ledger slice joins only an exact namespaced order reference (`shopify:<shop-or-account>:<order-id>`), and checks exact decimal amount and currency. It does not infer a join from amount, time, email, or customer identity, and it never writes graph facts or claims payout settlement.
+- The initial ledger slice joins only an exact namespaced order reference (`shopify:<shop-or-account>:<order-id>`), and checks exact decimal amount and currency. It ignores source-time older order revisions and flags divergent revisions with equal source time for review. It does not infer a join from amount, time, email, or customer identity, and it never writes graph facts or claims payout settlement.
 - Source identity merge, split, reconnect, and erasure preserve permitted aliases and audit without resurrecting deleted identities.
 - Tenant A cannot read, dedupe against, link to, replay, or project tenant B's raw, canonical, identity, or graph evidence.
 - Unknown payload versions quarantine with original provenance; unsupported capability is `not_applicable`; missing access or stale data is `unavailable` or `degraded`, not empty or healthy.

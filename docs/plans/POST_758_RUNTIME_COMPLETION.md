@@ -98,7 +98,9 @@ sanitized metadata. It exposes the evidence through
 `GET /v1/commerce/reconciliation/order-payments`, guarded by `commerce:read`.
 Matching never uses amount, time, email, or customer identity; multiple
 successful payments and mismatched amounts remain explicit conflicts. This
-slice does not project payment graph facts or claim settlement. No current
+ledger ignores source-time older order revisions and flags divergent revisions
+with equal source time for review. This slice does not project payment graph
+facts or claim settlement. No current
 payment adapter emits the commerce metadata contract by default, so provider
 certification, SDK checkout linkage, correction/refund semantics, and the
 two-provider golden path remain release work.

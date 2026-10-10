@@ -36,6 +36,7 @@ class CommerceOrderPaymentLedger:
         amount: str,
         currency: str,
         revision_id: str,
+        source_revision_at: str | None,
         occurred_at: str,
     ) -> dict[str, Any]:
         """Upsert the authoritative order snapshot under its exact reference."""
@@ -46,6 +47,7 @@ class CommerceOrderPaymentLedger:
             "amount": _decimal_text(amount),
             "currency": _currency(currency),
             "revisionId": _required(revision_id, "revision_id"),
+            "sourceRevisionAt": source_revision_at or occurred_at,
             "occurredAt": occurred_at,
         }
         key = _key(tenant_id, ref)
@@ -60,8 +62,14 @@ class CommerceOrderPaymentLedger:
             record["state"] = "conflict"
             record["conflictReason"] = "reference_maps_to_multiple_orders"
         elif not prior or prior.get("revisionId") != order["revisionId"]:
-            record["order"] = order
-        record["updatedAt"] = occurred_at
+            prior_revision_at = str(prior.get("sourceRevisionAt") or "")
+            next_revision_at = str(order.get("sourceRevisionAt") or "")
+            if next_revision_at > prior_revision_at:
+                record["order"] = order
+            elif next_revision_at == prior_revision_at:
+                record["state"] = "conflict"
+                record["conflictReason"] = "divergent_order_revisions_with_equal_source_time"
+        record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
         self._reconcile(record)
         await self._store.set(key, record)
         return record

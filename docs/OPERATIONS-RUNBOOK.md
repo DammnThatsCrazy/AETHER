@@ -18,7 +18,7 @@ source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
   "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
-  "services/backend/services/provider_runtime/": "sha256:76161c67972ddd7ab2b014beb85b6f1c3488fd9136be799f18f2debc0fc2313d"
+  "services/backend/services/provider_runtime/": "sha256:7fdbf307710d2b880455aa082ea08798976a928b1ef17eba98b80f0b88465eac"
 ---
 # Operations Runbook v0.1.0-alpha.0
 

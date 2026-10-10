@@ -134,6 +134,11 @@ class EventBridge:
                     amount=str(amount),
                     currency=str(currency),
                     revision_id=str(event.revision_id or event.event_id),
+                    source_revision_at=(
+                        str((event.data or {}).get("updated_at"))
+                        if (event.data or {}).get("updated_at")
+                        else None
+                    ),
                     occurred_at=event.occurred_at,
                 )
         metrics.increment(
