@@ -85,7 +85,7 @@ NON_SURFACE: dict[str, str] = {
     "/notifications": (
         "tenant's own notification inbox is self-scoped attention data not "
         "projected into the tenant graph; operator signals have their own ops "
-        "exception queue (services/kyber/ops/exceptions)"
+        "exception queue (services/api/governance/kyber/ops/exceptions)"
     ),
     "/billing": "tenant billing portal; operator view is /v1/kyber/revops",
     "/usage-plan": "tenant plan self-service; operator view is /v1/kyber/revops",

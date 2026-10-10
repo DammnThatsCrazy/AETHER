@@ -30,21 +30,21 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import TenantContext
 from shared.common.common import BadRequestError, ForbiddenError
 
-import services.agent_access_intelligence.access_graph as access_graph
-import services.agent_access_intelligence.access_graph_routes as access_graph_routes
-from services.agent_access_intelligence.access_graph import (
+import actions.agent_access_intelligence.access_graph as access_graph
+import actions.agent_access_intelligence.access_graph_routes as access_graph_routes
+from actions.agent_access_intelligence.access_graph import (
     EDGE_AUTHORIZED_FOR,
     EDGE_CONNECTS_TO,
     EDGE_EXPOSES,
     MAX_DEPTH,
     capability_access_graph_service,
 )
-from services.agent_access_intelligence.authority import server_ref_for
-from services.agent_access_intelligence.authority_routes import (
+from actions.agent_access_intelligence.authority import server_ref_for
+from actions.agent_access_intelligence.authority_routes import (
     CapabilityAuthorizationGrant,
     grant_authorization,
 )
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
 
 
 class FakeProducer:

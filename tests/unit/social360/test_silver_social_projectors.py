@@ -32,27 +32,27 @@ from __future__ import annotations
 # conftest.py has prepended the worktree backend path, so these imports resolve
 # to THIS checkout, not the editable install that points at /Users/osazehunt/AETHER.
 from shared.social360.canonical import SOURCE_SCOPES  # noqa: E402
-from services.silver.projectors.social_identity_projector import (  # noqa: E402
+from ingestion.silver.projectors.social_identity_projector import (  # noqa: E402
     SOCIAL_IDENTITY_TABLE,
     SocialIdentityProjector,
 )
-from services.silver.projectors.social_connection_projector import (  # noqa: E402
+from ingestion.silver.projectors.social_connection_projector import (  # noqa: E402
     SOCIAL_CONNECTION_TABLE,
     SocialConnectionProjector,
 )
-from services.silver.projectors.social_interaction_projector import (  # noqa: E402
+from ingestion.silver.projectors.social_interaction_projector import (  # noqa: E402
     SOCIAL_INTERACTION_TABLE,
     SocialInteractionProjector,
 )
-from services.silver.projectors.social_content_projector import (  # noqa: E402
+from ingestion.silver.projectors.social_content_projector import (  # noqa: E402
     SOCIAL_CONTENT_TABLE,
     SocialContentProjector,
 )
-from services.silver.projectors.social_community_projector import (  # noqa: E402
+from ingestion.silver.projectors.social_community_projector import (  # noqa: E402
     SOCIAL_COMMUNITY_TABLE,
     SocialCommunityMembershipProjector,
 )
-from services.silver.projectors.social_metric_projector import (  # noqa: E402
+from ingestion.silver.projectors.social_metric_projector import (  # noqa: E402
     SOCIAL_METRIC_TABLE,
     SocialMetricProjector,
 )

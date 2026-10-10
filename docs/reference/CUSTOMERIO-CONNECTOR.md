@@ -10,9 +10,9 @@ flags: [AETHER_CONNECTORS_ENABLED, AETHER_COMMS_INGESTION_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
-  - services/backend/services/integrations/connectors/customerio.py
+  - services/api/connectors/integrations/connectors/customerio.py
 source_hashes:
-  "services/backend/services/integrations/connectors/customerio.py": "sha256:37f0e4827c0e5031d80239a216a0227867cae8790735ce879da6e308a76cf39e"
+  "services/api/connectors/integrations/connectors/customerio.py": "sha256:8b42cc47b7679ea294cb3d699771f781c3f89bedaecca4559732315580a9a867"
 ---
 
 # Customer.io Connector

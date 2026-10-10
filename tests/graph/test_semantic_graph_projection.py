@@ -20,10 +20,10 @@ def _isolate(monkeypatch):
     from config.settings import settings
     from repositories.graph_mutation_ledger import reset_graph_ledger_memory
     from repositories.repos import reset_in_memory_stores
-    from services.semantic_intelligence import service as service_mod
-    from services.semantic_intelligence.engine import get_store, set_store
-    from services.semantic_intelligence.service import SemanticIntelligenceService
-    from services.semantic_intelligence.store import DurableSemanticSentimentStore
+    from intelligence.semantic_intelligence import service as service_mod
+    from intelligence.semantic_intelligence.engine import get_store, set_store
+    from intelligence.semantic_intelligence.service import SemanticIntelligenceService
+    from intelligence.semantic_intelligence.store import DurableSemanticSentimentStore
 
     reset_in_memory_stores()
     reset_graph_ledger_memory()
@@ -56,8 +56,8 @@ def test_semantic_edge_type_registered_and_excluded_layer():
 
 
 async def _seed(tenant: str, source: str, target: str) -> None:
-    from services.semantic_intelligence import service as service_mod
-    from services.semantic_intelligence.engine import classify_event, get_store
+    from intelligence.semantic_intelligence import service as service_mod
+    from intelligence.semantic_intelligence.engine import classify_event, get_store
 
     obs, sentiments = await classify_event(
         {
@@ -87,7 +87,7 @@ async def _fresh_graph():
 
 async def test_relationship_gold_projects_through_the_ledger():
     from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
-    from services.semantic_intelligence.graph_projector import project_tenant
+    from intelligence.semantic_intelligence.graph_projector import project_tenant
     from shared.graph.graph import EdgeType
 
     await _seed("T", "a", "b")
@@ -104,7 +104,7 @@ async def test_relationship_gold_projects_through_the_ledger():
 
 
 async def test_projection_is_idempotent_through_the_gateway():
-    from services.semantic_intelligence.graph_projector import project_tenant
+    from intelligence.semantic_intelligence.graph_projector import project_tenant
     from shared.graph.graph import EdgeType
 
     await _seed("T", "a", "b")

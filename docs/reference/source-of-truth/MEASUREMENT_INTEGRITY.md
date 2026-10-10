@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/shared/measurement/value_states.py, services/backend/shared/measurement/context.py, services/backend/shared/measurement/contracts.py, services/backend/shared/measurement/validators.py, services/backend/shared/measurement/uncertainty.py, services/backend/shared/measurement/registry.py, services/backend/shared/measurement/compute.py, services/backend/repositories/measurement_results_repo.py, services/backend/services/measurement/routes/integrity.py, services/backend/services/campaign/routes.py]
+source_files: [services/api/shared/measurement/value_states.py, services/api/shared/measurement/context.py, services/api/shared/measurement/contracts.py, services/api/shared/measurement/validators.py, services/api/shared/measurement/uncertainty.py, services/api/shared/measurement/registry.py, services/api/shared/measurement/compute.py, services/api/repositories/measurement_results_repo.py, services/api/journeys/measurement/routes/integrity.py, services/api/journeys/campaign/routes.py]
 last_synced_commit: ae973059
 ---
 
@@ -53,7 +53,7 @@ a different result, never a silent overwrite.
   `campaign_ltv`, plus `gross_value`, `net_value`, `costs`, `margin`, `ltv`,
   `refunds`, `exposure`. Every economic360 `metricRef` resolves against
   `packages/shared/contracts/metric-registry.json` (parity-tested against the
-  hand-authored `registry.py`); USD-safe value semantics live in `services.value`,
+  hand-authored `registry.py`); USD-safe value semantics live in `value.value`,
   never cross-currency sums.
 - `uncertainty.py` — `wilson_interval` (proportions) and a seeded, deterministic
   `bootstrap_ci` (means). `probability`-named metrics are gated on the registry's
@@ -80,7 +80,7 @@ migration keeps a single alembic head.
 
 ## Read surfaces
 
-`services/backend/services/measurement/routes/integrity.py` (mounted under `/v1/measurement`):
+`services/api/journeys/measurement/routes/integrity.py` (mounted under `/v1/measurement`):
 
 | Route | Returns |
 |---|---|
@@ -103,7 +103,7 @@ result into the plane, idempotently (an active result for the same context is
 returned unchanged, not re-inserted).
 
 The Campaign360 gold materializer
-(`services/backend/services/measurement/engine/gold_materializer.py`) uses this to record the
+(`services/api/journeys/measurement/engine/gold_materializer.py`) uses this to record the
 tenant-day `conversion_rate` into the plane on every materialization. The gold
 ClickHouse row keeps its typed float column for analytical compatibility; the
 plane is the **integrity source of truth** — a `0.0` in gold is legacy

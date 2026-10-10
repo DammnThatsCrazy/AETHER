@@ -15,8 +15,8 @@ from starlette.requests import Request
 
 from config.settings import settings
 from repositories.repos import reset_in_memory_stores
-from services.consent.authority import ConsentReceiptRepository
-from services.sdk import routes
+from governance.consent.authority import ConsentReceiptRepository
+from ingestion.sdk import routes
 
 TENANT = "tenant-sdk-route-contract"
 

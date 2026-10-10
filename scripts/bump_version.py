@@ -52,7 +52,7 @@ PACKAGE_JSONS = [
     ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "cache" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "events" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "logger" / "package.json",
-    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "services" / "ingestion" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "ingestion" / "ingestion" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "auth" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "cache" / "package.json",
@@ -60,7 +60,7 @@ PACKAGE_JSONS = [
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "events" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "logger" / "package.json",
     ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "services" / "data-lake" / "package.json",
-    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "services" / "ingestion" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "ingestion" / "ingestion" / "package.json",
     ROOT / "packages" / "sdk" / "server" / "package.json",
     ROOT / "packages" / "ui" / "mobile" / "package.json",
 ]
@@ -295,7 +295,7 @@ def check_version_alignment() -> int:
         # The backend mirror of the same fact. Not a second version authority
         # (pyproject.toml remains the source); it is the copy the verifier
         # compares against, pinned here so it cannot drift from it.
-        ROOT / "services" / "backend" / "services" / "sdk_distribution" / "versions.py": [f'CANONICAL_SDK_VERSION = "{canonical}"'],
+        ROOT / "services" / "api" / "ingestion" / "sdk_distribution" / "versions.py": [f'CANONICAL_SDK_VERSION = "{canonical}"'],
     }
     print("Checking SDK/native version constants...")
     for path, needles in native_expectations.items():

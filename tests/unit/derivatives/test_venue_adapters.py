@@ -16,12 +16,12 @@ import pytest
 
 import mock_venues as mv
 
-from services.derivatives.adapters.conformance import run_conformance
-from services.derivatives.adapters.drift import DriftAdapter
-from services.derivatives.adapters.dydx import DydxAdapter
-from services.derivatives.adapters.gmx import GmxAdapter
-from services.derivatives.adapters.hyperliquid import HyperliquidAdapter
-from services.derivatives.models import ReadOnlyCredentialError
+from value.derivatives.adapters.conformance import run_conformance
+from value.derivatives.adapters.drift import DriftAdapter
+from value.derivatives.adapters.dydx import DydxAdapter
+from value.derivatives.adapters.gmx import GmxAdapter
+from value.derivatives.adapters.hyperliquid import HyperliquidAdapter
+from value.derivatives.models import ReadOnlyCredentialError
 from shared.certification.checks import run_certification
 
 
@@ -197,7 +197,7 @@ async def test_dydx_retries_through_timeout():
 
 async def test_test_connection_classifies_server_error():
     import httpx
-    from services.derivatives.connectors.transport import RestBackfillClient
+    from value.derivatives.connectors.transport import RestBackfillClient
 
     def handler(request):
         return httpx.Response(500, json={"error": "boom"}, request=request)
@@ -270,7 +270,7 @@ async def test_fetch_fills_returns_bronze_observations():
 
 
 async def test_hyperliquid_connector_real_fetch_and_normalize():
-    from services.derivatives.connectors.hyperliquid import HyperliquidConnector
+    from value.derivatives.connectors.hyperliquid import HyperliquidConnector
 
     transport, _ = mv.hyperliquid_transport(
         fills=[mv.hl_fill(1, 1000, "B"), mv.hl_fill(2, 1001, "A")],
@@ -288,7 +288,7 @@ async def test_hyperliquid_connector_real_fetch_and_normalize():
 
 def test_import_fallback_still_parses_partner_records():
     """Partners without credentials use the explicit CSV/JSON/NDJSON fallback."""
-    from services.derivatives.connectors.generic_import import parse_import_payload
+    from value.derivatives.connectors.generic_import import parse_import_payload
 
     payload = (
         '{"source_record_id":"f1","account":"0xabc","market":"BTC","side":"buy",'

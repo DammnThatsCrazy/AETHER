@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/interop/correlation.py
-  - services/backend/services/interop/admin_routes.py
+  - services/api/graph/interop/correlation.py
+  - services/api/graph/interop/admin_routes.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/interop/admin_routes.py": "sha256:d3b506fdfb47dd45fbfc8c150f48689ac3e7bfe641b080bc7ddf287c1749c9d1"
-  "services/backend/services/interop/correlation.py": "sha256:781c5a927507f4a4f6ad6c519ef270f6605dabd45dbea135f8fd391f5a506be1"
+  "services/api/graph/interop/admin_routes.py": "sha256:78450d2b09b0966cfc8e5464a9c32578466a8fa9c31247f8a88b6b51291c6bc5"
+  "services/api/graph/interop/correlation.py": "sha256:cb3c51e9093df2475a788a6fa98544b54bd8b9b6524a8980b19c2211aac1364d"
 ---
 
 # Interoperability Observer Runbook

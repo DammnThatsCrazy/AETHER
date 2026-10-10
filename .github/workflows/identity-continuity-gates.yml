@@ -136,14 +136,14 @@ jobs:
           set -euo pipefail
           echo "=== Gate 2: Routing gate — durable import/provider evidence reaches identity candidates ==="
           .venv/bin/python -m pytest \
-            services/backend/tests/identity/test_import_first_sdk_later.py \
-            services/backend/tests/identity/test_sdk_import_identity_candidates.py \
-            services/backend/tests/identity/test_sdk_identify_route_resolution.py \
-            services/backend/tests/identity/test_identity_observability_export.py \
-            services/backend/tests/identity/test_connector_reimport_idempotency.py \
-            services/backend/tests/identity/test_provider_identity_candidate_adapter.py \
-            services/backend/tests/providers/test_identity_evidence.py \
-            services/backend/tests/providers/test_commerce_identity_evidence.py \
+            services/api/tests/identity/test_import_first_sdk_later.py \
+            services/api/tests/identity/test_sdk_import_identity_candidates.py \
+            services/api/tests/identity/test_sdk_identify_route_resolution.py \
+            services/api/tests/identity/test_identity_observability_export.py \
+            services/api/tests/identity/test_connector_reimport_idempotency.py \
+            services/api/tests/identity/test_provider_identity_candidate_adapter.py \
+            services/api/tests/providers/test_identity_evidence.py \
+            services/api/tests/providers/test_commerce_identity_evidence.py \
             -v
           echo "Gate 2 PASSED — import/provider routing, SDK identify traces, and PII-filtered observability exports were exercised."
 
@@ -183,17 +183,17 @@ jobs:
           #   test_cross_tenant_block, test_deleted_identity_suppression,
           #   test_agent_human_no_merge, plus import-first / anonymous / multi-sdk
           .venv/bin/python -m pytest \
-            services/backend/tests/identity/test_shared_device_no_merge.py \
-            services/backend/tests/identity/test_shared_email_review.py \
-            services/backend/tests/identity/test_cross_tenant_block.py \
-            services/backend/tests/identity/test_deleted_identity_suppression.py \
-            services/backend/tests/identity/test_agent_human_no_merge.py \
-            services/backend/tests/identity/test_import_first_sdk_later.py \
-            services/backend/tests/identity/test_anonymous_to_known.py \
-            services/backend/tests/identity/test_multi_sdk_same_user.py \
-            services/backend/tests/identity/test_sdk_late_binding.py \
-            services/backend/tests/identity/test_verified_email_resolution.py \
-            services/backend/tests/identity/test_source_precedence.py \
+            services/api/tests/identity/test_shared_device_no_merge.py \
+            services/api/tests/identity/test_shared_email_review.py \
+            services/api/tests/identity/test_cross_tenant_block.py \
+            services/api/tests/identity/test_deleted_identity_suppression.py \
+            services/api/tests/identity/test_agent_human_no_merge.py \
+            services/api/tests/identity/test_import_first_sdk_later.py \
+            services/api/tests/identity/test_anonymous_to_known.py \
+            services/api/tests/identity/test_multi_sdk_same_user.py \
+            services/api/tests/identity/test_sdk_late_binding.py \
+            services/api/tests/identity/test_verified_email_resolution.py \
+            services/api/tests/identity/test_source_precedence.py \
             -v
           echo "Gate 3 PASSED — merge safety invariants hold."
 
@@ -201,7 +201,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== Gate 3: Confidence evaluation — reviewed-pair errors, score bands, evidence thresholds ==="
-          .venv/bin/python -m pytest services/backend/tests/identity/test_confidence_calibration_evaluation.py -v
+          .venv/bin/python -m pytest services/api/tests/identity/test_confidence_calibration_evaluation.py -v
           .venv/bin/python -m pytest tests/unit/test_identity_continuity_calibration_workflow.py -v
           .venv/bin/python scripts/identity_confidence_calibration_evaluation.py --help > /dev/null
           echo "Gate 3 confidence evaluation PASSED — no representative label data is fabricated and runtime calibration remains disabled."
@@ -236,10 +236,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== Gate 4: Split gate — create_split_candidate → approve → execute_split ==="
-          .venv/bin/python -m pytest services/backend/tests/identity/test_bad_merge_split.py -v
+          .venv/bin/python -m pytest services/api/tests/identity/test_bad_merge_split.py -v
           echo ""
           echo "Also asserting restatement still wired after split (computation guard):"
-          .venv/bin/python -m pytest services/backend/tests/computation/test_identity_restatement.py -v
+          .venv/bin/python -m pytest services/api/tests/computation/test_identity_restatement.py -v
           echo "Gate 4 PASSED — split repair is auditable, versioned, and non-destructive."
 
   # -------------------------------------------------------------------------
@@ -272,8 +272,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== Gate 5: Projection gate — registered projections complete; unsupported domains are recorded ==="
-          .venv/bin/python -m pytest services/backend/tests/identity/test_projection_restatement.py -v
-          .venv/bin/python -m pytest services/backend/tests/identity/test_projection_restatement_jobs.py -k 'executes_profile_view_and_persists_unsupported_surfaces or account_360 or campaign or value' -v
+          .venv/bin/python -m pytest services/api/tests/identity/test_projection_restatement.py -v
+          .venv/bin/python -m pytest services/api/tests/identity/test_projection_restatement_jobs.py -k 'executes_profile_view_and_persists_unsupported_surfaces or account_360 or campaign or value' -v
           echo "Gate 5 PASSED — executable projections restate; unsupported domains remain explicit (value-deduped, retryable, raw immutable)."
 
   # -------------------------------------------------------------------------
@@ -318,14 +318,14 @@ jobs:
           echo "  all required frontend identity components present"
           echo ""
           echo "Checking backend explainability service & routes:"
-          test -f services/backend/services/identity/explainability.py
-          grep -q "get_profile_identity_explanation" services/backend/services/identity/explainability.py
-          grep -q "get_decision_details" services/backend/services/identity/explainability.py
-          grep -q "review_queue" services/backend/services/identity/explainability.py
-          grep -q "activation_status" services/backend/services/identity/explainability.py
-          grep -q "review-queue" services/backend/services/identity/routes.py
-          grep -q "activation-status" services/backend/services/identity/routes.py
-          grep -q "profiles.*identity/explanation\|identity/explanation" services/backend/services/identity/routes.py
+          test -f services/api/identity/identity/explainability.py
+          grep -q "get_profile_identity_explanation" services/api/identity/identity/explainability.py
+          grep -q "get_decision_details" services/api/identity/identity/explainability.py
+          grep -q "review_queue" services/api/identity/identity/explainability.py
+          grep -q "activation_status" services/api/identity/identity/explainability.py
+          grep -q "review-queue" services/api/identity/identity/routes.py
+          grep -q "activation-status" services/api/identity/identity/routes.py
+          grep -q "profiles.*identity/explanation\|identity/explanation" services/api/identity/identity/routes.py
           echo "  backend explainability routes present: review-queue, activation-status, identity/explanation"
           echo ""
           echo "Gate 6 PASSED — UX explainability surfaces exist (frontend + backend routes)."
@@ -429,7 +429,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          .venv/bin/python -m pytest services/backend/tests/identity/ services/backend/tests/computation/test_identity_restatement.py -q 2>&1 | tee .artifacts/identity-continuity-proof/logs/identity-restatement-pytest.log
+          .venv/bin/python -m pytest services/api/tests/identity/ services/api/tests/computation/test_identity_restatement.py -q 2>&1 | tee .artifacts/identity-continuity-proof/logs/identity-restatement-pytest.log
 
       - name: Write Gate 7 proof summary
         id: proof-summary

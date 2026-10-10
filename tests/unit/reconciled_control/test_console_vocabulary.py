@@ -26,7 +26,7 @@ _PREFIX = "/v1/admin/kyber/managed-integrations"
 
 
 def _capability():
-    from services.kyber.access.capabilities import require_capability
+    from governance.kyber.access.capabilities import require_capability
 
     return require_capability(_RCP_CAPABILITY)
 
@@ -40,7 +40,7 @@ def test_capability_is_declared_in_the_kyber_vocabulary() -> None:
     assert cap.scope == "all_tenants_aggregate"
     assert not cap.tenant_scoped
 
-    from services.kyber.access.capabilities import (
+    from governance.kyber.access.capabilities import (
         COMMAND_CAPABILITY_IDS,
         TENANT_SCOPED_CAPABILITY_IDS,
     )
@@ -58,7 +58,7 @@ def test_capability_rides_the_evidence_read_templates() -> None:
     # surface; a role that cannot hold neither. This equivalence is asserted
     # as a set identity over every template so future role edits cannot drift
     # the two evidence surfaces apart.
-    from services.kyber.access.roles import ROLE_TEMPLATES
+    from governance.kyber.access.roles import ROLE_TEMPLATES
 
     anchor = "kyber.audit.read"
     drifted = [
@@ -80,7 +80,7 @@ def test_every_rcp_route_declares_the_capability() -> None:
     # kyber_routes registry declarations for the six mounted GETs (literal
     # routes plus the two id-capture templates, exercised through concrete
     # paths so the template regexes really match).
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     paths = (
         f"{_PREFIX}",

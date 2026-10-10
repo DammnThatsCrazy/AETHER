@@ -13,7 +13,7 @@ since_version: "0.1.0"
 ## Overview
 
 The repository contains a legacy `StripeConnector` under
-`services/backend/services/integrations/connectors/adapters.py`. It accepts
+`services/api/connectors/integrations/connectors/adapters.py`. It accepts
 Stripe webhook events and verifies signatures through the legacy webhook
 integration path. It is not a native UPR provider plugin and does not currently
 poll Stripe for orders, transactions, or subscriptions.

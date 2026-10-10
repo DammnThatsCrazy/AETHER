@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -30,8 +30,8 @@ os.environ.setdefault("JWT_SECRET", "test-secret-for-jobs-platform-tests")
 from shared.common.common import BadRequestError  # noqa: E402
 
 from repositories.jobs_repo import JobsRepository, reset_jobs_memory  # noqa: E402
-from services.jobs.models import JobStatus  # noqa: E402
-from services.jobs.scheduler import (  # noqa: E402
+from workers.jobs.models import JobStatus  # noqa: E402
+from workers.jobs.scheduler import (  # noqa: E402
     JobScheduler,
     compute_next_run,
     validate_cron_expression,

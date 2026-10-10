@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 
 from repositories.artifacts import (  # noqa: E402
@@ -16,8 +16,8 @@ from repositories.artifacts import (  # noqa: E402
     MAX_ARTIFACT_BYTES,
     ArtifactRepository,
 )
-from services.export.manifest import build_manifest, sanitize_params  # noqa: E402
-from services.export.service import serialize_rows  # noqa: E402
+from ingestion.export.manifest import build_manifest, sanitize_params  # noqa: E402
+from ingestion.export.service import serialize_rows  # noqa: E402
 from shared.common.common import BadRequestError, NotFoundError  # noqa: E402
 
 

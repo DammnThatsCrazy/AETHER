@@ -20,7 +20,7 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
@@ -49,17 +49,17 @@ def _routes():
 
 
 def test_every_mounted_route_is_classified():
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
     unclassified = [p for p in _routes() if classify(p) is None]
     assert not unclassified, (
         "Unclassified route prefixes (add them to config/route_registry.yaml "
-        f"known_prefixes — default-deny): {sorted({__import__('services.security.route_registry', fromlist=['prefix_of']).prefix_of(p) for p in unclassified})}"
+        f"known_prefixes — default-deny): {sorted({__import__('governance.security.route_registry', fromlist=['prefix_of']).prefix_of(p) for p in unclassified})}"
     )
 
 
 def test_runtime_inventory_uses_route_templates_and_has_no_unknowns():
     import main
-    from services.security.route_registry import validate_mounted_routes
+    from governance.security.route_registry import validate_mounted_routes
 
     inventory = validate_mounted_routes(main.app.routes)
     assert inventory
@@ -68,7 +68,7 @@ def test_runtime_inventory_uses_route_templates_and_has_no_unknowns():
 
 
 def test_kyber_routes_require_operator_and_audit():
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
     offenders = []
     for path in _routes():
         if "/kyber" in path:
@@ -79,13 +79,13 @@ def test_kyber_routes_require_operator_and_audit():
 
 
 def test_sensitive_routes_are_audited():
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
     offenders = [p for p in _routes() if (c := classify(p)) and c.sensitive and not c.audit_required]
     assert not offenders, f"sensitive routes must be audit_required: {offenders}"
 
 
 def test_public_paths_classify_public_and_not_kyber():
-    from services.security.route_registry import classify, is_public_path
+    from governance.security.route_registry import classify, is_public_path
     mounted = set(_routes())
     for path in mounted:
         pol = classify(path)
@@ -97,7 +97,7 @@ def test_public_paths_classify_public_and_not_kyber():
 
 
 def test_unknown_prefix_denies():
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
     assert classify("/v1/totally-new-surface/thing") is None
     assert classify("/v1/kyber/anything") is not None  # kyber prefix is known
 
@@ -107,8 +107,8 @@ def test_unknown_prefix_denies():
 
 def test_declared_capabilities_resolve_to_real_capability_ids():
     """Every kyber_routes declaration names a capability that actually exists."""
-    from services.kyber.access.capabilities import ALL_CAPABILITY_IDS
-    from services.security.route_registry import _declarations
+    from governance.kyber.access.capabilities import ALL_CAPABILITY_IDS
+    from governance.security.route_registry import _declarations
 
     declarations = _declarations()
     assert declarations, "kyber_routes block is empty — no route is capability-classified"
@@ -118,9 +118,9 @@ def test_declared_capabilities_resolve_to_real_capability_ids():
 
 
 def test_declared_disclosure_and_action_class_are_in_range():
-    from services.kyber.access.capabilities import MAX_ACTION_CLASS
-    from services.kyber.access.disclosure import DisclosureLevel
-    from services.security.route_registry import _declarations
+    from governance.kyber.access.capabilities import MAX_ACTION_CLASS
+    from governance.kyber.access.disclosure import DisclosureLevel
+    from governance.security.route_registry import _declarations
 
     for decl in _declarations():
         assert 0 <= decl.action_class <= MAX_ACTION_CLASS, decl.template
@@ -133,7 +133,7 @@ def test_unknown_declared_capability_raises_at_load(tmp_path, monkeypatch):
     import pytest
     import yaml
 
-    from services.security import route_registry as rr
+    from governance.security import route_registry as rr
 
     catalog = dict(rr._catalog())
     catalog["kyber_routes"] = [{
@@ -161,7 +161,7 @@ def test_unknown_declared_capability_raises_at_load(tmp_path, monkeypatch):
 
 
 def test_declared_kyber_route_carries_its_capability():
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     policy = classify("/v1/kyber/tenants/{tenant_id}/operational-envelope", "GET")
 
@@ -174,7 +174,7 @@ def test_declared_kyber_route_carries_its_capability():
 
 def test_undeclared_kyber_route_falls_back_to_operator_required():
     """No declaration must never mean no gate."""
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     policy = classify("/v1/kyber/a-surface-nobody-declared", "GET")
 
@@ -189,7 +189,7 @@ def test_undeclared_kyber_route_falls_back_to_operator_required():
 
 def test_non_kyber_route_is_unchanged_by_schema_v3():
     """v2 behaviour is preserved exactly for every non-Kyber route."""
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     policy = classify("/v1/profile/{entity_id}", "GET")
 
@@ -202,7 +202,7 @@ def test_non_kyber_route_is_unchanged_by_schema_v3():
 
 def test_classify_keeps_the_single_argument_signature():
     """158 existing call sites pass only a path — that must keep working."""
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     assert classify("/v1/kyber/jobs/timeline") is not None
     assert classify("/v1/kyber/jobs/timeline").kyber_operator_required is True
@@ -210,7 +210,7 @@ def test_classify_keeps_the_single_argument_signature():
 
 def test_declared_routes_are_still_operator_required_and_audited():
     """A declaration adds authority requirements; it never relaxes the gate."""
-    from services.security.route_registry import _declarations, classify
+    from governance.security.route_registry import _declarations, classify
 
     for decl in _declarations():
         policy = classify(decl.template, None if decl.method == "*" else decl.method)
@@ -222,7 +222,7 @@ def test_declared_routes_are_still_operator_required_and_audited():
 
 
 def test_referral_link_routes_are_tenant_scoped_sensitive_and_audited():
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     policy = classify("/v1/referral-links/{verified_referral_link_id}/revoke")
 

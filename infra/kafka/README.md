@@ -1,7 +1,7 @@
 # Aether — Kafka Topic Provisioning
 
 Aether declares every event topic in the `Topic` enum at
-`services/backend/shared/events/events.py`. The MSK cluster
+`services/api/shared/events/events.py`. The MSK cluster
 is provisioned with `auto.create.topics.enable=false` (see
 `infra/aws/terraform/modules/msk/main.tf`), so **a topic that is
 not explicitly created does not exist** — the broker will never materialise it
@@ -29,14 +29,14 @@ Regenerate the JSON after adding a topic:
 
 ```bash
 source .venv/bin/activate
-cd "services/backend"
+cd "services/api"
 python - <<'PY'
 import json
 from shared.events.events import Topic
 topics = [t.value for t in Topic]
 open("../../infra/kafka/topics.json", "w").write(
     json.dumps({"schema_version": 1,
-                "source": "services/backend/shared/events/events.py::Topic",
+                "source": "services/api/shared/events/events.py::Topic",
                 "generated_from_enum": True, "topic_count": len(topics),
                 "topics": topics}, indent=2) + "\n")
 PY

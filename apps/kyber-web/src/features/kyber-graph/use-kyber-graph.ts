@@ -2,7 +2,7 @@
  * KYBER operator adapter — the Kyber Graph plane (`/v1/kyber/graph`).
  *
  * Eight backend routes across three disclosure levels, in the order the backend
- * itself puts them (`services/kyber/graph/routes.py`): platform topology (D0),
+ * itself puts them (`services/api/governance/kyber/graph/routes.py`): platform topology (D0),
  * fleet aggregates and cohorts (D1), a bounded blast-radius review (D0), and —
  * only with an active purpose-bound scope — one tenant's own graph (D3).
  *
@@ -16,7 +16,7 @@
  *    `totals_known` before it is allowed to call any of them a total. There is no
  *    `.default(0)` and no `?? 0` anywhere below.
  *
- * 2. **Stale is not healthy.** `services/kyber/graph/fleet.py` states the rule
+ * 2. **Stale is not healthy.** `services/api/governance/kyber/graph/fleet.py` states the rule
  *    directly: a stale row rendered green converts "we do not know" into "it is
  *    fine" and an operator stops looking. So `stale`, `oldest_computed_at` and
  *    `oldest_row_age_seconds` are required fields on every fleet shape here, not

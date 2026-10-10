@@ -7,32 +7,32 @@ audience: [dev-senior, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/integrations/connectors/base.py
-  - services/backend/services/integrations/connectors/registry.py
-  - services/backend/shared/integration_contracts/catalog.py
-  - services/backend/shared/integration_contracts/migration.py
-  - services/backend/services/providers/shopify/
-  - services/backend/services/providers/woocommerce/
-  - services/backend/services/providers/etsy/
-  - services/backend/services/providers/amazon/
-  - services/backend/services/providers/ebay/
-  - services/backend/services/providers/walmart/
-  - services/backend/services/providers/tiktok/
+  - services/api/connectors/integrations/connectors/base.py
+  - services/api/connectors/integrations/connectors/registry.py
+  - services/api/shared/integration_contracts/catalog.py
+  - services/api/shared/integration_contracts/migration.py
+  - services/api/connectors/providers/shopify/
+  - services/api/connectors/providers/woocommerce/
+  - services/api/connectors/providers/etsy/
+  - services/api/connectors/providers/amazon/
+  - services/api/connectors/providers/ebay/
+  - services/api/connectors/providers/walmart/
+  - services/api/connectors/providers/tiktok/
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/backend/services/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
-  "services/backend/services/integrations/connectors/registry.py": "sha256:cbd62d89ef255fbe7097d9778d1adc2f728f7ff98bfade29a98d0620d86238f8"
-  "services/backend/services/providers/amazon/": "sha256:775e061ac0c1344aa5ab76585467a510afc063ae6bec1d9fe2f58a32043c75dc"
-  "services/backend/services/providers/ebay/": "sha256:36a36b484077e6e4d833ce553a7f80a1f3dab7fefa0b0fc79b143bf19405ec1f"
-  "services/backend/services/providers/etsy/": "sha256:3f62869a8e5f1fbdc0e9e3f5d2037a1a2be6539f4b30584176e50f5c8fb7d2d1"
-  "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
-  "services/backend/services/providers/tiktok/": "sha256:081c927e0d3bd7ad9dc4610a79005b01949fca195fced6fa8ad7a933f1fb04b3"
-  "services/backend/services/providers/walmart/": "sha256:aa3ea9aa3af1b60f59a3e789398e53a89a92c3719e8d32d8b52fc1b6dcb0c186"
-  "services/backend/services/providers/woocommerce/": "sha256:2fa57e2e7e797edffe9083feb1462cefb2307de233feed57e60352719805fe4f"
-  "services/backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
-  "services/backend/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
+  "services/api/connectors/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
+  "services/api/connectors/integrations/connectors/registry.py": "sha256:6930e4008db461965dc9c6e0888b7ce204095872d3a7f038cf65eb75fa89fa17"
+  "services/api/connectors/providers/amazon/": "sha256:96d3a75625cab54ea0f8e395c3bfc9c72a15b6b98a8a8fd0cc9880e4413ee185"
+  "services/api/connectors/providers/ebay/": "sha256:7596f8b9c516ae389f508bc8bad7404839dc1297249bdf7da9280734dea0f5b2"
+  "services/api/connectors/providers/etsy/": "sha256:f4bc4633c778787060215a46a10a5333c9cd8a998d7028243f75f8ec22add3dc"
+  "services/api/connectors/providers/shopify/": "sha256:3105e681b0fb0ed9f3417abbc72624377a63a97489cca007ce79ab99b7d857e0"
+  "services/api/connectors/providers/tiktok/": "sha256:97db9e114887181397ef7e9e1cf1059fee2ed4f686108d12ee0a16db1cbece83"
+  "services/api/connectors/providers/walmart/": "sha256:09426499055d250d2ceea2a5ed8053dac7d8b68b5445bcfae1b8b2837d3879ed"
+  "services/api/connectors/providers/woocommerce/": "sha256:4f5785952f1ac662b61075d6da093985705be8aba7fce0f948c6e677c2294926"
+  "services/api/shared/integration_contracts/catalog.py": "sha256:76a954865823c7b8d0b9aac98787ed4ea1b0dbcbde1e99f6c58a07025971b63c"
+  "services/api/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
 ---
 
 # Provider Migration
@@ -55,7 +55,7 @@ untouched and working throughout; nothing in this migration is core-first.
 ### Path (a) — today: every connector is already exposed
 
 The `LegacyConnectorPlugin`
-(`services/backend/services/provider_runtime/legacy.py`, installed by `install_legacy_plugins`
+(`services/api/connectors/provider_runtime/legacy.py`, installed by `install_legacy_plugins`
 during `provider_registry.load_all()`) wraps the existing connector framework
 with **zero provider code**:
 
@@ -79,7 +79,7 @@ adapters, or UPR-native operation, implement and certify its native plugin.
 Six native provider packages already exist in this build; the Shopify package
 is the reference for continuing this path:
 
-1. Write a plugin package under `services/backend/services/providers/<family>/` following
+1. Write a plugin package under `services/api/connectors/providers/<family>/` following
    [PROVIDER-PLUGIN-SPEC](../architecture/PROVIDER-PLUGIN-SPEC.md).
 2. Honor the manifest + §32 honesty invariants
    ([PROVIDER-MANIFEST-SPEC](../architecture/PROVIDER-MANIFEST-SPEC.md)).
@@ -97,7 +97,7 @@ same shape:
    (`shopify.ingestion.connector`); legacy `shopify.*` namespaced events keep
    flowing.
 2. **Build** — the native Shopify package already exists at
-   `services/backend/services/providers/shopify/` (plugin, adapters, normalizer,
+   `services/api/connectors/providers/shopify/` (plugin, adapters, normalizer,
    fixtures); use it as the reference while keeping it alongside the legacy
    connector until cutover gates pass.
 3. **Map events** — the normalizer maps Shopify order status → canonical
@@ -160,10 +160,10 @@ per-provider decommission, plus the config/secret projection engine (WS6).
 
 Because these six ship **no legacy `BaseConnector`**, there is no legacy path
 to decommission: they land directly as native plugins (path b). Each lives at
-`services/backend/services/providers/<family>/` with an `install_<family>_providers(registry)`
+`services/api/connectors/providers/<family>/` with an `install_<family>_providers(registry)`
 entry in its `__init__.py`, self-registers through the runtime's
 `LOCAL_PLUGIN_MODULES` discovery list
-(`services/backend/services/provider_runtime/plugin.py`), and is covered by
+(`services/api/connectors/provider_runtime/plugin.py`), and is covered by
 `tests/unit/test_provider_plugins.py` (55 collected tests: registry install,
 pull fetch/cursor/error-classification, and the claimed webhook schemes).
 The manifests are honest by construction: `certification_state` stays
@@ -179,7 +179,7 @@ GraphQL uses API version `2026-07` and remains credential-waiting with every
 environment disabled. Shopify REST/webhook revision parity, sandbox evidence,
 source authority, graph projection, durable tenant writer routing, and rollback
 are not complete, so no tenant has cut over. The decommission procedure uses the retire helper in
-`services/backend/services/integrations/connectors/registry.py`:
+`services/api/connectors/integrations/connectors/registry.py`:
 `retire_connector_type(registry_state, connector_type)` returns a typed
 `RetireResult` (`retired` / `already_retired` / `unknown` /
 `not_eligible`) and is idempotent + audited (first success records

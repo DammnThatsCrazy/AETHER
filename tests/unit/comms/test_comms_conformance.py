@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -21,7 +21,7 @@ pytest.importorskip("fastapi", reason="Backend deps not installed")
 
 
 def test_klaviyo_passes_full_conformance_suite():
-    from services.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
+    from journeys.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
 
     results = certify_comms()
     assert len(results) == len(COMMS_CONFORMANCE_CHECKS)
@@ -32,7 +32,7 @@ def test_klaviyo_passes_full_conformance_suite():
 
 
 def test_hubspot_passes_full_conformance_suite():
-    from services.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
+    from journeys.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
 
     results = certify_comms(connector_type="hubspot")
     assert len(results) == len(COMMS_CONFORMANCE_CHECKS)
@@ -43,7 +43,7 @@ def test_hubspot_passes_full_conformance_suite():
 
 def test_iterable_passes_full_conformance_suite():
     """Iterable (pull-capable, native HMAC webhook) certifies with no failures."""
-    from services.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
+    from journeys.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
 
     results = certify_comms(connector_type="iterable")
     assert len(results) == len(COMMS_CONFORMANCE_CHECKS)
@@ -51,7 +51,7 @@ def test_iterable_passes_full_conformance_suite():
     assert not failures, [f"{r.name}: {r.detail}" for r in failures]
     assert all(r.passed for r in results)
     # Iterable declares pull + backfill + a native query-param HMAC scheme.
-    from services.comms.conformance import comms_certification_descriptor
+    from journeys.comms.conformance import comms_certification_descriptor
     d = comms_certification_descriptor("iterable")
     assert d.pagination_model == "cursor"
     assert d.expected_webhook_headers == ["signature", "ts"]
@@ -59,7 +59,7 @@ def test_iterable_passes_full_conformance_suite():
 
 def test_braze_passes_full_conformance_suite():
     """The pull-first Braze adapter certifies with no failures (ADR-C11 follow-up)."""
-    from services.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
+    from journeys.comms.conformance import certify_comms, COMMS_CONFORMANCE_CHECKS
 
     results = certify_comms(connector_type="braze")
     assert len(results) == len(COMMS_CONFORMANCE_CHECKS)
@@ -73,7 +73,7 @@ def test_comms_domain_checks_all_apply():
     """The comms-domain checks are not silently skipping — each asserts a real
     §25 property (manifest, credential absence, normalization, identity,
     webhook, suppression, reconciliation, backfill, account discovery)."""
-    from services.comms.conformance import certify_comms
+    from journeys.comms.conformance import certify_comms
 
     results = {r.name: r for r in certify_comms()}
     # Explicit set of comms-domain check names that must be present and passed.
@@ -96,7 +96,7 @@ def test_comms_domain_checks_all_apply():
 
 
 def test_certification_descriptor_is_honest():
-    from services.comms.conformance import comms_certification_descriptor
+    from journeys.comms.conformance import comms_certification_descriptor
     from shared.certification.readiness import CredentialReadiness
 
     d = comms_certification_descriptor("klaviyo")
@@ -124,7 +124,7 @@ def test_registry_includes_all_communications_providers():
 def test_every_comms_provider_passes_conformance_suite():
     """Each comms provider certifies with no failures: capabilities it declares
     are checked and pass; capabilities it does not declare skip honestly."""
-    from services.comms.conformance import certify_comms
+    from journeys.comms.conformance import certify_comms
 
     for provider in ("klaviyo", "sendgrid", "customerio", "mailchimp", "postmark",
                      "hubspot", "iterable", "braze"):
@@ -139,7 +139,7 @@ def test_webhook_only_providers_do_not_claim_pull_operations():
     """The certification descriptor derives operations from the connector's
     declared manifest outputs + capability flags — a webhook-only provider never
     claims campaign/flow/message sync or pull/backfill/reconciliation (ADR-C11)."""
-    from services.comms.conformance import comms_certification_descriptor
+    from journeys.comms.conformance import comms_certification_descriptor
 
     pull_ops = {"campaign_sync", "flow_sync", "message_sync", "incremental_pull",
                 "historical_backfill", "reconciliation", "reply_ingest"}

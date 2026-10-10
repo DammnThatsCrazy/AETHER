@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/kyber/ops/mission_contracts.py, services/backend/services/kyber/ops/mission_repository.py, services/backend/services/kyber/ops/missions.py, services/backend/services/kyber/ops/monitoring_service.py, services/backend/services/kyber/ops/mission_routes.py]
+source_files: [services/api/governance/kyber/ops/mission_contracts.py, services/api/governance/kyber/ops/mission_repository.py, services/api/governance/kyber/ops/missions.py, services/api/governance/kyber/ops/monitoring_service.py, services/api/governance/kyber/ops/mission_routes.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 7
 toc_depth: 3
@@ -26,11 +26,11 @@ the monitoring loop runs only when `KYBER_MISSION_MONITORING_ENABLED=true`.
 `MissionService.reconstruct(mission_id)` assembles a `MissionView` from:
 
 - Objective / Plan / PlanSteps / WorkerRuns / review-batch approvals — via
-  `services.agent.runtime_repository`.
+  `actions.agent.runtime_repository`.
 - Jobs and job events — via `repositories.jobs_repo`.
 - Observed tool calls — the `agent_events` stream.
 - Evidence & `VerificationResult` — `services/agents/models/evidence.py`.
-- Commands — `services.kyber.ops.command_repository`.
+- Commands — `governance.kyber.ops.command_repository`.
 
 Only mission identity, lifecycle `status`, `verification_gate`, `MissionResult`,
 and `MonitoringCondition`s are persisted (`kyber_missions`,

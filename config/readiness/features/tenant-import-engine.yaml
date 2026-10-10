@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - services/backend/services/imports/
-  - services/backend/services/imports/service.py
-  - services/backend/services/imports/commit.py
+  - services/api/ingestion/imports/
+  - services/api/ingestion/imports/service.py
+  - services/api/ingestion/imports/commit.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -115,7 +115,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: services/backend/services/imports/'
+  - 'repository evidence: services/api/ingestion/imports/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

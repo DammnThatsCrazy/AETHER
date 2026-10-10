@@ -4,7 +4,7 @@ Aether Kafka Topic Provisioner (provisioning-ready definition)
 
 Creates, idempotently, exactly the set of Kafka topics Aether declares in its
 declarative topic registry. The registry's canonical source is the
-``Topic`` enum in ``services/backend/shared/events/events.py``;
+``Topic`` enum in ``services/api/shared/events/events.py``;
 the machine-readable copy this script reads lives beside it at
 ``infra/kafka/topics.json`` and is verified against the enum by
 ``infra/kafka/tests/test_topics_registry_sync.py``.

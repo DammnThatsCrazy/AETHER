@@ -17,7 +17,7 @@ from shared.exploration.generated_surfaces import (
     SURFACE_CAPABILITIES,
 )
 from shared.exploration.models import FILTER_DISPOSITIONS
-from services.exploration.planner import iter_leaf_expressions, plan_context
+from journeys.exploration.planner import iter_leaf_expressions, plan_context
 
 
 def _one_op(field_id: str) -> str:

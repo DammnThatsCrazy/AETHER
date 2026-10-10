@@ -561,7 +561,7 @@ groups:
 
   # ============================================================
   # Semantic Pipeline Health
-  # Metrics emitted by services/semantic_intelligence only —
+  # Metrics emitted by services/api/intelligence/semantic_intelligence only —
   # tests/unit/test_semantic_observability_assets.py pins this
   # group to the contracted series names.
   # Targets: abstention ratio ≤ 25%, classify p95 ≤ 1000 ms,
@@ -768,7 +768,7 @@ groups:
       # (payment_rail_sync_transitioned_total{state=...}); the durable conflict/stale
       # BACKLOG (how many sessions are conflicted right now) has no gauge, so it is
       # additionally evaluated in-process by
-      # services/integrations/providers/payment_rails/alert_eval.py, which reads the
+      # services/api/connectors/integrations/providers/payment_rails/alert_eval.py, which reads the
       # reconciliation records directly. No secrets appear here — labels carry only
       # provider/state tokens.
 

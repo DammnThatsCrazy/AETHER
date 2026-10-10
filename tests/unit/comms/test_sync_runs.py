@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -25,7 +25,7 @@ def _clean():
 
 @pytest.mark.asyncio
 async def test_open_complete_list_lifecycle():
-    from services.comms.sync_runs import SyncRunService
+    from journeys.comms.sync_runs import SyncRunService
 
     svc = SyncRunService()
     run = await svc.open_run(
@@ -51,7 +51,7 @@ async def test_open_complete_list_lifecycle():
 
 @pytest.mark.asyncio
 async def test_failed_run_records_safe_error():
-    from services.comms.sync_runs import SyncRunService
+    from journeys.comms.sync_runs import SyncRunService
 
     svc = SyncRunService()
     run = await svc.open_run(
@@ -69,8 +69,8 @@ async def test_failed_run_records_safe_error():
 
 
 def test_derive_sync_counts_is_deterministic():
-    from services.comms.sync_runs import derive_sync_counts
-    from services.integrations.connectors.base import NormalizedEvent
+    from journeys.comms.sync_runs import derive_sync_counts
+    from connectors.integrations.connectors.base import NormalizedEvent
 
     events = [
         NormalizedEvent(event_type="email_sent", source="klaviyo"),
@@ -96,9 +96,9 @@ def test_derive_sync_counts_is_deterministic():
 @pytest.mark.asyncio
 async def test_connector_service_sync_records_run(monkeypatch):
     """A real connector sync opens and closes a durable sync-run entry."""
-    from services.integrations.connectors.service import connector_service
-    from services.integrations.connectors.klaviyo import KlaviyoConnector
-    from services.integrations.connectors.base import NormalizedEvent
+    from connectors.integrations.connectors.service import connector_service
+    from connectors.integrations.connectors.klaviyo import KlaviyoConnector
+    from connectors.integrations.connectors.base import NormalizedEvent
 
     async def fake_pull(self, config, since=None, secret=None):
         return [

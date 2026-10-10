@@ -7,16 +7,16 @@ audience: [ops, architect]
 status: beta
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/reliability/definitions.py
-  - services/backend/services/reliability/service.py
+  - services/api/governance/reliability/definitions.py
+  - services/api/governance/reliability/service.py
 related:
   - reliability/operations
   - reliability/pipeline-health
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_hashes:
-  "services/backend/services/reliability/definitions.py": "sha256:b763bd81f769d38c27f635113bed97e7d0c403204a96d3202e633fc658c7b21a"
-  "services/backend/services/reliability/service.py": "sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb"
+  "services/api/governance/reliability/definitions.py": "sha256:c8fd781bb882c1306acf959751c9c4b7535227bc67544d6e41c4d72b6a33728e"
+  "services/api/governance/reliability/service.py": "sha256:71fe39c503316a915a02f154dececd6385e7e07ed074ddea7ddb24915551d20c"
 ---
 # Queue & Worker Health
 

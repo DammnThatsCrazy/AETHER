@@ -7,7 +7,7 @@
  *
  * The wire contracts live in `@aether/shared` (`packages/shared/mobile-projection.ts`)
  * as parity-tested twins of the Python-authoritative builders
- * (`services/mobile/projections.py`) and are re-exported here under the app-local
+ * (`services/api/ingestion/mobile/projections.py`) and are re-exported here under the app-local
  * names the screens consume — a single canonical shape, no app-local drift.
  *
  * All screens are READ-ONLY by construction (M2 "no offline mutation" invariant):

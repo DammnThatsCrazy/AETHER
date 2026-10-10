@@ -6,7 +6,7 @@ visibility: I
 audience: [buyer, ops, architect]
 status: beta
 since_version: "0.1.0"
-source_files: [services/backend/services/reliability/models.py, services/backend/services/reliability/service.py, services/backend/services/reliability/routes.py, services/backend/services/reliability/tenant_impact.py, apps/kyber-web/src/pages/reliability/reliability-page.tsx, apps/aether-web/src/pages/system-status/system-status-page.tsx]
+source_files: [services/api/governance/reliability/models.py, services/api/governance/reliability/service.py, services/api/governance/reliability/routes.py, services/api/governance/reliability/tenant_impact.py, apps/kyber-web/src/pages/reliability/reliability-page.tsx, apps/aether-web/src/pages/system-status/system-status-page.tsx]
 related: [reliability/sre-runbooks, reliability/incident-response, reliability/slo-tracking, reliability/tenant-status]
 canonical_owner: platform@aether
 estimated_read_minutes: 8
@@ -14,10 +14,10 @@ toc_depth: 3
 source_hashes:
   "apps/aether-web/src/pages/system-status/system-status-page.tsx": "sha256:6d0e8550d17d6b6ce4e4f95b74e87ac4b28e5690c9ee161922f74b040465b3ba"
   "apps/kyber-web/src/pages/reliability/reliability-page.tsx": "sha256:5df98757afc5a2509f402d64f39d7a5761ee14971e331ae46cb7257fb6d861a1"
-  "services/backend/services/reliability/models.py": "sha256:bc309641f6b9b0465ece62481f4520b2b36d842a4920bbae578b039c8c3a4411"
-  "services/backend/services/reliability/routes.py": "sha256:a28140054a4ffc46654adbf78bec26bca2934ff4d6fdde75c63cfc31adbed2b0"
-  "services/backend/services/reliability/service.py": "sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb"
-  "services/backend/services/reliability/tenant_impact.py": "sha256:8a188d25da4ba795efde29071186f35001ce6c9f7717fbdd99ac743abb136318"
+  "services/api/governance/reliability/models.py": "sha256:bc309641f6b9b0465ece62481f4520b2b36d842a4920bbae578b039c8c3a4411"
+  "services/api/governance/reliability/routes.py": "sha256:aa8f7b1739acbda7065e85fd6c9a1e60805e542d4f60563adf3010ed7f35ee54"
+  "services/api/governance/reliability/service.py": "sha256:71fe39c503316a915a02f154dececd6385e7e07ed074ddea7ddb24915551d20c"
+  "services/api/governance/reliability/tenant_impact.py": "sha256:7df9e077f7672c7ccd4d2cdd537c411fb84217a1fac6bb37dd54bb8ee7b509ac"
 ---
 # Reliability Operations
 

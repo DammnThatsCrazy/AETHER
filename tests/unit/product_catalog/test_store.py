@@ -4,8 +4,8 @@ from __future__ import annotations
 import pytest
 
 from repositories.repos import reset_in_memory_stores
-from services.product_catalog.models import CatalogNode, MappingProposal, MappingRule
-from services.product_catalog.store import (
+from billing.product_catalog.models import CatalogNode, MappingProposal, MappingRule
+from billing.product_catalog.store import (
     ProductCatalogNodeRepository,
     ProductMappingProposalRepository,
     ProductMappingRuleRepository,

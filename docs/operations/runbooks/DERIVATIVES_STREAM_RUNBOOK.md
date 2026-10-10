@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/derivatives/connectors/stream.py
-  - services/backend/services/derivatives/admin_routes.py
+  - services/api/value/derivatives/connectors/stream.py
+  - services/api/value/derivatives/admin_routes.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/derivatives/admin_routes.py": "sha256:cf4e6c5ff4cb8dc919c7b323cf5c00cf20dc8b03bb6238529d3efc9fe15a1239"
-  "services/backend/services/derivatives/connectors/stream.py": "sha256:52d32498c813fa09a0758ee4a7ecdc5dbd46a66593b68a808f76aa225aa59846"
+  "services/api/value/derivatives/admin_routes.py": "sha256:94eb1c95b844e86a866fc44b88e831116ebd1a8892ce2535520848e35b57924b"
+  "services/api/value/derivatives/connectors/stream.py": "sha256:5dd156c359956ad22c41d0393959dad9cf8c7340c449a5779af4d3dc4e524fff"
 ---
 
 # Derivatives Stream Runbook

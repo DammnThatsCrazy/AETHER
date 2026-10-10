@@ -10,12 +10,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.imports.contracts import FieldMapping  # noqa: E402
-from services.imports.mapping import (  # noqa: E402
+from ingestion.imports.contracts import FieldMapping  # noqa: E402
+from ingestion.imports.mapping import (  # noqa: E402
     match_template,
     template_drift,
     unmapped_columns,
@@ -75,7 +75,7 @@ def test_unknown_target_field_surfaces_field_error() -> None:
     ]
     errors = validate_mapping_fields(bad)
     # The exact string comes straight from contracts.validate_field_mapping.
-    from services.imports.contracts import validate_field_mapping
+    from ingestion.imports.contracts import validate_field_mapping
 
     expected = validate_field_mapping(bad[0])
     assert expected is not None

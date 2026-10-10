@@ -6,7 +6,7 @@ name: Production-Equivalent CI (M1 + M2 + M4)
 #
 # WHAT THIS IS: every OTHER backend workflow in .github/workflows/ runs with
 # AETHER_ENV=local, which makes repositories.repos.get_pool() return None, so
-# services/ingestion/bronze_bulk.py (and every repository with the same
+# services/api/ingestion/ingestion/bronze_bulk.py (and every repository with the same
 # pattern) silently takes its in-memory-dict fallback branch instead of the
 # real asyncpg/Postgres path. This workflow boots real postgres + redis service
 # containers and runs the persistence paths against them.
@@ -37,7 +37,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BACKEND_DIR: "services/backend"
+  BACKEND_DIR: "services/api"
   DATABASE_URL: postgresql://aether:aether_dev_password@localhost:5432/aether
   REDIS_URL: redis://localhost:6379/0
 
@@ -77,9 +77,9 @@ jobs:
           components = set(index["impacted_components"])
           production_paths = (
               "tests/prod_equivalent/",
-              "services/backend/alembic/",
-              "services/backend/repositories/",
-              "services/backend/services/ingestion/",
+              "services/api/alembic/",
+              "services/api/repositories/",
+              "services/api/ingestion/ingestion/",
           )
           direct_production_path = any(
               path == "infra/local/docker-compose.yml"

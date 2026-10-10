@@ -9,11 +9,11 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
-source_files: [services/backend/services/kyber/identity/bootstrap.py, services/backend/services/kyber/identity/invitations.py, services/backend/services/kyber/devices/approvals.py]
+source_files: [services/api/governance/kyber/identity/bootstrap.py, services/api/governance/kyber/identity/invitations.py, services/api/governance/kyber/devices/approvals.py]
 source_hashes:
-  services/backend/services/kyber/devices/approvals.py: sha256:a2df5f8968e485f5a5dbf699c7a3bfc7f1b1c6e83dc1efc11b2c736f3548900c
-  services/backend/services/kyber/identity/bootstrap.py: sha256:949e128373290d238a587ba97f87ca7dc3671162762ed6acf98013e2dc43030b
-  services/backend/services/kyber/identity/invitations.py: sha256:019d350b95c3e12847f7fc6bf3245aae1019461ca3f1fbc4d2882cb292acce12
+  "services/api/governance/kyber/devices/approvals.py": "sha256:f2bebf7b5f670e2686762259ddd9b8d3bad998aeabfadbed526a6e95f80a26ba"
+  "services/api/governance/kyber/identity/bootstrap.py": "sha256:6cec412ea8f7864cf74d6e3905c769844550710b4d2f961015676562bd3a97a6"
+  "services/api/governance/kyber/identity/invitations.py": "sha256:b7e435fad0ae104212f82ef23ceaab9e404bbf5913900e52d33798c48f18712d"
 ---
 
 # Runbook — Kyber Account Recovery

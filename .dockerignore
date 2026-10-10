@@ -32,7 +32,7 @@ README.md
 CONTRIBUTING.md
 LICENSE
 *.md
-!services/backend/**/*.md
+!services/api/**/*.md
 
 # Python byproducts
 **/__pycache__/

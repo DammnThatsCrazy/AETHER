@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/contracts/event-registry.json, packages/shared/agent-deployment.ts, packages/shared/ai-execution.ts, packages/shared/payment-rails.ts, packages/shared/targeting-intelligence.ts, services/backend/config/settings.py]
+source_files: [packages/shared/contracts/event-registry.json, packages/shared/agent-deployment.ts, packages/shared/ai-execution.ts, packages/shared/payment-rails.ts, packages/shared/targeting-intelligence.ts, services/api/config/settings.py]
 last_synced_commit: HEAD
 ---
 
@@ -53,23 +53,23 @@ feature-flagged and default OFF.
 
 | Area | Status at audit | Canonical location |
 |---|---|---|
-| Canonical ingestion `/v1/batch`, bronze/silver, idempotency | Exists (mature) | `services/backend/services/ingestion/batch.py`, `repositories/lake.py`, `services/backend/services/silver/` |
+| Canonical ingestion `/v1/batch`, bronze/silver, idempotency | Exists (mature) | `services/api/ingestion/ingestion/batch.py`, `repositories/lake.py`, `services/api/ingestion/silver/` |
 | Canonical event registry (generated) | Exists — 416 events, 25 families | `packages/shared/contracts/event-registry.json` → `generate_contracts.py` |
-| Agentic observability pipeline | Exists | `services/backend/services/agentic_observability/` |
-| Agent deployment registry | **Missing** (in-memory registration dict only) | `services/backend/services/agent/routes.py` |
-| Payment provider adapters (Privy/Stripe onramp/Coinbase/MoonPay/Bridge) | **Missing** (Stripe = own billing only; x402 rail exists) | `services/backend/services/billing/`, `services/backend/services/x402/` |
-| AI execution facts | Partial — SDK cost passthrough only | `services/backend/services/silver/projectors/agent_execution_projector.py` |
+| Agentic observability pipeline | Exists | `services/api/actions/agentic_observability/` |
+| Agent deployment registry | **Missing** (in-memory registration dict only) | `services/api/actions/agent/routes.py` |
+| Payment provider adapters (Privy/Stripe onramp/Coinbase/MoonPay/Bridge) | **Missing** (Stripe = own billing only; x402 rail exists) | `services/api/billing/billing/`, `services/api/value/x402/` |
+| AI execution facts | Partial — SDK cost passthrough only | `services/api/ingestion/silver/projectors/agent_execution_projector.py` |
 | AI pricing registry / price cards / workflow economics | **Missing** | — |
-| Noesis LLM instrumentation | Partial — token counts only | `services/backend/services/noesis/provider.py` |
-| Cluster targeting intelligence (intents/eligibility/leakage/holdouts) | **Missing** (Cluster360 read surface exists) | `services/backend/services/cluster/` |
-| OODA suggestions / recommendation families | Exists (mature) | `services/backend/services/suggestions/`, `services/backend/services/intelligence/` |
-| Agent runtime control plane (objectives/runs/review/kill switch) | Exists (durable) | `services/backend/services/agent/runtime_repository.py` |
-| Backend→worker dispatch bridge + worker callbacks | **Missing/partial** | `services/backend/services/agent/routes.py`, `services/agents/queue/` |
-| Approval-to-commit graph mutation execution | Partial (review exists; commit execution missing) | `services/backend/services/agent/runtime_repository.py` |
+| Noesis LLM instrumentation | Partial — token counts only | `services/api/intelligence/noesis/provider.py` |
+| Cluster targeting intelligence (intents/eligibility/leakage/holdouts) | **Missing** (Cluster360 read surface exists) | `services/api/graph/cluster/` |
+| OODA suggestions / recommendation families | Exists (mature) | `services/api/intelligence/suggestions/`, `services/api/intelligence/intelligence/` |
+| Agent runtime control plane (objectives/runs/review/kill switch) | Exists (durable) | `services/api/actions/agent/runtime_repository.py` |
+| Backend→worker dispatch bridge + worker callbacks | **Missing/partial** | `services/api/actions/agent/routes.py`, `services/agents/queue/` |
+| Approval-to-commit graph mutation execution | Partial (review exists; commit execution missing) | `services/api/actions/agent/runtime_repository.py` |
 | Durable briefings / alert compression / ops readiness | **Missing/partial** (in-memory BriefingStore) | `services/agents/agent_controller/runtime/briefing.py` |
-| Identity resolution (conservative, consent-gated) | Exists (mature) | `services/backend/services/identity/` |
+| Identity resolution (conservative, consent-gated) | Exists (mature) | `services/api/identity/identity/` |
 | Graph write validation + staged mutations + CIS quarantine | Exists | `shared/graph/`, `shared/cis/` |
-| Profile360 / Campaign360 / Cluster360 / Path Intelligence / Outcome Ledger | Exists | `services/backend/services/profile/`, `services/backend/services/campaign/`, `services/backend/services/cluster/`, `services/backend/services/operational_intelligence/`, `services/backend/services/intelligence/outcome_ledger.py` |
+| Profile360 / Campaign360 / Cluster360 / Path Intelligence / Outcome Ledger | Exists | `services/api/identity/profile/`, `services/api/journeys/campaign/`, `services/api/graph/cluster/`, `services/api/graph/operational_intelligence/`, `services/api/intelligence/intelligence/outcome_ledger.py` |
 
 ## Canonical contracts (added in this release)
 
@@ -107,7 +107,7 @@ objects are computed read models over existing facts.
 ## Feature flags
 
 All default OFF. Backend settings sections in
-`services/backend/config/settings.py`:
+`services/api/config/settings.py`:
 
 | Settings section | Flags |
 |---|---|

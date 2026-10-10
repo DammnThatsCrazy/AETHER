@@ -14,13 +14,13 @@ relevant rows to FAIL/WARN with an explicit detail rather than crashing):
   idempotency, cursor, environment availability, credential schema)
 * credential contracts — ``config/credential_contracts.yaml`` (slots, rotation
   method, environment binding)
-* credential authority — ``services/providers/credentials/`` +
+* credential authority — ``services/api/connectors/providers/credentials/`` +
   ``shared/credentials/`` (the platform credentials are consumed through)
-* worker supervision — ``services/runtime/supervisor.py`` (WorkerSupervisor /
+* worker supervision — ``services/api/workers/runtime/supervisor.py`` (WorkerSupervisor /
   WorkerSpec) and the per-domain worker builder modules
 * secret hygiene — the canonical ``scripts/security/secret_scan.py``
-* metering / entitlement — ``services/commerce/metering.py``,
-  ``services/metering_evidence/``, ``services/x402/entitlements.py``
+* metering / entitlement — ``services/api/value/commerce/metering.py``,
+  ``services/api/billing/metering_evidence/``, ``services/api/value/x402/entitlements.py``
 * migrations — the ``alembic/versions`` chain
 * deployment — ``config/deployment_profiles.yaml`` + ``infra/terraform``
 * test evidence — the unit / chaos / fixture trees
@@ -64,7 +64,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 # ── backend import bootstrap (mirrors scripts/credentialless_certification.py) ─
-BACKEND_ROOT = Path(__file__).resolve().parent.parent / "services" / "backend"
+BACKEND_ROOT = Path(__file__).resolve().parent.parent / "services" / "api"
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 os.environ.setdefault("AETHER_ENV", "local")
@@ -870,7 +870,7 @@ def _collect_workers(evidence: dict, backend: Path) -> None:
         and "runtime/run_role.py" not in str(p)
     ]
     evidence["workers_total"] = len(worker_files)
-    supervisor = backend / "services" / "runtime" / "supervisor.py"
+    supervisor = backend / "workers" / "runtime" / "supervisor.py"
     supervised = False
     try:
         text = supervisor.read_text(encoding="utf-8")
@@ -890,8 +890,8 @@ def _collect_code_evidence(evidence: dict, backend: Path) -> None:
     """Structural code/artifact evidence (file presence + token scans)."""
     services = "services/**/*.py"
     evidence["transport_modules"] = bool(
-        _files(backend, ["services/gateway/**/*.py", "services/x402/**/*.py",
-                         "services/commerce/**/*.py"])
+        _files(backend, ["services/api/ingestion/gateway/**/*.py", "services/api/value/x402/**/*.py",
+                         "services/api/value/commerce/**/*.py"])
     )
     evidence["normalization_modules"] = bool(
         _files(backend, ["services/**/normalizer*.py", "services/**/normalization*.py",
@@ -921,10 +921,10 @@ def _collect_code_evidence(evidence: dict, backend: Path) -> None:
         _files(backend, ["services/**/repair*.py"])
     )
     evidence["heartbeat"] = _contains(
-        backend, ["services/runtime/**/*.py", "services/**/worker*.py"], "heartbeat"
+        backend, ["services/api/workers/runtime/**/*.py", "services/**/worker*.py"], "heartbeat"
     )
     evidence["readiness_exposed"] = bool(
-        _files(backend, ["services/**/readiness*.py", "services/gateway/readiness.py"])
+        _files(backend, ["services/**/readiness*.py", "services/api/ingestion/gateway/readiness.py"])
     )
     evidence["health_false_success"] = False  # check_health_transitions forbids it
     evidence["health_verified"] = bool(
@@ -939,7 +939,7 @@ def _collect_code_evidence(evidence: dict, backend: Path) -> None:
         backend, ["shared/integration_contracts/results.py", "services/**/*.py"], "not_configured"
     ) or _co_occurs(
         backend,
-        ["services/providers/credentials/**/*.py", "shared/credentials/**/*.py"],
+        ["services/api/connectors/providers/credentials/**/*.py", "shared/credentials/**/*.py"],
         ["missing", "credential"],
     )
     evidence["invalid_credential_explicit"] = _contains(
@@ -950,7 +950,7 @@ def _collect_code_evidence(evidence: dict, backend: Path) -> None:
     )
     evidence["empty_vs_failure_preserved"] = _co_occurs(
         ROOT, ["tests/**/*.py"], ["empty", "failure"]
-    ) or _contains(backend, ["services/commerce/reconciliation.py"], "empty snapshot")
+    ) or _contains(backend, ["services/api/value/commerce/reconciliation.py"], "empty snapshot")
     evidence["unknown_vs_zero_preserved"] = bool(
         _files(ROOT, ["tests/unit/test_value_semantics.py"])
     ) or _contains(ROOT, ["tests/**/*.py"], "unknown != 0")
@@ -960,14 +960,14 @@ def _collect_code_evidence(evidence: dict, backend: Path) -> None:
                       "tests/unit/test_diagnostics_queue_routes.py"])
     )
     evidence["operator_diagnostics"] = bool(
-        _files(backend, ["services/command_center/**/*.py",
-                         "services/operational_intelligence/**/*.py"])
+        _files(backend, ["services/api/governance/command_center/**/*.py",
+                         "services/api/graph/operational_intelligence/**/*.py"])
     )
     evidence["usage_meter_defined"] = bool(
-        _files(backend, ["services/commerce/metering.py", "services/metering_evidence/**/*.py"])
+        _files(backend, ["services/api/value/commerce/metering.py", "services/api/billing/metering_evidence/**/*.py"])
     )
     evidence["entitlement_key_defined"] = bool(
-        _files(backend, ["services/x402/entitlements.py", "services/rewards/**/*.py"])
+        _files(backend, ["services/api/value/x402/entitlements.py", "services/api/value/rewards/**/*.py"])
     )
     evidence["offline_fixtures"] = bool(
         _files(ROOT, ["tests/fixtures/**/*.json", "tests/fixtures/**/*.yaml",
@@ -1018,7 +1018,7 @@ def collect_evidence(root: Optional[Path] = None) -> dict:
     """Best-effort evidence aggregation. Never raises: each source degrades the
     relevant rows to FAIL/WARN with a recorded error rather than crashing."""
     root = Path(root) if root is not None else ROOT
-    backend = root / "services" / "backend"
+    backend = root / "services" / "api"
     evidence: dict = {
         "manifest_count": 0,
         "manifest_errors": [],
@@ -1092,7 +1092,7 @@ def collect_evidence(root: Optional[Path] = None) -> dict:
     # Cross-cutting derived flags.
     evidence["credential_authority"] = bool(
         (backend / "shared" / "credentials" / "service.py").exists()
-        and (backend / "services" / "providers" / "credentials" / "authority.py").exists()
+        and (backend / "connectors" / "providers" / "credentials" / "authority.py").exists()
     )
     evidence["normalization_tests"] = _contains(
         ROOT, ["tests/**/*.py"], "normalize"

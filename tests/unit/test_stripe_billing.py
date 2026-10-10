@@ -25,7 +25,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
@@ -67,7 +67,7 @@ def _reload_settings():
         "shared.rate_limit",
         "shared.logger",
         "repositories",
-        "services.admin",
+        "governance.admin",
         "dependencies",
     )
     for name in list(sys.modules):
@@ -406,7 +406,7 @@ class TestWebhookHandling:
             from shared.billing import stripe_repository
 
             stripe_repository._reset_in_memory_for_tests()
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
 
             sub_obj = {
                 "id": "sub_1",
@@ -435,7 +435,7 @@ class TestWebhookHandling:
             from shared.billing import stripe_repository
 
             stripe_repository._reset_in_memory_for_tests()
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
 
             def apply(tenant, status, price="price_gamma"):
                 asyncio.run(wh._apply_subscription_state({
@@ -461,7 +461,7 @@ class TestWebhookHandling:
             stripe_repository._reset_in_memory_for_tests()
             asyncio.run(stripe_repository.update_plan_tier("t-2", "gamma"))
 
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             event_data = {"object": {
                 "id": "sub_2", "customer": "cus_2", "status": "canceled",
                 "ended_at": None,
@@ -481,7 +481,7 @@ class TestWebhookHandling:
             stripe_repository._reset_in_memory_for_tests()
             asyncio.run(stripe_repository.update_plan_tier("t-3", "alpha"))
 
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             event_data = {"object": {
                 "id": "cs_1", "customer": "cus_3", "subscription": "sub_3",
                 "client_reference_id": "t-3",
@@ -500,7 +500,7 @@ class TestWebhookHandling:
             _reload_settings()
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             asyncio.run(wh._HANDLERS["checkout.session.async_payment_succeeded"]({
                 "object": {
                     "customer": "cus_async",
@@ -525,7 +525,7 @@ class TestWebhookHandling:
             stripe_repository._reset_in_memory_for_tests()
             send_email = AsyncMock()
             monkeypatch.setattr(email_service, "send_email", send_email)
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             tenant_id = "t-async-email"
 
             asyncio.run(wh._handle_checkout_session_completed({
@@ -559,7 +559,7 @@ class TestWebhookHandling:
             _reload_settings()
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             asyncio.run(wh._HANDLERS["checkout.session.async_payment_failed"]({
                 "object": {
                     "customer": "cus_async_failed",
@@ -575,7 +575,7 @@ class TestWebhookHandling:
         self._setup(monkeypatch)
         with backend_path():
             _reload_settings()
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             mapping = AsyncMock()
             state = AsyncMock()
             monkeypatch.setattr(wh.stripe_repository, "update_customer_mapping", mapping)
@@ -615,7 +615,7 @@ class TestWebhookHandling:
             stripe_repository._reset_in_memory_for_tests()
             send_email = AsyncMock()
             monkeypatch.setattr(email_service, "send_email", send_email)
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             asyncio.run(wh._handle_checkout_session_async_payment_succeeded({
                 "object": {
                     "customer": "cus_async_gamma",
@@ -640,7 +640,7 @@ class TestWebhookHandling:
             _reload_settings()
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             event_data = {"object": {
                 "id": "in_1", "customer": "cus_4", "subscription": "sub_4",
                 "status": "paid", "currency": "usd",
@@ -663,7 +663,7 @@ class TestWebhookHandling:
         self._setup(monkeypatch)
         with backend_path():
             _reload_settings()
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             assert wh._HANDLERS["invoice.payment_succeeded"] is wh._handle_invoice_paid
             assert wh._HANDLERS["invoice.created"] is wh._handle_invoice_finalized
 
@@ -674,7 +674,7 @@ class TestWebhookHandling:
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
             asyncio.run(stripe_repository.update_plan_tier("t-5", "gamma"))
-            wh = importlib.import_module("services.admin.webhook_routes")
+            wh = importlib.import_module("governance.admin.webhook_routes")
             event_data = {"object": {
                 "id": "in_5", "customer": "cus_5", "subscription": "sub_5",
                 "status": "open", "currency": "usd",
@@ -839,7 +839,7 @@ class TestOveragePlanTierResolution:
             from shared.auth.auth import (
                 APIKeyTier, PlanTier, Role, TenantContext,
             )
-            routes = importlib.import_module("services.admin.routes")
+            routes = importlib.import_module("governance.admin.routes")
 
             class _Req:
                 pass
@@ -869,7 +869,7 @@ class TestOveragePlanTierResolution:
             from shared.auth.auth import (
                 APIKeyTier, PlanTier, Role, TenantContext,
             )
-            routes = importlib.import_module("services.admin.routes")
+            routes = importlib.import_module("governance.admin.routes")
 
             class _Req:
                 pass

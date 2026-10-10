@@ -11,8 +11,8 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -40,7 +40,7 @@ def billing_routes(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     with backend_module_path():
-        mod = importlib.import_module("services.admin.billing_subscription_routes")
+        mod = importlib.import_module("governance.admin.billing_subscription_routes")
         importlib.reload(mod)
         from shared.billing import stripe_repository
         stripe_repository._reset_in_memory_for_tests()

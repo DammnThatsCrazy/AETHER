@@ -20,7 +20,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 # Stub heavy optional dependencies before imports
 _STUBBED: list[str] = []
@@ -49,13 +49,13 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
 from shared.graph.graph import Edge, GraphClient  # noqa: E402
-from services.identity.graph_reconciliation import (  # noqa: E402
+from identity.identity.graph_reconciliation import (  # noqa: E402
     _run_store,
     get_latest_reconciliation_run,
     reconcile_identity_edges,
 )
-from services.identity.models import ConfidenceTier, EdgeType  # noqa: E402
-from services.identity.repository import IdentityResolutionRepository  # noqa: E402
+from identity.identity.models import ConfidenceTier, EdgeType  # noqa: E402
+from identity.identity.repository import IdentityResolutionRepository  # noqa: E402
 
 SAME_AS = EdgeType.SAME_AS.value
 
@@ -329,7 +329,7 @@ class _Request:
 
 @pytest.mark.asyncio
 async def test_get_route_returns_envelope():
-    from services.identity import reconciliation_routes as rr
+    from identity.identity import reconciliation_routes as rr
 
     request = _Request(_Tenant("tenant-route-get", {"read"}))
     response = await rr.get_identity_reconciliation(request, refresh=True)
@@ -342,7 +342,7 @@ async def test_get_route_returns_envelope():
 
 @pytest.mark.asyncio
 async def test_admin_route_rejects_non_operator():
-    from services.identity import reconciliation_routes as rr
+    from identity.identity import reconciliation_routes as rr
 
     # Even a role-admin Aether tenant is not a Kyber operator.
     request = _Request(_Tenant("tenant-route-admin", {"admin"}))
@@ -359,7 +359,7 @@ async def test_admin_route_rejects_non_operator():
 
 @pytest.mark.asyncio
 async def test_admin_route_allows_kyber_operator():
-    from services.identity import reconciliation_routes as rr
+    from identity.identity import reconciliation_routes as rr
 
     operator = _Tenant("olympus-op", {"kyber:operator"})
     request = _Request(operator)

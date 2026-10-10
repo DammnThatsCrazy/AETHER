@@ -35,7 +35,7 @@ EVIDENCE_SCHEMA_PATH = (
 )
 READINESS_PY = (
     ROOT
-    / "services" / "backend"
+    / "services" / "api"
     / "shared"
     / "certification"
     / "readiness.py"

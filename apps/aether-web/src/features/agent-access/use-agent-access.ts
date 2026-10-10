@@ -1,7 +1,7 @@
 /**
  * Agent Access Intelligence — tenant read surface.
  *
- * Wire shapes mirror `services/agent_access_intelligence/*` on the backend. The
+ * Wire shapes mirror `services/api/actions/agent_access_intelligence/*` on the backend. The
  * one property every schema here exists to preserve: **a count the backend could
  * not compute arrives as `null`, and `null` is not zero.** Each response that can
  * be partially computed carries a `*_known` flag plus a `missing_inputs` list, and

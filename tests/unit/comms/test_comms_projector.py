@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -34,7 +34,7 @@ def _event(event_type: str, props: dict | None = None, message_id: str = "m-1") 
 
 class TestFactShape:
     def test_click_fact_fields(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_clicked", {
             "external_campaign_id": "camp-1", "external_message_id": "msg-1",
             "link_id": "link-1", "sequence_step": 2,
@@ -52,7 +52,7 @@ class TestFactShape:
         assert row["canonical_activity_key"]
 
     def test_bounce_normalizes_state(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_bounced", {"bounce_type": "hard"}))
         row = result.rows[0]
         assert row["communication_state"] == "bounced"
@@ -60,7 +60,7 @@ class TestFactShape:
         assert row["journey_role"] == "state_only"
 
     def test_missing_message_id_skips(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         event = _event("email_clicked")
         event.pop("messageId")
         result = CommsProjector().project(event)
@@ -71,7 +71,7 @@ class TestNoRawPII:
     """ADR-C10 — raw addresses are hashed; bodies/subjects never persist."""
 
     def test_raw_email_never_stored(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_delivered"))
         row = result.rows[0]
         flat = str(row)
@@ -80,7 +80,7 @@ class TestNoRawPII:
         assert row["recipient_display"].startswith("j***@")
 
     def test_payload_strips_content_fields(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_replied", {
             "subject": "Re: secret negotiation",
             "body": "full text",
@@ -96,7 +96,7 @@ class TestMachineClassification:
     """Phase 14 — deterministic separation of machine engagement."""
 
     def test_scanner_click_flagged_and_excluded_from_journey(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_clicked", {
             "user_agent": "Barracuda Sentinel LinkProtect",
         }))
@@ -106,7 +106,7 @@ class TestMachineClassification:
         assert row["journey_role"] == "excluded"
 
     def test_proxy_open_weak_engagement(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_opened", {
             "user_agent": "Mozilla/5.0 (via GoogleImageProxy)",
         }))
@@ -114,7 +114,7 @@ class TestMachineClassification:
         assert row["suspected_machine_activity"] is True
 
     def test_human_click_probable(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_clicked", {
             "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
         }))
@@ -123,7 +123,7 @@ class TestMachineClassification:
         assert row["engagement_strength"] in ("probable", "strong")
 
     def test_authenticated_session_deterministic(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_clicked", {
             "has_authenticated_session": True,
         }))
@@ -132,7 +132,7 @@ class TestMachineClassification:
         assert row["engagement_confidence"] == 1.0
 
     def test_delivery_events_carry_no_engagement(self):
-        from services.comms.projector import CommsProjector
+        from journeys.comms.projector import CommsProjector
         result = CommsProjector().project(_event("email_delivered"))
         row = result.rows[0]
         assert row["engagement_type"] is None
@@ -144,9 +144,9 @@ class TestActivityOwnership:
 
     @pytest.mark.asyncio
     async def test_one_fact_one_touchpoint_one_activity(self):
-        from services.silver.dispatcher import SilverDispatcher
-        from services.measurement.silver_adapters import adapt_from_silver
-        from services.comms.repository import reset_local_stores
+        from ingestion.silver.dispatcher import SilverDispatcher
+        from journeys.measurement.silver_adapters import adapt_from_silver
+        from journeys.comms.repository import reset_local_stores
 
         reset_local_stores()
         outcome = await SilverDispatcher().project_with_outcome(
@@ -166,8 +166,8 @@ class TestActivityOwnership:
         assert tp["communication_fact_id"] == comms[0].rows[0]["idempotency_key"]
 
     def test_excluded_machine_activity_produces_no_activity(self):
-        from services.comms.projector import CommsProjector
-        from services.measurement.silver_adapters import adapt_from_silver
+        from journeys.comms.projector import CommsProjector
+        from journeys.measurement.silver_adapters import adapt_from_silver
         result = CommsProjector().project(_event("email_clicked", {
             "user_agent": "python-requests/2.31",
         }))
@@ -180,7 +180,7 @@ class TestTouchpointGating:
 
     @pytest.mark.asyncio
     async def test_machine_click_creates_no_touchpoint(self):
-        from services.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.dispatcher import SilverDispatcher
         outcome = await SilverDispatcher().project_with_outcome(
             _event("email_clicked", {"user_agent": "curl/8.0"})
         )
@@ -190,14 +190,14 @@ class TestTouchpointGating:
 
     @pytest.mark.asyncio
     async def test_bounce_creates_no_positive_touchpoint(self):
-        from services.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.dispatcher import SilverDispatcher
         outcome = await SilverDispatcher().project_with_outcome(_event("email_bounced"))
         tables = [r.table for r in outcome.results]
         assert "silver_campaign_touchpoint_facts" not in tables
 
     @pytest.mark.asyncio
     async def test_reply_creates_email_reply_touchpoint(self):
-        from services.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.dispatcher import SilverDispatcher
         outcome = await SilverDispatcher().project_with_outcome(_event("email_replied"))
         tp = next(r for r in outcome.results if r.table == "silver_campaign_touchpoint_facts")
         assert tp.rows[0]["touchpoint_type"] == "email_reply"

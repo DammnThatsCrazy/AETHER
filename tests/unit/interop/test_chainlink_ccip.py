@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 
 from repositories.interop_repos import InteropMessageEventRepo, InteropMessageRepo
-from services.interop.correlation import CorrelationEngine
-from services.interop.providers.chainlink_ccip import ChainlinkCcipAdapter
+from graph.interop.correlation import CorrelationEngine
+from graph.interop.providers.chainlink_ccip import ChainlinkCcipAdapter
 from shared.certification.checks import run_certification
 from shared.certification.readiness import CredentialReadiness
 

@@ -22,7 +22,7 @@ from typing import Optional
 
 import pytest
 
-from services.managed_integrations.actuators import (
+from connectors.managed_integrations.actuators import (
     Actuator,
     ActuatorApplyResult,
     ActuatorAuthority,
@@ -31,10 +31,10 @@ from services.managed_integrations.actuators import (
     get_actuator_registry,
     registry_with_authorities,
 )
-from services.managed_integrations.change_sets_repository import (
+from connectors.managed_integrations.change_sets_repository import (
     get_change_set_repository,
 )
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations.contracts import (
     BlastRadiusView,
     ChangeSetApprovalView,
     ChangeSetPlanView,
@@ -42,7 +42,7 @@ from services.managed_integrations.contracts import (
     CONTROL_FINDING_KINDS,
     RiskAssessmentView,
 )
-from services.managed_integrations.execution_records_repository import (
+from connectors.managed_integrations.execution_records_repository import (
     get_action_required_repository,
     get_change_evidence_repository,
     get_change_set_approval_repository,
@@ -50,7 +50,7 @@ from services.managed_integrations.execution_records_repository import (
     get_change_set_rollback_repository,
     get_last_known_good_repository,
 )
-from services.managed_integrations.executor import (
+from connectors.managed_integrations.executor import (
     S34_TRANSITIONS,
     RunOutcome,
     TargetSnapshot,
@@ -85,8 +85,8 @@ def _executor_db_free(monkeypatch: pytest.MonkeyPatch) -> None:
     fixture; this only guarantees repo writes never reach a live Postgres even
     under an ambient non-local ``AETHER_ENV``.
     """
-    import services.managed_integrations.change_sets_repository as cs_module
-    import services.managed_integrations.execution_records_repository as er_module
+    import connectors.managed_integrations.change_sets_repository as cs_module
+    import connectors.managed_integrations.execution_records_repository as er_module
 
     async def _no_pool() -> None:
         return None
@@ -683,7 +683,7 @@ def test_executor_is_importable_and_inert_without_an_explicit_caller() -> None:
     # Every Reconciled Control Plane flag defaults OFF; nothing here registers
     # a trigger, worker or route. A caller may still drive run_changeset
     # explicitly through the governed path.
-    from services.managed_integrations import flags
+    from connectors.managed_integrations import flags
 
     assert flags.enabled() is False
     assert callable(run_changeset)

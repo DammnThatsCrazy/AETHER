@@ -31,7 +31,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "services" / "backend"
+DOMAIN_PACKAGES = ("tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing")
+BACKEND = ROOT / "services" / "api"
 ALLOWLIST_DIR = ROOT / "scripts" / "allowlists"
 
 PY_ALLOWLIST = ALLOWLIST_DIR / "temporal_naive_datetime.json"
@@ -80,7 +81,7 @@ def _scan(paths: list[Path], patterns: tuple[re.Pattern, ...], exempt: tuple[str
 
 def scan_python() -> set[str]:
     paths: list[Path] = []
-    for base in (BACKEND / "services", BACKEND / "shared", BACKEND / "middleware",
+    for base in (*(BACKEND / d for d in DOMAIN_PACKAGES), BACKEND / "shared", BACKEND / "middleware",
                  BACKEND / "repositories", BACKEND / "config"):
         paths.extend(base.rglob("*.py"))
     return _scan(paths, _PY_PATTERNS, _PY_EXEMPT)

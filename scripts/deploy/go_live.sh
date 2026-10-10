@@ -180,7 +180,7 @@ aws ecr get-login-password --region "${REGION}" | \
   docker login --username AWS --password-stdin "${ECR_BASE}"
 
 echo "    Building backend image..."
-cd "${REPO_ROOT}/services/backend"
+cd "${REPO_ROOT}/services/api"
 docker build -t aether-backend .
 
 docker tag aether-backend:latest "${ECR_BASE}/aether-backend:latest"

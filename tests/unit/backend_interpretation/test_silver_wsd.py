@@ -21,7 +21,7 @@ def _event(event_type, properties, message_id="m-1"):
 
 
 def test_revenue_money_off_is_byte_parity(wsd_flags):
-    from services.silver.projectors.revenue_projector import RevenueProjector
+    from ingestion.silver.projectors.revenue_projector import RevenueProjector
 
     wsd_flags()  # all WS-D flags OFF
     row = RevenueProjector().project(
@@ -34,7 +34,7 @@ def test_revenue_money_off_is_byte_parity(wsd_flags):
 
 
 def test_revenue_money_on_is_exact_and_never_fabricates(wsd_flags):
-    from services.silver.projectors.revenue_projector import RevenueProjector
+    from ingestion.silver.projectors.revenue_projector import RevenueProjector
 
     wsd_flags(silver_exact_money_enabled=True)
     # Missing money -> typed absence, never 0.0/USD.
@@ -56,7 +56,7 @@ def test_revenue_money_on_is_exact_and_never_fabricates(wsd_flags):
 
 
 def test_outcome_money_off_on(wsd_flags):
-    from services.silver.projectors.outcome_projector import OutcomeProjector
+    from ingestion.silver.projectors.outcome_projector import OutcomeProjector
 
     wsd_flags()
     off = OutcomeProjector().project(
@@ -85,7 +85,7 @@ def test_outcome_money_off_on(wsd_flags):
 
 
 def test_silver_temporal_off_preserves_raw_timestamp(wsd_flags):
-    from services.ingestion.workers import _apply_silver_temporal
+    from ingestion.ingestion.workers import _apply_silver_temporal
 
     wsd_flags(silver_temporal_envelope_enabled=False)
     envelope = {"timestamp": "2026-09-06T00:00:00Z", "messageId": "m-1"}
@@ -100,7 +100,7 @@ def test_silver_temporal_off_preserves_raw_timestamp(wsd_flags):
 
 
 def test_silver_temporal_on_uses_server_occurred_at(wsd_flags):
-    from services.ingestion.workers import _apply_silver_temporal
+    from ingestion.ingestion.workers import _apply_silver_temporal
 
     wsd_flags(silver_temporal_envelope_enabled=True)
     envelope = {"timestamp": "2026-09-06T00:00:00Z", "messageId": "m-1"}
@@ -117,7 +117,7 @@ def test_silver_temporal_on_uses_server_occurred_at(wsd_flags):
 
 
 def test_silver_temporal_on_without_payload_temporal_is_unchanged(wsd_flags):
-    from services.ingestion.workers import _apply_silver_temporal
+    from ingestion.ingestion.workers import _apply_silver_temporal
 
     wsd_flags(silver_temporal_envelope_enabled=True)
     envelope = {"timestamp": "2026-09-06T00:00:00Z"}
@@ -127,7 +127,7 @@ def test_silver_temporal_on_without_payload_temporal_is_unchanged(wsd_flags):
 @pytest.mark.asyncio
 async def test_silver_fact_rows_carry_server_occurred_at(wsd_flags):
     """Temporal-integrity: a projector row's occurred_at follows the envelope."""
-    from services.silver.projectors.revenue_projector import RevenueProjector
+    from ingestion.silver.projectors.revenue_projector import RevenueProjector
 
     wsd_flags(silver_temporal_envelope_enabled=True)
     env = _event("order_completed", {"amount": "10.00"})
@@ -143,7 +143,7 @@ async def test_silver_fact_rows_carry_server_occurred_at(wsd_flags):
 @pytest.mark.asyncio
 async def test_outcome_truth_recorder_flag_off_is_noop(wsd_flags):
     from shared.backend_interpretation.primitives import OutcomeTruthRecord
-    from services.measurement.outcome.truth_recorder import persist_outcome_truth
+    from journeys.measurement.outcome.truth_recorder import persist_outcome_truth
 
     wsd_flags()
     record = OutcomeTruthRecord(
@@ -157,7 +157,7 @@ async def test_outcome_truth_recorder_flag_off_is_noop(wsd_flags):
 async def test_outcome_truth_recorder_retains_lineage(wsd_flags):
     from shared.store import reset_in_memory_stores
     from shared.backend_interpretation.stores import OutcomeTruthStore
-    from services.measurement.outcome.truth_recorder import record_from_silver_outcome
+    from journeys.measurement.outcome.truth_recorder import record_from_silver_outcome
 
     reset_in_memory_stores()
     wsd_flags(outcome_truth_store_enabled=True)
@@ -196,9 +196,9 @@ async def test_outcome360_provider_reads_durable_truth(wsd_flags):
         ProjectionRequest,
         ProjectionSubject,
     )
-    from services.operational_intelligence.models import EntityRef
-    from services.measurement.outcome.truth_recorder import record_from_silver_outcome
-    from services.measurement.outcome.provider import Outcome360Provider
+    from graph.operational_intelligence.models import EntityRef
+    from journeys.measurement.outcome.truth_recorder import record_from_silver_outcome
+    from journeys.measurement.outcome.provider import Outcome360Provider
 
     reset_in_memory_stores()
     wsd_flags(outcome_truth_store_enabled=True)

@@ -7,9 +7,9 @@ audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
 source_files:
-  - services/backend/shared/graph/
-  - services/backend/services/web3/classifier.py
-  - services/backend/services/web3/routes.py
+  - services/api/shared/graph/
+  - services/api/graph/web3/classifier.py
+  - services/api/graph/web3/routes.py
   - scripts/allowlists/graph_write_paths.json
   - scripts/validate_graph_write_paths.py
   - docs/reference/source-of-truth/GRAPH_ALIGNMENT.md
@@ -19,12 +19,12 @@ toc_depth: 3
 reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
-  "docs/reference/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:396ceafd442c6912eaf6aba88f32498315ce4e9d701343345b76a742972fe5c4"
+  "docs/reference/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:77e53b782c1633240ba44d8151a7b0f3712f44a497cf9691b7c0421a466c56f8"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
-  "scripts/validate_graph_write_paths.py": "sha256:1a4fae607b1eccdee38ec5bac42ebbcd57d28cb9ef0dfabe3d7a70bdbfcae91d"
-  "services/backend/services/web3/classifier.py": "sha256:ab4186e37c2e058401d4303559ca66db49659f93d60389729933777c6fca6061"
-  "services/backend/services/web3/routes.py": "sha256:49be15a983fe82d9c65b4bd3b471d0a0a9e15a012dc8abfc1d8f2a521830df2e"
-  "services/backend/shared/graph/": "sha256:b8f2f40f16fe665fc41a094d4d019783260f798e4ce07bf04cfddca9c5272aee"
+  "scripts/validate_graph_write_paths.py": "sha256:b8e155e472289a5a0024e91e1af025f0c300b927f91cb9b6f3d34e02dfaf00c6"
+  "services/api/graph/web3/classifier.py": "sha256:4ced74981c964a8e2442071071289d7d28dbd6bf4042200ce05934cdbd781a0e"
+  "services/api/graph/web3/routes.py": "sha256:ab26eeb02ade6a6bd3c47e04f30ac3e731e092dc078fc4b9cced56315589c47c"
+  "services/api/shared/graph/": "sha256:0074169c53298b1e710bc6dfca292afb8eb512ce9e8095a5fb03c51d1c1d41b0"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
@@ -82,7 +82,7 @@ semantic Gold state ────> semantic graph projector ┘         ↓
                                                         GraphClient
 ```
 
-The former `services/backend/services/lake/graph_mutations.py` job was unused
+The former `services/api/ingestion/lake/graph_mutations.py` job was unused
 and has been removed. Its wallet/protocol, social, and governance edges cannot
 currently be rebuilt from lake state through that old module. The separate
 semantic graph projector remains an active Gold-to-graph path.
@@ -97,7 +97,7 @@ The Web3 and cross-domain registries are tenant-owned: a registration or
 classification is stored for the calling tenant, reads return that tenant's rows
 (plus the platform-seeded chain, protocol, app, token, venue and governance
 reference data), and a second tenant cannot overwrite an id the first one owns.
-`services/backend/services/web3/classifier.py` sends its vertex and edge
+`services/api/graph/web3/classifier.py` sends its vertex and edge
 intents through `GraphMutationGateway.apply`. When `tx_hash` is present, its
 source event key is chain ID plus transaction hash. `Web3Observation` has no
 per-log/event index, so this key identifies a transaction observation, not a
@@ -117,14 +117,14 @@ writes are atomic.
 
 A second, governed mutation path closes the "Gold is computed but never reaches
 the graph" gap for semantic intelligence: the **semantic graph projector**
-(`services/backend/services/semantic_intelligence/graph_projector.py`) reads each tenant's
+(`services/api/intelligence/semantic_intelligence/graph_projector.py`) reads each tenant's
 durable `gold_relationship_semantic_state` projections and writes one directed
 `SEMANTIC_RELATES_TO` edge per relationship (`source_ref -> target_ref`) into
 the graph **through the canonical `GraphMutationGateway`** — never a direct
 graph write. See [Semantic relationship overlay](#semantic-relationship-overlay).
 
 A third, governed path makes **population membership a first-class graph fact**
-(population360 P3.1 — `services/backend/services/population/governance.py`): every join/leave is
+(population360 P3.1 — `services/api/identity/population/governance.py`): every join/leave is
 written as a directed `MEMBER_OF` edge (`entity -> population`) through the same
 canonical `GraphMutationGateway`, never a bare table write. The gateway
 close-and-appends into the bitemporal ledger, so a membership history is
@@ -143,13 +143,13 @@ population-definition version the membership was computed under),
 governed soft-revoke of the `MEMBER_OF` edge (`edge_expired`) — never a hard
 delete**, so the append-only membership and definition ledgers stay intact and
 rebuildable. Consent/policy is evaluated at the write boundary itself
-(population360 P3.2, server-authoritative `services.consent.authority`), and a
+(population360 P3.2, server-authoritative `governance.consent.authority`), and a
 data-subject erasure runs governed leaves through this same path (see
 [DSR Cascade](#dsr-cascade-art-17-erasure)).
 
 Membership joins also carry their **governing rights decision**: the governor
 asks the Rights Authority propagation producer
-(`services/backend/services/rights_authority/propagation.py`) for the
+(`services/api/tenancy/rights_authority/propagation.py`) for the
 `RightsDecision` authorizing this write into the tenant graph and stamps its
 durable `rdec_...` id onto the intent's `rights_decision_ref`, which the
 gateway copies onto `MutationRecord.rights_decision_ref` — landing in the
@@ -173,7 +173,7 @@ still error in staging/prod): `LOCATED_AT` (subject -> `REGION`, the resolved
 located-at region at declared precision), `OBSERVED_IN` (subject -> `PLACE`, a
 single observation at a named venue), and `UNDER_JURISDICTION` (subject ->
 `JURISDICTION`, the governing policy scope kept distinct from the observation
-that locates a subject). `services/backend/services/geo/location_edges.py` is the one assembly
+that locates a subject). `services/api/graph/geo/location_edges.py` is the one assembly
 surface: it fails closed on unknown vocabulary and on a `precise`/`coarse_cell`
 claim the fact's evidence cannot support (precision never exceeds evidence),
 and emits one edge per resolution target carrying the geographic provenance
@@ -445,7 +445,7 @@ When a Data Subject Request is received:
   `MEMBER_OF` edge is soft-revoked (`edge_expired`) via
   `PopulationMembershipGovernor.remove_membership`, the membership row
   transitions to `left`, and each affected population's `member_count` is
-  recomputed (population360 P3.3, `services/backend/services/consent/erasure_jobs.py::_erase_population_plane`).
+  recomputed (population360 P3.3, `services/api/governance/consent/erasure_jobs.py::_erase_population_plane`).
   The erasure marks the three population dsr_propagation components
   (`population_memberships` / `population_snapshots` / `populations`) with real
   receipts — only memberships carry subject identity; snapshots and population
@@ -673,7 +673,7 @@ See `docs/operations/UNIVERSAL_GRAPH_RUNBOOK.md` for operational procedures.
 
 ### Universal Query API (v8.10.0)
 
-New routes added to `services/backend/services/operational_intelligence/routes.py`:
+New routes added to `services/api/graph/operational_intelligence/routes.py`:
 
 | Method | Path | Description |
 |--------|------|-------------|

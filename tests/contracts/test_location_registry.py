@@ -1,7 +1,7 @@
 """Contract tests for the location registry (geographic360 Phase 4).
 
 `packages/shared/location-registry.ts`,
-`services/backend/shared/geo/generated_taxonomy.py`, and
+`services/api/shared/geo/generated_taxonomy.py`, and
 `docs/_generated/location-registry-table.md` are generated twins of
 `packages/shared/contracts/location-registry.json`;
 `shared/geo/models.py` is the hand-authored model surface (`LocationFact` with
@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 

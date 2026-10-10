@@ -49,7 +49,7 @@ version_patterns = {
     # The backend mirror of the same fact. It is not a second version authority
     # (pyproject.toml / package.json remain the source); it is the copy the
     # verifier compares against, pinned here so it cannot drift from them.
-    'services/backend/services/sdk_distribution/versions.py': [
+    'services/api/ingestion/sdk_distribution/versions.py': [
         f'CANONICAL_SDK_VERSION = "{VERSION}"'
     ],
 }

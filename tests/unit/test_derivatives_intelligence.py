@@ -5,10 +5,10 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from services.derivatives.intelligence import (
+from value.derivatives.intelligence import (
     ACTOR_EDGE_LAYER_MAP,
     DOMAIN_EDGE_LAYER_MAP,
     AuthorityGrant,
@@ -21,7 +21,7 @@ from services.derivatives.intelligence import (
     compute_behavior_features,
     project_position_edges,
 )
-from services.derivatives.models import PositionEpochState, PositionSide, PositionStatus, SourceRef
+from value.derivatives.models import PositionEpochState, PositionSide, PositionStatus, SourceRef
 
 
 def _position(tenant_id="tenant-a", pnl="12.50", fees="1.25"):
@@ -72,11 +72,11 @@ def test_unknown_or_misclassified_graph_edges_fail_closed():
         explanation="test",
     )
     with pytest.raises(ValueError, match="unclassified"):
-        from services.derivatives.intelligence import DerivativesGraphEdgeIntent
+        from value.derivatives.intelligence import DerivativesGraphEdgeIntent
 
         DerivativesGraphEdgeIntent("tenant-a", "UNMAPPED", "a", "b", GraphLayer.H2H, evidence, "2026-07-01T00:00:00Z", "2026-07-01T00:00:00Z")
     with pytest.raises(ValueError, match="must be classified"):
-        from services.derivatives.intelligence import DerivativesGraphEdgeIntent
+        from value.derivatives.intelligence import DerivativesGraphEdgeIntent
 
         DerivativesGraphEdgeIntent("tenant-a", "HOLDS_POSITION", "a", "b", GraphLayer.H2H, evidence, "2026-07-01T00:00:00Z", "2026-07-01T00:00:00Z")
 

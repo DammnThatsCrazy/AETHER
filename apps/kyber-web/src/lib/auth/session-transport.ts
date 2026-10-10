@@ -21,7 +21,7 @@ import { env, getEnvironment } from '@kyber/lib/env';
 
 /** Readable CSRF cookie paired with the HttpOnly session cookie. */
 // Pinned to the single name the backend actually sets
-// (services/kyber/sessions/cookies.py::CSRF_COOKIE_NAME). Accepting a
+// (services/api/governance/kyber/sessions/cookies.py::CSRF_COOKIE_NAME). Accepting a
 // non-`__Host-` fallback would let a cookie set by a sibling subdomain satisfy
 // the CSRF check, which is the precise attack the `__Host-` prefix prevents.
 export const CSRF_COOKIE_NAMES = ['__Host-kyber_csrf'] as const;

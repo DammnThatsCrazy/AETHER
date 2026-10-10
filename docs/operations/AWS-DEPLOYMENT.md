@@ -46,13 +46,13 @@ source_files:
   - scripts/release/check_staging_awake_lease.py
   - scripts/release/check_terraform_state_access_policy.py
   - scripts/release/check_staging_lifecycle_policy.py
-  - services/backend/Dockerfile
+  - services/api/Dockerfile
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:7debcfe047fd42bdb4e6b18ed3b25ee0f4d843c4017154e497be3fe63bf2aaeb"
-  ".github/workflows/deploy.yml": "sha256:17c0c4543f1ecacbb8aabdf6056cda41408fbb6b9278d47ace5e3d514954beed"
+  ".github/workflows/deploy.yml": "sha256:103a856af062237e1e7fa6eab4072f17cb737ce66e78cb3d040fee1cac1959a8"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:f8081113b9e501906c6148cf299c90637b2da6e584583f8a08465b5a41d8b58a"
   ".github/workflows/staging-state-reconcile.yml": "sha256:c08a7521eee7fbe505195ab1e49f27272b6ef144d4ba2e9b0153fe6e2f07f33d"
@@ -73,7 +73,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:c89112ad000d1b4d7401b1260f8c6796dff7aec700e027623954afb00ec15100"
+  "infra/aws/terraform/": "sha256:eace0b2cae355aa48d20b755a7e574613f7c9bb70882e70958e0c95b1eeffe21"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:124f62c1f1469281a3e19de2ec58d36b50f6f210410f1e79de8f79b2ef222e36"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -90,7 +90,7 @@ source_hashes:
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
-  "services/backend/Dockerfile": "sha256:e7ace77caa57362659d1c315715abea225c23271892117d2e73babb640462a7a"
+  "services/api/Dockerfile": "sha256:3cead3d09671f10595adc975ea3ff963e2fde1e10b6fb21b41027c3d6763cfd4"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -290,7 +290,7 @@ its key to be named explicitly rather than widening the execution role to `*`.
 The backend image preserves the repository-relative source depth used by its
 canonical asset readers and explicitly ships the root `config/`, shared JSON
 contracts, delivery schemas, and release metadata. Flattening
-`services/backend` into `/app` or leaving `packages/shared/contracts/` excluded
+`services/api` into `/app` or leaving `packages/shared/contracts/` excluded
 from the Docker build context makes startup/request-time authorities silently
 fall back or fail only after ECS launch, so the image layout is covered by the
 backend guard tests and the hosted immutable build. Inline-ML profiles also

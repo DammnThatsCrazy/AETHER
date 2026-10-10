@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -146,6 +146,6 @@ def test_repo_doctor_clean_list_covers_social_twins():
     text = REPO_DOCTOR_PATH.read_text(encoding="utf-8")
     assert "packages/shared/social-provider-capability-vocabulary.ts" in text
     assert (
-        "services/backend/shared/social_provider/"
+        "services/api/shared/social_provider/"
         "generated_social_provider_capability_vocabulary.py" in text
     )

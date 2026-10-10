@@ -19,8 +19,8 @@ estimated_read_minutes: 5
 
 - Secrets are **never** committed, logged, returned in API responses, written to
   audit events/exports, or shown in the UI. `sanitize_metadata`
-  (`services/backend/services/security/contracts.py`) strips secret-named keys before persistence;
-  `redact_config` (`services/backend/services/security/integration_security.py`) signals presence
+  (`services/api/governance/security/contracts.py`) strips secret-named keys before persistence;
+  `redact_config` (`services/api/governance/security/integration_security.py`) signals presence
   without exposing values.
 - Tenant BYOK secrets are encrypted at rest in the key vault
   (`shared/providers/key_vault.py`) and fetched lazily; rotation records an audit

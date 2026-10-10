@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -32,12 +32,12 @@ def _ts():
 
 
 def _make_explorer():
-    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-    from services.measurement.repositories.conversion_repo import ConversionRepository
-    from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-    from services.measurement.repositories.journey_repo import JourneyRepository
-    from services.measurement.repositories.spend_repo import SpendRepository
-    from services.campaign.exploration import CampaignPopulationExplorer
+    from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+    from journeys.measurement.repositories.conversion_repo import ConversionRepository
+    from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+    from journeys.measurement.repositories.journey_repo import JourneyRepository
+    from journeys.measurement.repositories.spend_repo import SpendRepository
+    from journeys.campaign.exploration import CampaignPopulationExplorer
 
     return CampaignPopulationExplorer(
         touchpoint_repo=TouchpointRepository(),
@@ -50,9 +50,9 @@ def _make_explorer():
 
 @pytest.fixture(autouse=True)
 def clear_all_stores():
-    from services.measurement.repositories.touchpoint_repo import _local_store as tp
-    from services.measurement.repositories.conversion_repo import _local_store as cv
-    from services.measurement.repositories.attribution_run_repo import _local_credits as cr
+    from journeys.measurement.repositories.touchpoint_repo import _local_store as tp
+    from journeys.measurement.repositories.conversion_repo import _local_store as cv
+    from journeys.measurement.repositories.attribution_run_repo import _local_credits as cr
 
     tp.clear()
     cv.clear()
@@ -72,9 +72,9 @@ CONVERSION_ID = str(uuid.uuid4())
 
 async def _seed_full_journey():
     """Seed a complete paid-media ecommerce journey for one customer."""
-    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-    from services.measurement.repositories.conversion_repo import ConversionRepository
-    from services.measurement.repositories.attribution_run_repo import _local_credits
+    from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+    from journeys.measurement.repositories.conversion_repo import ConversionRepository
+    from journeys.measurement.repositories.attribution_run_repo import _local_credits
 
     tp_repo = TouchpointRepository()
     cv_repo = ConversionRepository()
@@ -192,7 +192,7 @@ class TestPaidMediaEcommerceFlow:
     @pytest.mark.asyncio
     async def test_conversions_returned_for_campaign(self):
         await _seed_full_journey()
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
 
         repo = ConversionRepository()
         conversions = await repo.list_by_campaign(TENANT, CAMPAIGN_ID, include_unattributed=True)
@@ -202,7 +202,7 @@ class TestPaidMediaEcommerceFlow:
     @pytest.mark.asyncio
     async def test_cluster_rollup_captures_linear_attribution(self):
         await _seed_full_journey()
-        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
 
         repo = AttributionRunRepository()
         rows = await repo.campaign_cluster_rollup(TENANT, CAMPAIGN_ID)
@@ -239,7 +239,7 @@ class TestPaidMediaEcommerceFlow:
         """All three channel touchpoints (display, paid_search, email) should
         be visible through the touchpoint repo's campaign read."""
         await _seed_full_journey()
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
 
         repo = TouchpointRepository()
         touchpoints = await repo.list_by_campaign(TENANT, CAMPAIGN_ID, limit=50)
@@ -252,7 +252,7 @@ class TestPaidMediaEcommerceFlow:
     async def test_attribution_credit_weights_sum_to_one(self):
         """Linear attribution across 3 touchpoints must sum to ~1.0."""
         await _seed_full_journey()
-        from services.measurement.repositories.attribution_run_repo import _local_credits
+        from journeys.measurement.repositories.attribution_run_repo import _local_credits
 
         campaign_credits = [
             c

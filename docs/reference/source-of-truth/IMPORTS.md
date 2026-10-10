@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/imports/contracts.py, services/backend/services/imports/analyzer.py, services/backend/services/imports/mapping.py, services/backend/services/imports/validation.py, services/backend/services/imports/service.py, services/backend/services/imports/routes.py, services/backend/services/imports/storage.py, services/backend/services/imports/commit.py, services/backend/repositories/import_files.py, services/backend/repositories/imports_repo.py]
+source_files: [services/api/ingestion/imports/contracts.py, services/api/ingestion/imports/analyzer.py, services/api/ingestion/imports/mapping.py, services/api/ingestion/imports/validation.py, services/api/ingestion/imports/service.py, services/api/ingestion/imports/routes.py, services/api/ingestion/imports/storage.py, services/api/ingestion/imports/commit.py, services/api/repositories/import_files.py, services/api/repositories/imports_repo.py]
 last_synced_commit: pending
 ---
 
@@ -27,7 +27,7 @@ passing validation.
 
 ## Contract (TS ⇄ Python twins)
 
-`packages/shared/imports.ts` and `services/backend/services/imports/contracts.py` are
+`packages/shared/imports.ts` and `services/api/ingestion/imports/contracts.py` are
 hand-authored twins, parity-tested by
 `tests/contracts/test_imports_parity.py` (statuses, primitives, transforms,
 column types, and the barrel export).
@@ -86,7 +86,7 @@ governance-sensitive import cannot slip to `approved` without both.
 
 ## Commit / replay / rollback
 
-`services/backend/services/imports/commit.py` — the mutation half. An **approved** import is
+`services/api/ingestion/imports/commit.py` — the mutation half. An **approved** import is
 staged, with lineage, into two durable places:
 
 - **Bronze** (`BronzeRepository("tenant_import")`): every source row is ingested
@@ -124,7 +124,7 @@ staged, with lineage, into two durable places:
 - `repositories/import_files.py` (migration `20260718_import_engine`) — the
   uploaded bytes in a direct-SQL `import_files` BYTEA table (32 MB hard cap,
   sha256, size, MIME), string-identical DDL to the migration (parity-tested),
-  with an in-memory local fallback. `services/backend/services/imports/storage.py` wraps it
+  with an in-memory local fallback. `services/api/ingestion/imports/storage.py` wraps it
   behind an `ImportStorageAdapter` Protocol — the S3 seam.
 - `repositories/imports_repo.py` — the session lifecycle plus schema, mapping
   (versioned), template, validation, and capped row-error records over
@@ -133,7 +133,7 @@ staged, with lineage, into two durable places:
 
 ## Read/write surfaces
 
-`services/backend/services/imports/routes.py`, mounted under `/v1/imports`:
+`services/api/ingestion/imports/routes.py`, mounted under `/v1/imports`:
 
 | Route | Purpose |
 |---|---|

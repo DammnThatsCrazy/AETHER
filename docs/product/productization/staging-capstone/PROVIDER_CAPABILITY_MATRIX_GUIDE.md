@@ -6,12 +6,12 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/shared/certification/registry.py, services/backend/shared/certification/readiness.py, services/backend/shared/certification/descriptor.py]
+source_files: [services/api/shared/certification/registry.py, services/api/shared/certification/readiness.py, services/api/shared/certification/descriptor.py]
 canonical_owner: platform@aether
 source_hashes:
-  services/backend/shared/certification/descriptor.py: sha256:c7f2d05f4799b1a6d7a4ab1ca125117049180b595eafa0267e01c9d656df4ac7
-  services/backend/shared/certification/readiness.py: sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2
-  services/backend/shared/certification/registry.py: sha256:5c2e75d47d24e1dc2429c6ea6a2476cab2b0dcc71be4899ad77bac802ee12624
+  "services/api/shared/certification/descriptor.py": "sha256:c7f2d05f4799b1a6d7a4ab1ca125117049180b595eafa0267e01c9d656df4ac7"
+  "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
+  "services/api/shared/certification/registry.py": "sha256:f0d9c01a6f3b2341afca6901db34c4361a444742eb9e403593f669a493a67abc"
 ---
 
 # Provider Capability Matrix Guide
@@ -20,7 +20,7 @@ source_hashes:
 > eight-provider cohort (Braze, Customer.io, HubSpot, Iterable, Klaviyo,
 > Mailchimp, Postmark, SendGrid), each certifying at `credential_waiting`
 > (first-release), resolved from its live connector via
-> `services/backend/services/comms/conformance.py::comms_certification_descriptor`. The descriptor
+> `services/api/journeys/comms/conformance.py::comms_certification_descriptor`. The descriptor
 > derives `capabilities` from the connector's declared manifest outputs, so
 > webhook-only providers honestly claim fewer operations than the Klaviyo pull
 > reference. Every communications provider certifies offline through the shared
@@ -80,7 +80,7 @@ All four off-ramps rank below everything so an "at least CREDENTIAL_WAITING"
 assertion never admits an off-ramped provider. Per-tenant runtime lifecycle
 state is persisted in `capability_activation_states` and transitioned only
 through the machine-enforced `CapabilityLifecycleAuthority`
-(`services/backend/services/capabilities/lifecycle.py`) — promotions require evidence
+(`services/api/tenancy/capabilities/lifecycle.py`) — promotions require evidence
 references, an ACTIVE credential version, and entitlement, all fail-closed.
 
 ### Import failures are surfaced, never silent

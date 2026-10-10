@@ -29,7 +29,7 @@ repository_ceiling:
     - Capture credentialed staging + production environment evidence
   remaining_is_repository_controlled: false
   evidence:
-    - "services/backend/services/identity/routes.py"
+    - "services/api/identity/identity/routes.py"
 
 implementation:
   state: TURNKEY

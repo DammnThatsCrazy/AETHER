@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
 from config.settings import Environment  # noqa: E402
-from services.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
+from workers.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
 
 
 async def _wait_for(predicate, timeout: float = 5.0, interval: float = 0.005) -> None:

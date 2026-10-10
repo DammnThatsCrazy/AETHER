@@ -1,7 +1,7 @@
 """WebSocket stream chaos — disconnect + resume, gap recovery, out-of-order,
 duplicate frames.
 
-Drives the REAL reconnecting stream driver (``services.derivatives.connectors.
+Drives the REAL reconnecting stream driver (``value.derivatives.connectors.
 stream.ReconnectingStream``) against a scripted in-process frame source
 (``scripted_ws_factory`` from tests/unit/derivatives/mock_venues.py). NO live
 socket. A ``("disconnect", [...])`` connection yields its frames then raises the
@@ -20,7 +20,7 @@ from __future__ import annotations
 from tests.chaos.conftest import noop_sleeper
 from tests.unit.derivatives import mock_venues as mv
 
-from services.derivatives.connectors.stream import ReconnectingStream
+from value.derivatives.connectors.stream import ReconnectingStream
 
 
 def _frame(seq: int) -> dict:

@@ -38,7 +38,7 @@
         deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget validate-ephemeral-budget
 
 # Centralized subsystem paths — single place to rename if directories move.
-BACKEND_DIR := services/backend
+BACKEND_DIR := services/api
 ML_DIR      := services/ml
 AGENT_DIR   := services/agents
 DEMO_TENANT_ID ?= aether-demo-v1
@@ -475,17 +475,17 @@ demo-seed: ## Explicitly seed the versioned backend demo dataset
 	# export REDIS_URL=$(DEMO_REDIS_URL) so the durable store is shared.
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
 		REDIS_URL="$${REDIS_URL:-}" \
-		$(PYTHON) -m services.demo_seed.cli seed --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
+		$(PYTHON) -m governance.demo_seed.cli seed --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-status: ## Show backend demo seed ledger status
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
 		REDIS_URL="$${REDIS_URL:-}" \
-		$(PYTHON) -m services.demo_seed.cli status --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
+		$(PYTHON) -m governance.demo_seed.cli status --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-verify: ## Verify the demo manifest checksum, records, and provenance
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
 		REDIS_URL="$${REDIS_URL:-}" \
-		$(PYTHON) -m services.demo_seed.cli verify --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
+		$(PYTHON) -m governance.demo_seed.cli verify --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)"
 
 demo-reset: ## Reset only seeded records (requires DEMO_RESET_CONFIRMATION)
 	@if [ -z "$(DEMO_RESET_CONFIRMATION)" ]; then \
@@ -493,7 +493,7 @@ demo-reset: ## Reset only seeded records (requires DEMO_RESET_CONFIRMATION)
 	fi
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" DATABASE_URL="$(DEMO_DATABASE_URL)" \
 		REDIS_URL="$${REDIS_URL:-}" \
-		$(PYTHON) -m services.demo_seed.cli reset --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)" --confirm "$(DEMO_RESET_CONFIRMATION)"
+		$(PYTHON) -m governance.demo_seed.cli reset --tenant "$(DEMO_TENANT_ID)" --namespace "$(DEMO_SEED_NAMESPACE)" --confirm "$(DEMO_RESET_CONFIRMATION)"
 
 dev-demo: ## Explicitly start local backend with in-process demo seeding
 	AETHER_ENV=local AETHER_DEMO_SEED_ON_START=true \
@@ -532,7 +532,7 @@ lifecycle-seed: ## Stage end-user lifecycle E2E scenario tenants (A-F) from $(LI
 	@set -a; . "$(LIFECYCLE_E2E_ENV)"; set +a; \
 	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" \
 		DATABASE_URL="$(DEMO_DATABASE_URL)" \
-		$(PYTHON) -m services.demo_seed.cli seed-lifecycle
+		$(PYTHON) -m governance.demo_seed.cli seed-lifecycle
 
 # ---------------------------------------------------------------------------
 # Design-partner demo (M7) — local/automated end-to-end demo stack
@@ -569,7 +569,7 @@ bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0
 # ---------------------------------------------------------------------------
 
 graph-test: ## Run all graph tests (root-level + backend tests)
-	python -m pytest tests/graph/ "services/backend/tests/graph/" -v --tb=short
+	python -m pytest tests/graph/ "services/api/tests/graph/" -v --tb=short
 
 graph-replay: ## Run synthetic graph replay workload (in-memory, no Neptune required)
 	python scripts/graph/replay_relationship_layers.py
@@ -1135,7 +1135,7 @@ load-smoke-ci: ## Load smoke gate for CI pipelines (same fail-closed contract as
 # ---------------------------------------------------------------------------
 
 semantic-sentiment-unit-test: ## Run semantic/sentiment unit and API tests
-	cd "services/backend" && python -m pytest tests/semantic_intelligence -v
+	cd "services/api" && python -m pytest tests/semantic_intelligence -v
 
 semantic-sentiment-test: semantic-sentiment-unit-test ## Run semantic/sentiment test suite
 
@@ -1156,19 +1156,19 @@ semantic-sentiment-release-check-strict: semantic-sentiment-contracts-check ## V
 # ---------------------------------------------------------------------------
 
 campaign-test: ## Run campaign registry unit tests
-	cd "services/backend" && python -m pytest tests/unit/test_campaign_registry.py -v
+	cd "services/api" && python -m pytest tests/unit/test_campaign_registry.py -v
 
 campaign-integration-test: ## Run campaign registry integration tests
-	cd "services/backend" && python -m pytest tests/integration/test_campaign_registry_api.py -v
+	cd "services/api" && python -m pytest tests/integration/test_campaign_registry_api.py -v
 
 campaign-e2e: ## Run campaign registry E2E tests
-	cd "services/backend" && python -m pytest tests/e2e/test_campaign_registry_e2e.py -v
+	cd "services/api" && python -m pytest tests/e2e/test_campaign_registry_e2e.py -v
 
 campaign-security-check: ## Run campaign registry security tests
-	cd "services/backend" && python -m pytest tests/security/test_campaign_registry_security.py -v
+	cd "services/api" && python -m pytest tests/security/test_campaign_registry_security.py -v
 
 campaign-migration-check: ## Verify campaign registry migration round-trip
-	cd "services/backend" && alembic upgrade head && alembic downgrade -1 && alembic upgrade head
+	cd "services/api" && alembic upgrade head && alembic downgrade -1 && alembic upgrade head
 
 campaign-contracts-check: ## Validate campaign registry contracts
 	python scripts/validate_contracts.py --domain campaign

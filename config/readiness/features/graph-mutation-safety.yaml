@@ -27,8 +27,8 @@ repository_ceiling:
   remaining_is_repository_controlled: false
   evidence:
   - services/agents/README.md
-  - services/backend/services/agent/mutation_commit.py
-  - services/backend/services/agent/runtime_repository.py
+  - services/api/actions/agent/mutation_commit.py
+  - services/api/actions/agent/runtime_repository.py
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)

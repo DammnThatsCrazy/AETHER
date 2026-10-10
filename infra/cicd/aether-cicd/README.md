@@ -265,14 +265,14 @@ The pipeline manages the following Aether monorepo layout:
 
 | Path                       | Language   | Runtime |
 | -------------------------- | ---------- | ------- |
-| `services/backend/services/ingestion`       | Python | Python  |
-| `services/backend/services/identity`        | Python | Python  |
-| `services/backend/services/analytics`       | Python | Python  |
-| `services/backend/services/ml_serving`      | Python | Python  |
-| `services/backend/services/agent`            | Python | Python  |
-| `services/backend/services/campaign`        | Python | Python  |
-| `services/backend/services/consent`         | Python | Python  |
-| `services/backend/services/admin`           | Python | Python  |
+| `services/api/ingestion/ingestion`       | Python | Python  |
+| `services/api/identity/identity`        | Python | Python  |
+| `services/api/intelligence/analytics`       | Python | Python  |
+| `services/api/intelligence/ml_serving`      | Python | Python  |
+| `services/api/actions/agent`            | Python | Python  |
+| `services/api/journeys/campaign`        | Python | Python  |
+| `services/api/governance/consent`         | Python | Python  |
+| `services/api/governance/admin`           | Python | Python  |
 
 ---
 

@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -41,7 +41,7 @@ from shared.integration_contracts.catalog import (  # noqa: E402
     DEFERRED_CREDIT_BUREAU_MANIFESTS,
     PAYMENT_RAIL_MANIFESTS,
 )
-from services.integrations.connectors.catalog_endpoints import (  # noqa: E402
+from connectors.integrations.connectors.catalog_endpoints import (  # noqa: E402
     _manifest_entry,
     _visible_catalog_entries,
 )

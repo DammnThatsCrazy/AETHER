@@ -20,7 +20,7 @@
  *
  * Auth: admin-scoped API key passed via the configured API key header. The
  * backend's default API key header is X-Api-Key (see
- * services/backend/config/settings.py → api_key_header) but older scripts/docs
+ * services/api/config/settings.py → api_key_header) but older scripts/docs
  * reference X-Aether-API-Key; the script honours AETHER_API_KEY_HEADER and
  * falls back to X-Aether-API-Key for backwards compatibility.
  *

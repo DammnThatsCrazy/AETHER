@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
@@ -28,7 +28,7 @@ def backend_module_path():
     """Temporarily put the backend root on sys.path and clean up afterwards."""
     original = list(sys.path)
     for prefix in (
-        "config", "services", "shared", "middleware", "dependencies", "repositories",
+        "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
     ):
         sys.modules.pop(prefix, None)
         for name in list(sys.modules):
@@ -40,7 +40,7 @@ def backend_module_path():
     finally:
         sys.path[:] = original
         for prefix in (
-            "config", "services", "shared", "middleware", "dependencies", "repositories",
+            "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
         ):
             sys.modules.pop(prefix, None)
             for name in list(sys.modules):
@@ -388,7 +388,7 @@ class TestHealthEndpointContract:
 
         monkeypatch.setattr(deps_mod, "get_registry", lambda: FakeRegistry())
 
-        gateway_routes = importlib.import_module("services.gateway.routes")
+        gateway_routes = importlib.import_module("ingestion.gateway.routes")
         importlib.reload(gateway_routes)
 
         app = FastAPI()
@@ -442,7 +442,7 @@ class TestHealthEndpointContract:
 
             assert result["status"] == "degraded"
             # Degradation must not be expressed as a non-200; that is what
-            # /v1/ready is for. See services/gateway/routes.py::health_check.
+            # /v1/ready is for. See services/api/ingestion/gateway/routes.py::health_check.
             assert response.status_code == 200
 
     def test_health_healthy_when_all_ok(self, common_module, monkeypatch):

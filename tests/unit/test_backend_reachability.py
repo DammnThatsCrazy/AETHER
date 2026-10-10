@@ -15,7 +15,7 @@ _spec = importlib.util.spec_from_file_location(
 reach = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(reach)
 
-BACKEND = "services/backend"
+BACKEND = "services/api"
 
 
 def _repo(tmp_path, files, outside=None, allow=(), dynamic=(), generated=(), entries=("main",), ledger_ids=("row-a",)):
@@ -102,8 +102,8 @@ def test_a_script_workflow_or_dockerfile_naming_a_module_is_a_reference(tmp_path
 def test_documents_registries_and_tests_do_not_keep_code_reachable(tmp_path):
     outside = {
         "docs/guide.md": "services.alpha.orphan",
-        "config/inventory.yaml": "file: services/backend/services/alpha/orphan.py",
-        "services/backend/tests/test_orphan.py": "from services.alpha.orphan import X\n",
+        "config/inventory.yaml": "file: services/api/services/alpha/orphan.py",
+        "services/api/tests/test_orphan.py": "from services.alpha.orphan import X\n",
         "docs/reference/reports/state.json": '{"module": "services.alpha.orphan"}',
     }
     assert _unreachable(tmp_path, TREE, outside=outside) == ["services.alpha.orphan"]
@@ -119,7 +119,7 @@ def test_dynamic_packages_and_generated_modules_are_roots(tmp_path):
 
 def test_an_unlisted_unreachable_module_is_an_error(tmp_path):
     errors = _errors(tmp_path, TREE)
-    assert any("services/backend/services/alpha/orphan.py is not reachable" in e for e in errors)
+    assert any("services/api/services/alpha/orphan.py is not reachable" in e for e in errors)
 
 
 def test_allowlist_covers_listed_modules_and_needs_a_ledger_row(tmp_path):
@@ -184,7 +184,7 @@ def test_a_listed_package_does_not_cover_modules_added_under_it_later(tmp_path):
 
 
 def test_a_script_naming_a_module_path_in_a_checklist_is_not_a_caller(tmp_path):
-    outside = {"scripts/status.py": 'CHECKS = ["services/backend/services/alpha/orphan.py"]\n'}
+    outside = {"scripts/status.py": 'CHECKS = ["services/api/services/alpha/orphan.py"]\n'}
     assert _unreachable(tmp_path, TREE, outside=outside) == ["services.alpha.orphan"]
     outside = {"scripts/run.py": 'import importlib\nimportlib.import_module("services.alpha.orphan")\n'}
     assert _unreachable(tmp_path / "b", TREE, outside=outside) == []

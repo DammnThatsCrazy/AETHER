@@ -4,7 +4,7 @@ See docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md, section
 "4. A production-equivalent CI lane". M4 is: extend the lane (M1 boots real
 postgres + redis and runs an ingestion smoke test) to the
 measurement/attribution suites —
-``services/measurement/repositories/conversion_repo.py``,
+``services/api/journeys/measurement/repositories/conversion_repo.py``,
 ``spend_repo.py`` and ``attribution_run_repo.py`` — which share the exact same
 in-memory-fallback branch pattern as ingestion: each method calls
 ``repositories.repos.get_pool()`` and takes a module-level ``dict`` fallback
@@ -68,12 +68,12 @@ import pytest
 # Repo-root tests/prod_equivalent/ -> parents[2] is the repo root (identical to
 # test_real_stack_smoke.py). The backend package lives under a spaced dir.
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -96,13 +96,13 @@ def fresh_backend():
     try:
         repos = importlib.import_module("repositories.repos")
         conversion_repo = importlib.import_module(
-            "services.measurement.repositories.conversion_repo"
+            "journeys.measurement.repositories.conversion_repo"
         )
         spend_repo = importlib.import_module(
-            "services.measurement.repositories.spend_repo"
+            "journeys.measurement.repositories.spend_repo"
         )
         attribution_run_repo = importlib.import_module(
-            "services.measurement.repositories.attribution_run_repo"
+            "journeys.measurement.repositories.attribution_run_repo"
         )
         yield repos, conversion_repo, spend_repo, attribution_run_repo
     finally:

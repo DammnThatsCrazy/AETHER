@@ -53,8 +53,8 @@ must reconcile — never fork — each of them:
    pending spines; the 2026-09-05 re-cut onto `origin/main` re-formalized
    `graph_history_replay`, `grouping_membership`, and
    `context_capsule_semantics` to `implemented` once their authorities —
-   `services/backend/services/temporal360` history replay, `services/backend/services/population` membership
-   governor + append-only definition versions, `services/backend/services/geographic360` capsule
+   `services/api/graph/temporal360` history replay, `services/api/identity/population` membership
+   governor + append-only definition versions, `services/api/graph/geographic360` capsule
    semantics — landed on the base.) That registry is the closest
    existing analog to a spine registry; this ADR is the spine plane that
    formalizes it.
@@ -129,7 +129,7 @@ calls for (`tenant_id`, `request_id`, `scope_ref`, `subject_refs`, `as_of`,
 present-but-unpopulated (`@unpopulated`); no producer is claimed until one
 ships. `rights_decision_ref` **left** that set on 2026-09-14, when the
 rights-propagation producer
-(`services/backend/services/rights_authority/propagation.py`) shipped and a
+(`services/api/tenancy/rights_authority/propagation.py`) shipped and a
 governed write began stamping the durable `rdec_...` identity of the
 `RightsDecision` that authorized it; `identity_watermark` remains
 `@unpopulated`. Nothing is re-defined.
@@ -138,9 +138,9 @@ governed write began stamping the durable `rdec_...` identity of the
 
 Information Rights, Retention & Learning becomes a first-class **naming
 overlay** on the rights machinery that already exists:
-`services/backend/services/integrations/data_rights` (`DataRightsGrant`, `model_training_allowed`),
-`services/backend/services/policy` (`ConsentPolicyDecision`), `services/backend/services/dsr_propagation`,
-`services/backend/services/storage_lifecycle`, and the source-of-truth ledger
+`services/api/connectors/integrations/data_rights` (`DataRightsGrant`, `model_training_allowed`),
+`services/api/governance/policy` (`ConsentPolicyDecision`), `services/api/governance/dsr_propagation`,
+`services/api/ingestion/storage_lifecycle`, and the source-of-truth ledger
 `DATA_RIGHTS_LEDGER.md`. IRRL terms (`DataRightsEnvelope`, `UseAuthority`,
 `DerivationClass`, `RetentionPolicy`, `Generalization Gateway`,
 `RightsDecision`) map onto those existing ids; enforcement continues to live in

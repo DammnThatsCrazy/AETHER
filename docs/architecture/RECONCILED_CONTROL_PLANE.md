@@ -7,41 +7,41 @@ audience: [architect, dev-senior]
 status: experimental
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/managed_integrations/
-  - services/backend/services/sdk_distribution/control_plane.py
+  - services/api/connectors/managed_integrations/
+  - services/api/ingestion/sdk_distribution/control_plane.py
   - scripts/validate_sdk_control_plane_seam.py
-  - services/backend/services/kyber/access/
-  - services/backend/alembic/versions/20260906_rcp_managed_integrations.py
-  - services/backend/alembic/versions/20260906_rcp_change_sets.py
-  - services/backend/alembic/versions/20260906_rcp_execution.py
-  - services/backend/alembic/versions/20260906_rcp_admission.py
-  - services/backend/alembic/versions/20260906_rcp_simulation.py
-  - services/backend/alembic/versions/20260906_rcp_schema_mapping.py
-  - services/backend/alembic/versions/20260906_rcp_source_authority.py
-  - services/backend/alembic/versions/20260906_rcp_rollouts.py
-  - services/backend/alembic/versions/20260906_rcp_fleet_update.py
+  - services/api/governance/kyber/access/
+  - services/api/alembic/versions/20260906_rcp_managed_integrations.py
+  - services/api/alembic/versions/20260906_rcp_change_sets.py
+  - services/api/alembic/versions/20260906_rcp_execution.py
+  - services/api/alembic/versions/20260906_rcp_admission.py
+  - services/api/alembic/versions/20260906_rcp_simulation.py
+  - services/api/alembic/versions/20260906_rcp_schema_mapping.py
+  - services/api/alembic/versions/20260906_rcp_source_authority.py
+  - services/api/alembic/versions/20260906_rcp_rollouts.py
+  - services/api/alembic/versions/20260906_rcp_fleet_update.py
   - config/route_registry.yaml
-  - services/backend/main.py
-  - services/backend/config/settings.py
+  - services/api/main.py
+  - services/api/config/settings.py
   - packages/shared/managed-integrations.ts
 source_hashes:
-  "config/route_registry.yaml": "sha256:ba142e357842d4356af1681b9fede052d3fb9e27540adf28ef2b5d04543ab230"
-  "packages/shared/managed-integrations.ts": "sha256:59ae532137ef2c00b41432f7b47baae4057147749719bff78e2b087f581571b2"
-  "scripts/validate_sdk_control_plane_seam.py": "sha256:a6c971b14dd26ef11626bfcf748461e6f6a8d73424906068615291ceca48fbe7"
-  "services/backend/alembic/versions/20260906_rcp_admission.py": "sha256:b57dc1a0b7a5e8d06e9ec985ff04f3dd0e705d6e4d66d7de419d960407759908"
-  "services/backend/alembic/versions/20260906_rcp_change_sets.py": "sha256:7becb857318edc7ccd267ed951c0a5cfbc291282c307df663f7d8b9277bf6bc7"
-  "services/backend/alembic/versions/20260906_rcp_execution.py": "sha256:fe60187d99dbf2b67a883a5e6155b6a67c2ab5ee954552d762d5e4239ed528a6"
-  "services/backend/alembic/versions/20260906_rcp_fleet_update.py": "sha256:e68eb36c569f253c01cab5f263e07432768dc34d9cd8cf48b3ec5626d1461f42"
-  "services/backend/alembic/versions/20260906_rcp_managed_integrations.py": "sha256:d2946f405c5a427091f7f3bc08cbc247fca8ca400b72001a1cff5b87335feeff"
-  "services/backend/alembic/versions/20260906_rcp_rollouts.py": "sha256:596f4ab7a09e6f9322e876bc84edabc5b81562c72e9c9ff92414684838e34c77"
-  "services/backend/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:f52e3ca5ee8ab0050fd9f447642d87fb93f5c7ef0eab16bf8e34211a1360d8b6"
-  "services/backend/alembic/versions/20260906_rcp_simulation.py": "sha256:9365aeced6274ca792563a9d8931a54e387e4cced758bfeec7114adc6e932838"
-  "services/backend/alembic/versions/20260906_rcp_source_authority.py": "sha256:b3506114be9179b6592dbc08dfc616de066aea4856d274db16f46cf0f8c17422"
-  "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
-  "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
-  "services/backend/services/kyber/access/": "sha256:518b962e1ac1c2d7a4edd9bcfc7882007ab2caf058dd85120946401cf9fbe841"
-  "services/backend/services/managed_integrations/": "sha256:41c1cab340da06d00003e77f96541660cecc732099cf696deeb1938a692d7bca"
-  "services/backend/services/sdk_distribution/control_plane.py": "sha256:593c4d57a8d4370951b86034077150fec0018783c15ed3ac8afa3a3a28f008c1"
+  "config/route_registry.yaml": "sha256:2430634b1aa14eb8f0f574c52ad1bc4bf07428b32ab286c63ad3b341d244f551"
+  "packages/shared/managed-integrations.ts": "sha256:1277aae12c27f222f7358c793d71bfa0a8e34c07354de88bb48dff5126a55b25"
+  "scripts/validate_sdk_control_plane_seam.py": "sha256:321dbeec981f9542054e4be9c70f804414b027befeeb11d5eef4342f6c25f3af"
+  "services/api/alembic/versions/20260906_rcp_admission.py": "sha256:ac836b9f4fc08cb325444f9447689efc05031157e0b52d7dc2402d04b7514a1e"
+  "services/api/alembic/versions/20260906_rcp_change_sets.py": "sha256:173adc0310aabe04f976646217d35c24871597fd4a2e8c6aa23703afae14e988"
+  "services/api/alembic/versions/20260906_rcp_execution.py": "sha256:b1d8f4a50733d35aeb4d6e27c92f5b9a616b7b02092875011ebf8af7d0751d90"
+  "services/api/alembic/versions/20260906_rcp_fleet_update.py": "sha256:7465ef0db822f50ce44de034c54a035fa25bed734e462e52b037987bf4f89ee7"
+  "services/api/alembic/versions/20260906_rcp_managed_integrations.py": "sha256:51de3584a6cbb9053056c8e3d74d35f41c8e2a2c80d96813f05a2f9f3b4231af"
+  "services/api/alembic/versions/20260906_rcp_rollouts.py": "sha256:fa4e7df5a34b0289c893f7ec70a0a5056d48ee74ffd56207ca0ac23817afdfaf"
+  "services/api/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:e691acb7903a9758863e19c409d6e03847f40402191b557b39d68e7aa6f0d324"
+  "services/api/alembic/versions/20260906_rcp_simulation.py": "sha256:86f635d8f06d758f8fc42b09a7ac4f853f8983483eff275e9f1190fe5c8dbaf4"
+  "services/api/alembic/versions/20260906_rcp_source_authority.py": "sha256:2d01381af9228c26b5ed4c24c3ff9cc84af6d08717e771460c9a086491cca760"
+  "services/api/config/settings.py": "sha256:d55bef95d2e6d1f13c003fe7289e4309d8299ab783b3d58b7660c6519bdaeadb"
+  "services/api/connectors/managed_integrations/": "sha256:fe2306749156ff6b2969d6de41359213b1715e645f7514295e5f7c19566239cf"
+  "services/api/governance/kyber/access/": "sha256:23b63f5b1882f5b966c9e23f638fdcd140e4271c38241e58ecfbfb5d53f76e25"
+  "services/api/ingestion/sdk_distribution/control_plane.py": "sha256:d49325a1264f40d124a17722f1742b6a08a8342cd93b9ff0b3d0bcf22b73d17b"
+  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)
@@ -95,7 +95,7 @@ by tests only until a §41+ review lifts the boundary.
 
 ```
 packages/shared/managed-integrations.ts            TS contract twin (canonical const arrays + interfaces)
-services/backend/services/
+services/api/services/
   managed_integrations/
     contracts.py         Python mirror (tuples + pydantic view models)
     flags.py             function-local OFF-by-default flag reads
@@ -127,7 +127,7 @@ config/route_registry.yaml     six kyber_routes declarations (D4, action_class 0
 config/storage_policies.yaml   17-field rows for every RCP table
 tests/contracts/test_managed_integrations_parity.py   twin parity gate
 tests/unit/reconciled_control/   vocab + engine + console + flag-OFF parity tests
-services/backend/tests/managed_integrations/   repo round-trip tests
+services/api/tests/managed_integrations/   repo round-trip tests
 ```
 
 ## Key decisions
@@ -258,7 +258,7 @@ That is the same ambiguity the SDK distribution layer's install verifier exists
 to remove, one layer down — and the two are now joined at one seam:
 
 ```text
-services/sdk_distribution/            services/managed_integrations/
+services/api/ingestion/sdk_distribution/            services/api/connectors/managed_integrations/
   install_verifier.py                   sensors.py
     describe_site_install() ─────────▶    observed_from_site_install()
       (the read view of a site's            (the observed-state snapshot:
@@ -272,7 +272,7 @@ services/sdk_distribution/            services/managed_integrations/
 
 **The dependency runs one way.** The plane owns `ObservedStateSnapshot`, the
 §6 kind vocabulary and the §16 admission lifecycle; nothing under
-`services/managed_integrations` imports the SDK distribution layer. That is what
+`services/api/connectors/managed_integrations` imports the SDK distribution layer. That is what
 lets the plane be reasoned about — and shipped — without an SDK install path
 existing, and `scripts/validate_sdk_control_plane_seam.py` fails if the edge is
 ever reversed.

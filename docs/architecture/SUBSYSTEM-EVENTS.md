@@ -6,13 +6,13 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/shared/events/events.py, services/backend/services/ingestion/validation.py]
+source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/backend/services/ingestion/validation.py": "sha256:1404682d2f2747db9ec1fcf705007ea557c59970a767a720b6029e59e452edfe"
-  "services/backend/shared/events/events.py": "sha256:dc232a0068588ee482bbdbef7cb89df9bde69a54b1880ab861f515e1c60971fc"
+  "services/api/ingestion/ingestion/validation.py": "sha256:6e90b9af93ab958e7a9124b322a9886188d3bbb57f5fb5d4eaa0b989b645f2d6"
+  "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
 ---
 
 # Events / Kafka Subsystem
@@ -86,12 +86,12 @@ Topics are organized by domain (257 total). Examples:
 - **Risk360 / Fraud360 (read-only projection plane):** `aether.risk.signal.created` / `.superseded`, `aether.risk.assessment.created` / `.superseded`, `aether.fraud.hypothesis.created` / `.updated` / `.confirmed` / `.superseded`
 - **Data Exchange Plane:** `aether.data_exchange.artifact.uploaded` (governed transfer uploads; envelope import/export transitions deliberately reuse the existing `IMPORT_*` / `EXPORT_*` vocabulary)
 - **Reports (Data Exchange):** `aether.report.requested`, `.available`, `.failed`, `.downloaded` (report-artifact lifecycle)
-- **Responsiveness spine:** `aether.tenant.activation.updated`, `aether.tenant.surface_readiness.updated`, `aether.lens.projection.updated`, `aether.background_job.updated`. These are best-effort state-transition notifications from `services/responsiveness`.
+- **Responsiveness spine:** `aether.tenant.activation.updated`, `aether.tenant.surface_readiness.updated`, `aether.lens.projection.updated`, `aether.background_job.updated`. These are best-effort state-transition notifications from `services/api/governance/responsiveness`.
 - **Dead letter:** the durable `DEAD_LETTER` topic
 
 ## Envelope Required-Field Enforcement (staged)
 
-Ingestion validation (`services/backend/services/ingestion/validation.py`) stages enforcement of the canonical envelope v1 fields `context.sequence`, `context.schemaVersion`, and `context.surface`:
+Ingestion validation (`services/api/ingestion/ingestion/validation.py`) stages enforcement of the canonical envelope v1 fields `context.sequence`, `context.schemaVersion`, and `context.surface`:
 
 - **Model layer:** the fields remain Optional — older SDK payloads still parse.
 - **Enforcement:** gated by `settings.ingestion_v2.envelope_required_fields_enforced`, which defaults from the release profile — OFF in local/dev/integration, ON when `AETHER_ENV` is `staging` or `production`. The explicit env var `INGESTION_ENVELOPE_REQUIRED_FIELDS_ENFORCED` always wins, so enforcement can be rolled back per environment without a code change.

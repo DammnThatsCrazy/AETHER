@@ -6,12 +6,12 @@ visibility: I
 audience: [dev-senior, architect, buyer]
 status: experimental
 since_version: 0.1.0
-source_files: [services/backend/services/comms/contracts.py, services/backend/services/comms/projector.py, services/backend/services/comms/state.py, services/backend/services/silver/dispatcher.py]
+source_files: [services/api/journeys/comms/contracts.py, services/api/journeys/comms/projector.py, services/api/journeys/comms/state.py, services/api/ingestion/silver/dispatcher.py]
 source_hashes:
-  services/backend/services/comms/contracts.py: sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961
-  services/backend/services/comms/projector.py: sha256:4744e01f562aa331be96730330668f25e0daa14a264f752c90b579f6a567278a
-  services/backend/services/comms/state.py: sha256:8a2cb4265352d598cc6a50a1e789f89f1ee88249d003b59902f6d5f4a7c481fc
-  services/backend/services/silver/dispatcher.py: sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f
+  "services/api/ingestion/silver/dispatcher.py": "sha256:91649997a908ec2894c0097e513dba14c6a7e4d5c39a6519159bf0593e3d01fb"
+  "services/api/journeys/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
+  "services/api/journeys/comms/projector.py": "sha256:fd040efc9e84420c7d41809a02c253cbcc58d6386f4904e859e2b8bb3fd7b0d2"
+  "services/api/journeys/comms/state.py": "sha256:a25ee352c7f49dbdd6f19e89701500bf174cc9b7273e497dd1131203db9a704b"
 ---
 
 # Communications Intelligence Overview
@@ -26,19 +26,19 @@ through external providers — it never composes, schedules, or sends them
 
 ```
 External provider (Klaviyo, generic signed webhook, inbound-parse replies)
-  → connector normalization        services/backend/services/integrations/connectors/klaviyo.py
-  → canonical communication event  services/backend/services/comms/contracts.py (registry family: comms)
-  → durable Bronze write + bus     services/backend/services/comms/ingest.py → SDK_EVENTS_VALIDATED
-  → multi-projector Silver fan-out services/backend/services/silver/dispatcher.py (ADR-C3)
+  → connector normalization        services/api/connectors/integrations/connectors/klaviyo.py
+  → canonical communication event  services/api/journeys/comms/contracts.py (registry family: comms)
+  → durable Bronze write + bus     services/api/journeys/comms/ingest.py → SDK_EVENTS_VALIDATED
+  → multi-projector Silver fan-out services/api/ingestion/silver/dispatcher.py (ADR-C3)
       1. CommsProjector            → silver_comms_facts (authoritative)
       2. IdentityEvidenceProjector → identity evidence
       3. TouchpointProjector       → silver_campaign_touchpoint_facts
-  → campaign resolution            services/backend/services/campaign/resolver.py (existing registry)
-  → canonical activity (exactly 1) services/backend/services/measurement/silver_adapters.py::adapt_comms
-  → unified journey                services/backend/services/measurement/engine/journey_compiler.py
-  → attribution eligibility        services/backend/services/comms/attribution_policy.py (ADR-C8)
-  → aggregated graph relationship  services/backend/services/comms/graph_projection.py (ADR-C6)
-  → communication state            services/backend/services/comms/state.py (rebuildable reducer)
+  → campaign resolution            services/api/journeys/campaign/resolver.py (existing registry)
+  → canonical activity (exactly 1) services/api/journeys/measurement/silver_adapters.py::adapt_comms
+  → unified journey                services/api/journeys/measurement/engine/journey_compiler.py
+  → attribution eligibility        services/api/journeys/comms/attribution_policy.py (ADR-C8)
+  → aggregated graph relationship  services/api/journeys/comms/graph_projection.py (ADR-C6)
+  → communication state            services/api/journeys/comms/state.py (rebuildable reducer)
   → Profile360 / Campaign 360 / Noesis / Kyber health
 ```
 
@@ -55,18 +55,18 @@ Email-first, channel-agnostic by design. The canonical taxonomy lives in
 
 The same architecture extends to SMS, push, support messaging, and
 human/agent communications by adding events to the registry and mapping
-tables in `services/backend/services/comms/contracts.py` — no new pipeline is required.
+tables in `services/api/journeys/comms/contracts.py` — no new pipeline is required.
 
 ## Measurement quality
 
 - **Reported vs human-qualified engagement** — every open/click is
-  classified deterministically (`services/backend/services/comms/classification.py`):
+  classified deterministically (`services/api/journeys/comms/classification.py`):
   scanner user-agents, privacy proxies, datacenter IPs, scanner-window
   clicks, and repeated-link patterns mark `suspected_machine_activity`.
   Machine engagement never earns journey steps, touchpoints, or attribution
   credit; it remains visible as a quality metric.
 - **Replies** — inbound replies correlate via In-Reply-To / References /
-  provider thread / reply-token (`services/backend/services/comms/replies.py`); DSN,
+  provider thread / reply-token (`services/api/journeys/comms/replies.py`); DSN,
   out-of-office, and loop responses are excluded from engagement.
 - **Attribution** — delivery is context-only; reported opens are excluded by
   default; human-qualified clicks are eligible; replies are tenant-configurable;
@@ -75,7 +75,7 @@ tables in `services/backend/services/comms/contracts.py` — no new pipeline is 
 ## Privacy
 
 Raw addresses are normalized, HMAC-hashed tenant-scoped, and redacted for
-display (`services/backend/services/comms/mailbox.py`). Bodies and attachments are never
+display (`services/api/journeys/comms/mailbox.py`). Bodies and attachments are never
 stored by default; subjects are used transiently for automated-response
 detection only. Shared/role mailboxes (`sales@`, `support@`, …) resolve to
 organizations, never to individual humans.

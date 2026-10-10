@@ -2,7 +2,7 @@
  * KYBER zod schemas for the payment-rail operator health contract.
  *
  * Mirrors the typed, versioned backend contract in
- * `services/integrations/providers/payment_rails/kyber_contract.py`
+ * `services/api/connectors/integrations/providers/payment_rails/kyber_contract.py`
  * (contract_version "1.0.0"). Every response from
  * `GET /v1/admin/kyber/payment-rails/health` and
  * `GET /v1/admin/kyber/payment-rails/{tenant_id}` is runtime-validated against

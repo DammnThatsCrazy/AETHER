@@ -31,7 +31,7 @@ def discover_test_files(paths: list[Path]) -> list[Path]:
 
 def run_file(path: Path) -> tuple[Path, int, str]:
     env = os.environ.copy()
-    backend = str(ROOT / "services" / "backend")
+    backend = str(ROOT / "services" / "api")
     env["PYTHONPATH"] = backend + os.pathsep + env.get("PYTHONPATH", "")
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", str(path), "-q", "-n", "0", "--tb=short"],

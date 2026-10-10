@@ -120,7 +120,7 @@ Stone surface. Olympus Arch mark. Home uses tabbed bento sections (Company / Pri
 Hero + Profile 360 (interactive profile card: sources with brand logos, relationships to people / syndicates / agents, two campaign-tied journeys with CAC and conversion rate, agent actions shown as **observed**) + Relationship Explorer. Port `Profile 360` and `Relationship Explorer` as standalone components; they're reused in `/app`.
 
 ### Pricing
-Plans from `services/backend/shared/plans/catalog.py` (Alpha free, Beta, Gamma self-serve; Epsilon, Omicron, Omega enterprise → contact). Self-serve / Enterprise tab switch. Same plan data feeds `/app/signup` — share one `plans.ts` module.
+Plans from `services/api/shared/plans/catalog.py` (Alpha free, Beta, Gamma self-serve; Epsilon, Omicron, Omega enterprise → contact). Self-serve / Enterprise tab switch. Same plan data feeds `/app/signup` — share one `plans.ts` module.
 
 ### Docs
 Tabbed sections, left page nav, content pane, per-section accent glyph + color. Search across page titles. Connector catalog page shows every provider with its brand logo (`assets/brand/*.svg`).
@@ -136,7 +136,7 @@ Single focused column form. Submit to the existing demo-request handler (`apps/m
 
 ### `/app` — sign in, sign up, setup (Aether Portal.dc.html)
 Flow: **sign up + plan + payment on one card → 7-step setup → Home**. Returning users land where they left off.
-- **Sign up:** account fields, then plan picker below. Alpha → account created → setup. Paid → Stripe **Payment Element** appears in the same card; button shows spinner while processing; errors inline with retry or "switch to Alpha"; "Powered by Stripe" mark; receipt-emailed note. Create a Stripe subscription server-side (`services/backend/shared/billing/stripe_client.py`), confirm client-side, never navigate away.
+- **Sign up:** account fields, then plan picker below. Alpha → account created → setup. Paid → Stripe **Payment Element** appears in the same card; button shows spinner while processing; errors inline with retry or "switch to Alpha"; "Powered by Stripe" mark; receipt-emailed note. Create a Stripe subscription server-side (`services/api/shared/billing/stripe_client.py`), confirm client-side, never navigate away.
 - **SSO:** Google, Apple, Slack, Microsoft buttons with brand marks → Cognito hosted-UI federated sign-in (`signInWithRedirect({ provider })`), return to `/app`.
 - **Setup steps (all required, Import and Invite skippable):** Goal (incl. "Something else" free text) → Connect (searchable logo grid of all connectors; any number; no per-connector fees; each opens an in-page consent dialog "Allow Aether to access {provider} data" with per-scope checkboxes, read-only) → Import (CSV / JSON / JSONL ≤ 32 MB; auto column mapping in a small modal; full import tools only after setup) → SDKs (pick one or more of Web, iOS, Android, React Native, Server; **one key per SDK**; keys hidden until "Reveal", scramble-reveal ~700 ms; per-SDK "Send test" row: listening → received / error with "Troubleshoot ↗" to `/docs/troubleshooting`; Continue unlocks after one success) → Invite (live email validation: green / red ring; role chips) → First profile (assembles source by source; dark slate card) → Done.
 - **Shell after setup:** sidebar shows only Setup + Settings until first event/profile; then Home, Explore, Profiles, Data, Settings. Setup wizard disappears once complete.

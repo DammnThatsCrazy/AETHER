@@ -26,10 +26,10 @@ from typing import Any, Optional
 
 import pytest
 
-import services.agent_access_intelligence.reconciliation_routes as reconciliation_routes
-import services.agent_access_intelligence.reconciliation_service as reconciliation_service
+import actions.agent_access_intelligence.reconciliation_routes as reconciliation_routes
+import actions.agent_access_intelligence.reconciliation_service as reconciliation_service
 from repositories.repos import reset_in_memory_stores
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
 from shared.auth.auth import TenantContext
 from shared.common.common import ForbiddenError
 

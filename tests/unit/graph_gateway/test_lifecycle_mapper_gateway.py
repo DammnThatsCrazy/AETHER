@@ -14,7 +14,7 @@ from repositories.graph_mutation_ledger import (
     reset_graph_ledger_memory,
 )
 from repositories.repos import reset_in_memory_stores
-from services.agent.lifecycle_mapper import AgentLifecycleMapper
+from actions.agent.lifecycle_mapper import AgentLifecycleMapper
 from shared.graph.graph import GraphClient
 from shared.graph.mutation_gateway import current_graph_digest, replay_ledger
 

@@ -6,15 +6,15 @@ visibility: I
 audience: [architect, dev-senior, ops]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/intelligence/investigations.py, services/backend/services/intelligence/routes.py]
+source_files: [services/api/intelligence/intelligence/investigations.py, services/api/intelligence/intelligence/routes.py]
 flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED]
 related: [ai/decision-outcome-intelligence, ai/recommendation-families]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/backend/services/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
-  "services/backend/services/intelligence/routes.py": "sha256:5180cf7321ef1cc342f42acbf64aba510aba598c58c39b671303598f7f5084ef"
+  "services/api/intelligence/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
+  "services/api/intelligence/intelligence/routes.py": "sha256:46f4df5f21914056a91810cb1c0a490183ed144e99a9568b8aedf170f3b05e29"
 ---
 # Investigation Workspace
 

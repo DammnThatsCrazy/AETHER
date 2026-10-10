@@ -6,12 +6,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT.parent / "services" / "backend"
+BACKEND_ROOT = ROOT.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 
 def test_recommendation_scorer_penalizes_risk_and_governance():
-    from services.intelligence.scoring import RecommendationScoreInput, RecommendationScorer
+    from intelligence.intelligence.scoring import RecommendationScoreInput, RecommendationScorer
 
     scorer = RecommendationScorer()
     strong = scorer.score(RecommendationScoreInput(
@@ -36,7 +36,7 @@ def test_recommendation_scorer_penalizes_risk_and_governance():
 
 
 def test_recommendation_schema_requires_entity_or_population():
-    from services.intelligence.decision_models import (
+    from intelligence.intelligence.decision_models import (
         CandidateAction,
         Recommendation,
         RecommendationConfidence,
@@ -60,7 +60,7 @@ def test_recommendation_schema_requires_entity_or_population():
 
 
 def test_ooda_engine_generates_governed_recommendation():
-    from services.intelligence.ooda_engine import GraphNativeRecommendationEngine
+    from intelligence.intelligence.ooda_engine import GraphNativeRecommendationEngine
 
     rec = GraphNativeRecommendationEngine().generate_for_entity(
         "tenant-1", "entity-1", {"churn_probability": 0.8, "ltv_predicted_usd": 1200, "trust_score": 0.9}
@@ -92,7 +92,7 @@ def test_decision_outcome_feature_flags_default_to_gradual_rollout_disabled(monk
 
 
 def test_recommendation_family_registry_selects_non_retention_family():
-    from services.intelligence.recommendation_families import RecommendationFamilyRegistry
+    from intelligence.intelligence.recommendation_families import RecommendationFamilyRegistry
 
     registry = RecommendationFamilyRegistry()
     family = registry.detect({"fraud_probability": 0.91, "expected_value_usd": 750})
@@ -114,7 +114,7 @@ def test_recommendation_family_registry_selects_non_retention_family():
     ({"operational_failure_probability": 0.8}, "operational_failure"),
 ])
 def test_each_recommendation_family_generates_evidence_and_actions(signal, family_key):
-    from services.intelligence.recommendation_families import RecommendationFamilyRegistry
+    from intelligence.intelligence.recommendation_families import RecommendationFamilyRegistry
 
     family = RecommendationFamilyRegistry().get(family_key)
     assert family is not None
@@ -126,7 +126,7 @@ def test_each_recommendation_family_generates_evidence_and_actions(signal, famil
 
 
 def test_outcome_ledger_detects_stale_incomplete_and_failed_loops():
-    from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
+    from intelligence.intelligence.outcome_ledger import OutcomeLedgerAggregator
 
     recs = [
         {"recommendation_id": "rec-old", "tenant_id": "tenant-1", "entity_id": "entity-1", "recommendation_type": "retention", "expected_value": 100, "computed_at": "2026-01-01T00:00:00+00:00", "status": "generated"},

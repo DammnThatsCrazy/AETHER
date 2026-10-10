@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -123,7 +123,7 @@ async def test_insufficient_data_has_no_value(repo):
 
 
 async def test_definitions_route(repo):
-    from services.measurement.routes.integrity import get_measurement_definitions
+    from journeys.measurement.routes.integrity import get_measurement_definitions
 
     body = await get_measurement_definitions(_Req())
     data = body["data"]
@@ -133,7 +133,7 @@ async def test_definitions_route(repo):
 
 
 async def test_results_route_lists_active(repo):
-    from services.measurement.routes.integrity import list_measurement_results
+    from journeys.measurement.routes.integrity import list_measurement_results
 
     await repo.insert_result(_result())
     # Pass query params explicitly: called directly (not via FastAPI), the
@@ -146,7 +146,7 @@ async def test_results_route_lists_active(repo):
 
 
 async def test_explain_route_returns_chain(repo):
-    from services.measurement.routes.integrity import explain_measurement_result
+    from journeys.measurement.routes.integrity import explain_measurement_result
 
     prior = await repo.insert_result(_result(value=0.25))
     await repo.supersede(TENANT, prior["id"], _result(value=0.31), reason="restated")
@@ -159,7 +159,7 @@ async def test_explain_route_returns_chain(repo):
 
 
 async def test_explain_missing_result_404(repo):
-    from services.measurement.routes.integrity import explain_measurement_result
+    from journeys.measurement.routes.integrity import explain_measurement_result
     from shared.common.common import NotFoundError
 
     with pytest.raises(Exception) as exc_info:

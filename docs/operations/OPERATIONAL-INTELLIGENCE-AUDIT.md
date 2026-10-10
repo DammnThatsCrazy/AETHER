@@ -6,18 +6,18 @@ visibility: I
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/investigation/routes.py, services/backend/services/governance/routes.py, services/backend/services/events/routes.py, services/backend/services/events/worker.py, services/backend/services/realtime/channel_hub.py, services/backend/repositories/repos.py, services/backend/shared/events/events.py]
+source_files: [services/api/governance/investigation/routes.py, services/api/governance/governance/routes.py, services/api/ingestion/events/routes.py, services/api/ingestion/events/worker.py, services/api/ingestion/realtime/channel_hub.py, services/api/repositories/repos.py, services/api/shared/events/events.py]
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged.'}
   - {'commit': 'f63d631', 'reason': 'Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required.'}
 source_hashes:
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
-  "services/backend/services/events/routes.py": "sha256:1ede3d12a54845f33a149b13106b001a899c4b77c168c6d990023e836b59101f"
-  "services/backend/services/events/worker.py": "sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363"
-  "services/backend/services/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"
-  "services/backend/services/investigation/routes.py": "sha256:885be3f6f0b9592dab4ab7ac2603568a06d6ed7406554202da046ee7facd339a"
-  "services/backend/services/realtime/channel_hub.py": "sha256:c53cb1a1270ba4d2f19dac8b3db0ebc09ab60118fa7f176afd3e5e45363399c9"
-  "services/backend/shared/events/events.py": "sha256:dc232a0068588ee482bbdbef7cb89df9bde69a54b1880ab861f515e1c60971fc"
+  "services/api/governance/governance/routes.py": "sha256:ca87bb59cf8c61661b53d0294d6cee4f5093beb28ae32aca79cbea7a62b708f1"
+  "services/api/governance/investigation/routes.py": "sha256:10904ac8cea009ad26d205ccfdda5387f9ef4777ec55cfee734fe71ff7fbe37f"
+  "services/api/ingestion/events/routes.py": "sha256:7c5fb908eefa9ec1165637ef1cc9d432c3a97a0b0d8b0ca180c03ca64c3623f8"
+  "services/api/ingestion/events/worker.py": "sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363"
+  "services/api/ingestion/realtime/channel_hub.py": "sha256:c53cb1a1270ba4d2f19dac8b3db0ebc09ab60118fa7f176afd3e5e45363399c9"
+  "services/api/repositories/repos.py": "sha256:bbad38e1ca8c19e36f2f936332bbe199e6a7b09e71598495ee72eb2efc2a9100"
+  "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
 ---
 
 # Operational Intelligence — Stub vs. Production Audit
@@ -38,7 +38,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `services/backend/services/events/worker.py` |
+| **File** | `services/api/ingestion/events/worker.py` |
 | **Symptom** | `_process_job` incremented a counter for each matching envelope but never called `producer.publish()` |
 | **Impact** | Replay jobs completed with `totalReplayed: N` but zero events reached the event bus; WebSocket clients on `tenant.events` received nothing |
 | **Fix applied** | Worker now calls `await producer.publish(Event(topic=..., tenant_id=..., payload=...))` for each matching envelope. Dry-run jobs count but skip publish. Unknown Topic values are skipped with a warning. |
@@ -47,7 +47,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `services/backend/services/events/routes.py` |
+| **File** | `services/api/ingestion/events/routes.py` |
 | **Symptom** | `POST /v1/events/ingest` stored envelopes in `_EVENTS: dict[str, dict]` only; server restart lost all data; worker could only replay events ingested in the current process lifetime |
 | **Fix applied** | `ingest_event` now calls `await _envelope_repo.create(envelope_dict)` before updating the hot cache. `EventEnvelopeRepository` added to `repos.py`, backed by PostgreSQL in staging/production and by the shared `_IN_MEMORY_STORES` dict in local/test. |
 
@@ -55,7 +55,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `services/backend/services/investigation/routes.py` |
+| **File** | `services/api/governance/investigation/routes.py` |
 | **Symptom** | `PATCH /v1/investigations/{id}/status` accepted any `→ any` transition with comment `# any → any for MVP` |
 | **Impact** | Closed cases could be re-opened; escalated cases could regress to open; compliance audit trail would be unreliable |
 | **Fix applied** | `_VALID_TRANSITIONS` dict added; `transition_status` raises `HTTP 422` on invalid transitions. Valid graph: `open → {triage, active, escalated, closed}`, `triage → {active, escalated, closed}`, `active → {escalated, closed}`, `escalated → {closed}`, `closed → {}` (terminal). |
@@ -64,7 +64,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `services/backend/services/governance/routes.py:86` |
+| **File** | `services/api/governance/governance/routes.py:86` |
 | **Symptom** | `allowed = not bool(body.context.get("deny", False))` — always allows unless caller passes `{"deny": true}` in context |
 | **Impact** | Frontend `useEvaluateGovernance()` returns decisions that appear authoritative but apply no real policies |
 | **Status** | Deferred — requires a `PolicyRepository`, policy DSL, and an evaluation engine. Tracked as Phase 2. |
@@ -74,7 +74,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `services/backend/services/realtime/routes.py` |
+| **File** | `services/api/ingestion/realtime/routes.py` |
 | **Symptom** | WebSocket `subscribe` action accepts any channel name without checking whether the authenticated entity holds a delegation that grants access |
 | **Impact** | Tenant-scoped isolation is partially enforced (events are only fanned out to queues keyed by `(tenant_id, channel)`), but any authenticated user in that tenant can subscribe to any channel |
 | **Status** | Deferred — requires delegation scope lookup at subscription time. Tracked as Phase 2. |
@@ -83,7 +83,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `services/backend/services/realtime/routes.py` |
+| **File** | `services/api/ingestion/realtime/routes.py` |
 | **Symptom** | Cursors are generated and sent to clients but the server does not store a rolling event window; reconnecting clients receive no missed events |
 | **Status** | Deferred — requires a short-TTL event buffer (e.g., Redis sorted-set keyed by `(tenant_id, channel)`). Tracked as Phase 3. |
 
@@ -100,11 +100,11 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **EventEnvelopeRepository** | `repos.py:1519` | PostgreSQL-backed durable envelope storage with replayable filter |
 | **EventProducer** | `shared/events/events.py:328` | AIOKafka with acks=all, retries=3, exponential backoff, DLQ; batch overflow falls back to individual publish; DLQ events include `original_payload` for replay |
 | **EventConsumer** | `shared/events/events.py:438` | Concurrency-limited (semaphore=10), per-handler retry, dead-letter on exhaustion |
-| **ChannelHub** | `services/backend/services/realtime/channel_hub.py` | 54 topics → 9 named channels; monotonic cursor; lock-protected fanout; QueueFull logged |
-| **Investigation Routes** | `services/backend/services/investigation/routes.py` | Full CRUD + state machine + evidence + annotations; EventProducer wired |
-| **Governance Routes** | `services/backend/services/governance/routes.py` | Decision persistence + audit trail; EventProducer wired; principal_id filter fixed |
-| **Event Replay Routes** | `services/backend/services/events/routes.py` | Job CRUD; envelope durable ingest; EventProducer wired for submit/cancel |
-| **Replay Worker** | `services/backend/services/events/worker.py` | Polls queued jobs; filters envelopes from durable repo; republishes via producer; dry-run support |
+| **ChannelHub** | `services/api/ingestion/realtime/channel_hub.py` | 54 topics → 9 named channels; monotonic cursor; lock-protected fanout; QueueFull logged |
+| **Investigation Routes** | `services/api/governance/investigation/routes.py` | Full CRUD + state machine + evidence + annotations; EventProducer wired |
+| **Governance Routes** | `services/api/governance/governance/routes.py` | Decision persistence + audit trail; EventProducer wired; principal_id filter fixed |
+| **Event Replay Routes** | `services/api/ingestion/events/routes.py` | Job CRUD; envelope durable ingest; EventProducer wired for submit/cancel |
+| **Replay Worker** | `services/api/ingestion/events/worker.py` | Polls queued jobs; filters envelopes from durable repo; republishes via producer; dry-run support |
 | **Kyber investigation, governance and graph-intelligence hooks** | removed | The Kyber hooks that called these endpoints (`features/investigation`, `features/governance`, `features/graph/use-graph-intelligence`, `use-entity-intelligence`) had no importer reachable from the app and were deleted; the endpoints above are unchanged and no Kyber screen consumes them today |
 | **Shared TS contracts** | `packages/shared/operational-intelligence.ts` | InvestigationCase, GovernanceDecision, ReplayJobResponse, RealtimeChannel — mirrors Pydantic models |
 | **topics.json** | `docs/_generated/topics.json` | All 7 new operational intelligence topics present (101 total) |
@@ -113,8 +113,8 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **AgentEconomicIdentityRepository** | `repos.py` | `upsert_identity`, `find_for_agent(agent_id, tenant_id)` — tenant-scoped key: `{tenant_id}:{agent_id}:economic_identity` |
 | **EconomicResourceRepository** | `repos.py` | `upsert_resource`, `list_for_tenant(tenant_id)` — tenant-isolated purchasable capabilities |
 | **FacilitatorRepository** | `repos.py` | `upsert_facilitator`, `list_active(tenant_id)` — x402 facilitator/trust-broker registry |
-| **X402LifecycleMapper** | `services/backend/services/x402/lifecycle_mapper.py` | Routes 14 canonical x402 events to repositories; idempotent via event_id; full tenant isolation. Not yet called by any event consumer |
-| **AgentLifecycleMapper** | `services/backend/services/agent/lifecycle_mapper.py` | Routes 19 canonical agent lifecycle events to graph mutations + repos; all vertex IDs use `{tenant_id}:agent:{id}` format. Not yet called by any event consumer |
+| **X402LifecycleMapper** | `services/api/value/x402/lifecycle_mapper.py` | Routes 14 canonical x402 events to repositories; idempotent via event_id; full tenant isolation. Not yet called by any event consumer |
+| **AgentLifecycleMapper** | `services/api/actions/agent/lifecycle_mapper.py` | Routes 19 canonical agent lifecycle events to graph mutations + repos; all vertex IDs use `{tenant_id}:agent:{id}` format. Not yet called by any event consumer |
 | **Four-layer graph coverage** | `/v1/graph/*` + `shared/graph-contract.ts` | All four interaction layers implemented: H2H (human↔human), H2A (human→agent), A2H (agent→human), A2A (agent↔agent). `classifyEdgeType` routes each edge type to its layer; `countEdgesByLayer` aggregates per-layer stats exposed via `/v1/graph/health`. |
 
 ---
@@ -237,8 +237,8 @@ Add to `infra/local/docker-compose.yml` and ECS task definitions:
 ```yaml
 # infra/local/docker-compose.yml addition
 aether-replay-worker:
-  build: ./services/backend
-  command: python -m services.events.worker_entrypoint
+  build: ./services/api
+  command: python -m ingestion.events.worker_entrypoint
   environment:
     - AETHER_ENV=${AETHER_ENV}
     - DATABASE_URL=${DATABASE_URL}
@@ -277,7 +277,7 @@ PR #344 added the following operational artifacts that affect this audit scope:
 
 **New Event Topics** (`shared/events/events.py`): `FRAUD_NETWORK_CREATED`, `FRAUD_NETWORK_UPDATED`, `FRAUD_NETWORK_REFRESHED`, `FRAUD_NETWORK_ESCALATED`, `FRAUD_NETWORK_SUPPRESSED`, `FLOW_TRACE_CREATED`, `FLOW_TRACE_COMPLETED`, `RISK_OVERLAY_GENERATED`.
 
-**New Investigation Endpoints** (`services/backend/services/investigation/routes.py`): Six new endpoints for attaching fraud networks and flow traces to investigation cases, retrieving fraud summaries, generating investigation reports, and exporting case bundles — all tenant-scoped, permission-gated, and using the existing state machine.
+**New Investigation Endpoints** (`services/api/governance/investigation/routes.py`): Six new endpoints for attaching fraud networks and flow traces to investigation cases, retrieving fraud summaries, generating investigation reports, and exporting case bundles — all tenant-scoped, permission-gated, and using the existing state machine.
 
 ### Data Exchange Plane event-surface additions (commit 5b974b02, `data-exchange-plane` lane)
 

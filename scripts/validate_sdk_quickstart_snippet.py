@@ -2,7 +2,7 @@
 """Validate that the install snippet is one language, spoken in two places.
 
 The snippet is written twice: the server renders it
-(``services/backend/services/sdk_distribution/snippet.py``) and the loader
+(``services/api/ingestion/sdk_distribution/snippet.py``) and the loader
 interprets it (``packages/sdk/web/src/loader/auto-init.ts``). Nothing links the two
 at runtime — the loader is a standalone script on a CDN and the server is
 Python — so a rename on one side produces a snippet that looks right, installs
@@ -30,7 +30,7 @@ ERRORS: list[str] = []
 
 LOADER_TS = 'packages/sdk/web/src/loader/auto-init.ts'
 LOADER_BUNDLE = 'packages/sdk/web/rollup.loader.mjs'
-SERVER_SNIPPET = 'services/backend/services/sdk_distribution/snippet.py'
+SERVER_SNIPPET = 'services/api/ingestion/sdk_distribution/snippet.py'
 
 
 def fail(msg: str) -> None:

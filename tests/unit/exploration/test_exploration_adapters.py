@@ -7,9 +7,9 @@ from exploration_fakes import FakeGraphNode, FakeGraphResponse, context, fake_gr
 
 from shared.exploration.generated_fields import FILTER_FIELDS
 from shared.exploration.generated_surfaces import SURFACE_CAPABILITIES
-from services.exploration.adapters import available_surfaces, get_adapter
-from services.exploration.adapters.base import AdapterContext
-import services.exploration.adapters.graph as graph_adapter
+from journeys.exploration.adapters import available_surfaces, get_adapter
+from journeys.exploration.adapters.base import AdapterContext
+import journeys.exploration.adapters.graph as graph_adapter
 
 
 def test_every_backed_surface_has_an_adapter():

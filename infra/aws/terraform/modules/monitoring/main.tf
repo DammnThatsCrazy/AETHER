@@ -791,7 +791,7 @@ resource "aws_cloudwatch_dashboard" "main" {
 # at steady state, and the orchestrator has no reason to replace anything — a
 # task doing seven-eighths of its job is indistinguishable from a healthy one.
 #
-# services/runtime/run_role.py::_watch_role_health re-reads
+# services/api/workers/runtime/run_role.py::_watch_role_health re-reads
 # supervisor.status_by_role() on an interval and prints
 #
 #     [run_role] role=<role> UNHEALTHY (restarts exhausted) failed=... 
@@ -802,7 +802,7 @@ resource "aws_cloudwatch_dashboard" "main" {
 # This makes the state ACTIONABLE; it does not make it self-healing. Automatic
 # replacement needs an ECS container healthCheck, and a healthCheck needs
 # something in the worker container to probe — the runtime services run
-# `python -m services.runtime.run_role <key>` and serve no HTTP at all, so a
+# `python -m workers.runtime.run_role <key>` and serve no HTTP at all, so a
 # probe surface has to be added to run_role.py before a healthCheck can be
 # anything but a guaranteed kill. That change lives in the backend tree, not
 # here.

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services" / "backend"))
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
 from repositories.lake import BronzeRepository, SilverRepository
 from repositories.repos import reset_in_memory_stores
@@ -13,10 +13,10 @@ from repositories.stablecoin_repos import (
     StablecoinPollingCheckpointRepository,
     StablecoinProviderHealthRepository,
 )
-from services.stablecoins.ingestion import ProviderObservation, StablecoinIngestionPipeline
-from services.stablecoins.models import FinalityState, StablecoinEventType
-from services.stablecoins.polling import StablecoinPollingScheduler
-from services.stablecoins.providers import StablecoinProviderIngestionRunner
+from value.stablecoins.ingestion import ProviderObservation, StablecoinIngestionPipeline
+from value.stablecoins.models import FinalityState, StablecoinEventType
+from value.stablecoins.polling import StablecoinPollingScheduler
+from value.stablecoins.providers import StablecoinProviderIngestionRunner
 
 
 @pytest.fixture(autouse=True)

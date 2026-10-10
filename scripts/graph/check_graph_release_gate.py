@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
-BACKEND_ROOT = REPO_ROOT / "services" / "backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "api"
 
 sys.path.insert(0, str(BACKEND_ROOT))
 # Stub jwt so auth imports don't fail in CI without cffi

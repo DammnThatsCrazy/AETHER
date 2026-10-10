@@ -4,8 +4,8 @@ rollback + scan checkpointing against the injectable fixture RPC."""
 from __future__ import annotations
 
 from repositories.interop_repos import InteropMessageEventRepo, InteropMessageRepo
-from services.interop.correlation import CorrelationEngine
-from services.interop.providers.layerzero_v2 import LayerZeroV2Adapter
+from graph.interop.correlation import CorrelationEngine
+from graph.interop.providers.layerzero_v2 import LayerZeroV2Adapter
 
 from tests.unit.interop.lz_fixtures import (
     DST_EID,

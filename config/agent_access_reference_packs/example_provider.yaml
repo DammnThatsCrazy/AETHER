@@ -36,7 +36,7 @@ description: >-
   fictional and must not be copied into a reference pack as fact.
 
 # One of: mcp_tool | provider_action | account | resource | unknown
-# (services/agent_access_intelligence/models.py::CapabilityKind)
+# (services/api/actions/agent_access_intelligence/models.py::CapabilityKind)
 capability_kind_defaults:
   default: provider_action
   by_object_type:

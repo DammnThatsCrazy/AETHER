@@ -6,11 +6,11 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/backend/services/campaign/registry.py, services/backend/services/campaign/repository.py, services/backend/alembic/versions/20260627_campaign_registry.py]
+source_files: [services/api/journeys/campaign/registry.py, services/api/journeys/campaign/repository.py, services/api/alembic/versions/20260627_campaign_registry.py]
 source_hashes:
-  "services/backend/alembic/versions/20260627_campaign_registry.py": "sha256:0e241e5ddb71cf5843ae307ee6c3cb5f5bc2d6d10d0a0f268c5e9c9df36af7d1"
-  "services/backend/services/campaign/registry.py": "sha256:584907f95420352ceff625497421f825d5d7c1f4e02696b4c639e3ab06dd0dc6"
-  "services/backend/services/campaign/repository.py": "sha256:531f5919b3b46055fc9c08be1d682fd2865117c3c063c178b3dc13ca2f37dd75"
+  "services/api/alembic/versions/20260627_campaign_registry.py": "sha256:0e241e5ddb71cf5843ae307ee6c3cb5f5bc2d6d10d0a0f268c5e9c9df36af7d1"
+  "services/api/journeys/campaign/registry.py": "sha256:265c863bbc9752efb8874c4a34a2c651dbb18d275c29510bb2d52dbeaad908b0"
+  "services/api/journeys/campaign/repository.py": "sha256:73c71a55e10b19e9ddf40cec726e93d226b35269c863fe500564e8705bccce5d"
 ---
 
 # Campaign Registry Architecture
@@ -93,7 +93,7 @@ Unique constraint: `(tenant_id, evidence_hash, status='open')` prevents duplicat
 3. The resolver never fuzzy-matches campaign names.
 4. The resolver never resolves across tenants.
 5. A canonical UUID from an external source is always validated against tenant ownership before use.
-6. Production never uses in-memory fallback stores for registry or resolver. This is enforced in code, not convention: `_require_pool` in `services/backend/services/campaign/repository.py` raises when no pool is available outside the pool-optional environments (`local`/`dev`/`test`), so a misconfigured production process fails at the read/write rather than silently minting transient campaign identity in memory. The check lives in the shared `_acquire_pool` path, so no repository method can reach a local store without passing it.
+6. Production never uses in-memory fallback stores for registry or resolver. This is enforced in code, not convention: `_require_pool` in `services/api/journeys/campaign/repository.py` raises when no pool is available outside the pool-optional environments (`local`/`dev`/`test`), so a misconfigured production process fails at the read/write rather than silently minting transient campaign identity in memory. The check lives in the shared `_acquire_pool` path, so no repository method can reach a local store without passing it.
 7. Raw evidence is never discarded after resolution failure.
 8. Every manual mapping mutation is permission-gated and audited.
 9. External campaign rename retains the Aether UUID.

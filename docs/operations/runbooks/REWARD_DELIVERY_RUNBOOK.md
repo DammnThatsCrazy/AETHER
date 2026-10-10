@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/rewards/delivery_outbox.py
-  - services/backend/services/rewards/rails.py
+  - services/api/value/rewards/delivery_outbox.py
+  - services/api/value/rewards/rails.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/rewards/delivery_outbox.py": "sha256:549cda61fd8cf7587756483f80706eaa47679f1dad9ee32e4d651bb06a442dcc"
-  "services/backend/services/rewards/rails.py": "sha256:982d83a7e7940e0393a48020d91b5b857f5d62417e071e593234ac645792ed99"
+  "services/api/value/rewards/delivery_outbox.py": "sha256:9fd28e34c6f74df4c5f77b8ed3ca0966214dfbdb3686b5f497d30f0701b44480"
+  "services/api/value/rewards/rails.py": "sha256:19bef0ee7898b64d6cfd848eb5a1c26f592c1a265c384124590af4abf6c89dad"
 ---
 
 # Reward Delivery Runbook
@@ -69,7 +69,7 @@ an outage.
 ## Webhook signing secret could not be resolved
 
 The signing secret is resolved from the credential authority at the narrow send
-site (`services/backend/services/rewards/webhook_secret.py`), NOT stored plaintext in the job —
+site (`services/api/value/rewards/webhook_secret.py`), NOT stored plaintext in the job —
 the job carries only a `secret_ref`. A `fatal` send outcome with
 "signing secret could not be resolved" means the tenant has no ACTIVE
 `webhook_signing_secret` credential for the `tenant_webhook` provider in this

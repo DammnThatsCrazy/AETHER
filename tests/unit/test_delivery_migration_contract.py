@@ -15,8 +15,7 @@ import re
 
 MIGRATION = (
     Path(__file__).resolve().parents[2]
-    / "services"
-    / "backend"
+    / "services" / "api"
     / "alembic"
     / "versions"
     / "20260702_delivery_infrastructure.py"

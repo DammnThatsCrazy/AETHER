@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from services.agent_access_intelligence.catalog_service import CapabilityCatalogService
-from services.agent_access_intelligence.models import CapabilityKind
+from actions.agent_access_intelligence.catalog_service import CapabilityCatalogService
+from actions.agent_access_intelligence.models import CapabilityKind
 from shared.common.common import NotFoundError
 
 

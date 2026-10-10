@@ -9,8 +9,8 @@ since_version: "0.1.0"
 estimated_read_minutes: 5
 canonical_owner: platform@aether
 source_files:
-  - services/backend/services/auth/routes.py
-  - services/backend/repositories/repos.py
+  - services/api/tenancy/auth/routes.py
+  - services/api/repositories/repos.py
   - infra/aws/terraform/modules/ecs/main.tf
   - .github/workflows/infrastructure.yml
   - .github/workflows/staging-lifecycle.yml
@@ -24,11 +24,11 @@ source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:a30a86c08edcb57316ccd388659c7d832c9a3e542f8e40c44ace2206482dcc5e"
   ".github/workflows/staging-lifecycle.yml": "sha256:f8081113b9e501906c6148cf299c90637b2da6e584583f8a08465b5a41d8b58a"
   ".github/workflows/terraform-promote.yml": "sha256:b493d4250ab5da8cb183f579924e13692588091c4c2daf43f20311d62e6e23d3"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:e4421f391a397cdfada01ae38293c70ea813fbc1030727615619ca378c554a01"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:a1b701301f9ebb1339cfa1ae1f07f24bc7c8b1f36c47d38b52f8e5050ccfe7b4"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
-  "services/backend/services/auth/routes.py": "sha256:8559fb54da03dc9a6ca14bed490a5bc01d0da25e62073648ef17ece676bb2934"
+  "services/api/repositories/repos.py": "sha256:bbad38e1ca8c19e36f2f936332bbe199e6a7b09e71598495ee72eb2efc2a9100"
+  "services/api/tenancy/auth/routes.py": "sha256:35dd9ffc6fe501bed1346c37fc1f455e65b9494f0d041b2ec9e70fcb930fe3d1"
 ---
 
 # AETHER first-admin bootstrap

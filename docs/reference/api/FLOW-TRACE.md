@@ -6,10 +6,10 @@ visibility: I
 audience: [dev-senior, security, architect]
 status: stable
 since_version: "0.1.0"
-source_files: [services/backend/services/flow_trace/routes.py, services/backend/services/flow_trace/traversal.py]
+source_files: [services/api/value/flow_trace/routes.py, services/api/value/flow_trace/traversal.py]
 source_hashes:
-  services/backend/services/flow_trace/routes.py: sha256:1cc8be381d28c682eb26e966c5b1bf02b936338b096e4d1734a9b95d5094143c
-  services/backend/services/flow_trace/traversal.py: sha256:af2906e9f3423fb10e49b57039856e2e8b253dc04a21cf00e1f43c1d3d557578
+  "services/api/value/flow_trace/routes.py": "sha256:e8cfc7a55d383d52aa073ff34dc49d7d2a73b189153f23bf496e4469248a80d6"
+  "services/api/value/flow_trace/traversal.py": "sha256:3971c6abfae330d09e0a2e14dbc5e9fb7393b13deb458b3aaf951cfefc9d101f"
 ---
 
 # Flow Trace API Reference

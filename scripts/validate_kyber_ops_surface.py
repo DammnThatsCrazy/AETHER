@@ -29,14 +29,14 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND = os.path.join(ROOT, "services", "backend")
+BACKEND = os.path.join(ROOT, "services", "api")
 
 MAIN_PY = os.path.join(BACKEND, "main.py")
-OBS_ROUTES = os.path.join(BACKEND, "services", "ingestion", "observability_routes.py")
-OBS_MODULE = os.path.join(BACKEND, "services", "ingestion", "ingestion_observability.py")
-REPLAY_ROUTES = os.path.join(BACKEND, "services", "ingestion", "replay_routes.py")
-GATEWAY_ROUTES = os.path.join(BACKEND, "services", "gateway", "routes.py")
-SDK_CONFIG_ROUTES = os.path.join(BACKEND, "services", "sdk_config", "routes.py")
+OBS_ROUTES = os.path.join(BACKEND, "ingestion", "ingestion", "observability_routes.py")
+OBS_MODULE = os.path.join(BACKEND, "ingestion", "ingestion", "ingestion_observability.py")
+REPLAY_ROUTES = os.path.join(BACKEND, "ingestion", "ingestion", "replay_routes.py")
+GATEWAY_ROUTES = os.path.join(BACKEND, "ingestion", "gateway", "routes.py")
+SDK_CONFIG_ROUTES = os.path.join(BACKEND, "ingestion", "sdk_config", "routes.py")
 
 ERRORS: list[str] = []
 NOTES: list[str] = []

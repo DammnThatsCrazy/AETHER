@@ -9,10 +9,10 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
-source_files: [services/backend/services/campaign/exploration.py, services/backend/services/measurement/repositories/conversion_repo.py]
+source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/measurement/repositories/conversion_repo.py]
 source_hashes:
-  "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:15955fbf15cb02418c196fb5b9a977e8dffaa47c22f1846c4e87f961708243fe"
+  "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
+  "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:ed4dacb42d8b93f67af9e2c819edf3e98fb7b7f407c9187d1502cd1df340144c"
 ---
 
 # Runbook — Missing Conversions (Campaign 360)

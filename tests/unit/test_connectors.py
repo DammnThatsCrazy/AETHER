@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -39,13 +39,13 @@ def conn(monkeypatch):
     with backend_module_path():
         repos = importlib.import_module("repositories.repos")
         repos.reset_in_memory_stores()
-        audit_mod = importlib.import_module("services.security.audit_ledger")
+        audit_mod = importlib.import_module("governance.security.audit_ledger")
         audit_mod._TENANT_TAIL.clear()
         audit_mod._TENANT_SEQ.clear()
-        registry = importlib.import_module("services.integrations.connectors.registry")
-        service = importlib.import_module("services.integrations.connectors.service")
-        base = importlib.import_module("services.integrations.connectors.base")
-        routes = importlib.import_module("services.integrations.connectors.routes")
+        registry = importlib.import_module("connectors.integrations.connectors.registry")
+        service = importlib.import_module("connectors.integrations.connectors.service")
+        base = importlib.import_module("connectors.integrations.connectors.base")
+        routes = importlib.import_module("connectors.integrations.connectors.routes")
         yield SimpleNamespace(registry=registry, service=service.connector_service, base=base, routes=routes)
 
 

@@ -17,7 +17,7 @@ program:
 # Completion program (this session): picks up C2-pending (mobile notification projection,
 # unsafe-routing validator) and drives C5-C9 to make ci-check green. PRs #500 (C0-C4) and
 # #503 (C8 slice) landed on origin/main; the in-flight ADR-C11 comms cohort branch
-# (claude/aether-comms-multi-provider) is PARKED and out of scope (services/comms/ untouched).
+# (claude/aether-comms-multi-provider) is PARKED and out of scope (services/api/journeys/comms/ untouched).
 completion:
   scope: full-remaining-program
   pr_train: one-branch-one-pr                      # claude/aether-turnkey-completion-m8-f8b2e (PR #515) -> single PR -> milestone commits
@@ -52,7 +52,7 @@ milestones:
     note: >
       Core C1 landed: contract twins, the dual-mode continuation persistence engine
       (repositories/continuation_repo.py, alembic 20260820), the tenant continuation
-      routes (/v1/continuations, services/continuation/*), and the client-sync feed
+      routes (/v1/continuations, services/api/journeys/continuation/*), and the client-sync feed
       (repositories/client_sync_repo.py, alembic 20260821, /v1/client-sync,
       enqueue_sync_change emitter with continuation_changed as the first wired producer).
       All flag-gated OFF (continuation.enabled, client_sync.enabled) → 404 when disabled;
@@ -75,7 +75,7 @@ milestones:
       into notification_intelligence WITH an SSRF guard (both already share
       WebhookRepository), the router was unmounted, and the 5 resolved pairs were
       removed from the route-conflict ratchet (tests/unit/test_route_conflicts.py).
-      PRODUCER-COVERAGE REGISTRY landed: services/notification_intelligence/coverage.py
+      PRODUCER-COVERAGE REGISTRY landed: services/api/journeys/notification_intelligence/coverage.py
       + GET /v1/notifications/coverage — honest states, NEVER 'healthy' without a
       declared baseline, in-process heartbeat, seeded with real producers at
       required=False (operators declare the baseline). ~20 tests. Remaining C2 (mobile
@@ -90,10 +90,10 @@ milestones:
     note: >
       C3 landed: installation + push-subscription persistence (alembic
       20260822_mobile_installations, repositories/installation_repo.py), the tenant
-      mobile gateway (/v1/mobile installations + subscriptions, services/mobile/*),
+      mobile gateway (/v1/mobile installations + subscriptions, services/api/ingestion/mobile/*),
       the four provider adapters (apns/fcm/web_push/email) with production-shaped
       request construction + response mapping and provider-shaped LOCAL fakes that
-      fail closed outside local/dev (services/delivery/adapters/*, DeliveryChannel.PUSH
+      fail closed outside local/dev (services/api/actions/delivery/adapters/*, DeliveryChannel.PUSH
       + delivery-receipt.ts twin), the deep-link resolve endpoint
       (POST /v1/mobile/deep-links/resolve, fail-closed, reuses continuation records),
       and the credentials tooling (scripts/credentials_status.py + credentials-inventory
@@ -161,7 +161,7 @@ milestones:
     externally_blocked: [native-compile, store-submission]
     note: >
       C5 is LANDED. The bounded redacted gateway projections (today/profile/campaign/alerts/
-      explore — services/mobile/projections.py reuses owning services, never re-calculates
+      explore — services/api/ingestion/mobile/projections.py reuses owning services, never re-calculates
       Profile360/Campaign360/graph truth), Aether Mobile feature screens
       (Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth),
       the Aether desktop notification center (inbox UI + unread badge + filters + read/ack/
@@ -187,10 +187,10 @@ milestones:
       (notification/saved_view/conversation/watchlist/incident/command_receipt/preference_changed/
       session/installation_revoked/continuation), tenant-scoped t:{tenant_id} AND operator-scoped
       o:{operator_id}; pinned by tests/unit/test_client_sync_producer_coverage.py (21 tests). The
-      operator (Kyber) continuation router landed (services/continuation/operator_routes.py,
+      operator (Kyber) continuation router landed (services/api/journeys/continuation/operator_routes.py,
       /v1/kyber/continuations — create/recent/get/patch/handoff/delete, scoped to the authenticated
       operator_id, flag-gated OFF like the tenant plane, 15 tests) and the operator client-sync
-      read route closed the gap (services/client_sync/operator_routes.py, /v1/kyber/client-sync
+      read route closed the gap (services/api/ingestion/client_sync/operator_routes.py, /v1/kyber/client-sync
       reading o:{operator_id} via the SAME durable feed — no second sync feed, 3 new tests). Desktop
       continue-on-phone surfaces: frontend/aether (continue-on-phone + recent-activity on the Noesis
       + notification-center pages, cursor-paged client-sync consumption, flags enableContinuations/
@@ -209,7 +209,7 @@ milestones:
     landed: [mobile-action-adapter, kyber-mobile-tier-0-3-ui, mobile-step-up-flow, command-receipt-visibility, mobile-bound-device-attestation]
     note: >
       C7 is LANDED via M6 of the completion program. The mobile action adapter
-      (services/kyber/ops/mobile_actions.py, GET /v1/kyber/mobile/actions) is a READ-ONLY
+      (services/api/governance/kyber/ops/mobile_actions.py, GET /v1/kyber/mobile/actions) is a READ-ONLY
       action-availability digest composing the OWNING services — exception queue buckets + open
       command list + session step-up freshness — tier0-tier3, with available_action/capability_id/
       requires_step_up as availability pointers only. NO second command plane, NO generic mutation
@@ -218,7 +218,7 @@ milestones:
       via the SDK's typed getCommandReceipts/getCommandReceipt) tabs with step-up via the EXISTING
       StepUpService/device_proof challenge path; verification:null renders "Not verified", never
       omitted. Mobile-bound device attestation landed as proof-key enrollment
-      (services/kyber/devices/mobile_proof_routes.py, /v1/kyber/mobile/proof-keys): SAME store,
+      (services/api/governance/kyber/devices/mobile_proof_routes.py, /v1/kyber/mobile/proof-keys): SAME store,
       SAME verify path, SAME key validation as the browser-proof path (DeviceProofKeyRepository /
       DeviceProofService.verify_proof / load_p256_public_key), one live row per device, redacted
       inventory list, 404-never-403 for absent/foreign device ids. SDK: 9 typed methods + zero-import
@@ -248,19 +248,19 @@ milestones:
 # Wave / architecture rollup (reuse-first). "reuse" = exists complete; "extend" = exists, add surface;
 # "build" = net-new this program. Authoritative detail: docs/reference/reports/mobile-productization/repo-baseline.json.
 architecture:
-  notification_control_plane: extend        # services/notification_intelligence/* exists complete; brand + TS twins + coverage registry + collision fix
-  delivery_infrastructure: extend           # services/delivery/* exists complete; add apns/fcm/webpush/email adapters + fakes
-  worker_supervisor: reuse                  # services/runtime/{supervisor,specs}.py
+  notification_control_plane: extend        # services/api/journeys/notification_intelligence/* exists complete; brand + TS twins + coverage registry + collision fix
+  delivery_infrastructure: extend           # services/api/actions/delivery/* exists complete; add apns/fcm/webpush/email adapters + fakes
+  worker_supervisor: reuse                  # services/api/workers/runtime/{supervisor,specs}.py
   exploration_context: reuse                # shared/exploration/models.py (+ TS twin, parity-tested)
-  saved_views: reuse                        # services/exploration/store.py
-  noesis_conversations: reuse               # services/noesis/{conversations,conversation}.py (durable one referenced)
-  continuation_plane: build                 # NET-NEW: services/continuation/*, alembic, /v1/continuations
-  client_sync_feed: build                   # NET-NEW: services/client_sync/*, alembic, /v1/client-sync
+  saved_views: reuse                        # services/api/journeys/exploration/store.py
+  noesis_conversations: reuse               # services/api/intelligence/noesis/{conversations,conversation}.py (durable one referenced)
+  continuation_plane: build                 # NET-NEW: services/api/journeys/continuation/*, alembic, /v1/continuations
+  client_sync_feed: build                   # NET-NEW: services/api/ingestion/client_sync/*, alembic, /v1/client-sync
   push_provider_adapters: build             # NET-NEW: apns/fcm/webpush/email adapters
-  installation_push_model: build            # NET-NEW: extends services/auth/sessions + services/kyber/devices
-  kyber_command_plane: reuse                # services/kyber/ops/* (req->dry-run->approve->execute->verify); mobile adapts, no new plane
-  kyber_identity_device_trust: reuse        # services/kyber/{identity,devices,sessions,access}/*
-  tenant_identity_authz: reuse              # services/auth/*, middleware/middleware.py, services/policy/*
+  installation_push_model: build            # NET-NEW: extends services/api/tenancy/auth/sessions + services/api/governance/kyber/devices
+  kyber_command_plane: reuse                # services/api/governance/kyber/ops/* (req->dry-run->approve->execute->verify); mobile adapts, no new plane
+  kyber_identity_device_trust: reuse        # services/api/governance/kyber/{identity,devices,sessions,access}/*
+  tenant_identity_authz: reuse              # services/api/tenancy/auth/*, middleware/middleware.py, services/api/governance/policy/*
   credential_platform: reuse                # shared/credentials/* (in_memory/local_encrypted/aws_secrets_manager)
   mobile_apps: build                        # NET-NEW: apps/aether-mobile, apps/kyber-mobile (Expo + prebuild)
   mobile_shared_packages: build             # NET-NEW: packages/mobile-* (mobile-ui in M2)
@@ -270,9 +270,9 @@ architecture:
   delivery_safety_validator: build          # NET-NEW: M1 (scripts/release/validate_delivery_safety.py permanent gate)
   mobile_config_release: build              # NET-NEW: M2 (GET /v1/mobile/config + distribution profiles + app-version registration)
   mobile_offline_cache: build               # NET-NEW: M2 (read-only offline cache framework in packages/sdk/mobile-core)
-  gateway_projections: build                # NET-NEW: M3 landed (services/mobile/projections.py reusing owning services, never re-calculating Profile360/Campaign360/graph truth)
-  operator_continuation_router: build       # NET-NEW: M5 (services/continuation/ operator router)
-  mobile_action_adapter: build              # NET-NEW: M6 landed (gateway adapter -> existing services/kyber/ops, no second plane)
+  gateway_projections: build                # NET-NEW: M3 landed (services/api/ingestion/mobile/projections.py reusing owning services, never re-calculating Profile360/Campaign360/graph truth)
+  operator_continuation_router: build       # NET-NEW: M5 (services/api/journeys/continuation/ operator router)
+  mobile_action_adapter: build              # NET-NEW: M6 landed (gateway adapter -> existing services/api/governance/kyber/ops, no second plane)
   demo_seed_extensions: landed              # M7a landed: six M7 domains seed through the CANONICAL stores (DurableStore/continuation-scope adapters, no parallel copy) + design-partner-demo make targets
   release_readiness_machinery: reuse        # scripts/production_status.py, repo_doctor.py, deployment_profiles.yaml
 
@@ -334,13 +334,13 @@ open_pr_overlap:
   - pr: null
     title: "ADR-C11 comms cohort (PARKED by owner decision)"
     branch: claude/aether-comms-multi-provider
-    relation: "separate observe-external-ESP domain (services/comms/); out of scope for this program; 12 unmerged local commits left untouched"
+    relation: "separate observe-external-ESP domain (services/api/journeys/comms/); out of scope for this program; 12 unmerged local commits left untouched"
     action: park
     disposition: parked
 
 quality:                                     # updated at each milestone boundary from real gate runs
   ci_check: "make ci-check EXIT=0 (55 gates) confirmed green on the M8 final tip (58ecad11 GATE_EXIT=0; also green at 619cba2c); docs_drift --strict 388 clean, 0 stale at 93f6a134/739bd63c. (M7a tip evidence retained: demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores — DurableStoreSeedRepository → same get_store singleton the agent runtime reads; ContinuationScopedSeedRepository → canonical create()/get_scoped/delete_scoped — with no parallel copy; make design-partner-demo-{up,seed,check,down} targets wrap the existing demo-seed/reset-smoke machinery)"
-  demo_seed: "services/demo_seed suite 14 tests green incl. test_m7a_six_domains_seed_and_are_visible_via_canonical_read_paths (each domain read through the SAME store/read path the real APIs use: notification_inbox find_by_id, kyber ops find_many, agent get_run/list_review_batches, continuation get_scoped); manifest 25 records, checksum-stable, all offsets <= 0; ownership sidecar + exact-confirmation reset + production refusal unchanged"
+  demo_seed: "services/api/governance/demo_seed suite 14 tests green incl. test_m7a_six_domains_seed_and_are_visible_via_canonical_read_paths (each domain read through the SAME store/read path the real APIs use: notification_inbox find_by_id, kyber ops find_many, agent get_run/list_review_batches, continuation get_scoped); manifest 25 records, checksum-stable, all offsets <= 0; ownership sidecar + exact-confirmation reset + production refusal unchanged"
   mobile_sdk: "packages/sdk/mobile-core wired into workspaces + lockfile + root typecheck + bump_version; tsc --noEmit clean; 46 tests green (client/PKCE/secure-store/offline + 11 kyber-client step-up/proof-keys/actions/receipts + 12 P256 signer incl. RFC 6979 A.2.5 KAT + derivePublicKey round-trip) via npm test --workspaces"
   mobile_apps: "apps/aether-mobile + apps/kyber-mobile scaffolds; scripts/mobile_build_check.py enforces distinct planes/bundles + scaffold completeness (4 tests); native compile externally_blocked (no macOS/Xcode/Android SDK/Expo here)"
   unit_tests: "full pytest suites green (root, backend, ml, compliance, agent-layer, journey-service, observability) — root 4951 passed, backend 3540 passed (incl. 12 mobile-action + 11 mobile-proof-key + 21 producer-coverage + 15 operator-continuation + 3 operator-client-sync tests), compliance 361 passed"
@@ -358,7 +358,7 @@ quality:                                     # updated at each milestone boundar
 # supply-chain red (node-tar via Expo) and the owner's merge decision. Update this section only
 # where evidence (make ci-check / gates / review) supports it.
 readiness:
-  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7 LANDED via M6 (mobile action adapter — read-only availability digest reusing services/kyber/ops, NO second command plane; Kyber Mobile Tier 0-3 Actions + durable Receipts tabs with step-up via existing StepUpService/device_proof; mobile-bound proof-key attestation reusing the browser-proof store/verify path); M7 LANDED (design-partner demo: demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores — DurableStore singleton + continuation scope/idempotency — with design-partner-demo-{up,seed,check,down} make targets; distribution + command-security source-of-truth docs MOBILE_DISTRIBUTION.md + KYBER_MOBILE_COMMAND_SECURITY.md, reviewed against code); M8 LANDED (C9 six-lens adversarial review + remediation: M8-A1/A2/B-series landed; M8-D3 mobile-actions tenant scope — scoped command digest binds to the operator's tenant, unscoped keeps the global list, repo-level tenant filter verified; M8-E1 kyber device DSR erasure — operator-keyed device stores reachable by DSR via delete_by_operator + fail-closed coverage-gate binding; M8-E2 privacy-manifest honesty — data-safety.json no longer claims in-app account deletion, deletion is the backend DSR flow; M8-F readiness-honesty docs — PRODUCTIZATION/REWARD_ENABLEMENT/CONNECTORS aligned to the canonical scorecard (release-ready 4/5 bands, never production-ready without scorecard evidence)); COMPLETE: final `make ci-check` 55/55 (GATE_EXIT=0) + docs_drift 388 clean at the M8 tip (58ecad11 + 93f6a134); release-gate assessed — only red is supply-chain (node-tar critical via @expo/cli, tar@6.2.1, build-time use only, no same-major fix, Expo SDK 51->57 bump required; recorded as expo_supply_chain_tar in external-blockers.json, externally_blocked). Owner merge decision on PR #515 pending (branch claude/aether-turnkey-completion-m8-f8b2e)."
+  implementation: "C0-C4 + C8 landed + gated green; C2-pending landed via M1; C5 LANDED via M2/M3/M4 (gateway projections, both mobile apps' feature screens, Aether desktop notification center + preferences, Kyber desktop command-receipt stub + continuation hooks); C6 LANDED via M5 (all 10 sync producers wired at owning mutation sites, operator continuation router + operator client-sync read route, desktop continue-on-phone + mobile continue-on-desktop surfaces in both frontends + both mobile apps); C7 LANDED via M6 (mobile action adapter — read-only availability digest reusing services/api/governance/kyber/ops, NO second command plane; Kyber Mobile Tier 0-3 Actions + durable Receipts tabs with step-up via existing StepUpService/device_proof; mobile-bound proof-key attestation reusing the browser-proof store/verify path); M7 LANDED (design-partner demo: demo-seed extensions for notifications/continuations/exceptions/incidents/runs/reviews seed through the CANONICAL stores — DurableStore singleton + continuation scope/idempotency — with design-partner-demo-{up,seed,check,down} make targets; distribution + command-security source-of-truth docs MOBILE_DISTRIBUTION.md + KYBER_MOBILE_COMMAND_SECURITY.md, reviewed against code); M8 LANDED (C9 six-lens adversarial review + remediation: M8-A1/A2/B-series landed; M8-D3 mobile-actions tenant scope — scoped command digest binds to the operator's tenant, unscoped keeps the global list, repo-level tenant filter verified; M8-E1 kyber device DSR erasure — operator-keyed device stores reachable by DSR via delete_by_operator + fail-closed coverage-gate binding; M8-E2 privacy-manifest honesty — data-safety.json no longer claims in-app account deletion, deletion is the backend DSR flow; M8-F readiness-honesty docs — PRODUCTIZATION/REWARD_ENABLEMENT/CONNECTORS aligned to the canonical scorecard (release-ready 4/5 bands, never production-ready without scorecard evidence)); COMPLETE: final `make ci-check` 55/55 (GATE_EXIT=0) + docs_drift 388 clean at the M8 tip (58ecad11 + 93f6a134); release-gate assessed — only red is supply-chain (node-tar critical via @expo/cli, tar@6.2.1, build-time use only, no same-major fix, Expo SDK 51->57 bump required; recorded as expo_supply_chain_tar in external-blockers.json, externally_blocked). Owner merge decision on PR #515 pending (branch claude/aether-turnkey-completion-m8-f8b2e)."
   backend_mobile_platform: "code-complete + ci-check green (continuation plane, client-sync feed, notification/delivery TS twins, installation+push model, mobile gateway, provider adapters+fakes, deep-link resolve, credentials tooling)"
   mobile_sdk: "code-complete + ci-check green (@aether/mobile-core: typed clients + PKCE + secure store; M6: step-up/proof-key/actions/receipts typed methods + zero-import pure-TS P256Signer verified against RFC 6979 A.2.5 + Node crypto)"
   mobile_apps: "BOTH mobile apps have feature screens: Aether Mobile (M3: Today/Copilot/Explore/Alerts/Account, typed navigation + offline cache + secure-store auth; M5: continue-on-desktop/resume via ContinueOnDesktopPanel) and Kyber Mobile (M4: Pulse/Exceptions/Incidents/Runs/Reviews/Briefings/Account, read-only GET-only operator client; M5: OperatorContinuationsPanel with 404-safe resume; M6: Actions Tier 0-3 + durable Receipts tabs, step-up via attestation.ts ensureProofKey/elevate, verification:null rendered as 'Not verified' — never omitted); both app typechecks + npm test gates green in ci-check; native iOS-sim/Android-emulator compile externally_blocked (macOS/Xcode/Android SDK/Expo absent here) — runs in hosted CI"

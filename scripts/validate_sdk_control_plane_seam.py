@@ -4,9 +4,9 @@
 Two layers meet here and neither can see the other's vocabulary at runtime:
 
   * the SDK distribution layer writes a site's install handshake and publishes
-    its read view (``services/sdk_distribution/install_verifier.py``);
+    its read view (``services/api/ingestion/sdk_distribution/install_verifier.py``);
   * the Reconciled Control Plane reads that view into an observed-state
-    snapshot and reconciles it (``services/managed_integrations/sensors.py``).
+    snapshot and reconciles it (``services/api/connectors/managed_integrations/sensors.py``).
 
 The dependency runs one way on purpose — the plane owns the observed-state
 vocabulary and knows nothing about SDK installs — which means every name that
@@ -40,13 +40,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
 
-VERIFIER = 'services/backend/services/sdk_distribution/install_verifier.py'
-SENSORS = 'services/backend/services/managed_integrations/sensors.py'
-RECONCILER = 'services/backend/services/managed_integrations/reconciler.py'
-CONTROL_PLANE = 'services/backend/services/sdk_distribution/control_plane.py'
-VERSIONS = 'services/backend/services/sdk_distribution/versions.py'
-TIERS = 'services/backend/services/ingestion/sdk_version_tiers.py'
-DESIRED_POLICY = 'services/backend/services/managed_integrations/desired_policy.py'
+VERIFIER = 'services/api/ingestion/sdk_distribution/install_verifier.py'
+SENSORS = 'services/api/connectors/managed_integrations/sensors.py'
+RECONCILER = 'services/api/connectors/managed_integrations/reconciler.py'
+CONTROL_PLANE = 'services/api/ingestion/sdk_distribution/control_plane.py'
+VERSIONS = 'services/api/ingestion/sdk_distribution/versions.py'
+TIERS = 'services/api/ingestion/ingestion/sdk_version_tiers.py'
+DESIRED_POLICY = 'services/api/connectors/managed_integrations/desired_policy.py'
 
 
 def fail(msg: str) -> None:
@@ -282,7 +282,7 @@ if not re.search(r'^def compare_sdk_versions\(', tiers_src, re.MULTILINE):
 # can ship alone.
 plane_imports = set(
     re.findall(
-        r'^from services\.sdk_distribution|^import services\.sdk_distribution',
+        r'^from ingestion\.sdk_distribution|^import ingestion\.sdk_distribution',
         sensors_src + reconciler_src,
         re.MULTILINE,
     )
@@ -315,11 +315,11 @@ MUTATION_MODULES = (
 def _imports_module(src: str, module: str) -> bool:
     """True when ``src`` imports ``module`` from the plane, in any spelling."""
     if re.search(rf'managed_integrations\.{module}\b', src):
-        # `from services.managed_integrations.executor import ...`, `import ...executor`
+        # `from connectors.managed_integrations.executor import ...`, `import ...executor`
         return True
-    # `from services.managed_integrations import a, b` — every such line, since a
+    # `from connectors.managed_integrations import a, b` — every such line, since a
     # file can carry several and the module may be named on any of them.
-    for names in re.findall(r'from services\.managed_integrations import ([^\n]+)', src):
+    for names in re.findall(r'from connectors\.managed_integrations import ([^\n]+)', src):
         if re.search(rf'\b{module}\b', names):
             return True
     return False

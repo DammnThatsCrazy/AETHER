@@ -6,12 +6,12 @@ visibility: P
 audience: [security, architect]
 status: stable
 since_version: 0.1.0
-source_files: [security/model_extraction_defense/]
+source_files: [services/api/governance/model_extraction_defense/]
 canonical_owner: security@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  security/model_extraction_defense/: sha256:a39e9edab1b81febc20fb8432a61746b2ac840c1e82c2b8c1842f4e431d2b0b2
+  "services/api/governance/model_extraction_defense/": "sha256:88a02a7688d8a85b81633abcc6550d143e0d35da661b6a8ba7ff85280d75c7da"
 ---
 # Model Extraction Defense v0.1.0-alpha.0
 
@@ -205,4 +205,4 @@ The mesh's budget, expectation, policy, attribution and telemetry engines and it
 
 ## Legacy Defense Layer
 
-The original `security/model_extraction_defense/` module remains functional and runs as a secondary defense when enabled via `ENABLE_EXTRACTION_DEFENSE=true`. The mesh and legacy layers are complementary — the mesh handles identity correlation and policy, while the legacy layer provides canary detection, output perturbation (when allowed), and watermarking.
+The original `services/api/governance/model_extraction_defense/` module remains functional and runs as a secondary defense when enabled via `ENABLE_EXTRACTION_DEFENSE=true`. The mesh and legacy layers are complementary — the mesh handles identity correlation and policy, while the legacy layer provides canary detection, output perturbation (when allowed), and watermarking.

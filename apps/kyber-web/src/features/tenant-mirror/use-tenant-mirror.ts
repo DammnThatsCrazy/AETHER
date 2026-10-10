@@ -26,10 +26,10 @@
  * `deriveParityState` below: the ordering of its branches is the safety property.
  *
  * Sources of truth:
- *   services/kyber/mirror/routes.py     — the three routes and their envelopes
- *   services/kyber/mirror/contracts.py  — MirrorEnvelope / OperatorDiagnostics /
+ *   services/api/governance/kyber/mirror/routes.py     — the three routes and their envelopes
+ *   services/api/governance/kyber/mirror/contracts.py  — MirrorEnvelope / OperatorDiagnostics /
  *                                         ParityDigest / ParityComparison / Divergence
- *   services/kyber/mirror/parity.py     — MAX_REPORTED_DIVERGENCES, divergence reasons
+ *   services/api/governance/kyber/mirror/parity.py     — MAX_REPORTED_DIVERGENCES, divergence reasons
  *   packages/shared/contracts/kyber-feature-surface-manifest.json — the surface list
  */
 

@@ -181,9 +181,9 @@ def demo_change_detection() -> None:
     print("Scenario 1: Only ingestion + identity changed")
     affected = detect_changed_services(
         changed_files=[
-            "services/backend/services/ingestion/batch.py",
-            "services/backend/services/identity/routes.py",
-            "services/backend/services/identity/tests/profile.test.py",
+            "services/api/ingestion/ingestion/batch.py",
+            "services/api/identity/identity/routes.py",
+            "services/api/identity/identity/tests/profile.test.py",
         ]
     )
     print(f"  Affected: {sorted(affected)}\n")
@@ -193,7 +193,7 @@ def demo_change_detection() -> None:
     affected = detect_changed_services(
         changed_files=[
             "config/pipeline_config.py",
-            "services/backend/services/ingestion/batch.py",
+            "services/api/ingestion/ingestion/batch.py",
         ]
     )
     print(f"  Affected: {sorted(affected)}\n")

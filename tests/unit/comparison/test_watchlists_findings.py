@@ -8,13 +8,13 @@ import pytest
 
 from shared.common.common import BadRequestError
 
-from services.intelligence.comparison.findings import (
+from intelligence.intelligence.comparison.findings import (
     CausalClaimViolation,
     FindingRecord,
     FindingsService,
     validate_causal_claim,
 )
-from services.intelligence.comparison.watchlists import (
+from intelligence.intelligence.comparison.watchlists import (
     MuteRule,
     NoiseControls,
     WatchlistDefinition,
@@ -204,7 +204,7 @@ class TestFindingsLifecycle:
         assert case["subjects"][0]["id"] == "user-a"
 
     async def test_act_emits_ooda_recommendation(self):
-        from services.intelligence.repositories import RecommendationRepository
+        from intelligence.intelligence.repositories import RecommendationRepository
 
         service = FindingsService()
         record = finding_record(severity="high", materiality=0.9)

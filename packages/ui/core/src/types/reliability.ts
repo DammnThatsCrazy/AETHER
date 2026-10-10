@@ -2,7 +2,7 @@
  * Shared reliability / SRE / incident-response contracts.
  *
  * These mirror the backend Pydantic models in
- * `services/reliability/models.py`. Field names are identical across layers so
+ * `services/api/governance/reliability/models.py`. Field names are identical across layers so
  * payloads round-trip cleanly between backend and frontend (Kyber + Aether).
  */
 

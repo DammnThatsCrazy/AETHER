@@ -20,7 +20,7 @@ class TestPlaneLiveSeam:
             IMPLEMENTED_PROJECTION_IDS,
             register_implemented_projection_providers,
         )
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
         from shared.intelligence_projections.registry import projection_registry
 
         registered: list[str] = []

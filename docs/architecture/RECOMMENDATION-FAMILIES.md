@@ -6,15 +6,15 @@ visibility: I
 audience: [architect, dev-senior]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/intelligence/recommendation_families.py, services/backend/services/intelligence/ooda_engine.py]
+source_files: [services/api/intelligence/intelligence/recommendation_families.py, services/api/intelligence/intelligence/ooda_engine.py]
 flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD]
 related: [ai/decision-outcome-intelligence]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  services/backend/services/intelligence/ooda_engine.py: sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486
-  services/backend/services/intelligence/recommendation_families.py: sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43
+  "services/api/intelligence/intelligence/ooda_engine.py": "sha256:e029e43ee23fe742c4ad33a5023e5b04d66e2003a3b655ab177d4567747b92de"
+  "services/api/intelligence/intelligence/recommendation_families.py": "sha256:1d4ef3823c50ca7cd13617c779fb0c83266dd9d57f1b61e4f819f8c820b5bb6a"
 ---
 # Recommendation Families
 

@@ -24,21 +24,21 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 ROOT = Path(__file__).resolve().parents[2]
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
-from services.sdk_distribution.sites import (  # noqa: E402
+from ingestion.sdk_distribution.sites import (  # noqa: E402
     SITE_ID_PREFIX,
     SiteOriginError,
     new_site_id,
     normalize_origin,
     normalize_origins,
 )
-from services.sdk_distribution.snippet import (  # noqa: E402
+from ingestion.sdk_distribution.snippet import (  # noqa: E402
     ATTR_KEY,
     ATTR_SITE,
     LOADER_URL,
@@ -106,7 +106,7 @@ def test_origins_keep_their_order_and_lose_their_duplicates():
 # ── The registry ─────────────────────────────────────────────────────────────
 
 def _repo():
-    from services.sdk_distribution.sites import SDKSiteRepository
+    from ingestion.sdk_distribution.sites import SDKSiteRepository
 
     return SDKSiteRepository()
 
@@ -198,7 +198,7 @@ def test_every_attribute_the_snippet_emits_is_one_the_loader_reads():
 
     emitted = set(re.findall(
         r"""['"](data-[a-z-]+)['"]""",
-        (BACKEND / "services/sdk_distribution/snippet.py").read_text(encoding="utf-8"),
+        (BACKEND / "ingestion/sdk_distribution/snippet.py").read_text(encoding="utf-8"),
     ))
     assert emitted, "the snippet builder emits no data-* attributes"
     assert emitted <= loader_attributes, (

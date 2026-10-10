@@ -2,7 +2,7 @@
  * Unified integration catalog wire types (R1 contract-spine FE twin).
  *
  * Transport schemas for the Settings→Integrations read model served by
- * services/integrations/connectors/catalog_endpoints.py:
+ * services/api/connectors/integrations/connectors/catalog_endpoints.py:
  *   - /v1/integration-catalog        (derived one-customer catalog)
  *   - /v1/tenant-integrations[/{id}] (tenant's configured integrations)
  *   - /v1/integration-readiness      (catalog-level readiness matrix)
@@ -116,7 +116,7 @@ export type IntegrationReadinessResponse = z.infer<
 
 
 // ─── Tenant-contextual readiness (joined graph, WS-4) ───────────────────────
-// Transport shapes for services/readiness_graph/tenant_integration_readiness_routes.py:
+// Transport shapes for services/api/graph/readiness_graph/tenant_integration_readiness_routes.py:
 //   - /v1/tenant/integration-readiness
 // One item per connectable catalog manifest (plus any tenant-configured family
 // the catalog no longer exposes), joined with the tenant's connection record

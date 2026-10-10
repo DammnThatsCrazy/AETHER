@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 
 REQUIRED = [
-    "services/backend/services/semantic_intelligence/models.py",
-    "services/backend/services/semantic_intelligence/engine.py",
-    "services/backend/services/semantic_intelligence/routes.py",
-    "services/backend/tests/semantic_intelligence/test_semantic_intelligence.py",
+    "services/api/intelligence/semantic_intelligence/models.py",
+    "services/api/intelligence/semantic_intelligence/engine.py",
+    "services/api/intelligence/semantic_intelligence/routes.py",
+    "services/api/tests/semantic_intelligence/test_semantic_intelligence.py",
     "docs/product/semantic-sentiment/SEMANTIC-SENTIMENT-INTELLIGENCE.md",
     "docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
-    "services/backend/alembic/versions/20260702_semantic_sentiment.py",
+    "services/api/alembic/versions/20260702_semantic_sentiment.py",
     "packages/shared/semantic-sentiment.ts",
 ]
 
@@ -33,7 +33,7 @@ def main() -> int:
                 "pytest",
                 "-o",
                 "addopts=",
-                "services/backend/tests/semantic_intelligence",
+                "services/api/tests/semantic_intelligence",
                 "-q",
             ],
             env=env,

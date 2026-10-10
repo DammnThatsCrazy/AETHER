@@ -83,7 +83,7 @@ checks:
     risk: high
     command: [python, scripts/validate_capability_overlays.py]
     runtime_budget_seconds: 10
-  # Adding or removing a directory under services/backend/services changes what
+  # Adding or removing a directory under services/api/services changes what
   # this registry must say, so it also runs in every PR-lane plan.
   service_classification:
     owner: platform
@@ -149,24 +149,24 @@ domains:
     minimum_lane: fast
   backend:
     owner: backend
-    paths: [services/backend/**, services/agents/**, services/compliance/**, docs/archive/legacy-architecture/backend/**, tests/**]
+    paths: [services/api/**, services/agents/**, services/compliance/**, docs/archive/legacy-architecture/backend/**, tests/**]
     # Component suites are the ordinary-PR authority. The aggregate backend
     # suite remains registered for regression/release lanes only.
     checks: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
     path_checks:
-      services/backend/services/identity/**: [backend-identity]
-      services/backend/services/ingestion/**: [backend-ingestion]
-      services/backend/services/campaign/**: [backend-campaigns]
-      services/backend/services/profile/**: [backend-profile360]
-      services/backend/services/profile360_workers/**: [backend-profile360]
-      services/backend/services/agent/**: [backend-agent]
-      services/backend/services/computation/**: [backend-computation]
-      services/backend/services/value/**: [backend-value]
-      services/backend/tests/valuation/**: [backend-value]
-      services/backend/services/agent_comm_observability/**: [backend-observability]
-      services/backend/services/external_account_observability/**: [backend-observability]
-      services/backend/services/agentic_observability/**: [backend-observability]
-      services/backend/services/protocol_observability/**: [backend-observability]
+      services/api/identity/identity/**: [backend-identity]
+      services/api/ingestion/ingestion/**: [backend-ingestion]
+      services/api/journeys/campaign/**: [backend-campaigns]
+      services/api/identity/profile/**: [backend-profile360]
+      services/api/workers/profile360_workers/**: [backend-profile360]
+      services/api/actions/agent/**: [backend-agent]
+      services/api/intelligence/computation/**: [backend-computation]
+      services/api/value/value/**: [backend-value]
+      services/api/tests/valuation/**: [backend-value]
+      services/api/actions/agent_comm_observability/**: [backend-observability]
+      services/api/connectors/external_account_observability/**: [backend-observability]
+      services/api/actions/agentic_observability/**: [backend-observability]
+      services/api/graph/protocol_observability/**: [backend-observability]
       services/agents/**: [agent-layer]
       services/compliance/**: [compliance]
       docs/archive/legacy-architecture/backend/services/journey-service/**: [journey-service]

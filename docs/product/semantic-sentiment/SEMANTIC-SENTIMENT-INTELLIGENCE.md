@@ -7,17 +7,17 @@ audience: [dev-senior, architect, ops]
 status: experimental
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/semantic_intelligence/models.py
-  - services/backend/services/semantic_intelligence/engine.py
-  - services/backend/services/semantic_intelligence/routes.py
+  - services/api/intelligence/semantic_intelligence/models.py
+  - services/api/intelligence/semantic_intelligence/engine.py
+  - services/api/intelligence/semantic_intelligence/routes.py
   - packages/shared/semantic-sentiment.ts
 canonical_owner: platform-intelligence@aether
 estimated_read_minutes: 8
 source_hashes:
-  "services/backend/services/semantic_intelligence/engine.py": "sha256:ae8d6eb39b33ef305131c5af3f07ee46f2d5c1cd595c36219dcb7f5f68c50f83"
-  "services/backend/services/semantic_intelligence/models.py": "sha256:1b92bc04ddd1cd7e94ec09044012491c0bfcf11fcf7e8a738ad985cb5e4db28e"
-  "services/backend/services/semantic_intelligence/routes.py": "sha256:ddd3fcd31482b92381396246daa2cc45f55d61b5bd75885426fa4f02c3215d75"
   "packages/shared/semantic-sentiment.ts": "sha256:85333759d1977c54a8655e634b30a1ee90a644c0a6fe357f1bfc6132a2b0cda0"
+  "services/api/intelligence/semantic_intelligence/engine.py": "sha256:e900f05e6bf78a126f7de31165fe2289e5e20904fab2131c01c0d68830d26d6a"
+  "services/api/intelligence/semantic_intelligence/models.py": "sha256:1b92bc04ddd1cd7e94ec09044012491c0bfcf11fcf7e8a738ad985cb5e4db28e"
+  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:d9d17f23ae914259fb94e3e2748fbefc3baa193e7984616a34238abc1ecbf6e4"
 ---
 
 # Semantic-Sentiment Intelligence Plane

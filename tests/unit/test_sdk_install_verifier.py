@@ -28,7 +28,7 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
@@ -38,7 +38,7 @@ from repositories.sdk_repos import (  # noqa: E402
     SITE_INSTALL_RECORD_TYPE,
     SDKInstallationRepository,
 )
-from services.sdk_distribution.install_verifier import (  # noqa: E402
+from ingestion.sdk_distribution.install_verifier import (  # noqa: E402
     SIGNAL_INITIALIZED,
     SIGNAL_LOADED,
     SIGNAL_FAILED,
@@ -52,7 +52,7 @@ from services.sdk_distribution.install_verifier import (  # noqa: E402
     merge_site_install,
     schedule_install_projection,
 )
-from services.sdk_distribution.versions import (  # noqa: E402
+from ingestion.sdk_distribution.versions import (  # noqa: E402
     DRIFT_AHEAD,
     DRIFT_BEHIND,
     DRIFT_CURRENT,
@@ -285,7 +285,7 @@ def test_the_projection_is_skipped_entirely_for_ordinary_batches():
 def test_a_projection_failure_cannot_fail_ingestion():
     """It runs after Bronze durability, so a verifier-side bug must not become
     a 503 for a tenant whose events are already safe."""
-    from services.sdk_distribution import install_verifier
+    from ingestion.sdk_distribution import install_verifier
     import repositories.sdk_repos as sdk_repos
 
     class _Boom:
@@ -341,7 +341,7 @@ def test_fleet_health_does_not_count_a_site_install_as_a_silent_sdk():
         producer = _FakeProducer()
         _ingest(env, [_sdk_event(env.batch, signal=SIGNAL_LOADED)], producer)
 
-        health = importlib.import_module("services.sdk_health.service")
+        health = importlib.import_module("ingestion.sdk_health.service")
         service = health.SDKHealthService()
 
         status = _run(service.get_fleet_status("t1"))
@@ -355,7 +355,7 @@ def test_the_install_page_advertises_endpoints_that_exist():
     """The install page hands an operator a URL to poll. A verifier endpoint
     that is advertised but unregistered is a 404 at the exact moment someone is
     trying to find out whether their install worked."""
-    from services.sdk_distribution.routes import router
+    from ingestion.sdk_distribution.routes import router
 
     registered = {r.path for r in router.routes}
     for path in ("/v1/sdk/sites/{site_id}/heartbeat", "/v1/sdk/sites/{site_id}/live"):
@@ -365,7 +365,7 @@ def test_the_install_page_advertises_endpoints_that_exist():
 # ── Harness: the real ingestion spine ────────────────────────────────────────
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -438,7 +438,7 @@ def _fresh():
     try:
         repos = importlib.import_module("repositories.repos")
         repos.reset_in_memory_stores()
-        batch = importlib.import_module("services.ingestion.batch")
+        batch = importlib.import_module("ingestion.ingestion.batch")
         env = SimpleNamespace(repos=repos, batch=batch, cache=_FakeCache())
         env.batch.get_registry = lambda: _FakeRegistry(env.cache)
         env.batch.get_identity_resolver = lambda: None

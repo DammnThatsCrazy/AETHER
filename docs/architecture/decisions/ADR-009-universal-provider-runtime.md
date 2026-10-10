@@ -16,7 +16,7 @@ canonical_owner: platform@aether
 ## Context
 
 Aether's inbound integration surface is a **closed union of connector types**.
-`services/backend/services/integrations/connectors/base.py` defines
+`services/api/connectors/integrations/connectors/base.py` defines
 `ConnectorType = Literal[...]` — a single, ever-growing union of 61 connector
 ids — plus the `BaseConnector` hierarchy and the `CONNECTORS` registry (21
 registered connectors). Adding
@@ -59,11 +59,11 @@ Concretely:
   normalization, certification contracts.
 - New **`shared/commerce_contracts`** — provider-neutral commerce vocabulary
   (Money, Order, canonical event-type classification).
-- New **`services/backend/services/provider_runtime`** service — registry → orchestrator →
+- New **`services/api/connectors/provider_runtime`** service — registry → orchestrator →
   pipeline → engines → API.
-- New **`services/backend/services/providers/shopify`** reference plugin.
+- New **`services/api/connectors/providers/shopify`** reference plugin.
 - **Legacy compatibility** via a `LegacyConnectorPlugin`
-  (`services/backend/services/provider_runtime/legacy.py`) that exposes every existing
+  (`services/api/connectors/provider_runtime/legacy.py`) that exposes every existing
   connector with zero code changes, delegating lifecycle to the existing
   `BaseConnector`.
 - **One sanctioned feature-gate change**: `/v1/provider-webhooks/` is added
@@ -108,7 +108,7 @@ validated, or a webhook scheme it does not verify.
 ### D4 — Reuse, not rewrite
 
 The legacy `BaseConnector` hierarchy
-(`services/backend/services/integrations/connectors/base.py`) stays **authoritative** for the legacy
+(`services/api/connectors/integrations/connectors/base.py`) stays **authoritative** for the legacy
 lifecycle; the compat plugin delegates to it directly. (An intermediate
 `IntegrationAdapter` / `ConnectorIntegrationAdapter` facade was specified here but
 never wired in, and has since been removed.) The credential service (`shared/credentials/service.py`),
@@ -232,25 +232,25 @@ certification-level follow-on work, not a build claim.
 
 ## References
 
-- `services/backend/shared/integration_contracts/` — plugin
+- `services/api/shared/integration_contracts/` — plugin
   protocol (`plugin.py`), manifest + honesty invariants (`manifest.py`),
   capability adapters (`capabilities.py`), canonical results (`results.py`),
   normalization (`normalization.py`), events (`events.py`), certification
   contracts (`certification.py`).
-- `services/backend/shared/commerce_contracts/` — Money,
+- `services/api/shared/commerce_contracts/` — Money,
   Order vocabulary, and the canonical `commerce.*` event-type set.
-- `services/backend/services/provider_runtime/` — the UPR
+- `services/api/connectors/provider_runtime/` — the UPR
   service (registry, orchestrator, pipeline, engines, API): `registry.py`,
   `plugin.py` (`register_provider`), `validation.py`, `legacy.py`
   (`LegacyConnectorPlugin`), `certification.py` (`certify_provider`),
   `webhook.py` (fail-closed gateway), `routes.py`.
-- `services/backend/services/providers/shopify/` — the
+- `services/api/connectors/providers/shopify/` — the
   reference native plugin (`plugin.py`, `auth.py`, `account.py`, `pull.py`,
   `webhook.py`, `normalizer.py`, `payloads.py`).
-- `services/backend/services/integrations/connectors/base.py`
+- `services/api/connectors/integrations/connectors/base.py`
   — the legacy `ConnectorType` union and `BaseConnector` hierarchy this ADR
   layers on (untouched).
-- `services/backend/shared/rate_limit/feature_gate.py` — the
+- `services/api/shared/rate_limit/feature_gate.py` — the
   one sanctioned change: `/v1/provider-webhooks/` added to
   `PUBLIC_PATH_PREFIXES`.
 - `docs/architecture/decisions/ADR-007-domain-canonicalization.md` — the one-source-of-truth

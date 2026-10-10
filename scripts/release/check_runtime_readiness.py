@@ -9,7 +9,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ROOT / "infra/integration/docker-compose.durable.yml"
-# All nine canonical runtime roles (services/runtime/roles.py::WORKER_ROLES
+# All nine canonical runtime roles (services/api/workers/runtime/roles.py::WORKER_ROLES
 # plus api). semantic-worker owns two ConsumerSpecs and is deployed in every
 # profile, so the durable stack must run it too.
 REQUIRED_ROLES = {
@@ -33,7 +33,7 @@ def validate() -> list[str]:
             errors.append(f"RUNTIME_ROLE_MISMATCH:{role}")
     if services.get("api", {}).get("environment", {}).get("AETHER_ROLE") != "api":
         errors.append("RUNTIME_API_ATTACHES_WORKERS")
-    source = (ROOT / "services/backend/services/runtime/consumer_specs.py").read_text()
+    source = (ROOT / "services/api/workers/runtime/consumer_specs.py").read_text()
     names = [line.split('name="', 1)[1].split('"', 1)[0]
              for line in source.splitlines() if 'name="' in line]
     if len(names) != len(set(names)):

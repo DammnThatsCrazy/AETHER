@@ -28,7 +28,7 @@ async def test_rejection_blocks_authorize(cp):
     )
     assert rejected.status.value == "rejected"
 
-    from services.x402.control_plane import ControlPlaneError
+    from value.x402.control_plane import ControlPlaneError
     with pytest.raises(ControlPlaneError) as exc_info:
         await cp.authorize_payment(
             tenant_id=TENANT,
@@ -48,7 +48,7 @@ async def test_pending_approval_blocks_authorize(cp):
     approval, _ = await cp.request_approval(tenant_id=TENANT, challenge_id=req.challenge_id)
     # Do NOT decide — approval stays PENDING
 
-    from services.x402.control_plane import ControlPlaneError
+    from value.x402.control_plane import ControlPlaneError
     with pytest.raises(ControlPlaneError) as exc_info:
         await cp.authorize_payment(
             tenant_id=TENANT,

@@ -1,6 +1,6 @@
 /**
  * Capability contract types — mirror the backend GET /v1/capabilities response
- * (services/capabilities/schema.py). Kept as plain TS types so this UI package
+ * (services/api/tenancy/capabilities/schema.py). Kept as plain TS types so this UI package
  * stays free of a runtime schema dependency; each app validates the payload
  * with its own zod schema before handing it to the provider.
  */

@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - services/backend/main.py
-  - services/backend/services/ingestion/batch.py
-  - services/backend/middleware/middleware.py
+  - services/api/main.py
+  - services/api/ingestion/ingestion/batch.py
+  - services/api/middleware/middleware.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -119,7 +119,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: services/backend/main.py'
+  - 'repository evidence: services/api/main.py'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

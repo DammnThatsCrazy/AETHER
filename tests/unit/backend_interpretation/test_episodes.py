@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.operational_intelligence.models import EntityRef, EvidenceRef
+from graph.operational_intelligence.models import EntityRef, EvidenceRef
 
 SUBJECT = EntityRef(kind="user", id="u-1")
 
@@ -16,7 +16,7 @@ def _ref(event_id: str, source: str = "sdk") -> EvidenceRef:
 @pytest.mark.asyncio
 async def test_episode_engine_open_append_close(wsd_flags):
     from shared.store import reset_in_memory_stores
-    from services.measurement.episodes.engine import EpisodeEngine
+    from journeys.measurement.episodes.engine import EpisodeEngine
 
     reset_in_memory_stores()
     wsd_flags(episode_engine_enabled=True)
@@ -57,7 +57,7 @@ async def test_episode_engine_open_append_close(wsd_flags):
 @pytest.mark.asyncio
 async def test_episode_completion_hint_closes(wsd_flags):
     from shared.store import reset_in_memory_stores
-    from services.measurement.episodes.engine import EpisodeEngine
+    from journeys.measurement.episodes.engine import EpisodeEngine
 
     reset_in_memory_stores()
     wsd_flags(episode_engine_enabled=True)
@@ -79,8 +79,8 @@ async def test_episode360_provider_renders_sections(wsd_flags):
         ProjectionSubject,
     )
     from shared.store import reset_in_memory_stores
-    from services.measurement.episodes.engine import EpisodeEngine
-    from services.measurement.episodes.provider import Episode360Provider
+    from journeys.measurement.episodes.engine import EpisodeEngine
+    from journeys.measurement.episodes.provider import Episode360Provider
 
     reset_in_memory_stores()
     wsd_flags(episode_engine_enabled=True)
@@ -134,7 +134,7 @@ async def test_episode360_provider_empty_store_is_typed_empty(wsd_flags):
     )
     from shared.backend_interpretation.stores import EpisodeStore
     from shared.store import reset_in_memory_stores
-    from services.measurement.episodes.provider import Episode360Provider
+    from journeys.measurement.episodes.provider import Episode360Provider
 
     reset_in_memory_stores()
     wsd_flags(episode_engine_enabled=True)

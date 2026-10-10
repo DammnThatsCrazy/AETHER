@@ -9,8 +9,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from services.interop.providers import INTEROP_PROVIDERS
-from services.interop.security import SecurityPolicyService, policy_content_hash
+from graph.interop.providers import INTEROP_PROVIDERS
+from graph.interop.security import SecurityPolicyService, policy_content_hash
 
 TENANT = "t-interop-a"
 OTHER_TENANT = "t-interop-b"
@@ -113,7 +113,7 @@ class _FakeTenant:
 
 
 def _build_app(tenant_id: str) -> TestClient:
-    from services.interop.routes import router
+    from graph.interop.routes import router
 
     app = FastAPI()
 

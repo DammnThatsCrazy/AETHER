@@ -1,7 +1,7 @@
 """Axelar GMP fixture + mock-server builder.
 
 Fixtures are generated with the SAME encoders the adapter decodes with
-(services.interop.providers.axelar). The source ContractCall's own tx hash +
+(graph.interop.providers.axelar). The source ContractCall's own tx hash +
 log index and the destination ContractCallApproved's data fields resolve to one
 canonical GMP message id, so both legs correlate on one key even out of order.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from services.interop.providers.axelar import (
+from graph.interop.providers.axelar import (
     TOPIC_CONTRACT_CALL,
     TOPIC_CONTRACT_CALL_APPROVED,
     TOPIC_CONTRACT_CALL_EXECUTED,

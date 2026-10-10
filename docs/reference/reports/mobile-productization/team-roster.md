@@ -18,7 +18,7 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 
 ## Shared paths (orchestrator-only) — never written by agents
 
-`main.py` · `config/settings.py` · `services/backend/services/runtime/specs.py` · `packages/shared/index.ts` ·
+`main.py` · `config/settings.py` · `services/api/workers/runtime/specs.py` · `packages/shared/index.ts` ·
 `package.json` · `package-lock.json` · `Makefile` · `config/storage_policies.yaml` ·
 `alembic/versions/` · `docs/_generated/**` · `docs/reference/reports/mobile-productization/**`
 
@@ -26,14 +26,14 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
-| **M1a** mobile-projection | Redacted mobile notification projection (push title/body/summary + deep-link class + category), inbox push fields, delivery wiring, TS twin + parity tests | `services/backend/services/notification_intelligence/projection.py`, `services/backend/services/notification_intelligence/inbox.py` (model fields), `services/backend/services/delivery/adapters/_notification_base.py`, `services/backend/services/delivery/adapters/apns.py`, `services/backend/services/delivery/adapters/fcm.py`, `packages/shared/notification.ts`, `tests/contracts/test_notification_contract_parity.py`, `services/backend/tests/unit/test_mobile_notification_projection.py` | mount projection in push path; `packages/shared/index.ts`; Makefile gate wiring |
-| **M1b** delivery-safety-validator | Unsafe-routing validator: direct adapter calls, fire-and-forget critical delivery, unconfigured router, success-with-no-recipient, simulated provider receipts | `scripts/release/validate_delivery_safety.py`, `scripts/release/check_delivery_topology.py` (reuse/confirm), `tests/unit/test_delivery_safety_validator.py`, `services/backend/tests/unit/` (regression fixtures only) | Makefile `delivery-safety-check` target; repo_doctor/CI hook decision |
+| **M1a** mobile-projection | Redacted mobile notification projection (push title/body/summary + deep-link class + category), inbox push fields, delivery wiring, TS twin + parity tests | `services/api/journeys/notification_intelligence/projection.py`, `services/api/journeys/notification_intelligence/inbox.py` (model fields), `services/api/actions/delivery/adapters/_notification_base.py`, `services/api/actions/delivery/adapters/apns.py`, `services/api/actions/delivery/adapters/fcm.py`, `packages/shared/notification.ts`, `tests/contracts/test_notification_contract_parity.py`, `services/api/tests/unit/test_mobile_notification_projection.py` | mount projection in push path; `packages/shared/index.ts`; Makefile gate wiring |
+| **M1b** delivery-safety-validator | Unsafe-routing validator: direct adapter calls, fire-and-forget critical delivery, unconfigured router, success-with-no-recipient, simulated provider receipts | `scripts/release/validate_delivery_safety.py`, `scripts/release/check_delivery_topology.py` (reuse/confirm), `tests/unit/test_delivery_safety_validator.py`, `services/api/tests/unit/` (regression fixtures only) | Makefile `delivery-safety-check` target; repo_doctor/CI hook decision |
 
 ## Wave 2 — M2 (mobile platform foundations)
 
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
-| **M2a** mobile-config | `GET /v1/mobile/config`, DistributionProfile enum, app-version registration (alembic `20260830`), typed twin | `services/backend/services/mobile/config.py`, `services/backend/services/mobile/routes.py` (config routes), `alembic/versions/20260830_app_version_registration.py`, `packages/shared/mobile-config.ts`, `services/backend/tests/unit/test_mobile_config.py`, `tests/contracts/test_mobile_config_parity.py` | mount routes in main.py; shared index; storage_policies entry; Makefile |
+| **M2a** mobile-config | `GET /v1/mobile/config`, DistributionProfile enum, app-version registration (alembic `20260830`), typed twin | `services/api/ingestion/mobile/config.py`, `services/api/ingestion/mobile/routes.py` (config routes), `alembic/versions/20260830_app_version_registration.py`, `packages/shared/mobile-config.ts`, `services/api/tests/unit/test_mobile_config.py`, `tests/contracts/test_mobile_config_parity.py` | mount routes in main.py; shared index; storage_policies entry; Makefile |
 | **M2b** mobile-ui-offline | `packages/ui/mobile` (theme, typed nav, shared components) + read-only offline cache framework in mobile-core + apps | `packages/ui/mobile/**`, `packages/sdk/mobile-core/src/offline.ts`, `packages/sdk/mobile-core/src/config.ts` (extend), `apps/aether-mobile/src/offline/**`, `apps/kyber-mobile/src/offline/**`, `packages/ui/mobile/**/__tests__/**` | workspace wiring; root typecheck chain; shared index |
 | **M2c** compliance-umbrella | `make mobile-compliance-check` umbrella + SDK/permission inventory gate | `scripts/release/check_mobile_compliance.py` (or extend existing), `docs/reference/reports/mobile-productization/mobile-sdk-inventory.json` (regen) | Makefile target; fold into docs |
 
@@ -41,9 +41,9 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
-| **M3a** gateway-projections | Bounded redacted projections: today digest, profile summary, campaign summary, alerts inbox, explore briefing | `services/backend/services/mobile/projections.py`, `services/backend/services/mobile/routes.py` (projection routes), `services/backend/tests/unit/test_mobile_projections.py` | mount routes; storage_policies; shared index; feature-surface manifest |
+| **M3a** gateway-projections | Bounded redacted projections: today digest, profile summary, campaign summary, alerts inbox, explore briefing | `services/api/ingestion/mobile/projections.py`, `services/api/ingestion/mobile/routes.py` (projection routes), `services/api/tests/unit/test_mobile_projections.py` | mount routes; storage_policies; shared index; feature-surface manifest |
 | **M3b** aether-mobile-screens | Today/Copilot/Explore/Alerts/Account screens + typed navigation + offline consumption | `apps/aether-mobile/src/**`, `packages/ui/mobile/**` (extend if needed) | — (app-internal) |
-| **M3c** desktop-notification-center | Aether desktop NC (inbox UI, badge, filters, read/ack) + preferences persistence (quiet hours/timezone/digest) route+UI + device/session/account-deletion entry points | `frontend/aether/src/features/notifications/**`, `frontend/aether/src/features/account/**`, `services/backend/services/mobile/preferences.py` + routes | mount preferences routes in main.py; settings flag; shared index |
+| **M3c** desktop-notification-center | Aether desktop NC (inbox UI, badge, filters, read/ack) + preferences persistence (quiet hours/timezone/digest) route+UI + device/session/account-deletion entry points | `frontend/aether/src/features/notifications/**`, `frontend/aether/src/features/account/**`, `services/api/ingestion/mobile/preferences.py` + routes | mount preferences routes in main.py; settings flag; shared index |
 
 ## Wave 4 — M4 (Kyber Mobile + operator surfaces)
 
@@ -56,8 +56,8 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
-| **M5a** sync-producers | Wire 9 unwired producers via `enqueue_sync_change` at owning mutation sites | `services/backend/services/notification_intelligence/lifecycle.py`, `services/backend/services/exploration/store.py`, `services/backend/services/noesis/conversations.py`, `services/backend/services/kyber/ops/command_repository.py`, `services/backend/services/auth/sessions/service.py`, `services/backend/services/mobile/installations.py` (or existing repo), `services/backend/tests/unit/test_sync_producers.py` | emitter signature stays stable; settings flag |
-| **M5b** operator-continuation-router | Kyber continuation router in `services/backend/services/continuation/` (o: scope) + routes | `services/backend/services/continuation/operator.py`, `services/backend/services/continuation/routes.py` (operator router), `services/backend/tests/unit/test_operator_continuation_router.py` | mount in main.py; feature-surface manifest |
+| **M5a** sync-producers | Wire 9 unwired producers via `enqueue_sync_change` at owning mutation sites | `services/api/journeys/notification_intelligence/lifecycle.py`, `services/api/journeys/exploration/store.py`, `services/api/intelligence/noesis/conversations.py`, `services/api/governance/kyber/ops/command_repository.py`, `services/api/tenancy/auth/sessions/service.py`, `services/api/ingestion/mobile/installations.py` (or existing repo), `services/api/tests/unit/test_sync_producers.py` | emitter signature stays stable; settings flag |
+| **M5b** operator-continuation-router | Kyber continuation router in `services/api/journeys/continuation/` (o: scope) + routes | `services/api/journeys/continuation/operator.py`, `services/api/journeys/continuation/routes.py` (operator router), `services/api/tests/unit/test_operator_continuation_router.py` | mount in main.py; feature-surface manifest |
 | **M5c** desktop-continue-on-phone | Desktop continue-on-phone/recent-activity/resume + copy handoff link (both frontends) | `frontend/aether/src/features/continue-on-phone/**`, `frontend/kyber/src/features/continue-on-phone/**` | — (frontend-internal) |
 | **M5d** mobile-continue-on-desktop | Mobile continue-on-desktop/resume/send-to-desktop + client-sync consumption UI | `apps/aether-mobile/src/features/continue-on-desktop/**`, `apps/kyber-mobile/src/features/continue-on-desktop/**`, `packages/sdk/mobile-core/src/sync.ts` | — (app-internal) |
 
@@ -65,15 +65,15 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
-| **M6a** mobile-action-adapter | Gateway adapter: action availability + step-up adaptation to existing `services/backend/services/kyber/ops` | `services/backend/services/mobile/actions.py`, `services/backend/services/mobile/routes.py` (action routes), `packages/shared/mobile-action.ts`, `services/backend/tests/unit/test_mobile_action_adapter.py`, `tests/contracts/test_mobile_action_parity.py` | mount routes; shared index; no second command plane |
+| **M6a** mobile-action-adapter | Gateway adapter: action availability + step-up adaptation to existing `services/api/governance/kyber/ops` | `services/api/ingestion/mobile/actions.py`, `services/api/ingestion/mobile/routes.py` (action routes), `packages/shared/mobile-action.ts`, `services/api/tests/unit/test_mobile_action_adapter.py`, `tests/contracts/test_mobile_action_parity.py` | mount routes; shared index; no second command plane |
 | **M6b** kyber-tier-ui | Kyber Mobile Tier 0/1/2/3 UI + step-up flow + command-receipt visibility | `apps/kyber-mobile/src/features/actions/**`, `apps/kyber-mobile/src/features/step-up/**`, `frontend/kyber/src/features/command-receipts/**` | — (app/frontend-internal) |
-| **M6c** mobile-device-attestation | Mobile-bound device signature/attestation where feasible | `services/backend/services/kyber/devices/device_proof.py` (extend), `services/backend/tests/unit/test_mobile_device_attestation.py` | settings flag; storage_policies if new persisted field |
+| **M6c** mobile-device-attestation | Mobile-bound device signature/attestation where feasible | `services/api/governance/kyber/devices/device_proof.py` (extend), `services/api/tests/unit/test_mobile_device_attestation.py` | settings flag; storage_policies if new persisted field |
 
 ## Wave 7 — M7 (demo + distribution docs)
 
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
-| **M7a** demo-seed | Extend `dataset.py` with notifications/continuations/exceptions/incidents/runs/reviews (stable IDs, idempotent, safe reset) | `services/backend/services/demo_seed/dataset.py`, `services/backend/services/demo_seed/models.py`, `services/backend/services/demo_seed/policy.py`, `services/backend/tests/unit/test_demo_seed_mobile.py` | Makefile `design-partner-demo-*` targets |
+| **M7a** demo-seed | Extend `dataset.py` with notifications/continuations/exceptions/incidents/runs/reviews (stable IDs, idempotent, safe reset) | `services/api/governance/demo_seed/dataset.py`, `services/api/governance/demo_seed/models.py`, `services/api/governance/demo_seed/policy.py`, `services/api/tests/unit/test_demo_seed_mobile.py` | Makefile `design-partner-demo-*` targets |
 | **M7b** distribution-docs | `MOBILE_DISTRIBUTION.md` + `KYBER_MOBILE_COMMAND_SECURITY.md` + readiness scorecard updates (evidence-only) | `docs/reference/source-of-truth/MOBILE_DISTRIBUTION.md`, `docs/reference/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md`, `docs/reference/source-of-truth/MOBILE_COMPLIANCE.md` | source-linked stamp review (`docs_drift.py --update`) |
 
 ## Wave 8 — M8 (C9 adversarial review) — Workflow, not single agents

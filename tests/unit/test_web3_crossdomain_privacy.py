@@ -19,13 +19,13 @@ import pytest
 os.environ["AETHER_ENV"] = "local"
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
 def backend_path():
     original = list(sys.path)
-    for prefix in ("config", "services", "shared", "repositories", "middleware", "dependencies"):
+    for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "repositories", "middleware", "dependencies"):
         sys.modules.pop(prefix, None)
         for name in list(sys.modules):
             if name == prefix or name.startswith(f"{prefix}."):
@@ -35,7 +35,7 @@ def backend_path():
         yield
     finally:
         sys.path[:] = original
-        for prefix in ("config", "services", "shared", "repositories", "middleware", "dependencies"):
+        for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "repositories", "middleware", "dependencies"):
             sys.modules.pop(prefix, None)
             for name in list(sys.modules):
                 if name == prefix or name.startswith(f"{prefix}."):
@@ -49,27 +49,27 @@ def backend_path():
 class TestWeb3Models:
     def test_completeness_status_values(self):
         with backend_path():
-            from services.web3.models import CompletenessStatus
+            from graph.web3.models import CompletenessStatus
             assert CompletenessStatus.RAW_OBSERVED == "raw_observed"
             assert CompletenessStatus.HIGH_CONFIDENCE == "high_confidence"
 
     def test_canonical_action_families(self):
         with backend_path():
-            from services.web3.models import CanonicalAction
+            from graph.web3.models import CanonicalAction
             actions = {a.value for a in CanonicalAction}
             for required in ["transfer", "swap", "lend", "borrow", "stake", "bridge", "vote"]:
                 assert required in actions, f"Missing: {required}"
 
     def test_provenance_model(self):
         with backend_path():
-            from services.web3.models import Provenance
+            from graph.web3.models import Provenance
             p = Provenance(source="dune", chain="ethereum")
             assert p.source == "dune"
             assert 0.0 <= p.classification_confidence <= 1.0
 
     def test_chain_create(self):
         with backend_path():
-            from services.web3.models import ChainCreate, VMFamily
+            from graph.web3.models import ChainCreate, VMFamily
             c = ChainCreate(chain_id="ethereum", canonical_name="Ethereum", vm_family=VMFamily.EVM, evm_chain_id=1)
             assert c.chain_id == "ethereum"
 
@@ -77,26 +77,26 @@ class TestWeb3Models:
 class TestWeb3Classifier:
     def test_known_selectors(self):
         with backend_path():
-            from services.web3.classifier import classify_method_selector
+            from graph.web3.classifier import classify_method_selector
             assert classify_method_selector("0xa9059cbb") == "transfer"
             assert classify_method_selector("0x38ed1739") == "swap"
             assert classify_method_selector("0xe8eda9df") == "lend"
 
     def test_unknown_selector(self):
         with backend_path():
-            from services.web3.classifier import classify_method_selector
+            from graph.web3.classifier import classify_method_selector
             assert classify_method_selector("0xdeadbeef") == "unknown"
 
 
 class TestWeb3Seed:
     def test_chain_seed_count(self):
         with backend_path():
-            from services.web3.seed import CHAIN_SEED
+            from graph.web3.seed import CHAIN_SEED
             assert len(CHAIN_SEED) >= 30
 
     def test_protocol_seed_unique_ids(self):
         with backend_path():
-            from services.web3.seed import PROTOCOL_SEED
+            from graph.web3.seed import PROTOCOL_SEED
             ids = [p["protocol_id"] for p in PROTOCOL_SEED]
             assert len(ids) == len(set(ids)), "Duplicate protocol_id"
 
@@ -108,19 +108,19 @@ class TestWeb3Seed:
 class TestCrossDomainModels:
     def test_entity_types(self):
         with backend_path():
-            from services.crossdomain.models import EntityType
+            from graph.crossdomain.models import EntityType
             assert EntityType.PERSON == "person"
             assert EntityType.INSTITUTION == "institution"
 
     def test_ownership_roles(self):
         with backend_path():
-            from services.crossdomain.models import OwnershipRole
+            from graph.crossdomain.models import OwnershipRole
             assert OwnershipRole.LEGAL_OWNER == "legal_owner"
             assert OwnershipRole.BENEFICIAL_OWNER == "beneficial_owner"
 
     def test_order_lifecycle(self):
         with backend_path():
-            from services.crossdomain.models import OrderStatus
+            from graph.crossdomain.models import OrderStatus
             statuses = {s.value for s in OrderStatus}
             for required in ["pending", "submitted", "filled", "cancelled", "rejected"]:
                 assert required in statuses
@@ -262,7 +262,7 @@ class TestConsentEnforcement:
 class TestProfileResolverTenantIsolation:
     def test_resolve_rejects_empty_tenant(self):
         with backend_path():
-            from services.profile.resolver import ProfileResolver
+            from identity.profile.resolver import ProfileResolver
             from shared.cache.cache import CacheClient
             from shared.graph.graph import GraphClient
             resolver = ProfileResolver(GraphClient(), CacheClient())
@@ -273,7 +273,7 @@ class TestProfileResolverTenantIsolation:
 
     def test_get_identifiers_rejects_empty_tenant(self):
         with backend_path():
-            from services.profile.resolver import ProfileResolver
+            from identity.profile.resolver import ProfileResolver
             from shared.cache.cache import CacheClient
             from shared.graph.graph import GraphClient
             resolver = ProfileResolver(GraphClient(), CacheClient())

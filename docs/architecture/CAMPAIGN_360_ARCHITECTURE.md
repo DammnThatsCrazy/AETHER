@@ -9,14 +9,14 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 4
-source_files: [services/backend/services/campaign/exploration.py, services/backend/services/campaign/routes.py, services/backend/services/measurement/repositories/touchpoint_repo.py, services/backend/services/measurement/repositories/conversion_repo.py, services/backend/services/measurement/repositories/attribution_run_repo.py, services/backend/services/traffic/repair.py]
+source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/campaign/routes.py, services/api/journeys/measurement/repositories/touchpoint_repo.py, services/api/journeys/measurement/repositories/conversion_repo.py, services/api/journeys/measurement/repositories/attribution_run_repo.py, services/api/journeys/traffic/repair.py]
 source_hashes:
-  "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/backend/services/campaign/routes.py": "sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e"
-  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:0a1ec25f6d8bb3ff911ac0e966df64775438ccbcfd7e2cc7e5d73715c4c8482c"
-  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:15955fbf15cb02418c196fb5b9a977e8dffaa47c22f1846c4e87f961708243fe"
-  "services/backend/services/measurement/repositories/touchpoint_repo.py": "sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8"
-  "services/backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
+  "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
+  "services/api/journeys/campaign/routes.py": "sha256:872f533120f44707b938829206f76d24497d34c17d5ae945da3b16de0ef19186"
+  "services/api/journeys/measurement/repositories/attribution_run_repo.py": "sha256:5c5a1edbacb8ebe97e641b0a577eab924a1a0ca5b76e75967711bd88e8ae46dd"
+  "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:ed4dacb42d8b93f67af9e2c819edf3e98fb7b7f407c9187d1502cd1df340144c"
+  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:fe9b5f6c7f24fa33a0288533013677fe2741b36b86e71308579d08cc4e2a68f0"
+  "services/api/journeys/traffic/repair.py": "sha256:309a31315d07945083aa693341cff37b4fe5cefbc71592925c38ad818acfab68"
 ---
 
 # Campaign 360 Architecture
@@ -138,7 +138,7 @@ so it does not depend on arrival order (Silver conversions are written through
 
 The Campaign Sources page's advertising connect flow is additive to this
 architecture and does not change the explorer's read repos. It is orchestrated
-by `services/backend/services/campaign/ad_source_links.py` over the canonical
+by `services/api/journeys/campaign/ad_source_links.py` over the canonical
 `measurement_connectors` store — the same rows the measurement ad connectors
 read at sync time. Connect is idempotent (one *active* source per
 tenant/family) and requires a complete credential set at store time — first

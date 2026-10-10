@@ -45,7 +45,7 @@ perl -0pi -e "s/v[0-9]+\.[0-9]+\.[0-9]+\)/v$VERSION\)/g; s/version: \"[^\"]+\"/v
 perl -0pi -e "s/LOADER_VERSION = '[^']+'/LOADER_VERSION = '$VERSION'/g" \
   "$ROOT/packages/web/src/loader/bootstrap.ts"
 perl -0pi -e "s/CANONICAL_SDK_VERSION = \"[^\"]+\"/CANONICAL_SDK_VERSION = \"$VERSION\"/g" \
-  "$ROOT/services/backend/services/sdk_distribution/versions.py"
+  "$ROOT/services/api/ingestion/sdk_distribution/versions.py"
 
 python "$ROOT/scripts/validate_sdk_release_alignment.py"
 echo "Done. SDK release metadata set to $VERSION."

@@ -1,12 +1,12 @@
 """TS <-> Python parity for the comparison contract.
 
 `packages/shared/comparison-contract.ts` and
-`services/intelligence/comparison/generated_vocabulary.py` are generated twins
+`services/api/intelligence/intelligence/comparison/generated_vocabulary.py` are generated twins
 of `packages/shared/contracts/comparison-registry.json`;
-`services/intelligence/comparison/contracts.py` is the hand-authored twin of
+`services/api/intelligence/intelligence/comparison/contracts.py` is the hand-authored twin of
 the generated interfaces. This test fails on vocabulary or field drift, if the
 TS module leaves the barrel, and if the comparison package starts being
-imported eagerly by `services.intelligence`.
+imported eagerly by `intelligence.intelligence`.
 """
 from __future__ import annotations
 
@@ -16,18 +16,18 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.intelligence.comparison.contracts import (  # noqa: E402
+from intelligence.intelligence.comparison.contracts import (  # noqa: E402
     BaselineSpec,
     ComparisonDefinition,
     ComparisonFinding,
     ComparisonRun,
     ComparisonSubject,
 )
-from services.intelligence.comparison.generated_vocabulary import (  # noqa: E402
+from intelligence.intelligence.comparison.generated_vocabulary import (  # noqa: E402
     ALIGNMENT_OUTCOMES,
     BASELINE_TYPES,
     CAUSAL_CLAIM_LEVELS,
@@ -127,8 +127,8 @@ def test_generated_vocabulary_matches_registry():
 
 
 def test_comparison_not_imported_eagerly_by_intelligence():
-    """services.intelligence must not pull the comparison package at import time."""
-    # Evict ONLY the subtree under test so `import services.intelligence` is a
+    """intelligence.intelligence must not pull the comparison package at import time."""
+    # Evict ONLY the subtree under test so `import intelligence.intelligence` is a
     # true cold import. Evicting every services.* module here would destroy
     # class references that OTHER already-imported modules hold: e.g. a venue
     # adapter imported earlier in the same xdist worker caches
@@ -137,11 +137,11 @@ def test_comparison_not_imported_eagerly_by_intelligence():
     # that the adapter's except clause does not catch (the exact venue-test
     # failure this isolation fix prevents). The assertion below still proves the
     # comparison package is not pulled eagerly.
-    for mod in [m for m in list(sys.modules) if m.startswith("services.intelligence")]:
+    for mod in [m for m in list(sys.modules) if m.startswith("intelligence.intelligence")]:
         del sys.modules[mod]
-    import services.intelligence  # noqa: F401
+    import intelligence.intelligence  # noqa: F401
 
-    assert "services.intelligence.comparison" not in sys.modules
+    assert "intelligence.intelligence.comparison" not in sys.modules
 
 
 def test_barrel_exports_comparison_contract():

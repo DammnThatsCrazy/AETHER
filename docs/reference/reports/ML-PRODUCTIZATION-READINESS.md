@@ -7,14 +7,14 @@ audience: [architect, dev-senior]
 status: experimental
 since_version: 0.1.0
 canonical_owner: ml@aether
-source_files: [services/ml/common/model_registry.py, services/ml/common/feature_contracts.py, services/ml/common/artifact_registry.py, services/ml/training/pipelines/train.py, services/ml/serving/src/api.py, services/backend/services/ml_serving/routes.py, security/model_extraction_defense/defense_layer.py]
+source_files: [services/ml/common/model_registry.py, services/ml/common/feature_contracts.py, services/ml/common/artifact_registry.py, services/ml/training/pipelines/train.py, services/ml/serving/src/api.py, services/api/intelligence/ml_serving/routes.py, services/api/governance/model_extraction_defense/defense_layer.py]
 source_hashes:
-  "security/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
-  "services/backend/services/ml_serving/routes.py": "sha256:4f1a0c13e7c127eeed7259196cfe583d7f1d91ff5dec5b24af830a2a18d5b89a"
+  "services/api/governance/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
+  "services/api/intelligence/ml_serving/routes.py": "sha256:b5c5842465c2a11827c297c27dc3f154af4a09669ca199e1eab8aaa12ae1252d"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
   "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"
-  "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"
+  "services/ml/serving/src/api.py": "sha256:6f4245be3d28dd75a1ba1495252ec6418cd66e28b13d7f2de9c1e26fe6443147"
   "services/ml/training/pipelines/train.py": "sha256:98f93d379b93e93aa1e9a80eec03c8d1697408d7b58339e42ef4076a4c4cdbd8"
 ---
 
@@ -180,7 +180,7 @@ Stub policy: stubs load only when `AETHER_ENV` ∉ {`production`, `staging`}. Pr
 
 ## Section 6: Backend ML Gateway Status
 
-**Location**: `services/backend/services/ml_serving/routes.py`
+**Location**: `services/api/intelligence/ml_serving/routes.py`
 
 All bugs fixed:
 
@@ -200,7 +200,7 @@ All bugs fixed:
 
 ## Section 7: Extraction Defense Status
 
-**Location**: `security/model_extraction_defense/defense_layer.py`
+**Location**: `services/api/governance/model_extraction_defense/defense_layer.py`
 
 | Component | Status |
 |-----------|--------|
@@ -238,8 +238,8 @@ Drift detection is now fully wired: training saves a `baseline.joblib` sample (u
 ## Section 9: Kyber Admin Hooks
 
 Backend admin routes for ML operational state are defined in:
-- `services/backend/services/ml_serving/routes.py` (production gateway)
-- `services/backend/services/ml_serving/kyber_ml_admin.py` — 14 admin routes at `/v1/admin/kyber/ml/` ✅
+- `services/api/intelligence/ml_serving/routes.py` (production gateway)
+- `services/api/intelligence/ml_serving/kyber_ml_admin.py` — 14 admin routes at `/v1/admin/kyber/ml/` ✅
   - Includes 4 new routes: `/alerts`, `/audit`, `/models/{id}/rollback-eligibility`, `/models/{id}/training-history`
 
 **Kyber ML frontend page**: `apps/kyber-web/src/pages/ml/ml-admin-page.tsx` — `/ml` route registered in Kyber router. Displays fleet overview health card (fleet_status, models_loaded/total, extraction defense toggle, readiness badge) and model fleet table via `useMLModels()` + `useMLOverview()` hooks. Frontend API callers for all 14 admin routes are in `apps/kyber-web/src/lib/api/endpoints.ts` under `api.ml.*` ✅
@@ -391,7 +391,7 @@ The registry now carries per-model governance metadata (`allowed_training_purpos
 and `artifact_registry.promote_artifact` blocks staging/promotion when required
 governance artifacts (model card, dataset card, privacy review, training manifest,
 bias audit) are missing. The backend enforces two additional gates
-(`services/backend/services/model_governance`, see `docs/reference/source-of-truth/MODEL_GOVERNANCE.md`):
+(`services/api/intelligence/model_governance`, see `docs/reference/source-of-truth/MODEL_GOVERNANCE.md`):
 
 - **TrainingDataGate** — consent-scoped training-data admission: data collected
   under non-trainable purposes (`web3`/`credit`/`location`) or purposes needing a

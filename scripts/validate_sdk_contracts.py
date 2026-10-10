@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 ERRORS: list[str] = []
 CHECKS: list[dict] = []
 
@@ -59,7 +59,7 @@ def check_ingestion_contract_ts() -> None:
         f"INGESTION_ENDPOINT={endpoint!r}",
     )
 
-    batch_py = text(BACKEND / "services" / "ingestion" / "batch.py")
+    batch_py = text(BACKEND / "ingestion" / "ingestion" / "batch.py")
     prefix = re.search(r'APIRouter\(prefix="([^"]+)"', batch_py)
     route = re.search(r'@router\.post\("([^"]+)"', batch_py)
     backend_endpoint = f"{prefix.group(1)}{route.group(1)}" if prefix and route else None

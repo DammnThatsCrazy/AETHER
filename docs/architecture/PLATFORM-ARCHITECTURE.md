@@ -7,12 +7,12 @@ audience: [architect, dev-senior, security]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/main.py
-  - services/backend/middleware/middleware.py
-  - services/backend/config/settings.py
-  - services/backend/services/ingestion/replay.py
-  - services/backend/services/ingestion/replay_routes.py
-  - services/backend/shared/events/events.py
+  - services/api/main.py
+  - services/api/middleware/middleware.py
+  - services/api/config/settings.py
+  - services/api/ingestion/ingestion/replay.py
+  - services/api/ingestion/ingestion/replay_routes.py
+  - services/api/shared/events/events.py
   - packages/shared/
 canonical_owner: platform@aether
 estimated_read_minutes: 20
@@ -21,13 +21,13 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:c4d5d00025e7ee23ff43e665d2eceb8c57b2000b7dc584ba86fffe33d18745d5"
-  "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
-  "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
-  "services/backend/middleware/middleware.py": "sha256:0f510c459757b1d4c54428eada1cc4ebf9b8249f19d1788d457047cca7082564"
-  "services/backend/services/ingestion/replay.py": "sha256:39a4bfbc19fbe131e31418567e9349084cc82a8e2cbf89d2a6e0d5555642665c"
-  "services/backend/services/ingestion/replay_routes.py": "sha256:44e6e89117a8cbbebe2cd45bac315e616e87b2cf823e82c5af3f503de44eea56"
-  "services/backend/shared/events/events.py": "sha256:dc232a0068588ee482bbdbef7cb89df9bde69a54b1880ab861f515e1c60971fc"
+  "packages/shared/": "sha256:2ab95280d3f14a3327070be39325db11b698b30e03acb7c82e9641c85e016c89"
+  "services/api/config/settings.py": "sha256:d55bef95d2e6d1f13c003fe7289e4309d8299ab783b3d58b7660c6519bdaeadb"
+  "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
+  "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
+  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/middleware/middleware.py": "sha256:4f984e6a2d3622df9652045c85dd323db990e11bfb4d8cf4af6f08aadfb935d6"
+  "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
 ---
 # Aether vNext — Architecture Guide
 
@@ -46,7 +46,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 ### Repository topology and runtime ownership
 
 The implementation tree follows the same boundaries as the runtime architecture.
-`services/backend/` is the deployed Python/FastAPI application and owns
+`services/api/` is the deployed Python/FastAPI application and owns
 ingestion, lake coordination, graph access, intelligence routes, and backend
 repositories. `services/ml/` owns model training and serving; `services/agents/`
 owns internal broker-coupled workers and staged graph-mutation workflows; and
@@ -165,7 +165,7 @@ All SDKs generate a deterministic device fingerprint (SHA-256 hash) that is incl
 
 ## Traffic Source Classification
 
-SDKs collect raw traffic signals and ship them to the backend, where the `SourceClassifier` (`services/backend/services/traffic/classifier.py`) classifies every session into source/medium/channel automatically.
+SDKs collect raw traffic signals and ship them to the backend, where the `SourceClassifier` (`services/api/journeys/traffic/classifier.py`) classifies every session into source/medium/channel automatically.
 
 ```
 SDK detect()                       Backend SourceClassifier
@@ -511,7 +511,7 @@ projection surface answers live instead of degrading to `provider_unavailable`
 in the source-of-truth). Exploration surfaces compose over the engine through
 projection-backed surface adapters
 
-(`services/backend/services/exploration/adapters/projection.py`).
+(`services/api/journeys/exploration/adapters/projection.py`).
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
 the source-of-truth is
 [INTELLIGENCE_PROJECTION_ARCHITECTURE.md](../reference/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md).
@@ -575,9 +575,9 @@ surface.
 ### Provider transport adapters
 
 Provider SDKs live only behind the harness's provider-neutral `AsyncModelProvider`
-contract (`services/backend/services/model_runtime/provider.py`); orchestrators such as Noesis
+contract (`services/api/intelligence/model_runtime/provider.py`); orchestrators such as Noesis
 never import them. Real transport for the first two providers lives in
-`services/backend/services/model_runtime/adapters/`:
+`intelligence/model_runtime/adapters/`:
 
 | Adapter | Transport | Env surface |
 |---|---|---|
@@ -625,7 +625,7 @@ OpenAI adapter emits `response_format={"type":"json_object"}` when the request
 asks for it.
 
 The Noesis LLM plan providers (`AnthropicNoesisPlanProvider` and
-`OpenAINoesisPlanProvider` in `services/backend/services/noesis/provider.py`) now build a
+`OpenAINoesisPlanProvider` in `services/api/intelligence/noesis/provider.py`) now build a
 `ModelRequest` and delegate the actual API call to the matching adapter via
 `.complete()`, converting the `ModelResponse` back to the legacy `_call_api`
 dict shape (`text`, `tokens_used`, `input_tokens`, `output_tokens`). Plan
@@ -638,7 +638,7 @@ the fail-closed behavior on missing credentials or config is preserved.
 ### Intelligence planes
 
 The model-runtime control plane builds on the provider adapters as a package
-under `services/backend/services/model_runtime/`:
+under `services/api/intelligence/model_runtime/`:
 
 | Plane | Package | Responsibility | ADR-008 |
 |---|---|---|---|
@@ -689,7 +689,7 @@ job handler), `DATA_EXCHANGE_SIGNED_TRANSFERS_ENABLED`,
 plus `DATA_EXCHANGE_OBJECT_STORE_ENABLED` / `DATA_EXCHANGE_PARQUET_ENABLED` for
 transport/storage features — all OFF by default. Routes enforce the `data_exchange`
 RBAC domain (added to `ALL_DOMAINS` / `TENANT_DOMAINS`, auto-granted to tenant
-owner/admin/viewer) via `services/backend/services/data_exchange/authz.py`, resolving each
+owner/admin/viewer) via `services/api/ingestion/data_exchange/authz.py`, resolving each
 dotted `data_exchange.*` grant to the legacy read/write/admin alias the proxied
 seam admits. See `BACKEND-API.md` ("Data Exchange Plane") and
 `docs/architecture/plans/data-exchange-api.md` for the full contract.
@@ -717,8 +717,8 @@ acquisition, health, reconciliation, certification) and `shared/commerce_contrac
 | Layer | Modules |
 |---|---|
 | Contract plane | `shared/integration_contracts/` — plugin, stream, source-object, raw/event, normalization, acquisition, health, reconciliation, and certification contracts; `shared/commerce_contracts/{money,order,events}.py` |
-| Runtime service | `services/backend/services/provider_runtime/` — registry, validation, legacy compatibility, credential broker, raw store, event bridge, pull/webhook ingress, source-object mapping, tenant route ledger and opt-in graph writer fence, health, and certification |
-| Reference plugin | `services/backend/services/providers/shopify/` — `shopify.admin.orders_read`, SSRF-safe shop domain, HMAC webhook verify, order normalizer, REST compatibility pull and opt-in pinned GraphQL order snapshots |
+| Runtime service | `services/api/connectors/provider_runtime/` — registry, validation, legacy compatibility, credential broker, raw store, event bridge, pull/webhook ingress, source-object mapping, tenant route ledger and opt-in graph writer fence, health, and certification |
+| Reference plugin | `services/api/connectors/providers/shopify/` — `shopify.admin.orders_read`, SSRF-safe shop domain, HMAC webhook verify, order normalizer, REST compatibility pull and opt-in pinned GraphQL order snapshots |
 
 Data flow is **raw-before-canonical**: `RawProviderRecord`s are persisted
 idempotently in protected provider Bronze before normalization. V1 retains
@@ -857,7 +857,7 @@ trunk on the backend plane. Its authoritative architecture is
 [FINANCIAL_NORMALIZATION.md](../reference/source-of-truth/FINANCIAL_NORMALIZATION.md); this
 subsection is a pointer, not a replacement.
 
-**Universal Asset Registry service domain** (`services/backend/services/assets/`). Global
+**Universal Asset Registry service domain** (`services/api/graph/assets/`). Global
 reference identity for fiat currencies, crypto natives, stablecoins, and tokens
 (namespaced ids `fiat:USD`, `crypto:ETH`, `stablecoin:USDC`,
 `token:<chain>:<contract>`), their chain deployments, and alias rows that
@@ -875,7 +875,7 @@ additionally require `settings.assets.ingestion_enabled`
 permission; writes require `ADMIN`. Runtime seeding is not enabled by default —
 the seed ships as an ADMIN action, it is not run at startup.
 
-**Event-time valuation + persistence** (`services/backend/services/valuation/`). The pure
+**Event-time valuation + persistence** (`services/api/value/valuation/`). The pure
 `value_at` engine and the `observe_price` ingest path price a native value into
 a tenant-scoped `ValuationSnapshot` in a reporting asset at `effective_at`,
 persisted as an immutable append-only row — a correction appends a NEW
@@ -890,7 +890,7 @@ and the observational writes (`observe` / `value` / policy) additionally require
 `AETHER_VALUATION_INGESTION_ENABLED` + ADMIN. `execution_by_aether` is always
 False — the domain observes and reports, never executes.
 
-**Reporting-asset-keyed safe rollup (W4a shared seam)** (`services/backend/services/value/rollups.py`).
+**Reporting-asset-keyed safe rollup (W4a shared seam)** (`services/api/value/value/rollups.py`).
 `safe_rollup` accepts a reporting context — a canonical `reporting_asset_id`
 (`fiat:USD` default) and an optional `amount_in_reporting_asset` resolver — and
 returns an additive `reporting_totals` envelope keyed by that asset (priced /
@@ -908,7 +908,7 @@ optional `reporting_totals` / `value_lineage` to `RollupResult`. This is the
 Phase-4 shared seam; per-domain ingestion adapters and viewer-display
 convergence follow.
 
-**Registry → graph reference projector** (`services/backend/services/assets/graph_projector.py`).
+**Registry → graph reference projector** (`services/api/graph/assets/graph_projector.py`).
 Projects the canonical seed's asset / chain / fiat / deployment rows into GLOBAL
 reference vertices plus DEPLOYED_ON_CHAIN edges (platform tenant, EXCLUDED
 layer). Opt-in and never run at startup: the seeder projects only when invoked
@@ -979,9 +979,9 @@ Three additive service modules mount conditionally via `main.py` behind feature 
 
 | Service | Feature Flag | Router Prefix |
 |---------|-------------|---------------|
-| `services/backend/services/fraud_networks` | `FEATURE_FRAUD_NETWORKS` | `/v1/fraud/networks` |
-| `services/backend/services/flow_trace` | `FEATURE_FLOW_TRACE` | `/v1/flow-trace` |
-| `services/backend/services/risk_overlay` | `FEATURE_RISK_OVERLAYS` | `/v1/risk-overlays` |
+| `services/api/intelligence/fraud_networks` | `FEATURE_FRAUD_NETWORKS` | `/v1/fraud/networks` |
+| `services/api/value/flow_trace` | `FEATURE_FLOW_TRACE` | `/v1/flow-trace` |
+| `services/api/graph/risk_overlay` | `FEATURE_RISK_OVERLAYS` | `/v1/risk-overlays` |
 
 These services are fully additive — they add no startup overhead when their flags are disabled. They share the graph client, event producer, and investigation repository with existing services. The `FraudIntelligenceConfig` dataclass in `config/settings.py` owns the fraud-intelligence flags and tuning parameters (`max_network_depth`, `max_flow_trace_hops`).
 

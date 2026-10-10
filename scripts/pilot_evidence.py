@@ -46,7 +46,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 DEFAULT_MANIFEST = ROOT / "config" / "pilot" / "examples" / "usdc-observation.yaml"
 DEFAULT_OUT = ROOT / ".artifacts" / "pilot-evidence"
 

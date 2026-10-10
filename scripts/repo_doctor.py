@@ -643,7 +643,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Settings flags are read",
         results=results,
         stop_on_failure=stop,
-        remediation="delete the unread field from services/backend/config/settings.py (and its env example, release flag and doc lines), or wire it to the behavior it claims to gate",
+        remediation="delete the unread field from services/api/config/settings.py (and its env example, release flag and doc lines), or wire it to the behavior it claims to gate",
     )
 
     run(
@@ -729,34 +729,34 @@ def main(argv: Sequence[str] | None = None) -> None:
             _check_clean(
                 [
                     "packages/shared/temporal-policy.ts",
-                    "services/backend/shared/temporal/generated_policy.py",
+                    "services/api/shared/temporal/generated_policy.py",
                     "packages/shared/interaction-contract.ts",
-                    "services/backend/shared/product/generated_vocabulary.py",
+                    "services/api/shared/product/generated_vocabulary.py",
                     "packages/shared/context-capsule.ts",
-                    "services/backend/shared/context_capsule/generated_taxonomy.py",
+                    "services/api/shared/context_capsule/generated_taxonomy.py",
                     "packages/shared/graph-mutation.ts",
-                    "services/backend/shared/graph/generated_mutation_taxonomy.py",
+                    "services/api/shared/graph/generated_mutation_taxonomy.py",
                     "packages/shared/filter-fields.ts",
-                    "services/backend/shared/exploration/generated_fields.py",
+                    "services/api/shared/exploration/generated_fields.py",
                     "packages/shared/surface-capabilities.ts",
-                    "services/backend/shared/exploration/generated_surfaces.py",
+                    "services/api/shared/exploration/generated_surfaces.py",
                     "packages/shared/comparison-contract.ts",
-                    "services/backend/services/intelligence/comparison/generated_vocabulary.py",
-                    "services/backend/services/silver/generated_ownership.py",
+                    "services/api/intelligence/intelligence/comparison/generated_vocabulary.py",
+                    "services/api/ingestion/silver/generated_ownership.py",
                     "packages/shared/intelligence-projections_generated.ts",
-                    "services/backend/shared/intelligence_projections/generated_registry.py",
+                    "services/api/shared/intelligence_projections/generated_registry.py",
                     "packages/shared/lenses_generated.ts",
-                    "services/backend/shared/projection_engine/generated_lenses.py",
+                    "services/api/shared/projection_engine/generated_lenses.py",
                     "packages/shared/outcome-types_generated.ts",
-                    "services/backend/shared/measurement/generated_outcome_types.py",
+                    "services/api/shared/measurement/generated_outcome_types.py",
                     "packages/shared/relationship-predicate-registry.ts",
-                    "services/backend/shared/relationship_spine/generated_relationship_predicate_registry.py",
+                    "services/api/shared/relationship_spine/generated_relationship_predicate_registry.py",
                     "packages/shared/relationship-motif-registry.ts",
-                    "services/backend/shared/relationship_spine/generated_relationship_motif_registry.py",
+                    "services/api/shared/relationship_spine/generated_relationship_motif_registry.py",
                     "packages/shared/social-provider-capability-vocabulary.ts",
-                    "services/backend/shared/social_provider/generated_social_provider_capability_vocabulary.py",
+                    "services/api/shared/social_provider/generated_social_provider_capability_vocabulary.py",
                     "packages/shared/spine-registry.ts",
-                    "services/backend/shared/spine/generated_spine_registry.py",
+                    "services/api/shared/spine/generated_spine_registry.py",
                 ],
                 name="Unified-platform generated contracts — no uncommitted diff",
                 results=results,
@@ -838,7 +838,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Reward rail matrix (adapters ↔ classification ↔ senders)",
         results=results,
         stop_on_failure=stop,
-        remediation="align services/rewards/{rails,rail_matrix,senders}.py and regenerate docs/_generated/reward-rail-matrix.json",
+        remediation="align services/api/value/rewards/{rails,rail_matrix,senders}.py and regenerate docs/_generated/reward-rail-matrix.json",
     )
     run(
         [sys.executable, "scripts/validate_signal_use_matrix.py"],
@@ -852,14 +852,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Consent PolicyDecision evidence service (present, matrix-driven, wired)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep services/policy/ decision fields + signal-use-matrix wiring intact",
+        remediation="keep services/api/governance/policy/ decision fields + signal-use-matrix wiring intact",
     )
     run(
         [sys.executable, "scripts/validate_kyber_seams.py"],
         name="Kyber cross-package seam integrity (declared calls still resolve)",
         results=results,
         stop_on_failure=stop,
-        remediation="fix the caller, or update services/kyber/seams.py if a seam legitimately moved",
+        remediation="fix the caller, or update services/api/governance/kyber/seams.py if a seam legitimately moved",
     )
     run(
         [sys.executable, "scripts/generate_feature_surface_manifest.py"],
@@ -965,7 +965,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Canonical ingestion-tree ownership (single-owner registration; no new duplicate trees)",
         results=results,
         stop_on_failure=stop,
-        remediation="route new tree units into the canonical tree (services/backend, packages/*) or register them in scripts/allowlists/repo_tree_ownership.json with architect review; never extend deprecated legacy trees",
+        remediation="route new tree units into the canonical tree (services/api, packages/*) or register them in scripts/allowlists/repo_tree_ownership.json with architect review; never extend deprecated legacy trees",
     )
     run(
         [sys.executable, "scripts/validate_ts_public_exports.py"],
@@ -1007,21 +1007,21 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Agent-access reference packs (schema, unique pack ids, grounded reference packs)",
         results=results,
         stop_on_failure=stop,
-        remediation="fix the reported fields in config/agent_access_reference_packs/*.yaml; the schema is owned by services/agent_access_intelligence/reference_packs.py::pack_violations",
+        remediation="fix the reported fields in config/agent_access_reference_packs/*.yaml; the schema is owned by services/api/actions/agent_access_intelligence/reference_packs.py::pack_violations",
     )
     run(
         [sys.executable, "scripts/validate_projector_ownership.py"],
         name="Silver projector ownership (registry == dispatcher; one activity owner per event type)",
         results=results,
         stop_on_failure=stop,
-        remediation="align packages/shared/contracts/projector-ownership-registry.json with services/silver/dispatcher.py, then regenerate via make repo-doctor-fix",
+        remediation="align packages/shared/contracts/projector-ownership-registry.json with services/api/ingestion/silver/dispatcher.py, then regenerate via make repo-doctor-fix",
     )
     run(
         [sys.executable, "scripts/validate_social360_guardrails.py"],
         name="Social360 static guardrails (predicate-registry honesty vs live EdgeTypes + no legacy fabricated defaults)",
         results=results,
         stop_on_failure=stop,
-        remediation="REGISTERED predicates must name live EdgeTypes present in shared.graph.relationship_layers; remove any fabricated followers=0 / influence='low' / fixed audience_overlap idioms from the governed social surfaces (services/social, services/silver, services/exploration/adapters/social360.py, services/relationship_fidelity, shared/social360)",
+        remediation="REGISTERED predicates must name live EdgeTypes present in shared.graph.relationship_layers; remove any fabricated followers=0 / influence='low' / fixed audience_overlap idioms from the governed social surfaces (services/social, services/api/ingestion/silver, services/api/journeys/exploration/adapters/social360.py, services/api/identity/relationship_fidelity, shared/social360)",
     )
     run(
         [sys.executable, "scripts/validate_intelligence_projections.py"],
@@ -1042,7 +1042,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Rights vocabulary tri-surface parity (canonical rights-vocabulary.json ↔ python enums ↔ data-rights.ts twin)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep packages/shared/contracts/rights-vocabulary.json, the python enums in services/backend/services/integrations/data_rights/models.py, and the TS as-const arrays in packages/shared/data-rights.ts on the exact same snake_case vocabulary (RIGHTS_AUTHORITY_BLUEPRINT §3–§9); update the owning surface, then restamp bindings only on real vocabulary change",
+        remediation="keep packages/shared/contracts/rights-vocabulary.json, the python enums in services/api/connectors/integrations/data_rights/models.py, and the TS as-const arrays in packages/shared/data-rights.ts on the exact same snake_case vocabulary (RIGHTS_AUTHORITY_BLUEPRINT §3–§9); update the owning surface, then restamp bindings only on real vocabulary change",
     )
     run(
         [sys.executable, "scripts/validate_no_parallel_rights_registries.py"],
@@ -1056,7 +1056,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Financial value semantics (USD-first contract + no cross-currency sums)",
         results=results,
         stop_on_failure=stop,
-        remediation="use services.value.safe_rollup and the canonical value contract; see docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
+        remediation="use value.value.safe_rollup and the canonical value contract; see docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
     )
     run(
         [sys.executable, "scripts/validate_universal_financial_assets.py"],
@@ -1077,7 +1077,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="SDK version-compatibility tiers (Gate H: supported/deprecated/read-compatible bands preserved, fail-closed date enforcement staged behind default-OFF flags)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep services/ingestion/sdk_version_tiers.py on the honest tier table (never block a served band before its date; never weaken staged default-OFF enforcement); see docs/reference/source-of-truth/INGESTION_OPS.md",
+        remediation="keep services/api/ingestion/ingestion/sdk_version_tiers.py on the honest tier table (never block a served band before its date; never weaken staged default-OFF enforcement); see docs/reference/source-of-truth/INGESTION_OPS.md",
     )
     run(
         [sys.executable, "scripts/validate_frontend_value_display.py"],
@@ -1091,14 +1091,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Cross-360 monetary/FX guard (context-360 + composition seam stay on the canonical value/FX path)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep the context-360 family, exploration path, and cross-360 composition seam monetary-free; consume economic360/services.value pre-priced content with canonical FX provenance; shrink scripts/allowlists/cross360_monetary_fx.json only",
+        remediation="keep the context-360 family, exploration path, and cross-360 composition seam monetary-free; consume economic360/value.value pre-priced content with canonical FX provenance; shrink scripts/allowlists/cross360_monetary_fx.json only",
     )
     run(
         [sys.executable, "scripts/validate_event_schema_parity.py"],
         name="EventType parity (TypeScript ↔ Python CANONICAL_EVENT_TYPES)",
         results=results,
         stop_on_failure=stop,
-        remediation="sync CANONICAL_EVENT_TYPES in services/ingestion/batch.py with EventType union in packages/shared/events.ts",
+        remediation="sync CANONICAL_EVENT_TYPES in services/api/ingestion/ingestion/batch.py with EventType union in packages/shared/events.ts",
     )
     run(
         [sys.executable, "scripts/validate_mobile_event_parity.py"],
@@ -1142,7 +1142,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Delivery safety validator (D11 unsafe-delivery patterns)",
         results=results,
         stop_on_failure=stop,
-        remediation="fix the reported delivery-path violation (direct adapter dispatch, fire-and-forget critical task, unconfigured router, zero-channel success, or unguarded simulated receipt) in services/delivery/** or services/notification_intelligence/**",
+        remediation="fix the reported delivery-path violation (direct adapter dispatch, fire-and-forget critical task, unconfigured router, zero-channel success, or unguarded simulated receipt) in services/api/actions/delivery/** or services/api/journeys/notification_intelligence/**",
     )
     run(
         [sys.executable, "scripts/release/check_profile_parity.py"],
@@ -1196,7 +1196,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="SDK ingestion contract (shared TS ↔ backend /v1/batch)",
         results=results,
         stop_on_failure=stop,
-        remediation="align packages/shared/ingestion-contract.ts with services/ingestion/batch.py (endpoint, idempotency key, batch bounds)",
+        remediation="align packages/shared/ingestion-contract.ts with services/api/ingestion/ingestion/batch.py (endpoint, idempotency key, batch bounds)",
     )
     run(
         [sys.executable, "scripts/validate_sdk_import_boundary.py"],
@@ -1210,7 +1210,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Model governance (consent-scoped training + inference gates)",
         results=results,
         stop_on_failure=stop,
-        remediation="ensure services/model_governance gates exist, reuse the consent engine, and are wired into ml_serving/routes.py; see docs/reference/source-of-truth/MODEL_GOVERNANCE.md",
+        remediation="ensure services/api/intelligence/model_governance gates exist, reuse the consent engine, and are wired into ml_serving/routes.py; see docs/reference/source-of-truth/MODEL_GOVERNANCE.md",
     )
     run(
         [sys.executable, "scripts/validate_consent_purpose_reconciliation.py"],

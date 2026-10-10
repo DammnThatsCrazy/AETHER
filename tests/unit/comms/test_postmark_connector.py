@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -28,7 +28,7 @@ class TestWebhookMapping:
         ("SpamComplaint", "email_spam_complaint"),
     ])
     def test_record_type_mapping(self, record_type, expected):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         events = PostmarkConnector().parse_webhook(
             [_pm_record(record_type, Recipient="jane@example.com",
                         ReceivedAt="2026-07-01T10:00:00Z")]
@@ -38,14 +38,14 @@ class TestWebhookMapping:
         assert events[0].properties["provider"] == "postmark"
 
     def test_transient_bounce_maps_to_deferred(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         events = PostmarkConnector().parse_webhook([
             _pm_record("Bounce", Type="Transient", BouncedAt="2026-07-01T10:00:00Z")
         ])
         assert events[0].event_type == "email_deferred"
 
     def test_unsubscribe_bounce_maps_to_unsubscribe(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         events = PostmarkConnector().parse_webhook([
             _pm_record("Bounce", Type="Unsubscribe", Recipient="u@example.com")
         ])
@@ -53,7 +53,7 @@ class TestWebhookMapping:
         assert events[0].properties["unsubscribe_scope"] == "marketing_channel"
 
     def test_hard_bounce_classification(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         hard = PostmarkConnector().parse_webhook([
             _pm_record("Bounce", Type="HardBounce")
         ])[0]
@@ -64,7 +64,7 @@ class TestWebhookMapping:
         assert soft.event_type == "email_deferred"
 
     def test_subscription_change_suppression(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         events = PostmarkConnector().parse_webhook([
             _pm_record("SubscriptionChange", SuppressSending=True,
                        Recipient="u@example.com", ChangeType="Complaint")
@@ -73,24 +73,24 @@ class TestWebhookMapping:
         assert events[0].properties["suppression_reason"] == "recipient_suppression_request"
 
     def test_reactivation_dropped(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         assert PostmarkConnector().parse_webhook([
             _pm_record("SubscriptionChange", SuppressSending=False)
         ]) == []
 
     def test_unknown_record_type_dropped(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         assert PostmarkConnector().parse_webhook([_pm_record("Inbound")]) == []
 
     def test_transactional_message_category(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         events = PostmarkConnector().parse_webhook([
             _pm_record("Delivery", MessageStream="transactional")
         ])
         assert events[0].properties["message_category"] == "transactional"
 
     def test_timestamp_normalized(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         events = PostmarkConnector().parse_webhook([
             _pm_record("Open", OpenedAt="2026-07-01T10:00:00.0000000Z")
         ])
@@ -99,14 +99,14 @@ class TestWebhookMapping:
 
 class TestAuthModel:
     def test_endpoint_secret_verified_by_possession(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         # No body signature — possession of the durable endpoint id is the auth.
         assert PostmarkConnector.verify_webhook_signature(b"{}", {}, "")
 
 
 class TestDescriptor:
     def test_honest_declaration(self):
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         from shared.certification.readiness import to_readiness
         c = PostmarkConnector()
         assert c.signature_scheme == "endpoint_secret"
@@ -117,6 +117,6 @@ class TestDescriptor:
         assert "comms.delivery_events" in c.manifest_data_outputs
 
     def test_registry_serves_postmark(self):
-        from services.integrations.connectors.registry import get_connector
-        from services.integrations.connectors.postmark import PostmarkConnector
+        from connectors.integrations.connectors.registry import get_connector
+        from connectors.integrations.connectors.postmark import PostmarkConnector
         assert isinstance(get_connector("postmark"), PostmarkConnector)

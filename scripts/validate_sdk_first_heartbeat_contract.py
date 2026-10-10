@@ -40,9 +40,9 @@ ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
 
 LOADER_HEARTBEAT = 'packages/sdk/web/src/loader/heartbeat.ts'
-VERIFIER = 'services/backend/services/sdk_distribution/install_verifier.py'
-ROUTES = 'services/backend/services/sdk_distribution/routes.py'
-MIDDLEWARE = 'services/backend/middleware/middleware.py'
+VERIFIER = 'services/api/ingestion/sdk_distribution/install_verifier.py'
+ROUTES = 'services/api/ingestion/sdk_distribution/routes.py'
+MIDDLEWARE = 'services/api/middleware/middleware.py'
 
 
 def fail(msg: str) -> None:

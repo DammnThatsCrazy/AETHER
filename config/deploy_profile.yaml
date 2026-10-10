@@ -17,7 +17,7 @@
 #   optional - present but gated off in the founding profile by cost policy
 #   gap      - not yet implemented; MUST carry a `gap` note (validator asserts note)
 #
-# Roles come from services/backend/services/runtime/roles.py
+# Roles come from services/api/workers/runtime/roles.py
 # (WORKER_ROLES + api). Terraform modules live under
 # infra/aws/terraform/modules/<name>.
 # =============================================================================
@@ -26,7 +26,7 @@ schema_version: 1
 canonical_source: config/deploy_profile.yaml
 compose_file: infra/local/docker-compose.yml
 terraform_modules_dir: infra/aws/terraform/modules
-runtime_roles_source: services/backend/services/runtime/roles.py
+runtime_roles_source: services/api/workers/runtime/roles.py
 
 # The full required capability set. Every id here must appear in `capabilities`.
 required_capabilities:

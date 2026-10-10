@@ -26,7 +26,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT.parent / "services" / "backend"
+BACKEND_ROOT = ROOT.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 pytest.importorskip("fastapi")
@@ -58,7 +58,7 @@ def reset_stores():
 @pytest.mark.asyncio
 async def test_shared_device_and_shared_wallet_detected():
     """Two entities share a device fingerprint AND a wallet — both detectors fire."""
-    from services.fraud_networks.detectors import detect_shared_device, detect_wallet_cluster
+    from intelligence.fraud_networks.detectors import detect_shared_device, detect_wallet_cluster
 
     sessions = [
         {"entity_id": "e1", "device_fingerprint": "fp_abc", "ip_address": "1.2.3.4", "tenant_id": "t1"},
@@ -89,7 +89,7 @@ async def test_shared_device_and_shared_wallet_detected():
 @pytest.mark.asyncio
 async def test_reward_farming_ring_detected():
     """One referrer recruits 5 referred accounts — reward farming fires."""
-    from services.fraud_networks.detectors import detect_reward_farming
+    from intelligence.fraud_networks.detectors import detect_reward_farming
 
     reward_events = [
         {"entity_id": f"referred_{i}", "referrer_id": "ring_leader", "campaign_id": "camp_1", "tenant_id": "t1"}
@@ -107,7 +107,7 @@ async def test_reward_farming_ring_detected():
 @pytest.mark.asyncio
 async def test_reward_farming_below_threshold_not_flagged():
     """A referrer with only 2 referred accounts should NOT be flagged."""
-    from services.fraud_networks.detectors import detect_reward_farming
+    from intelligence.fraud_networks.detectors import detect_reward_farming
 
     reward_events = [
         {"entity_id": "r1", "referrer_id": "ref", "campaign_id": "c1", "tenant_id": "t1"},
@@ -124,7 +124,7 @@ async def test_reward_farming_below_threshold_not_flagged():
 @pytest.mark.asyncio
 async def test_commerce_abuse_high_refund_rate_detected():
     """Entity with 70% refund rate on 10 orders triggers commerce_abuse."""
-    from services.fraud_networks.detectors import detect_commerce_abuse
+    from intelligence.fraud_networks.detectors import detect_commerce_abuse
 
     orders = [{"entity_id": "abu", "order_id": f"ord_{i}", "amount": "100"} for i in range(10)]
     refunds = [{"entity_id": "abu", "order_id": f"ord_{i}", "amount": "100"} for i in range(7)]
@@ -139,7 +139,7 @@ async def test_commerce_abuse_high_refund_rate_detected():
 @pytest.mark.asyncio
 async def test_commerce_abuse_low_refund_rate_not_flagged():
     """Entity with 20% refund rate should NOT trigger."""
-    from services.fraud_networks.detectors import detect_commerce_abuse
+    from intelligence.fraud_networks.detectors import detect_commerce_abuse
 
     orders = [{"entity_id": "legit", "order_id": f"ord_{i}", "amount": "50"} for i in range(10)]
     refunds = [{"entity_id": "legit", "order_id": "ord_0", "amount": "50"}]
@@ -155,7 +155,7 @@ async def test_commerce_abuse_low_refund_rate_not_flagged():
 @pytest.mark.asyncio
 async def test_agentic_delegation_abuse_detected():
     """Agent fanning out to 6 distinct targets triggers delegation abuse."""
-    from services.fraud_networks.detectors import detect_agentic_delegation_abuse
+    from intelligence.fraud_networks.detectors import detect_agentic_delegation_abuse
 
     delegations = [
         {"agent_id": "agent_x", "principal_id": "p1", "scope": "payments"},
@@ -177,7 +177,7 @@ async def test_agentic_delegation_abuse_detected():
 @pytest.mark.asyncio
 async def test_agentic_delegation_abuse_empty_inputs_clean():
     """Empty delegations and transfers produces no results — not a false clear."""
-    from services.fraud_networks.detectors import detect_agentic_delegation_abuse
+    from intelligence.fraud_networks.detectors import detect_agentic_delegation_abuse
 
     results = detect_agentic_delegation_abuse([], [])
     assert results == []
@@ -190,7 +190,7 @@ async def test_agentic_delegation_abuse_empty_inputs_clean():
 @pytest.mark.asyncio
 async def test_circular_transfer_detected():
     """A → B → C → A cycle is detected correctly."""
-    from services.fraud_networks.detectors import detect_circular_transfers
+    from intelligence.fraud_networks.detectors import detect_circular_transfers
 
     transfers = [
         {"from_entity_id": "A", "to_entity_id": "B", "amount": "1000"},
@@ -209,7 +209,7 @@ async def test_circular_transfer_detected():
 @pytest.mark.asyncio
 async def test_split_merge_detected():
     """1 → 4 intermediaries → 1 triggers split-merge layering."""
-    from services.fraud_networks.detectors import detect_split_merge
+    from intelligence.fraud_networks.detectors import detect_split_merge
 
     transfers = (
         [{"from_entity_id": "splitter", "to_entity_id": f"inter_{i}"} for i in range(4)]
@@ -233,7 +233,7 @@ async def test_split_merge_detected():
 async def test_fraud_decision_supersession():
     """Creating a second decision for the same subject supersedes the first."""
     from repositories.repos import FraudDecisionRepository
-    from services.fraud.models import FraudDecision
+    from intelligence.fraud.models import FraudDecision
 
     repo = FraudDecisionRepository()
     now = "2026-07-02T00:00:00+00:00"
@@ -288,7 +288,7 @@ async def test_fraud_decision_supersession():
 async def test_fraud_decision_suppression_review():
     """A flagged decision can be suppressed via review, voiding it."""
     from repositories.repos import FraudDecisionRepository
-    from services.fraud.models import FraudDecision
+    from intelligence.fraud.models import FraudDecision
 
     repo = FraudDecisionRepository()
     now = "2026-07-02T00:00:00+00:00"
@@ -329,7 +329,7 @@ async def test_fraud_decision_suppression_review():
 async def test_cross_tenant_decision_isolation():
     """A decision created for t1 must NOT be visible to t2."""
     from repositories.repos import FraudDecisionRepository
-    from services.fraud.models import FraudDecision
+    from intelligence.fraud.models import FraudDecision
 
     repo = FraudDecisionRepository()
     now = "2026-07-02T00:00:00+00:00"
@@ -362,7 +362,7 @@ async def test_cross_tenant_decision_isolation():
 @pytest.mark.asyncio
 async def test_cross_tenant_detector_isolation():
     """Sessions from t1 must not bleed into t2's detection."""
-    from services.fraud_networks.detectors import detect_shared_device
+    from intelligence.fraud_networks.detectors import detect_shared_device
 
     sessions_t1 = [
         {"entity_id": "e1", "device_fingerprint": "fp_shared", "tenant_id": "t1"},
@@ -386,7 +386,7 @@ async def test_cross_tenant_detector_isolation():
 @pytest.mark.asyncio
 async def test_evaluation_failure_does_not_produce_clear():
     """When evaluation raises, the returned decision must be 'monitor' not 'clear'."""
-    from services.fraud.evaluation import FraudEvaluationService
+    from intelligence.fraud.evaluation import FraudEvaluationService
 
     evaluator = FraudEvaluationService()
 
@@ -423,7 +423,7 @@ async def test_full_evaluation_persists_decision():
         TransferRepository,
         WalletRepository,
     )
-    from services.fraud.evaluation import FraudEvaluationService
+    from intelligence.fraud.evaluation import FraudEvaluationService
 
     # Seed sessions with a shared device — should fire shared_device signal
     session_repo = SessionRepository()
@@ -467,7 +467,7 @@ async def test_full_evaluation_persists_decision():
 async def test_evaluation_idempotency_within_ttl():
     """Second evaluation within TTL returns the cached decision without creating a new one."""
     from repositories.repos import FraudDecisionRepository
-    from services.fraud.evaluation import FraudEvaluationService
+    from intelligence.fraud.evaluation import FraudEvaluationService
 
     evaluator = FraudEvaluationService()
 
@@ -492,7 +492,7 @@ async def test_evaluation_idempotency_within_ttl():
 async def test_evaluation_force_creates_new_decision():
     """force=True always creates a fresh decision even within TTL."""
     from repositories.repos import FraudDecisionRepository
-    from services.fraud.evaluation import FraudEvaluationService
+    from intelligence.fraud.evaluation import FraudEvaluationService
 
     evaluator = FraudEvaluationService()
 
@@ -519,8 +519,8 @@ async def test_evaluation_force_creates_new_decision():
 @pytest.mark.asyncio
 async def test_risk_annotation_written_to_activity():
     """evaluate_subject writes risk annotation to canonical_activity."""
-    from services.measurement.repositories.activity_repo import ActivityRepository
-    from services.fraud.evaluation import FraudEvaluationService
+    from journeys.measurement.repositories.activity_repo import ActivityRepository
+    from intelligence.fraud.evaluation import FraudEvaluationService
 
     act_repo = ActivityRepository()
     act = {

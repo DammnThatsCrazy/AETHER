@@ -17,7 +17,7 @@ import {
  * The canonical connectable family ids encoded in this dataset, transcribed from
  * the one-customer catalog's two public connectable groups:
  *
- *  - the 21 connector-registry families (services/integrations/connectors/
+ *  - the 21 connector-registry families (services/api/connectors/integrations/connectors/
  *    adapters.py ALL_CONNECTORS → registry.py CONNECTORS; the seven branded
  *    comms connectors klaviyo, sendgrid, customerio, mailchimp, postmark,
  *    iterable, braze included), and

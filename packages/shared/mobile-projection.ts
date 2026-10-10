@@ -2,7 +2,7 @@
  * Mobile gateway projection contracts (v1).
  *
  * TS twin of the Python-authoritative mobile projection builders
- * (`services/mobile/projections.py`). Every surface is bounded and redacted by
+ * (`services/api/ingestion/mobile/projections.py`). Every surface is bounded and redacted by
  * the backend — these are the wire shapes the Aether Mobile app renders, never a
  * second projection calculation. Field names are snake_case (decision-log D6) and
  * parity-tested against the Python builders by

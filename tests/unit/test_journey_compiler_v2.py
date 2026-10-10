@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -28,7 +28,7 @@ def _make_activity(
     tenant_id: str = "tenant-a",
     profile_id: str = "profile-001",
 ) -> dict:
-    from services.measurement.contracts import CanonicalActivity, ActivityFamily, ActivityStatus
+    from journeys.measurement.contracts import CanonicalActivity, ActivityFamily, ActivityStatus
     return CanonicalActivity(
         tenant_id=tenant_id,
         profile_id=profile_id,
@@ -47,7 +47,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_compile_returns_journey_version(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         result = await compiler.compile_for_profile("tenant-a", "profile-001")
         assert result is not None
@@ -55,15 +55,15 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_compiler_version_is_2_0(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         result = await compiler.compile_for_profile("tenant-a", "profile-v2")
         assert result.get("compiler_version") == "2.0"
 
     @pytest.mark.asyncio
     async def test_cross_rail_activities_included(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         profile_id = f"prof-{uuid4()}"
         for family, activity_type in [
@@ -82,7 +82,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_deterministic_sort_same_input_same_output(self):
-        from services.measurement.engine.journey_compiler import _sort_deterministically
+        from journeys.measurement.engine.journey_compiler import _sort_deterministically
         activities = [
             _make_activity(offset=10),
             _make_activity(offset=5),
@@ -95,7 +95,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_deterministic_sort_chronological_order(self):
-        from services.measurement.engine.journey_compiler import _sort_deterministically
+        from journeys.measurement.engine.journey_compiler import _sort_deterministically
         activities = [
             _make_activity(offset=20),
             _make_activity(offset=5),
@@ -107,7 +107,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_transition_classification_cross_rail(self):
-        from services.measurement.engine.journey_compiler import _classify_pair
+        from journeys.measurement.engine.journey_compiler import _classify_pair
         web2 = _make_activity(family="web2", activity_type="page_view", offset=0)
         web3 = _make_activity(family="web3", activity_type="transfer", offset=10)
         transition = _classify_pair(web2, web3, session_timeout_seconds=1800)
@@ -115,7 +115,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_transition_web3_to_web2(self):
-        from services.measurement.engine.journey_compiler import _classify_pair
+        from journeys.measurement.engine.journey_compiler import _classify_pair
         web3 = _make_activity(family="web3", activity_type="transfer", offset=0)
         web2 = _make_activity(family="web2", activity_type="page_view", offset=10)
         transition = _classify_pair(web3, web2, session_timeout_seconds=1800)
@@ -123,7 +123,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_transition_human_to_agent(self):
-        from services.measurement.engine.journey_compiler import _classify_pair
+        from journeys.measurement.engine.journey_compiler import _classify_pair
         human = {**_make_activity(family="web2", offset=0), "actor_type": "human"}
         agent = {**_make_activity(family="agent", offset=5), "actor_type": "agent"}
         transition = _classify_pair(human, agent, session_timeout_seconds=1800)
@@ -131,7 +131,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_empty_profile_produces_zero_step_count(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         profile_id = f"empty-{uuid4()}"
         compiler = JourneyCompiler()
         result = await compiler.compile_for_profile("tenant-a", profile_id)
@@ -139,8 +139,8 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_cluster_only_activity_builds_cluster_journey(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
 
         cluster_id = f"cluster-{uuid4()}"
         activity = _make_activity(profile_id=f"unused-{uuid4()}")
@@ -159,7 +159,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_profile_and_cluster_with_same_id_keep_distinct_lineages(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
 
         shared_id = f"shared-{uuid4()}"
         compiler = JourneyCompiler()
@@ -192,7 +192,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_profile_and_anonymous_with_same_id_keep_distinct_lineages(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
 
         shared_id = f"shared-anonymous-{uuid4()}"
         compiler = JourneyCompiler()
@@ -220,14 +220,14 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_rebuild_consent_change(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         results = await compiler.rebuild_affected_by_consent_change("tenant-a", "profile-001")
         assert isinstance(results, list)
 
     @pytest.mark.asyncio
     async def test_rebuild_web3_status_change(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
         tx_hash = f"0x{uuid4().hex}"
         results = await compiler.rebuild_affected_by_web3_status_change("tenant-a", tx_hash, "confirmed")
@@ -235,7 +235,7 @@ class TestJourneyCompilerV2:
 
     @pytest.mark.asyncio
     async def test_web3_does_not_break_session_boundary(self):
-        from services.measurement.engine.journey_compiler import _classify_pair
+        from journeys.measurement.engine.journey_compiler import _classify_pair
         web2 = _make_activity(family="web2", offset=0)
         web3 = _make_activity(family="web3", offset=5)
         web2_after = _make_activity(family="web2", offset=10)
@@ -251,8 +251,8 @@ class TestJourneyCompilerV2Regression:
 
     @pytest.mark.asyncio
     async def test_campaign_only_profile(self):
-        from services.measurement.engine.journey_compiler import JourneyCompiler
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
         repo = ActivityRepository()
         profile_id = f"camp-{uuid4()}"
         for i in range(3):

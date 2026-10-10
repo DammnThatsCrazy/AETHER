@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - constrained local sandboxes only
     pytest_asyncio = SimpleNamespace(fixture=_async_fixture)
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -50,17 +50,17 @@ RESOURCE_ID = "res-int-001"
 
 
 def _reset_all():
-    import services.x402.approvals as _approvals_mod
-    import services.x402.entitlements as _entitlements_mod
-    import services.x402.facilitators as _facilitators_mod
-    import services.x402.policies as _policies_mod
-    import services.x402.resources as _res_mod
-    import services.x402.settlement as _settlement_mod
-    import services.x402.verification as _verification_mod
+    import value.x402.approvals as _approvals_mod
+    import value.x402.entitlements as _entitlements_mod
+    import value.x402.facilitators as _facilitators_mod
+    import value.x402.policies as _policies_mod
+    import value.x402.resources as _res_mod
+    import value.x402.settlement as _settlement_mod
+    import value.x402.verification as _verification_mod
     from repositories.repos import reset_in_memory_stores
-    from services.x402.commerce_store import reset_commerce_store
-    from services.x402.control_plane import reset_control_plane
-    from services.x402.idempotency import reset_idempotency_store
+    from value.x402.commerce_store import reset_commerce_store
+    from value.x402.control_plane import reset_control_plane
+    from value.x402.idempotency import reset_idempotency_store
 
     reset_in_memory_stores()
     reset_commerce_store()
@@ -87,12 +87,12 @@ def reset_all_stores():
 @pytest_asyncio.fixture
 async def seeded_resource():
     """Seed facilitators/assets and register a protected resource."""
-    from services.x402.commerce_models import ProtectedResource, ResourceClass
-    from services.x402.facilitators import (
+    from value.x402.commerce_models import ProtectedResource, ResourceClass
+    from value.x402.facilitators import (
         get_facilitator_registry,
         seed_facilitators_and_assets,
     )
-    from services.x402.resources import ProtectedResourceRegistry
+    from value.x402.resources import ProtectedResourceRegistry
 
     await seed_facilitators_and_assets(TENANT)
     # Authorization routes only to a facilitator with a current healthy signal.
@@ -122,7 +122,7 @@ async def seeded_resource():
 @pytest_asyncio.fixture
 async def cp(seeded_resource):
     """X402ControlPlane with a mocked event producer."""
-    from services.x402.control_plane import X402ControlPlane
+    from value.x402.control_plane import X402ControlPlane
 
     producer = AsyncMock()
     producer.publish = AsyncMock()

@@ -6,13 +6,13 @@ visibility: I
 audience: [architect, dev-senior, ops, buyer]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/admin/kyber_strategic.py, services/backend/services/admin/routes.py, apps/kyber-web/src/components/recommendation-observability-panel.tsx]
+source_files: [services/api/governance/admin/kyber_strategic.py, services/api/governance/admin/routes.py, apps/kyber-web/src/components/recommendation-observability-panel.tsx]
 flags: []
 related: [ai/kyber-strategic-observability, ai/playbooks, ai/recommendation-families]
 source_hashes:
   "apps/kyber-web/src/components/recommendation-observability-panel.tsx": "sha256:7aa4bfb78ced06b43c567563ca81a208a9e2f85e53bd184265e736758318bae1"
-  "services/backend/services/admin/kyber_strategic.py": "sha256:53235e2711b40308c0fe42c96b4f442290c9c73c054931ad1c5683f69123151f"
-  "services/backend/services/admin/routes.py": "sha256:afde854e3e99a713735396a7308ad6a79517f8b80237fb38b2dcfd0aceb67187"
+  "services/api/governance/admin/kyber_strategic.py": "sha256:814a81f744d044cf8dbd533d29d53373772a2e1c97eeb97db084c271bb9b583a"
+  "services/api/governance/admin/routes.py": "sha256:448866155ff0ffee0857e0843e3ac9c25dec4c32a9a1c30ba1b749e3eb4c168c"
 ---
 
 # Kyber Revenue Intelligence

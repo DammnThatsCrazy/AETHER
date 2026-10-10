@@ -40,10 +40,10 @@ def test_worker_readiness_alert_threshold_matches_the_probe_it_alerts_on() -> No
 
     import yaml
 
-    backend = ROOT / "services/backend"
+    backend = ROOT / "services/api"
     if str(backend) not in sys.path:
         sys.path.insert(0, str(backend))
-    from services.runtime.supervisor import HEARTBEAT_TIMEOUT_S
+    from workers.runtime.supervisor import HEARTBEAT_TIMEOUT_S
 
     manifest = yaml.safe_load(
         (ROOT / "config/founding_tenant_release.yaml").read_text(encoding="utf-8")

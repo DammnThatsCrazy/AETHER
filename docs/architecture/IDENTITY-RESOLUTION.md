@@ -7,26 +7,26 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/identity/
-  - services/backend/services/ingestion/batch.py
-  - services/backend/services/runtime/consumer_specs.py
-  - services/backend/repositories/repos.py
-  - services/backend/services/analytics/routes.py
-  - services/backend/services/profile/composer.py
-  - services/backend/services/profile/aggregator.py
+  - services/api/identity/identity/
+  - services/api/ingestion/ingestion/batch.py
+  - services/api/workers/runtime/consumer_specs.py
+  - services/api/repositories/repos.py
+  - services/api/intelligence/analytics/routes.py
+  - services/api/identity/profile/composer.py
+  - services/api/identity/profile/aggregator.py
   - packages/shared/identity.ts
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
-  "services/backend/services/analytics/routes.py": "sha256:58d556a9dcc74c50a5dd2bec6c779b61c87a01dda11c57471f9ca45539accb2d"
-  "services/backend/services/identity/": "sha256:01503b76be64eda0a099615b9e1434a8a1252b72df48ef0bbf827a80e3396a03"
-  "services/backend/services/ingestion/batch.py": "sha256:a82c8c8458d2b1b320752f27189778b78d4238cb68a05578fbe91b14874f36d3"
-  "services/backend/services/profile/aggregator.py": "sha256:1a8495842ba83117735baddfbe24ec265dd93a0baec1d91307fb62f210a2ea0c"
-  "services/backend/services/profile/composer.py": "sha256:672ed8a1653a7ebe76e4ee38742c7079b36f0ed7c9a291509b62a9cee8083220"
-  "services/backend/services/runtime/consumer_specs.py": "sha256:0bd54fe2c7dd031759f31f312b068428e11958169066764b3bb00792f4e82dac"
+  "services/api/identity/identity/": "sha256:2c8e08c39468c5d10ce093aa4eb67204e85f0e7c185a8a8333d36fdf23d384c1"
+  "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
+  "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
+  "services/api/ingestion/ingestion/batch.py": "sha256:d91f4306575bad6127bd700158e90198e88a4f21427b748e019fee1a6f6438c3"
+  "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
+  "services/api/repositories/repos.py": "sha256:bbad38e1ca8c19e36f2f936332bbe199e6a7b09e71598495ee72eb2efc2a9100"
+  "services/api/workers/runtime/consumer_specs.py": "sha256:48f0418bed3e1b77ed8775bf74ff2b461e320a48608b6cd150a0aa1c45dc9bcb"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
@@ -38,7 +38,7 @@ Aether's Identity Resolution system unifies user profiles across devices, browse
 
 ## Architecture
 
-The production implementation lives in `services/backend/services/identity/` — `resolver.py` orchestrates a 15-step pipeline via `IdentityResolutionService`, backed by 9 specialized repository classes (`repository.py`), HMAC-SHA256 PII hashing (`hashing.py`), merge/split policy engines (`merge_policy.py`, `split_policy.py`), a conflict manager (`conflicts.py`), an audit writer (`audit.py`), and a graph writer (`graph_writer.py`). Confidence scoring uses a 5-tier model (BLOCKED → NONE → LOW → MEDIUM → HIGH → DETERMINISTIC) in `confidence.py`.
+The production implementation lives in `services/api/identity/identity/` — `resolver.py` orchestrates a 15-step pipeline via `IdentityResolutionService`, backed by 9 specialized repository classes (`repository.py`), HMAC-SHA256 PII hashing (`hashing.py`), merge/split policy engines (`merge_policy.py`, `split_policy.py`), a conflict manager (`conflicts.py`), an audit writer (`audit.py`), and a graph writer (`graph_writer.py`). Confidence scoring uses a 5-tier model (BLOCKED → NONE → LOW → MEDIUM → HIGH → DETERMINISTIC) in `confidence.py`.
 
 **Persistence.** Alembic migrations create the identity tables with named
 columns, not the generic `data` JSONB column. The migrations are
@@ -289,7 +289,7 @@ The `DeviceFingerprintCollector` in `packages/sdk/web/src/core/fingerprint.ts` g
 | Device memory | Low-Medium | `navigator.deviceMemory` |
 | Touch support | Low | `navigator.maxTouchPoints` |
 
-**Privacy**: Only the composite SHA-256 hash leaves the browser. Raw signals are never transmitted. On the backend, PII fields (email, phone, IP) are stored as HMAC-SHA256 hashes (`services/backend/services/identity/hashing.py`) — raw values are never persisted in the graph or audit trail. Fingerprinting is skipped when GDPR mode is active and analytics consent is not granted. Cached in localStorage for 7 days.
+**Privacy**: Only the composite SHA-256 hash leaves the browser. Raw signals are never transmitted. On the backend, PII fields (email, phone, IP) are stored as HMAC-SHA256 hashes (`services/api/identity/identity/hashing.py`) — raw values are never persisted in the graph or audit trail. Fingerprinting is skipped when GDPR mode is active and analytics consent is not granted. Cached in localStorage for 7 days.
 
 ### iOS SDK
 
@@ -328,7 +328,7 @@ The legacy `PUT /v1/resolution/config` route was removed with the unregistered r
 
 ## API Endpoints
 
-Production routes are served under `/v1/identity/` by `services/backend/services/identity/routes.py`. Legacy profile routes are backwards-compatible.
+Production routes are served under `/v1/identity/` by `services/api/identity/identity/routes.py`. Legacy profile routes are backwards-compatible.
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -401,7 +401,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | **Cooldown** | Don't re-evaluate rejected pairs for 24 hours. |
 | **Fraud gate** | If either profile has fraud score > 40, route to manual review regardless of identity confidence. |
 | **Undo capability** | `RESOLVED_AS` edges store full signal snapshots. Merges can be reversed by restoring the secondary profile and reassigning graph edges. |
-| **Privacy** | All PII (email, phone, IP) stored as HMAC-SHA256 hashes only (`services/backend/services/identity/hashing.py`). Raw values never persisted in graph or audit trail. |
+| **Privacy** | All PII (email, phone, IP) stored as HMAC-SHA256 hashes only (`services/api/identity/identity/hashing.py`). Raw values never persisted in graph or audit trail. |
 
 ## Audit Trail
 
@@ -470,13 +470,13 @@ v8.0 extends the identity graph to autonomous AI agents and smart contracts.
 Identity resolution now emits **additive, fail-closed decision evidence** without
 changing any resolution outcome:
 
-- **IdentityDecision evidence** (`services/backend/services/identity/decision_evidence.py`) — the
+- **IdentityDecision evidence** (`services/api/identity/identity/decision_evidence.py`) — the
   resolver records an `IdentityDecisionEvidence` row (decision type — `auto_link`,
   `candidate_link`, `merge`, `split`, `suppress`, `reject`, `conflict`, …, the
   matched signals, confidence, and a hashed consent snapshot) for each resolution.
   Recording is wrapped so a failure can never break resolution; evidence is
   tenant-scoped.
-- **Source Precedence Engine** (`services/backend/services/identity/source_precedence.py`) — a
+- **Source Precedence Engine** (`services/api/identity/identity/source_precedence.py`) — a
   machine-readable precedence matrix ranks conflicting sources per field
   (identity, revenue, wallet/account/payment linkage, financial value, reward
   status, attribution basis, …). When candidate sources disagree and none clears

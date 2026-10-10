@@ -20,14 +20,14 @@ or graph projection.
 ## Subsystems
 
 Aether has multiple connector execution surfaces under
-`services/backend/services/`:
+`services/api/services/`:
 
 | Subsystem | Path | Purpose |
 |---|---|---|
-| Integrations | `services/backend/services/integrations/connectors/` | Email and marketing platform connectors |
-| Measurement | `services/backend/services/measurement/connectors/` | Ad platform measurement connectors |
-| Derivatives | `services/backend/services/derivatives/connectors/` | Financial venue connectors |
-| Universal Provider Runtime (UPR) | `services/backend/services/provider_runtime/` and `services/backend/services/providers/` | Manifest-driven provider lifecycle, stream sync, webhook, raw storage, normalization, and replay runtime |
+| Integrations | `services/api/connectors/integrations/connectors/` | Email and marketing platform connectors |
+| Measurement | `services/api/journeys/measurement/connectors/` | Ad platform measurement connectors |
+| Derivatives | `services/api/value/derivatives/connectors/` | Financial venue connectors |
+| Universal Provider Runtime (UPR) | `services/api/connectors/provider_runtime/` and `services/api/connectors/providers/` | Manifest-driven provider lifecycle, stream sync, webhook, raw storage, normalization, and replay runtime |
 
 ## Integration Connectors
 
@@ -55,7 +55,7 @@ Aether has multiple connector execution surfaces under
 
 ## Provider Plugins
 
-Provider plugins at `services/backend/services/providers/` normalize through
+Provider plugins at `services/api/connectors/providers/` normalize through
 `shared/integration_contracts/normalization.py`. The table reflects structural
 plugin capability; follow the current manifest and certification evidence for
 per-stream availability. Credentials vary by provider and profile.
@@ -73,8 +73,8 @@ per-stream availability. Credentials vary by provider and profile.
 ## Validation
 
 UPR manifest honesty and structural certification are enforced through
-`services/backend/services/provider_runtime/validation.py` and
-`services/backend/services/provider_runtime/certification.py`. Legacy
+`services/api/connectors/provider_runtime/validation.py` and
+`services/api/connectors/provider_runtime/certification.py`. Legacy
 integration, measurement, communications, import, and specialized financial
 paths retain their own adapters and persistence contracts; this validator does
 not certify those paths or prove a graph projector exists.

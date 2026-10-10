@@ -3,7 +3,7 @@
 Two fail-closed layers:
 
 1. Explicit checks over the candidate env dict, mirroring the guards in
-   "services/backend/config/settings.py"
+   "services/api/config/settings.py"
    (``Settings.__post_init__``) plus staging-hardening rules Settings cannot
    express: no wildcard/localhost CORS, no placeholder secret values, and no
    in-memory-store overrides (shared/store.py and attribution fail closed).
@@ -30,7 +30,7 @@ from typing import Callable, Optional
 from .preflight_results import CheckResult, failed, passed
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_DIR = ROOT / "services" / "backend"
+BACKEND_DIR = ROOT / "services" / "api"
 
 # Exact env var names from config/settings.py.
 ALLOWED_ENVIRONMENTS = ("staging", "production")        # Environment enum values
@@ -342,7 +342,7 @@ def run_env_checks(
             detail,
             "fix the candidate environment until config.settings.Settings() "
             "constructs (see Settings.__post_init__ guards in "
-            '"services/backend/config/settings.py")',
+            '"services/api/config/settings.py")',
         ))
 
     # 9. Import the full API graph when the caller requests the stronger

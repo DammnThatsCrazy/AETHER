@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/integrations/providers/payment_rails/sync_worker.py
-  - services/backend/services/integrations/providers/payment_rails/reconciliation.py
+  - services/api/connectors/integrations/providers/payment_rails/sync_worker.py
+  - services/api/connectors/integrations/providers/payment_rails/reconciliation.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/integrations/providers/payment_rails/reconciliation.py": "sha256:ea8c4b88206050af1e02c4c078ceaed8ea7241fd4c79f80ee9176f71279da9d3"
-  "services/backend/services/integrations/providers/payment_rails/sync_worker.py": "sha256:4f329fa6bf142e40bb3a031aa9d09f37dd3c2c1cbdbf8946102d1503fe6fb515"
+  "services/api/connectors/integrations/providers/payment_rails/reconciliation.py": "sha256:5350e7d1bed28083d17152c4cf472b470ff7d5ababa991fef7fe1ca2b9df7e09"
+  "services/api/connectors/integrations/providers/payment_rails/sync_worker.py": "sha256:ccd4bdc1b1cf9f2291a8397460abc8cbb72b1c026216ab49a7004438e5205d0c"
 ---
 
 # Payment Rail Observability Runbook

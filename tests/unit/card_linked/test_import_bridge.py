@@ -1,6 +1,6 @@
 """Card-linked bulk import routed THROUGH the canonical import engine.
 
-Covers deliverable 3: the card-linked import reuses services.imports for PII /
+Covers deliverable 3: the card-linked import reuses ingestion.imports for PII /
 sensitivity detection, dry-run validation, review-approval, and lineage, and
 imported rows reconcile against later provider evidence.
 """
@@ -13,7 +13,7 @@ pytestmark = pytest.mark.asyncio
 
 
 def test_build_import_lineage_detects_pii_and_validates():
-    from services.card_linked_payments.import_bridge import build_import_lineage
+    from value.card_linked_payments.import_bridge import build_import_lineage
 
     rows = [
         {"id": "r1", "basis": "spend", "card_program_id": "redotpay",
@@ -24,7 +24,7 @@ def test_build_import_lineage_detects_pii_and_validates():
          "occurred_at": "2026-07-11T00:00:00Z"},
     ]
     lineage = build_import_lineage("t-imp", rows)
-    assert lineage["engine"] == "services.imports"
+    assert lineage["engine"] == "ingestion.imports"
     assert lineage["import_id"].startswith("climp_")
     assert lineage["rows_total"] == 2
     # The engine's analyzer flagged the identity columns as PII/identifier.
@@ -48,14 +48,14 @@ async def test_import_stamps_lineage_on_every_flow(tenant, ingestion):
     assert len(results) == 2
     for record, _ in results:
         lineage = record.get("import_lineage")
-        assert lineage and lineage["engine"] == "services.imports"
+        assert lineage and lineage["engine"] == "ingestion.imports"
         assert "row_index" in lineage
         assert record["source"] == "tenant_import"
         assert record["evidence_strength"] == "self_reported"
 
 
 async def test_import_review_required_audited(tenant, ingestion):
-    from services.card_linked_payments.repositories import get_card_linked_repositories
+    from value.card_linked_payments.repositories import get_card_linked_repositories
 
     await ingestion.ingest_tenant_import(tenant, [
         {"id": "imp_pii", "basis": "spend", "card_program_id": "redotpay",
@@ -67,7 +67,7 @@ async def test_import_review_required_audited(tenant, ingestion):
 
 
 async def test_imported_row_reconciles_with_later_provider_event(tenant, ingestion):
-    from services.card_linked_payments.repositories import get_card_linked_repositories
+    from value.card_linked_payments.repositories import get_card_linked_repositories
 
     # 1) An imported top-up row for a wallet+program.
     await ingestion.ingest_tenant_import(tenant, [

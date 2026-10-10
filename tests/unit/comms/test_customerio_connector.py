@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -47,28 +47,28 @@ class TestWebhookMapping:
         ("unsubscribed", "unsubscribe_observed"),
     ])
     def test_event_mapping(self, event, expected):
-        from services.integrations.connectors.customerio import CustomerIOConnector
+        from connectors.integrations.connectors.customerio import CustomerIOConnector
         events = CustomerIOConnector().parse_webhook([_cio_record(event)])
         assert len(events) == 1
         assert events[0].event_type == expected
         assert events[0].properties["provider"] == "customerio"
 
     def test_short_metric_name_mapping(self):
-        from services.integrations.connectors.customerio import CustomerIOConnector
+        from connectors.integrations.connectors.customerio import CustomerIOConnector
         events = CustomerIOConnector().parse_webhook([
             {**_cio_record("email_clicked"), "metric": "clicked"},
         ])
         assert events[0].event_type == "email_clicked"
 
     def test_unknown_event_dropped(self):
-        from services.integrations.connectors.customerio import CustomerIOConnector
+        from connectors.integrations.connectors.customerio import CustomerIOConnector
         assert CustomerIOConnector().parse_webhook(
             [_cio_record("email_converted")]
         ) == []
 
     def test_unix_timestamp_converted(self):
         from datetime import datetime, timezone
-        from services.integrations.connectors.customerio import CustomerIOConnector
+        from connectors.integrations.connectors.customerio import CustomerIOConnector
         events = CustomerIOConnector().parse_webhook([_cio_record("email_delivered")])
         assert events[0].occurred_at.startswith(
             datetime.fromtimestamp(NOW, tz=timezone.utc).isoformat().split("+")[0]
@@ -76,7 +76,7 @@ class TestWebhookMapping:
         assert events[0].occurred_at.endswith("+00:00")
 
     def test_bounce_type(self):
-        from services.integrations.connectors.customerio import CustomerIOConnector
+        from connectors.integrations.connectors.customerio import CustomerIOConnector
         hard = CustomerIOConnector().parse_webhook([
             _cio_record("email_bounced", bounce_type="hard")
         ])[0]
@@ -90,7 +90,7 @@ class TestSignature:
         ).hexdigest()
 
     def test_verify_dispatches_native_hmac(self):
-        from services.integrations.connectors.customerio import CustomerIOConnector
+        from connectors.integrations.connectors.customerio import CustomerIOConnector
         sig = self._cio_sig(NOW, PAYLOAD)
         headers = {"X-CIO-Signature": sig, "X-CIO-Timestamp": str(NOW)}
         assert CustomerIOConnector.verify_webhook_signature(PAYLOAD, headers, SECRET)
@@ -112,7 +112,7 @@ class TestSignature:
 
 class TestDescriptor:
     def test_honest_declaration(self):
-        from services.integrations.connectors.customerio import CustomerIOConnector
+        from connectors.integrations.connectors.customerio import CustomerIOConnector
         from shared.certification.readiness import to_readiness
         c = CustomerIOConnector()
         assert c.signature_scheme == "customerio_hmac_v0"
@@ -122,6 +122,6 @@ class TestDescriptor:
         assert "comms.click_events" in c.manifest_data_outputs
 
     def test_registry_serves_customerio(self):
-        from services.integrations.connectors.registry import get_connector
-        from services.integrations.connectors.customerio import CustomerIOConnector
+        from connectors.integrations.connectors.registry import get_connector
+        from connectors.integrations.connectors.customerio import CustomerIOConnector
         assert isinstance(get_connector("customerio"), CustomerIOConnector)

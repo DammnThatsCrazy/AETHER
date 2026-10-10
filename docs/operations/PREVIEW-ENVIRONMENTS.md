@@ -12,7 +12,7 @@ source_files:
   - .github/workflows/frontend-preview.yml
   - config/staging_frontend_preview_iam_policy.yaml
   - infra/aws/terraform/main.tf
-  - services/backend/shared/security/cors.py
+  - services/api/shared/security/cors.py
 ---
 
 # Preview environments
@@ -55,7 +55,7 @@ A preview is only the frontend. It calls the staging API and signs in through
 staging Auth0, so staging must be awake for a preview to do more than render.
 The staging API allows exactly `https://pr-<N>.<preview domain>` origins
 (`CORS_PREVIEW_ORIGIN_SUFFIX`, built into an anchored pattern by
-`services/backend/shared/security/cors.py` and refused in production). The
+`services/api/shared/security/cors.py` and refused in production). The
 staging Auth0 application accepts `https://*.<preview domain>` callbacks and
 origins. Sign-in uses the bearer session token, so previews work on the
 Amplify default domain, which is cross-site to the API.

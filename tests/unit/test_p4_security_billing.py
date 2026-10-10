@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -40,7 +40,7 @@ def _providers(monkeypatch, *, mode: str):
     monkeypatch.setenv("BILLING_PROVIDER_MODE", mode)
     monkeypatch.delenv("AETHER_STRIPE_BILLING_ENABLED", raising=False)
     with backend_module_path():
-        return importlib.import_module("services.billing.providers")
+        return importlib.import_module("billing.billing.providers")
 
 
 # ── Billing providers ───────────────────────────────────────────────────────

@@ -103,9 +103,9 @@ AREAS: list[Area] = [
         "Local in-memory fallbacks are dev/test only; staging/production require "
         "Postgres/Redis/Neptune/Kafka.",
         [
-            "services/backend/main.py",
-            "services/backend/services/ingestion/batch.py",
-            "services/backend/middleware/middleware.py",
+            "services/api/main.py",
+            "services/api/ingestion/ingestion/batch.py",
+            "services/api/middleware/middleware.py",
             "scripts/validate_event_schema_parity.py",
         ],
     ),
@@ -129,8 +129,8 @@ AREAS: list[Area] = [
         "with confidence scoring, merge endpoint with reason + Kafka audit event, and a "
         "admin identity review queue with approve/reject for low-confidence decisions.",
         [
-            "services/backend/services/sdk/routes.py",
-            "services/backend/services/identity/routes.py",
+            "services/api/ingestion/sdk/routes.py",
+            "services/api/identity/identity/routes.py",
         ],
     ),
     Area(
@@ -143,8 +143,8 @@ AREAS: list[Area] = [
         "unit test suite covering aggregator dimensions, quality scoring, tenant "
         "isolation, pagination shape, and the consent gate.",
         [
-            "services/backend/services/profile/",
-            "services/backend/services/profile/routes.py",
+            "services/api/identity/profile/",
+            "services/api/identity/profile/routes.py",
             "packages/shared/profile360-contract.ts",
             "tests/unit/test_profile_360.py",
         ],
@@ -162,10 +162,10 @@ AREAS: list[Area] = [
         "scripts added. Release gate enforces all invariants (make graph-release-check). "
         "Gap: staging Neptune not yet provisioned; load baseline not recorded.",
         [
-            "services/backend/shared/graph/graph.py",
-            "services/backend/shared/graph/relationship_layers.py",
-            "services/backend/shared/graph/write_validator.py",
-            "services/backend/shared/graph/edge_properties.py",
+            "services/api/shared/graph/graph.py",
+            "services/api/shared/graph/relationship_layers.py",
+            "services/api/shared/graph/write_validator.py",
+            "services/api/shared/graph/edge_properties.py",
             "scripts/graph/check_graph_release_gate.py",
         ],
     ),
@@ -184,10 +184,10 @@ AREAS: list[Area] = [
         "credentiallessly by tests/chaos. Gap: hosted mode still needs durable storage.",
         [
             "services/agents/README.md",
-            "services/backend/services/agent/mutation_commit.py",
-            "services/backend/services/agent/runtime_repository.py",
-            "services/backend/services/intelligence/graph_mutations.py",
-            "services/backend/services/x402/economic_mutations.py",
+            "services/api/actions/agent/mutation_commit.py",
+            "services/api/actions/agent/runtime_repository.py",
+            "services/api/intelligence/intelligence/graph_mutations.py",
+            "services/api/value/x402/economic_mutations.py",
             "tests/chaos/test_agent_mutation.py",
             "docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
         ],
@@ -204,9 +204,9 @@ AREAS: list[Area] = [
         "ClickHouse-backed CIS health engine wired for production; local mode uses "
         "deterministic baseline + per-tenant jitter.",
         [
-            "services/backend/services/sdk_drift/routes.py",
-            "services/backend/services/data_quality/",
-            "services/backend/services/operational_intelligence/",
+            "services/api/ingestion/sdk_drift/routes.py",
+            "services/api/governance/data_quality/",
+            "services/api/graph/operational_intelligence/",
         ],
     ),
     Area(
@@ -218,7 +218,7 @@ AREAS: list[Area] = [
         [
             "apps/kyber-web/",
             ".github/workflows/kyber-e2e.yml",
-            "services/backend/services/intelligence/routes.py",
+            "services/api/intelligence/intelligence/routes.py",
         ],
     ),
     Area(
@@ -246,10 +246,10 @@ AREAS: list[Area] = [
         "vault → pull → Bronze ingest path is complete and E2E tested. Minor gap: "
         "no live staging validation with real provider credentials.",
         [
-            "services/backend/services/integrations/connectors/",
-            "services/backend/tests/test_connector_ingest.py",
-            "services/backend/tests/test_slack_notify_e2e.py",
-            "services/backend/repositories/lake.py",
+            "services/api/connectors/integrations/connectors/",
+            "services/api/tests/test_connector_ingest.py",
+            "services/api/tests/test_slack_notify_e2e.py",
+            "services/api/repositories/lake.py",
         ],
     ),
     Area(
@@ -264,9 +264,9 @@ AREAS: list[Area] = [
         "validated in test_slack_notify_e2e.py. Minor gap: no live workspace "
         "validation in staging.",
         [
-            "services/backend/services/integrations/connectors/adapters.py",
-            "services/backend/services/notification_intelligence/",
-            "services/backend/tests/test_slack_notify_e2e.py",
+            "services/api/connectors/integrations/connectors/adapters.py",
+            "services/api/journeys/notification_intelligence/",
+            "services/api/tests/test_slack_notify_e2e.py",
         ],
     ),
     Area(
@@ -279,9 +279,9 @@ AREAS: list[Area] = [
         "AETHER_ENV guard removed; replaced with config-driven DUNE_BACKEND flag. "
         "Staging validation and persistent backend wiring are the remaining gaps.",
         [
-            "services/backend/services/dune_feeder/service.py",
-            "services/backend/services/dune_feeder/routes.py",
-            "services/backend/services/dune_feeder/models.py",
+            "services/api/connectors/dune_feeder/service.py",
+            "services/api/connectors/dune_feeder/routes.py",
+            "services/api/connectors/dune_feeder/models.py",
             "apps/kyber-web/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
@@ -310,12 +310,12 @@ AREAS: list[Area] = [
             "packages/contracts/smart-contracts/contracts/AnalyticsRewards.sol",
             "packages/contracts/smart-contracts/test/AnalyticsRewards.test.js",
             ".github/workflows/smart-contract-analysis.yml",
-            "services/backend/services/rewards/policy_engine.py",
-            "services/backend/services/rewards/rails.py",
-            "services/backend/services/rewards/delivery_outbox.py",
-            "services/backend/services/rewards/repositories.py",
-            "services/backend/services/rewards/routes.py",
-            "services/backend/alembic/versions/20260613_reward_enablement.py",
+            "services/api/value/rewards/policy_engine.py",
+            "services/api/value/rewards/rails.py",
+            "services/api/value/rewards/delivery_outbox.py",
+            "services/api/value/rewards/repositories.py",
+            "services/api/value/rewards/routes.py",
+            "services/api/alembic/versions/20260613_reward_enablement.py",
             "tests/chaos/test_reward_delivery.py",
             "docs/operations/runbooks/REWARD_DELIVERY_RUNBOOK.md",
             "docs/operations/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
@@ -332,13 +332,13 @@ AREAS: list[Area] = [
         "export. 14/18 controls implemented + VM-dep-audit and VM-secret-scan now CI-gated; "
         "4 controls documented-only (IR, PR, PT, TM); no external certification.",
         [
-            "services/backend/shared/auth/auth.py",
-            "services/backend/services/security/retention.py",
-            "services/backend/services/security/retention_worker.py",
-            "services/backend/services/ingestion/batch.py",
+            "services/api/shared/auth/auth.py",
+            "services/api/governance/security/retention.py",
+            "services/api/governance/security/retention_worker.py",
+            "services/api/ingestion/ingestion/batch.py",
             "tests/unit/test_tenant_isolation.py",
             "scripts/compliance/readiness.py",
-            "services/backend/tests/security/",
+            "services/api/tests/security/",
             "scripts/security/secret_scan.py",
         ],
     ),
@@ -361,12 +361,12 @@ AREAS: list[Area] = [
             "packages/shared/agent.ts",
             "packages/shared/x402-lifecycle.ts",
             "packages/sdk/web/src/index.ts",
-            "services/backend/services/x402/lifecycle_mapper.py",
-            "services/backend/services/agent/lifecycle_mapper.py",
-            "services/backend/services/profile/agent.py",
-            "services/backend/repositories/repos.py",
-            "services/backend/services/admin/routes.py",
-            "services/backend/tests/agentic_x402/",
+            "services/api/value/x402/lifecycle_mapper.py",
+            "services/api/actions/agent/lifecycle_mapper.py",
+            "services/api/identity/profile/agent.py",
+            "services/api/repositories/repos.py",
+            "services/api/governance/admin/routes.py",
+            "services/api/tests/agentic_x402/",
         ],
     ),
     Area(
@@ -406,19 +406,19 @@ AREAS: list[Area] = [
         "converting journeys before training (falls back to position_based); Gold ClickHouse writes "
         "require provisioned ClickHouse instance.",
         [
-            "services/backend/services/measurement/",
-            "services/backend/services/measurement/engine/attribution_engine.py",
-            "services/backend/services/measurement/engine/journey_compiler.py",
-            "services/backend/services/measurement/engine/subscription_ltv.py",
-            "services/backend/services/measurement/engine/algorithmic_attribution.py",
-            "services/backend/services/measurement/connectors/",
-            "services/backend/services/measurement/routes/",
-            "services/backend/alembic/versions/20260622_measurement_core.py",
-            "services/backend/alembic/versions/20260622_incrementality.py",
-            "services/backend/tests/e2e/test_paid_media_ecommerce_flow.py",
-            "services/backend/tests/e2e/test_b2b_account_flow.py",
-            "services/backend/tests/e2e/test_privacy_consent_flow.py",
-            "services/backend/tests/e2e/test_agent_web3_attribution_flow.py",
+            "services/api/journeys/measurement/",
+            "services/api/journeys/measurement/engine/attribution_engine.py",
+            "services/api/journeys/measurement/engine/journey_compiler.py",
+            "services/api/journeys/measurement/engine/subscription_ltv.py",
+            "services/api/journeys/measurement/engine/algorithmic_attribution.py",
+            "services/api/journeys/measurement/connectors/",
+            "services/api/journeys/measurement/routes/",
+            "services/api/alembic/versions/20260622_measurement_core.py",
+            "services/api/alembic/versions/20260622_incrementality.py",
+            "services/api/tests/e2e/test_paid_media_ecommerce_flow.py",
+            "services/api/tests/e2e/test_b2b_account_flow.py",
+            "services/api/tests/e2e/test_privacy_consent_flow.py",
+            "services/api/tests/e2e/test_agent_web3_attribution_flow.py",
             "apps/kyber-web/src/pages/measurement/",
             "infra/clickhouse/schemas/008_measurement_gold.sql",
             "infra/observability/grafana/dashboards/measurement-slos.json",
@@ -445,12 +445,12 @@ AREAS: list[Area] = [
         "Campaign360 calculators do not yet thread MeasurementContext end-to-end; "
         "no production traffic at scale.",
         [
-            "services/backend/shared/measurement/",
-            "services/backend/shared/measurement/value_states.py",
-            "services/backend/shared/measurement/registry.py",
-            "services/backend/repositories/measurement_results_repo.py",
-            "services/backend/services/measurement/routes/integrity.py",
-            "services/backend/alembic/versions/20260716_measurement_integrity.py",
+            "services/api/shared/measurement/",
+            "services/api/shared/measurement/value_states.py",
+            "services/api/shared/measurement/registry.py",
+            "services/api/repositories/measurement_results_repo.py",
+            "services/api/journeys/measurement/routes/integrity.py",
+            "services/api/alembic/versions/20260716_measurement_integrity.py",
             "docs/reference/source-of-truth/MEASUREMENT_INTEGRITY.md",
         ],
     ),
@@ -474,11 +474,11 @@ AREAS: list[Area] = [
         "Gaps: Silver import projector deferred; tenant-facing UI is a follow-on; "
         "no production traffic at scale.",
         [
-            "services/backend/services/imports/",
-            "services/backend/services/imports/service.py",
-            "services/backend/services/imports/commit.py",
-            "services/backend/services/imports/kyber_routes.py",
-            "services/backend/repositories/import_files.py",
+            "services/api/ingestion/imports/",
+            "services/api/ingestion/imports/service.py",
+            "services/api/ingestion/imports/commit.py",
+            "services/api/ingestion/imports/kyber_routes.py",
+            "services/api/repositories/import_files.py",
             "packages/shared/imports.ts",
             "docs/reference/source-of-truth/IMPORTS.md",
             "docs/operations/runbooks/IMPORT_FAILURES.md",
@@ -504,18 +504,18 @@ AREAS: list[Area] = [
         "E2E, and security test suites. 8 docs including ADR, architecture, contract, "
         "migration guide, SDK guide, connector guide, Kyber guide, and operator runbooks.",
         [
-            "services/backend/services/campaign/registry.py",
-            "services/backend/services/campaign/resolver.py",
-            "services/backend/services/campaign/normalization.py",
-            "services/backend/services/campaign/repository.py",
-            "services/backend/services/campaign/routes.py",
-            "services/backend/services/campaign/metrics.py",
-            "services/backend/services/measurement/connectors/writer.py",
-            "services/backend/alembic/versions/20260627_campaign_registry.py",
-            "services/backend/tests/unit/test_campaign_registry.py",
-            "services/backend/tests/integration/test_campaign_registry_api.py",
-            "services/backend/tests/e2e/test_campaign_registry_e2e.py",
-            "services/backend/tests/security/test_campaign_registry_security.py",
+            "services/api/journeys/campaign/registry.py",
+            "services/api/journeys/campaign/resolver.py",
+            "services/api/journeys/campaign/normalization.py",
+            "services/api/journeys/campaign/repository.py",
+            "services/api/journeys/campaign/routes.py",
+            "services/api/journeys/campaign/metrics.py",
+            "services/api/journeys/measurement/connectors/writer.py",
+            "services/api/alembic/versions/20260627_campaign_registry.py",
+            "services/api/tests/unit/test_campaign_registry.py",
+            "services/api/tests/integration/test_campaign_registry_api.py",
+            "services/api/tests/e2e/test_campaign_registry_e2e.py",
+            "services/api/tests/security/test_campaign_registry_security.py",
             "packages/shared/acquisition-evidence.ts",
             "apps/aether-web/src/pages/campaigns/campaign-sources-page.tsx",
             "apps/aether-web/src/pages/campaigns/campaign-registry-page.tsx",
@@ -584,10 +584,10 @@ AREAS: list[Area] = [
         "readiness, it does not itself confer production; promotion to REPLAY/SANDBOX/"
         "PARTNER_LIVE needs the credential + validation evidence in the promotion guide.",
         [
-            "services/backend/shared/certification/registry.py",
-            "services/backend/shared/certification/readiness.py",
-            "services/backend/shared/certification/descriptor.py",
-            "services/backend/shared/certification/checks.py",
+            "services/api/shared/certification/registry.py",
+            "services/api/shared/certification/readiness.py",
+            "services/api/shared/certification/descriptor.py",
+            "services/api/shared/certification/checks.py",
             "docs/_generated/adapter-certification-matrix.json",
             "scripts/credentialless_certification.py",
             "docs/product/productization/staging-capstone/PROVIDER_CAPABILITY_MATRIX_GUIDE.md",
@@ -612,8 +612,8 @@ AREAS: list[Area] = [
         "is the observer-stack outbox projector); one of the two graph designs has "
         "to be chosen before either is claimed.",
         [
-            "services/backend/services/stablecoin/",
-            "services/backend/services/stablecoins/rpc_observer.py",
+            "services/api/value/stablecoin/",
+            "services/api/value/stablecoins/rpc_observer.py",
             "packages/shared/stablecoin.ts",
             "tests/unit/stablecoin/",
             "tests/chaos/test_chain_observers.py",
@@ -643,8 +643,8 @@ AREAS: list[Area] = [
         "Not production: zero PARTNER_LIVE venue adapters (read-only credentials "
         "required); Kafka streams deferred to local transport; no staging validation.",
         [
-            "services/backend/services/derivatives/",
-            "services/backend/repositories/typed_repo.py",
+            "services/api/value/derivatives/",
+            "services/api/repositories/typed_repo.py",
             "tests/unit/derivatives/",
             "tests/chaos/test_stream_recovery.py",
             "tests/chaos/test_provider_faults.py",
@@ -665,7 +665,7 @@ AREAS: list[Area] = [
         "Credentialless reorg/cursor-drift/RPC-failure recovery is pinned by tests/chaos. "
         "Not production: no live provider, no staging validation.",
         [
-            "services/backend/services/interop/",
+            "services/api/graph/interop/",
             "packages/shared/interoperability.ts",
             "tests/unit/interop/",
             "tests/chaos/test_chain_observers.py",
@@ -694,8 +694,8 @@ AREAS: list[Area] = [
         "credentialless matrix; duplicate-webhook-storm dedupe and idempotent worker "
         "restart are pinned by tests/chaos.",
         [
-            "services/backend/services/integrations/providers/payment_rails/",
-            "services/backend/services/integrations/providers/payment_rails/sync_worker.py",
+            "services/api/connectors/integrations/providers/payment_rails/",
+            "services/api/connectors/integrations/providers/payment_rails/sync_worker.py",
             "docs/reference/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
             "docs/operations/runbooks/PAYMENT_RAILS_RUNBOOK.md",
             "tests/payment_rails/test_sync_worker.py",
@@ -722,12 +722,12 @@ AREAS: list[Area] = [
         "durable store unexercised against real Postgres in staging, replay validated "
         "in-memory only, no live traffic; graph promotion of semantic edges stays gated.",
         [
-            "services/backend/services/semantic_intelligence/",
-            "services/backend/services/semantic_intelligence/providers.py",
-            "services/backend/services/semantic_intelligence/replay.py",
-            "services/backend/alembic/versions/20260702_semantic_sentiment.py",
-            "services/backend/alembic/versions/20260732_semantic_replay.py",
-            "services/backend/services/reliability/definitions.py",
+            "services/api/intelligence/semantic_intelligence/",
+            "services/api/intelligence/semantic_intelligence/providers.py",
+            "services/api/intelligence/semantic_intelligence/replay.py",
+            "services/api/alembic/versions/20260702_semantic_sentiment.py",
+            "services/api/alembic/versions/20260732_semantic_replay.py",
+            "services/api/governance/reliability/definitions.py",
             "docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
             "tests/integration/semantic/",
             "tests/chaos/test_semantic_pipeline.py",
@@ -749,7 +749,7 @@ AREAS: list[Area] = [
         "provider evidence, and no live provider data has ever flowed through the plane. "
         "Operator triage documented in the card-linked runbook.",
         [
-            "services/backend/services/card_linked_payments/",
+            "services/api/value/card_linked_payments/",
             "docs/reference/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
             "docs/operations/runbooks/CARD_LINKED_RUNBOOK.md",
             "tests/unit/card_linked/test_ingestion_wiring.py",
@@ -908,12 +908,12 @@ def _check_agentic_x402_files() -> list[str]:
     required = [
         "packages/shared/x402-lifecycle.ts",
         "packages/sdk/web/src/index.ts",
-        "services/backend/services/x402/lifecycle_mapper.py",
-        "services/backend/services/agent/lifecycle_mapper.py",
-        "services/backend/services/profile/agent.py",
-        "services/backend/tests/agentic_x402/test_tenant_isolation.py",
-        "services/backend/tests/agentic_x402/test_x402_lifecycle_mapper.py",
-        "services/backend/tests/agentic_x402/test_agent_lifecycle_mapper.py",
+        "services/api/value/x402/lifecycle_mapper.py",
+        "services/api/actions/agent/lifecycle_mapper.py",
+        "services/api/identity/profile/agent.py",
+        "services/api/tests/agentic_x402/test_tenant_isolation.py",
+        "services/api/tests/agentic_x402/test_x402_lifecycle_mapper.py",
+        "services/api/tests/agentic_x402/test_agent_lifecycle_mapper.py",
     ]
     missing = [p for p in required if not (ROOT / p).exists()]
     return missing

@@ -8,13 +8,13 @@ from contextlib import contextmanager
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
-BACKEND_ROOT = REPO_ROOT / "services" / "backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "api"
 
 
 @contextmanager
 def backend_path():
     original = list(sys.path)
-    for prefix in ("shared", "services", "config"):
+    for prefix in ("shared", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "config"):
         for name in list(sys.modules):
             if name == prefix or name.startswith(f"{prefix}."):
                 sys.modules.pop(name, None)

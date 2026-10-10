@@ -14,7 +14,7 @@ import pytest
 
 
 def test_relationship_fact_typed_fields_and_resolution(wsd_flags):
-    from services.operational_intelligence.models import EntityRef
+    from graph.operational_intelligence.models import EntityRef
     from shared.backend_interpretation.facts import fact_from_assertion
 
     wsd_flags(relationship_fact_enabled=True)
@@ -146,7 +146,7 @@ def test_section25_subject_type_day_fallback_and_keyless_skip(wsd_flags):
 @pytest.mark.asyncio
 async def test_durable_stores_round_trip_and_tenant_scope(wsd_flags):
     from shared.store import reset_in_memory_stores
-    from services.operational_intelligence.models import EntityRef
+    from graph.operational_intelligence.models import EntityRef
     from shared.backend_interpretation.primitives import (
         EpisodeRecord,
         OutcomeTruthRecord,

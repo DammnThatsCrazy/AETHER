@@ -1066,9 +1066,8 @@ def test_wake_readiness_handles_empty_cluster_failures_as_structured_json():
 def test_deactivation_revokes_durable_api_keys_before_marking_inactive():
     source = (
         ROOT
-        / "services" / "backend"
-        / "services"
-        / "auth"
+        / "services" / "api"
+        / "tenancy" / "auth"
         / "routes.py"
     ).read_text(encoding="utf-8")
     revoke_start = source.index("async def _revoke_tenant_api_keys")
@@ -1121,7 +1120,7 @@ def test_cleanup_requires_a_complete_erasure_receipt_and_declares_all_rehearsal_
         "tenant_graph",
     ):
         assert surface in (
-            (ROOT / "services" / "backend" / "services" / "auth" / "routes.py")
+            (ROOT / "services" / "api" / "tenancy" / "auth" / "routes.py")
             .read_text(encoding="utf-8")
         ), f"cleanup does not name the {surface} surface"
     assert "cleanup_complete receipt" in cleanup
@@ -2080,7 +2079,7 @@ def test_the_recorded_staging_state_is_asserted_in_both_wake_and_sleep():
 def _canonical_event_types() -> frozenset:
     import importlib.util
 
-    path = ROOT / "services" / "backend" / "services" / "ingestion" / "generated_registry.py"
+    path = ROOT / "services" / "api" / "ingestion" / "ingestion" / "generated_registry.py"
     spec = importlib.util.spec_from_file_location("_generated_event_registry", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

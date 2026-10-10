@@ -6,13 +6,13 @@ visibility: P
 audience: [dev-senior, dev-junior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/backend/services/comms/routes.py, services/backend/services/comms/ingest.py, services/backend/services/integrations/connectors/routes.py, services/backend/services/integrations/providers/payment_rails/webhook_endpoints.py, services/backend/services/integrations/providers/payment_rails/signature_verify.py]
+source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comms/ingest.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py, services/api/connectors/integrations/providers/payment_rails/signature_verify.py]
 source_hashes:
-  "services/backend/services/comms/ingest.py": "sha256:f5723b54d3bf02a39c2458e8cd649bf211503503e8f1ce4a735b454aff6dac2f"
-  "services/backend/services/comms/routes.py": "sha256:3b7c0b3a0f30dbd081291d4eb9529b0735a4897dcdf73dfaed4d8fda6d17b75e"
-  "services/backend/services/integrations/connectors/routes.py": "sha256:b77981fa68d21125447295add3c4f20d8bdb5dc7668119f98a73b6bf70333f8b"
-  "services/backend/services/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
-  "services/backend/services/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
+  "services/api/connectors/integrations/connectors/routes.py": "sha256:f3f63c100a16ead6edf6c8806c5d7f74e12c01f16b72be83eaf99165088f7826"
+  "services/api/connectors/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
+  "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
+  "services/api/journeys/comms/ingest.py": "sha256:5d3bb421d821198b564cd5ad5faa940d4de4de334711c186043366bf2623ad68"
+  "services/api/journeys/comms/routes.py": "sha256:c82539c0f35ba7c15a8c1a517a7ce26f1b20da5e16eba019ed9771fcd73259e8"
 ---
 
 # Generic Signed Communications Webhook

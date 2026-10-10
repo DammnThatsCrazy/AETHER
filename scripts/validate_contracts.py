@@ -106,15 +106,15 @@ def check_python_backend_event_types(events: dict) -> list[str]:
 
     backend_ingestion = (
         _Path(__file__).resolve().parent.parent
-        / "services" / "backend"
-        / "services" / "ingestion"
+        / "services" / "api"
+        / "ingestion" / "ingestion"
     )
     batch_path = backend_ingestion / "batch.py"
     registry_path = backend_ingestion / "generated_registry.py"
 
     if not batch_path.exists():
         errors.append(
-            "services/ingestion/batch.py not found — "
+            "services/api/ingestion/ingestion/batch.py not found — "
             "POST /v1/batch ingestion endpoint is missing."
         )
         return errors
@@ -132,7 +132,7 @@ def check_python_backend_event_types(events: dict) -> list[str]:
     if not match:
         errors.append(
             "Could not parse CANONICAL_EVENT_TYPES from "
-            f"services/ingestion/{search_path.name}. "
+            f"services/api/ingestion/ingestion/{search_path.name}. "
             "Ensure it is a frozenset literal."
         )
         return errors
@@ -148,7 +148,7 @@ def check_python_backend_event_types(events: dict) -> list[str]:
     if only_ts:
         errors.append(
             f"Event type(s) in generated registry but NOT in Python CANONICAL_EVENT_TYPES: "
-            f"{sorted(only_ts)}. Update services/ingestion/{search_path.name}."
+            f"{sorted(only_ts)}. Update services/api/ingestion/ingestion/{search_path.name}."
         )
     if only_py:
         errors.append(
@@ -232,7 +232,7 @@ def check_graph_contracts() -> list[str]:
       ``VertexType``, every declared edge a ``EdgeType``, and every edge endpoint a
       ``VertexType`` (or a documented non-vertex scope root).
     """
-    backend = str(Path(__file__).resolve().parent.parent / "services" / "backend")
+    backend = str(Path(__file__).resolve().parent.parent / "services" / "api")
     if backend not in sys.path:
         sys.path.insert(0, backend)
     # This check runs in the dependency-free control profile. ``shared/__init__``

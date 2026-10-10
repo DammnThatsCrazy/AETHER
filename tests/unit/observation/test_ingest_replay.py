@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 from repositories.repos import _IN_MEMORY_STORES, reset_in_memory_stores
-from services.ingestion.replay import (
+from ingestion.ingestion.replay import (
     REPLAY_SOURCE_SERVICE,
     iter_bronze_observations,
     replay_events,
@@ -300,7 +300,7 @@ async def test_replaying_never_mints_a_second_bronze_row() -> None:
     producer = FakeProducer()
     await replay_events(TENANT, dry_run=False, producer=producer, replay_run_id="rb1")
 
-    from services.ingestion.workers import sdk_bronze_writer
+    from ingestion.ingestion.workers import sdk_bronze_writer
 
     for event in producer.events:
         await sdk_bronze_writer(event)  # must no-op for source_service replay
@@ -434,7 +434,7 @@ async def test_in_flight_same_run_id_is_rejected() -> None:
 async def test_route_allows_dry_run_preview_while_replay_disabled() -> None:
     """Dry-run is the safe default and never needs the feature flag."""
     _seed("e0")
-    from services.ingestion.replay_routes import ReplayRequest, replay_endpoint
+    from ingestion.ingestion.replay_routes import ReplayRequest, replay_endpoint
 
     body = ReplayRequest(tenant_id=TENANT, dry_run=True)
     result = await replay_endpoint(body, producer=FakeProducer())
@@ -447,7 +447,7 @@ async def test_route_refuses_a_real_run_while_replay_disabled(monkeypatch) -> No
 
     from shared.common.common import ForbiddenError
 
-    import services.ingestion.replay_routes as rr
+    import ingestion.ingestion.replay_routes as rr
 
     # Patch the module's settings reference (frozen dataclass — patch the name,
     # not the attribute) to guarantee the kill switch is OFF for this test.

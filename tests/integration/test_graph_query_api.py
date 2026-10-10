@@ -12,7 +12,7 @@ from typing import Iterator
 import pytest
 
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
@@ -29,7 +29,7 @@ def test_app():
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
     from shared.graph.graph import GraphClient, Vertex, Edge
-    from services.operational_intelligence.routes import router
+    from graph.operational_intelligence.routes import router
 
     from shared.common.common import ForbiddenError as _ForbiddenError
     from fastapi.responses import JSONResponse as _JSONResponse

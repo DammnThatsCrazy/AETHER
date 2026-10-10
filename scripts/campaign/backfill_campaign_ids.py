@@ -251,8 +251,8 @@ async def run_backfill(
         return 1
 
     try:
-        from services.campaign.registry import CampaignRegistryService  # type: ignore[import]
-        from services.campaign.repository import (  # type: ignore[import]
+        from journeys.campaign.registry import CampaignRegistryService  # type: ignore[import]
+        from journeys.campaign.repository import (  # type: ignore[import]
             CampaignRegistryRepository,
             ExternalRefRepository,
             AliasRepository,

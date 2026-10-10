@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
@@ -52,7 +52,7 @@ def _graph_edges(mapper) -> list:
 async def test_agent_registered_upserts_agent_vertex(monkeypatch):
     with backend_path(monkeypatch):
         from repositories.repos import AgentExecutionRepository, DelegationRepository, reset_in_memory_stores
-        from services.agent.lifecycle_mapper import AgentLifecycleMapper
+        from actions.agent.lifecycle_mapper import AgentLifecycleMapper
         from shared.graph.graph import GraphClient
         reset_in_memory_stores()
         mapper = AgentLifecycleMapper(GraphClient(), DelegationRepository(), AgentExecutionRepository())
@@ -73,7 +73,7 @@ async def test_agent_registered_upserts_agent_vertex(monkeypatch):
 async def test_agent_task_created_creates_task_vertex(monkeypatch):
     with backend_path(monkeypatch):
         from repositories.repos import AgentExecutionRepository, DelegationRepository, reset_in_memory_stores
-        from services.agent.lifecycle_mapper import AgentLifecycleMapper
+        from actions.agent.lifecycle_mapper import AgentLifecycleMapper
         from shared.graph.graph import GraphClient
         reset_in_memory_stores()
         mapper = AgentLifecycleMapper(GraphClient(), DelegationRepository(), AgentExecutionRepository())
@@ -93,7 +93,7 @@ async def test_agent_task_created_creates_task_vertex(monkeypatch):
 async def test_task_decomposed_links_parent_to_children(monkeypatch):
     with backend_path(monkeypatch):
         from repositories.repos import AgentExecutionRepository, DelegationRepository, reset_in_memory_stores
-        from services.agent.lifecycle_mapper import AgentLifecycleMapper
+        from actions.agent.lifecycle_mapper import AgentLifecycleMapper
         from shared.graph.graph import GraphClient
         reset_in_memory_stores()
         mapper = AgentLifecycleMapper(GraphClient(), DelegationRepository(), AgentExecutionRepository())
@@ -114,7 +114,7 @@ async def test_task_decomposed_links_parent_to_children(monkeypatch):
 async def test_subagent_spawned_links_parent_to_child(monkeypatch):
     with backend_path(monkeypatch):
         from repositories.repos import AgentExecutionRepository, DelegationRepository, reset_in_memory_stores
-        from services.agent.lifecycle_mapper import AgentLifecycleMapper
+        from actions.agent.lifecycle_mapper import AgentLifecycleMapper
         from shared.graph.graph import GraphClient
         reset_in_memory_stores()
         mapper = AgentLifecycleMapper(GraphClient(), DelegationRepository(), AgentExecutionRepository())
@@ -135,7 +135,7 @@ async def test_subagent_spawned_links_parent_to_child(monkeypatch):
 async def test_agent_lifecycle_graph_writes_are_tenant_scoped(monkeypatch):
     with backend_path(monkeypatch):
         from repositories.repos import AgentExecutionRepository, DelegationRepository, reset_in_memory_stores
-        from services.agent.lifecycle_mapper import AgentLifecycleMapper
+        from actions.agent.lifecycle_mapper import AgentLifecycleMapper
         from shared.graph.graph import GraphClient
         reset_in_memory_stores()
         mapper = AgentLifecycleMapper(GraphClient(), DelegationRepository(), AgentExecutionRepository())
@@ -154,7 +154,7 @@ async def test_agent_lifecycle_graph_writes_are_tenant_scoped(monkeypatch):
 async def test_agent_legacy_task_normalizes(monkeypatch):
     with backend_path(monkeypatch):
         from repositories.repos import AgentExecutionRepository, DelegationRepository, reset_in_memory_stores
-        from services.agent.lifecycle_mapper import AgentLifecycleMapper
+        from actions.agent.lifecycle_mapper import AgentLifecycleMapper
         from shared.graph.graph import GraphClient
         reset_in_memory_stores()
         mapper = AgentLifecycleMapper(GraphClient(), DelegationRepository(), AgentExecutionRepository())

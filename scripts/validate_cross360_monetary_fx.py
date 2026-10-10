@@ -8,10 +8,10 @@ population-specific FX, and a cross-360 monetary metric is never computed by
 re-pricing inside the context family.
 
 In repository terms the three context-360 leaves (WHEN ``temporal360``, WHERE
-``geographic360`` + its ``services/geo`` plane, WHO/cohort ``population360``),
+``geographic360`` + its ``services/api/graph/geo`` plane, WHO/cohort ``population360``),
 the exploration surface path that routes them, and the cross-360 composition
 seam (:mod:`shared.projection_engine.composition`) are **monetary-free**: money
-lives in economic360 / ``services.value`` (the ``packages/shared/value.ts``
+lives in economic360 / ``value.value`` (the ``packages/shared/value.ts``
 mirror), whose pre-priced section content already composes unchanged through
 :mod:`shared.projection_engine.composition` — never a per-slice FX or money
 class introduced beside it.
@@ -36,23 +36,23 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 ALLOWLIST = (
     ROOT / "scripts" / "allowlists" / "cross360_monetary_fx.json"
 )
 
 # Scanned roots: the context-360 leaves and the planes that serve/compose them.
 _SCAN_ROOTS = (
-    BACKEND / "services" / "temporal360",
-    BACKEND / "services" / "geographic360",
-    BACKEND / "services" / "geo",
-    BACKEND / "services" / "population360",
-    BACKEND / "services" / "exploration",
+    BACKEND / "graph" / "temporal360",
+    BACKEND / "graph" / "geographic360",
+    BACKEND / "graph" / "geo",
+    BACKEND / "identity" / "population360",
+    BACKEND / "journeys" / "exploration",
 )
 _SCAN_FILES = (BACKEND / "shared" / "projection_engine" / "composition.py",)
 
 # Monetary/FX handling vocabulary. Deliberately excludes the canonical-seam
-# names a legitimate cross-360 path would IMPORT (``services.value``,
+# names a legitimate cross-360 path would IMPORT (``value.value``,
 # ``economic360_contracts``, ``shared.commerce_contracts.money``) — those live
 # outside the scanned roots and are the sanctioned remediation, not an
 # offender. Word boundaries keep ``usd``/``money``/``fx`` from false-matching
@@ -140,9 +140,9 @@ def main() -> int:
             print(f"  - {error}", file=sys.stderr)
         print(
             "The context-360 family (temporal360/geographic360/population360), "
-            "its services/geo plane, the exploration path, and the cross-360 "
+            "its services/api/graph/geo plane, the exploration path, and the cross-360 "
             "composition seam are monetary-free by doctrine. A monetary metric "
-            "must come pre-priced from economic360 / services.value (the "
+            "must come pre-priced from economic360 / value.value (the "
             "packages/shared/value.ts mirror) with canonical FX provenance — "
             "see docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md. Never add a "
             "geography- or population-specific FX/money path beside them.",

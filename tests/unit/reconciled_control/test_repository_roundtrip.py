@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from services.managed_integrations.contracts import ReconcileRunView
-from services.managed_integrations.repository import (
+from connectors.managed_integrations.contracts import ReconcileRunView
+from connectors.managed_integrations.repository import (
     ManagedIntegrationRepository,
     ReconcileRunRepository,
     get_managed_integration_repository,
@@ -159,7 +159,7 @@ async def test_reconcile_run_repo_persists_evidence_and_latest_wins(
 
 
 async def test_reconcile_run_round_trips_drift_evidence(db_free) -> None:
-    from services.managed_integrations.contracts import DriftRecord
+    from connectors.managed_integrations.contracts import DriftRecord
 
     rr_repo = get_reconcile_run_repository()
     drift = [

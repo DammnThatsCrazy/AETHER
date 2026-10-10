@@ -14,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 PLANS_JSON = ROOT / "apps" / "public-site" / "src" / "site" / "plans.json"
 
 SELF_SERVE = ("alpha", "beta", "gamma", "delta")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed when deployable runtime topology drifts from runtime roles.
 
-The canonical role registry is ``services/runtime/roles.py``; the canonical
+The canonical role registry is ``services/api/workers/runtime/roles.py``; the canonical
 deployable topology is ``config/runtime_deployment.yaml``. Since schema v2 the
 unit of deployment is a *service* that may host several logical roles (an
 execution group), so the central invariant this script enforces is ownership,
@@ -20,7 +20,7 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
-ROLES_PY = "services/backend/services/runtime/roles.py"
+ROLES_PY = "services/api/workers/runtime/roles.py"
 
 # Every deployable profile, and the execution mode it is contractually pinned
 # to. Lean/staging consolidate onto an execution group; the two uncapped

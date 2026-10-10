@@ -15,15 +15,15 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.imports.contracts import (  # noqa: E402
+from ingestion.imports.contracts import (  # noqa: E402
     ColumnProfile,
     FieldMapping,
 )
-from services.imports.validation import (  # noqa: E402
+from ingestion.imports.validation import (  # noqa: E402
     apply_transform,
     validate_mapping,
 )

@@ -4,15 +4,15 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services" / "backend"))
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
-from services.stablecoins.aggregation import StablecoinGoldMaterializer, StablecoinMetricInput
-from services.stablecoins.alerts import StablecoinAlertEvaluator, StablecoinAlertSeverity
-from services.stablecoins.finality import StablecoinFinalityService
-from services.stablecoins.ingestion import ProviderObservation, StablecoinIngestionPipeline
-from services.stablecoins.models import FinalityState, StablecoinCapability, StablecoinEventType, StablecoinMoney, SupportState
-from services.stablecoins.reconciliation import OnchainEvidence, PaymentIntentEvidence, ReconciliationState, StablecoinReconciliationService
-from services.stablecoins.support import StablecoinSupportService, SupportEvidence
+from value.stablecoins.aggregation import StablecoinGoldMaterializer, StablecoinMetricInput
+from value.stablecoins.alerts import StablecoinAlertEvaluator, StablecoinAlertSeverity
+from value.stablecoins.finality import StablecoinFinalityService
+from value.stablecoins.ingestion import ProviderObservation, StablecoinIngestionPipeline
+from value.stablecoins.models import FinalityState, StablecoinCapability, StablecoinEventType, StablecoinMoney, SupportState
+from value.stablecoins.reconciliation import OnchainEvidence, PaymentIntentEvidence, ReconciliationState, StablecoinReconciliationService
+from value.stablecoins.support import StablecoinSupportService, SupportEvidence
 from repositories.lake import BronzeRepository, SilverRepository
 from repositories.stablecoin_repos import StablecoinObservationRepository, StablecoinReconciliationRepository, StablecoinSupportAssertionRepository
 

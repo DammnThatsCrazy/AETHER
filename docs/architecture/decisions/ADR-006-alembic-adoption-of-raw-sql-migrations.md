@@ -7,10 +7,10 @@ audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/alembic/versions/20260708_derivatives_foundation_adoption.py
+  - services/api/alembic/versions/20260708_derivatives_foundation_adoption.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/alembic/versions/20260708_derivatives_foundation_adoption.py": "sha256:7ee61a22415974370ab3b1fe2a678fa7931ab4707aaa400efabe19fd64cb3180"
+  "services/api/alembic/versions/20260708_derivatives_foundation_adoption.py": "sha256:7ee61a22415974370ab3b1fe2a678fa7931ab4707aaa400efabe19fd64cb3180"
 ---
 
 # ADR-006: Alembic Adoption of Raw-SQL Migrations

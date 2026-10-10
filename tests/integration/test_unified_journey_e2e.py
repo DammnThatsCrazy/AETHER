@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -27,7 +27,7 @@ async def _seed_profile(repo, tenant_id: str, profile_id: str, activities: list[
 
 
 def _act(family: str, activity_type: str, offset: int, profile_id: str = "placeholder", **extra) -> dict:
-    from services.measurement.contracts import CanonicalActivity, ActivityFamily, ActivityStatus
+    from journeys.measurement.contracts import CanonicalActivity, ActivityFamily, ActivityStatus
     return CanonicalActivity(
         tenant_id="tenant-a",
         profile_id=profile_id,
@@ -48,8 +48,8 @@ class TestScenarioA_CampaignWeb2Web3Conversion:
 
     @pytest.mark.asyncio
     async def test_full_cross_rail_journey(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
 
         repo = ActivityRepository()
         compiler = JourneyCompiler()
@@ -77,8 +77,8 @@ class TestScenarioB_AnonymousUserJourney:
 
     @pytest.mark.asyncio
     async def test_anonymous_journey(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
 
         repo = ActivityRepository()
         compiler = JourneyCompiler()
@@ -101,8 +101,8 @@ class TestScenarioF_BlockchainReorg:
 
     @pytest.mark.asyncio
     async def test_reorg_updates_status(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
-        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler
 
         repo = ActivityRepository()
         compiler = JourneyCompiler()
@@ -126,7 +126,7 @@ class TestScenarioG_MultiTenantCollision:
 
     @pytest.mark.asyncio
     async def test_same_wallet_different_tenants_isolated(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
 
         repo = ActivityRepository()
         wallet = f"0x{uuid4().hex}"
@@ -154,8 +154,8 @@ class TestScenarioH_LateEventDeterministicReplay:
 
     @pytest.mark.asyncio
     async def test_late_event_sorted_correctly(self):
-        from services.measurement.repositories.activity_repo import ActivityRepository
-        from services.measurement.engine.journey_compiler import JourneyCompiler, _sort_deterministically
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
+        from journeys.measurement.engine.journey_compiler import JourneyCompiler, _sort_deterministically
 
         repo = ActivityRepository()
         compiler = JourneyCompiler()

@@ -9,7 +9,7 @@ status: beta
 
 # Responsiveness & Time-to-Value API Endpoints
 
-> Mirrors `services/backend/services/responsiveness/routes.py` exactly. All endpoints are single-tenant (tenant from `request.state.tenant`), require `READ` permission, and return an `APIResponse(data=...)` envelope.
+> Mirrors `services/api/governance/responsiveness/routes.py` exactly. All endpoints are single-tenant (tenant from `request.state.tenant`), require `READ` permission, and return an `APIResponse(data=...)` envelope.
 
 ---
 

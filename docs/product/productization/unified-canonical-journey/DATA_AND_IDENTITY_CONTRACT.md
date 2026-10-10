@@ -6,11 +6,11 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/measurement/contracts.py, services/backend/alembic/versions/20260627_canonical_activity.py, services/backend/alembic/versions/20260725_ai_referral_attribution.py]
+source_files: [services/api/journeys/measurement/contracts.py, services/api/alembic/versions/20260627_canonical_activity.py, services/api/alembic/versions/20260725_ai_referral_attribution.py]
 source_hashes:
-  "services/backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
-  "services/backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
-  "services/backend/services/measurement/contracts.py": "sha256:9640687983cb6a2a3e478a68f5bc7e038c5b60a73811351c29d3d85377855770"
+  "services/api/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
+  "services/api/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
+  "services/api/journeys/measurement/contracts.py": "sha256:9640687983cb6a2a3e478a68f5bc7e038c5b60a73811351c29d3d85377855770"
 ---
 
 # Data and Identity Contract

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -36,8 +36,8 @@ def _click_event(message_id: str = "evt-click-1") -> dict:
 
 @pytest.fixture(autouse=True)
 def _clean_stores():
-    from services.comms.repository import reset_local_stores
-    from services.silver.writer import reset_local_tables
+    from journeys.comms.repository import reset_local_stores
+    from ingestion.silver.writer import reset_local_tables
     reset_local_stores()
     reset_local_tables()
     yield
@@ -47,19 +47,19 @@ def _clean_stores():
 
 class TestFanOut:
     def test_comm_event_reaches_multiple_projectors(self):
-        from services.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.dispatcher import SilverDispatcher
         names = SilverDispatcher().projectors_for("email_clicked")
         assert names == ["CommsProjector", "TouchpointProjector"]
 
     def test_order_is_deterministic_comms_first(self):
-        from services.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.dispatcher import SilverDispatcher
         d = SilverDispatcher()
         for t in ("email_delivered", "email_opened", "email_clicked", "email_replied"):
             names = d.projectors_for(t)
             assert names[0] == "CommsProjector", f"{t}: {names}"
 
     def test_single_projector_events_unchanged(self):
-        from services.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.dispatcher import SilverDispatcher
         d = SilverDispatcher()
         assert d.projectors_for("page") == ["TouchpointProjector"]
         # Fan-out fixed a latent bug: order_completed previously reached only
@@ -71,7 +71,7 @@ class TestFanOut:
 
     @pytest.mark.asyncio
     async def test_both_results_returned(self):
-        from services.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.dispatcher import SilverDispatcher
         outcome = await SilverDispatcher().project_with_outcome(_click_event())
         tables = [r.table for r in outcome.results]
         assert "silver_comms_facts" in tables
@@ -81,9 +81,9 @@ class TestFanOut:
 class TestFailureIsolation:
     @pytest.mark.asyncio
     async def test_one_projector_failure_does_not_erase_others(self, monkeypatch):
-        from services.silver import dispatcher as dispatcher_module
-        from services.silver.dispatcher import SilverDispatcher
-        from services.silver.projectors.touchpoint_projector import TouchpointProjector
+        from ingestion.silver import dispatcher as dispatcher_module
+        from ingestion.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.projectors.touchpoint_projector import TouchpointProjector
 
         def _boom(self, event):
             raise RuntimeError("touchpoint exploded")
@@ -102,9 +102,9 @@ class TestFailureIsolation:
 class TestReplaySafety:
     @pytest.mark.asyncio
     async def test_replay_creates_no_duplicate_facts(self):
-        from services.silver.dispatcher import SilverDispatcher
-        from services.silver.writer import SilverFactWriter
-        from services.comms.repository import CommsFactsRepository
+        from ingestion.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.writer import SilverFactWriter
+        from journeys.comms.repository import CommsFactsRepository
 
         d, w = SilverDispatcher(), SilverFactWriter()
         for _ in range(3):
@@ -117,8 +117,8 @@ class TestReplaySafety:
     @pytest.mark.asyncio
     async def test_replay_creates_no_duplicate_activity(self):
         """ADR-C4: one real-world event → one canonical activity idempotency key."""
-        from services.silver.dispatcher import SilverDispatcher
-        from services.measurement.silver_adapters import adapt_from_silver
+        from ingestion.silver.dispatcher import SilverDispatcher
+        from journeys.measurement.silver_adapters import adapt_from_silver
 
         d = SilverDispatcher()
         keys = set()
@@ -132,8 +132,8 @@ class TestReplaySafety:
     @pytest.mark.asyncio
     async def test_touchpoint_activity_suppressed_for_comm_events(self, monkeypatch):
         """Only the CommsProjector emits canonical activity for comm events."""
-        from services.silver.dispatcher import SilverDispatcher
-        from services.silver.projectors.base import BaseProjector
+        from ingestion.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.projectors.base import BaseProjector
 
         emitted_tables: list[str] = []
 

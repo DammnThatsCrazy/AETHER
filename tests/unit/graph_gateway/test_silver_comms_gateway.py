@@ -14,11 +14,11 @@ from repositories.graph_mutation_ledger import (
     GraphMutationLedgerRepository,
     reset_graph_ledger_memory,
 )
-from services.comms.graph_projection import (
+from journeys.comms.graph_projection import (
     CommsGraphProjector,
     reset_local_relationships,
 )
-from services.silver.projectors.silver_graph_projector import SilverGraphProjector
+from ingestion.silver.projectors.silver_graph_projector import SilverGraphProjector
 from shared.graph.graph import EdgeType, GraphClient
 from shared.graph.mutation_gateway import (
     GraphMutationGateway,

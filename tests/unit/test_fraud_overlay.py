@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
@@ -89,7 +89,7 @@ class TestFraudOverlayStructure:
     """Fraud overlay returns correct top-level structure."""
 
     def test_fraud_overlay_id_and_name(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u1")]
         membership = [_fraud_membership("fn-001", "mule", 0.82)]
@@ -108,7 +108,7 @@ class TestFraudOverlayStructure:
             assert c == call("u1", TENANT)
 
     def test_fraud_overlay_properties_keys(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u1")]
         membership = [_fraud_membership("fn-001", "mule", 0.9)]
@@ -124,7 +124,7 @@ class TestFraudOverlayStructure:
             assert key in props, f"Missing key: {key}"
 
     def test_status_is_computed(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u1")]
         mock_repo = _make_repo_mock([])
@@ -139,7 +139,7 @@ class TestFraudOverlayNodeAnnotation:
     """Fraud member nodes are annotated; non-members are not."""
 
     def test_member_node_is_annotated(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         member = _make_vertex("u-member")
         membership = [_fraud_membership("fn-002", "beneficiary", 0.75, network_type="account_takeover")]
@@ -158,7 +158,7 @@ class TestFraudOverlayNodeAnnotation:
         assert ann["alert_state"] == "open"
 
     def test_non_member_node_not_annotated(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         non_member = _make_vertex("u-clean")
         mock_repo = _make_repo_mock([])
@@ -170,7 +170,7 @@ class TestFraudOverlayNodeAnnotation:
         assert "u-clean" not in annotations
 
     def test_mixed_nodes_partial_annotation(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         member = _make_vertex("u-bad")
         clean = _make_vertex("u-good")
@@ -198,7 +198,7 @@ class TestFraudOverlayCoverage:
     """fraud_coverage_pct is calculated correctly."""
 
     def test_full_coverage(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex(f"u{i}") for i in range(4)]
         membership = [_fraud_membership("fn-x", "mule", 0.7)]
@@ -211,7 +211,7 @@ class TestFraudOverlayCoverage:
         assert overlays[0].properties["fraud_coverage_pct"] == 100.0
 
     def test_partial_coverage(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex(f"u{i}") for i in range(4)]
 
@@ -228,7 +228,7 @@ class TestFraudOverlayCoverage:
         assert overlays[0].properties["fraud_coverage_pct"] == 25.0
 
     def test_empty_nodes_no_data_status(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         mock_repo = _make_repo_mock([])
 
@@ -243,7 +243,7 @@ class TestFraudOverlayMultipleMemberships:
     """When a node has multiple memberships the highest-risk one is used."""
 
     def test_highest_risk_membership_wins(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         node = _make_vertex("u-multi")
         memberships = [
@@ -267,7 +267,7 @@ class TestFraudOverlayRepositoryFailure:
     """Repository errors are swallowed — node is not annotated but overlay still returns."""
 
     def test_repo_exception_skips_node(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u-fail"), _make_vertex("u-ok")]
         membership = [_fraud_membership("fn-001", "mule", 0.8)]
@@ -295,14 +295,14 @@ class TestNoFraudOverlayRequested:
     """No overlay requested → returns None (no unnecessary computation)."""
 
     def test_no_overlay_returns_none(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u1")]
         result = _run(_compute_overlay_scores(nodes, [], None, tenant_id=TENANT))
         assert result is None
 
     def test_empty_overlay_list_returns_none(self):
-        from services.operational_intelligence.routes import _compute_overlay_scores
+        from graph.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u1")]
         result = _run(_compute_overlay_scores(nodes, [], [], tenant_id=TENANT))

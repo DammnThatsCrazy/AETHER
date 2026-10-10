@@ -26,12 +26,12 @@ source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:a30a86c08edcb57316ccd388659c7d832c9a3e542f8e40c44ace2206482dcc5e"
   ".github/workflows/terraform-promote.yml": "sha256:b493d4250ab5da8cb183f579924e13692588091c4c2daf43f20311d62e6e23d3"
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
-  "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
+  "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
   "infra/aws/terraform/DECOMMISSION.md": "sha256:d6b05d282e02fcd6840078a75312165ca7a808f5344cc9e05f2eb234dcef7238"
-  "infra/aws/terraform/main.tf": "sha256:68861b95a57c75d22bb0594b4bc758aa06b789205d2c4a6e771658bf419dd8b2"
+  "infra/aws/terraform/main.tf": "sha256:a04ba5462686d78c59d9f03feb2a9261a39adc26814997133ee22a08503e293f"
   "infra/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
-  "infra/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
+  "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
   "infra/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
   "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:a2332459163543d270b1c7a0bb6157fdd5d11e67f600588eb1df425593f351fb"
   "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
@@ -160,7 +160,7 @@ the at-least-once delivery path buys a two-minute interruption for a few cents.
 Consolidation moves the **process boundary** and nothing else. Inside the
 `lean-worker` task every member role keeps its own SQS queue, consumer group,
 DLQ, retry policy, metrics label and restart behaviour — resolved in-process by
-`services/backend/services/runtime/roles.py::roles_in` from the `AETHER_ROLE` token.
+`services/api/workers/runtime/roles.py::roles_in` from the `AETHER_ROLE` token.
 
 Terraform carries the role list for exactly one reason: a consolidated task
 must bind one SQS queue per hosted role, which a single `SQS_QUEUE_URL` cannot

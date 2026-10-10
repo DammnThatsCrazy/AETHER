@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -57,15 +57,15 @@ def _errors_forbidden() -> tuple[type[Exception], ...]:
     common = importlib.import_module("shared.common.common")
     return (common.ForbiddenError, ForbiddenError)
 
-from services.kyber.access.emergency import (  # noqa: E402
+from governance.kyber.access.emergency import (  # noqa: E402
     EMERGENCY_SCOPE,
     EMERGENCY_TEMPLATE_ID,
     PLATFORM_EMERGENCY_TENANT,
     assert_not_emergency_template,
     emergency_access_service,
 )
-from services.kyber.access.roles import ROLE_TEMPLATES  # noqa: E402
-from services.security.repositories import (  # noqa: E402
+from governance.kyber.access.roles import ROLE_TEMPLATES  # noqa: E402
+from governance.security.repositories import (  # noqa: E402
     SecurityAuditEventRepository,
 )
 

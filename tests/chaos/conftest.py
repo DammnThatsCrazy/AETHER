@@ -29,9 +29,9 @@ from pathlib import Path
 
 import pytest
 
-# Backend lives under "services/backend" (note the space).
+# Backend lives under "services/api" (note the space).
 # tests/chaos/conftest.py -> parents[2] == repo root.
-_BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+_BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
@@ -43,7 +43,7 @@ def _reset_in_memory_state() -> None:
     for module_name, fn_name in (
         ("repositories.repos", "reset_in_memory_stores"),
         ("repositories.typed_repo", "reset_typed_in_memory_stores"),
-        ("services.x402.idempotency", "reset_idempotency_store"),
+        ("value.x402.idempotency", "reset_idempotency_store"),
     ):
         try:
             module = __import__(module_name, fromlist=[fn_name])

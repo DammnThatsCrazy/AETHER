@@ -63,7 +63,7 @@ It records timestamps for each milestone event and computes deltas between them.
 
 **When it fires:** When the ingestion batch handler sends an ACK back to the SDK after accepting the first event.
 
-**Who records it:** `services/backend/services/ingestion/batch.py` → `record_first_event_ack()`
+**Who records it:** `services/api/ingestion/ingestion/batch.py` → `record_first_event_ack()`
 
 **Code reference:**
 ```python
@@ -118,7 +118,7 @@ await get_responsiveness_service().record_first_event_ack(
 
 **When it fires:** When the first graph stub becomes visible to the user — the placeholder/sh skeleton that shows before the full graph is hydrated.
 
-**Who records it:** `services/backend/services/semantic_intelligence/graph_projector.py` → `mark_graph_stub_visible()`
+**Who records it:** `services/api/intelligence/semantic_intelligence/graph_projector.py` → `mark_graph_stub_visible()`
 
 **Code reference:**
 ```python

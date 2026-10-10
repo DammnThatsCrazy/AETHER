@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:d817c3c651468f7d2cf3a92e0867218504c6890501214941fd7e40f321c8bd9a"
+  "scripts/production_status.py": "sha256:5a5218a6e5176e10a5881978bb096fa65f8da25a50587aed32ffd2da2d679c3c"
 ---
 
 # AETHER × Kyber Release State
@@ -112,7 +112,7 @@ independently.
 
 1. **Tenant routing fix.** Correctness fix to tenant resolution; behind the same
    routing path, no new default behavior.
-2. **Self-serve activation FSM** (`services/backend/services/activation`, `/v1/activation/*`,
+2. **Self-serve activation FSM** (`services/api/tenancy/activation`, `/v1/activation/*`,
    flag `AETHER_ACTIVATION_ENABLED`). A real service — `models.py`,
    `repository.py`, `routes.py`, `service.py` plus migration
    `20260814_activation_state.py`. The FSM reuses the registration key-mint,
@@ -122,7 +122,7 @@ independently.
    and never echoes them again.
 3. **Kyber Mission aggregate** (`/v1/kyber/missions`, flags
    `KYBER_MISSIONS_ENABLED` and `KYBER_MISSION_MONITORING_ENABLED`, both OFF by
-   default). Landed as real modules under `services/backend/services/kyber/ops/`:
+   default). Landed as real modules under `services/api/governance/kyber/ops/`:
    `mission_contracts.py`, `mission_repository.py`, `missions.py`,
    `monitoring_service.py`, and `mission_routes.py`, plus migration
    `20260815_kyber_missions.py`. It is a thin-root Mission aggregate with

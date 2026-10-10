@@ -15,9 +15,8 @@ REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "consent-registry.j
 TS_SOURCE = ROOT / "packages" / "shared" / "consent.ts"
 PY_SOURCE = (
     ROOT
-    / "services" / "backend"
-    / "services"
-    / "ingestion"
+    / "services" / "api"
+    / "ingestion" / "ingestion"
     / "generated_registry.py"
 )
 

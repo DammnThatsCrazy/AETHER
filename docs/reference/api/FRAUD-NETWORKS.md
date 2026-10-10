@@ -6,9 +6,9 @@ visibility: I
 audience: [dev-senior, security, architect]
 status: stable
 since_version: "0.1.0"
-source_files: [services/backend/services/fraud_networks/routes.py]
+source_files: [services/api/intelligence/fraud_networks/routes.py]
 source_hashes:
-  services/backend/services/fraud_networks/routes.py: sha256:43023cf8241fbf3dffe599f6f4618d03b47fc0e0015bea3e0026476fbe97b707
+  "services/api/intelligence/fraud_networks/routes.py": "sha256:38ba1b424d0712cb9c96e0508997ba3a7e62c697ec930043adc53b3a9e1563ab"
 ---
 
 # Fraud Networks API Reference

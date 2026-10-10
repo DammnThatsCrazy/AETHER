@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/exploration-contract.ts, packages/ui/core/src/exploration/client.ts, packages/shared/contracts/filter-field-registry.json, packages/shared/contracts/surface-capability-registry.json, packages/shared/filter-fields.ts, packages/shared/surface-capabilities.ts, services/backend/shared/exploration/models.py, services/backend/shared/exploration/generated_fields.py, services/backend/shared/exploration/generated_surfaces.py, services/backend/shared/contracts_models/filters.py, services/backend/services/exploration/planner.py, services/backend/services/exploration/facets.py, services/backend/services/exploration/service.py, services/backend/services/exploration/routes.py, services/backend/services/exploration/operations.py, services/backend/services/exploration/session.py, services/backend/services/exploration/store.py, services/backend/services/exploration/snapshots.py, services/backend/services/exploration/adapters/__init__.py, services/backend/services/exploration/adapters/base.py, services/backend/services/exploration/adapters/graph.py, services/backend/services/exploration/adapters/projection.py]
+source_files: [packages/shared/exploration-contract.ts, packages/ui/core/src/exploration/client.ts, packages/shared/contracts/filter-field-registry.json, packages/shared/contracts/surface-capability-registry.json, packages/shared/filter-fields.ts, packages/shared/surface-capabilities.ts, services/api/shared/exploration/models.py, services/api/shared/exploration/generated_fields.py, services/api/shared/exploration/generated_surfaces.py, services/api/shared/contracts_models/filters.py, services/api/journeys/exploration/planner.py, services/api/journeys/exploration/facets.py, services/api/journeys/exploration/service.py, services/api/journeys/exploration/routes.py, services/api/journeys/exploration/operations.py, services/api/journeys/exploration/session.py, services/api/journeys/exploration/store.py, services/api/journeys/exploration/snapshots.py, services/api/journeys/exploration/adapters/__init__.py, services/api/journeys/exploration/adapters/base.py, services/api/journeys/exploration/adapters/graph.py, services/api/journeys/exploration/adapters/projection.py]
 last_synced_commit: 99736fed
 ---
 
@@ -21,7 +21,7 @@ envelope carries one applicability entry per requested filter
 
 | Concern | Canonical owner |
 |---|---|
-| The ONE boolean filter language | `shared/contracts_models/filters.py` (moved from `services/backend/services/operational_intelligence/models.py`, which re-exports unchanged) ↔ the `FilterOperator`/`FilterExpression`/`FilterGroup` section of `packages/shared/graph-contract.ts` |
+| The ONE boolean filter language | `shared/contracts_models/filters.py` (moved from `services/api/graph/operational_intelligence/models.py`, which re-exports unchanged) ↔ the `FilterOperator`/`FilterExpression`/`FilterGroup` section of `packages/shared/graph-contract.ts` |
 | `ExplorationContextV1` (COMPOSES FilterGroup — never a second filter system), `ApplicabilityReport`, `ExplorationResultEnvelope` (completeness/truth/execution blocks), `ContextLink` | `shared/exploration/models.py` ↔ `packages/shared/exploration-contract.ts` (parity-tested) |
 | Filterable-field catalog (33 seed fields: operators ⊆ FilterOperator, sensitivity tiers, consent purposes, minimum cohort sizes — e.g. `geography.city` ≥ 25) | `packages/shared/contracts/filter-field-registry.json` → generated twins |
 | Per-surface capability declarations (17 surfaces × field categories / temporal modes / views / facets / comparison / selection sets / saved views / export) | `packages/shared/contracts/surface-capability-registry.json` → generated twins |
@@ -52,7 +52,7 @@ same query/facet/view contracts plus snapshot list/create/get/compare methods;
 apps supply their existing authenticated transport and do not duplicate query
 or snapshot state.
 
-## Backend (`services/backend/services/exploration/`, flag-gated `AETHER_EXPLORATION_ENABLED`)
+## Backend (`services/api/journeys/exploration/`, flag-gated `AETHER_EXPLORATION_ENABLED`)
 
 | Module | Responsibility |
 |---|---|

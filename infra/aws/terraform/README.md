@@ -300,7 +300,7 @@ aws ecr get-login-password --region $AWS_REGION | \
   docker login --username AWS --password-stdin \
   "${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-docker build -t aether-backend ./services/backend
+docker build -t aether-backend ./services/api
 docker tag aether-backend:latest \
   "${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/aether-backend:latest"
 docker push \

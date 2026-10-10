@@ -23,7 +23,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "backend"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "api"))
 
 from shared.logger.logger import get_logger
 
@@ -90,7 +90,7 @@ async def _run(
     dry_run: bool,
     model_version: str,
 ) -> None:
-    from services.fraud.evaluation import FraudEvaluationService
+    from intelligence.fraud.evaluation import FraudEvaluationService
 
     service = FraudEvaluationService(model_version=model_version)
     evaluated = 0

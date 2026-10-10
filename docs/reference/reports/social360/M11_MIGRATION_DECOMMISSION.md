@@ -21,12 +21,12 @@ precise seam (D-04, D-05) rather than executed speculatively.
 
 | Artifact | Disposition | Milestone | Evidence |
 |---|---|---|---|
-| `services/backend/services/social/social_aggregator.py` | **Deleted** (legacy fixed-overlap + fabricated-default source) | M4 | file absent; M4 tests 14/0; legacy-scan validator (M12) finds no idioms |
+| `services/api/services/social/social_aggregator.py` | **Deleted** (legacy fixed-overlap + fabricated-default source) | M4 | file absent; M4 tests 14/0; legacy-scan validator (M12) finds no idioms |
 | `gold_social_intelligence` DDL | **Deleted** (dead/redundant social-gold DDL) | M4 | file absent |
 | Fixed cross-platform audience overlap `0.20 / 0.15 / 0.25` in the authority path | **Removed** | M4 | routes.py re-written as legacy wrapper over canonical aggregator; `audience_summary` no longer synthesized from fixed constants |
 | `/v1/profile/{id}/social-intelligence` empty stub shadowing real handler | **Resolved** — reclassified as a legacy wrapper delegating to `IntelligenceAggregator.social_intelligence` | M4 | routes.py; defect `social_stub_shadows_real_handler` closed |
 | kyber `influence = "low"` + `verified: False` fabrication on unknown data | **Fixed** — unknown remains unknown | M4/M10 | kyber social-intelligence-panel honesty fix; M10 tests 35/0 |
-| `services/backend/services/social/` legacy surface | **Retained as compatibility wrapper** (decommission continues only under social360-surface activation; §150 requires no *active* customer path change off-flag) | M11 | this report, D-05 |
+| `services/api/services/social/` legacy surface | **Retained as compatibility wrapper** (decommission continues only under social360-surface activation; §150 requires no *active* customer path change off-flag) | M11 | this report, D-05 |
 
 ## 3. Classification outcome (G061 / §116-§120)
 
@@ -85,7 +85,7 @@ validator and the M2-M10 test suites are the standing sentinels until then.
 
 ## 7. Compatibility contracts (legacy → canonical)
 
-`services/backend/services/social/routes.py` is the single compatibility surface: it preserves
+`services/api/services/social/routes.py` is the single compatibility surface: it preserves
 the legacy `/v1/.../social-intelligence` read shape while delegating computation
 to `IntelligenceAggregator.social_intelligence` (the canonical aggregator).
 `IntelligenceAggregator` enforces read permission; the consent model
@@ -99,7 +99,7 @@ gated on this route (D-05).
 
 - Manual scan of governed social sources: only honest documentation strings
   remain (e.g. `routes.py` documents "never `followers = 0` …", and
-  `services/backend/services/exploration/adapters/social360.py` returns `provider_unavailable`
+  `services/api/journeys/exploration/adapters/social360.py` returns `provider_unavailable`
   rather than synthesized metrics).
 - Machine scan (M12 validator, token-stripped so documentation cannot
   self-trigger): **42 governed files, 0 idioms** — `make ci-check` gate #64.
@@ -109,7 +109,7 @@ gated on this route (D-05).
 
 | Id | Seam | Where it is named | Why not bridged here |
 |---|---|---|---|
-| D-04 | M6↔M7 evidence-independence resolver (`services.relationship_promotion.evidence_independence::resolve_independent_groups`) | PROGRAM_STATE.yaml, M7 module docstring | Forcing a coarse bucket bridge would fabricate an independence answer below M6's authoritative endpoint-aware grouping. Fidelity is OFF; no caller invokes it. |
+| D-04 | M6↔M7 evidence-independence resolver (`identity.relationship_promotion.evidence_independence::resolve_independent_groups`) | PROGRAM_STATE.yaml, M7 module docstring | Forcing a coarse bucket bridge would fabricate an independence answer below M6's authoritative endpoint-aware grouping. Fidelity is OFF; no caller invokes it. |
 | D-05 | Historical-consent evaluation on legacy social reads | PROGRAM_STATE.yaml | Flipping a consent gate now changes legacy API behavior outside the social360 flag; belongs to surface activation. |
 | D-OPEN (G017) | Olympus corpus → tenant overlay projection rule (§14) | PROGRAM_STATE.yaml | Unresolved by design; must be resolved + documented (or recorded EXTERNALLY_BLOCKED) **before** corpus-derived relationships are written to the tenant-scoped graph. No corpus-derived graph writes exist today, so this does not block any active path. |
 

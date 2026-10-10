@@ -1,6 +1,6 @@
 """Router-level integration tests for the Job Center API.
 
-Exercises services/jobs/routes.py and services/jobs/kyber_routes.py through
+Exercises services/api/workers/jobs/routes.py and services/api/workers/jobs/kyber_routes.py through
 a real FastAPI app + TestClient (HTTP layer, path ordering, pydantic
 validation, AetherError → status-code mapping), with the auth middleware
 replaced by a header-driven fake tenant — the same approach as the other
@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -35,9 +35,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 from shared.common.common import AetherError  # noqa: E402
 
 from repositories.jobs_repo import get_jobs_repository, reset_jobs_memory  # noqa: E402
-from services.jobs import kyber_routes, routes  # noqa: E402
-from services.jobs.handlers import JobOutcome, register_handler  # noqa: E402
-from services.jobs.models import JobStatus  # noqa: E402
+from workers.jobs import kyber_routes, routes  # noqa: E402
+from workers.jobs.handlers import JobOutcome, register_handler  # noqa: E402
+from workers.jobs.models import JobStatus  # noqa: E402
 
 TENANT_A = "tenant-api-a"
 TENANT_B = "tenant-api-b"

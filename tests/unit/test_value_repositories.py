@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 for _mod in ("jwt", "cryptography", "cryptography.hazmat"):
     if _mod not in sys.modules:
@@ -23,7 +23,7 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.value.repositories import ValueSnapshotService  # noqa: E402
+from value.value.repositories import ValueSnapshotService  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 

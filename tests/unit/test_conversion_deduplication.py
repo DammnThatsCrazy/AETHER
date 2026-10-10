@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -41,14 +41,14 @@ def _make_conversion(authority_rank: int = 50, source_event_id: str | None = Non
 class TestConversionDeduplication:
     @pytest.fixture(autouse=True)
     def clear_store(self):
-        from services.measurement.repositories.conversion_repo import _local_store
+        from journeys.measurement.repositories.conversion_repo import _local_store
         _local_store.clear()
         yield
         _local_store.clear()
 
     @pytest.mark.asyncio
     async def test_first_insert_succeeds(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
         repo = ConversionRepository()
         row = _make_conversion(authority_rank=50)
         result = await repo.upsert(row)
@@ -56,7 +56,7 @@ class TestConversionDeduplication:
 
     @pytest.mark.asyncio
     async def test_higher_authority_wins(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository, _local_store
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository, _local_store
         repo = ConversionRepository()
         low = _make_conversion(authority_rank=30)
         low["gross_value"] = "50.00"
@@ -69,7 +69,7 @@ class TestConversionDeduplication:
 
     @pytest.mark.asyncio
     async def test_lower_authority_does_not_overwrite(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository, _local_store
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository, _local_store
         repo = ConversionRepository()
         high = _make_conversion(authority_rank=90)
         high["gross_value"] = "100.00"
@@ -82,7 +82,7 @@ class TestConversionDeduplication:
 
     @pytest.mark.asyncio
     async def test_same_authority_updates(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
         repo = ConversionRepository()
         first = _make_conversion(authority_rank=70)
         first["gross_value"] = "80.00"
@@ -95,7 +95,7 @@ class TestConversionDeduplication:
 
     @pytest.mark.asyncio
     async def test_different_dedup_keys_are_independent(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository, _local_store
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository, _local_store
         repo = ConversionRepository()
         row1 = _make_conversion()
         row1["deduplication_key"] = "key-A"
@@ -109,7 +109,7 @@ class TestConversionDeduplication:
 
     @pytest.mark.asyncio
     async def test_tombstone_marks_attribution_ineligible(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository, _local_store
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository, _local_store
         repo = ConversionRepository()
         row = _make_conversion()
         row["profile_id"] = "profile-tombstone"
@@ -126,7 +126,7 @@ class TestConversionDeduplication:
     @pytest.mark.asyncio
     async def test_tombstone_tenant_scoped(self):
         """Tombstone for tenant-A must not affect tenant-B conversions."""
-        from services.measurement.repositories.conversion_repo import ConversionRepository, _local_store
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository, _local_store
         repo = ConversionRepository()
         row_a = _make_conversion()
         row_a["tenant_id"] = "tenant-A"

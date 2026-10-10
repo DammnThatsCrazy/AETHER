@@ -54,7 +54,7 @@
             <button type="button" role="radio" aria-checked="{{ annualChecked }}" onClick="{{ setAnnual }}" style="{{ annualStyle }}">Annual</button>
           </div>
           <sc-if value="{{ flags }}" hint-placeholder-val="{{ false }}">
-            <div style="display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border: 1px dashed #c9975a; border-radius: 4px; font-size: 13px; background: #f5f4f1; text-align: left;"><span style="font-family: var(--font-mono); color: #8a6433;">▲</span><span><span style="font-weight: 500;">Owner review.</span> Prices and limits are read from <code style="font-size: 12px;">services/backend/shared/plans/catalog.py</code>. Confirm before launch.</span></div>
+            <div style="display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border: 1px dashed #c9975a; border-radius: 4px; font-size: 13px; background: #f5f4f1; text-align: left;"><span style="font-family: var(--font-mono); color: #8a6433;">▲</span><span><span style="font-weight: 500;">Owner review.</span> Prices and limits are read from <code style="font-size: 12px;">services/api/shared/plans/catalog.py</code>. Confirm before launch.</span></div>
           </sc-if>
         </div>
       </section>

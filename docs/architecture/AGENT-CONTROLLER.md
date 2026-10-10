@@ -207,7 +207,7 @@ health = hub.controller_health()
 
 ### Internal Ops Service
 ```python
-from services.agent.internal_ops import InternalOpsService
+from actions.agent.internal_ops import InternalOpsService
 
 ops = InternalOpsService(hub)
 ops.submit_objective("discovery", "Find new entities in source X")

@@ -292,7 +292,7 @@
           "entity_ref_resolution"
         ],
         "services": [
-          "services/backend/services/identity",
+          "services/api/identity/identity",
           "docs/reference/source-of-truth/IDENTITY_RESOLUTION.md"
         ],
         "migrationMode": "formalize_existing"
@@ -400,9 +400,9 @@
           "evidence_and_restatement"
         ],
         "services": [
-          "services/backend/shared/integrity",
-          "services/backend/services/integrity",
-          "services/backend/shared/cis/provenance.py",
+          "services/api/shared/integrity",
+          "services/api/governance/integrity",
+          "services/api/shared/cis/provenance.py",
           "docs/reference/source-of-truth/ENRICHMENT_LINEAGE.md",
           "docs/operations/DATA-QUALITY.md"
         ],
@@ -509,8 +509,8 @@
           "temporal_integrity"
         ],
         "services": [
-          "services/backend/shared/temporal",
-          "services/backend/services/events",
+          "services/api/shared/temporal",
+          "services/api/ingestion/events",
           "docs/reference/source-of-truth/TEMPORAL_INTEGRITY.md"
         ],
         "migrationMode": "formalize_existing"
@@ -617,7 +617,7 @@
         ],
         "services": [
           "docs/reference/source-of-truth/GRAPH_LAYER_PARITY.md",
-          "services/backend/services/semantic_intelligence"
+          "services/api/intelligence/semantic_intelligence"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -742,8 +742,8 @@
           "graph_layer"
         ],
         "services": [
-          "services/backend/services/gateway",
-          "services/backend/shared/graph",
+          "services/api/ingestion/gateway",
+          "services/api/shared/graph",
           "docs/reference/source-of-truth/GRAPH_CONTRACT.md",
           "docs/reference/source-of-truth/GRAPH_LAYER_PARITY.md"
         ],
@@ -852,7 +852,7 @@
           "context_intelligence"
         ],
         "services": [
-          "services/backend/shared/context_capsule",
+          "services/api/shared/context_capsule",
           "docs/reference/source-of-truth/CONTEXT_INTELLIGENCE.md"
         ],
         "migrationMode": "formalize_existing"
@@ -959,9 +959,9 @@
           "dsr"
         ],
         "services": [
-          "services/backend/services/policy",
-          "services/backend/services/consent",
-          "services/backend/services/dsr_propagation",
+          "services/api/governance/policy",
+          "services/api/governance/consent",
+          "services/api/governance/dsr_propagation",
           "docs/reference/source-of-truth/CONSENT_MODEL.md"
         ],
         "migrationMode": "formalize_existing"
@@ -971,7 +971,7 @@
     {
       "id": "rights_irrl",
       "displayName": "Rights / IRRL runtime",
-      "description": "The Information Rights, Retention & Learning (IRRL) composition spine: resolves a durable, versioned, evidence-linked RightsDecision over data use, retention, output derivation, learning, model-training eligibility, generalization, Olympus internal intelligence, disclosure, portability, and termination by composing the existing consent / data-rights / lifecycle / lineage / storage authorities. Speaks the canonical vocabulary registered in packages/shared/contracts/rights-vocabulary.json (python enums in services/backend/services/integrations/data_rights/models.py; TS twin packages/shared/data-rights.ts).",
+      "description": "The Information Rights, Retention & Learning (IRRL) composition spine: resolves a durable, versioned, evidence-linked RightsDecision over data use, retention, output derivation, learning, model-training eligibility, generalization, Olympus internal intelligence, disclosure, portability, and termination by composing the existing consent / data-rights / lifecycle / lineage / storage authorities. Speaks the canonical vocabulary registered in packages/shared/contracts/rights-vocabulary.json (python enums in services/api/connectors/integrations/data_rights/models.py; TS twin packages/shared/data-rights.ts).",
       "plane": "governance_contract",
       "spineKind": "truth_authority",
       "implementationState": "in_flight",
@@ -1104,7 +1104,7 @@
         {
           "ref": "IRRL vocabulary & naming-overlay terms (DataRightsEnvelope, UseAuthority, RightsDerivationClass, LearningClass, OwnershipClass, RightsDecision)",
           "kind": "vocabulary",
-          "reason": "The IRRL vocabulary now resolves against real implementing homes rather than aspirational labels: the canonical value sets live in packages/shared/contracts/rights-vocabulary.json; the python (str, Enum) members land in services/backend/services/integrations/data_rights/models.py; the TS twin is packages/shared/data-rights.ts; and the frozen contract/naming docs are RIGHTS_AUTHORITY_BLUEPRINT.md / IRRL_NAMING_OVERLAY.md / RIGHTS_TAXONOMY.md. Remaining to land across the program phases: the structured DataRightsGrant nested components' runtime parity surface (already in data_rights models + TS twin), the durable rdec_* RightsDecision persistence behind the Effective Rights Resolver, and the Generalization Gateway runtime adapter",
+          "reason": "The IRRL vocabulary now resolves against real implementing homes rather than aspirational labels: the canonical value sets live in packages/shared/contracts/rights-vocabulary.json; the python (str, Enum) members land in services/api/connectors/integrations/data_rights/models.py; the TS twin is packages/shared/data-rights.ts; and the frozen contract/naming docs are RIGHTS_AUTHORITY_BLUEPRINT.md / IRRL_NAMING_OVERLAY.md / RIGHTS_TAXONOMY.md. Remaining to land across the program phases: the structured DataRightsGrant nested components' runtime parity surface (already in data_rights models + TS twin), the durable rdec_* RightsDecision persistence behind the Effective Rights Resolver, and the Generalization Gateway runtime adapter",
           "resolvesIn": "Rights IRRL Authority program (feat/rights-irrl-authority; RIGHTS_AUTHORITY_BLUEPRINT.md §17 Phase 0–1)"
         }
       ],
@@ -1116,10 +1116,10 @@
           "information_rights_retention_learning"
         ],
         "services": [
-          "services/backend/services/integrations/data_rights",
-          "services/backend/services/policy",
-          "services/backend/services/dsr_propagation",
-          "services/backend/services/storage_lifecycle",
+          "services/api/connectors/integrations/data_rights",
+          "services/api/governance/policy",
+          "services/api/governance/dsr_propagation",
+          "services/api/ingestion/storage_lifecycle",
           "docs/reference/source-of-truth/DATA_RIGHTS_LEDGER.md",
           "docs/reference/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md",
           "docs/reference/source-of-truth/IRRL_NAMING_OVERLAY.md",
@@ -1240,8 +1240,8 @@
           "provider_neutral_runtime"
         ],
         "services": [
-          "services/backend/services/provider_runtime",
-          "services/backend/services/providers",
+          "services/api/connectors/provider_runtime",
+          "services/api/connectors/providers",
           "docs/architecture/UNIVERSAL-PROVIDER-RUNTIME.md",
           "docs/reference/source-of-truth/IMPORTS.md"
         ],
@@ -1348,8 +1348,8 @@
           "sdk_alignment"
         ],
         "services": [
-          "services/backend/services/imports",
-          "services/backend/services/integrations/connectors",
+          "services/api/ingestion/imports",
+          "services/api/connectors/integrations/connectors",
           "docs/reference/source-of-truth/SDK_RUNTIME_PARITY.md"
         ],
         "migrationMode": "formalize_existing"
@@ -1459,8 +1459,8 @@
           "metric_algebra"
         ],
         "services": [
-          "services/backend/services/measurement",
-          "services/backend/shared/measurement",
+          "services/api/journeys/measurement",
+          "services/api/shared/measurement",
           "docs/reference/source-of-truth/MEASUREMENT_INTEGRITY.md"
         ],
         "migrationMode": "formalize_existing"
@@ -1570,8 +1570,8 @@
           "credit_algebra"
         ],
         "services": [
-          "services/backend/services/attribution",
-          "services/backend/services/measurement",
+          "services/api/value/attribution",
+          "services/api/journeys/measurement",
           "docs/reference/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md"
         ],
         "migrationMode": "formalize_existing"
@@ -1681,8 +1681,8 @@
           "unified_exploration_fabric"
         ],
         "services": [
-          "services/backend/services/exploration",
-          "services/backend/shared/exploration",
+          "services/api/journeys/exploration",
+          "services/api/shared/exploration",
           "docs/reference/source-of-truth/EXPLORATION_FABRIC.md"
         ],
         "migrationMode": "formalize_existing"
@@ -1815,7 +1815,7 @@
         ],
         "services": [
           "docs/reference/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md",
-          "services/backend/shared/intelligence_projections"
+          "services/api/shared/intelligence_projections"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -1927,9 +1927,9 @@
           "ml_contracts"
         ],
         "services": [
-          "services/backend/services/model_governance",
-          "services/backend/shared/model_governance",
-          "services/backend/services/model_runtime",
+          "services/api/intelligence/model_governance",
+          "services/api/shared/model_governance",
+          "services/api/intelligence/model_runtime",
           "docs/reference/source-of-truth/MODEL_GOVERNANCE.md"
         ],
         "migrationMode": "formalize_existing"
@@ -2034,9 +2034,9 @@
           "compute_substrate"
         ],
         "services": [
-          "services/backend/services/computation",
-          "services/backend/services/jobs",
-          "services/backend/services/flows",
+          "services/api/intelligence/computation",
+          "services/api/workers/jobs",
+          "services/api/value/flows",
           "docs/reference/source-of-truth/COMPUTATION_SUBSTRATE.md"
         ],
         "migrationMode": "formalize_existing"
@@ -2143,8 +2143,8 @@
           "execution_contracts"
         ],
         "services": [
-          "services/backend/services/agent",
-          "services/backend/services/agent_access_intelligence",
+          "services/api/actions/agent",
+          "services/api/actions/agent_access_intelligence",
           "docs/reference/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md",
           "docs/reference/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
         ],
@@ -2253,8 +2253,8 @@
           "capability_readiness"
         ],
         "services": [
-          "services/backend/services/activation",
-          "services/backend/services/tenant_readiness",
+          "services/api/tenancy/activation",
+          "services/api/tenancy/tenant_readiness",
           "docs/reference/source-of-truth/ACTIVATION.md",
           "docs/reference/source-of-truth/CAPABILITY_MANIFEST.md"
         ],
@@ -2357,8 +2357,8 @@
           "desired_observed_state"
         ],
         "services": [
-          "services/backend/services/reliability",
-          "services/backend/services/diagnostics",
+          "services/api/governance/reliability",
+          "services/api/governance/diagnostics",
           "docs/reference/source-of-truth/PLATFORM_PARITY.md"
         ],
         "migrationMode": "formalize_existing"
@@ -2459,8 +2459,8 @@
           "findings_investigations_decisions"
         ],
         "services": [
-          "services/backend/services/operational_intelligence",
-          "services/backend/services/investigation",
+          "services/api/graph/operational_intelligence",
+          "services/api/governance/investigation",
           "docs/architecture/DECISION-OUTCOME-INTELLIGENCE.md",
           "docs/architecture/INVESTIGATION-WORKSPACE.md"
         ],
@@ -2565,8 +2565,8 @@
           "kyber_control_plane"
         ],
         "services": [
-          "services/backend/services/kyber",
-          "services/backend/services/kyber_operator",
+          "services/api/governance/kyber",
+          "services/api/governance/kyber_operator",
           "docs/reference/source-of-truth/KYBER_ACCESS_CONTROL.md",
           "docs/reference/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
         ],
@@ -2676,8 +2676,8 @@
           "interaction_surfaces"
         ],
         "services": [
-          "services/backend/services/noesis",
-          "services/backend/services/me",
+          "services/api/intelligence/noesis",
+          "services/api/tenancy/me",
           "docs/reference/source-of-truth/UNIFIED_PLATFORM_BASELINE_AUDIT.md"
         ],
         "migrationMode": "formalize_existing"
@@ -2772,7 +2772,7 @@
           "infra_model"
         ],
         "services": [
-          "services/backend/services/infrastructure"
+          "services/api/graph/infrastructure"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -2878,8 +2878,8 @@
           "continuation"
         ],
         "services": [
-          "services/backend/services/continuation",
-          "services/backend/services/journeys",
+          "services/api/journeys/continuation",
+          "services/api/journeys/journeys",
           "docs/reference/source-of-truth/CROSS_DEVICE_CONTINUITY.md"
         ],
         "migrationMode": "net_new"
@@ -2894,7 +2894,7 @@
       "spineKind": "truth_authority",
       "implementationState": "implemented",
       "ownsCanonicalTruth": false,
-      "authorityDeclaration": "Authoritative over historical graph reconstruction: consumes the bitemporal mutation ledger (shared/graph replay_state + services/temporal360 GraphHistoryReplay) to answer as-of graph snapshot queries and corrections_between deltas.",
+      "authorityDeclaration": "Authoritative over historical graph reconstruction: consumes the bitemporal mutation ledger (shared/graph replay_state + services/api/graph/temporal360 GraphHistoryReplay) to answer as-of graph snapshot queries and corrections_between deltas.",
       "nonOwnershipStatement": "Does not own the mutation ledger or temporal kernel it replays over — graph and temporal_kernel own those; graph_history_replay is a reader/rebuilder authority, not a new system of record.",
       "canonicalContractRefs": [
         {
@@ -2988,9 +2988,9 @@
           "history_replay"
         ],
         "services": [
-          "services/backend/services/temporal360",
-          "services/backend/shared/graph",
-          "services/backend/shared/temporal",
+          "services/api/graph/temporal360",
+          "services/api/shared/graph",
+          "services/api/shared/temporal",
           "docs/reference/source-of-truth/TEMPORAL_INTEGRITY.md"
         ],
         "migrationMode": "net_new"
@@ -3000,7 +3000,7 @@
     {
       "id": "context_capsule_semantics",
       "displayName": "Context Capsule Semantics",
-      "description": "Owns the capsule → canonical-geographic interpretation layer — role, precision class, location-fact extraction, and fact-row normalisation (services/geographic360/capsule_semantics, consumed through the provider’s reader seam and covered by DSR erasure) so projections read context capsule state and transitions coherently.",
+      "description": "Owns the capsule → canonical-geographic interpretation layer — role, precision class, location-fact extraction, and fact-row normalisation (services/api/graph/geographic360/capsule_semantics, consumed through the provider’s reader seam and covered by DSR erasure) so projections read context capsule state and transitions coherently.",
       "plane": "resolution_canonical_data",
       "spineKind": "truth_authority",
       "implementationState": "implemented",
@@ -3091,8 +3091,8 @@
           "context_capsule_semantics_spine"
         ],
         "services": [
-          "services/backend/services/geographic360",
-          "services/backend/shared/context_capsule",
+          "services/api/graph/geographic360",
+          "services/api/shared/context_capsule",
           "docs/reference/source-of-truth/CONTEXT_INTELLIGENCE.md"
         ],
         "migrationMode": "net_new"
@@ -3102,7 +3102,7 @@
     {
       "id": "grouping_membership",
       "displayName": "Grouping Membership",
-      "description": "Owns governed population membership — the MEMBER_OF-via-gateway PopulationMembershipGovernor and the append-only population_definition_versions ledger (services/population) — so population membership is a governed, versioned fact rather than per-projection state. Cohort/cluster governed membership remains owned by the graph/cluster surfaces until declared here.",
+      "description": "Owns governed population membership — the MEMBER_OF-via-gateway PopulationMembershipGovernor and the append-only population_definition_versions ledger (services/api/identity/population) — so population membership is a governed, versioned fact rather than per-projection state. Cohort/cluster governed membership remains owned by the graph/cluster surfaces until declared here.",
       "plane": "relationship_graph",
       "spineKind": "truth_authority",
       "implementationState": "implemented",
@@ -3195,9 +3195,9 @@
           "cohort_membership"
         ],
         "services": [
-          "services/backend/services/population",
-          "services/backend/services/population360",
-          "services/backend/services/cluster"
+          "services/api/identity/population",
+          "services/api/identity/population360",
+          "services/api/graph/cluster"
         ],
         "migrationMode": "net_new"
       },
@@ -3306,8 +3306,8 @@
           "control_plane_rollup"
         ],
         "services": [
-          "services/backend/services/provider_runtime",
-          "services/backend/services/activation"
+          "services/api/connectors/provider_runtime",
+          "services/api/tenancy/activation"
         ],
         "migrationMode": "net_new"
       },

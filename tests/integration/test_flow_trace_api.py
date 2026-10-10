@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT.parent / "services" / "backend"
+BACKEND_ROOT = ROOT.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 pytest.importorskip("fastapi")
 
@@ -81,7 +81,7 @@ def _restore_flag(routes_module, flag_name: str, value: bool) -> None:
 @pytest.mark.asyncio
 async def test_create_trace_happy_path() -> None:
     from repositories.repos import reset_in_memory_stores, TransferRepository
-    from services.flow_trace import routes
+    from value.flow_trace import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "flow_trace_enabled", True)
@@ -110,7 +110,7 @@ async def test_create_trace_happy_path() -> None:
 @pytest.mark.asyncio
 async def test_trace_identifies_sinks() -> None:
     from repositories.repos import reset_in_memory_stores, TransferRepository
-    from services.flow_trace import routes
+    from value.flow_trace import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "flow_trace_enabled", True)
@@ -139,7 +139,7 @@ async def test_trace_identifies_sinks() -> None:
 @pytest.mark.asyncio
 async def test_trace_detects_cycles() -> None:
     from repositories.repos import reset_in_memory_stores, TransferRepository
-    from services.flow_trace import routes
+    from value.flow_trace import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "flow_trace_enabled", True)
@@ -167,7 +167,7 @@ async def test_trace_detects_cycles() -> None:
 @pytest.mark.asyncio
 async def test_tenant_isolation_in_trace() -> None:
     from repositories.repos import reset_in_memory_stores, TransferRepository
-    from services.flow_trace import routes
+    from value.flow_trace import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "flow_trace_enabled", True)
@@ -194,7 +194,7 @@ async def test_tenant_isolation_in_trace() -> None:
 @pytest.mark.asyncio
 async def test_get_trace_by_id() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.flow_trace import routes
+    from value.flow_trace import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "flow_trace_enabled", True)
@@ -219,7 +219,7 @@ async def test_get_trace_by_id() -> None:
 @pytest.mark.asyncio
 async def test_get_trace_wrong_tenant_raises_404() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.flow_trace import routes
+    from value.flow_trace import routes
     from shared.common.common import NotFoundError
 
     reset_in_memory_stores()
@@ -244,7 +244,7 @@ async def test_get_trace_wrong_tenant_raises_404() -> None:
 @pytest.mark.asyncio
 async def test_list_traces_tenant_scoped() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.flow_trace import routes
+    from value.flow_trace import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "flow_trace_enabled", True)
@@ -277,7 +277,7 @@ async def test_list_traces_tenant_scoped() -> None:
 @pytest.mark.asyncio
 async def test_feature_disabled_raises_404() -> None:
     from repositories.repos import reset_in_memory_stores
-    from services.flow_trace import routes
+    from value.flow_trace import routes
     from shared.common.common import NotFoundError
 
     reset_in_memory_stores()
@@ -298,7 +298,7 @@ async def test_feature_disabled_raises_404() -> None:
 @pytest.mark.asyncio
 async def test_depth_bounds_respected() -> None:
     from repositories.repos import reset_in_memory_stores, TransferRepository
-    from services.flow_trace import routes
+    from value.flow_trace import routes
 
     reset_in_memory_stores()
     prev = _enable_flag(routes, "flow_trace_enabled", True)

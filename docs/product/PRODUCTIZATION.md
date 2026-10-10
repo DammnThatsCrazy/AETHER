@@ -199,7 +199,7 @@ now complete are documented in the "What's Production-Ready" section above.
 
 ### 🟡 High Priority 3 — Stripe Billing Wire-Up
 
-**What's missing:** `services/backend/services/billing/providers/stripe_provider.py` contains a readiness stub — methods raise `ProviderDisabledError` instead of calling the Stripe API. Revenue cannot be collected programmatically.
+**What's missing:** `services/api/billing/billing/providers/stripe_provider.py` contains a readiness stub — methods raise `ProviderDisabledError` instead of calling the Stripe API. Revenue cannot be collected programmatically.
 
 **Required:** Wire `sync_tenant`, `create_usage_record`, and `export_invoices` to real Stripe API calls. Config keys (`STRIPE_SECRET_KEY`, `STRIPE_PRODUCT_MAPPING_JSON`) already in `config/environments/.env.example`.
 

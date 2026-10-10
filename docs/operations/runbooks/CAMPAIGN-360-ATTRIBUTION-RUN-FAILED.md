@@ -9,12 +9,12 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
-source_files: [services/backend/services/campaign/exploration.py, services/backend/services/measurement/repositories/attribution_run_repo.py, services/backend/services/measurement/engine/attribution_engine.py, services/backend/services/traffic/repair.py]
+source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/measurement/repositories/attribution_run_repo.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/traffic/repair.py]
 source_hashes:
-  "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/backend/services/measurement/engine/attribution_engine.py": "sha256:974d3414b4d7985ae578b89a4fbd1f886c7feac569838bee9c11b763425c285a"
-  "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:0a1ec25f6d8bb3ff911ac0e966df64775438ccbcfd7e2cc7e5d73715c4c8482c"
-  "services/backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
+  "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
+  "services/api/journeys/measurement/engine/attribution_engine.py": "sha256:f933e4895eeb931f50757a1789081f6a4bc92461bd1de3ece2424b1d918cc0d9"
+  "services/api/journeys/measurement/repositories/attribution_run_repo.py": "sha256:5c5a1edbacb8ebe97e641b0a577eab924a1a0ca5b76e75967711bd88e8ae46dd"
+  "services/api/journeys/traffic/repair.py": "sha256:309a31315d07945083aa693341cff37b4fe5cefbc71592925c38ad818acfab68"
 ---
 
 # Runbook — Attribution Run Failed (Campaign 360)

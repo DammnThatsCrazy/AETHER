@@ -26,17 +26,17 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:796250cff3fb2853e19eb3583ec43ac74f01e980fb561ec11cbd163b568b4861"
+  ".github/workflows/": "sha256:f87c8b606aa780f07014b5eafd994d2da7a3cee66d98a7da524c80ee7104251b"
   "config/delivery_workflow_authority.yaml": "sha256:7a23c16f192c2fcd9d742f25a447ac7a1d85659bdc51a303a1c61765a64332d6"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
-  "infra/cicd/aether-cicd/README.md": "sha256:7a34fb5195c834de93d12fe6f75f48d060ea729cd723b372036f5f2f53a3e609"
-  "infra/cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
+  "infra/cicd/aether-cicd/README.md": "sha256:36a2b231349b26f17f945f32a223d35f482acc9fd82ccbcde4a728b1fa9e05a9"
+  "infra/cicd/aether-cicd/main.py": "sha256:45ea58ecdc9250e8bedffcd9d9a369b1025c5dc7a1da23d38e0f6c1670494c0f"
   "infra/cicd/aether-cicd/quality_gates/": "sha256:c5f18dd825882b733505e259192deb3fd3293fe308c471a6a0a27ff5c3c4dce9"
-  "infra/cicd/aether-cicd/stages/": "sha256:31b31f43238aae825464ef9f0cc8d3b9d81b1acd26cf01b910ae96166517e9bb"
+  "infra/cicd/aether-cicd/stages/": "sha256:1659a38e95cc4ce3163a69510bc79ee4d9a011b3d01c5593baf7a9ce78b747cb"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
@@ -762,7 +762,7 @@ The bump covers more than manifests: `scripts/bump-sdk-version.sh` rewrites the
 SDK runtime constants (web, React Native, Android, iOS), the loader's own
 `LOADER_VERSION` in `packages/sdk/web/src/loader/bootstrap.ts`, and the backend
 mirror `CANONICAL_SDK_VERSION` in
-`services/backend/services/sdk_distribution/versions.py`. The loader and backend
+`services/api/ingestion/sdk_distribution/versions.py`. The loader and backend
 copies exist because each is bundled or deployed separately from the package
 manifests, and the release then runs `scripts/validate_sdk_release_alignment.py`,
 which pins all of them against the canonical version. That check runs under

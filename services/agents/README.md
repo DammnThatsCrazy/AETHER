@@ -248,7 +248,7 @@ services/agents/
 │       ├── verification/                  # Verification teams
 │       ├── recovery/                      # Recovery teams
 │       └── commit/                        # Commit support teams
-├── services/backend/services/agent/
+├── services/api/services/agent/
 │   ├── internal_ops.py                    # Internal operations service
 │   └── review_queue.py                    # Review queue service
 └── shared/

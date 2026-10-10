@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -22,7 +22,7 @@ TENANT = "tenant-idempotency-test"
 
 @pytest.fixture()
 def store():
-    from services.x402.idempotency import reset_idempotency_store, get_idempotency_store
+    from value.x402.idempotency import reset_idempotency_store, get_idempotency_store
     reset_idempotency_store()
     return get_idempotency_store()
 
@@ -76,9 +76,9 @@ async def test_store_size_grows_with_records(store):
 
 @pytest.mark.asyncio
 async def test_ttl_expires_entries(store):
-    from services.x402.idempotency import reset_idempotency_store
+    from value.x402.idempotency import reset_idempotency_store
     # Create store with 1s TTL
-    from services.x402.idempotency import _InMemoryIdempotencyStore
+    from value.x402.idempotency import _InMemoryIdempotencyStore
     short_ttl_store = _InMemoryIdempotencyStore(ttl_seconds=1)
     await short_ttl_store.record(TENANT, "pay-id-ttl", {"x": 1})
     # Wait for expiry

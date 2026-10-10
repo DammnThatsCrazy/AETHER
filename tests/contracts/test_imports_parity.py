@@ -1,6 +1,6 @@
 """TS <-> Python parity for the Tenant Import Engine contract.
 
-`packages/shared/imports.ts` and `services/imports/contracts.py` are
+`packages/shared/imports.ts` and `services/api/ingestion/imports/contracts.py` are
 hand-authored twins; this test fails if their canonical vocabularies drift
 (statuses, primitives, transforms, column types), and if the TS module is not
 exported from the shared barrel.
@@ -12,11 +12,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.imports.contracts import (  # noqa: E402
+from ingestion.imports.contracts import (  # noqa: E402
     IMPORT_COLUMN_TYPES,
     IMPORT_PRIMITIVE_FIELDS,
     IMPORT_PRIMITIVES,

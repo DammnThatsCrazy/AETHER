@@ -39,7 +39,7 @@ facilitator with highest `success_rate` and lowest `avg_latency_ms`.
 
 On tenant provisioning:
 ```python
-from services.x402.facilitators import seed_facilitators_and_assets
+from value.x402.facilitators import seed_facilitators_and_assets
 await seed_facilitators_and_assets(tenant_id)
 ```
 

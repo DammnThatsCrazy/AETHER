@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = REPO_ROOT / "services" / "backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -333,7 +333,7 @@ def _aggregate_migration_state() -> tuple[dict[str, Any], list[str]]:
 
 
 def _aggregate_worker_topology() -> tuple[dict[str, Any], list[str]]:
-    from services.runtime.roles import (  # dependency-free by design
+    from workers.runtime.roles import (  # dependency-free by design
         ALL_ROLES,
         CONSUMER_ROLES,
         EXECUTION_GROUPS,
@@ -360,9 +360,9 @@ def _aggregate_worker_topology() -> tuple[dict[str, Any], list[str]]:
             "spec_owner_index": dict(sorted(spec_owner.items())),
         },
         [
-            "services/backend/services/runtime/roles.py",
-            "services/backend/services/runtime/specs.py",
-            "services/backend/services/runtime/supervisor.py",
+            "services/api/workers/runtime/roles.py",
+            "services/api/workers/runtime/specs.py",
+            "services/api/workers/runtime/supervisor.py",
         ],
     )
 
@@ -514,7 +514,7 @@ def _aggregate_entitlement_registry() -> tuple[dict[str, Any], list[str]]:
         },
         sorted(
             [
-                "services/backend/shared/plans/service_catalog.py",
+                "services/api/shared/plans/service_catalog.py",
                 _rel(cm_path),
                 _rel(cc_path),
             ]
@@ -544,11 +544,11 @@ def _aggregate_meter_registry() -> tuple[dict[str, Any], list[str]]:
             "metered_definition": _json_safe(metered[0]) if metered else None,
         },
         [
-            "services/backend/shared/providers/__init__.py",
-            "services/backend/shared/providers/categories.py",
-            "services/backend/shared/providers/meter.py",
-            "services/backend/shared/providers/registry.py",
-            "services/backend/shared/computation/generated_registry.py",
+            "services/api/shared/providers/__init__.py",
+            "services/api/shared/providers/categories.py",
+            "services/api/shared/providers/meter.py",
+            "services/api/shared/providers/registry.py",
+            "services/api/shared/computation/generated_registry.py",
         ],
     )
 
@@ -631,7 +631,7 @@ def _aggregate_readiness_state() -> tuple[dict[str, Any], list[str]]:
             ),
         },
         sorted(
-            ["services/backend/shared/certification/readiness.py"]
+            ["services/api/shared/certification/readiness.py"]
             + [_rel(f) for f in cert_dir.glob("*.json")]
         ),
     )

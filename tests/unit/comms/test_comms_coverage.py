@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -31,7 +31,7 @@ def _clean():
 
 @pytest.fixture
 def comms_coverage():
-    from services.comms import coverage
+    from journeys.comms import coverage
     return coverage
 
 
@@ -46,8 +46,8 @@ async def test_comms_providers_includes_full_cohort(comms_coverage):
 @pytest.mark.asyncio
 async def test_provider_coverage_reports_grounded_observations(comms_coverage):
     """Identity + suppression counts come from the store, not from assertions."""
-    from services.comms.identity_bridge import ProviderIdentityBridge
-    from services.comms.suppression_authority import SuppressionAuthorityService
+    from journeys.comms.identity_bridge import ProviderIdentityBridge
+    from journeys.comms.suppression_authority import SuppressionAuthorityService
 
     bridge = ProviderIdentityBridge()
     # provisional (no canonical entity in local)

@@ -22,14 +22,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
 def backend_path():
     original = list(sys.path)
     stale_prefixes = (
-        "config", "services", "shared", "middleware", "dependencies", "repositories",
+        "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
     )
     for prefix in stale_prefixes:
         for name in list(sys.modules):
@@ -69,7 +69,7 @@ def _batch_payload(*events):
 def test_batch_module_imports():
     with backend_path():
         import importlib
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         assert hasattr(m, "router")
         assert hasattr(m, "ingest_batch")
         assert hasattr(m, "CANONICAL_EVENT_TYPES")
@@ -81,7 +81,7 @@ def test_batch_module_imports():
 async def test_batch_accepted():
     with backend_path():
         import importlib
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
 
         mock_cache = AsyncMock()
         mock_cache.get = AsyncMock(return_value=None)  # no duplicate
@@ -111,7 +111,7 @@ async def test_batch_accepted():
 async def test_batch_rejects_unknown_event_type():
     with backend_path():
         import importlib
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         mock_cache = AsyncMock()
 
         result = await m._process_single_event(
@@ -138,7 +138,7 @@ async def test_duplicate_same_tenant_same_id():
     """Same event_id from same tenant must return duplicate on second send."""
     with backend_path():
         import importlib
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
 
         mock_cache = AsyncMock()
         mock_cache.get = AsyncMock(return_value="1")  # simulate already seen
@@ -168,7 +168,7 @@ async def test_cross_tenant_same_event_id_not_duplicate():
     """
     with backend_path():
         import importlib
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
 
         shared_event_id = "shared-event-id"
 
@@ -231,7 +231,7 @@ async def test_sensitive_fields_are_scrubbed():
     """Backend must scrub sensitive fields even if SDK sends them."""
     with backend_path():
         import importlib
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
 
         mock_cache = AsyncMock()
         mock_cache.get = AsyncMock(return_value=None)
@@ -266,7 +266,7 @@ def test_normalized_payload_preserves_client_event_id():
     """Client-generated event_id must be preserved (not replaced by server UUID)."""
     with backend_path():
         import importlib
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
 
         event = m.BaseEvent(
             id="client-generated-id-xyz",
@@ -294,7 +294,7 @@ def test_sdk_batch_route_registered():
     """The /v1/batch route must be registered in the batch module's router."""
     with backend_path():
         import importlib
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         routes = [r.path for r in m.router.routes]
         assert "/v1/batch" in routes, f"Expected /v1/batch in routes, got {routes}"
 
@@ -305,7 +305,7 @@ def test_feed_event_requires_external_id():
     with backend_path():
         import importlib
         from pydantic import ValidationError
-        m = importlib.import_module("services.ingestion.routes")
+        m = importlib.import_module("ingestion.ingestion.routes")
         with pytest.raises(ValidationError):
             m.APIFeedEvent(
                 source="dune",

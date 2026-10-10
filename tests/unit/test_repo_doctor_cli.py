@@ -180,7 +180,7 @@ def test_outcome_type_gate_wired_in_repo_doctor() -> None:
         "registry (packages/shared/outcome-types_generated.ts)"
     )
     assert (
-        "services/backend/shared/measurement/generated_outcome_types.py"
+        "services/api/shared/measurement/generated_outcome_types.py"
         in source
     ), (
         "repo_doctor _check_clean must track the backend generated outcome-type "
@@ -241,7 +241,7 @@ def test_intelligence_projection_gate_wired_in_repo_doctor() -> None:
         "(packages/shared/intelligence-projections_generated.ts)"
     )
     assert (
-        "services/backend/shared/intelligence_projections/generated_registry.py"
+        "services/api/shared/intelligence_projections/generated_registry.py"
         in source
     ), (
         "repo_doctor _check_clean must track the backend generated registry "
@@ -269,7 +269,7 @@ def test_spine_registry_gate_wired_in_repo_doctor() -> None:
         "(packages/shared/spine-registry.ts)"
     )
     assert (
-        "services/backend/shared/spine/generated_spine_registry.py"
+        "services/api/shared/spine/generated_spine_registry.py"
         in source
     ), (
         "repo_doctor _check_clean must track the backend generated spine registry "

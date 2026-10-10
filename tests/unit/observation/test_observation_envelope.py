@@ -25,8 +25,8 @@ from shared.observation.envelope import (
     TenancyBlock,
     UniversalObservationEnvelope,
 )
-from services.ingestion import batch
-from services.ingestion import observation_envelope as oe
+from ingestion.ingestion import batch
+from ingestion.ingestion import observation_envelope as oe
 
 
 def _core_normalized() -> dict:

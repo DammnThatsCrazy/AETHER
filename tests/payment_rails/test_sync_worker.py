@@ -11,19 +11,19 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.integrations.providers.payment_rails import sync_worker  # noqa: E402
-from services.integrations.providers.payment_rails.models import (  # noqa: E402
+from connectors.integrations.providers.payment_rails import sync_worker  # noqa: E402
+from connectors.integrations.providers.payment_rails.models import (  # noqa: E402
     FundingSession,
     ReconciliationRecord,
 )
-from services.integrations.providers.payment_rails.reconciliation import (  # noqa: E402
+from connectors.integrations.providers.payment_rails.reconciliation import (  # noqa: E402
     STALE_AFTER_SECONDS,
 )
-from services.integrations.providers.payment_rails.service import PaymentRailsService  # noqa: E402
+from connectors.integrations.providers.payment_rails.service import PaymentRailsService  # noqa: E402
 
 OLD_TS = "2020-01-01T00:00:00+00:00"
 NOW = datetime(2026, 7, 11, tzinfo=timezone.utc)
@@ -42,7 +42,7 @@ def _service() -> PaymentRailsService:
     duck-typed, so a freshly-constructed InMemoryStore drops straight in.
     """
     from shared.store import InMemoryStore
-    from services.integrations.providers.payment_rails.repository import (
+    from connectors.integrations.providers.payment_rails.repository import (
         PaymentRailsRepositories,
     )
 
@@ -272,7 +272,7 @@ async def test_card_linked_gold_materialized_when_enabled(monkeypatch, request):
         return {"cluster_feature_rows": 0}
 
     monkeypatch.setattr(
-        "services.card_linked_payments.gold.materialize_gold", _fake_materialize
+        "value.card_linked_payments.gold.materialize_gold", _fake_materialize
     )
 
     stats = await sync_worker.run_sync_cycle(service=service, now=NOW)
@@ -289,7 +289,7 @@ async def test_card_linked_gold_skipped_when_disabled(monkeypatch):
         raise AssertionError("gold must not materialize when the flag is off")
 
     monkeypatch.setattr(
-        "services.card_linked_payments.gold.materialize_gold", _fake_materialize
+        "value.card_linked_payments.gold.materialize_gold", _fake_materialize
     )
 
     stats = await sync_worker.run_sync_cycle(service=service, now=NOW)

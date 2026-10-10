@@ -18,11 +18,11 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:4e413d9b540e17345bc6ccc38d53a8baee240a3e761d07cf5630c9c8f78b3e89"
-  "Makefile": "sha256:8dc718ec76147cd8caa527730e4b7e45a87e1a76e49439487b80dbeebe4193e0"
-  "config/unread_settings_flags.yaml": "sha256:a2ec165b3a23032bd06e67ce315f694509ead642f7fc7dd6e4c5ad9c61b974b8"
-  "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:d2aa83cdc82f5d6831ff3a2d1ff320b5f2427d6feafad3f2b5e7e00d8056f055"
-  "scripts/repo_doctor.py": "sha256:01d0efa017bf95681166af9f75742ff11ee07e2a177fab0a1c77f39434afea62"
-  "scripts/validate_settings_flags.py": "sha256:b54d1d9af6f77fb175e7d1dca840686ac564018a9327e30bc7942ab833831b9d"
+  "Makefile": "sha256:a29476bc15b07f2968315c7e9e9e09c3450bcb2db2b7638548eeb664111aab4e"
+  "config/unread_settings_flags.yaml": "sha256:3587b913f93df944cd4d53287db9f5b656042ae645aa50eb040adb1700f7583a"
+  "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:a30d10876d2e5201438620787212007075ca64b61db807b6b500776090016c7e"
+  "scripts/repo_doctor.py": "sha256:7e9d905cf0ebc5645496dc99ed1116c98e891f45ddce02d62604e98eed52abc2"
+  "scripts/validate_settings_flags.py": "sha256:d5ec3062bec02a6b4eacf8c0ada966c4e7dc2630fafdb807eee84816c9bde695"
 ---
 
 # Contributing
@@ -86,11 +86,11 @@ directory has one lifecycle class), frontend reachability
 (`config/frontend_reachability.yaml`: every Kyber and Aether source file is
 reachable from the app entry points or listed against a ledger row), and
 settings flags (`scripts/validate_settings_flags.py`: a field in
-`services/backend/config/settings.py` that reads an environment variable must be
+`services/api/config/settings.py` that reads an environment variable must be
 read by production code through its own config object, or be listed against a
 ledger row; a same-named attribute on another object does not count), and backend
 reachability (`config/backend_reachability.yaml`: every production module under
-`services/backend` is reachable from `main.py`, a runtime role, a script or a
+`services/api` is reachable from `main.py`, a runtime role, a script or a
 workflow, or is listed against a ledger row). These checks
 validate repository policy; they do not claim that AWS credentials, runtime
 validation, or production promotion occurred. The authority map records which

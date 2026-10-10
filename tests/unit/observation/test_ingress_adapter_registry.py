@@ -20,9 +20,9 @@ from shared.observation.envelope import (
     SOURCE_TYPES,
     UniversalObservationEnvelope,
 )
-from services.ingestion import adapters
-from services.ingestion.adapters.replay import ReplayIngressAdapter
-from services.ingestion.observation_envelope import (
+from ingestion.ingestion import adapters
+from ingestion.ingestion.adapters.replay import ReplayIngressAdapter
+from ingestion.ingestion.observation_envelope import (
     build_sdk_observation_envelope as delegate_build,
 )
 

@@ -337,7 +337,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: services/backend/Dockerfile
+          file: services/api/Dockerfile
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/aether-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
@@ -492,7 +492,7 @@ jobs:
             tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber-pilot-deferred .
           fi
           tar --sort=name --mtime='UTC 1970-01-01' -czf migrations.tar.gz \
-            'services/backend/alembic.ini' 'services/backend/alembic'
+            'services/api/alembic.ini' 'services/api/alembic'
           cp config/runtime_deployment.yaml runtime_deployment.yaml
       - name: Create commit-bound release manifest
         id: manifest
@@ -865,7 +865,7 @@ jobs:
           # the services map — not the role list — is the set of ECS services
           # that exist. Each service key IS the AETHER_ROLE token that service
           # runs (`api`, a dedicated worker role, or a group like lean-worker
-          # that services/runtime/run_role.py expands into its members), which
+          # that services/api/workers/runtime/run_role.py expands into its members), which
           # is why the loop variable below stays named `role`.
           mapfile -t SERVICES < <(python -c "import yaml; print(*yaml.safe_load(open('runtime_deployment.yaml'))['profiles']['$PROFILE']['services'], sep='\n')")
           test "${#SERVICES[@]}" -gt 0 || { echo "::error::profile $PROFILE declares no services"; exit 1; }

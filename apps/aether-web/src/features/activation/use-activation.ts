@@ -19,7 +19,7 @@ const STATUS_KEY = "activation:status";
 const FIRST_VALUE_KEY = "activation:first-value";
 
 /**
- * Backend self-serve activation state machine (services/activation/models.py).
+ * Backend self-serve activation state machine (services/api/tenancy/activation/models.py).
  * Rendered honestly by the UI — a non-live state is never dressed as complete.
  */
 export type ActivationState =

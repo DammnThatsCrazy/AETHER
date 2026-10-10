@@ -2,7 +2,7 @@
 """Validate the backend model-governance gates (§3.5, §3.9, §3.10).
 
 Static/contract gate — no services required. Enforces that:
-  - the ``services/model_governance`` package exists with the training +
+  - the ``services/api/intelligence/model_governance`` package exists with the training +
     inference gates and the canonical consent-registry reader;
   - the inference gate reuses the canonical consent PolicyDecision engine and
     records ``serve_inference`` evidence (not a bespoke decision path);
@@ -22,11 +22,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MG_DIR = (
-    ROOT / "services" / "backend" / "services" / "model_governance"
+    ROOT / "services" / "api" / "intelligence" / "model_governance"
 )
 ROUTES = (
-    ROOT / "services" / "backend"
-    / "services" / "ml_serving" / "routes.py"
+    ROOT / "services" / "api"
+    / "intelligence" / "ml_serving" / "routes.py"
 )
 
 ERRORS: list[str] = []
@@ -45,7 +45,7 @@ def _read(path: Path) -> str:
 
 def main() -> int:
     if not MG_DIR.exists():
-        fail("missing services/model_governance package")
+        fail("missing services/api/intelligence/model_governance package")
         return _report()
 
     required = {
@@ -61,22 +61,22 @@ def main() -> int:
     for fname, tokens in required.items():
         text = _read(MG_DIR / fname)
         if not text:
-            fail(f"missing services/model_governance/{fname}")
+            fail(f"missing services/api/intelligence/model_governance/{fname}")
             continue
         for tok in tokens:
             if tok not in text:
-                fail(f"services/model_governance/{fname} must reference '{tok}'")
+                fail(f"services/api/intelligence/model_governance/{fname} must reference '{tok}'")
 
     # Inference gate must NOT invent a parallel decision store — it reuses the
     # canonical consent engine so evidence lands in the shared audit ledger.
     inf = _read(MG_DIR / "inference_gate.py")
-    if "from services.policy" not in inf and "services.policy" not in inf:
-        fail("inference_gate must reuse services.policy consent engine (canonical evidence)")
+    if "from governance.policy" not in inf and "governance.policy" not in inf:
+        fail("inference_gate must reuse governance.policy consent engine (canonical evidence)")
 
     # The predict route must actually call the gate.
     routes = _read(ROUTES)
     if "inference_policy_gate" not in routes:
-        fail("services/ml_serving/routes.py predict() must invoke inference_policy_gate (§3.9)")
+        fail("services/api/intelligence/ml_serving/routes.py predict() must invoke inference_policy_gate (§3.9)")
 
     return _report()
 

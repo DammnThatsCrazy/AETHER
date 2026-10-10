@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/shared/graph/graph.py, services/backend/shared/graph/relationship_layers.py, services/backend/services/stablecoin/graph_mutations.py]
+source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, services/api/value/stablecoin/graph_mutations.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

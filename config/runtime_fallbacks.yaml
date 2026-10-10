@@ -7,7 +7,7 @@ fallbacks:
     allowed_profiles: [local, unit_test]
     readiness_effect: blocking
     implementation_paths:
-      - services/backend/repositories/repos.py
+      - services/api/repositories/repos.py
   - fallback_id: in_memory_queue
     owner: platform
     surfaces: [queues]
@@ -23,7 +23,7 @@ fallbacks:
     allowed_profiles: [local, unit_test]
     readiness_effect: blocking
     implementation_paths:
-      - services/backend/shared/cache/cache.py
+      - services/api/shared/cache/cache.py
       - docs/archive/legacy-architecture/data-ingestion-layer/packages/cache/src/index.ts
   - fallback_id: deterministic_model
     owner: ml-platform
@@ -38,15 +38,15 @@ fallbacks:
     allowed_profiles: [local, unit_test]
     readiness_effect: blocking
     implementation_paths:
-      - services/backend/shared/graph/graph.py
+      - services/api/shared/graph/graph.py
   - fallback_id: in_memory_rate_limiter
     owner: security
     surfaces: [rate_limiters]
     allowed_profiles: [local, unit_test]
     readiness_effect: blocking
     implementation_paths:
-      - services/backend/shared/rate_limit/limiter.py
-      - security/model_extraction_defense/defense_layer.py
+      - services/api/shared/rate_limit/limiter.py
+      - services/api/governance/model_extraction_defense/defense_layer.py
   - fallback_id: in_memory_api_key_store
     owner: ingestion
     surfaces: [key_stores]
@@ -61,4 +61,4 @@ fallbacks:
     allowed_profiles: [local, unit_test]
     readiness_effect: blocking
     implementation_paths:
-      - services/backend/repositories/account_deletion.py
+      - services/api/repositories/account_deletion.py

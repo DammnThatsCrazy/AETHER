@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -24,7 +24,7 @@ from shared.dimension_state import (  # noqa: E402
     rollup_state,
     worst_state,
 )
-from services.reconciliation.dimension_status import compute_data_status  # noqa: E402
+from replay.reconciliation.dimension_status import compute_data_status  # noqa: E402
 
 NOW = datetime(2026, 7, 11, tzinfo=timezone.utc)
 

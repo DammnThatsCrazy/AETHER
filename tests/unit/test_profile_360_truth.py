@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 for _mod in ("jwt", "cryptography", "cryptography.hazmat"):
     if _mod not in sys.modules:
@@ -31,8 +31,8 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.profile.aggregator import Profile360Aggregator, _is_stale  # noqa: E402
-from services.profile.composer import ProfileComposer  # noqa: E402
+from identity.profile.aggregator import Profile360Aggregator, _is_stale  # noqa: E402
+from identity.profile.composer import ProfileComposer  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

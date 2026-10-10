@@ -21,8 +21,8 @@ only as historical archive material.
 
 | Former root-era tree | Current path | State |
 |---|---|---|
-| `Backend Architecture/aether-backend/` | `services/backend/` | Deployed Python backend, ingestion, lake, graph, and intelligence |
-| Former standalone journey service | `services/backend/services/measurement/` | Active journey compilation, persistence, attribution, and API surface; archived FSM fixture is test-only |
+| `Backend Architecture/aether-backend/` | `services/api/` | Deployed Python backend, ingestion, lake, graph, and intelligence |
+| Former standalone journey service | `services/api/journeys/measurement/` | Active journey compilation, persistence, attribution, and API surface; archived FSM fixture is test-only |
 | `ML Models/aether-ml/` | `services/ml/` | ML training, serving, and model governance support |
 | `Agent Layer/` | `services/agents/` | Internal broker-coupled workers; registered, not independently deployable |
 | `GDPR & SOC2/aether-compliance/` | `services/compliance/` | Compliance control implementation |

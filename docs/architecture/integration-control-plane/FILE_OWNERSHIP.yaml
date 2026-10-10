@@ -4,7 +4,7 @@
 # orchestrator-leased: an agent submits the needed diff as evidence and the orchestrator
 # applies it during landing to avoid cross-agent conflicts on the single branch.
 #
-# Backend root = "services/backend/". Paths are relative to it unless
+# Backend root = "services/api/". Paths are relative to it unless
 # prefixed with "/" (repo root).
 
 orchestrator:
@@ -23,7 +23,7 @@ contracts:            # A1 (W1)
     - shared/integration_contracts/**
   reuse_only:                                       # may read/import, must not restructure
     - shared/certification/**
-    - services/integrations/connectors/base.py
+    - services/api/connectors/integrations/connectors/base.py
 
 credentials:          # A2 (W2)
   owner: credential-agent
@@ -31,45 +31,45 @@ credentials:          # A2 (W2)
     - shared/credentials/**
     - shared/providers/key_vault.py
   leased:                                           # scoped edits only, submitted as diff evidence
-    - services/integrations/connectors/service.py   # secret store/resolve path only
+    - services/api/connectors/integrations/connectors/service.py   # secret store/resolve path only
 
 oauth:                # A3 (W3)
   owner: oauth-agent
   paths:
-    - services/integrations/oauth/**
+    - services/api/connectors/integrations/oauth/**
 
 webhooks:             # A4 (W3)
   owner: webhook-agent
   paths:
-    - services/integrations/webhook_policy.py
-    - services/integrations/webhook_quarantine.py
-    - services/security/integration_security.py
+    - services/api/connectors/integrations/webhook_policy.py
+    - services/api/connectors/integrations/webhook_quarantine.py
+    - services/api/governance/security/integration_security.py
 
 sync:                 # A5 (W4)
   owner: sync-agent
   leased:
-    - services/integrations/connectors/service.py   # sync methods only
+    - services/api/connectors/integrations/connectors/service.py   # sync methods only
   paths:
-    - services/jobs/**
+    - services/api/workers/jobs/**
 
 connector_group_a:    # A6 (W4) — slack, webhook, shopify, stripe, hubspot
   owner: connector-agent-a
   leased:
-    - services/integrations/connectors/adapters.py
+    - services/api/connectors/integrations/connectors/adapters.py
 connector_group_b:    # A7 (W4) — salesforce, klaviyo, segment, posthog, ga4
   owner: connector-agent-b
   leased:
-    - services/integrations/connectors/adapters.py
-    - services/integrations/connectors/klaviyo.py
+    - services/api/connectors/integrations/connectors/adapters.py
+    - services/api/connectors/integrations/connectors/klaviyo.py
 connector_group_c:    # A8 (W4) — jira, linear, zendesk, intercom, dune
   owner: connector-agent-c
   leased:
-    - services/integrations/connectors/adapters.py
+    - services/api/connectors/integrations/connectors/adapters.py
 
 payment_rails:        # A9 (W4)
   owner: payment-rail-agent
   paths:
-    - services/integrations/providers/payment_rails/**
+    - services/api/connectors/integrations/providers/payment_rails/**
 
 gateway_remediation:  # A10 (W4)
   owner: gateway-agent
@@ -103,7 +103,7 @@ deploy_cert:          # A13 (W6)
 # app-shell.tsx nav, endpoints.ts, settings/). Each WS owns its paths exclusively;
 # files not listed are read-only to that WS. Contract files owned by WS-0 freeze
 # after R1 (change only via ADR-0008..0013).
-# Backend root = "services/backend/". Paths relative to it unless
+# Backend root = "services/api/". Paths relative to it unless
 # prefixed with "/" (repo root).
 # ============================================================================
 
@@ -113,7 +113,7 @@ r2_ws0_contract_spine:      # R1 (before fan-out); owns shared contracts + endpo
     - shared/integration_contracts/**          # extend experience_category + projection types
     - /packages/shared/connector-taxonomy.ts   # provider/category mirror (generate)
   leased:                                      # additive endpoints only (no restructure)
-    - services/integrations/connectors/routes.py
+    - services/api/connectors/integrations/connectors/routes.py
     - /apps/aether/src/lib/api/endpoints.ts
     - /apps/aether/src/features/integrations/**
 
@@ -131,18 +131,18 @@ r2_ws1_settings_ia:        # Phase 2 / PR B
 r2_ws2_advertising_convergence:   # Phase 3 / PR C
   owner: ws2
   paths:
-    - services/measurement/connectors/**
-    - services/campaign/**                      # source auto-link orchestration (additive)
+    - services/api/journeys/measurement/connectors/**
+    - services/api/journeys/campaign/**                      # source auto-link orchestration (additive)
     - /apps/aether/src/pages/campaigns/campaign-sources-page.tsx
     - /apps/aether/src/features/campaigns/use-campaign-sources.ts
   leased:
     - shared/providers/categories.py            # ad_platform identity/alias only
-    - services/campaign/routes.py               # connect/accounts/sync additions only
+    - services/api/journeys/campaign/routes.py               # connect/accounts/sync additions only
 
 r2_ws3_activation:         # Phase 4 / PR D
   owner: ws3
   paths:
-    - services/activation/**                    # intent + steps (extend, additive)
+    - services/api/tenancy/activation/**                    # intent + steps (extend, additive)
     - /apps/aether/src/pages/activation/**
     - /apps/aether/src/features/activation/**
   leased:
@@ -152,7 +152,7 @@ r2_ws3_activation:         # Phase 4 / PR D
 r2_ws4_readiness_contextual:   # Phase 5+6 / PR E
   owner: ws4
   paths:
-    - services/readiness_graph/**               # projection additions
+    - services/api/graph/readiness_graph/**               # projection additions
     - /apps/aether/src/features/integrations/**  # readiness hooks (after WS-0 types)
   leased:
     - /apps/aether/src/pages/campaigns/**   # contextual CTAs + empty states

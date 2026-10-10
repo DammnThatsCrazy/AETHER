@@ -6,10 +6,10 @@ visibility: I
 audience: [ops, dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/backend/config/settings.py, tests/integration/test_comms_golden_scenario.py]
+source_files: [services/api/config/settings.py, tests/integration/test_comms_golden_scenario.py]
 source_hashes:
-  "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
-  "tests/integration/test_comms_golden_scenario.py": "sha256:a26db2d8632f089933adf8df5d15d2a20756b33e6f4f3e082d384e8d5dd831ff"
+  "services/api/config/settings.py": "sha256:d55bef95d2e6d1f13c003fe7289e4309d8299ab783b3d58b7660c6519bdaeadb"
+  "tests/integration/test_comms_golden_scenario.py": "sha256:d24e527260d0b19a433190ba4c0b492a505942a9f54443448b7543a6a4fc92ba"
 ---
 
 # Communications Intelligence — Release Readiness
@@ -67,7 +67,7 @@ Measurement Operations → Communications pipeline health):
   derived state (`confirm=true` required; suppressions retained so
   opt-outs stay honored).
 
-Rebuilds are coalesced (`services/backend/services/comms/rebuild_coalescer.py`): an event
+Rebuilds are coalesced (`services/api/journeys/comms/rebuild_coalescer.py`): an event
 burst for one profile inside the debounce window
 (`AETHER_COMMS_REBUILD_WINDOW_SECONDS`, default 5s) produces exactly one
 state recompute and one journey recompile.

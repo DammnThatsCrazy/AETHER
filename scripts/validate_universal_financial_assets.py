@@ -8,8 +8,8 @@ Release-blocking gate for the Universal Financial Normalization program
     with the namespaced identity + deployment vocabulary, and value.ts carries
     the additive reporting/display seam (reporting_asset_id / reporting_amount,
     reporting_totals / value_lineage, CanonicalNativeValue + guards);
-  - the backend mirrors exist (services/assets, services/valuation) and the
-    canonical stablecoin read seam (services/stablecoin/canonical_identity.py)
+  - the backend mirrors exist (services/api/graph/assets, services/api/value/valuation) and the
+    canonical stablecoin read seam (services/api/value/stablecoin/canonical_identity.py)
     is present so the registry reuses it rather than re-deriving identity;
   - canonical ids are namespace-safe (``fiat:`` / ``crypto:`` / ``stablecoin:``
     / ``token:``; deployments ``deploy:``) — symbols are aliases, never identity
@@ -34,17 +34,17 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 
 FINANCIAL_TS = ROOT / "packages" / "shared" / "financial-assets.ts"
 VALUE_TS = ROOT / "packages" / "shared" / "value.ts"
-ASSETS_MODELS_PY = BACKEND / "services" / "assets" / "models.py"
-ASSETS_SEEDS_PY = BACKEND / "services" / "assets" / "seeds.py"
-ASSETS_REGISTRY_PY = BACKEND / "services" / "assets" / "registry.py"
-VALUATION_MODELS_PY = BACKEND / "services" / "valuation" / "models.py"
-VALUATION_SERVICE_PY = BACKEND / "services" / "valuation" / "service.py"
-VALUATION_REPOS_PY = BACKEND / "services" / "valuation" / "repositories.py"
-STABLECOIN_IDENTITY_PY = BACKEND / "services" / "stablecoin" / "canonical_identity.py"
+ASSETS_MODELS_PY = BACKEND / "graph" / "assets" / "models.py"
+ASSETS_SEEDS_PY = BACKEND / "graph" / "assets" / "seeds.py"
+ASSETS_REGISTRY_PY = BACKEND / "graph" / "assets" / "registry.py"
+VALUATION_MODELS_PY = BACKEND / "value" / "valuation" / "models.py"
+VALUATION_SERVICE_PY = BACKEND / "value" / "valuation" / "service.py"
+VALUATION_REPOS_PY = BACKEND / "value" / "valuation" / "repositories.py"
+STABLECOIN_IDENTITY_PY = BACKEND / "value" / "stablecoin" / "canonical_identity.py"
 TYPED_REPO_PY = BACKEND / "repositories" / "typed_repo.py"
 FINANCIAL_MIGRATIONS = sorted(BACKEND.glob("alembic/versions/20260902_*.py"))
 
@@ -102,16 +102,16 @@ def main() -> int:
             if f"export {('interface' if sym == 'CanonicalNativeValue' else 'function')} {sym}" not in vt:
                 fail(f"packages/shared/value.ts missing export {sym}")
 
-    # 3. Backend mirrors exist (services/assets + services/valuation).
+    # 3. Backend mirrors exist (services/api/graph/assets + services/api/value/valuation).
     am = _require_file(ASSETS_MODELS_PY)
     if am is not None:
         for sym in ("CanonicalAsset", "AssetDeployment", "AssetAlias", "UnresolvedAssetReference"):
             if f"class {sym}" not in am:
-                fail(f"services/assets/models.py missing class {sym}")
+                fail(f"services/api/graph/assets/models.py missing class {sym}")
         # Namespace-safe identity is the enforced convention (symbols are aliases).
         if "fiat:<ISO>" not in am or "stablecoin:<SYMBOL>" not in am:
             fail(
-                "services/assets/models.py must state the namespaced-id convention "
+                "services/api/graph/assets/models.py must state the namespaced-id convention "
                 "(fiat:<ISO>, crypto:<SYMBOL>, stablecoin:<SYMBOL>, token:<chain>:<contract>)"
             )
 
@@ -119,20 +119,20 @@ def main() -> int:
     if vm is not None:
         for sym in ("MarketPriceObservation", "ValuationSnapshot", "TenantValuePolicy", "CanonicalNativeValue"):
             if f"class {sym}" not in vm:
-                fail(f"services/valuation/models.py missing class {sym}")
+                fail(f"services/api/value/valuation/models.py missing class {sym}")
         # reporting_amount None = UNAVAILABLE, never coerced to 0.
         if "reporting_amount: Optional[Decimal]" not in vm:
-            fail("services/valuation/models.py missing Optional reporting_amount (None = UNAVAILABLE)")
+            fail("services/api/value/valuation/models.py missing Optional reporting_amount (None = UNAVAILABLE)")
         for guard in ("_decimal_or_error", "_optional_decimal"):
             if guard not in vm:
-                fail(f"services/valuation/models.py missing {guard} (Decimal-only amount validators)")
+                fail(f"services/api/value/valuation/models.py missing {guard} (Decimal-only amount validators)")
 
     # 4. Stablecoin canonical-identity read seam is reused (never re-derived).
     ci = _require_file(STABLECOIN_IDENTITY_PY)
     if ci is not None:
         for sym in ("StablecoinCanonicalIdentityResolver", "surface_on_read_row", "StablecoinUniversalIdentityRead"):
             if sym not in ci:
-                fail(f"services/stablecoin/canonical_identity.py missing {sym}")
+                fail(f"services/api/value/stablecoin/canonical_identity.py missing {sym}")
 
     # 5. Money is Decimal / NUMERIC(38, 18), never binary float, in canonical tables.
     tr = _require_file(TYPED_REPO_PY)
@@ -159,20 +159,20 @@ def main() -> int:
     seeds = _require_file(ASSETS_SEEDS_PY)
     if seeds is not None:
         if "_NAMESPACED_PREFIXES" not in seeds:
-            fail("services/assets/seeds.py missing the namespaced-prefix guard")
+            fail("services/api/graph/assets/seeds.py missing the namespaced-prefix guard")
         for lit in ("fiat:{iso_code}", "stablecoin:{symbol}"):
             if f'f"{lit}"' not in seeds and f"f'{lit}'" not in seeds:
-                fail(f"services/assets/seeds.py must build canonical ids namespaced (missing {lit})")
+                fail(f"services/api/graph/assets/seeds.py must build canonical ids namespaced (missing {lit})")
         # Legacy stablecoin ids are bridged as aliases, never rewritten.
         if "usdc" not in seeds.lower():
-            fail("services/assets/seeds.py must preserve legacy stablecoin ids via aliases (usdc)")
+            fail("services/api/graph/assets/seeds.py must preserve legacy stablecoin ids via aliases (usdc)")
         # The x402 stablecoin universe is seeded namespaced: USDC/USDT symbols
         # drive `stablecoin:<symbol>` asset rows (never hardcoded id literals).
         if "_STABLECOIN_NAMES" not in seeds or ("USDC" not in seeds or "USDT" not in seeds):
-            fail("services/assets/seeds.py seed completeness vs x402: USDC/USDT stablecoin symbols missing")
+            fail("services/api/graph/assets/seeds.py seed completeness vs x402: USDC/USDT stablecoin symbols missing")
         for seed_ref in ("crypto:ETH", "eip155:8453", "solana:mainnet"):
             if seed_ref not in seeds:
-                fail(f"services/assets/seeds.py seed completeness vs x402: missing chain/native {seed_ref}")
+                fail(f"services/api/graph/assets/seeds.py seed completeness vs x402: missing chain/native {seed_ref}")
 
     # 7. Valuation immutability + observe-only posture.
     repos = _require_file(VALUATION_REPOS_PY)

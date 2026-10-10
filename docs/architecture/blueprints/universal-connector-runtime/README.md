@@ -48,7 +48,7 @@ flowchart LR
   G --> V[Projection and product views]
 ```
 
-The repository already has a Universal Provider Runtime in `services/backend/services/provider_runtime/`, plugin contracts in `services/backend/shared/integration_contracts/`, native plugins in `services/backend/services/providers/`, a legacy connector wrapper, and a separate ingestion gateway. It also has managed integration, credential, Bronze, identity, graph mutation, and projection systems. These are the implementation seams. Creating a second `packages/connectors/` runtime or `apps/api/` service from the earlier conversation's illustrative TypeScript tree would duplicate them.
+The repository already has a Universal Provider Runtime in `services/api/connectors/provider_runtime/`, plugin contracts in `services/api/shared/integration_contracts/`, native plugins in `services/api/connectors/providers/`, a legacy connector wrapper, and a separate ingestion gateway. It also has managed integration, credential, Bronze, identity, graph mutation, and projection systems. These are the implementation seams. Creating a second `packages/connectors/` runtime or `apps/api/` service from the earlier conversation's illustrative TypeScript tree would duplicate them.
 
 The implementation target is a single connector control and execution authority that **extends the existing Python runtime** and converges existing connector subsystems at explicit seams. Provider modules own source protocol details. Domain contracts own normalized meaning. Identity and source authority decide what evidence can establish truth. The graph gateway alone commits graph mutations. Read models expose evidence and limitations rather than inferred green status.
 

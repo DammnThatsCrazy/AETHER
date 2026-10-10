@@ -7,16 +7,16 @@ audience: [security, dev-senior, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/flow_trace/
-  - services/backend/repositories/repos.py
+  - services/api/value/flow_trace/
+  - services/api/repositories/repos.py
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; flow-trace behavior and contracts are unaffected."
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
-  "services/backend/services/flow_trace/": "sha256:ecabf31ddd0dacf96475c891836cc7d7ba3906c17a34f67669393eff874a3348"
+  "services/api/repositories/repos.py": "sha256:bbad38e1ca8c19e36f2f936332bbe199e6a7b09e71598495ee72eb2efc2a9100"
+  "services/api/value/flow_trace/": "sha256:e91b3edfb7d6e7a8a0f89951a87f01491a52a155fe5fca8911abc7b5aa94279f"
 ---
 
 # Flow of Funds Trace
@@ -158,7 +158,7 @@ sub-resources — see `docs/reference/api/FLOW-TRACE.md`.
 
 ## Scoring
 
-Pure functions in `services/backend/services/flow_trace/scoring.py`; all scores in [0, 100].
+Pure functions in `services/api/value/flow_trace/scoring.py`; all scores in [0, 100].
 
 ### Path Score (`score_path`)
 

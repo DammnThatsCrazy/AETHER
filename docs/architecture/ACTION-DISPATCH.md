@@ -6,15 +6,15 @@ visibility: I
 audience: [architect, dev-senior, ops]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/intelligence/routes.py, services/backend/services/intelligence/action_targets/base.py, services/backend/services/intelligence/action_targets/registry.py]
+source_files: [services/api/intelligence/intelligence/routes.py, services/api/intelligence/intelligence/action_targets/base.py, services/api/intelligence/intelligence/action_targets/registry.py]
 related: [ai/integration-actions, ai/decision-outcome-intelligence]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/backend/services/intelligence/action_targets/base.py": "sha256:983f23fdb3696c505d39e80232b5e91c22d917744fef156cc58900bbfde0c449"
-  "services/backend/services/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "services/backend/services/intelligence/routes.py": "sha256:5180cf7321ef1cc342f42acbf64aba510aba598c58c39b671303598f7f5084ef"
+  "services/api/intelligence/intelligence/action_targets/base.py": "sha256:455280d204f34cf4b774550f1d46024b320ae8e0f2f77eed44b3db8b6b7c2672"
+  "services/api/intelligence/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
+  "services/api/intelligence/intelligence/routes.py": "sha256:46f4df5f21914056a91810cb1c0a490183ed144e99a9568b8aedf170f3b05e29"
 ---
 
 # Governed Action Dispatch

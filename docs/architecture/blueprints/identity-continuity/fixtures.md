@@ -11,7 +11,7 @@ status: beta
 
 **Blueprint:** §17-§18  
 **Proof Plan:** `docs/architecture/blueprints/identity-continuity/proof-plan.md`  
-**Code:** `services/backend/tests/identity/`, `tests/e2e/proof/packages/fixtures/fixtures/identity/`
+**Code:** `services/api/tests/identity/`, `tests/e2e/proof/packages/fixtures/fixtures/identity/`
 
 ---
 
@@ -51,9 +51,9 @@ observations; the route fixture does not claim exactly-once retry behavior.
 ### Run
 
 ```bash
-pytest services/backend/tests/identity/ -v
-pytest services/backend/tests/computation/test_identity_restatement.py -v
-pytest services/backend/tests/identity/test_import_first_sdk_later.py -vv  # single scenario
+pytest services/api/tests/identity/ -v
+pytest services/api/tests/computation/test_identity_restatement.py -v
+pytest services/api/tests/identity/test_import_first_sdk_later.py -vv  # single scenario
 ```
 
 ## 2. Shared proof fixtures (JSON/TS, for harness + frontend)
@@ -91,7 +91,7 @@ All apps assert SDK contract field parity against `packages/shared/contracts/ide
 ## 4. How to add a new fixture
 
 1. Add JSON under `tests/e2e/proof/packages/fixtures/fixtures/identity/<scenario>/`.
-2. Add pytest under `services/backend/tests/identity/test_<scenario>.py` using the pattern in `test_import_first_sdk_later.py`.
+2. Add pytest under `services/api/tests/identity/test_<scenario>.py` using the pattern in `test_import_first_sdk_later.py`.
 3. Register the scenario in `docs/architecture/blueprints/identity-continuity/proof-plan.md` §2 matrix.
 4. Wire the fixture into harness `tests/e2e/proof/packages/fixtures/src/index.ts` if staging needs it.
 

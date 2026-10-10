@@ -7,26 +7,26 @@ audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/main.py
-  - services/backend/config/settings.py
-  - services/backend/shared/rate_limit/feature_gate.py
-  - services/backend/shared/integration_contracts/
-  - services/backend/shared/commerce_contracts/
-  - services/backend/services/provider_runtime/
-  - services/backend/services/providers/
-  - services/backend/services/providers/shopify/
+  - services/api/main.py
+  - services/api/config/settings.py
+  - services/api/shared/rate_limit/feature_gate.py
+  - services/api/shared/integration_contracts/
+  - services/api/shared/commerce_contracts/
+  - services/api/connectors/provider_runtime/
+  - services/api/connectors/providers/
+  - services/api/connectors/providers/shopify/
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
-  "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
-  "services/backend/services/provider_runtime/": "sha256:4d2b5f1bae274fe1f369d4c294ce936dd917c44b72ef13333c6097fa3285daf3"
-  "services/backend/services/providers/": "sha256:c5f185eb1a96f4c9c081c70a930cddd1ab1cc183308663b0256944fca5fdf70e"
-  "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
-  "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
-  "services/backend/shared/integration_contracts/": "sha256:730f2eb7382e766e8389fa2a5592e0a6895a8d5b0ab6865f9ee598e339d3a383"
-  "services/backend/shared/rate_limit/feature_gate.py": "sha256:a93ea91270a1d0ca3d8664ddea29b75cbfca8c2180a239cb78a3a61d8facda96"
+  "services/api/config/settings.py": "sha256:d55bef95d2e6d1f13c003fe7289e4309d8299ab783b3d58b7660c6519bdaeadb"
+  "services/api/connectors/provider_runtime/": "sha256:a93c938f33f3280596b99270a95a9de8a1472404d6dfcf15bb890118ad21a0c9"
+  "services/api/connectors/providers/": "sha256:2d36bd80b4df653e2ce5b97240f28e4ca976f94b52ffa95a6365e7848dd0c6db"
+  "services/api/connectors/providers/shopify/": "sha256:3105e681b0fb0ed9f3417abbc72624377a63a97489cca007ce79ab99b7d857e0"
+  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
+  "services/api/shared/integration_contracts/": "sha256:54a124b718666f272272a9845ada4e8720cce2b81981b981db40a4e88674149e"
+  "services/api/shared/rate_limit/feature_gate.py": "sha256:52ba44636beee6c43f7dde3b200edfd562bbd70cfd2ed21163d33149b8bab29c"
 ---
 
 # Universal Provider Runtime
@@ -46,11 +46,11 @@ The layer map:
 
 | Layer | Location | Role |
 |---|---|---|
-| Plugin contract | `services/backend/shared/integration_contracts/` | `ProviderPlugin` protocol, manifest + honesty invariants, capability adapters, canonical results, normalization, events, certification contracts |
-| Commerce vocabulary | `services/backend/shared/commerce_contracts/` | Provider-neutral Money / Order shapes and the canonical `commerce.*` event-type set |
-| Runtime service | `services/backend/services/provider_runtime/` | Registry → orchestrator → pipeline → engines → API; registers, certifies, and executes plugins |
-| Plugin modules | `services/backend/services/providers/*/` | One package per provider capability (reference: `services/backend/services/providers/shopify/`) |
-| Legacy compat | `services/backend/services/provider_runtime/legacy.py` (`LegacyConnectorPlugin`) | Exposes every existing `BaseConnector` as a plugin with zero code changes |
+| Plugin contract | `services/api/shared/integration_contracts/` | `ProviderPlugin` protocol, manifest + honesty invariants, capability adapters, canonical results, normalization, events, certification contracts |
+| Commerce vocabulary | `services/api/shared/commerce_contracts/` | Provider-neutral Money / Order shapes and the canonical `commerce.*` event-type set |
+| Runtime service | `services/api/connectors/provider_runtime/` | Registry → orchestrator → pipeline → engines → API; registers, certifies, and executes plugins |
+| Plugin modules | `services/api/connectors/providers/*/` | One package per provider capability (reference: `services/api/connectors/providers/shopify/`) |
+| Legacy compat | `services/api/connectors/provider_runtime/legacy.py` (`LegacyConnectorPlugin`) | Exposes every existing `BaseConnector` as a plugin with zero code changes |
 
 ## Components
 
@@ -64,7 +64,7 @@ The layer map:
                                        │ AETHER_PROVIDER_RUNTIME_ENABLED
                                        ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                     services/backend/services/provider_runtime                             │
+│                     services/api/connectors/provider_runtime                             │
 │                                                                          │
 │   ┌──────────────┐   discover   ┌───────────────┐   invoke    ┌───────┐  │
 │   │   Registry   │ ───────────▶ │  Orchestrator │ ───────────▶ │Pipeline│ │
@@ -82,8 +82,8 @@ The layer map:
                             │ plugin discovery
                             ▼
    ┌────────────────────────────────────────────────────────────────┐
-   │ Plugin modules (services/backend/services/providers/*/)                          │
-   │   services/backend/services/providers/shopify/   (native plugin)                 │
+   │ Plugin modules (services/api/connectors/providers/*/)                          │
+   │   services/api/connectors/providers/shopify/   (native plugin)                 │
    │   ...future native plugins...                                    │
    │   LegacyConnectorPlugin          (wraps BaseConnector, identity │
    │                                    (connector_type,"ingestion", │
@@ -95,7 +95,7 @@ The layer map:
 ### Package layout
 
 ```
-services/backend/
+services/api/
 ├── shared/
 │   ├── integration_contracts/          # plugin contract layer (additive)
 │   │   ├── plugin.py                   #   ProviderPlugin, BaseProviderPlugin,
@@ -215,7 +215,7 @@ The pipeline honors three invariants:
   from each `AetherEvent`'s `data`/`context` in place before the durable dump
   (mandatory and unconditional — Bronze and the publish carry only scrubbed
   payloads) and runs the shared ingress decision
-  (`services/backend/services/ingestion/validation.evaluate_ingress_decision`) per event. A
+  (`services/api/ingestion/ingestion/validation.evaluate_ingress_decision`) per event. A
   denied event is rejected — no canonical Bronze/outbox row or publish,
   `provider_runtime_consent_blocked_total` incremented. Any already-admitted
   provider raw record remains available only while its rights/retention basis
@@ -305,7 +305,7 @@ grant raw-data retention rights.
 
 ## How a new provider lands
 
-1. **Build the plugin package** (`services/backend/services/providers/<family>/`): plugin class,
+1. **Build the plugin package** (`services/api/connectors/providers/<family>/`): plugin class,
    manifest (honest, §32-valid), one adapter per claimed capability, a
    deterministic normalizer, and replay fixtures.
 2. **Register** it: `register_provider(plugin)` / `ProviderRegistry.register`

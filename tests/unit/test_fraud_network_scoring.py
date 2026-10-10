@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from services.fraud_networks.scoring import (
+from intelligence.fraud_networks.scoring import (
     score_cluster_risk,
     score_confidence,
     score_edge_risk,

@@ -53,9 +53,9 @@ production claims require their separate live evidence and canonical gates.
 | Tenant, access, consent, and rights | Backend tenant and policy authorities decide admission before data use or action. | Existing backend auth, tenant, consent, rights, and billing services. |
 | Source-native records | The source system remains authoritative for its own orders, payments, messages, and similar records. | SDKs emit observations; connectors own provider auth, sync, webhooks, and cursors. |
 | Canonical contracts | One versioned contract vocabulary, with adapters for older clients and source-specific schemas. | `packages/shared/contracts/` and its generators and validators. |
-| Evidence and normalization | Tenant-scoped raw evidence and a replay identity precede normalized facts; source trust and lineage stay attached. | `services/backend/services/ingestion/`, the observation envelope registry, and durable lake/outbox paths. |
-| Identity | The backend resolver owns canonical entity decisions, review, correction, and restatement. | `services/backend/services/identity/`; source identity is scoped by tenant and `source_namespace`. |
-| Graph | All canonical state transitions are authorized, idempotent mutation intents with ledger evidence. | `services/backend/shared/graph/mutation_gateway.py` and graph projection owners. |
+| Evidence and normalization | Tenant-scoped raw evidence and a replay identity precede normalized facts; source trust and lineage stay attached. | `services/api/ingestion/ingestion/`, the observation envelope registry, and durable lake/outbox paths. |
+| Identity | The backend resolver owns canonical entity decisions, review, correction, and restatement. | `services/api/identity/identity/`; source identity is scoped by tenant and `source_namespace`. |
+| Graph | All canonical state transitions are authorized, idempotent mutation intents with ledger evidence. | `services/api/shared/graph/mutation_gateway.py` and graph projection owners. |
 | Intelligence | Versioned lenses, journeys, attribution, value, and recommendations read governed facts and carry evidence. | Existing backend computation and intelligence services; projection registries. |
 | Customer presentation | Aether composes read-only governed views and requests permitted actions. | Existing Aether frontend and mobile clients. |
 | Operator control | Kyber inspects health, authorizes repairs, and records audit trails through backend authorities. | Existing Kyber frontend, operator routes, jobs, and runbooks. |
@@ -156,7 +156,7 @@ and billing. Deployment environments are local, preview, staging, pilot
 production, and production; capabilities are overlays, not new environments.
 
 This layout is a destination, not an instruction to copy code into parallel
-packages or deploy more microservices. Today `services/backend/` is the
+packages or deploy more microservices. Today `services/api/` is the
 deployed Python authority, `packages/shared/contracts/` is the contract source,
 `apps/aether-web/` is the customer web app, `apps/kyber-web/` is the operator
 web app, and `infra/aws/` contains the active AWS implementation. A physical

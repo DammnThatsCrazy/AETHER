@@ -21,7 +21,7 @@ This gate imports each declared target and introspects it for real:
   5. the positional arity the caller relies on is available.
 
 A rename now fails CI instead of degrading in production. The declaration lives
-in ``services/kyber/seams.py`` — one entry per cross-package call.
+in ``services/api/governance/kyber/seams.py`` — one entry per cross-package call.
 
 Note on ``optional``: a seam marked optional means the *caller* tolerates the
 plane being absent. It does not weaken this gate. If the module imports, the
@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "seam-validator")
@@ -159,9 +159,9 @@ def check(seam) -> None:
 
 def main() -> int:
     try:
-        from services.kyber.seams import SEAMS
+        from governance.kyber.seams import SEAMS
     except ImportError as exc:
-        print(f"FAIL — services/kyber/seams.py is not importable: {exc}")
+        print(f"FAIL — services/api/governance/kyber/seams.py is not importable: {exc}")
         return 1
 
     print("=" * 70)
@@ -183,7 +183,7 @@ def main() -> int:
             "without\n  the caller following. Because Kyber's cross-package calls are "
             "guarded by\n  try/except ImportError, this would otherwise degrade "
             "silently at runtime\n  rather than failing here. Fix the caller, or update "
-            "services/kyber/seams.py\n  if the seam legitimately moved."
+            "services/api/governance/kyber/seams.py\n  if the seam legitimately moved."
         )
         print("=" * 70)
         return 1

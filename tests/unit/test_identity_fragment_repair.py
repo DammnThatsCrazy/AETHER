@@ -20,7 +20,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 # Stub heavy optional dependencies before imports
 _STUBBED: list[str] = []
@@ -48,19 +48,19 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.identity.audit import IdentityAuditWriter  # noqa: E402
-from services.identity.conflicts import IdentityConflictManager  # noqa: E402
-from services.identity.graph_writer import IdentityGraphWriter  # noqa: E402
-from services.identity.metrics import IdentityMetrics  # noqa: E402
-from services.identity.models import (  # noqa: E402
+from identity.identity.audit import IdentityAuditWriter  # noqa: E402
+from identity.identity.conflicts import IdentityConflictManager  # noqa: E402
+from identity.identity.graph_writer import IdentityGraphWriter  # noqa: E402
+from identity.identity.metrics import IdentityMetrics  # noqa: E402
+from identity.identity.models import (  # noqa: E402
     ConfidenceTier,
     EdgeType,
     EntityType,
     IdentitySignalType,
     SubjectStatus,
 )
-from services.identity.repository import IdentityResolutionRepository  # noqa: E402
-from services.identity.resolver import IdentityResolutionService  # noqa: E402
+from identity.identity.repository import IdentityResolutionRepository  # noqa: E402
+from identity.identity.resolver import IdentityResolutionService  # noqa: E402
 
 TENANT = "tenant-frag-1"
 ACTOR = "operator-1"
@@ -654,8 +654,8 @@ class _PermRequest:
 @pytest.mark.asyncio
 async def test_execute_requires_write_permission(monkeypatch):
     from shared.common.common import ForbiddenError
-    from services.identity import routes
-    from services.identity.schemas import IdentityFragmentSplitRequest
+    from identity.identity import routes
+    from identity.identity.schemas import IdentityFragmentSplitRequest
 
     resolver, _ = _build_resolver()
     monkeypatch.setattr(routes, "_get_resolver", lambda: resolver)
@@ -671,8 +671,8 @@ async def test_execute_requires_write_permission(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_preview_route_returns_envelope(monkeypatch):
-    from services.identity import routes
-    from services.identity.schemas import IdentitySplitPreviewRequest
+    from identity.identity import routes
+    from identity.identity.schemas import IdentitySplitPreviewRequest
 
     resolver, repo = _build_resolver()
     await repo.create_subject(TENANT, "entity-src", EntityType.HUMAN)

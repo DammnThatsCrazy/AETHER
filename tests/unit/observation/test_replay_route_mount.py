@@ -1,7 +1,7 @@
 """WS-B4 replay operator route — main.py mount + classification + kill switch.
 
 The WS-B4 slice shipped the operator surface in
-``services/ingestion/replay_routes.py`` and left the main.py mount as the
+``services/api/ingestion/ingestion/replay_routes.py`` and left the main.py mount as the
 program-tip seam. This test locks the integration: the two replay routes are
 mounted on the real ``main.app``, classify under the route-policy registry as
 Kyber-operator-required (the default-deny ratchet never lets a mounted route
@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[3] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[3] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -53,7 +53,7 @@ def test_replay_routes_are_mounted_on_main_app():
 
 
 def test_replay_routes_classify_operator_required():
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     for path in (REPLAY_EVENTS, REPLAY_STATUS):
         policy = classify(path, method="POST" if "events" in path else "GET")
@@ -81,7 +81,7 @@ async def test_replay_real_run_refused_while_flag_off(monkeypatch):
         )
         monkeypatch.setattr(settings, "ingest_replay", patched)
 
-    from services.ingestion.replay_routes import (
+    from ingestion.ingestion.replay_routes import (
         ReplayRequest,
         replay_endpoint,
         replay_status,

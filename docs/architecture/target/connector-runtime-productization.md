@@ -13,8 +13,8 @@ since_version: "0.1.0"
 ## Current foundation
 
 The repository already has a Universal Provider Runtime (UPR) in
-`services/backend/services/provider_runtime/` and plugin contracts in
-`services/backend/shared/integration_contracts/`. The runtime registers
+`services/api/connectors/provider_runtime/` and plugin contracts in
+`services/api/shared/integration_contracts/`. The runtime registers
 provider capabilities, validates manifests, manages connections, persists raw
 provider records before normalization, runs pull and webhook adapters, bridges
 events into Bronze, and exposes health and offline certification. The legacy

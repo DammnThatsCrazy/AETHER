@@ -39,7 +39,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -48,8 +48,8 @@ from scripts.lib.preflight_results import (  # noqa: E402
 )
 
 FOUNDING = ROOT / "config" / "founding_tenant_release.yaml"
-ROLES_PY = BACKEND_ROOT / "services" / "runtime" / "roles.py"
-CONSUMER_SPECS = BACKEND_ROOT / "services" / "runtime" / "consumer_specs.py"
+ROLES_PY = BACKEND_ROOT / "workers" / "runtime" / "roles.py"
+CONSUMER_SPECS = BACKEND_ROOT / "workers" / "runtime" / "consumer_specs.py"
 GRAPH_REPLAY = ROOT / "scripts" / "graph" / "replay_relationship_layers.py"
 GOLD_SCHEMA = ROOT / "infra" / "clickhouse" / "schemas" / "008_measurement_gold.sql"
 CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"

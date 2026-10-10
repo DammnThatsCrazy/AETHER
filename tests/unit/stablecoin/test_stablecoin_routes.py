@@ -38,7 +38,7 @@ class _FakeTenant:
 
 
 def _build_app(tenant: _FakeTenant) -> TestClient:
-    from services.stablecoin.routes import router
+    from value.stablecoin.routes import router
 
     app = FastAPI()
 
@@ -141,7 +141,7 @@ def test_support_requires_manage_permission(monkeypatch):
 
 
 def test_graph_mutations_are_tenant_scoped_and_deterministic():
-    from services.stablecoin.graph_mutations import build_observation_mutations
+    from value.stablecoin.graph_mutations import build_observation_mutations
 
     observation = {
         "tenant_id": TENANT,

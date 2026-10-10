@@ -11,9 +11,9 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -41,7 +41,7 @@ def feedback_routes(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     with backend_module_path():
-        mod = importlib.import_module("services.agent.feedback_routes")
+        mod = importlib.import_module("actions.agent.feedback_routes")
         importlib.reload(mod)
         mod._loop_store._data.clear()
         mod._loop_store._lists.clear()

@@ -10,9 +10,9 @@ flags: [AETHER_CONNECTORS_ENABLED, AETHER_COMMS_INGESTION_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
-  - services/backend/services/integrations/connectors/sendgrid.py
+  - services/api/connectors/integrations/connectors/sendgrid.py
 source_hashes:
-  "services/backend/services/integrations/connectors/sendgrid.py": "sha256:02453dba7b767e516138444f51f709758382ad6449c8ddeb609be6a6bfdf2f77"
+  "services/api/connectors/integrations/connectors/sendgrid.py": "sha256:84e4e5a15898d7c5d6797c5086bb1d6dd259e4555c77d0b846f1660695f2f4d4"
 ---
 
 # SendGrid Connector

@@ -3,8 +3,8 @@
  *
  * These mirror the backend contracts exposed by the tenant-scoped SDK
  * services:
- *   - services/sdk_health  →  /v1/diagnostics/sdk/*
- *   - services/sdk_config  →  /v1/config/sdk/*
+ *   - services/api/ingestion/sdk_health  →  /v1/diagnostics/sdk/*
+ *   - services/api/ingestion/sdk_config  →  /v1/config/sdk/*
  *
  * They intentionally match the shapes used by the internal Kyber operator
  * console (apps/kyber-web/src/types/sdk-health.ts) so a tenant sees the same

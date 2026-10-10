@@ -1,5 +1,5 @@
 {
-  "_source": "services/backend/shared/plans/catalog.py (tests/unit/test_site_plans_match_catalog.py keeps this in sync)",
+  "_source": "services/api/shared/plans/catalog.py (tests/unit/test_site_plans_match_catalog.py keeps this in sync)",
   "self_serve": [
     { "id": "alpha", "name": "Alpha", "monthly": 0, "annual": 0, "monthly_quota": 3000000, "member_cap": 2, "burst_rpm": 100, "service_count": 11, "event_overage_per_1k": "0.060" },
     { "id": "beta", "name": "Beta", "monthly": 299, "annual": 3050, "monthly_quota": 9000000, "member_cap": 3, "burst_rpm": 500, "service_count": 22, "event_overage_per_1k": "0.050" },

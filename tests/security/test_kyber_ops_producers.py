@@ -43,25 +43,25 @@ from typing import Any, Optional
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "kyber-ops-producers-test")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.kyber.graph.projector import (  # noqa: E402
+from governance.kyber.graph.projector import (  # noqa: E402
     PROJECTION_STALL_FAILURE_THRESHOLD,
     KyberGraphProjector,
 )
-from services.kyber.graph.repository import KyberGraphStore  # noqa: E402
-from services.kyber.graph.routes import PLATFORM_NODE_TYPES  # noqa: E402
-from services.kyber.graph.topology import UNDERIVABLE_INPUTS  # noqa: E402
-from services.kyber.ops.contracts import IncidentSignal  # noqa: E402
-from services.kyber.ops.correlation import (  # noqa: E402
+from governance.kyber.graph.repository import KyberGraphStore  # noqa: E402
+from governance.kyber.graph.routes import PLATFORM_NODE_TYPES  # noqa: E402
+from governance.kyber.graph.topology import UNDERIVABLE_INPUTS  # noqa: E402
+from governance.kyber.ops.contracts import IncidentSignal  # noqa: E402
+from governance.kyber.ops.correlation import (  # noqa: E402
     IncidentCorrelationWorker,
     build_incident_correlator_coro,
 )
-from services.kyber.ops.exceptions import (  # noqa: E402
+from governance.kyber.ops.exceptions import (  # noqa: E402
     ExceptionService,
     report_operational_signal,
 )
@@ -96,7 +96,7 @@ class FakeLedger:
     """The one read shape the projector uses, with an injectable failure.
 
     Deliberately the same signature as ``GraphMutationLedgerRepository.list_records``
-    — the declared seam in ``services/kyber/seams.py`` is what keeps that true.
+    — the declared seam in ``services/api/governance/kyber/seams.py`` is what keeps that true.
     """
 
     def __init__(self, rows: Optional[list[dict[str, Any]]] = None) -> None:
@@ -241,7 +241,7 @@ async def test_a_topology_failure_does_not_stop_ledger_projection():
     async def _boom(_store: KyberGraphStore, *, environment: str) -> dict[str, Any]:
         raise RuntimeError("role table unreadable")
 
-    import services.kyber.graph.projector as projector_module
+    import governance.kyber.graph.projector as projector_module
 
     original = projector_module.sync_topology
     projector_module.sync_topology = _boom
@@ -272,7 +272,7 @@ async def test_a_failed_topology_sync_retries_on_the_next_sweep():
     async def _boom(_store: KyberGraphStore, *, environment: str) -> dict[str, Any]:
         raise RuntimeError("transient")
 
-    import services.kyber.graph.projector as projector_module
+    import governance.kyber.graph.projector as projector_module
 
     original = projector_module.sync_topology
     projector_module.sync_topology = _boom
@@ -395,7 +395,7 @@ async def test_the_correlation_loop_survives_a_raising_iteration():
     correlator = FlakyCorrelator()
     worker = IncidentCorrelationWorker(correlator=correlator)  # type: ignore[arg-type]
 
-    import services.kyber.ops.correlation as correlation_module
+    import governance.kyber.ops.correlation as correlation_module
 
     original = correlation_module.sweep_interval_seconds
     correlation_module.sweep_interval_seconds = lambda: 0

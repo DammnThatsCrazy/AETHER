@@ -2,7 +2,7 @@
 
 Covers the behavior of POST /v1/ingest/events and POST /v1/ingest/events/batch
 after convergence onto the canonical V1 spine
-(``services.ingestion.batch.ingest_events``):
+(``ingestion.ingestion.batch.ingest_events``):
 
 * kill flag OFF (default) → both handlers still return dispositions (never
   410); an accepted legacy event publishes EXACTLY ONCE to
@@ -40,10 +40,10 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -125,8 +125,8 @@ def _fresh(kill: bool = False):
     try:
         repos = importlib.import_module("repositories.repos")
         repos.reset_in_memory_stores()
-        routes = importlib.import_module("services.ingestion.routes")
-        batch = importlib.import_module("services.ingestion.batch")
+        routes = importlib.import_module("ingestion.ingestion.routes")
+        batch = importlib.import_module("ingestion.ingestion.batch")
         settings = importlib.import_module("config.settings").settings
 
         env = SimpleNamespace(

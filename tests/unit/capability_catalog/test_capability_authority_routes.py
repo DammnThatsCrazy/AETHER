@@ -22,12 +22,12 @@ from shared.auth.auth import TenantContext
 from shared.common.common import ForbiddenError, NotFoundError
 from shared.events.events import Topic
 
-import services.agent_access_intelligence.authority_routes as authority_routes
-from services.agent_access_intelligence.authority_routes import (
+import actions.agent_access_intelligence.authority_routes as authority_routes
+from actions.agent_access_intelligence.authority_routes import (
     CapabilityAuthorizationGrant,
     CapabilityInvocationCheck,
 )
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
 
 
 class FakeProducer:

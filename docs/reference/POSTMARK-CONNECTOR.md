@@ -10,9 +10,9 @@ flags: [AETHER_CONNECTORS_ENABLED, AETHER_COMMS_INGESTION_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
-  - services/backend/services/integrations/connectors/postmark.py
+  - services/api/connectors/integrations/connectors/postmark.py
 source_hashes:
-  "services/backend/services/integrations/connectors/postmark.py": "sha256:14e323341d5f8252f364b822c420dab3c1716a9f002f8760aad93a8bc1e198c7"
+  "services/api/connectors/integrations/connectors/postmark.py": "sha256:12c26a7452f241fb7ebd7dbf9a0bded94aee2609487ea93723fb49988e197333"
 ---
 
 # Postmark Connector

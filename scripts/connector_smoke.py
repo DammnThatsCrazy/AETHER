@@ -23,7 +23,7 @@ import sys
 import asyncio
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).parent.parent / "services" / "backend"
+BACKEND_ROOT = Path(__file__).parent.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 
@@ -44,8 +44,8 @@ def _require_secret(name: str) -> str:
 
 async def smoke_connector(connector_type: str, secret: str, extra_config: dict | None = None) -> None:
     """Run a live pull against one adapter."""
-    from services.integrations.connectors.registry import get_connector
-    from services.integrations.connectors.base import ConnectorConfig
+    from connectors.integrations.connectors.registry import get_connector
+    from connectors.integrations.connectors.base import ConnectorConfig
 
     connector = get_connector(connector_type)
     if connector is None:

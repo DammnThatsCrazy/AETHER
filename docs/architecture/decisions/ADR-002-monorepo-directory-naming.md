@@ -48,7 +48,7 @@ in [`repo-migration.md`](../../reference/source-of-truth/repo-migration.md).
 
 **Current state (Accepted):** Active implementation directories use shell-safe
 paths. `BACKEND_DIR`, `ML_DIR`, `AGENT_DIR`, and `TF_DIR` point to
-`services/backend`, `services/ml`, `services/agents`, and `infra/aws/terraform`.
+`services/api`, `services/ml`, `services/agents`, and `infra/aws/terraform`.
 CI still quotes variable expansions at command boundaries.
 
 **Completed migration map:**
@@ -57,7 +57,7 @@ CI still quotes variable expansions at command boundaries.
 |---------|--------|
 | `AWS Deployment/aether-aws/` | `infra/aws/` |
 | `Agent Layer/` | `services/agents/` |
-| `Backend Architecture/aether-backend/` | `services/backend/` |
+| `Backend Architecture/aether-backend/` | `services/api/` |
 | `Data Ingestion Layer/` | `docs/archive/legacy-architecture/data-ingestion-layer/` |
 | `Data Lake Architecture/` | `docs/archive/legacy-architecture/data-lake-architecture/` |
 | `GDPR & SOC2/aether-compliance/` | `services/compliance/` |

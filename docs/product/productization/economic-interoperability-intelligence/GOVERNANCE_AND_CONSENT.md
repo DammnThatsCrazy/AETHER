@@ -6,12 +6,12 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/consent-registry.json, services/backend/shared/auth/auth.py, services/backend/shared/privacy/consent_enforcement.py]
+source_files: [packages/shared/contracts/consent-registry.json, services/api/shared/auth/auth.py, services/api/shared/privacy/consent_enforcement.py]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/contracts/consent-registry.json": "sha256:40d6fca088c2aa8e7f6699ad12232be20a8c72fb5d62191c7ba1bbd1b4afeb30"
-  "services/backend/shared/auth/auth.py": "sha256:26b570c6eeb17ab53db612a14ffe5146b1eb2a76ea102b2c297a3a4a9b5544aa"
-  "services/backend/shared/privacy/consent_enforcement.py": "sha256:1508745af0a8b2085f109d69050e49524bfcffc93d62316529056bf76fb67bd1"
+  "packages/shared/contracts/consent-registry.json": "sha256:f147d3df7c63735b59103d2432b0a2fa37699b3494f6a2b95c397025dc54ec76"
+  "services/api/shared/auth/auth.py": "sha256:26b570c6eeb17ab53db612a14ffe5146b1eb2a76ea102b2c297a3a4a9b5544aa"
+  "services/api/shared/privacy/consent_enforcement.py": "sha256:1508745af0a8b2085f109d69050e49524bfcffc93d62316529056bf76fb67bd1"
 ---
 
 # Governance and Consent

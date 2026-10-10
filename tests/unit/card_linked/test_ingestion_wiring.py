@@ -9,15 +9,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[3] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[3] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 import pytest  # noqa: E402
 
 from config.settings import get_settings  # noqa: E402
-from services.card_linked_payments import ingestion as ingestion_mod  # noqa: E402
-from services.card_linked_payments.ingestion import CardLinkedIngestionService  # noqa: E402
+from value.card_linked_payments import ingestion as ingestion_mod  # noqa: E402
+from value.card_linked_payments.ingestion import CardLinkedIngestionService  # noqa: E402
 
 
 def _webhook_payload(**overrides):
@@ -40,7 +40,7 @@ def _webhook_payload(**overrides):
 def service(monkeypatch):
     # Fresh repositories per test: the card-linked repo factory caches, so
     # reset its singleton the same way the existing card_linked conftest does.
-    from services.card_linked_payments import repositories as repos_mod
+    from value.card_linked_payments import repositories as repos_mod
 
     monkeypatch.setattr(repos_mod, "_repos", None, raising=False)
     monkeypatch.setattr(ingestion_mod, "_service", None, raising=False)
@@ -107,10 +107,10 @@ def _force_flag(request, enabled: bool) -> None:
 
 
 async def test_sdk_pipeline_hook_feeds_flow_store(request, monkeypatch):
-    from services.ingestion.workers import _ingest_card_linked_context
+    from ingestion.ingestion.workers import _ingest_card_linked_context
 
     _force_flag(request, True)
-    from services.card_linked_payments import repositories as repos_mod
+    from value.card_linked_payments import repositories as repos_mod
 
     monkeypatch.setattr(repos_mod, "_repos", None, raising=False)
     monkeypatch.setattr(ingestion_mod, "_service", None, raising=False)
@@ -125,9 +125,9 @@ async def test_sdk_pipeline_hook_feeds_flow_store(request, monkeypatch):
     await _ingest_card_linked_context("tenant-sdk-wire", payload)
     # Read through a fresh import so we query the SAME ingestion-service
     # identity the worker wrote to (module-identity churn can otherwise split
-    # writer and reader across two `services.card_linked_payments.ingestion`
+    # writer and reader across two `value.card_linked_payments.ingestion`
     # modules, making the store look empty).
-    from services.card_linked_payments.ingestion import get_ingestion_service
+    from value.card_linked_payments.ingestion import get_ingestion_service
 
     flows = await get_ingestion_service()._repos.flows.list_for_tenant("tenant-sdk-wire")
     assert flows, "SDK hook did not persist a card-linked flow"
@@ -135,10 +135,10 @@ async def test_sdk_pipeline_hook_feeds_flow_store(request, monkeypatch):
 
 
 async def test_sdk_hook_ignores_non_card_events(request, monkeypatch):
-    from services.ingestion.workers import _ingest_card_linked_context
+    from ingestion.ingestion.workers import _ingest_card_linked_context
 
     _force_flag(request, True)
-    from services.card_linked_payments import repositories as repos_mod
+    from value.card_linked_payments import repositories as repos_mod
 
     monkeypatch.setattr(repos_mod, "_repos", None, raising=False)
     monkeypatch.setattr(ingestion_mod, "_service", None, raising=False)
@@ -155,7 +155,7 @@ async def test_sdk_hook_ignores_non_card_events(request, monkeypatch):
 
 async def test_ingest_routes_are_mounted():
     """POST ingestion endpoints exist on the card-linked router."""
-    from services.card_linked_payments.routes import router
+    from value.card_linked_payments.routes import router
 
     paths = {(r.path, m) for r in router.routes for m in (r.methods or [])}
     prefix = "/v1/integrations/providers/payment-rails/card-linked"

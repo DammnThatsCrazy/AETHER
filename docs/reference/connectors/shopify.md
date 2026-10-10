@@ -13,9 +13,9 @@ since_version: "0.1.0"
 ## Current paths
 
 Shopify has a legacy `BaseConnector` under
-`services/backend/services/integrations/connectors/` and a native Universal
+`services/api/connectors/integrations/connectors/` and a native Universal
 Provider Runtime capability, `shopify.admin.orders_read`, under
-`services/backend/services/providers/shopify/`. The legacy route remains
+`services/api/connectors/providers/shopify/`. The legacy route remains
 available behind its existing connector flag. A native plugin registration is
 not a tenant migration or a whole-commerce certification.
 

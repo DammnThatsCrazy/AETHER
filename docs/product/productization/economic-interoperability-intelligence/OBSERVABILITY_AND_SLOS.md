@@ -6,10 +6,10 @@ visibility: I
 audience: [architect, ops, buyer]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/notification_intelligence/consumer.py]
+source_files: [services/api/journeys/notification_intelligence/consumer.py]
 canonical_owner: platform@aether
 source_hashes:
-  services/backend/services/notification_intelligence/consumer.py: sha256:6ed102bb946271ee5d9b52baa0c041f478e170108bdaef32e0eb60645f55c568
+  "services/api/journeys/notification_intelligence/consumer.py": "sha256:a3d195a687cde196be1f66ae1e43e0b56d5d8b5f4a64a039573673fbe06ebd94"
 ---
 
 # Observability and SLOs

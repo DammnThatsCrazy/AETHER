@@ -26,9 +26,9 @@ repository_ceiling:
   - Insert provider credentials into the credential platform; run credentials-preflight.
   remaining_is_repository_controlled: false
   evidence:
-  - services/backend/services/integrations/connectors/
-  - services/backend/tests/test_connector_ingest.py
-  - services/backend/tests/test_slack_notify_e2e.py
+  - services/api/connectors/integrations/connectors/
+  - services/api/tests/test_connector_ingest.py
+  - services/api/tests/test_slack_notify_e2e.py
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)
@@ -129,7 +129,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: services/backend/services/integrations/connectors/'
+  - 'repository evidence: services/api/connectors/integrations/connectors/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

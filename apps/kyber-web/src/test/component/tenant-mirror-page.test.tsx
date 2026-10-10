@@ -59,7 +59,7 @@ beforeAll(() => {
 //
 // Named for what they are, not `MOCK_*`: `scripts/validate_frontend_data_truth.py`
 // fails on that token, and these are response shapes copied from
-// `services/kyber/mirror/contracts.py`, not stand-ins for missing data.
+// `services/api/governance/kyber/mirror/contracts.py`, not stand-ins for missing data.
 
 const TENANT = 'tenant_alpha';
 const SURFACE = 'users';
@@ -74,7 +74,7 @@ const DIAGNOSTICS = {
     exposure_known: true,
   },
   lineage: {
-    source: 'services.kyber.graph.scoped_gateway',
+    source: 'governance.kyber.graph.scoped_gateway',
     vertex_types: ['User'],
     scope_id: 'scope_77',
     purpose: 'tenant_investigation',
@@ -474,10 +474,10 @@ describe('TenantMirrorPage — diagnostics stay out of the tenant-visible region
     // Lineage lives behind its own tab, still inside the operator region.
     await userEvent.click(within(operator).getByRole('tab', { name: 'Lineage' }));
     expect(
-      within(operatorRegion()).getByText('services.kyber.graph.scoped_gateway'),
+      within(operatorRegion()).getByText('governance.kyber.graph.scoped_gateway'),
     ).toBeInTheDocument();
     expect(
-      within(tenantRegion()).queryByText('services.kyber.graph.scoped_gateway'),
+      within(tenantRegion()).queryByText('governance.kyber.graph.scoped_gateway'),
     ).not.toBeInTheDocument();
   });
 

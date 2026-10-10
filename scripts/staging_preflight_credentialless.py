@@ -42,7 +42,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 SCRIPTS = ROOT / "scripts"
 for p in (str(ROOT), str(SCRIPTS), str(SCRIPTS / "release"), str(BACKEND_ROOT)):
     if p not in sys.path:
@@ -80,9 +80,9 @@ def check_code_exists() -> list[CheckResult]:
     out: list[CheckResult] = []
     import py_compile
     mods = [
-        BACKEND_ROOT / "services/runtime/run_role.py",
-        BACKEND_ROOT / "services/runtime/roles.py",
-        BACKEND_ROOT / "services/runtime/consumer_specs.py",
+        BACKEND_ROOT / "workers/runtime/run_role.py",
+        BACKEND_ROOT / "workers/runtime/roles.py",
+        BACKEND_ROOT / "workers/runtime/consumer_specs.py",
     ]
     bad = []
     for m in mods:
@@ -143,7 +143,7 @@ def check_workers_register() -> CheckResult:
     eight in a consolidated one. Reading the removed key returned an empty set
     and turned this into an unconditional failure.
     """
-    roles_py = BACKEND_ROOT / "services/runtime/roles.py"
+    roles_py = BACKEND_ROOT / "workers/runtime/roles.py"
     worker_roles = set(runtime_constants(roles_py)["WORKER_ROLES"])
     mapped = _role_to_spec_names_keys(roles_py)
     if not worker_roles or worker_roles - mapped:

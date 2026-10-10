@@ -16,7 +16,7 @@
     {"type": "panel", "id": "stat", "name": "Stat", "version": ""}
   ],
   "annotations": {"list": []},
-  "description": "Semantic pipeline health — classification outcomes, abstention ratio, classify latency, review queue, replay jobs. Metrics emitted by services/semantic_intelligence only.",
+  "description": "Semantic pipeline health — classification outcomes, abstention ratio, classify latency, review queue, replay jobs. Metrics emitted by services/api/intelligence/semantic_intelligence only.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,

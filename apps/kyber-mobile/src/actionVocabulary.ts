@@ -7,9 +7,9 @@
  * (the SDK's governed-action methods are being built in parallel).
  *
  * Action classes are the capability plane's 0-5 ladder
- * (`services/kyber/access/capabilities.py`): 0 read … 5 fleet-destructive.
+ * (`services/api/governance/kyber/access/capabilities.py`): 0 read … 5 fleet-destructive.
  * Command statuses / verification outcomes are the wire values the command plane
- * writes (`services/kyber/ops/contracts.py`) — rendered snake_case-as-typed,
+ * writes (`services/api/governance/kyber/ops/contracts.py`) — rendered snake_case-as-typed,
  * never camelCased.
  */
 import { theme } from '@aether/mobile-ui';

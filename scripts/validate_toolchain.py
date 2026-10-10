@@ -84,7 +84,7 @@ GROUPS: tuple[ToolchainGroup, ...] = (
             "the backend test tree imports the FastAPI app at module scope; without these "
             "the suite reports collection errors rather than results"
         ),
-        suites=("services/backend/tests",),
+        suites=("services/api/tests",),
     ),
     ToolchainGroup(
         name="ml",

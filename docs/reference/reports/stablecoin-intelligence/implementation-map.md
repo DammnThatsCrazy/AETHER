@@ -2,10 +2,10 @@
 
 ## PR1 delivered
 
-- Backend contracts: `services/backend/services/stablecoins/models.py`
-- Deployment registry: `services/backend/services/stablecoins/registry.py`
-- Durable repositories: `services/backend/repositories/stablecoin_repos.py`
-- Additive migration: `services/backend/migrations/2026_07_stablecoin_intelligence_foundation.sql`
+- Backend contracts: `services/api/value/stablecoins/models.py`
+- Deployment registry: `services/api/value/stablecoins/registry.py`
+- Durable repositories: `services/api/repositories/stablecoin_repos.py`
+- Additive migration: `services/api/migrations/2026_07_stablecoin_intelligence_foundation.sql`
 - SDK shared contract: `packages/shared/stablecoin.ts`
 - Source-of-truth docs: `docs/reference/source-of-truth/STABLECOIN_DOMAIN.md`, `STABLECOIN_EVENT_REGISTRY.md`, `STABLECOIN_METRICS.md`
 - Tests: `tests/unit/test_stablecoin_intelligence_foundation.py`
@@ -18,22 +18,22 @@
 
 ## PR2 delivered
 
-- Ingestion and normalization: `services/backend/services/stablecoins/ingestion.py`
-- Finality/reorganization correction foundation: `services/backend/services/stablecoins/finality.py`
-- Reconciliation: `services/backend/services/stablecoins/reconciliation.py`
-- Gold accounting materializer: `services/backend/services/stablecoins/aggregation.py`
-- Support state machine: `services/backend/services/stablecoins/support.py`
-- Alert evaluator: `services/backend/services/stablecoins/alerts.py`
+- Ingestion and normalization: `services/api/value/stablecoins/ingestion.py`
+- Finality/reorganization correction foundation: `services/api/value/stablecoins/finality.py`
+- Reconciliation: `services/api/value/stablecoins/reconciliation.py`
+- Gold accounting materializer: `services/api/value/stablecoins/aggregation.py`
+- Support state machine: `services/api/value/stablecoins/support.py`
+- Alert evaluator: `services/api/value/stablecoins/alerts.py`
 - PR2 tests: `tests/unit/test_stablecoin_intelligence_pr2_pipeline.py`
 
 ## PR2 provider-execution layer
 
 Delivered after the PR2 foundation:
 
-- `services/backend/services/stablecoins/providers.py`: tenant-scoped provider execution runner with dry-run, explicit provider failure health, checkpoints, and execution-scoped rollback.
-- `services/backend/services/stablecoins/rpc_observer.py`: read-only EVM receipt verification with tenant scope, deployment/log matching, receipt status handling, and threshold-based finality updates.
-- `services/backend/services/stablecoins/solana_observer.py`: read-only Solana transaction verification with tenant scope, SPL mint matching, transaction-error handling, and slot-threshold finality updates.
-- `services/backend/services/stablecoins/polling.py`: connector-neutral provider/finality polling scheduler with durable checkpoints and failed-provider health records.
+- `services/api/value/stablecoins/providers.py`: tenant-scoped provider execution runner with dry-run, explicit provider failure health, checkpoints, and execution-scoped rollback.
+- `services/api/value/stablecoins/rpc_observer.py`: read-only EVM receipt verification with tenant scope, deployment/log matching, receipt status handling, and threshold-based finality updates.
+- `services/api/value/stablecoins/solana_observer.py`: read-only Solana transaction verification with tenant scope, SPL mint matching, transaction-error handling, and slot-threshold finality updates.
+- `services/api/value/stablecoins/polling.py`: connector-neutral provider/finality polling scheduler with durable checkpoints and failed-provider health records.
 - `scripts/stablecoin_backfill.py`: connector-neutral JSON backfill CLI supporting the required dry-run, tenant, asset, deployment, chain, source, window, limit, resume, verify-only, and rollback-tag arguments.
 - `stablecoin_provider_health`, `stablecoin_ingestion_checkpoints`, and `stablecoin_polling_checkpoints` additive tables.
 - Tests: `tests/unit/test_stablecoin_intelligence_provider_execution.py`, `tests/unit/test_stablecoin_intelligence_rpc_verification.py`, and `tests/unit/test_stablecoin_intelligence_solana_verification.py`, and `tests/unit/test_stablecoin_intelligence_polling_scheduler.py`.
@@ -46,9 +46,9 @@ PR2 now includes deterministic service foundations and a first provider-executio
 
 Delivered:
 
-- `services/backend/services/stablecoins/operations.py`: Kyber tenant health, lineage, and audited remediation-intent capture.
-- `services/backend/services/stablecoins/governance.py`: capability decisions, read-only metering, and governed benchmark publication.
-- `services/backend/services/stablecoins/release_readiness.py`: explicit `NOT_READY` release matrix with blockers.
+- `services/api/value/stablecoins/operations.py`: Kyber tenant health, lineage, and audited remediation-intent capture.
+- `services/api/value/stablecoins/governance.py`: capability decisions, read-only metering, and governed benchmark publication.
+- `services/api/value/stablecoins/release_readiness.py`: explicit `NOT_READY` release matrix with blockers.
 - `stablecoin_remediation_audit` and `stablecoin_market_benchmarks` additive tables.
 - Release evidence reports under `docs/reference/reports/stablecoin-intelligence/`.
 
@@ -61,10 +61,10 @@ Boundaries:
 
 Delivered:
 
-- `services/backend/services/stablecoins/identity.py`: tenant-scoped wallet identity links with evidence, confidence, consent context, and unresolved wallet responses.
-- `services/backend/services/stablecoins/graph_projector.py`: deterministic, tenant-scoped graph projection outbox records without direct Neptune mutation.
-- `services/backend/services/stablecoins/profile360.py`: backend Profile360 composer that surfaces finalized payment summaries, unresolved wallets, unattributed activity, provenance, and drill links.
-- `services/backend/services/stablecoins/routes.py`: feature-flagged tenant APIs for `/v1/profile/{profile_id}/stablecoins` and `/v1/stablecoins/observations`.
+- `services/api/value/stablecoins/identity.py`: tenant-scoped wallet identity links with evidence, confidence, consent context, and unresolved wallet responses.
+- `services/api/value/stablecoins/graph_projector.py`: deterministic, tenant-scoped graph projection outbox records without direct Neptune mutation.
+- `services/api/value/stablecoins/profile360.py`: backend Profile360 composer that surfaces finalized payment summaries, unresolved wallets, unattributed activity, provenance, and drill links.
+- `services/api/value/stablecoins/routes.py`: feature-flagged tenant APIs for `/v1/profile/{profile_id}/stablecoins` and `/v1/stablecoins/observations`.
 - Additive identity-link and graph-projection-outbox tables.
 
 Boundaries:

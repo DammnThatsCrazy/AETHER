@@ -9,7 +9,7 @@ status: beta
 
 # Responsiveness & Time-to-Value Spine
 
-> **Slice 6 of 6 — documentation.** Mirrors `services/backend/services/responsiveness/` and the integration instrumentation already committed on `feature/responsiveness-spine`.
+> **Slice 6 of 6 — documentation.** Mirrors `services/api/governance/responsiveness/` and the integration instrumentation already committed on `feature/responsiveness-spine`.
 
 The Responsiveness & Time-to-Value (RTV) spine is a dedicated observability and performance contract layer that sits beside the existing Tenant Activation & Readiness Spine. It answers, for any tenant at any moment:
 
@@ -34,7 +34,7 @@ It does not fake progress. Every state transition is driven by real integration 
                            │ GET /v1/responsiveness + sub-paths
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  services/backend/services/responsiveness/routes.py                     │
+│  services/api/governance/responsiveness/routes.py                     │
 │  GET /v1/responsiveness                           # full envelope        │
 │  GET /v1/responsiveness/activation-milestones                              │
 │  GET /v1/responsiveness/surface-readiness                                 │
@@ -53,7 +53,7 @@ It does not fake progress. Every state transition is driven by real integration 
                            │ read / write
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  services/backend/services/responsiveness/                                │
+│  services/api/governance/responsiveness/                                │
 │  models.py          — dataclasses + enums (all state shapes)              │
 │  service.py         — ResponsivenessService (aggregates + records)      │
 │  repository.py      — ResponsivenessRepository (flat BaseRepository rows)│
@@ -150,11 +150,11 @@ The spine records real evidence from five integration points. Each is wired as a
 
 | Integration | File | What's recorded |
 |-------------|------|-----------------|
-| SDK ingestion ACK | `services/backend/services/ingestion/batch.py` | `record_first_event_ack()` — first-event-ack latency, first heartbeat visible |
-| Provider runtime | `services/backend/services/provider_runtime/scheduler.py` | `update_provider_sync_state()` — provider connection lifecycle, first sample, progress % |
-| Graph projector | `services/backend/services/semantic_intelligence/graph_projector.py` | `update_graph_hydration_state()` + `mark_graph_stub_visible()` + `mark_first_value()` |
-| Jobs worker | `services/backend/services/jobs/worker.py` | `update_background_job()` — job lifecycle timing (imported, phase 2+) |
-| Analytics queries | `services/backend/services/analytics/routes.py` | `record_query()` — query execution state, lane, latency, cache hit |
+| SDK ingestion ACK | `services/api/ingestion/ingestion/batch.py` | `record_first_event_ack()` — first-event-ack latency, first heartbeat visible |
+| Provider runtime | `services/api/connectors/provider_runtime/scheduler.py` | `update_provider_sync_state()` — provider connection lifecycle, first sample, progress % |
+| Graph projector | `services/api/intelligence/semantic_intelligence/graph_projector.py` | `update_graph_hydration_state()` + `mark_graph_stub_visible()` + `mark_first_value()` |
+| Jobs worker | `services/api/workers/jobs/worker.py` | `update_background_job()` — job lifecycle timing (imported, phase 2+) |
+| Analytics queries | `services/api/intelligence/analytics/routes.py` | `record_query()` — query execution state, lane, latency, cache hit |
 
 See [integration-guide.md](./integration-guide.md) for code-level detail.
 

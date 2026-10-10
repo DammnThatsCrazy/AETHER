@@ -16,7 +16,7 @@ import pytest
 
 @contextmanager
 def _backend_path() -> Iterator[None]:
-    backend = str(Path(__file__).parents[2] / "services" / "backend")
+    backend = str(Path(__file__).parents[2] / "services" / "api")
     if backend not in sys.path:
         sys.path.insert(0, backend)
     yield

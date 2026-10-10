@@ -84,8 +84,8 @@ export type TenantReadinessResponse = z.infer<typeof tenantReadinessResponseSche
 export type TenantReadinessCheck = z.infer<typeof tenantReadinessCheckSchema>;
 
 // Customer settings responses are validated at the transport boundary.  Keep
-// these schemas aligned with the explicit DTOs returned by services/me and
-// services/billing; callers must never guess between legacy field names.
+// these schemas aligned with the explicit DTOs returned by services/api/tenancy/me and
+// services/api/billing/billing; callers must never guess between legacy field names.
 const apiKeySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -308,7 +308,7 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
 };
 
 // ── Continuations (cross-device continue-on-phone plane) request shapes ──────
-// Mirrors services/continuation/routes.py ContinuationInput / HandoffRequest.
+// Mirrors services/api/journeys/continuation/routes.py ContinuationInput / HandoffRequest.
 // Identity fields (id / principal_id / tenant_id / app_kind) are server-owned.
 
 /** POST /v1/continuations request body (client-supplied fields only). */
@@ -353,7 +353,7 @@ const clientSyncResponseSchema = z.object({
 });
 
 // ─── Semantic intelligence shapes ────────────────────────────────────────────
-// Mirrors services/semantic_intelligence/models.py (EvidenceRef,
+// Mirrors services/api/intelligence/semantic_intelligence/models.py (EvidenceRef,
 // EntitySemanticState) and the /v1/graph/semantic-overlay route payload.
 
 const semanticEvidenceRefSchema = z.object({
@@ -1763,7 +1763,7 @@ export const api = {
         .then(r => r.data as AuthGrantResponse & { tenant_id: string }),
 
     /** Exchange Auth0 JWT for an Aether session (or legacy API key) — SSO callback. */
-    // Body field must match SSOCallbackRequest (services/backend/services/auth/routes.py).
+    // Body field must match SSOCallbackRequest (services/api/tenancy/auth/routes.py).
     ssoCallback: (jwt: string) =>
       restClient.post('/v1/auth/sso/callback', wrap(unknownSchema), { token: jwt })
         .then(r => r.data as AuthGrantResponse),
@@ -1981,7 +1981,7 @@ export const api = {
 
   // ── Social Intelligence (12-platform unified grid) ─────────────────────────
   // Honest contract: the canonical Profile360 IntelligenceAggregator envelope
-  // (services/profile/intelligence.py). The legacy stub that fabricated
+  // (services/api/identity/profile/intelligence.py). The legacy stub that fabricated
   // influence_level / total_followers_deduped / engagement_rate was removed in
   // M4 — unknown data is absent (null / empty), never reported as 0 or 'low'.
   social: {

@@ -11,8 +11,8 @@ to full enforcement:
 
   2. Coverage (new, fail-closed): the persistent-resource inventory is derived
      from the repo itself — BaseRepository-backed store names in
-     ``services/backend/repositories/repos.py`` plus every
-     table created by ``services/backend/alembic/versions``
+     ``services/api/repositories/repos.py`` plus every
+     table created by ``services/api/alembic/versions``
      migrations (literal ``CREATE TABLE IF NOT EXISTS`` statements and the
      ``*TABLES*`` list/tuple/dict constants used by loop-style migrations).
      Every inventory entry MUST have a policy, and every policy MUST map to an
@@ -49,7 +49,7 @@ REQUIRED_FIELDS = [
 VALID_DELETE = {"hard_delete", "tombstone", "preserve"}
 VALID_CODEC = {"zstd", "none"}
 
-_BACKEND_REL = Path("services") / "backend"
+_BACKEND_REL = Path("services") / "api"
 _STORE_RE = re.compile(r'super\(\)\.__init__\(\s*"([A-Za-z_][A-Za-z0-9_]*)"')
 _CREATE_RE = re.compile(r"CREATE TABLE IF NOT EXISTS\s+([A-Za-z_][A-Za-z0-9_]*)")
 _TABLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")

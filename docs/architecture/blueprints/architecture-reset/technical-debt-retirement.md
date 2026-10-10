@@ -46,7 +46,7 @@ separate.
 | Intake admission | shared ingress contract and policy decision; source-specific auth and trust stay per source | `intake-sdk-batch-v1-v2`, `intake-provider-runtime-vs-legacy-connectors` | converge |
 | Evidence and replay identity | one append-only L0 record; `ProviderRawRightsAdmission` for provider raw data | `evidence-single-admission-and-replay` | converge |
 | Normalization | registry-routed Silver dispatcher with versioned adapters | `normalization-one-fact-authority` | converge |
-| Identity | `services/backend/services/identity` | `identity-single-resolver`, `identity-legacy-resolution-module` | retain, deprecated |
+| Identity | `services/api/identity/identity` | `identity-single-resolver`, `identity-legacy-resolution-module` | retain, deprecated |
 | Graph mutation | `MutationIntent` to `GraphMutationGateway.apply` | `graph-single-mutation-gateway` | converge |
 | Journey and value | measurement journey compiler | `intelligence-journey-and-value-composition` | converge |
 | Governed action | delivery intent, job and receipt | `action-single-delivery-authority` | converge |
@@ -127,7 +127,7 @@ These are measurements, each tied to a ledger row.
   identity-continuity-gates workflow and component tests depend on three barrels
   and the identity panels they export; it is under the same check. Rows `product-kyber-unmounted-code`, `product-kyber-unmounted-code-pending`,
   `product-aether-unmounted-code` and `product-aether-unmounted-code-pending`.
-- **A legacy resolution module.** `services/backend/services/resolution` held an
+- **A legacy resolution module.** `services/api/services/resolution` held an
   engine, consumer, rules, signals and repository that nothing registered and
   whose graph entry points already failed closed. Those seven files (1,353
   lines) and the pending, audit, reject and config routes they backed are
@@ -139,7 +139,7 @@ These are measurements, each tied to a ledger row.
   which also stops being unmounted code. Rows
   `identity-legacy-resolution-engine` and `identity-legacy-resolution-module`.
 - **Settings flags that gate nothing.** 100 fields in
-  `services/backend/config/settings.py` read an environment variable that no
+  `services/api/config/settings.py` read an environment variable that no
   production Python consults, so setting them changed nothing while env examples,
   release flag lists, runbooks and capability overlays presented them as
   controls. They included reserved partner and marketplace flags, per-engine
@@ -179,7 +179,7 @@ These are measurements, each tied to a ledger row.
   parameter names erased and include prefixes applied finds 15, and all 15 are
   resolved: the gate now allows none, and a second test pins the owner of each
   URL that had a shadowed copy. The five `/v1/admin/kyber/*` copies in
-  `services/intelligence/routes.py` were dead (the Kyber hook calls the
+  `services/api/intelligence/intelligence/routes.py` were dead (the Kyber hook calls the
   `admin/routes.py` shape and passes a `window` the copies did not accept). The
   other ten were resolved by choosing the handler on evidence. The Stripe webhook
   is served by `admin/webhook_routes.py`, the fuller and tested handler (it
@@ -192,7 +192,7 @@ These are measurements, each tied to a ledger row.
   check; the profile handlers (which the tests and Profile 360 docs describe) now
   serve them, so those four bodies change and web2 returns 403 without credit
   consent. The other two (`/agentic`, `/campaigns`) keep the economic handlers,
-  which compute spend and ROAS, and every `services/economic` route now requires
+  which compute spend and ROAS, and every `services/api/value/economic` route now requires
   the `read` permission. The `services/social` wrapper called the same aggregator
   as the handler it shadowed and is deleted. Rows
   `intelligence-duplicate-route-handlers` and `product-legacy-social-route`.
@@ -320,7 +320,7 @@ These are views over vocabularies that already exist. Do not add a parallel enum
   [runtime map](runtime-authority-map.md) already assigns an owner to each.
   Knowledge state (known, unknown, inferred, conflicting, system-confirmed,
   user-confirmed, needs review) reuses `EpistemicStatus` in
-  `services/backend/shared/contracts_models/epistemic.py`; there is no
+  `services/api/shared/contracts_models/epistemic.py`; there is no
   `CONFIRMED` member yet, so user confirmation needs a typed attestation
   (L8) owned by the relevant domain before any adapter is built. Process state
   and knowledge state stay independent.
@@ -350,7 +350,7 @@ Each step is its own PR on `Development` and states what it makes deletable.
    the 10 unresolved imports fixed); map invariants and retire duplicates.
 3. Provider cutover: finish R1 for providers, then SDK V1 and V2 dual-read
    parity per tenant, then the V1 write path.
-4. Retire `services/backend/services/resolution` (done: the engine, its routes and
+4. Retire `services/api/services/resolution` (done: the engine, its routes and
    the three tombstones are deleted, and the Aether profile page shows the
    canonical identity panel).
 5. Kyber Profile360: one implementation (done: the orphaned second one is

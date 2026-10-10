@@ -15,7 +15,7 @@ from uuid import uuid4
 import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -46,14 +46,14 @@ def tenant() -> str:
 
 
 def test_new_intents_in_supported_set():
-    from services.noesis.models import SUPPORTED_INTENTS
+    from intelligence.noesis.models import SUPPORTED_INTENTS
 
     for intent in NEW_INTENTS:
         assert intent in SUPPORTED_INTENTS, intent
 
 
 def test_capability_registry_has_new_intents():
-    from services.noesis.capability_registry import get_capability
+    from intelligence.noesis.capability_registry import get_capability
 
     for intent in NEW_INTENTS:
         capability = get_capability(intent)
@@ -64,23 +64,23 @@ def test_capability_registry_has_new_intents():
 
 def test_capability_registry_matches_supported_intents():
     """Every registered capability must be a supported intent."""
-    from services.noesis.capability_registry import CAPABILITY_REGISTRY
-    from services.noesis.models import SUPPORTED_INTENTS
+    from intelligence.noesis.capability_registry import CAPABILITY_REGISTRY
+    from intelligence.noesis.models import SUPPORTED_INTENTS
 
     for capability in CAPABILITY_REGISTRY:
         assert capability.intent in SUPPORTED_INTENTS, capability.intent
 
 
 def test_query_plan_accepts_new_intents():
-    from services.noesis.models import QueryPlan
+    from intelligence.noesis.models import QueryPlan
 
     for intent in NEW_INTENTS:
         assert QueryPlan(intent=intent).intent == intent
 
 
 def test_classifier_routes_economic_prompts():
-    from services.noesis.models import NoesisQueryRequest
-    from services.noesis.service import NoesisService, Scope
+    from intelligence.noesis.models import NoesisQueryRequest
+    from intelligence.noesis.service import NoesisService, Scope
 
     svc = object.__new__(NoesisService)  # _classify uses no constructor state
     scope = Scope("kyber", "tenant-x", False, False)
@@ -105,7 +105,7 @@ def test_classifier_routes_economic_prompts():
 @pytest.mark.asyncio
 async def test_stablecoin_flow_summary_reports_depeg(tenant):
     from repositories.stablecoin_repos import FlowAggregateRepo, ValuationSnapshotRepo
-    from services.noesis.adapters.stablecoin_adapter import StablecoinNoesisAdapter
+    from intelligence.noesis.adapters.stablecoin_adapter import StablecoinNoesisAdapter
 
     await FlowAggregateRepo().insert({
         "tenant_id": tenant,
@@ -138,7 +138,7 @@ async def test_stablecoin_flow_summary_reports_depeg(tenant):
 @pytest.mark.asyncio
 async def test_stablecoin_flow_summary_tenant_isolated(tenant):
     from repositories.stablecoin_repos import FlowAggregateRepo
-    from services.noesis.adapters.stablecoin_adapter import StablecoinNoesisAdapter
+    from intelligence.noesis.adapters.stablecoin_adapter import StablecoinNoesisAdapter
 
     await FlowAggregateRepo().insert({
         "tenant_id": f"{tenant}-other",
@@ -159,7 +159,7 @@ async def test_derivatives_exposure_and_reconciliation(tenant):
         ReconciliationVarianceRepo,
         StreamGapRepo,
     )
-    from services.noesis.adapters.derivatives_adapter import DerivativesNoesisAdapter
+    from intelligence.noesis.adapters.derivatives_adapter import DerivativesNoesisAdapter
 
     await PositionRepo().insert({
         "tenant_id": tenant,
@@ -205,7 +205,7 @@ async def test_derivatives_exposure_and_reconciliation(tenant):
 @pytest.mark.asyncio
 async def test_interop_message_trace_and_path_reliability(tenant):
     from repositories.interop_repos import InteropMessageEventRepo, InteropMessageRepo
-    from services.noesis.adapters.interop_adapter import InteropNoesisAdapter
+    from intelligence.noesis.adapters.interop_adapter import InteropNoesisAdapter
 
     await InteropMessageRepo().insert({
         "tenant_id": tenant,
@@ -259,10 +259,10 @@ async def test_interop_message_trace_and_path_reliability(tenant):
 
 
 def test_depeg_snapshot_maps_to_suggestion(tenant):
-    from services.suggestions.adapters.stablecoin_adapter import (
+    from intelligence.suggestions.adapters.stablecoin_adapter import (
         create_suggestion_from_depeg_snapshot,
     )
-    from services.suggestions.models import SuggestionClass
+    from intelligence.suggestions.models import SuggestionClass
 
     suggestion = create_suggestion_from_depeg_snapshot(
         {
@@ -285,11 +285,11 @@ def test_depeg_snapshot_maps_to_suggestion(tenant):
 
 
 def test_variance_and_gap_map_to_suggestions(tenant):
-    from services.suggestions.adapters.derivatives_adapter import (
+    from intelligence.suggestions.adapters.derivatives_adapter import (
         create_suggestion_from_reconciliation_variance,
         create_suggestion_from_stream_gap,
     )
-    from services.suggestions.models import SuggestionClass
+    from intelligence.suggestions.models import SuggestionClass
 
     variance = create_suggestion_from_reconciliation_variance(
         {
@@ -330,11 +330,11 @@ def test_variance_and_gap_map_to_suggestions(tenant):
 
 
 def test_stuck_message_and_policy_change_map_to_suggestions(tenant):
-    from services.suggestions.adapters.interop_adapter import (
+    from intelligence.suggestions.adapters.interop_adapter import (
         create_suggestion_from_policy_change,
         create_suggestion_from_stuck_message,
     )
-    from services.suggestions.models import SuggestionClass
+    from intelligence.suggestions.models import SuggestionClass
 
     stuck = create_suggestion_from_stuck_message(
         {
@@ -386,7 +386,7 @@ def test_alert_topics_registered():
 
 
 def test_alert_policy_rows_exist_for_new_topics():
-    from services.notification_intelligence.consumer import _TOPIC_MAP
+    from journeys.notification_intelligence.consumer import _TOPIC_MAP
     from shared.events.events import Topic
 
     for topic in (

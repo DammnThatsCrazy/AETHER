@@ -40,7 +40,7 @@ which are not pulled in by `pip install -e ".[dev,backend]"` on a fresh containe
   `DERIVATIVES_ACTOR_EDGE_LAYER_MAP` (30 actor edges H2H/H2A/A2H/A2A) +
   `DERIVATIVES_DOMAIN_EDGE_LAYER_MAP` (23 domain edges, all `DOMAIN_EXCLUDED`),
   `execution_by_aether: false` fail-closed envelope.
-- `services/backend/migrations/2026_07_derivatives_foundation.sql` — raw SQL (NOT Alembic),
+- `services/api/migrations/2026_07_derivatives_foundation.sql` — raw SQL (NOT Alembic),
   11 tables, `NUMERIC(38,18)`, `CHECK (execution_by_aether = FALSE)`,
   `UNIQUE(tenant_id, idempotency_key)`.
 - Consent purpose `financial_activity` in `packages/shared/contracts/consent-registry.json`
@@ -50,11 +50,11 @@ which are not pulled in by `pip install -e ".[dev,backend]"` on a fresh containe
   mirror, silver projector, Profile360 section, Noesis intent, metering dimension, DSR table mapping.
 
 ### Stablecoin (no dedicated domain; strong adjacent code)
-- `services/backend/services/x402/`: `StablecoinAsset` model, **real on-chain USDC verification** (Base ERC-20 log +
+- `services/api/value/x402/`: `StablecoinAsset` model, **real on-chain USDC verification** (Base ERC-20 log +
   Solana SPL via manual JSON-RPC), facilitator registry, settlement FSM.
-- `services/backend/services/web3/registries.py`: `TokenRegistry`, `ChainRegistry`, `ProtocolRegistry`,
+- `services/api/graph/web3/registries.py`: `TokenRegistry`, `ChainRegistry`, `ProtocolRegistry`,
   `BridgeRouteRegistry`, `MarketVenueRegistry` (all `BaseRepository`-backed).
-- `services/backend/services/onchain/`: `rpc_gateway.py`, `chain_listener.py` (single-chain RPC observation).
+- `services/api/graph/onchain/`: `rpc_gateway.py`, `chain_listener.py` (single-chain RPC observation).
 - Graph: `STABLECOIN_ASSET` vertex, `ACCEPTS_ASSET` / `PRICES_IN` edges already exist.
 - **Absent**: canonical asset/deployment identity, observation taxonomy, valuation/depeg,
   support assertions, finality/reorg handling, reconciliation, flows, all product surfaces.
@@ -78,9 +78,9 @@ which are not pulled in by `pip install -e ".[dev,backend]"` on a fresh containe
 
 ## Known defects found during audit (root-cause fixes in scope)
 
-1. `services/backend/shared/privacy/consent_enforcement.py` hardcodes a stale
+1. `services/api/shared/privacy/consent_enforcement.py` hardcodes a stale
    `CONSENT_PURPOSES` set that is missing `financial_activity` (added in PR1). Consumed by
-   `services/backend/services/capabilities/routes.py`. Fix: derive from the consent registry.
+   `services/api/tenancy/capabilities/routes.py`. Fix: derive from the consent registry.
 2. Derivatives PR1 migration bypassed Alembic (raw SQL in a separate dir). Fix: idempotent
    Alembic adoption revision so migrations have a single owner.
 3. `shared/privacy/retention.py` `_DSR_SCOPE_TO_SILVER_TABLE` lacks mappings for the

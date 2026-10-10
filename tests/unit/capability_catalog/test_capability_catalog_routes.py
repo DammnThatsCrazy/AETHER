@@ -17,9 +17,9 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import TenantContext
 from shared.common.common import ForbiddenError, NotFoundError
 
-import services.agent_access_intelligence.routes as aai_routes
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
-from services.security.request_context import require_kyber_operator
+import actions.agent_access_intelligence.routes as aai_routes
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
+from governance.security.request_context import require_kyber_operator
 
 OPERATOR_PERM = get_settings().security_governance.kyber_operator_permission
 

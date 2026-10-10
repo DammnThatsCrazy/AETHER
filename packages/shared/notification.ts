@@ -2,7 +2,7 @@
  * Notification contract (v1).
  *
  * TS twin of the Python-authoritative notification-intelligence models
- * (`services/notification_intelligence/models.py`). Preserves the four-concept
+ * (`services/api/journeys/notification_intelligence/models.py`). Preserves the four-concept
  * separation (domain event → insight → notification → delivery) and the
  * forward-only lifecycle. Desktop and mobile read the same `notification_inbox`
  * records; this contract is the shared shape of a notification event.
@@ -97,7 +97,7 @@ export interface IntelligenceNotificationEvent {
 
 /** Redacted push surface for a mobile notification (M1a, decision-log D11).
  *
- * Twin of `services/notification_intelligence/projection.py`
+ * Twin of `services/api/journeys/notification_intelligence/projection.py`
  * `MobileNotificationProjection` (parity-tested by
  * `tests/contracts/test_notification_contract_parity.py`). Every field is
  * snake_case (decision-log D6). A push built from these fields carries ONLY

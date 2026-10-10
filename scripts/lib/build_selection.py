@@ -168,7 +168,7 @@ def select_builds(
     applications: set[str] = set()
     packages: set[str] = set()
     sdk = {"ios": False, "android": False, "js": False}
-    backend_image = _under(changed, "services/backend")
+    backend_image = _under(changed, "services/api")
 
     for prefix, application in (
         ("apps/aether-web", "aether"),
@@ -223,7 +223,7 @@ def select_builds(
     if backend_image or any(
         _under(changed, prefix)
         for prefix in (
-            "services/backend",
+            "services/api",
             "services/agents",
             "services/compliance",
             "docs/archive/legacy-architecture/backend",

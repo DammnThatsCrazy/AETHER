@@ -31,7 +31,7 @@ not alternate service homes.
 | `apps/` | User-facing applications and marketing surfaces |
 | `services/` | Backend runtime services |
 | `packages/` | Shared packages, SDKs, clients, UI, contracts package |
-| `services/backend/services/integrations/connectors/` | Provider connector runtime owned by the backend service |
+| `services/api/connectors/integrations/connectors/` | Provider connector runtime owned by the backend service |
 | `packages/contracts/` | Canonical event, graph, identity, journey, campaign, communication, value, and agent contracts |
 | `docs/` | Human-readable documentation |
 | `scripts/` | Repository validation, generation, release, docs, and contract scripts |
@@ -47,8 +47,8 @@ root now have one canonical home:
 
 | Concern | Canonical path | Archived duplicate/orphan path |
 |---|---|---|
-| Python backend, ingestion, lake, graph, and intelligence | `services/backend/` | `docs/archive/legacy-architecture/backend/` |
-| Journey compilation, persistence, attribution, and routes | `services/backend/services/measurement/` | `docs/archive/legacy-architecture/backend/services/journey-service/` (test fixture only) |
+| Python backend, ingestion, lake, graph, and intelligence | `services/api/` | `docs/archive/legacy-architecture/backend/` |
+| Journey compilation, persistence, attribution, and routes | `services/api/journeys/measurement/` | `docs/archive/legacy-architecture/backend/services/journey-service/` (test fixture only) |
 | ML training and serving | `services/ml/` | — |
 | Internal broker-coupled agents | `services/agents/` | — |
 | Compliance controls | `services/compliance/` | — |

@@ -3,18 +3,18 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services" / "backend"))
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
 from repositories.repos import reset_in_memory_stores
 from repositories.stablecoin_repos import StablecoinObservationRepository, StablecoinReconciliationRepository
-from services.stablecoins.governance import (
+from value.stablecoins.governance import (
     BenchmarkInput,
     MarketDataClass,
     StablecoinCapabilityEntitlement,
     StablecoinGovernanceService,
 )
-from services.stablecoins.operations import RemediationAction, RemediationRequest, StablecoinOperationsService
-from services.stablecoins.release_readiness import StablecoinReleaseReadinessService
+from value.stablecoins.operations import RemediationAction, RemediationRequest, StablecoinOperationsService
+from value.stablecoins.release_readiness import StablecoinReleaseReadinessService
 
 
 @pytest.fixture(autouse=True)

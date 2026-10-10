@@ -86,7 +86,7 @@ services:
   backend:
     build:
       context: ../../
-      dockerfile: services/backend/Dockerfile
+      dockerfile: services/api/Dockerfile
     ports:
       - "8000:8000"
     depends_on:

@@ -7,10 +7,10 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/stablecoin/admin_routes.py
+  - services/api/value/stablecoin/admin_routes.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/stablecoin/admin_routes.py": "sha256:64c51cd5cd5232915f553d70e3c901dec8044e165b1432894e26fa63d76c194d"
+  "services/api/value/stablecoin/admin_routes.py": "sha256:51e360e2ffb266ad66a8729a597ca29a9059bbef5ba19497f74fbaa512125228"
 ---
 
 # Stablecoin Operations Runbook

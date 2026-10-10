@@ -12,12 +12,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from services.attribution.resolver import JourneyStore  # noqa: E402
+from value.attribution.resolver import JourneyStore  # noqa: E402
 
 
 @pytest.fixture()

@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/agent/runtime_repository.py
-  - services/backend/services/agent/mutation_commit.py
+  - services/api/actions/agent/runtime_repository.py
+  - services/api/actions/agent/mutation_commit.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/agent/mutation_commit.py": "sha256:53333e556ceba4a84382683687d900f1f1e4e9ea48333fa295fe5b8976a026a8"
-  "services/backend/services/agent/runtime_repository.py": "sha256:58209dbc9455991f64bb67462ef8bfbcd7d7167077c11a5fdcf44feda642914b"
+  "services/api/actions/agent/mutation_commit.py": "sha256:a899bf664b7b25e37a45487472e8c512eed2ccfb4fe209ec9260166d4d612a33"
+  "services/api/actions/agent/runtime_repository.py": "sha256:58209dbc9455991f64bb67462ef8bfbcd7d7167077c11a5fdcf44feda642914b"
 ---
 
 # Agent Runtime & Mutation Review Runbook

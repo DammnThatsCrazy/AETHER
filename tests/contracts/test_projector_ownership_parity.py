@@ -1,6 +1,6 @@
 """Registry <-> generated-artifact <-> dispatcher parity for projector ownership.
 
-`services/backend/services/silver/generated_ownership.py`
+`services/api/ingestion/silver/generated_ownership.py`
 is the generated twin of
 `packages/shared/contracts/projector-ownership-registry.json` (via
 scripts/generate_platform_contracts.py); scripts/validate_projector_ownership.py
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -23,7 +23,7 @@ REGISTRY_PATH = (
     REPO_ROOT / "packages" / "shared" / "contracts" / "projector-ownership-registry.json"
 )
 
-from services.silver import generated_ownership as gen  # noqa: E402
+from ingestion.silver import generated_ownership as gen  # noqa: E402
 
 
 def _registry() -> dict:

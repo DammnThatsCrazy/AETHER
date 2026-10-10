@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from services.imports import analyzer
-from services.imports.analyzer import (
+from ingestion.imports import analyzer
+from ingestion.imports.analyzer import (
     SUPPORTED_FORMATS,
     analyze_bytes,
     detect_format,
@@ -21,7 +21,7 @@ from services.imports.analyzer import (
     infer_sensitivity,
     read_rows,
 )
-from services.imports.contracts import SchemaProfile
+from ingestion.imports.contracts import SchemaProfile
 from shared.common.common import BadRequestError
 
 WALLET_A = "0x" + "a" * 40

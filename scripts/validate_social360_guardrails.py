@@ -40,7 +40,7 @@ import sys
 import tokenize
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND = os.path.join(ROOT, "services", "backend")
+BACKEND = os.path.join(ROOT, "services", "api")
 REGISTRY = os.path.join(
     ROOT, "packages", "shared", "contracts", "relationship-predicate-registry.json"
 )
@@ -48,9 +48,9 @@ REGISTRY = os.path.join(
 # Social/legacy roots scanned for fabricated defaults / fixed overlap constants.
 SCAN_ROOTS = [
     os.path.join(BACKEND, "services", "social"),
-    os.path.join(BACKEND, "services", "silver"),
-    os.path.join(BACKEND, "services", "exploration", "adapters", "social360.py"),
-    os.path.join(BACKEND, "services", "relationship_fidelity"),
+    os.path.join(BACKEND, "ingestion", "silver"),
+    os.path.join(BACKEND, "journeys", "exploration", "adapters", "social360.py"),
+    os.path.join(BACKEND, "identity", "relationship_fidelity"),
     os.path.join(BACKEND, "shared", "social360"),
 ]
 

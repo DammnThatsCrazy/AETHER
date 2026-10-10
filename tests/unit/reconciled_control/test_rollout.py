@@ -1,6 +1,6 @@
 """Reconciled Control Plane — §40 universal progressive-delivery engine tests (Phase 4).
 
-Covers the Phase-4 rollout engine (``services/managed_integrations/rollout.py``)
+Covers the Phase-4 rollout engine (``services/api/connectors/managed_integrations/rollout.py``)
 and the durable record store it drives (``rollout_repository.py``):
 
 * §40 ring law — the canonical ring sequence
@@ -34,15 +34,15 @@ from typing import Any
 
 import pytest
 
-from services.managed_integrations import flags
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations import flags
+from connectors.managed_integrations.contracts import (
     ROLLOUT_RINGS,
     HealthGateSpec,
     HealthSnapshotView,
     RolloutView,
     ring_percentage,
 )
-from services.managed_integrations.rollout import (
+from connectors.managed_integrations.rollout import (
     create_rollout,
     evaluate_and_advance,
     evaluate_health_gates,
@@ -55,7 +55,7 @@ from services.managed_integrations.rollout import (
     stage_index,
     start_rollout,
 )
-from services.managed_integrations.rollout_repository import (
+from connectors.managed_integrations.rollout_repository import (
     RolloutRecordRow,
     get_rollout_repository,
     reset_rollout_stores,
@@ -88,7 +88,7 @@ def _rollout_db_free(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("repositories.repos.get_pool", _no_pool)
     monkeypatch.setattr(
-        "services.managed_integrations.rollout_repository.get_pool",
+        "connectors.managed_integrations.rollout_repository.get_pool",
         _no_pool,
     )
 

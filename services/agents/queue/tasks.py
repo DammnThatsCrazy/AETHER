@@ -151,7 +151,7 @@ if _app is not None:
     def execute_objective_step(self, envelope: dict[str, Any]) -> dict[str, Any]:
         """Backend worker-bridge task (dispatched BY NAME from the backend).
 
-        The backend's services/backend/services/agent/worker_bridge.py send_task()s this name
+        The backend's services/api/services/agent/worker_bridge.py send_task()s this name
         with the canonical execution envelope and routes it to the queue named
         in the envelope. Retries report ``retry`` back to the backend so the
         durable run record tracks attempts; the final failure reports
@@ -176,7 +176,7 @@ def execute_objective_step_impl(
 ) -> dict[str, Any]:
     """Execute one backend dispatch envelope and report status callbacks.
 
-    Envelope contract (backend services/backend/services/agent/worker_bridge.py): tenant_id,
+    Envelope contract (backend services/api/services/agent/worker_bridge.py): tenant_id,
     objective_id, run_id, controller, queue, idempotency_key, attempt,
     payload, created_at, request_id (+ optional plan_id/step_id).
 

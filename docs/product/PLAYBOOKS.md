@@ -6,15 +6,15 @@ visibility: I
 audience: [architect, dev-senior, ops]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/intelligence/routes.py, services/backend/services/intelligence/decision_models.py]
+source_files: [services/api/intelligence/intelligence/routes.py, services/api/intelligence/intelligence/decision_models.py]
 flags: [AETHER_PLAYBOOKS_ENABLED, AETHER_RECOMMENDATIONS_ENABLED]
 related: [ai/decision-outcome-intelligence, ai/outcome-ledger]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
-  "services/backend/services/intelligence/routes.py": "sha256:5180cf7321ef1cc342f42acbf64aba510aba598c58c39b671303598f7f5084ef"
+  "services/api/intelligence/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
+  "services/api/intelligence/intelligence/routes.py": "sha256:46f4df5f21914056a91810cb1c0a490183ed144e99a9568b8aedf170f3b05e29"
 ---
 # Playbooks
 

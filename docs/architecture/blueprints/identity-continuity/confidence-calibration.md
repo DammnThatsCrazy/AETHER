@@ -14,7 +14,7 @@ status: beta
 `score_signals` emits an `identity_match_score`: an ordinal, evidence-weighted
 strength of match. It is not a probability that two records describe the same
 identity. The offline evaluator in
-`services/backend/services/identity/calibration_evaluation.py` preserves that
+`services/api/identity/identity/calibration_evaluation.py` preserves that
 distinction. It measures reviewed decision errors and empirical same-identity
 rates within score bands. The score-to-rate gap is descriptive and is not a
 calibration error. Brier score, log loss, and probabilistic claims are

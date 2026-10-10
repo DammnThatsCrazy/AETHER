@@ -6,11 +6,11 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/profile360-contract.ts, services/backend/services/profile/routes.py]
+source_files: [packages/shared/profile360-contract.ts, services/api/identity/profile/routes.py]
 canonical_owner: platform@aether
 source_hashes:
   "packages/shared/profile360-contract.ts": "sha256:bad6bde6b18cd49a1ba08093b02ac9d1c97f75dfe30154e82565b71c2ae15033"
-  "services/backend/services/profile/routes.py": "sha256:4bf5f6d3eabeb14f912d02e5c84a885c709017426b694be57ab310935c9a48ed"
+  "services/api/identity/profile/routes.py": "sha256:db152bc22effffbb626e2de110e7b369c05be76efd543316045fabd54066b70a"
 ---
 
 # Profile360 Surfaces
@@ -33,7 +33,7 @@ additive: entities with no economic activity return empty envelopes,
 not errors.
 
 The card-linked payment rail slice adds three more routes to
-`services/backend/services/profile/routes.py` (gated by BOTH
+`services/api/identity/profile/routes.py` (gated by BOTH
 `AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` and
 `AETHER_CARD_LINKED_PROFILE360_ENABLED`):
 `GET /v1/profile/{id}/card-linked-activity`, its alias
@@ -56,4 +56,4 @@ mix, and reducer provenance. It returns an empty-but-shaped response
 when no semantic observations exist yet, and delegates to the
 semantic-intelligence service's weighted reducer (no duplicated aggregation
 logic). Backing data: `gold_entity_semantic_state`. See
-`services/backend/services/semantic_intelligence/reducers.py`.
+`services/api/intelligence/semantic_intelligence/reducers.py`.

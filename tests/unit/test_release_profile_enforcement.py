@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -80,7 +80,7 @@ def test_production_profile_matches_founding_manifest():
 
 
 def test_excluded_domains_denied_under_production_lean():
-    from services.security.route_registry import (
+    from governance.security.route_registry import (
         founding_domain_excluded,
         founding_excluded_domains,
     )
@@ -104,7 +104,7 @@ def test_excluded_domains_denied_under_production_lean():
 
 
 def test_excluded_domains_scoped_to_founding_profile():
-    from services.security.route_registry import founding_excluded_domains
+    from governance.security.route_registry import founding_excluded_domains
 
     # The manifest narrows only its declared profile; others are unaffected.
     assert founding_excluded_domains("production-scale") == frozenset()

@@ -1,7 +1,7 @@
 """Wormhole fixture + mock-server builder.
 
 Fixtures are generated with the SAME encoders the adapter decodes with
-(services.interop.providers.wormhole), so decoder and fixtures can never drift:
+(graph.interop.providers.wormhole), so decoder and fixtures can never drift:
 the source LogMessagePublished, the guardian VAA, and the destination
 TransferRedeemed all reference one (emitterChain, emitterAddress, sequence)
 triple and therefore correlate on one canonical key.
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from services.interop.providers.wormhole import (
+from graph.interop.providers.wormhole import (
     TOPIC_LOG_MESSAGE_PUBLISHED,
     TOPIC_TRANSFER_REDEEMED,
     WormholeRateLimitError,

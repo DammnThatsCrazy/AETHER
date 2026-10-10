@@ -13,7 +13,7 @@ since_version: "0.1.0"
 ## Overview
 
 The repository contains a legacy `HubSpotConnector` under
-`services/backend/services/integrations/connectors/adapters.py`. It has a
+`services/api/connectors/integrations/connectors/adapters.py`. It has a
 credential-gated CRM contacts pull, a Marketing Hub campaign pull, and a
 webhook parser for CRM and marketing email events. It has not migrated to the
 native UPR provider plugin path.

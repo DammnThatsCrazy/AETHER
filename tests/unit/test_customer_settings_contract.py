@@ -10,8 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "apps/aether-web/src/lib/api/endpoints.ts"
-BILLING = ROOT / "services/backend/services/billing/routes.py"
-ME = ROOT / "services/backend/services/me/routes.py"
+BILLING = ROOT / "services/api/billing/billing/routes.py"
+ME = ROOT / "services/api/tenancy/me/routes.py"
 
 
 def test_checkout_uses_plan_tier_not_provider_price_id() -> None:
@@ -56,7 +56,7 @@ def test_enterprise_company_enum_is_identical() -> None:
         ROOT / "apps/aether-web/src/pages/billing/billing-page.tsx"
     ).read_text(encoding="utf-8")
     backend = (
-        ROOT / "services/backend/services/contact/routes.py"
+        ROOT / "services/api/identity/contact/routes.py"
     ).read_text(encoding="utf-8")
     expected = {"startup", "smb", "enterprise", "government", "nonprofit"}
 

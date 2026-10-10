@@ -23,7 +23,7 @@ from unittest.mock import patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
@@ -31,7 +31,7 @@ def backend_module_path():
     """Temporarily put the backend root on sys.path and clean up afterwards."""
     original = list(sys.path)
     for prefix in (
-        "config", "services", "shared", "middleware", "dependencies", "repositories",
+        "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
     ):
         sys.modules.pop(prefix, None)
         for name in list(sys.modules):
@@ -43,7 +43,7 @@ def backend_module_path():
     finally:
         sys.path[:] = original
         for prefix in (
-            "config", "services", "shared", "middleware", "dependencies", "repositories",
+            "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
         ):
             sys.modules.pop(prefix, None)
             for name in list(sys.modules):

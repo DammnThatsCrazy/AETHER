@@ -10,9 +10,9 @@ flags: [AETHER_CONNECTORS_ENABLED, AETHER_COMMS_INGESTION_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
-  - services/backend/services/integrations/connectors/iterable.py
+  - services/api/connectors/integrations/connectors/iterable.py
 source_hashes:
-  "services/backend/services/integrations/connectors/iterable.py": "sha256:2ee6ee2646f05eb4e7e92a2e84b0d8a9b072a189765900d722e0203514718356"
+  "services/api/connectors/integrations/connectors/iterable.py": "sha256:29b22d656d093ed91e1bb296fe720eee60d4183ab4f23f719c96933204915c44"
 ---
 
 # Iterable Connector

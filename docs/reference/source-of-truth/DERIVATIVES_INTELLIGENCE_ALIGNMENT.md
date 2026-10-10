@@ -7,7 +7,7 @@ audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
 owner: derivatives-intelligence
-source: services/backend/services/derivatives/intelligence.py
+source: services/api/value/derivatives/intelligence.py
 ---
 
 # Derivatives Intelligence Alignment

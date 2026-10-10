@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/stablecoins/rpc_observer.py
-  - services/backend/services/stablecoins/solana_observer.py
+  - services/api/value/stablecoins/rpc_observer.py
+  - services/api/value/stablecoins/solana_observer.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/stablecoins/rpc_observer.py": "sha256:ba66db580cd8b31fdb65b95f366133cf5c8ea2e5167a5017e3eeb5fadcca6e49"
-  "services/backend/services/stablecoins/solana_observer.py": "sha256:29d60e9e1e933046cf6e128974b84f89553bbb9efa257dcda7c34ff710812c16"
+  "services/api/value/stablecoins/rpc_observer.py": "sha256:93355ac3e25aa1d8d84046430dff4f655eff5765bc5f1014619b67d951b3f167"
+  "services/api/value/stablecoins/solana_observer.py": "sha256:2dcbda9b3910956d5dc533894629058dbe8dd53d92477536f9797b0f77ac1f8f"
 ---
 
 # Stablecoin Observer Runbook

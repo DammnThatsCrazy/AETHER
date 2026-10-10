@@ -7,12 +7,12 @@ audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/derivatives/adapters/base.py
-  - services/backend/services/agentic_observability/foundation.py
+  - services/api/value/derivatives/adapters/base.py
+  - services/api/actions/agentic_observability/foundation.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/agentic_observability/foundation.py": "sha256:16eacb148f01e09136ad41a350b04b7bd466e4bc9d396ef081c5a6bb748468c9"
-  "services/backend/services/derivatives/adapters/base.py": "sha256:787fc96a6067075032ecdb277a71095c2855ab31ca0865c7e54d8b64a144feee"
+  "services/api/actions/agentic_observability/foundation.py": "sha256:4bba69eec57048849dfb87ed9e33e7a5e76db633afcb18fd303a9bf04066597a"
+  "services/api/value/derivatives/adapters/base.py": "sha256:46b4fe9cf745c563365da72d207ee3fd08f000df816678acf7db19835519370f"
 ---
 
 # ADR-011: Observation-Only Execution Invariant

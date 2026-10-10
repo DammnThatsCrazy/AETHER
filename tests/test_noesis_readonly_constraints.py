@@ -15,13 +15,13 @@ from pathlib import Path
 from typing import get_args
 
 # This file lives at repo-root ``tests/``; parents[1] is the repo root and the
-# backend package lives under "services/backend".
-BACKEND = Path(__file__).resolve().parents[1] / "services" / "backend"
+# backend package lives under "services/api".
+BACKEND = Path(__file__).resolve().parents[1] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.noesis.capability_registry import CAPABILITY_REGISTRY  # noqa: E402
-from services.noesis.models import (  # noqa: E402
+from intelligence.noesis.capability_registry import CAPABILITY_REGISTRY  # noqa: E402
+from intelligence.noesis.models import (  # noqa: E402
     SUPPORTED_INTENTS,
     WRITE_LIKE_KEYWORDS,
     QueryPlan,

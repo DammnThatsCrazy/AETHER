@@ -17,8 +17,8 @@ from shared.exploration.models import (
     PivotSpec,
     TemporalSelection,
 )
-from services.exploration.operations import apply_operation
-from services.exploration.planner import iter_leaf_expressions
+from journeys.exploration.operations import apply_operation
+from journeys.exploration.planner import iter_leaf_expressions
 
 
 def _eq(field: str, value: str) -> FilterExpression:

@@ -14,7 +14,7 @@
 // are bridged later by alias rows (`AssetAlias`), never rewritten in place.
 //
 // Invariants (encoded here and mirrored by the backend Pydantic contracts in
-// services/assets/models.py + services/valuation/models.py):
+// services/api/graph/assets/models.py + services/api/value/valuation/models.py):
 //   - amounts are DECIMAL STRINGS, never binary floats (see toDecimalString)
 //   - reporting_amount === null means UNAVAILABLE, NEVER coerced to "0"
 //   - canonical id !== symbol — an asset is never identified by its symbol

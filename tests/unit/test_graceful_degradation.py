@@ -25,7 +25,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-BACKEND_ROOT = Path(__file__).parent.parent.parent / "services" / "backend"
+BACKEND_ROOT = Path(__file__).parent.parent.parent / "services" / "api"
 
 
 @contextmanager
@@ -35,7 +35,7 @@ def backend_module_path():
     original_modules = dict(sys.modules)
 
     # Clean stale backend module cache so each test gets fresh imports
-    for prefix in ("config", "services", "shared", "middleware", "dependencies", "repositories"):
+    for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories"):
         sys.modules.pop(prefix, None)
         for name in list(sys.modules):
             if name == prefix or name.startswith(f"{prefix}."):

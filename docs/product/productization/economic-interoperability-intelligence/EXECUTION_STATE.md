@@ -6,12 +6,12 @@ visibility: I
 audience: [architect, ops, buyer]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/stablecoin/service.py, services/backend/services/derivatives/state_machines.py, services/backend/services/interop/correlation.py]
+source_files: [services/api/value/stablecoin/service.py, services/api/value/derivatives/state_machines.py, services/api/graph/interop/correlation.py]
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/derivatives/state_machines.py": "sha256:d8fc78fa1063fd5d96a3ee23f311fb3d1b3160dd832aea7966452dd19b17e2ff"
-  "services/backend/services/interop/correlation.py": "sha256:781c5a927507f4a4f6ad6c519ef270f6605dabd45dbea135f8fd391f5a506be1"
-  "services/backend/services/stablecoin/service.py": "sha256:b00127d3bc49bad5861afcaec080688cadee0e283e7cbe279db6eb941b61d5fd"
+  "services/api/graph/interop/correlation.py": "sha256:cb3c51e9093df2475a788a6fa98544b54bd8b9b6524a8980b19c2211aac1364d"
+  "services/api/value/derivatives/state_machines.py": "sha256:d8fc78fa1063fd5d96a3ee23f311fb3d1b3160dd832aea7966452dd19b17e2ff"
+  "services/api/value/stablecoin/service.py": "sha256:cb06616c015f5dfe9d61d0c4cfaab8bd300461f68466f585f718230058ddf70f"
 ---
 
 # Execution State

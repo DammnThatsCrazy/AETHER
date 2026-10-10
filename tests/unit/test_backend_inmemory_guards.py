@@ -12,13 +12,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
 def backend_module_path():
     original = list(sys.path)
-    for prefix in ("config", "services", "shared"):
+    for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared"):
         sys.modules.pop(prefix, None)
         for name in list(sys.modules):
             if name == prefix or name.startswith(f"{prefix}."):
@@ -28,7 +28,7 @@ def backend_module_path():
         yield
     finally:
         sys.path[:] = original
-        for prefix in ("config", "services", "shared"):
+        for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared"):
             sys.modules.pop(prefix, None)
             for name in list(sys.modules):
                 if name == prefix or name.startswith(f"{prefix}."):
@@ -272,7 +272,7 @@ def test_journey_store_rejects_inmemory_outside_local(monkeypatch):
     monkeypatch.delenv("AETHER_ALLOW_INMEMORY_JOURNEY_STORE", raising=False)
 
     with backend_module_path():
-        module = importlib.import_module("services.attribution.resolver")
+        module = importlib.import_module("value.attribution.resolver")
         importlib.reload(module)
 
         with pytest.raises(RuntimeError, match="JourneyStore is disabled outside local mode"):
@@ -302,7 +302,7 @@ def test_journey_store_uses_dynamodb_for_staging_and_preserves_tenant_isolation(
         monkeypatch.setenv(key, value)
 
     with backend_module_path():
-        module = importlib.import_module("services.attribution.resolver")
+        module = importlib.import_module("value.attribution.resolver")
         importlib.reload(module)
         table = _FakeDynamoTable()
         monkeypatch.setattr(module, "_boto3_journey", _FakeBoto3(table))
@@ -357,7 +357,7 @@ def test_journey_store_uses_redis_for_scale_profiles_and_preserves_tenant_isolat
         monkeypatch.setenv(key, value)
 
     with backend_module_path():
-        module = importlib.import_module("services.attribution.resolver")
+        module = importlib.import_module("value.attribution.resolver")
         importlib.reload(module)
         fake_redis = _FakeRedis()
 
@@ -456,7 +456,7 @@ def test_staging_api_imports_with_the_configured_durable_backends():
             "-c",
             (
                 "import main; "
-                "from services.security.route_registry import validate_mounted_routes; "
+                "from governance.security.route_registry import validate_mounted_routes; "
                 "inventory = validate_mounted_routes(main.app.routes); "
                 "assert any(item['route_template'] == '/models' for item in inventory); "
                 "print('STAGING_IMPORT_OK')"
@@ -478,8 +478,20 @@ def test_backend_image_preserves_runtime_authority_layout():
     dockerfile = (BACKEND_ROOT / "Dockerfile").read_text(encoding="utf-8")
     dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
 
-    assert 'COPY ["services/backend/services/", "./services/backend/services/"]' in dockerfile
-    assert 'COPY ["services/backend/shared/", "./services/backend/shared/"]' in dockerfile
+    assert 'COPY ["services/api/tenancy/", "./services/api/tenancy/"]' in dockerfile
+    assert 'COPY ["services/api/ingestion/", "./services/api/ingestion/"]' in dockerfile
+    assert 'COPY ["services/api/identity/", "./services/api/identity/"]' in dockerfile
+    assert 'COPY ["services/api/graph/", "./services/api/graph/"]' in dockerfile
+    assert 'COPY ["services/api/journeys/", "./services/api/journeys/"]' in dockerfile
+    assert 'COPY ["services/api/intelligence/", "./services/api/intelligence/"]' in dockerfile
+    assert 'COPY ["services/api/value/", "./services/api/value/"]' in dockerfile
+    assert 'COPY ["services/api/actions/", "./services/api/actions/"]' in dockerfile
+    assert 'COPY ["services/api/governance/", "./services/api/governance/"]' in dockerfile
+    assert 'COPY ["services/api/workers/", "./services/api/workers/"]' in dockerfile
+    assert 'COPY ["services/api/connectors/", "./services/api/connectors/"]' in dockerfile
+    assert 'COPY ["services/api/replay/", "./services/api/replay/"]' in dockerfile
+    assert 'COPY ["services/api/billing/", "./services/api/billing/"]' in dockerfile
+    assert 'COPY ["services/api/shared/", "./services/api/shared/"]' in dockerfile
     assert 'COPY ["services/ml/common/", "./common/"]' in dockerfile
     assert 'COPY ["services/ml/edge/", "./edge/"]' in dockerfile
     assert 'COPY ["services/ml/monitoring/", "./monitoring/"]' in dockerfile
@@ -487,10 +499,10 @@ def test_backend_image_preserves_runtime_authority_layout():
     assert 'COPY ["services/ml/serving/", "./serving/"]' in dockerfile
     assert 'COPY ["config/", "./config/"]' in dockerfile
     assert 'COPY ["packages/shared/contracts/", "./packages/shared/contracts/"]' in dockerfile
-    assert 'COPY ["packages/contracts/delivery/", "./contracts/delivery/"]' in dockerfile
+    assert 'COPY ["packages/contracts/delivery/", "./packages/contracts/delivery/"]' in dockerfile
     assert 'COPY ["pyproject.toml", "./pyproject.toml"]' in dockerfile
-    assert "ENV PYTHONPATH=/app/services/backend:/app" in dockerfile
-    assert "WORKDIR /app/services/backend" in dockerfile
+    assert "ENV PYTHONPATH=/app/services/api:/app" in dockerfile
+    assert "WORKDIR /app/services/api" in dockerfile
     assert "packages/*" in dockerignore
     assert "!packages/shared/contracts/" in dockerignore
     assert "!packages/shared/contracts/**" in dockerignore

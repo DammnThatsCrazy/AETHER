@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -23,8 +23,8 @@ import os  # noqa: E402
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.imports import commit as cm  # noqa: E402
-from services.imports import service as svc  # noqa: E402
+from ingestion.imports import commit as cm  # noqa: E402
+from ingestion.imports import service as svc  # noqa: E402
 
 TENANT = "tenant-commit"
 OTHER = "tenant-other"
@@ -106,7 +106,7 @@ async def _seed_approved(tenant: str = TENANT) -> str:
 
 
 def test_build_records_and_plan_graph():
-    from services.imports.contracts import FieldMapping
+    from ingestion.imports.contracts import FieldMapping
 
     fields = [FieldMapping(**f) for f in MAPPING]
     rows = [
@@ -124,7 +124,7 @@ def test_build_records_and_plan_graph():
 
 
 def test_build_records_surfaces_transform_errors():
-    from services.imports.contracts import FieldMapping
+    from ingestion.imports.contracts import FieldMapping
 
     fields = [FieldMapping(source_column="n", primitive="metric", target_field="value",
                            transform="to_number", required=True)]
@@ -290,7 +290,7 @@ async def test_tenant_isolation(clean):
 
 
 async def test_commit_job_handler(clean):
-    from services.jobs.handlers import JobContext
+    from workers.jobs.handlers import JobContext
 
     # Call the module-level handler directly (via this test's own `cm`), not the
     # global HANDLER_REGISTRY — a registry closure may be bound to a different
@@ -309,8 +309,8 @@ async def test_commit_job_handler(clean):
 
 
 def test_handlers_are_registered():
-    from services.imports.commit import register_import_handlers
-    from services.jobs.handlers import HANDLER_REGISTRY
+    from ingestion.imports.commit import register_import_handlers
+    from workers.jobs.handlers import HANDLER_REGISTRY
 
     register_import_handlers()
     assert "import.commit" in HANDLER_REGISTRY and "import.replay" in HANDLER_REGISTRY

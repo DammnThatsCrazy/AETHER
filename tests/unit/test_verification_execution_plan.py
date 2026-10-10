@@ -79,7 +79,7 @@ def test_functionality_proof_suite_is_not_a_domain_wide_default() -> None:
         "packages/sdk/ios/Sources/AetherSDK/Aether.swift",
         "packages/sdk/mobile-core/src/index.ts",
         "packages/ui/brand/src/index.ts",
-        "services/backend/config/settings.py",
+        "services/api/config/settings.py",
     ):
         plan = build_execution_plan([path])
         assert plan["status"] == "READY", path

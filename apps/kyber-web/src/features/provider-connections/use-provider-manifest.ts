@@ -24,7 +24,7 @@
  * happened to model.
  *
  * Sources of truth:
- *   services/provider_runtime/routes.py         — admin + tenant routers
+ *   services/api/connectors/provider_runtime/routes.py         — admin + tenant routers
  *   shared/integration_contracts/manifest.py    — ProviderManifest sub-models
  *   shared/integration_contracts/certification.py — CertificationReport
  */

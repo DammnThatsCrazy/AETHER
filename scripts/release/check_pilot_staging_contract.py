@@ -409,7 +409,7 @@ def find_errors(workflow_path: Path = DEFAULT_WORKFLOW, lane: str = PILOT) -> li
             + ", ".join(missing_bootstrap)
         )
 
-    settings = _read(ROOT / "services/backend/config/settings.py")
+    settings = _read(ROOT / "services/api/config/settings.py")
     missing_settings = _missing_all(settings, STRIPE_ENVIRONMENT)
     if missing_settings:
         errors.append(

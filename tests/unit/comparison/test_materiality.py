@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from services.intelligence.comparison.generated_vocabulary import (
+from intelligence.intelligence.comparison.generated_vocabulary import (
     COMPARISON_SEVERITIES,
     MATERIALITY_COMPONENTS,
 )
-from services.intelligence.comparison.materiality import (
+from intelligence.intelligence.comparison.materiality import (
     HardSeverityOverride,
     score_materiality,
     severity_for_score,

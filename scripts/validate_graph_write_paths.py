@@ -26,7 +26,8 @@ import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "services" / "backend"
+DOMAIN_PACKAGES = ("tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing")
+BACKEND = ROOT / "services" / "api"
 ALLOWLIST = ROOT / "scripts" / "allowlists" / "graph_write_paths.json"
 
 _WRITE_METHODS = frozenset({"add_edge", "upsert_vertex", "add_vertex", "revoke_edge"})
@@ -70,7 +71,7 @@ def _writes_directly(text: str) -> bool:
 
 def scan() -> set[str]:
     offenders: set[str] = set()
-    for base in (BACKEND / "services", BACKEND / "shared", BACKEND / "repositories"):
+    for base in (*(BACKEND / d for d in DOMAIN_PACKAGES), BACKEND / "shared", BACKEND / "repositories"):
         for path in base.rglob("*.py"):
             rel = str(path.relative_to(ROOT))
             if any(rel.endswith(marker) or marker in rel for marker in _EXEMPT):

@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
@@ -32,7 +32,7 @@ def backend_path():
     """Add backend root to sys.path and clean up stale module cache."""
     original = list(sys.path)
     stale_prefixes = (
-        "config", "services", "shared", "middleware", "dependencies", "repositories",
+        "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
     )
     for prefix in stale_prefixes:
         for name in list(sys.modules):
@@ -62,7 +62,7 @@ def test_canonical_event_types_match_typescript():
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     expected = frozenset(e["type"] for e in registry["events"])
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         assert m.CANONICAL_EVENT_TYPES == expected, (
             "CANONICAL_EVENT_TYPES diverged from event-registry.json. "
             "Run: python scripts/generate_contracts.py"
@@ -71,7 +71,7 @@ def test_canonical_event_types_match_typescript():
 
 def test_unknown_event_type_is_rejected():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         # unknown type should not be in canonical set
         assert "custom_unknown_xyz" not in m.CANONICAL_EVENT_TYPES
 
@@ -80,7 +80,7 @@ def test_unknown_event_type_is_rejected():
 
 def test_scrub_sensitive_fields_removes_private_key():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         props = {"action": "transfer", "private_key": "0xsecret", "amount": 100}
         scrubbed, had = m._scrub_sensitive_fields(props)
         assert scrubbed["private_key"] == "[REDACTED]"
@@ -91,7 +91,7 @@ def test_scrub_sensitive_fields_removes_private_key():
 
 def test_scrub_sensitive_fields_nested():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         props = {"meta": {"password": "hunter2", "label": "test"}}
         scrubbed, had = m._scrub_sensitive_fields(props)
         assert scrubbed["meta"]["password"] == "[REDACTED]"
@@ -101,7 +101,7 @@ def test_scrub_sensitive_fields_nested():
 
 def test_scrub_sensitive_fields_clean():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         props = {"product_id": "abc", "quantity": 3}
         scrubbed, had = m._scrub_sensitive_fields(props)
         assert scrubbed == props
@@ -110,7 +110,7 @@ def test_scrub_sensitive_fields_clean():
 
 def test_scrub_sensitive_fields_api_key():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         props = {"api_key": "ak_live_secret", "user": "alice"}
         scrubbed, had = m._scrub_sensitive_fields(props)
         assert scrubbed["api_key"] == "[REDACTED]"
@@ -119,7 +119,7 @@ def test_scrub_sensitive_fields_api_key():
 
 def test_scrub_sensitive_fields_seed_phrase():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         for key in ("seedphrase", "seed_phrase", "mnemonic"):
             props = {key: "word1 word2 word3"}
             scrubbed, had = m._scrub_sensitive_fields(props)
@@ -132,7 +132,7 @@ def test_scrub_sensitive_fields_seed_phrase():
 def test_idempotency_key_is_tenant_scoped():
     """Same event_id from different tenants must produce different keys."""
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         event_id = str(uuid.uuid4())
         key_t1 = m._make_idempotency_key("tenant_A", event_id, "1.0.0")
         key_t2 = m._make_idempotency_key("tenant_B", event_id, "1.0.0")
@@ -142,7 +142,7 @@ def test_idempotency_key_is_tenant_scoped():
 def test_idempotency_key_stable():
     """Same inputs must always produce the same key."""
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         k1 = m._make_idempotency_key("t1", "evt_abc", "1.0.0")
         k2 = m._make_idempotency_key("t1", "evt_abc", "1.0.0")
         assert k1 == k2
@@ -151,7 +151,7 @@ def test_idempotency_key_stable():
 def test_idempotency_key_length():
     """Key must be a 40-char hex string (first 40 chars of SHA-256)."""
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         key = m._make_idempotency_key("t", "e", "v")
         assert len(key) == 40
         assert all(c in "0123456789abcdef" for c in key)
@@ -238,7 +238,7 @@ def test_all_canonical_types_have_family():
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     declared_families = {e["family"] for e in registry["events"]}
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         for event_type in m.CANONICAL_EVENT_TYPES:
             family = m._get_event_family(event_type)
             assert family in declared_families, (
@@ -249,7 +249,7 @@ def test_all_canonical_types_have_family():
 
 def test_all_canonical_types_have_consent_purpose():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         for event_type in m.CANONICAL_EVENT_TYPES:
             assert event_type in m.EVENT_CONSENT_PURPOSE, (
                 f"Event type {event_type!r} has no consent purpose mapping"
@@ -260,7 +260,7 @@ def test_all_canonical_types_have_consent_purpose():
 
 def test_base_event_requires_id():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
             m.BaseEvent(
@@ -274,7 +274,7 @@ def test_base_event_requires_id():
 
 def test_base_event_rejects_invalid_timestamp():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
             m.BaseEvent(
@@ -288,7 +288,7 @@ def test_base_event_rejects_invalid_timestamp():
 
 def test_batch_request_max_500():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         from pydantic import ValidationError
         events = [
             m.BaseEvent(
@@ -306,7 +306,7 @@ def test_batch_request_max_500():
 
 def test_batch_request_min_1():
     with backend_path():
-        m = importlib.import_module("services.ingestion.batch")
+        m = importlib.import_module("ingestion.ingestion.batch")
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
             m.BatchRequest(batch=[], sentAt="2024-01-01T00:00:00Z")

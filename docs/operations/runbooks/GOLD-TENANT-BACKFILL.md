@@ -9,10 +9,10 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 2
-source_files: [services/backend/repositories/lake.py, scripts/gold_tenant_backfill.py]
+source_files: [services/api/repositories/lake.py, scripts/gold_tenant_backfill.py]
 source_hashes:
-  "scripts/gold_tenant_backfill.py": "sha256:2481481da80f89a79f07d3c43e446b2209df02d3c311095c998977f5244b5d34"
-  "services/backend/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
+  "scripts/gold_tenant_backfill.py": "sha256:fa51831b84447a67f850b42a025c42cf3e1a9b9656683d713524da1ec3ee3cf7"
+  "services/api/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
 ---
 
 # Runbook — Gold Tenant Backfill
@@ -137,7 +137,7 @@ deterministic:
   that consume it), scoped to the tenant the row now carries, and confirm
   the value matches what the report said would move.
 - `AETHER_ENV=local python -m pytest tests/unit/test_gold_backfill.py -q -n0`
-  (from `services/backend`) and
+  (from `services/api`) and
   `python scripts/validate_temporal_integrity.py` (from repo root) should
   both still pass.
 

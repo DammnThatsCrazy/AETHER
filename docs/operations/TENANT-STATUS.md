@@ -7,8 +7,8 @@ audience: [buyer, ops, architect]
 status: beta
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/reliability/routes.py
-  - services/backend/services/reliability/tenant_impact.py
+  - services/api/governance/reliability/routes.py
+  - services/api/governance/reliability/tenant_impact.py
   - apps/aether-web/src/pages/system-status/system-status-page.tsx
 related:
   - reliability/operations
@@ -16,9 +16,9 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 source_hashes:
-  "services/backend/services/reliability/routes.py": "sha256:a28140054a4ffc46654adbf78bec26bca2934ff4d6fdde75c63cfc31adbed2b0"
-  "services/backend/services/reliability/tenant_impact.py": "sha256:8a188d25da4ba795efde29071186f35001ce6c9f7717fbdd99ac743abb136318"
   "apps/aether-web/src/pages/system-status/system-status-page.tsx": "sha256:6d0e8550d17d6b6ce4e4f95b74e87ac4b28e5690c9ee161922f74b040465b3ba"
+  "services/api/governance/reliability/routes.py": "sha256:aa8f7b1739acbda7065e85fd6c9a1e60805e542d4f60563adf3010ed7f35ee54"
+  "services/api/governance/reliability/tenant_impact.py": "sha256:7df9e077f7672c7ccd4d2cdd537c411fb84217a1fac6bb37dd54bb8ee7b509ac"
 ---
 # Tenant System Status
 
@@ -53,7 +53,7 @@ are strictly single-tenant. No cross-tenant data is reachable.
 
 ## Model
 
-`TenantStatusSummary` — see `services/backend/services/reliability/models.py`. Overall status is
+`TenantStatusSummary` — see `services/api/governance/reliability/models.py`. Overall status is
 derived from active incident count + data freshness.
 
 ## Known gaps

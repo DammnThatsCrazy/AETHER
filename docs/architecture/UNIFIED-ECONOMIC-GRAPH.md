@@ -13,7 +13,7 @@ related:
   - concepts/economic-value-framing
   - concepts/tvl-gmv-revenue-metrics
 source_hashes:
-  "packages/shared/economic-metrics.ts": "sha256:51a302d8fcc563f8ef2a59e58d467ca905f0afc9dd25c31f1992c231fe5168d9"
+  "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
   "packages/shared/graph-relationships.ts": "sha256:032d9f24b21619538e79688359fc4761553e339fcf9d2e9c8662d1a0185e8641"
 ---
 
@@ -73,7 +73,7 @@ Total Value Observed
 - **Base economic layer**: `packages/shared/economic.ts`
 - **Graph relationships**: `packages/shared/graph-relationships.ts`
 - **Profile360 integration**: `packages/shared/profile360-contract.ts` (economic sub-resource)
-- **Backend routes**: `services/backend/services/economic/routes.py`
+- **Backend routes**: `services/api/value/economic/routes.py`
 - **Aggregation**: Derived read state, never persisted as canonical write state
 
 ## Provenance

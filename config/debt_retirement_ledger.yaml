@@ -67,19 +67,19 @@ entries:
     state: converge
     authority: >-
       V2 typed Bronze plus transactional outbox
-      (services/backend/services/ingestion/bronze_bulk.py)
+      (services/api/ingestion/ingestion/bronze_bulk.py)
     current:
-      - services/backend/services/ingestion/bronze_bulk.py
-      - services/backend/services/ingestion/batch.py
+      - services/api/ingestion/ingestion/bronze_bulk.py
+      - services/api/ingestion/ingestion/batch.py
     duplicates: []
     retire: >-
       V1 BronzeRepository("sdk_events") writes and the post-Bronze Redis
       idempotency claim; the flat-event fallback in the ingestion gateway
     consumers:
-      - services/backend/services/ingestion/workers.py
-      - services/backend/services/activation/service.py
-      - services/backend/services/comms/ingest.py
-      - services/backend/services/auth/routes.py
+      - services/api/ingestion/ingestion/workers.py
+      - services/api/tenancy/activation/service.py
+      - services/api/journeys/comms/ingest.py
+      - services/api/tenancy/auth/routes.py
     compatibility: >-
       /v1/batch response shape, accepted/rejected event IDs, privacy scrub,
       and reads of existing sdk_events rows by activation and backfill
@@ -94,17 +94,17 @@ entries:
     domain: intake
     classification: core
     state: converge
-    authority: Universal Provider Runtime (services/backend/services/provider_runtime)
+    authority: Universal Provider Runtime (services/api/connectors/provider_runtime)
     current:
-      - services/backend/services/provider_runtime
-      - services/backend/services/providers
+      - services/api/connectors/provider_runtime
+      - services/api/connectors/providers
     duplicates: []
     retire: >-
       the legacy BaseConnector pull/webhook path, one capability at a time, after
       native UPR cutover evidence; LegacyConnectorPlugin is the transition adapter
     consumers:
-      - services/backend/services/integrations/connectors
-      - services/backend/services/managed_integrations
+      - services/api/connectors/integrations/connectors
+      - services/api/connectors/managed_integrations
     compatibility: existing connector routes, tenant configuration, cursors and webhook URLs
     mechanism: adapter
     parity_evidence: null
@@ -121,16 +121,16 @@ entries:
       ProviderRawRightsAdmission for provider raw evidence; one append-only L0
       record per tenant + source namespace + object/delivery/revision
     current:
-      - services/backend/services/provider_runtime/raw_store.py
-      - services/backend/services/provider_runtime/rights_admission.py
-      - services/backend/repositories/lake.py
+      - services/api/connectors/provider_runtime/raw_store.py
+      - services/api/connectors/provider_runtime/rights_admission.py
+      - services/api/repositories/lake.py
     duplicates: []
     retire: >-
       per-path idempotency and retention behaviour in SDK V1/V2, import and feed
       persistence; Bronze rollback by hard delete (replace with governed revocation)
     consumers:
-      - services/backend/services/ingestion/replay.py
-      - services/backend/services/data_exchange
+      - services/api/ingestion/ingestion/replay.py
+      - services/api/ingestion/data_exchange
     compatibility: raw record IDs and lineage for rows already persisted
     mechanism: dual-write
     parity_evidence: null
@@ -146,17 +146,17 @@ entries:
     state: converge
     authority: >-
       the registry-routed Silver dispatcher with versioned deterministic
-      source-to-fact adapters (services/backend/services/silver)
+      source-to-fact adapters (services/api/ingestion/silver)
     current:
-      - services/backend/services/silver
-      - services/backend/services/provider_runtime/normalization.py
+      - services/api/ingestion/silver
+      - services/api/connectors/provider_runtime/normalization.py
     duplicates: []
     retire: >-
       SDK-only flat Silver reads and the flag-gated normalization spine bypass;
       provider events get Silver projectors instead of being deferred
     consumers:
-      - services/backend/services/ingestion/spine.py
-      - services/backend/services/ingestion/validation.py
+      - services/api/ingestion/ingestion/spine.py
+      - services/api/ingestion/ingestion/validation.py
     compatibility: event registry versions and existing Silver fact IDs
     mechanism: adapter
     parity_evidence: null
@@ -170,17 +170,17 @@ entries:
     domain: identity
     classification: core
     state: retain
-    authority: services/backend/services/identity (resolver, source identity registry, merge policy)
+    authority: services/api/identity/identity (resolver, source identity registry, merge policy)
     current:
-      - services/backend/services/identity
+      - services/api/identity/identity
     duplicates: []
     retire: >-
       none: import_candidate_adapter.py and data_exchange/identity_preview.py are
       evidence and preview adapters, not resolvers. They must never write a
       canonical entity ID.
     consumers:
-      - services/backend/services/identity/import_candidate_adapter.py
-      - services/backend/services/data_exchange/identity_preview.py
+      - services/api/identity/identity/import_candidate_adapter.py
+      - services/api/ingestion/data_exchange/identity_preview.py
     compatibility: import and SDK identify APIs, aliases, reviewed decisions, split and restatement
     mechanism: none
     parity_evidence: null
@@ -193,17 +193,17 @@ entries:
     domain: identity
     classification: removed
     state: removed
-    authority: services/backend/services/identity
+    authority: services/api/identity/identity
     current:
-      - services/backend/services/identity
+      - services/api/identity/identity
     duplicates:
-      - services/backend/services/resolution/engine.py
-      - services/backend/services/resolution/consumer.py
-      - services/backend/services/resolution/rules.py
-      - services/backend/services/resolution/signals.py
-      - services/backend/services/resolution/tasks.py
-      - services/backend/services/resolution/repository.py
-      - services/backend/services/resolution/models.py
+      - services/api/services/resolution/engine.py
+      - services/api/services/resolution/consumer.py
+      - services/api/services/resolution/rules.py
+      - services/api/services/resolution/signals.py
+      - services/api/services/resolution/tasks.py
+      - services/api/services/resolution/repository.py
+      - services/api/services/resolution/models.py
     retire: >-
       the legacy resolution engine, event consumer, rules, signals, repository and
       models (1,353 lines), and the pending, audit, reject and config routes they
@@ -219,7 +219,7 @@ entries:
     parity_evidence: >-
       the same SDK identify gate (resolution_enabled, sdk_late_binding_enabled,
       anonymous_to_known_binding_enabled) is enforced by the live path in
-      services/ingestion/batch.py and services/identity and covered by
+      services/api/ingestion/ingestion/batch.py and services/api/identity/identity and covered by
       tests/identity (batch identify idempotency, SDK alias and late-binding,
       legacy resolve late-binding); provider-delivery deferral is covered by
       workers tests in test_provider_consumer_defer.py
@@ -238,14 +238,14 @@ entries:
     domain: identity
     classification: removed
     state: removed
-    authority: services/backend/services/identity
+    authority: services/api/identity/identity
     current:
-      - services/backend/services/identity
+      - services/api/identity/identity
     duplicates:
-      - services/backend/services/resolution
+      - services/api/services/resolution
     retire: >-
       the three fail-closed tombstone routes that remained in
-      services/backend/services/resolution (cluster read, merge approval, batch), the
+      services/api/services/resolution (cluster read, merge approval, batch), the
       package and its mount in main.py, and the Aether user-profile page's
       "Identity cluster" section, which requested the cluster read, always got 503 and
       always rendered "No identity-cluster evidence was returned". The page now shows
@@ -274,11 +274,11 @@ entries:
     domain: product
     classification: removed
     state: removed
-    authority: Profile360 IntelligenceAggregator.social_intelligence (services/backend/services/profile)
+    authority: Profile360 IntelligenceAggregator.social_intelligence (services/api/identity/profile)
     current:
-      - services/backend/services/profile
+      - services/api/identity/profile
     duplicates:
-      - services/backend/services/social
+      - services/api/services/social
     retire: >-
       the services/social compatibility wrapper for /v1/profile/{entity_id}/social-intelligence.
       It called the same aggregator as the profile handler it shadowed, so the
@@ -287,7 +287,7 @@ entries:
     compatibility: none; the profile handler serves the same URL with the same body
     mechanism: delete
     parity_evidence: >-
-      services/backend/tests/social/test_legacy_social_honesty.py now runs against
+      services/api/tests/social/test_legacy_social_honesty.py now runs against
       the profile handler
     usage_evidence: >-
       the wrapper and the profile handler both call IntelligenceAggregator.social_intelligence
@@ -302,20 +302,20 @@ entries:
     domain: graph
     classification: core
     state: converge
-    authority: MutationIntent to GraphMutationGateway.apply (services/backend/shared/graph)
+    authority: MutationIntent to GraphMutationGateway.apply (services/api/shared/graph)
     current:
-      - services/backend/shared/graph/mutation_gateway.py
-      - services/backend/shared/graph/mutation_intents.py
+      - services/api/shared/graph/mutation_gateway.py
+      - services/api/shared/graph/mutation_intents.py
       - scripts/validate_graph_write_paths.py
     duplicates: []
     retire: >-
       the gateway "off" and "shadow" rollout modes once every writer is on
       enforce; any remaining producer that builds graph writes outside an intent
     consumers:
-      - services/backend/services/identity/graph_writer.py
-      - services/backend/services/silver/projectors/silver_graph_projector.py
-      - services/backend/services/semantic_intelligence/graph_projector.py
-      - services/backend/services/onchain/action_recorder.py
+      - services/api/identity/identity/graph_writer.py
+      - services/api/ingestion/silver/projectors/silver_graph_projector.py
+      - services/api/intelligence/semantic_intelligence/graph_projector.py
+      - services/api/graph/onchain/action_recorder.py
     compatibility: graph vertex and edge IDs; ledger and projection recovery
     mechanism: dual-write
     parity_evidence: null
@@ -329,11 +329,11 @@ entries:
     domain: intelligence
     classification: core
     state: converge
-    authority: services/backend/services/measurement/engine/journey_compiler.py
+    authority: services/api/journeys/measurement/engine/journey_compiler.py
     current:
-      - services/backend/services/measurement/engine/journey_compiler.py
+      - services/api/journeys/measurement/engine/journey_compiler.py
     duplicates:
-      - services/backend/services/journeys/stitching.py
+      - services/api/journeys/journeys/stitching.py
     retire: overlapping journey, value and outcome read compositions behind versioned projections
     consumers: []
     compatibility: existing journey and value route shapes
@@ -350,18 +350,18 @@ entries:
     state: converge
     authority: >-
       DeliveryIntent / DeliveryJob / ProviderReceipt with approval and policy
-      before effect (services/backend/services/delivery)
+      before effect (services/api/actions/delivery)
     current:
-      - services/backend/services/delivery
+      - services/api/actions/delivery
     duplicates:
-      - services/backend/services/recommendations/executor.py
-      - services/backend/services/suggestions/adapters/recommendation_adapter.py
+      - services/api/intelligence/recommendations/executor.py
+      - services/api/intelligence/suggestions/adapters/recommendation_adapter.py
     retire: >-
       parallel recommendation execution seams, and direct dispatch from
       intelligence routes and agent/mutation_commit.py, in bounded slices
     consumers:
-      - services/backend/services/agent/mutation_commit.py
-      - services/backend/services/intelligence/routes.py
+      - services/api/actions/agent/mutation_commit.py
+      - services/api/intelligence/intelligence/routes.py
     compatibility: action log, receipts, approvals and idempotency reservations
     mechanism: adapter
     parity_evidence: null
@@ -699,7 +699,7 @@ entries:
     classification: removed
     state: removed
     authority: >-
-      services/backend/config/settings.py: a settings field exists only if
+      services/api/config/settings.py: a settings field exists only if
       production Python reads it (scripts/validate_settings_flags.py)
     current:
       - scripts/validate_settings_flags.py
@@ -730,7 +730,7 @@ entries:
     parity_evidence: >-
       not applicable: a field nothing reads has no behavior to preserve; the
       guarantees two of them claimed hold structurally (mandatory commerce
-      approval is DEFAULT_APPROVAL_REQUIRED_ALL in services/x402/policies.py;
+      approval is DEFAULT_APPROVAL_REQUIRED_ALL in services/api/value/x402/policies.py;
       context never merges identities, pinned by
       tests/unit/test_context_has_no_identity_merge_path.py)
     usage_evidence: >-
@@ -766,7 +766,7 @@ entries:
       the other flags that gate behavior); Terraform passes KYBER_SESSION_COOKIE_SECURE
       although the __Host- session cookie's Secure attribute follows AETHER_ENV
       (on everywhere except local, dev and test;
-      services/backend/services/kyber/sessions/cookies.py). Deleting them changes those
+      services/api/governance/kyber/sessions/cookies.py). Deleting them changes those
       contracts, so it is kept out of the settings cleanup.
     consumers:
       - tests/unit/test_release_profile_enforcement.py
@@ -786,21 +786,21 @@ entries:
     classification: removed
     state: removed
     authority: >-
-      the import graph of services/backend/main.py plus the packages loaded by
+      the import graph of services/api/main.py plus the packages loaded by
       name; code no route, worker or import mounts is not product surface
     current:
       - config/backend_reachability.yaml
       - scripts/validate_backend_reachability.py
     duplicates:
-      - services/backend/repositories/idempotency.py
-      - services/backend/services/cis/engines/drift_engine.py
-      - services/backend/services/cis/engines/retrieval_engine.py
-      - services/backend/services/expectations/signal_builder.py
-      - services/backend/services/external_account_observability/portfolio_models.py
-      - services/backend/shared/cis/cache_provenance.py
-      - services/backend/shared/computation/temporal.py
-      - services/backend/shared/privacy/pii_masking.py
-      - services/backend/shared/scoring/anomaly_config.py
+      - services/api/repositories/idempotency.py
+      - services/api/intelligence/cis/engines/drift_engine.py
+      - services/api/intelligence/cis/engines/retrieval_engine.py
+      - services/api/intelligence/expectations/signal_builder.py
+      - services/api/connectors/external_account_observability/portfolio_models.py
+      - services/api/shared/cis/cache_provenance.py
+      - services/api/shared/computation/temporal.py
+      - services/api/shared/privacy/pii_masking.py
+      - services/api/shared/scoring/anomaly_config.py
     retire: >-
       nine backend modules (940 lines) that no import, string reference, script,
       workflow, registry, test or document names. Their packages keep their live
@@ -832,14 +832,14 @@ entries:
       shrink
     current:
       - config/backend_reachability.yaml
-      - services/backend/services/communication360
-      - services/backend/services/managed_integrations
-      - services/backend/services/derivatives
-      - services/backend/services/integrations
-      - services/backend/services/provider_runtime
-      - services/backend/services/suggestions/adapters
-      - services/backend/services/geo
-      - services/backend/shared/relationship_spine
+      - services/api/journeys/communication360
+      - services/api/connectors/managed_integrations
+      - services/api/value/derivatives
+      - services/api/connectors/integrations
+      - services/api/connectors/provider_runtime
+      - services/api/intelligence/suggestions/adapters
+      - services/api/graph/geo
+      - services/api/shared/relationship_spine
     duplicates: []
     retire: >-
       130 backend modules (about 32,400 lines) that nothing reaches from the
@@ -873,7 +873,7 @@ entries:
     current:
       - tests/unit/test_route_conflicts.py
     duplicates:
-      - services/backend/services/social
+      - services/api/services/social
     retire: >-
       ten shadowed handlers, each behind a handler of the same URL that FastAPI
       matches first. Owners chosen: POST /v1/admin/billing/stripe/webhook is
@@ -884,13 +884,13 @@ entries:
       is redundant because APIKeyValidator reads the billing account's plan tier on
       every request). GET /v1/attribution/models stays with attribution/routes.py
       (the Aether and Kyber clients read it); the measurement router's catalog was
-      never reachable. GET /v1/profile/{id}/pnl stays with services/pnl (the Aether
+      never reachable. GET /v1/profile/{id}/pnl stays with services/api/value/pnl (the Aether
       profile page reads it). GET /v1/profile/{id}/economic, /web2, /web3 and
-      /warnings are now served by profile/routes.py: the services/economic copies
+      /warnings are now served by profile/routes.py: the services/api/value/economic copies
       returned empty models with no read-permission check and, for web2, no
       credit-consent check, while the profile handlers aggregate real data and are
       the ones the tests and Profile 360 docs describe. /economic/agentic and
-      /economic/campaigns stay with services/economic (the profile copies returned
+      /economic/campaigns stay with services/api/value/economic (the profile copies returned
       delegation lists, not spend or ROAS) and now require the read permission, as
       do the tenant-level /v1/economic routes. GET /v1/profile/{id}/social-intelligence
       is served by profile/routes.py; the services/social wrapper called the same

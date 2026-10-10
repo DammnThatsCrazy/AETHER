@@ -9,11 +9,11 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
-source_files: [services/backend/services/kyber/devices/approvals.py, services/backend/services/kyber/devices/device_proof.py, services/backend/services/kyber/sessions/service.py]
+source_files: [services/api/governance/kyber/devices/approvals.py, services/api/governance/kyber/devices/device_proof.py, services/api/governance/kyber/sessions/service.py]
 source_hashes:
-  services/backend/services/kyber/devices/approvals.py: sha256:a2df5f8968e485f5a5dbf699c7a3bfc7f1b1c6e83dc1efc11b2c736f3548900c
-  services/backend/services/kyber/devices/device_proof.py: sha256:65bae2c4b353e49e3e55acb9207ee0171e8446b82e3349931a3376a49d283d8b
-  services/backend/services/kyber/sessions/service.py: sha256:2991d35bd865a64c53775e31b1fba844c554b190bd896d094c80334e9f0032f2
+  "services/api/governance/kyber/devices/approvals.py": "sha256:f2bebf7b5f670e2686762259ddd9b8d3bad998aeabfadbed526a6e95f80a26ba"
+  "services/api/governance/kyber/devices/device_proof.py": "sha256:d3c19cc8a91290aeb341bb27544c20327211ee93c631275bf7da7c1801231bb4"
+  "services/api/governance/kyber/sessions/service.py": "sha256:1cdfc824330b1b7dfab7f78e6b57ecc42d3969077006b5415f3b6dd01ca6c64f"
 ---
 
 # Runbook — Kyber Device Loss

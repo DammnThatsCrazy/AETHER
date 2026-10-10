@@ -7,14 +7,14 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/shared/commerce_contracts/
-  - services/backend/shared/integration_contracts/events.py
+  - services/api/shared/commerce_contracts/
+  - services/api/shared/integration_contracts/events.py
 canonical_owner: platform@aether
 estimated_read_minutes: 11
 toc_depth: 3
 source_hashes:
-  "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
-  "services/backend/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
+  "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
+  "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
 ---
 
 # Commerce Event Contract
@@ -26,7 +26,7 @@ churn stays behind the adapter seam.
 
 ## 1. `shared/commerce_contracts` — the vocabulary
 
-`services/backend/shared/commerce_contracts/` is fully
+`services/api/shared/commerce_contracts/` is fully
 self-contained (stdlib + pydantic) and **never imports from**
 `shared.integration_contracts` or any service/HTTP/DB layer.
 

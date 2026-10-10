@@ -3,7 +3,7 @@
 #
 # This descriptor is retained only for the historical journey-service tests.
 # The active journey capability is implemented in
-# services/backend/services/measurement/ and is not a standalone Compose
+# services/api/journeys/measurement/ and is not a standalone Compose
 # service. The root Makefile and GitHub Actions workflows are authoritative.
 # =============================================================================
 service: journey-service

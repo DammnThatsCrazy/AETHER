@@ -9,14 +9,14 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 7
 toc_depth: 2
-source_files: [scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_dynamodb.py, scripts/lib/preflight_redis.py, scripts/lib/preflight_results.py, services/backend/services/gateway/readiness.py]
+source_files: [scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_dynamodb.py, scripts/lib/preflight_redis.py, scripts/lib/preflight_results.py, services/api/ingestion/gateway/readiness.py]
 source_hashes:
   "scripts/lib/preflight_dynamodb.py": "sha256:412fa322a11832da710b26c2834a9d7f57a02e0b5451ea4336e7a599de1e41f9"
-  "scripts/lib/preflight_env.py": "sha256:f2b8a4efc17d0923f5e3f844907e1c576ab3dbf368de35dc9edfca8094ec8012"
+  "scripts/lib/preflight_env.py": "sha256:ab12af8dd5db0bbb24f4b568b534e794b39c97b0fc9d6317b14f0b6ba182f96f"
   "scripts/lib/preflight_redis.py": "sha256:418ac3a2e776cfb96572e3b78864a65e96c34c70cfdd838fb3a90b2bf18ee117"
   "scripts/lib/preflight_results.py": "sha256:ce8f40edac30f24e6be3a9840d43c906436059055525cb2fba8df44c5165da86"
   "scripts/staging_preflight.py": "sha256:d18e7929deaedc6ad3ecf261d6cde3d3e59136f49515642dfc87b8e8f7026e28"
-  "services/backend/services/gateway/readiness.py": "sha256:76a97f3b23bdbc35dfed9909b13fbc4de56c3e509e43ea950b60b8855d7c1c3e"
+  "services/api/ingestion/gateway/readiness.py": "sha256:d48fdf41e2b7c407908f46073e12c86680172f4319228d498aa21651521edc87"
 ---
 
 # Runbook — Staging Preflight & Readiness
@@ -87,7 +87,7 @@ the gate has regressed and the dry run fails. `--dry-run` rejects `--env-file` /
 
 ## Readiness — `GET /v1/ready`
 
-The booted service's own health gate (`services/backend/services/gateway/readiness.py`), public
+The booted service's own health gate (`services/api/ingestion/gateway/readiness.py`), public
 (no auth), returning **200 when ready, 503 when not**, with a per-check map that
 never echoes secret values. Checks:
 
@@ -98,7 +98,7 @@ never echoes secret values. Checks:
 - **cache**, **event_bus** — backends reachable.
 - **workers** — per-role health of the worker roles *this process supervises*.
   Graded by criticality, declared in
-  `services/backend/services/runtime/roles.py`:
+  `services/api/workers/runtime/roles.py`:
   - a role in `RELEASE_CRITICAL_ROLES` (`outbox-relay`, `stream-worker`,
     `identity-worker`, `graph-writer`) reports `failed` and flips `ready` false;
   - any other role reports `degraded` — `ready` stays true and only that role's
@@ -107,7 +107,7 @@ never echoes secret values. Checks:
     counts as unavailable. Absence of a signal is never treated as health.
   A pure `api` task supervises no roles, so this check is `skipped` there and the
   worker fleet is gated by the worker tasks' own endpoints (see below).
-- **communications** — comms subsystem readiness (`services/backend/services/comms/readiness.py`):
+- **communications** — comms subsystem readiness (`services/api/journeys/comms/readiness.py`):
   storage reachability, comms-required release-critical worker dependency (a dead
   ingestion projector via `stream-worker`, or a stopped `outbox-relay`, fails
   comms readiness), and webhook-inbox backlog (`degraded`, not `failed`). It is a
@@ -123,7 +123,7 @@ still serves the path you care about.
 
 ### Worker task endpoints
 
-Worker processes (`python -m services.runtime.run_role <role>`) serve their own
+Worker processes (`python -m workers.runtime.run_role <role>`) serve their own
 health surface on `AETHER_WORKER_HEALTH_PORT` (default `8080`):
 
 - `GET /healthz`, `GET /livez` — **liveness**: 200 while the process is up. This

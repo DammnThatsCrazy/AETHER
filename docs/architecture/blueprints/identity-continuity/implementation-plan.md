@@ -20,37 +20,37 @@ status: beta
 
 | Area | Location | Status |
 |---|---|---|
-| Identity resolution engine | `services/backend/services/identity/resolver.py` | Core resolver with 15-step flow, idempotent |
-| Identity models | `services/backend/services/identity/models.py` | EntityType, ConfidenceTier, MergeDecision, EdgeType, ConflictStatus, SubjectStatus, VerificationMethod |
-| Merge policy engine | `services/backend/services/identity/merge_policy.py` | Evaluate with cross-tenant, consent, fingerprint, deterministic, strong, probable, weak rules |
-| Split policy | `services/backend/services/identity/split_policy.py` | Operator/admin split validation |
-| Confidence scoring | `services/backend/services/identity/confidence.py` | 5-tier match score with reason codes, calibrated=False |
-| Graph writer | `services/backend/services/identity/graph_writer.py` | GraphMutationGateway-backed edge writes, idempotent |
-| Conflict manager | `services/backend/services/identity/conflicts.py` | Open/conflict/resolve/conflict listing |
-| Identity repository | `services/backend/services/identity/repository.py` | Subject/alias/conflict persistence |
-| Audit writer | `services/backend/services/identity/audit.py` | Decision audit records |
-| Decision evidence | `services/backend/services/identity/decision_evidence.py` | DecisionType mapping, evidence service |
-| Resolution replay | `services/backend/services/identity/resolution_replay.py` | Idempotent replay wrapper |
-| Verification | `services/backend/services/identity/verification.py` | Email/wallet ownership verification |
-| Hashing | `services/backend/services/identity/hashing.py` | Email/phone/wallet/fingerprint/external_id hashing |
-| Normalization | `services/backend/services/identity/normalization.py` | Value normalization |
-| Source precedence | `services/backend/services/identity/source_precedence.py` | Source priority ordering |
-| Metrics | `services/backend/services/identity/metrics.py` | Identity metrics |
-| Identity routes | `services/backend/services/identity/routes.py` | HTTP surface |
-| Identity schemas | `services/backend/services/identity/schemas.py` | Pydantic schemas |
-| SDK routes | `services/backend/services/sdk/routes.py` | SDK event ingestion |
-| Ingestion envelope | `services/backend/services/ingestion/observation_envelope.py` | CanonicalObservationEnvelope mapping |
-| Ingestion adapters | `services/backend/services/ingestion/adapters/` | Base, SDK, replay adapters |
-| Profile 360 composer | `services/backend/services/profile/composer.py` | Holistic profile aggregation |
-| Profile routes | `services/backend/services/profile/routes.py` | 20+ profile endpoints |
+| Identity resolution engine | `services/api/identity/identity/resolver.py` | Core resolver with 15-step flow, idempotent |
+| Identity models | `services/api/identity/identity/models.py` | EntityType, ConfidenceTier, MergeDecision, EdgeType, ConflictStatus, SubjectStatus, VerificationMethod |
+| Merge policy engine | `services/api/identity/identity/merge_policy.py` | Evaluate with cross-tenant, consent, fingerprint, deterministic, strong, probable, weak rules |
+| Split policy | `services/api/identity/identity/split_policy.py` | Operator/admin split validation |
+| Confidence scoring | `services/api/identity/identity/confidence.py` | 5-tier match score with reason codes, calibrated=False |
+| Graph writer | `services/api/identity/identity/graph_writer.py` | GraphMutationGateway-backed edge writes, idempotent |
+| Conflict manager | `services/api/identity/identity/conflicts.py` | Open/conflict/resolve/conflict listing |
+| Identity repository | `services/api/identity/identity/repository.py` | Subject/alias/conflict persistence |
+| Audit writer | `services/api/identity/identity/audit.py` | Decision audit records |
+| Decision evidence | `services/api/identity/identity/decision_evidence.py` | DecisionType mapping, evidence service |
+| Resolution replay | `services/api/identity/identity/resolution_replay.py` | Idempotent replay wrapper |
+| Verification | `services/api/identity/identity/verification.py` | Email/wallet ownership verification |
+| Hashing | `services/api/identity/identity/hashing.py` | Email/phone/wallet/fingerprint/external_id hashing |
+| Normalization | `services/api/identity/identity/normalization.py` | Value normalization |
+| Source precedence | `services/api/identity/identity/source_precedence.py` | Source priority ordering |
+| Metrics | `services/api/identity/identity/metrics.py` | Identity metrics |
+| Identity routes | `services/api/identity/identity/routes.py` | HTTP surface |
+| Identity schemas | `services/api/identity/identity/schemas.py` | Pydantic schemas |
+| SDK routes | `services/api/ingestion/sdk/routes.py` | SDK event ingestion |
+| Ingestion envelope | `services/api/ingestion/ingestion/observation_envelope.py` | CanonicalObservationEnvelope mapping |
+| Ingestion adapters | `services/api/ingestion/ingestion/adapters/` | Base, SDK, replay adapters |
+| Profile 360 composer | `services/api/identity/profile/composer.py` | Holistic profile aggregation |
+| Profile routes | `services/api/identity/profile/routes.py` | 20+ profile endpoints |
 | Graph contract (TS) | `packages/shared/graph-contract.ts` | Edge layer classification (H2H/H2A/A2H/A2A) |
 | Interaction contract (TS) | `packages/shared/interaction-contract.ts` | Interaction vocabulary |
 | Observation envelope registry | `packages/shared/contracts/observation-envelope-registry.json` | Envelope B field registry |
-| Provider adapters | `services/backend/services/providers/` | Shopify, WooCommerce, eBay, Etsy, TikTok, Walmart |
+| Provider adapters | `services/api/connectors/providers/` | Shopify, WooCommerce, eBay, Etsy, TikTok, Walmart |
 | Proof infrastructure | `tests/e2e/proof/packages/runner/`, `tests/e2e/proof/packages/fixtures/`, `tests/e2e/proof/packages/reporting/` | Existing proof harness |
 | Feature flags | `config/release/feature_flags/` | Existing flag framework |
-| Tests (identity) | `services/backend/tests/identity/` | verified_email_resolution, resolution_replay, decision_evidence |
-| Tests (restatement) | `services/backend/tests/computation/test_identity_restatement.py` | Restatement + confidence semantics |
+| Tests (identity) | `services/api/tests/identity/` | verified_email_resolution, resolution_replay, decision_evidence |
+| Tests (restatement) | `services/api/tests/computation/test_identity_restatement.py` | Restatement + confidence semantics |
 
 ### Gaps — build or harden
 
@@ -95,7 +95,7 @@ status: beta
 - `packages/shared/contracts/identity/projection-restatement-job.json` — projection_restatement_job contract
 - `packages/shared/contracts/identity/index.json` — manifest
 - `packages/shared/src/identity/types.ts` — generated/normalized TS types (if generated contract system supports it; else hand-authored)
-- Align `services/backend/services/identity/models.py` — add missing fields (confidence_band, decision_type vocabulary, positive_evidence, negative_evidence, vetoes, policy_version, decided_by, graph_version_before/after, explanation, candidate arrays)
+- Align `services/api/identity/identity/models.py` — add missing fields (confidence_band, decision_type vocabulary, positive_evidence, negative_evidence, vetoes, policy_version, decided_by, graph_version_before/after, explanation, candidate arrays)
 
 **Acceptance:**
 - All identity contracts exist as JSON registries
@@ -108,21 +108,21 @@ status: beta
 **Goal:** Create source identity registry. Wire CSV/connector/SDK/API/agent source identity creation. Add idempotency.
 
 **Files to create/modify:**
-- `services/backend/services/identity/source_identity_registry.py` — new service
+- `services/api/identity/identity/source_identity_registry.py` — new service
   - `register_source_identity(input)` — create/update source identity
   - `upsert_identity_claim(input)` — normalize + store claim
   - `find_existing_source_identity(input)` — lookup by external_id/user_id/anonymous_id/device_id/installation_id + tenant
   - `get_claims_for_source_identity(source_identity_id)` — list claims
   - `mark_suppressed(source_identity_id)` — suppress
-- `services/backend/services/identity/claim_normalizer.py` — new service
+- `services/api/identity/identity/claim_normalizer.py` — new service
   - Email normalization (lowercase, strip, domain normalization)
   - Phone normalization (E.164)
   - Provider ID normalization (Shopify customer ID, Stripe customer ID, etc.)
   - Anonymous ID handling
-- Wire into ingestion: `services/backend/services/ingestion/adapters/sdk.py` — source identity creation on SDK events
-- Wire into providers: `services/backend/services/providers/shopify/` — source identity creation on customer sync
-- Wire into providers: `services/backend/services/providers/woocommerce/` — source identity creation
-- Wire into SDK routes: `services/backend/services/sdk/routes.py` — source identity on heartbeat/identify
+- Wire into ingestion: `services/api/ingestion/ingestion/adapters/sdk.py` — source identity creation on SDK events
+- Wire into providers: `services/api/connectors/providers/shopify/` — source identity creation on customer sync
+- Wire into providers: `services/api/connectors/providers/woocommerce/` — source identity creation
+- Wire into SDK routes: `services/api/ingestion/sdk/routes.py` — source identity on heartbeat/identify
 - Add idempotency: source_record_id + idempotency_key dedup
 
 **Acceptance:**
@@ -135,7 +135,7 @@ status: beta
 **Goal:** Harden resolver with blueprint invariants. Add veto engine. Add confidence band mapping. Add entity-type mismatch veto. Add cross-tenant hard block.
 
 **Files to create/modify:**
-- `services/backend/services/identity/veto_engine.py` — new service
+- `services/api/identity/identity/veto_engine.py` — new service
   - `evaluate_vetoes(input)` — check all hard vetoes:
     - cross-tenant candidate
     - deleted/suppressed identity
@@ -149,16 +149,16 @@ status: beta
     - simultaneous contradictory sessions
     - manual do-not-merge flag
   - Returns list of `IdentityVeto` objects
-- `services/backend/services/identity/confidence.py` — extend:
+- `services/api/identity/identity/confidence.py` — extend:
   - Add confidence_band: "very_high" (>=0.97), "high" (0.90-0.969), "medium" (0.70-0.899), "low" (0.30-0.699), "blocked" (any veto)
   - Map ConfidenceTier → confidence_band
-- `services/backend/services/identity/merge_policy.py` — extend:
+- `services/api/identity/identity/merge_policy.py` — extend:
   - Add entity type mismatch check (person ≠ agent, person ≠ account, device ≠ person)
   - Add conflicting verified email check
   - Add conflicting authenticated user ID check
   - Add shared device veto
   - Add shared inbox detection (role email patterns)
-- `services/backend/services/identity/resolver.py` — extend:
+- `services/api/identity/identity/resolver.py` — extend:
   - Wire veto engine before merge decision
   - High score cannot override hard veto
   - Every observation produces one resolution outcome
@@ -174,19 +174,19 @@ status: beta
 **Goal:** Make merges explicit, auditable, versioned, reversible.
 
 **Files to create/modify:**
-- `services/backend/services/identity/merge_ledger.py` — new service
+- `services/api/identity/identity/merge_ledger.py` — new service
   - `auto_merge(input)` — create decision record + execute merge
   - `manual_merge(input)` — operator merge with confirmation token
   - `block_merge(input)` — record blocked merge
   - `get_merge_history(canonical_entity_id)` — list all merge decisions
-- `services/backend/services/identity/graph_versioner.py` — new service
+- `services/api/identity/identity/graph_versioner.py` — new service
   - `create_graph_version(input)` — increment graph version
   - `get_current_version(canonical_entity_id)` — current graph version
   - `get_version_history(canonical_entity_id)` — version chain
-- Extend `services/backend/services/identity/models.py`:
+- Extend `services/api/identity/identity/models.py`:
   - Add `IdentityDecision` model (decision_type, candidate arrays, selected_entity, confidence, confidence_band, positive_evidence, negative_evidence, vetoes, policy_version, graph_version_before/after, explanation, decided_by, decided_at)
   - Add `IdentityGraphVersion` model (previous_version_id, version_number, reason, decision_ids, created_at)
-- Extend `services/backend/services/identity/graph_writer.py`:
+- Extend `services/api/identity/identity/graph_writer.py`:
   - Every merge creates identity_decision
   - Every merge increments graph version
   - Every merge queues projection restatement (via event)
@@ -203,20 +203,20 @@ status: beta
 **Goal:** Support bad-merge repair and conflict-based split candidates.
 
 **Files to create/modify:**
-- `services/backend/services/identity/split_service.py` — new service
+- `services/api/identity/identity/split_service.py` — new service
   - `create_split_candidate(input)` — detect conflict, create split candidate
   - `approve_split(input)` — admin/operator approval
   - `execute_split(input)` — move source identities, reverse edges, create new entities
   - `move_source_identity(input)` — move source identity from one canonical entity to another
   - `reverse_identity_edge(input)` — reverse an edge
   - `get_split_history(canonical_entity_id)` — list splits
-- Extend `services/backend/services/identity/split_policy.py`:
+- Extend `services/api/identity/identity/split_policy.py`:
   - Add auto-detect conflict → create split candidate flow
   - Add approval token validation
-- Extend `services/backend/services/identity/graph_writer.py`:
+- Extend `services/api/identity/identity/graph_writer.py`:
   - Edge reversal on split
   - Source identity reassignment
-- Extend `services/backend/services/identity/resolver.py`:
+- Extend `services/api/identity/identity/resolver.py`:
   - Wire split candidate creation on conflict detection
 
 **Acceptance:**
@@ -231,7 +231,7 @@ status: beta
 **Goal:** Restate downstream views after identity changes.
 
 **Files to create/modify:**
-- `services/backend/services/projections/projection_restatement_orchestrator.py` — new service (create `services/backend/services/projections/` if not exists)
+- `services/api/replay/projections/projection_restatement_orchestrator.py` — new service (create `services/api/replay/projections/` if not exists)
   - `queue_restatement(decision)` — create restatement job
   - `run_restatement(job)` — execute restatement
   - `restate_profile_360(entity_ids)` — recompute Profile 360
@@ -241,11 +241,11 @@ status: beta
   - `restate_value(entity_ids)` — reassign revenue (no duplicate)
   - `restate_signals(entity_ids)` — recompute profile signals
   - `restate_syndicates(entity_ids)` — recompute membership
-- `services/backend/services/projections/restatement_job_repository.py` — new repository
+- `services/api/replay/projections/restatement_job_repository.py` — new repository
   - ProjectionRestatementJob CRUD
 - Wire into merge_ledger: after merge, queue_restatement
 - Wire into split_service: after split, queue_restatement
-- Extend `services/backend/services/profile/composer.py`:
+- Extend `services/api/identity/profile/composer.py`:
   - Accept graph_version parameter for restatement
 - Add event topics: `TOPIC_IDENTITY_MERGED` (already exists), `TOPIC_IDENTITY_SPLIT` (new), `TOPIC_PROJECTION_RESTATEMENT_QUEUED` (new)
 
@@ -261,13 +261,13 @@ status: beta
 **Goal:** Ensure all SDKs emit enough identity evidence for late binding.
 
 **Files to create/modify:**
-- `services/backend/services/sdk/routes.py` — extend:
+- `services/api/ingestion/sdk/routes.py` — extend:
   - Anonymous-to-known binding flow
   - Heartbeat → source identity creation
   - Identify → source identity creation + resolution
   - Alias → anonymous-to-known binding
   - Reset → clear local anonymous context
-- `services/backend/services/ingestion/adapters/sdk.py` — extend:
+- `services/api/ingestion/ingestion/adapters/sdk.py` — extend:
   - Extract anonymous_id, user_id, session_id, device_id, installation_id, traits, consent state
   - Map to source_identity + identity_claim
 - `packages/shared/contracts/identity/sdk-contract.json` — new contract
@@ -278,7 +278,7 @@ status: beta
   - `tests/e2e/proof/apps/ios/src/identity-test/` — iOS SDK test app (stub)
   - `tests/e2e/proof/apps/android/src/identity-test/` — Android SDK test app (stub)
   - `tests/e2e/proof/apps/react-native/src/identity-test/` — React Native test app (stub)
-- `services/backend/tests/identity/test_sdk_late_binding.py` — new test
+- `services/api/tests/identity/test_sdk_late_binding.py` — new test
   - Import-first SDK-later scenario
   - Anonymous-to-known scenario
 
@@ -293,10 +293,10 @@ status: beta
 **Goal:** Expose identity continuity in product surfaces.
 
 **Files to create/modify:**
-- `services/backend/services/identity/explainability.py` — new service
+- `services/api/identity/identity/explainability.py` — new service
   - `get_profile_identity_explanation(profile_id)` — return explanation object
   - `get_decision_details(decision_id)` — return decision with evidence
-- `services/backend/services/identity/routes.py` — extend:
+- `services/api/identity/identity/routes.py` — extend:
   - `GET /v1/profiles/{profile_id}/identity/explanation` — explainability endpoint
   - `POST /v1/admin/identity/merge` — manual merge with confirmation token
   - `POST /v1/admin/identity/split` — manual split with confirmation token
@@ -321,7 +321,7 @@ status: beta
 **Goal:** Prove the feature end-to-end. Add metrics/traces/logs. Wire feature flags. Add CI gates.
 
 **Files to create/modify:**
-- `services/backend/tests/identity/` — new fixtures:
+- `services/api/tests/identity/` — new fixtures:
   - `test_import_first_sdk_later.py` — Scenario A
   - `test_anonymous_to_known.py` — anonymous→known binding
   - `test_multi_sdk_same_user.py` — multi-SDK stitching
@@ -333,7 +333,7 @@ status: beta
   - `test_deleted_identity_suppression.py` — suppressed identity block
   - `test_projection_restatement.py` — restatement after merge/split
   - `test_connector_reimport_idempotency.py` — duplicate import dedup
-- `services/backend/services/identity/observability.py` — new service
+- `services/api/identity/identity/observability.py` — new service
   - Metrics: identity.source_identity.created.count, identity.resolve.*, identity.merge.*, identity.split.*, identity.veto.*, identity.cross_tenant_block.*, identity.projection_restatement.*
   - Traces: ingestion.receive → source_identity.register → claims.normalize → identity.resolve → policy.score → veto.evaluate → decision.write → graph_version.create → projection_restatement.queue → profile_360.update
   - Logs: every identity decision log with tenant_id, source_system_id, source_identity_id, candidate_entity_ids, decision_type, confidence, vetoes, policy_version, graph_version_before/after, projection_jobs_created
@@ -402,8 +402,8 @@ Phase 3 (final): Iota
 **CI run:** After all agents complete, run:
 ```
 cd /Users/osazehunt/AETHER
-pytest services/backend/tests/identity/ -v
-pytest services/backend/tests/computation/test_identity_restatement.py -v
+pytest services/api/tests/identity/ -v
+pytest services/api/tests/computation/test_identity_restatement.py -v
 # + any frontend tests for identity features
 ```
 

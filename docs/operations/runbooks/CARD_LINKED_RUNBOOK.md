@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/card_linked_payments/ingestion.py
-  - services/backend/services/card_linked_payments/gold.py
+  - services/api/value/card_linked_payments/ingestion.py
+  - services/api/value/card_linked_payments/gold.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/card_linked_payments/gold.py": "sha256:1f3ef6a6ee5e6366171318590bd0ee7fac6d286266725bca971fedd99197ea31"
-  "services/backend/services/card_linked_payments/ingestion.py": "sha256:edb3e70792a4aaf27abb91df95943abfb87b65b91dba08b8b6a233252cbbb8f1"
+  "services/api/value/card_linked_payments/gold.py": "sha256:8c30681483d7ed364ceb4f511ecb12768e6708917dc1e54140d18c94dd7d9844"
+  "services/api/value/card_linked_payments/ingestion.py": "sha256:cb284620cb11585999d2e9ead8f4348f2cd9ab153fc1c9845584b709db331e7d"
 ---
 
 # Card-Linked Payment Rails Runbook

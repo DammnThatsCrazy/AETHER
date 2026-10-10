@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -55,8 +55,8 @@ def feeder(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     with backend_module_path():
-        svc_mod = importlib.import_module("services.dune_feeder.service")
-        models_mod = importlib.import_module("services.dune_feeder.models")
+        svc_mod = importlib.import_module("connectors.dune_feeder.service")
+        models_mod = importlib.import_module("connectors.dune_feeder.models")
         # Fresh singleton per test
         svc = svc_mod.DuneFeederService()
         yield svc, models_mod
@@ -242,7 +242,7 @@ class TestGraphIsolation:
 
     def test_service_does_not_import_graph_module(self):
         """Verify no graph/neptune imports exist in the service module."""
-        service_path = BACKEND_ROOT / "services" / "dune_feeder" / "service.py"
+        service_path = BACKEND_ROOT / "connectors" / "dune_feeder" / "service.py"
         source = service_path.read_text()
         assert "from shared.graph" not in source
         assert "import neptune" not in source.lower()

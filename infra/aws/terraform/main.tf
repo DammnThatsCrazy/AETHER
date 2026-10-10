@@ -510,7 +510,7 @@ module "ecs" {
   # Operators can override the derived list for a non-canonical staging host.
   api_cors_origins = join(",", local.api_cors_origins)
   # Per-PR frontend previews: the backend allows exactly
-  # https://pr-<N>.<this suffix> (services/backend/shared/security/cors.py).
+  # https://pr-<N>.<this suffix> (services/api/shared/security/cors.py).
   cors_preview_origin_suffix = join("", local.frontend_preview_domains)
 
   # Resource gating, so IAM policies and alarms only cover what exists.

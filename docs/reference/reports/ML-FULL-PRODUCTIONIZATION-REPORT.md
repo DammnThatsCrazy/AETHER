@@ -11,14 +11,14 @@ source_files: [services/ml/common/model_registry.py, services/ml/common/artifact
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:4447a2146cb718267a99291fa0b4d7630bba9ddadd28960429da9633aae1af93"
+  ".github/workflows/repo-health.yml": "sha256:5ee5ceb622f995d8e3797226ab7b185a1f2bed6b7e49a22b18ec88a8a3ea9ad3"
   "infra/aws/terraform/modules/s3/main.tf": "sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4"
-  "infra/local/docker-compose.yml": "sha256:b36215d164f301b1f5792a2e9d8f05dbbd567c8ae9bef95ce34ee6d8ae6c2d67"
+  "infra/local/docker-compose.yml": "sha256:71bfda6ac3eb75b3f568828ab1246405f239e94f5b6d5481880dc2c6084a52b0"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
   "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"
   "services/ml/docker/Dockerfile": "sha256:dd379b3e4129fbe375350003b2061ce0db3f96c50b7c4cea8b9b1714d3923355"
-  "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"
+  "services/ml/serving/src/api.py": "sha256:6f4245be3d28dd75a1ba1495252ec6418cd66e28b13d7f2de9c1e26fe6443147"
 ---
 
 # Aether ML Full Productionization Report

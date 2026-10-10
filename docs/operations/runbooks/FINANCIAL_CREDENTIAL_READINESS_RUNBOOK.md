@@ -8,11 +8,11 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - scripts/financial_credential_readiness.py
-  - services/backend/shared/certification/registry.py
+  - services/api/shared/certification/registry.py
 canonical_owner: platform@aether
 source_hashes:
-  "scripts/financial_credential_readiness.py": "sha256:8c19e0e1a0442bdcaf16e3f60a8325f860f472b55e8a89cbe40324ac66ab6620"
-  "services/backend/shared/certification/registry.py": "sha256:5c2e75d47d24e1dc2429c6ea6a2476cab2b0dcc71be4899ad77bac802ee12624"
+  "scripts/financial_credential_readiness.py": "sha256:c808670fc96db51e2da716797ce096042e209bbbdf7eaa5a79e3202d3d68c027"
+  "services/api/shared/certification/registry.py": "sha256:f0d9c01a6f3b2341afca6901db34c4361a444742eb9e403593f669a493a67abc"
 ---
 
 # Financial Credential-Readiness Runbook

@@ -1,7 +1,7 @@
 """TS <-> Python parity for the delivery receipt/attempt contract (C2).
 
 `packages/shared/delivery-receipt.ts` is a hand-authored twin of the
-Python-authoritative delivery models (`services/delivery/models.py`). The enum
+Python-authoritative delivery models (`services/api/actions/delivery/models.py`). The enum
 vocabularies are `str, Enum` classes, so the parity compares against
 `{e.value for e in Enum}` (the template variant for enum-backed vocab). Field sets
 are compared against `model_fields`. Wire fields are snake_case.
@@ -13,11 +13,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.delivery.models import (  # noqa: E402
+from actions.delivery.models import (  # noqa: E402
     DeliveryAttempt,
     DeliveryAttemptOutcome,
     DeliveryChannel,

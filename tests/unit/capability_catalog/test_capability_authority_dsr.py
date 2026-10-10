@@ -18,8 +18,8 @@ from repositories.repos import DelegationRepository, reset_in_memory_stores
 from shared.common.common import NotFoundError
 from shared.privacy.retention import DeletionPlan, DSARRequest
 
-from services.agent_access_intelligence.authority import CapabilityAuthorityService
-from services.agent_access_intelligence.catalog_service import CapabilityCatalogService
+from actions.agent_access_intelligence.authority import CapabilityAuthorityService
+from actions.agent_access_intelligence.catalog_service import CapabilityCatalogService
 
 
 @pytest.fixture(autouse=True)

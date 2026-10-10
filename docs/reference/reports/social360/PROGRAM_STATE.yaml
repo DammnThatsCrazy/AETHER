@@ -216,7 +216,7 @@ milestones:
   - id: M13
     title: "A&B read surface + spine activation seams (Address A & B)"
     status: implemented                # A&B slice 2026-09-04: D-04 seam FILLED (Wave 1 resolver +
-                                       # services.relationship_intelligence.coordinator as first
+                                       # identity.relationship_intelligence.coordinator as first
                                        # runtime caller); relationship read APIs G046 + consent
                                        # enforcement surface (D-05) + spine-run meters G059;
                                        # Noesis relationship-spine intents G048; influence-as-
@@ -263,7 +263,7 @@ key_decisions:
       authoritative; bucketing M7 observations into coarse family/source groups would fabricate an
       independence answer at lower resolution than M6's authoritative grouping -- an honesty
       violation. M7's loader keeps degrading independence-gated dims to UNKNOWN until the reserved
-      seam (services.relationship_promotion.evidence_independence::resolve_independent_groups,
+      seam (identity.relationship_promotion.evidence_independence::resolve_independent_groups,
       named in M7's M6_EVIDENCE_INDEPENDENCE_MODULE) is filled by the promotion->fidelity runtime
       call chain (post-program / M11-M12 hardening). Fidelity is flag-gated OFF today; no caller
       invokes it.
@@ -307,12 +307,12 @@ key_decisions:
     date: 2026-09-04
     decision: "Address A & B slice (M13) builds the relationship read surface + spine activation seams."
     reason: >-
-      Resolves D-04: the reserved seam (services.relationship_promotion.evidence_independence,
+      Resolves D-04: the reserved seam (identity.relationship_promotion.evidence_independence,
       the M6 module M7 names) is FILLED by Wave 1's resolver, and
-      services.relationship_intelligence.coordinator is its first runtime caller — proven end to
+      identity.relationship_intelligence.coordinator is its first runtime caller — proven end to
       end by the hermetic full-plane integration test (tests/relationship_intelligence/
       test_full_plane.py). D-05's consent model now has an enforcement surface
-      (services.relationship_intelligence.consent gates the new /v1/relationships read routes
+      (identity.relationship_intelligence.consent gates the new /v1/relationships read routes
       when AETHER_SOCIAL360_ENABLED is on); the legacy social aggregator is unchanged until
       social360-surface activation. Also lands the relationship read APIs (G046), Noesis
       read-only relationship-spine intents (G048), influence-as-propagation decomposition

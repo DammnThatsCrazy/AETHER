@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 for _mod in ("jwt", "cryptography", "cryptography.hazmat"):
     if _mod not in sys.modules:
@@ -26,9 +26,9 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.model_governance import consent_purposes  # noqa: E402
-from services.model_governance.inference_gate import InferencePolicyGate  # noqa: E402
-from services.model_governance.training_gate import TrainingDataGate  # noqa: E402
+from intelligence.model_governance import consent_purposes  # noqa: E402
+from intelligence.model_governance.inference_gate import InferencePolicyGate  # noqa: E402
+from intelligence.model_governance.training_gate import TrainingDataGate  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

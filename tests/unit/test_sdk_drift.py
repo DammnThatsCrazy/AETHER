@@ -36,7 +36,7 @@ def service_module_context(monkeypatch):
 def drift_detector(monkeypatch):
     with service_module_context(monkeypatch):
         import importlib
-        import services.sdk_drift.service as svc_mod
+        import ingestion.sdk_drift.service as svc_mod
         importlib.reload(svc_mod)
         svc_mod._sdk_drift_detector = None
         detector = svc_mod.get_sdk_drift_detector()

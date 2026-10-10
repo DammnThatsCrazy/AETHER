@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:d817c3c651468f7d2cf3a92e0867218504c6890501214941fd7e40f321c8bd9a"
+  "scripts/production_status.py": "sha256:5a5218a6e5176e10a5881978bb096fa65f8da25a50587aed32ffd2da2d679c3c"
 ---
 
 # AETHER Productization Audit
@@ -141,7 +141,7 @@ What the 2026-07-23 semantic operational-hardening pass changed (PR8):
   `docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md` runbook as
   `rb_semantic_classification_degraded`, and 3 SLOs (abstention rate ≤0.25,
   classify latency p95 ≤1s, review-queue depth ≤50) keyed to the Prometheus
-  series emitted by `services/backend/services/semantic_intelligence`
+  series emitted by `services/api/intelligence/semantic_intelligence`
   (`aether_semantic_observations_{classified,abstained,quarantined}_total`,
   `aether_semantic_classify_latency_ms`, `aether_semantic_review_queue_open`,
   `aether_semantic_replay_jobs_active`).

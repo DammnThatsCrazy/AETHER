@@ -33,7 +33,7 @@ async def _seed_activity(tenant, ingestion):
 # ── Cluster360 cohort generation ─────────────────────────────────────────────
 
 async def test_cluster_cohorts_generated(tenant, ingestion):
-    from services.card_linked_payments.clusters import build_card_linked_clusters
+    from value.card_linked_payments.clusters import build_card_linked_clusters
 
     await _seed_activity(tenant, ingestion)
     clusters = await build_card_linked_clusters(tenant)
@@ -50,7 +50,7 @@ async def test_cluster_cohorts_generated(tenant, ingestion):
 
 
 async def test_clusters_are_review_only_never_enforcement(tenant, ingestion):
-    from services.card_linked_payments.clusters import build_card_linked_clusters
+    from value.card_linked_payments.clusters import build_card_linked_clusters
 
     await _seed_activity(tenant, ingestion)
     # add a refund loop so the suspicious cohort materializes
@@ -69,8 +69,8 @@ async def test_clusters_are_review_only_never_enforcement(tenant, ingestion):
 
 
 async def test_benchmark_rows_never_enter_clusters(tenant):
-    from services.card_linked_payments.clusters import build_card_linked_clusters
-    from services.card_linked_payments.paymentscan import ingest_benchmark
+    from value.card_linked_payments.clusters import build_card_linked_clusters
+    from value.card_linked_payments.paymentscan import ingest_benchmark
 
     await ingest_benchmark(tenant, entity_type="card_program", entity_ref="RedotPay",
                            metric_name="monthly_volume", metric_window="2026-06",
@@ -81,7 +81,7 @@ async def test_benchmark_rows_never_enter_clusters(tenant):
 # ── Kyber diagnostics ────────────────────────────────────────────────────────
 
 async def test_diagnostics_response_shape(tenant, ingestion):
-    from services.card_linked_payments.diagnostics import card_linked_diagnostics
+    from value.card_linked_payments.diagnostics import card_linked_diagnostics
 
     await _seed_activity(tenant, ingestion)
     d = await card_linked_diagnostics(tenant)
@@ -99,8 +99,8 @@ async def test_diagnostics_response_shape(tenant, ingestion):
 
 
 async def test_diagnostics_paymentscan_stale_warning(tenant):
-    from services.card_linked_payments.diagnostics import card_linked_diagnostics
-    from services.card_linked_payments.paymentscan import sync_catalog
+    from value.card_linked_payments.diagnostics import card_linked_diagnostics
+    from value.card_linked_payments.paymentscan import sync_catalog
 
     d = await card_linked_diagnostics(tenant)
     assert d["paymentscan"]["stale"] is True    # never synced
@@ -115,7 +115,7 @@ async def test_diagnostics_paymentscan_stale_warning(tenant):
 async def test_diagnostics_basis_support_shows_source_coverage(tenant, ingestion):
     """The coverage map must show which basis each source can prove —
     provider webhooks prove spend, on-chain proves topup, never vice versa."""
-    from services.card_linked_payments.diagnostics import card_linked_diagnostics
+    from value.card_linked_payments.diagnostics import card_linked_diagnostics
 
     await _seed_activity(tenant, ingestion)
     d = await card_linked_diagnostics(tenant)
@@ -126,7 +126,7 @@ async def test_diagnostics_basis_support_shows_source_coverage(tenant, ingestion
 
 async def test_diagnostics_topup_spend_conflation_warning(tenant, ingestion):
     """An SDK spend claim is downgraded AND surfaces as a mislabeling warning."""
-    from services.card_linked_payments.diagnostics import card_linked_diagnostics
+    from value.card_linked_payments.diagnostics import card_linked_diagnostics
 
     await ingestion.ingest_sdk_event(tenant, {
         "type": "payment_completed", "event_id": "sdk_conf_1", "user_id": "u1",
@@ -138,7 +138,7 @@ async def test_diagnostics_topup_spend_conflation_warning(tenant, ingestion):
 
 
 async def test_diagnostics_surfaces_region_and_consent_suppressions(tenant, ingestion):
-    from services.card_linked_payments.diagnostics import card_linked_diagnostics
+    from value.card_linked_payments.diagnostics import card_linked_diagnostics
 
     await ingestion.ingest_sdk_event(tenant, {
         "type": "payment_completed", "event_id": "sdk_eu_d", "user_id": "u-eu",
@@ -162,7 +162,7 @@ async def test_diagnostics_surfaces_region_and_consent_suppressions(tenant, inge
 
 
 async def test_diagnostics_unmatched_evidence_counted(tenant, ingestion):
-    from services.card_linked_payments.diagnostics import card_linked_diagnostics
+    from value.card_linked_payments.diagnostics import card_linked_diagnostics
 
     await ingestion.ingest_onchain_observation(tenant, {
         "id": "oc_um1", "chain": "base", "tx_hash": "0xum1", "asset": "USDC",
@@ -175,7 +175,7 @@ async def test_diagnostics_unmatched_evidence_counted(tenant, ingestion):
 # ── Release gate (fail-closed governance checks) ─────────────────────────────
 
 def test_release_gate_all_checks_pass():
-    from services.card_linked_payments.governance import release_gate_passed, run_release_gate
+    from value.card_linked_payments.governance import release_gate_passed, run_release_gate
 
     results = run_release_gate()
     failing = [r.name for r in results if not r.passed]
@@ -190,9 +190,9 @@ def test_release_gate_all_checks_pass():
 def test_release_gate_fails_on_invalid_basis(monkeypatch):
     """An unsupported basis must be rejected everywhere — and the gate
     itself fails closed if basis validation is ever weakened."""
-    import services.card_linked_payments.models as models
-    from services.card_linked_payments.governance import _check_basis_validation
-    from services.card_linked_payments.normalizer import normalize_provider_webhook
+    import value.card_linked_payments.models as models
+    from value.card_linked_payments.governance import _check_basis_validation
+    from value.card_linked_payments.normalizer import normalize_provider_webhook
 
     assert _check_basis_validation().passed
     with pytest.raises(ValueError):
@@ -206,8 +206,8 @@ def test_release_gate_fails_on_invalid_basis(monkeypatch):
 
 def test_release_gate_fails_on_blocked_pii_acceptance(monkeypatch):
     """If PII rejection is ever weakened, the gate must fail."""
-    import services.card_linked_payments.models as models
-    from services.card_linked_payments.governance import _check_blocked_pii_rejection
+    import value.card_linked_payments.models as models
+    from value.card_linked_payments.governance import _check_blocked_pii_rejection
 
     assert _check_blocked_pii_rejection().passed
     monkeypatch.setattr(models, "reject_blocked_fields", lambda payload: dict(payload))
@@ -217,7 +217,7 @@ def test_release_gate_fails_on_blocked_pii_acceptance(monkeypatch):
 
 
 def test_release_gate_fails_if_flags_default_on(monkeypatch):
-    import services.card_linked_payments.governance as governance
+    import value.card_linked_payments.governance as governance
 
     def _tampered():
         from config import settings as settings_module
@@ -267,7 +267,7 @@ class _PlainTenant:
 
 def _build_kyber_app(actor) -> TestClient:
     from shared.common.common import AetherError
-    from services.card_linked_payments.kyber_routes import card_linked_kyber_router
+    from value.card_linked_payments.kyber_routes import card_linked_kyber_router
 
     app = FastAPI()
 

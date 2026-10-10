@@ -42,37 +42,37 @@ Source: `implementation-plan.md` §0 plus on-disk verification on 2026-09-16.
 
 | Area | Location | Verified |
 |---|---|---|
-| Identity resolution engine | `services/backend/services/identity/resolver.py` (1,760 LOC) | Core 15-step flow, idempotent, retryable |
-| Identity models | `services/backend/services/identity/models.py` | EntityType, ConfidenceTier/Band, MergeDecision, EdgeType, DecisionType, ProjectionType, etc. |
-| Merge policy | `services/backend/services/identity/merge_policy.py` | cross-tenant, consent, fingerprint, deterministic/strong/probable/weak |
-| Split policy | `services/backend/services/identity/split_policy.py` | operator/admin validation, approval tokens |
-| Confidence scoring | `services/backend/services/identity/confidence.py` | 5-tier + confidence_band (very_high/high/medium/low/blocked) |
-| Veto engine | `services/backend/services/identity/veto_engine.py` | 10 hard vetoes (cross-tenant, suppressed, entity-type mismatch, verified-email conflict, etc.) |
-| Graph writer | `services/backend/services/identity/graph_writer.py` | GraphMutationGateway-backed, idempotent edge writes |
-| Conflict manager | `services/backend/services/identity/conflicts.py` | open/conflict/resolve, review queue |
-| Identity repository | `services/backend/services/identity/repository.py` + `repository_tail.py` | Subject/alias/conflict/decision/version persistence |
-| Audit writer | `services/backend/services/identity/audit.py` | decision audit records |
-| Decision evidence | `services/backend/services/identity/decision_evidence.py` + `evidence.py` | DecisionType vocab, evidence service |
-| Resolution replay | `services/backend/services/identity/resolution_replay.py` | idempotent replay wrapper |
-| Verification | `services/backend/services/identity/verification.py` + `verification_repository.py` | email/wallet ownership |
-| Hashing / normalization | `services/backend/services/identity/hashing.py`, `normalization.py`, `claim_normalizer.py` | email/phone/wallet/external_id, E.164, lowercase/domain |
-| Source precedence | `services/backend/services/identity/source_precedence.py` | source priority ordering |
-| Source identity registry | `services/backend/services/identity/source_identity_registry.py` | register/upsert/find/suppress + idempotency_key dedup |
-| Metrics (thin) | `services/backend/services/identity/metrics.py` | Prometheus counters |
-| Observability | `services/backend/services/identity/observability.py` | full metric/trace/log payload (see §19) |
-| Explainability | `services/backend/services/identity/explainability.py` | profile explanation + decision details (§13.2) |
-| Graph versioner | `services/backend/services/identity/graph_versioner.py` | create/get/history |
-| Merge ledger | `services/backend/services/identity/merge_ledger.py` | auto_merge/manual_merge/block_merge + history |
-| Split service | `services/backend/services/identity/split_service.py` | candidate/approve/execute/move/reverse + history |
-| Identity routes | `services/backend/services/identity/routes.py` | resolve, entity, graph, conflicts, merge, split, health, explainability, admin |
-| Identity schemas | `services/backend/services/identity/schemas.py` | Pydantic request/response |
-| Projection orchestrator | `services/backend/services/projections/projection_restatement_orchestrator.py` | durable tenant-scoped jobs; implemented executors report outcomes, unsupported surfaces retain explicit reasons |
-| Profile 360 composer | `services/backend/services/profile/composer.py` | aggregation, graph_version-aware |
-| SDK routes | `services/backend/services/sdk/routes.py` | heartbeat/identify/alias/reset + source identity creation |
-| Ingestion envelope | `services/backend/services/ingestion/observation_envelope.py` + adapters | CanonicalObservationEnvelope + SDK/replay adapters |
+| Identity resolution engine | `services/api/identity/identity/resolver.py` (1,760 LOC) | Core 15-step flow, idempotent, retryable |
+| Identity models | `services/api/identity/identity/models.py` | EntityType, ConfidenceTier/Band, MergeDecision, EdgeType, DecisionType, ProjectionType, etc. |
+| Merge policy | `services/api/identity/identity/merge_policy.py` | cross-tenant, consent, fingerprint, deterministic/strong/probable/weak |
+| Split policy | `services/api/identity/identity/split_policy.py` | operator/admin validation, approval tokens |
+| Confidence scoring | `services/api/identity/identity/confidence.py` | 5-tier + confidence_band (very_high/high/medium/low/blocked) |
+| Veto engine | `services/api/identity/identity/veto_engine.py` | 10 hard vetoes (cross-tenant, suppressed, entity-type mismatch, verified-email conflict, etc.) |
+| Graph writer | `services/api/identity/identity/graph_writer.py` | GraphMutationGateway-backed, idempotent edge writes |
+| Conflict manager | `services/api/identity/identity/conflicts.py` | open/conflict/resolve, review queue |
+| Identity repository | `services/api/identity/identity/repository.py` + `repository_tail.py` | Subject/alias/conflict/decision/version persistence |
+| Audit writer | `services/api/identity/identity/audit.py` | decision audit records |
+| Decision evidence | `services/api/identity/identity/decision_evidence.py` + `evidence.py` | DecisionType vocab, evidence service |
+| Resolution replay | `services/api/identity/identity/resolution_replay.py` | idempotent replay wrapper |
+| Verification | `services/api/identity/identity/verification.py` + `verification_repository.py` | email/wallet ownership |
+| Hashing / normalization | `services/api/identity/identity/hashing.py`, `normalization.py`, `claim_normalizer.py` | email/phone/wallet/external_id, E.164, lowercase/domain |
+| Source precedence | `services/api/identity/identity/source_precedence.py` | source priority ordering |
+| Source identity registry | `services/api/identity/identity/source_identity_registry.py` | register/upsert/find/suppress + idempotency_key dedup |
+| Metrics (thin) | `services/api/identity/identity/metrics.py` | Prometheus counters |
+| Observability | `services/api/identity/identity/observability.py` | full metric/trace/log payload (see §19) |
+| Explainability | `services/api/identity/identity/explainability.py` | profile explanation + decision details (§13.2) |
+| Graph versioner | `services/api/identity/identity/graph_versioner.py` | create/get/history |
+| Merge ledger | `services/api/identity/identity/merge_ledger.py` | auto_merge/manual_merge/block_merge + history |
+| Split service | `services/api/identity/identity/split_service.py` | candidate/approve/execute/move/reverse + history |
+| Identity routes | `services/api/identity/identity/routes.py` | resolve, entity, graph, conflicts, merge, split, health, explainability, admin |
+| Identity schemas | `services/api/identity/identity/schemas.py` | Pydantic request/response |
+| Projection orchestrator | `services/api/replay/projections/projection_restatement_orchestrator.py` | durable tenant-scoped jobs; implemented executors report outcomes, unsupported surfaces retain explicit reasons |
+| Profile 360 composer | `services/api/identity/profile/composer.py` | aggregation, graph_version-aware |
+| SDK routes | `services/api/ingestion/sdk/routes.py` | heartbeat/identify/alias/reset + source identity creation |
+| Ingestion envelope | `services/api/ingestion/ingestion/observation_envelope.py` + adapters | CanonicalObservationEnvelope + SDK/replay adapters |
 | Graph/interaction contracts | `packages/shared/graph-contract.ts`, `interaction-contract.ts` | H2H/H2A/A2H/A2A, interaction vocab |
 | Observation envelope registry | `packages/shared/contracts/observation-envelope-registry.json` | field registry (Envelope B) |
-| Provider adapters | `services/backend/services/providers/` | Shopify, WooCommerce, eBay, Etsy, TikTok, Walmart |
+| Provider adapters | `services/api/connectors/providers/` | Shopify, WooCommerce, eBay, Etsy, TikTok, Walmart |
 | Proof harness | `tests/e2e/proof/packages/runner/`, `tests/e2e/proof/packages/fixtures/`, `tests/e2e/proof/packages/reporting/` | existing harness |
 | Feature flag framework | `config/release/feature_flags/` | alpha/staging/production-lean profiles |
 | Frontend identity | `apps/aether-web/src/features/identity/` | TenantActivationDashboard, Profile360IdentityPanel, IdentityReviewQueue, ConflictDetail, MergeSplitAudit, SdkHealth |
@@ -90,8 +90,8 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 | **Gamma** | Resolution Engine & Policy Hardening (PR 3) | `veto_engine.py`, confidence_band, merge_policy extensions, resolver wiring | `veto_engine.py` (244 LOC), `confidence.py` (band mapping), `merge_policy.py` (entity-type + verified-email + shared-device vetoes), `resolver.py` veto invocation | **Done** | Every observation → resolved/provisional/review_required/conflicted/suppressed/rejected. High score cannot override hard veto. |
 | **Delta** | Merge Ledger & Graph Versioning (PR 4) | `merge_ledger.py`, `graph_versioner.py`, model extensions, graph_writer hooks | `merge_ledger.py` (293 LOC), `graph_versioner.py` (98 LOC), `models.py` IdentityDecision/IdentityGraphVersion, `graph_writer.py` decision+version+restatement queue | **Done** | Every merge creates decision + edge + version increment + restatement job. |
 | **Epsilon** | Split/Unmerge Engine (PR 5) | `split_service.py`, split_policy, graph_writer reversal | `split_service.py` (295 LOC), `split_policy.py`, `graph_writer.py` edge reversal + reassignment | **Done** | Split preserves raw records, moves source identities, reverses edges, increments version, queues restatement, audit preserved. |
-| **Zeta** | Projection Restatement Orchestrator (PR 6) | `projection_restatement_orchestrator.py`, durable jobs-platform queue, worker registration, merge/split/resolver wiring | `services/backend/services/projections/projection_restatement_orchestrator.py`, `services/backend/services/projections/syndicates_restatement.py`, `main.py`, `merge_ledger.py`, `split_service.py`, `resolver.py` | **Partial; staging proof pending** | Merge/split decisions and resolver decisions enqueue idempotent tenant-scoped jobs. Syndicates merge restatement uses explicitly tagged Population 360 groups; split moves only memberships whose full alias/observation evidence resolves to one fragment. Unattributed memberships remain unchanged with structured per-membership reasons. |
-| **Eta** | SDK Late Binding & Contract Parity (PR 7) | SDK routes, ingestion adapter, `sdk-contract.json`, fixture apps, `test_sdk_late_binding.py` | `sdk/routes.py` (heartbeat/identify/alias/reset/consent), `ingestion/adapters/sdk.py` (anon/user/session/device/installation/traits/consent → claims), `packages/shared/contracts/identity/sdk-contract.json`, `services/backend/tests/identity/test_sdk_late_binding.py` (11 tests) | **Done** | Import-first SDK-later + anonymous-to-known tests pass; web SDK exercised; iOS/Android/React-Native stubs scaffolded. |
+| **Zeta** | Projection Restatement Orchestrator (PR 6) | `projection_restatement_orchestrator.py`, durable jobs-platform queue, worker registration, merge/split/resolver wiring | `services/api/replay/projections/projection_restatement_orchestrator.py`, `services/api/replay/projections/syndicates_restatement.py`, `main.py`, `merge_ledger.py`, `split_service.py`, `resolver.py` | **Partial; staging proof pending** | Merge/split decisions and resolver decisions enqueue idempotent tenant-scoped jobs. Syndicates merge restatement uses explicitly tagged Population 360 groups; split moves only memberships whose full alias/observation evidence resolves to one fragment. Unattributed memberships remain unchanged with structured per-membership reasons. |
+| **Eta** | SDK Late Binding & Contract Parity (PR 7) | SDK routes, ingestion adapter, `sdk-contract.json`, fixture apps, `test_sdk_late_binding.py` | `sdk/routes.py` (heartbeat/identify/alias/reset/consent), `ingestion/adapters/sdk.py` (anon/user/session/device/installation/traits/consent → claims), `packages/shared/contracts/identity/sdk-contract.json`, `services/api/tests/identity/test_sdk_late_binding.py` (11 tests) | **Done** | Import-first SDK-later + anonymous-to-known tests pass; web SDK exercised; iOS/Android/React-Native stubs scaffolded. |
 | **Theta** | Tenant UX & Explainability (PR 8) | `explainability.py`, route extensions, tenant activation and review surfaces | `explainability.py`, `routes.py`, `apps/aether-web/src/features/identity/` | **Implemented; local proof present** | Gated activation and review routes are wired to tenant-scoped capability and identity APIs. Fixture-backed UI tests are separate from authenticated staging UI evidence. |
 | **Iota** | Proof Harness, Observability & Release Gates (PR 9) | Fixtures, observability, flags, CI gates (§17–§22), docs (§21) | `tests/e2e/proof/packages/reporting/`, `scripts/identity_staging_capture.py`, `.github/workflows/identity-continuity-gates.yml`, staging lifecycle workflow | **Implemented; staging proof pending** | Capture, validation, redaction, and pack generation fail closed and are wired into staging. Real connector sync and authenticated live UI evidence have not been captured because required provider secrets are not configured. |
 
@@ -102,8 +102,8 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 | Item | Location | Status |
 |---|---|---|
 | Identity fixtures | `tests/e2e/proof/packages/fixtures/fixtures/identity/` | **Expanded** — includes import-first/SDK-later, shared-device no-merge, bad-merge/split, reimport idempotency, cross-tenant, deletion suppression, and multi-SDK cases |
-| Backend identity tests | `services/backend/tests/identity/` | **Expanded** — focused modules cover resolver policy, tenant/consent boundaries, recovery, provider candidate evidence, SDK lifecycle, projections, staging capture, and calibration evaluation |
-| Observability service | `services/backend/services/identity/observability.py` + `metrics.py` | **Done** — metrics `identity.source_identity.created`, `identity.resolve.*`, `identity.merge.*`, `identity.split.*`, `identity.veto.*`, `identity.cross_tenant_block.*`, `identity.projection_restatement.*`; traces ingestion→…→profile_360.update; logs per §19.1 |
+| Backend identity tests | `services/api/tests/identity/` | **Expanded** — focused modules cover resolver policy, tenant/consent boundaries, recovery, provider candidate evidence, SDK lifecycle, projections, staging capture, and calibration evaluation |
+| Observability service | `services/api/identity/identity/observability.py` + `metrics.py` | **Done** — metrics `identity.source_identity.created`, `identity.resolve.*`, `identity.merge.*`, `identity.split.*`, `identity.veto.*`, `identity.cross_tenant_block.*`, `identity.projection_restatement.*`; traces ingestion→…→profile_360.update; logs per §19.1 |
 | Feature-flag wiring | `config/release/feature_flags/` + backend settings and routes | **Wired and locally exercised** — retain runtime confidence as uncalibrated |
 | CI gates 1–7 | `.github/workflows/identity-continuity-gates.yml` plus staging lifecycle capture | **Wired as supplementary finalization evidence** — the canonical repository disposition remains the normal-PR readiness authority |
 | Docs (§21) | `docs/blueprints/identity-continuity/` | **This set** — `implementation-plan.md` (existing), `current-state-inventory.md` (this file), `proof-plan.md`, `fixtures.md`, `rollout-plan.md` |
@@ -127,12 +127,12 @@ Implements `implementation-plan.md` §1 (Agents Alpha–Iota) + §2 execution se
 ## 6. Verification performed
 
 ```bash
-ls services/backend/services/identity/*.py | wc -l   # 27 files, ~12k LOC
+ls services/api/identity/identity/*.py | wc -l   # 27 files, ~12k LOC
 ls packages/shared/contracts/identity/*.json          # 9 contracts + index.json
 ls apps/aether-web/src/features/identity/*.tsx        # 6 components
-ls services/backend/tests/identity/*.py               # 9 test modules
+ls services/api/tests/identity/*.py               # 9 test modules
 cat tests/e2e/proof/packages/fixtures/fixtures/identity/raw_input.json
-pytest services/backend/tests/identity/ -v            # run on finalization
+pytest services/api/tests/identity/ -v            # run on finalization
 ```
 
 ---

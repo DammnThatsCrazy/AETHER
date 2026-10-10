@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/derivatives/state_machines.py, services/backend/services/derivatives/streams.py, services/backend/services/derivatives/runtime_reconciliation.py, services/backend/services/derivatives/pnl.py, services/backend/services/derivatives/materializer.py, services/backend/services/derivatives/adapters/base.py, services/backend/services/derivatives/adapters/simulator.py, services/backend/services/derivatives/adapters/conformance.py]
+source_files: [services/api/value/derivatives/state_machines.py, services/api/value/derivatives/streams.py, services/api/value/derivatives/runtime_reconciliation.py, services/api/value/derivatives/pnl.py, services/api/value/derivatives/materializer.py, services/api/value/derivatives/adapters/base.py, services/api/value/derivatives/adapters/simulator.py, services/api/value/derivatives/adapters/conformance.py]
 canonical_owner: platform@aether
 last_synced_commit: 03ab3a6
 ---

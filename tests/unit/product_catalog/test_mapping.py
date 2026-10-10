@@ -1,13 +1,13 @@
 """Mapping precedence resolver — precedence order, tie-breaks, determinism."""
 from __future__ import annotations
 
-from services.product_catalog.mapping import (
+from billing.product_catalog.mapping import (
     PRECEDENCE_ORDER,
     UNMAPPED,
     resolve_for_match,
     resolve_mapping,
 )
-from services.product_catalog.models import MappingRule
+from billing.product_catalog.models import MappingRule
 
 
 def _rule(rule_id: str, precedence: str, confidence: float = 1.0, **kwargs) -> MappingRule:

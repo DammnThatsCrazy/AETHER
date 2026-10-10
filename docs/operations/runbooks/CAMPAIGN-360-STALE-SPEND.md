@@ -9,10 +9,10 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
-source_files: [services/backend/services/campaign/exploration.py, services/backend/services/campaign/routes.py]
+source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/campaign/routes.py]
 source_hashes:
-  services/backend/services/campaign/exploration.py: sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13
-  services/backend/services/campaign/routes.py: sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e
+  "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
+  "services/api/journeys/campaign/routes.py": "sha256:872f533120f44707b938829206f76d24497d34c17d5ae945da3b16de0ef19186"
 ---
 
 # Runbook — Stale Spend Warning (Campaign 360)

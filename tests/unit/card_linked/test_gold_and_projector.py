@@ -20,14 +20,14 @@ async def _seed(tenant, ingestion):
             "payment_network": "visa", "amount_usd": "25.00",
             "wallet_address_hash": "wh_g", "campaign_id": "camp_base_usdc",
         })
-    from services.card_linked_payments.paymentscan import ingest_benchmark
+    from value.card_linked_payments.paymentscan import ingest_benchmark
     await ingest_benchmark(tenant, entity_type="card_program", entity_ref="RedotPay",
                            metric_name="monthly_volume", metric_window="2026-06",
                            value="9999999")
 
 
 async def test_entity_rollup_separates_topup_from_spend(tenant, ingestion):
-    from services.card_linked_payments.gold import entity_economic_activity
+    from value.card_linked_payments.gold import entity_economic_activity
 
     await _seed(tenant, ingestion)
     rollup = await entity_economic_activity(tenant, "wh_g")
@@ -41,7 +41,7 @@ async def test_entity_rollup_separates_topup_from_spend(tenant, ingestion):
 
 
 async def test_campaign_outcomes_never_conflate_and_label_attribution(tenant, ingestion):
-    from services.card_linked_payments.gold import campaign_card_linked_outcomes
+    from value.card_linked_payments.gold import campaign_card_linked_outcomes
 
     await _seed(tenant, ingestion)
     outcomes = await campaign_card_linked_outcomes(tenant, "camp_base_usdc")
@@ -55,7 +55,7 @@ async def test_campaign_outcomes_never_conflate_and_label_attribution(tenant, in
 
 
 async def test_benchmark_only_rows_excluded_from_user_level_rollups(tenant, ingestion):
-    from services.card_linked_payments.gold import entity_economic_activity, program_issuer_benchmarks
+    from value.card_linked_payments.gold import entity_economic_activity, program_issuer_benchmarks
 
     await _seed(tenant, ingestion)
     rollup = await entity_economic_activity(tenant, "wh_g")
@@ -65,7 +65,7 @@ async def test_benchmark_only_rows_excluded_from_user_level_rollups(tenant, inge
 
 
 async def test_cluster_features_and_gold_materialization(tenant, ingestion):
-    from services.card_linked_payments.gold import cluster_features, materialize_gold
+    from value.card_linked_payments.gold import cluster_features, materialize_gold
 
     await _seed(tenant, ingestion)
     features = await cluster_features(tenant)
@@ -80,7 +80,7 @@ async def test_cluster_features_and_gold_materialization(tenant, ingestion):
 
 
 def test_projector_projects_only_card_linked_events():
-    from services.silver.projectors.card_linked_projector import CardLinkedProjector
+    from ingestion.silver.projectors.card_linked_projector import CardLinkedProjector
 
     projector = CardLinkedProjector()
     plain = projector.project({
@@ -102,7 +102,7 @@ def test_projector_projects_only_card_linked_events():
 
 
 def test_projector_downgrades_sdk_spend_claims():
-    from services.silver.projectors.card_linked_projector import CardLinkedProjector
+    from ingestion.silver.projectors.card_linked_projector import CardLinkedProjector
 
     result = CardLinkedProjector().project({
         "type": "transaction", "id": "e3",
@@ -114,7 +114,7 @@ def test_projector_downgrades_sdk_spend_claims():
 
 
 def test_projector_idempotency_key_stable():
-    from services.silver.projectors.card_linked_projector import CardLinkedProjector
+    from ingestion.silver.projectors.card_linked_projector import CardLinkedProjector
 
     event = {
         "type": "conversion", "id": "e4", "context": {"tenantId": "t1"},

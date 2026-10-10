@@ -33,7 +33,7 @@ Usage:
   python scripts/validate_rights_vocabulary.py [--check]
   python scripts/validate_rights_vocabulary.py \
       [--vocab packages/shared/contracts/rights-vocabulary.json] \
-      [--models services/backend/services/integrations/data_rights/models.py] \
+      [--models services/api/connectors/integrations/data_rights/models.py] \
       [--ts packages/shared/data-rights.ts]
 """
 
@@ -52,9 +52,8 @@ ROOT = Path(__file__).resolve().parent.parent
 VOCAB_PATH = ROOT / "packages" / "shared" / "contracts" / "rights-vocabulary.json"
 PY_MODELS_PATH = (
     ROOT
-    / "services" / "backend"
-    / "services"
-    / "integrations"
+    / "services" / "api"
+    / "connectors" / "integrations"
     / "data_rights"
     / "models.py"
 )

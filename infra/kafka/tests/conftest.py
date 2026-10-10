@@ -14,7 +14,7 @@ from pathlib import Path
 
 _KAFKA_DIR = Path(__file__).resolve().parent.parent  # infra/kafka
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent  # repo root
-_BACKEND_DIR = _REPO_ROOT / "services" / "backend"
+_BACKEND_DIR = _REPO_ROOT / "services" / "api"
 
 for _path in (_KAFKA_DIR, _BACKEND_DIR):
     if str(_path) not in sys.path:

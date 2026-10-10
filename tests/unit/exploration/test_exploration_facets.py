@@ -1,7 +1,7 @@
 """Conditioned facets — cohort-minimum suppression is mandatory."""
 from __future__ import annotations
 
-from services.exploration.facets import compute_facets, minimum_cohort_size
+from journeys.exploration.facets import compute_facets, minimum_cohort_size
 
 
 def test_registry_declares_city_minimum():

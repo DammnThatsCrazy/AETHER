@@ -2,7 +2,7 @@
 // Aether SDK — DataRightsGrant structured authorities (rights_irrl) — canonical TS twin
 // HAND-MAINTAINED contract — NOT generated (do not run generate_platform_contracts.py
 // against this file). Python twin:
-//   services/backend/services/integrations/data_rights/models.py
+//   services/api/connectors/integrations/data_rights/models.py
 // Parity is enforced by tests/unit/test_data_rights_contract_parity.py.
 //
 // This module is the TypeScript twin of the Python DataRightsGrant structured
@@ -517,7 +517,7 @@ export const collaborativeRightsProfileDefaults: RightsProfileDefaults = {
  * The upgraded DataRightsGrant (blueprint §3): the legacy grant shape (scalar
  * identity / fail-closed write-permission booleans / policy metadata, matching
  * the Python `DataRightsGrant` in
- * `services/integrations/data_rights/models.py`) PLUS the optional nested
+ * `services/api/connectors/integrations/data_rights/models.py`) PLUS the optional nested
  * structured authorities. Legacy booleans remain authoritative during the
  * blueprint §16 M0–M3 migration (structured authorities are shadow-derived and
  * optional); when a nested authority is absent its legacy boolean field(s)

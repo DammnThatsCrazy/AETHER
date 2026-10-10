@@ -7,28 +7,28 @@ audience: [architect, security, compliance, dev-senior]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [services/backend/services/consent/erasure_jobs.py, services/backend/services/consent/erasure_planes.py, services/backend/services/dsr_propagation/models.py, services/backend/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
+source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "scripts/release/check_dsr_coverage.py": "sha256:3e7278d5281df87983b69075aa0f701b476c4ec3ab7dca534e31011577b663a0"
-  "services/backend/services/consent/erasure_jobs.py": "sha256:1d98e9e3121ab00f7f62b4ab2a21f5b317a6182d757cc0ba630268a90081cdd0"
-  "services/backend/services/consent/erasure_planes.py": "sha256:424385259e27197846e54ec53ab90a820e820954a502a500e51edef432ac6ec7"
-  "services/backend/services/dsr_propagation/models.py": "sha256:a55bd9d415527b8770bc6eb9be2bcc347de3e462036c69bd7d490f5c40737dec"
-  "services/backend/shared/storage/lifecycle.py": "sha256:363902505a04df7228b46faad627ebe0cfc42bbbe8940122cf8ac42b6c93ac40"
+  "scripts/release/check_dsr_coverage.py": "sha256:2cca7e381e2c76b5e47e178828a8522cbc0794ffb45cdaad304d01e20f9ae1b4"
+  "services/api/governance/consent/erasure_jobs.py": "sha256:f2e3e36da76ad506b9b7599829162fcc45617870d6636ea99e8486fe460ec7bf"
+  "services/api/governance/consent/erasure_planes.py": "sha256:b3cd0f2d1208d382634d7092140ea3f4c3bec05f8b19c67c7f586091a98292d3"
+  "services/api/governance/dsr_propagation/models.py": "sha256:8c3c0477ca9434df84b48121679fa11fdf4980b489b0e2ba68bb3451c12b7f3b"
+  "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store
 
 A `POST /v1/consent/dsr` erasure opens a DSR propagation record that seeds one
 `pending` step per entry of `DSR_COMPONENTS`
-(`services/backend/services/dsr_propagation/models.py`) and durably enqueues the
-`consent.erasure` job (`services/backend/services/consent/erasure_jobs.py`).
+(`services/api/governance/dsr_propagation/models.py`) and durably enqueues the
+`consent.erasure` job (`services/api/governance/consent/erasure_jobs.py`).
 The record only rolls up to `completed` when **every** step is `completed` or
 `skipped_legal_hold` — so a component that nothing executes keeps the whole
 request `pending` forever, and its store's subject data silently survives.
 
 Fifteen components were in exactly that state; Silver facts and the
 hash-chained Bronze tier had no component at all. The completeness planes
-(`services/backend/services/consent/erasure_planes.py`) now execute every
+(`services/api/governance/consent/erasure_planes.py`) now execute every
 component, and `scripts/release/check_dsr_coverage.py` fails CI when a
 `DSR_COMPONENTS` entry is not referenced by the job.
 

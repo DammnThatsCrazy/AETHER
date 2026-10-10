@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, docs/reference/source-of-truth/GRAPH_CONTRACT.md]
+source_files: [services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, docs/reference/source-of-truth/GRAPH_CONTRACT.md]
 canonical_owner: graph@aether
 last_synced_commit: fd2288c
 ---
@@ -97,7 +97,7 @@ The following checks must pass before merge:
 
 1. `python tests/contracts/test_graph_contract_parity.py` — TypeScript/Python contract parity
 2. `python tests/docs/test_graph_layer_docs_parity.py` — no docs omit A2H
-3. `python services/backend/tests/graph/test_relationship_layer_parity.py` — every edge mapped
+3. `python services/api/tests/graph/test_relationship_layer_parity.py` — every edge mapped
 4. `make docs-check` — no stale source-linked docs
 5. `grep -R "H2H, H2A, and A2A" .` must return zero results
 

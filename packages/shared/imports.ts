@@ -15,7 +15,7 @@
  * replay retains its replacement commit ID and resumes under that ID; its
  * claims stay unavailable to candidate lookup until the replay completes.
  *
- * The Python mirror lives at `services/imports/contracts.py`; the two const
+ * The Python mirror lives at `services/api/ingestion/imports/contracts.py`; the two const
  * arrays (`importStatuses`, `importPrimitives`, `importTransforms`,
  * `importColumnTypes`) are parity-tested against it.
  */

@@ -31,21 +31,21 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
 
-from services.kyber.ops.contracts import IncidentSignal, OperationalException  # noqa: E402
-from services.kyber.ops.correlation import (  # noqa: E402
+from governance.kyber.ops.contracts import IncidentSignal, OperationalException  # noqa: E402
+from governance.kyber.ops.correlation import (  # noqa: E402
     ATTACHING_BASES,
     BASIS_ERROR_SIGNATURE,
     BASIS_RELEASE,
     IncidentCorrelator,
 )
-from services.kyber.ops.exceptions import ExceptionService  # noqa: E402
-from services.kyber.ops.severity import VOLUME_WEIGHT  # noqa: E402
+from governance.kyber.ops.exceptions import ExceptionService  # noqa: E402
+from governance.kyber.ops.severity import VOLUME_WEIGHT  # noqa: E402
 
 #: Big enough that a linear volume term would drown the leak, and cheap enough
 #: to run in-process.

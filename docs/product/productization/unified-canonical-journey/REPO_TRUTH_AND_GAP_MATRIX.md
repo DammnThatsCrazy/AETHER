@@ -42,10 +42,10 @@ since_version: 0.1.0
 
 ### New Files
 - `alembic/versions/20260627_canonical_activity.py`
-- `services/backend/services/measurement/repositories/activity_repo.py`
-- `services/backend/services/measurement/repositories/journey_step_repo.py`
-- `services/backend/services/measurement/silver_adapters.py`
-- `services/backend/services/measurement/metrics.py`
+- `services/api/journeys/measurement/repositories/activity_repo.py`
+- `services/api/journeys/measurement/repositories/journey_step_repo.py`
+- `services/api/journeys/measurement/silver_adapters.py`
+- `services/api/journeys/measurement/metrics.py`
 - `apps/aether-web/src/features/journey/use-unified-journey.ts`
 - `apps/aether-web/src/features/journey/journey-step-card.tsx`
 - `apps/aether-web/src/features/journey/journey-timeline.tsx`
@@ -62,12 +62,12 @@ since_version: 0.1.0
 - `docs/productization/unified-canonical-journey/` (this directory)
 
 ### Modified Files
-- `services/backend/services/measurement/contracts.py` — added ActivityFamily, ActivityStatus, TransitionType, CanonicalActivity, JourneyStep
-- `services/backend/services/measurement/engine/journey_compiler.py` — extended to v2.0
-- `services/backend/services/measurement/routes/journeys.py` — added steps, transitions, explain, rebuild endpoints
-- `services/backend/services/profile/aggregator.py` — added unified_journey() method
-- `services/backend/services/profile/routes.py` — added unified-journey endpoint
-- `services/backend/services/silver/projectors/base.py` — added project_and_emit, _emit_to_canonical_activity
+- `services/api/journeys/measurement/contracts.py` — added ActivityFamily, ActivityStatus, TransitionType, CanonicalActivity, JourneyStep
+- `services/api/journeys/measurement/engine/journey_compiler.py` — extended to v2.0
+- `services/api/journeys/measurement/routes/journeys.py` — added steps, transitions, explain, rebuild endpoints
+- `services/api/identity/profile/aggregator.py` — added unified_journey() method
+- `services/api/identity/profile/routes.py` — added unified-journey endpoint
+- `services/api/ingestion/silver/projectors/base.py` — added project_and_emit, _emit_to_canonical_activity
 - `apps/aether-web/src/features/journey/index.ts` — extended exports
 - `apps/kyber-web/src/features/measurement/use-journey-explorer.ts` — extended with new hooks
 - `apps/kyber-web/src/features/measurement/index.ts` — extended exports

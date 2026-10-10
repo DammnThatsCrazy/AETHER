@@ -7,16 +7,16 @@ from decimal import Decimal
 
 import pytest
 
-from services.stablecoin.finality import FinalityEngine
-from services.stablecoin.flows import FlowService
-from services.stablecoin.models import (
+from value.stablecoin.finality import FinalityEngine
+from value.stablecoin.flows import FlowService
+from value.stablecoin.models import (
     StablecoinFlowComputeRequest,
     StablecoinObservationIngest,
     StablecoinValuationRequest,
 )
-from services.stablecoin.reconciliation import ReconciliationService
-from services.stablecoin.service import StablecoinObservationService
-from services.stablecoin.valuation import ValuationService, classify_peg
+from value.stablecoin.reconciliation import ReconciliationService
+from value.stablecoin.service import StablecoinObservationService
+from value.stablecoin.valuation import ValuationService, classify_peg
 
 TENANT = "t-stable"
 USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"

@@ -18,7 +18,7 @@ with the hosting/config contract.
 
 ## Build artifacts
 
-- Backend: `services/backend/Dockerfile`
+- Backend: `services/api/Dockerfile`
 - Aether tenant frontend: `apps/aether-web/Dockerfile`
 - Kyber operator frontend: `apps/kyber-web/Dockerfile` (private artifact path)
 - Olympus Labs marketing: `apps/marketing-olympus`

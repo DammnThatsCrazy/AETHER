@@ -9,11 +9,11 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 7
 toc_depth: 2
-source_files: [services/backend/services/kyber/access/scopes.py, services/backend/services/kyber/access/dependencies.py, services/backend/services/security/policy_engine.py]
+source_files: [services/api/governance/kyber/access/scopes.py, services/api/governance/kyber/access/dependencies.py, services/api/governance/security/policy_engine.py]
 source_hashes:
-  services/backend/services/kyber/access/dependencies.py: sha256:c7ea789d50648a18192156fd238bc0bdd32d63748949522a2642489a2866412e
-  services/backend/services/kyber/access/scopes.py: sha256:e3726ddcb97772cf40d59fa3433a8fa04a5b09bf38f92411b1b34c16a7de4b34
-  services/backend/services/security/policy_engine.py: sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713
+  "services/api/governance/kyber/access/dependencies.py": "sha256:f986bb81414a354fa8d53b033fd4cb133fc1866c61a0665cfbf5790a08bbda9a"
+  "services/api/governance/kyber/access/scopes.py": "sha256:851875a8d4e61cc8fb770ce57edcad14df39f74dbf985f8bb31bb96de313c9f5"
+  "services/api/governance/security/policy_engine.py": "sha256:1546d352a7562f0e7c4c595e397eb3dab6f2ad94e039b2765a47373d98cec375"
 ---
 
 # Runbook — Kyber Tenant Scope Leak

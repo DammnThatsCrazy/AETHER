@@ -6,12 +6,12 @@ visibility: P
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/x402/commerce_routes.py]
+source_files: [services/api/value/x402/commerce_routes.py]
 canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "services/backend/services/x402/commerce_routes.py": "sha256:c6090fda076b98e183e90eb250150010b23832dc66a341d1d8f480063166be8a"
+  "services/api/value/x402/commerce_routes.py": "sha256:73a9f03a50f3a43b6d17cc2f9e118aec853f6a5d6d2a3c29c1348f66d94d00c4"
 ---
 # Agentic Commerce — Approval Model
 
@@ -84,7 +84,7 @@ don't see requests they couldn't ever approve.
 
 Mandatory approval is not configurable by a setting or a route. `PolicyEngine`
 enforces it for every spend class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in
-`services/x402/policies.py`). The one way to turn it off is the engine's
+`services/api/value/x402/policies.py`). The one way to turn it off is the engine's
 `set_mandatory_approval(False)`, which no production code calls (only tests do);
 whether to remove that setter is a decision for the commerce owner. A
 `commerce_approval_required_all` setting used to be documented here; no code read it,

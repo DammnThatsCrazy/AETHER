@@ -687,7 +687,7 @@ locals {
   # own, or the seven it cannot address consume nothing at all while the
   # deployment looks entirely healthy.
   #
-  # services/runtime/consumer_runner.py::role_queue_urls therefore reads
+  # services/api/workers/runtime/consumer_runner.py::role_queue_urls therefore reads
   # SQS_ROLE_QUEUE_URLS, a JSON object of role -> queue URL, and
   # ::resolve_queue_url falls back to SQS_QUEUE_URL for any role the object
   # omits. This map is that object, built from each service's OWN roles so a
@@ -798,7 +798,7 @@ resource "aws_ecs_task_definition" "runtime_service" {
     name      = each.key
     image     = "${var.ecr_backend_url}@${var.backend_image_digest}"
     essential = true
-    command   = ["python", "-m", "services.runtime.run_role", each.key]
+    command   = ["python", "-m", "workers.runtime.run_role", each.key]
     environment = concat(
       [
         { name = "APP_ENV", value = var.environment },

@@ -1,0 +1,286 @@
+"""Comms ingest bridge — routes normalized provider events into the standard
+Bronze → bus → Silver pipeline (Phase 12).
+
+Connectors and the generic signed webhook normalize provider payloads into
+canonical communication events; this module gives them one durable entry
+point that matches the /v1/batch contract:
+
+    durable Bronze write → SDK_EVENTS_VALIDATED publish → worker fan-out
+
+Campaign/flow catalog records (klaviyo.campaign, klaviyo.flow, …) register
+in the canonical campaign registry instead — no second registry (ADR-C9).
+Nothing here calls a model; the critical path is
+authenticate → verify → validate → dedupe → durable write → acknowledge.
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Any, Optional
+
+from shared.logger.logger import get_logger, metrics
+from journeys.comms.contracts import COMMUNICATION_EVENT_TYPES
+
+logger = get_logger("aether.comms.ingest")
+
+# Connector catalog record types → campaign registry sync.
+_CATALOG_EVENT_SUFFIXES = (".campaign", ".flow")
+# Provider profile records → provider identity bridge (identity evidence only;
+# these are not communication facts and never become touchpoints).
+_PROFILE_EVENT_SUFFIXES = (".profile",)
+
+
+async def ingest_normalized_events(
+    tenant_id: str,
+    events: list[Any],
+    *,
+    source_connector_id: Optional[str] = None,
+) -> dict[str, int]:
+    """Persist and publish a batch of connector-normalized events.
+
+    ``events`` are NormalizedEvent instances or dicts with
+    event_type/external_id/occurred_at/properties. Returns counters:
+    ``{"communications": n, "catalog": n, "skipped": n}``.
+    """
+    counts = {"communications": 0, "catalog": 0, "identities": 0, "skipped": 0}
+    for event in events:
+        data = event.model_dump() if hasattr(event, "model_dump") else dict(event)
+        event_type = data.get("event_type", "")
+        if event_type in COMMUNICATION_EVENT_TYPES:
+            # WS-B3 (C class): a consent-denied communication event is dropped
+            # entirely — nothing about it is written, published, identity-bridged,
+            # suppression-recorded, or metered (fail-closed, never partial).
+            ingested = await _ingest_communication(tenant_id, data, source_connector_id)
+            if not ingested:
+                counts["skipped"] += 1
+                continue
+            # Provider identity evidence carried on the event (best-effort;
+            # the communication fact is preserved regardless of resolution).
+            await _record_identity(tenant_id, data)
+            # Suppression signals (unsubscribe/complaint/hard-bounce/suppressed)
+            # update the canonical suppression authority (best-effort).
+            await _record_suppression(tenant_id, data)
+            # Billable usage metering (dedupe-safe; §20).
+            await _meter_event(tenant_id, data)
+            counts["communications"] += 1
+        elif any(event_type.endswith(s) for s in _CATALOG_EVENT_SUFFIXES):
+            await _register_catalog_record(tenant_id, data, source_connector_id)
+            counts["catalog"] += 1
+        elif any(event_type.endswith(s) for s in _PROFILE_EVENT_SUFFIXES):
+            # Provider profile records are identity evidence only.
+            if await _record_identity(tenant_id, data):
+                counts["identities"] += 1
+            else:
+                counts["skipped"] += 1
+        else:
+            counts["skipped"] += 1
+    if counts["communications"]:
+        metrics.increment(
+            "comms_events_ingested_total", counts["communications"],
+            labels={"tenant_id": tenant_id, "source": data.get("source", "unknown")},
+        )
+    return counts
+
+
+async def _ingest_communication(
+    tenant_id: str, data: dict[str, Any], source_connector_id: Optional[str],
+) -> bool:
+    """Durable Bronze write, then bus publish (mirrors /v1/batch ordering).
+
+    Returns True when the event was persisted + published, False when the
+    WS-B3 ingress consent gate dropped it (never a partial write).
+    """
+    properties = dict(data.get("properties") or {})
+    if source_connector_id:
+        properties.setdefault("source_connector_id", source_connector_id)
+
+    # WS-B3 connector/comm consent (C class). scrubbing sensitive values from
+    # properties is the MANDATORY minimization layer and runs UNCONDITIONALLY —
+    # it is never gated by the per-path flag (redaction never rejects). The
+    # shared ingress decision then runs for EVERY communication event: tenant
+    # data-policy removal of fingerprinting always, and the per-subject (S)
+    # server-receipt rejection only when the connector S-gate is enabled AND the
+    # event resolves a purpose + a subject under the authoritative flag. A
+    # denial drops the event — no Bronze, no publish.
+    from config.settings import settings
+    from ingestion.ingestion.generated_registry import EVENT_CONSENT_PURPOSE
+    from ingestion.ingestion.validation import (
+        evaluate_ingress_decision,
+        scrub_sensitive_fields,
+    )
+
+    properties, _ = scrub_sensitive_fields(properties)
+    event_type = str(data.get("event_type") or "")
+    # subject resolvable = the canonical recipient/profile id on the event.
+    recipient = (
+        properties.get("recipient_entity_id")
+        or properties.get("profile_id")
+        or ""
+    )
+    recipient = str(recipient).strip() or None
+    anon = str(properties.get("anonymous_id") or "").strip() or None
+    purpose = EVENT_CONSENT_PURPOSE.get(event_type)
+    if not settings.ingress_consent.connector_comms_consent_enforcement_enabled:
+        # S-class server-receipt escalation disabled for this connector path:
+        # fall back to the unconditional scrub + data-policy decision (no
+        # per-subject lookup or purpose gate; the event is processed under C/T
+        # minimization).
+        recipient = anon = purpose = None
+    allowed, reason_code, _decisions = await evaluate_ingress_decision(
+        tenant_id=tenant_id,
+        subject_id=recipient,
+        anonymous_id=anon,
+        purpose=purpose,
+        fingerprint_obj=properties,
+    )
+    if not allowed:
+        logger.warning(
+            "comms_ingest_consent_denied event=%s tenant=%s type=%s reason=%s",
+            data.get("external_id") or data.get("id"), tenant_id, event_type,
+            reason_code,
+        )
+        return False
+
+    event_id = str(data.get("external_id") or uuid.uuid4())
+    provider = properties.get("provider") or data.get("source") or "webhook"
+    # Deterministic event id namespaced by provider so replays dedupe.
+    normalized = {
+        "event_id": f"{provider}:{event_id}",
+        "tenant_id": tenant_id,
+        "event_type": data.get("event_type"),
+        "event_family": "comms",
+        "session_id": properties.get("session_id"),
+        "anonymous_id": properties.get("anonymous_id"),
+        "user_id": properties.get("recipient_entity_id") or properties.get("profile_id"),
+        "properties": properties,
+        "context": {"tenantId": tenant_id, "sourceConnectorId": source_connector_id},
+        # Provider-reported occurrence time; providers that send no timestamp
+        # (Mailchimp) emit the empty "unknown" sentinel — fall back to received
+        # time so Bronze never stores an empty occurrence.
+        "timestamp": data.get("occurred_at") or _now(),
+        "received_at": _now(),
+        "ingested_at": _now(),
+        "batch_id": f"connector:{provider}",
+        "schema_version": "1.0.0",
+        "source": "connector",
+    }
+
+    from repositories.lake import BronzeRepository
+    bronze = BronzeRepository("sdk_events")
+    await bronze.ingest(
+        source="connector",
+        source_tag=f"connector:{provider}:{tenant_id}",
+        provider_record_id=normalized["event_id"],
+        payload=normalized,
+        schema_version="1.0.0",
+        entity_id=normalized.get("user_id") or "",
+        entity_type="user",
+        tenant_id=tenant_id,
+    )
+
+    try:
+        from dependencies.providers import get_registry
+        from shared.events.events import Event, Topic
+        registry = get_registry()
+        await registry.producer.publish(Event(
+            topic=Topic.SDK_EVENTS_VALIDATED,
+            tenant_id=tenant_id,
+            source_service="comms.ingest",
+            payload=normalized,
+        ))
+    except Exception as exc:
+        # Bronze is durable; a replay of the Bronze range recovers the publish.
+        logger.warning("comms_ingest_publish_failed event=%s: %s", normalized["event_id"], exc)
+        metrics.increment("comms_ingest_publish_failures_total", labels={"tenant_id": tenant_id})
+    return True
+
+
+async def _record_identity(tenant_id: str, data: dict[str, Any]) -> bool:
+    """Record provider identity evidence into the bridge (§13). Best-effort."""
+    try:
+        from journeys.comms.identity_bridge import record_identity_from_event
+        result = await record_identity_from_event(tenant_id, data)
+        return result is not None
+    except Exception as exc:  # pragma: no cover - never break ingest
+        logger.warning("comms_identity_bridge_failed: %s", exc)
+        return False
+
+
+async def _record_suppression(tenant_id: str, data: dict[str, Any]) -> None:
+    """Record a canonical suppression when the event carries one. Best-effort."""
+    try:
+        from journeys.comms.suppression_authority import SuppressionAuthorityService
+        await SuppressionAuthorityService().record_from_event(tenant_id, data)
+    except Exception as exc:  # pragma: no cover - never break ingest
+        logger.warning("comms_suppression_authority_failed: %s", exc)
+
+
+async def _meter_event(tenant_id: str, data: dict[str, Any]) -> None:
+    """Emit billable usage metering for one canonical event. Best-effort."""
+    try:
+        from journeys.comms.metering import record_event_usage
+        props = data.get("properties") or {}
+        provider = props.get("provider") or data.get("source") or "webhook"
+        event_id = str(data.get("external_id") or "")
+        if event_id:
+            await record_event_usage(
+                tenant_id, event_type=data.get("event_type", ""),
+                event_id=f"{provider}:{event_id}", provider=provider,
+            )
+    except Exception as exc:  # pragma: no cover - metering never breaks ingest
+        logger.warning("comms_event_metering_failed: %s", exc)
+
+
+async def _register_catalog_record(
+    tenant_id: str, data: dict[str, Any], source_connector_id: Optional[str],
+) -> None:
+    """Campaign/flow catalog record → canonical campaign registry + message dims."""
+    properties = data.get("properties") or {}
+    provider = data.get("source", "unknown")
+    external_id = (
+        properties.get("external_campaign_id")
+        or properties.get("external_flow_id")
+        or data.get("external_id")
+    )
+    if not external_id:
+        return
+    try:
+        from journeys.campaign.registry import CampaignRegistryService
+        registry = CampaignRegistryService()
+        campaign = await registry.upsert_external_campaign(
+            tenant_id,
+            platform=provider,
+            external_account_id=properties.get("provider_account_id") or provider,
+            external_campaign_id=str(external_id),
+            external_campaign_name=properties.get("name"),
+            external_status=properties.get("status"),
+            source_connector_id=source_connector_id,
+            channel=properties.get("channel") or "email",
+        )
+        # Message dimension rows ride along when the provider includes them.
+        for message in properties.get("messages") or []:
+            from journeys.comms.repository import CampaignMessageRepository
+            await CampaignMessageRepository().upsert_message({
+                "tenant_id": tenant_id,
+                "campaign_id": str(campaign["campaign_id"]),
+                "provider": provider,
+                "provider_account_id": properties.get("provider_account_id"),
+                "external_message_id": str(message.get("id") or message.get("external_message_id")),
+                "external_template_id": message.get("template_id"),
+                "name": message.get("name"),
+                "sequence_step": message.get("sequence_step"),
+                "variant_id": message.get("variant_id"),
+                "channel": properties.get("channel") or "email",
+                "source_connector_id": source_connector_id,
+            })
+    except Exception as exc:
+        logger.warning(
+            "comms_catalog_register_failed provider=%s external_id=%s: %s",
+            provider, external_id, exc,
+        )
+        metrics.increment("comms_catalog_failures_total", labels={"tenant_id": tenant_id})
+
+
+def _now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()

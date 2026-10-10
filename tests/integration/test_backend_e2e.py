@@ -26,7 +26,7 @@ import threading
 import pytest
 
 # Add backend path early so service imports resolve
-sys.path.insert(0, "services/backend")
+sys.path.insert(0, "services/api")
 
 # Skip entire module if backend deps aren't installed
 pytest.importorskip("fastapi", reason="Backend deps not installed (pip install -e '.[backend]')")
@@ -106,7 +106,7 @@ class TestCampaignAttributionE2E:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Reset campaign state between tests."""
-        from services.campaign import routes
+        from journeys.campaign import routes
         # _touchpoint_store removed; touchpoints now persisted via TouchpointRepository
         routes._repo._store.clear()
         yield
@@ -114,7 +114,7 @@ class TestCampaignAttributionE2E:
     @pytest.mark.asyncio
     async def test_full_attribution_flow(self):
         """Credit weights from AttributionResolver sum to 1.0 and attribute the full revenue."""
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
 
         resolver = AttributionResolver(AttributionConfig())
         now = datetime.now(timezone.utc).isoformat()
@@ -136,7 +136,7 @@ class TestCampaignAttributionE2E:
     @pytest.mark.asyncio
     async def test_attribution_models_consistent(self):
         """All models produce credit weights summing to 1.0 for the same touchpoints."""
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
 
         resolver = AttributionResolver(AttributionConfig())
         now = datetime.now(timezone.utc).isoformat()
@@ -160,7 +160,7 @@ class TestCampaignAttributionE2E:
     @pytest.mark.asyncio
     async def test_empty_touchpoints_graceful(self):
         """Resolver with no touchpoints returns empty credits (min_touchpoints not met)."""
-        from services.attribution.resolver import AttributionConfig, AttributionResolver
+        from value.attribution.resolver import AttributionConfig, AttributionResolver
 
         resolver = AttributionResolver(AttributionConfig())
         result = await resolver.resolve(
@@ -173,7 +173,7 @@ class TestCampaignAttributionE2E:
     @pytest.mark.asyncio
     async def test_tenant_isolation_on_attribution(self):
         """Campaign belongs to tenant-A, not tenant-B."""
-        from services.campaign.routes import _repo
+        from journeys.campaign.routes import _repo
 
         campaign_id = str(uuid.uuid4())
         await _repo.insert(campaign_id, {
@@ -198,7 +198,7 @@ class TestAnalyticsExportE2E:
     @pytest.fixture(autouse=True)
     def setup(self):
         # sys.path configured at module level
-        from services.analytics import routes
+        from intelligence.analytics import routes
         if hasattr(routes._export_store, '_data'):
             routes._export_store._data.clear()
         yield
@@ -206,7 +206,7 @@ class TestAnalyticsExportE2E:
     @pytest.mark.asyncio
     async def test_export_idempotency(self):
         """Same query + format should reuse existing job."""
-        from services.analytics.routes import _export_store
+        from intelligence.analytics.routes import _export_store
 
         job_id = str(uuid.uuid4())
         job = {
@@ -229,7 +229,7 @@ class TestAnalyticsExportE2E:
 
     def test_export_job_sanitization(self):
         """Sanitized export should not contain internal fields."""
-        from services.analytics.routes import _sanitize_export_job
+        from intelligence.analytics.routes import _sanitize_export_job
 
         job = {
             "export_id": "ex-001",
@@ -246,7 +246,7 @@ class TestAnalyticsExportE2E:
     @pytest.mark.asyncio
     async def test_export_tenant_isolation(self):
         """Export job retrieval should enforce tenant matching."""
-        from services.analytics.routes import _export_store
+        from intelligence.analytics.routes import _export_store
 
         job = {"export_id": "ex-002", "tenant_id": "tenant-A", "status": "completed"}
         await _export_store.set("ex-002", job)
@@ -264,7 +264,7 @@ class TestGraphQLValidationE2E:
     """Full flow: query parsing → validation → field-level enforcement."""
 
     def test_valid_events_query(self):
-        from services.analytics.routes import _parse_and_validate_graphql
+        from intelligence.analytics.routes import _parse_and_validate_graphql
 
         result = _parse_and_validate_graphql(
             "query { events { event_id event_type timestamp } }"
@@ -274,7 +274,7 @@ class TestGraphQLValidationE2E:
         assert "event_type" in result["fields"]
 
     def test_introspection_blocked(self):
-        from services.analytics.routes import _parse_and_validate_graphql
+        from intelligence.analytics.routes import _parse_and_validate_graphql
         from shared.common.common import BadRequestError
 
         with pytest.raises(BadRequestError, match="Introspection"):
@@ -284,21 +284,21 @@ class TestGraphQLValidationE2E:
             _parse_and_validate_graphql("{ __type(name: \"Event\") { fields { name } } }")
 
     def test_unknown_root_type_rejected(self):
-        from services.analytics.routes import _parse_and_validate_graphql
+        from intelligence.analytics.routes import _parse_and_validate_graphql
         from shared.common.common import BadRequestError
 
         with pytest.raises(BadRequestError, match="Unknown root type"):
             _parse_and_validate_graphql("{ users { id name } }")
 
     def test_unknown_fields_rejected(self):
-        from services.analytics.routes import _parse_and_validate_graphql
+        from intelligence.analytics.routes import _parse_and_validate_graphql
         from shared.common.common import BadRequestError
 
         with pytest.raises(BadRequestError, match="Unknown fields"):
             _parse_and_validate_graphql("{ events { event_id secret_field } }")
 
     def test_depth_limit_enforced(self):
-        from services.analytics.routes import _parse_and_validate_graphql
+        from intelligence.analytics.routes import _parse_and_validate_graphql
         from shared.common.common import BadRequestError
 
         deep = "{ events { event_id { nested { deep { deeper { deepest } } } } } }"
@@ -306,14 +306,14 @@ class TestGraphQLValidationE2E:
             _parse_and_validate_graphql(deep)
 
     def test_empty_query_rejected(self):
-        from services.analytics.routes import _parse_and_validate_graphql
+        from intelligence.analytics.routes import _parse_and_validate_graphql
         from shared.common.common import BadRequestError
 
         with pytest.raises(BadRequestError, match="Empty"):
             _parse_and_validate_graphql("")
 
     def test_campaigns_query_valid(self):
-        from services.analytics.routes import _parse_and_validate_graphql
+        from intelligence.analytics.routes import _parse_and_validate_graphql
 
         result = _parse_and_validate_graphql(
             "{ campaigns { campaign_id name channel } }"
@@ -333,7 +333,7 @@ class TestAgentTaskBridgeE2E:
     @pytest.fixture(autouse=True)
     def setup(self):
         # sys.path configured at module level
-        from services.agent import routes
+        from actions.agent import routes
         if hasattr(routes._task_store, '_data'):
             routes._task_store._data.clear()
         if hasattr(routes._audit_store, '_data'):
@@ -344,7 +344,7 @@ class TestAgentTaskBridgeE2E:
     @pytest.mark.asyncio
     async def test_task_creation_and_lookup(self):
         """Created task should be retrievable with correct state."""
-        from services.agent.routes import _task_store
+        from actions.agent.routes import _task_store
 
         task_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -368,7 +368,7 @@ class TestAgentTaskBridgeE2E:
     @pytest.mark.asyncio
     async def test_task_tenant_isolation(self):
         """Task from wrong tenant should not be accessible."""
-        from services.agent.routes import _task_store
+        from actions.agent.routes import _task_store
 
         task_id = str(uuid.uuid4())
         await _task_store.set(task_id, {
@@ -383,7 +383,7 @@ class TestAgentTaskBridgeE2E:
     @pytest.mark.asyncio
     async def test_audit_trail_records(self):
         """Audit entries should be retrievable per tenant."""
-        from services.agent.routes import _audit_store
+        from actions.agent.routes import _audit_store
 
         await _audit_store.append_list("tenant-A", {
             "task_id": "t1", "tenant_id": "tenant-A",
@@ -402,7 +402,7 @@ class TestAgentTaskBridgeE2E:
         assert len(tenant_a) == 2
 
     def test_invalid_worker_type_validation(self):
-        from services.agent.routes import VALID_WORKER_TYPES
+        from actions.agent.routes import VALID_WORKER_TYPES
 
         assert "web_crawler" in VALID_WORKER_TYPES
         assert "invalid_type" not in VALID_WORKER_TYPES
@@ -417,7 +417,7 @@ class TestGeoEnrichmentE2E:
     """Full flow: IP extraction → enrichment → normalized output."""
 
     def test_private_ip_returns_empty_geo(self):
-        from services.ingestion.routes import _geo_lookup, _is_private_ip
+        from ingestion.ingestion.routes import _geo_lookup, _is_private_ip
 
         assert _is_private_ip("192.168.1.1")
         assert _is_private_ip("10.0.0.1")
@@ -429,20 +429,20 @@ class TestGeoEnrichmentE2E:
         assert result == {}
 
     def test_public_ip_not_private(self):
-        from services.ingestion.routes import _is_private_ip
+        from ingestion.ingestion.routes import _is_private_ip
 
         assert not _is_private_ip("8.8.8.8")
         assert not _is_private_ip("203.0.113.42")
         assert not _is_private_ip("1.1.1.1")
 
     def test_invalid_ip_returns_empty(self):
-        from services.ingestion.routes import _geo_lookup
+        from ingestion.ingestion.routes import _geo_lookup
 
         result = _geo_lookup("not-an-ip")
         assert result == {}
 
     def test_enrich_ip_always_returns_hash(self):
-        from services.ingestion.routes import _enrich_ip
+        from ingestion.ingestion.routes import _enrich_ip
 
         request = FakeRequest(ip="8.8.8.8")
         result = _enrich_ip(request)
@@ -451,7 +451,7 @@ class TestGeoEnrichmentE2E:
         assert result["ip_hash"] == hashlib.sha256(b"8.8.8.8").hexdigest()
 
     def test_enrich_ip_empty_ip_returns_empty(self):
-        from services.ingestion.routes import _enrich_ip
+        from ingestion.ingestion.routes import _enrich_ip
 
         request = FakeRequest(ip="")
         request.client.host = ""
@@ -461,7 +461,7 @@ class TestGeoEnrichmentE2E:
 
     def test_geo_fields_structure(self):
         """Even without MaxMind DB, result should have correct field structure."""
-        from services.ingestion.routes import _enrich_ip
+        from ingestion.ingestion.routes import _enrich_ip
 
         request = FakeRequest(ip="203.0.113.1")
         result = _enrich_ip(request)
@@ -671,20 +671,20 @@ class TestA2HRelationshipLayerE2E:
 
     def test_a2h_valid_interaction_types(self):
         """Agent routes should expose valid A2H interaction types."""
-        from services.agent.routes import VALID_A2H_TYPES
+        from actions.agent.routes import VALID_A2H_TYPES
 
         assert VALID_A2H_TYPES == {"notification", "recommendation", "delivery", "escalation"}
 
     def test_a2h_edge_map_complete(self):
         """Every A2H interaction type should map to an edge type."""
-        from services.agent.routes import _A2H_EDGE_MAP, VALID_A2H_TYPES
+        from actions.agent.routes import _A2H_EDGE_MAP, VALID_A2H_TYPES
 
         for interaction_type in VALID_A2H_TYPES:
             assert interaction_type in _A2H_EDGE_MAP
 
     def test_a2h_topic_map_complete(self):
         """Every A2H interaction type should map to an event topic."""
-        from services.agent.routes import _A2H_TOPIC_MAP, VALID_A2H_TYPES
+        from actions.agent.routes import _A2H_TOPIC_MAP, VALID_A2H_TYPES
 
         for interaction_type in VALID_A2H_TYPES:
             assert interaction_type in _A2H_TOPIC_MAP

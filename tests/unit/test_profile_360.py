@@ -22,8 +22,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -56,7 +56,7 @@ def agg(monkeypatch):
     with backend_module_path():
         repos_mod = importlib.import_module("repositories.repos")
         repos_mod.reset_in_memory_stores()
-        mod = importlib.import_module("services.profile.aggregator")
+        mod = importlib.import_module("identity.profile.aggregator")
         yield mod.Profile360Aggregator()
         repos_mod.reset_in_memory_stores()
 
@@ -301,9 +301,9 @@ class TestCreditConsentGate:
         monkeypatch.setenv("JWT_SECRET", "test-secret")
         with backend_module_path():
             from fastapi import HTTPException
-            from services.profile.routes import get_web2
+            from identity.profile.routes import get_web2
             from repositories.repos import ConsentRepository
-            from services.profile.intelligence import IntelligenceAggregator
+            from identity.profile.intelligence import IntelligenceAggregator
 
             # Consent repo with no records (deny-by-default)
             consent_repo = ConsentRepository()
@@ -326,9 +326,9 @@ class TestCreditConsentGate:
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret")
         with backend_module_path():
-            from services.profile.routes import get_web2
+            from identity.profile.routes import get_web2
             from repositories.repos import ConsentRepository
-            from services.profile.intelligence import IntelligenceAggregator
+            from identity.profile.intelligence import IntelligenceAggregator
 
             consent_repo = ConsentRepository()
             # Grant credit consent
@@ -358,9 +358,9 @@ class TestCreditConsentGate:
         monkeypatch.setenv("JWT_SECRET", "test-secret")
         with backend_module_path():
             from fastapi import HTTPException
-            from services.profile.routes import get_economic_web2
+            from identity.profile.routes import get_economic_web2
             from repositories.repos import ConsentRepository
-            from services.profile.intelligence import IntelligenceAggregator
+            from identity.profile.intelligence import IntelligenceAggregator
 
             consent_repo = ConsentRepository()
             intel = IntelligenceAggregator()

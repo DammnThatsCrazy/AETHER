@@ -24,7 +24,7 @@ PROFILES = ROOT / "config/deployment_profiles.yaml"
 CLASSES = {"core", "beta", "experimental", "internal"}
 # The runtime authority for flags. The registry may name it, but it cannot
 # redirect validation at a file the registry itself controls.
-FLAGS_SOURCE = "services/backend/config/settings.py"
+FLAGS_SOURCE = "services/api/config/settings.py"
 PREFIX = "enable-"
 # Environment variable names appear as quoted string literals in the settings
 # helpers (``_env_bool("AETHER_..._ENABLED", ...)``). Matching whole quoted names

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -46,25 +46,25 @@ class TestWebhookMapping:
         ("group_unsubscribe", "unsubscribe_observed"),
     ])
     def test_event_mapping(self, event, expected):
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         events = SendGridConnector().parse_webhook({"items": [_sendgrid_record(event)]})
         assert len(events) == 1
         assert events[0].event_type == expected
         assert events[0].properties["provider"] == "sendgrid"
 
     def test_unknown_event_dropped(self):
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         assert SendGridConnector().parse_webhook(
             {"items": [_sendgrid_record("group_resubscribe")]}
         ) == []
 
     def test_single_record_dict(self):
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         events = SendGridConnector().parse_webhook(_sendgrid_record("open"))
         assert events[0].event_type == "email_opened"
 
     def test_bounce_type_from_smtp_status(self):
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         hard = SendGridConnector().parse_webhook(
             {"items": [_sendgrid_record("bounce", status="5.1.1", reason="User unknown")]}
         )[0]
@@ -75,7 +75,7 @@ class TestWebhookMapping:
         assert soft.properties["bounce_type"] == "soft"
 
     def test_unsubscribe_scope(self):
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         assert SendGridConnector().parse_webhook(
             {"items": [_sendgrid_record("unsubscribe")]}
         )[0].properties["unsubscribe_scope"] == "marketing_channel"
@@ -84,7 +84,7 @@ class TestWebhookMapping:
         )[0].properties["unsubscribe_scope"] == "list"
 
     def test_click_evidence_extracted(self):
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         props = SendGridConnector().parse_webhook(
             {"items": [_sendgrid_record("click", url="https://x.example/promo",
                                         useragent="Mozilla/5.0")]}
@@ -113,7 +113,7 @@ class TestSignature:
         return base64.b64encode(sig).decode()
 
     def test_verify_dispatches_native_ecdsa(self):
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         private, public_b64 = self._ec_public_key()
         sig = self._ecdsa_sig(private, NOW, PAYLOAD)
         headers = {
@@ -131,7 +131,7 @@ class TestSignature:
 
 class TestDescriptor:
     def test_honest_declaration(self):
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         from shared.certification.readiness import to_readiness
         c = SendGridConnector()
         assert c.signature_scheme == "sendgrid_ecdsa"
@@ -142,6 +142,6 @@ class TestDescriptor:
         assert "send" not in c.ingest_event_types  # observe-only (ADR-C1)
 
     def test_registry_serves_sendgrid(self):
-        from services.integrations.connectors.registry import get_connector
-        from services.integrations.connectors.sendgrid import SendGridConnector
+        from connectors.integrations.connectors.registry import get_connector
+        from connectors.integrations.connectors.sendgrid import SendGridConnector
         assert isinstance(get_connector("sendgrid"), SendGridConnector)

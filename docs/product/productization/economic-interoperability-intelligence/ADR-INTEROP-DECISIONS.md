@@ -7,14 +7,14 @@ audience: [architect, dev-senior, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/interop/lifecycle.py
-  - services/backend/services/interop/correlation.py
-  - services/backend/services/interop/providers/layerzero_v2.py
+  - services/api/graph/interop/lifecycle.py
+  - services/api/graph/interop/correlation.py
+  - services/api/graph/interop/providers/layerzero_v2.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/interop/correlation.py": "sha256:781c5a927507f4a4f6ad6c519ef270f6605dabd45dbea135f8fd391f5a506be1"
-  "services/backend/services/interop/lifecycle.py": "sha256:336cf9da3f46ec6364bb47b23761292cf2fa52bb0cebdecb12ac20a209163090"
-  "services/backend/services/interop/providers/layerzero_v2.py": "sha256:1da5037959fb2a91ad2febd5738cc84bf1edebf56ff41ffd0cebbb47f00d8d03"
+  "services/api/graph/interop/correlation.py": "sha256:cb3c51e9093df2475a788a6fa98544b54bd8b9b6524a8980b19c2211aac1364d"
+  "services/api/graph/interop/lifecycle.py": "sha256:fe1ed1b1ac51f233cc21cad9aa9aeb3af2f1b3721bcdad1a4b2a0a0ebfc8a759"
+  "services/api/graph/interop/providers/layerzero_v2.py": "sha256:d0023a52c1d79801a9e635d224eee544f6c2cec9516b49cb6be8aa08c9d470e1"
 ---
 
 # Interoperability Intelligence — Domain Decisions

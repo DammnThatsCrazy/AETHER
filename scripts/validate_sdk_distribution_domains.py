@@ -35,7 +35,7 @@ ERRORS: list[str] = []
 
 #: The server module that renders the snippet. It owns the install URL: what it
 #: emits is what a customer pastes, so it is the authority here.
-SERVER_SNIPPET = 'services/backend/services/sdk_distribution/snippet.py'
+SERVER_SNIPPET = 'services/api/ingestion/sdk_distribution/snippet.py'
 #: The SDK's own default endpoint.
 SDK_ENTRY = 'packages/sdk/web/src/index.ts'
 #: The loader's default endpoint, resolved for the one-tag install.

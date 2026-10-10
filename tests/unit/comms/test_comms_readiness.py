@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -17,7 +17,7 @@ pytest.importorskip("fastapi", reason="Backend deps not installed")
 
 @pytest.mark.asyncio
 async def test_local_is_ready():
-    from services.comms.readiness import comms_subsystem_readiness
+    from journeys.comms.readiness import comms_subsystem_readiness
     out = await comms_subsystem_readiness(
         pool=None, worker_capabilities={}, is_local=True,
     )
@@ -26,7 +26,7 @@ async def test_local_is_ready():
 
 @pytest.mark.asyncio
 async def test_comms_required_worker_failure_fails_readiness():
-    from services.comms.readiness import comms_subsystem_readiness
+    from journeys.comms.readiness import comms_subsystem_readiness
     # stream-ingestion (comms projector) down and release-critical → comms fails.
     caps = {
         "stream-ingestion": {"available": False, "release_critical": True},
@@ -41,7 +41,7 @@ async def test_comms_required_worker_failure_fails_readiness():
 
 @pytest.mark.asyncio
 async def test_non_comms_or_non_critical_worker_does_not_fail_comms():
-    from services.comms.readiness import comms_subsystem_readiness
+    from journeys.comms.readiness import comms_subsystem_readiness
     # A non-release-critical comms-adjacent capability being down must not fail.
     caps = {
         "stream-ingestion": {"available": False, "release_critical": False},
@@ -55,7 +55,7 @@ async def test_non_comms_or_non_critical_worker_does_not_fail_comms():
 
 @pytest.mark.asyncio
 async def test_backlog_degrades_not_fails():
-    from services.comms.readiness import comms_subsystem_readiness
+    from journeys.comms.readiness import comms_subsystem_readiness
 
     class _FakePool:
         async def fetchrow(self, *_a, **_k):
@@ -70,7 +70,7 @@ async def test_backlog_degrades_not_fails():
 
 @pytest.mark.asyncio
 async def test_storage_unreachable_fails():
-    from services.comms.readiness import comms_subsystem_readiness
+    from journeys.comms.readiness import comms_subsystem_readiness
 
     class _BrokenPool:
         async def fetchrow(self, *_a, **_k):

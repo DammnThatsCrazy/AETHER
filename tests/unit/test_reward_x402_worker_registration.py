@@ -30,12 +30,12 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from services.runtime import roles as roles_mod  # noqa: E402
-from services.runtime import specs as specs_mod  # noqa: E402
+from workers.runtime import roles as roles_mod  # noqa: E402
+from workers.runtime import specs as specs_mod  # noqa: E402
 
 # The five workers this phase wired into the supervisor, and the role that must
 # own each. Kept as data so a regression that drops one is a single-line diff.
@@ -150,7 +150,7 @@ def test_lean_worker_execution_group_hosts_every_mission_worker():
 async def test_reconciliation_worker_skips_a_suspended_tenant(monkeypatch):
     """The kill switch is evaluated per settlement ENVIRONMENT: a PENDING
     settlement whose environment is suspended is skipped (not verified)."""
-    from services.x402 import reconciliation as recon_mod
+    from value.x402 import reconciliation as recon_mod
 
     class _SuspendedAuthority:
         async def get_state(self, tenant_id, provider, environment, capability):
@@ -158,7 +158,7 @@ async def test_reconciliation_worker_skips_a_suspended_tenant(monkeypatch):
 
     # _capability_suspended imports get_lifecycle_authority lazily from this
     # module, so patching the attribute here is what the worker will resolve.
-    import services.capabilities.lifecycle as lifecycle_mod
+    import tenancy.capabilities.lifecycle as lifecycle_mod
 
     monkeypatch.setattr(
         lifecycle_mod, "get_lifecycle_authority", lambda: _SuspendedAuthority()
@@ -188,7 +188,7 @@ async def _async_none():
 
 
 async def test_worker_loop_isolates_a_failing_tick_and_stays_cancellable():
-    from services.rewards import workers as workers_mod
+    from value.rewards import workers as workers_mod
 
     calls = {"n": 0}
     survived = asyncio.Event()

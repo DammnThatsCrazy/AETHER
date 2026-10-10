@@ -45,7 +45,7 @@ const CDN_BASE = 'https://cdn.aether.network';
  */
 function readMinimumSupportedVersion() {
   const source = readFileSync(
-    join(ROOT, 'services', 'backend', 'services', 'ingestion', 'sdk_version_tiers.py'),
+    join(ROOT, "services", "api", 'services', 'ingestion', 'sdk_version_tiers.py'),
     'utf-8',
   );
   // The `supported` band is the first block whose id is "supported".

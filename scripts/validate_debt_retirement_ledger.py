@@ -57,6 +57,9 @@ METRIC_KEYS = (
 )
 
 
+_BACKEND_DOMAINS = frozenset(("tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing"))
+
+
 def _tracked_files(root: Path = ROOT) -> list[str]:
     out = subprocess.run(
         ["git", "ls-files"], cwd=root, check=True, capture_output=True, text=True
@@ -249,7 +252,7 @@ def measure(root: Path = ROOT) -> dict[str, int]:
             profile_lines += len((root / pf).read_text(encoding="utf-8").splitlines())
     service_dirs = {
         f.split("/")[3] for f in files
-        if f.startswith("services/backend/services/") and f.count("/") >= 4
+        if f.startswith("services/api/") and f.split("/")[2] in _BACKEND_DOMAINS and f.count("/") >= 4
     }
     return {
         "tracked_files": len(files),

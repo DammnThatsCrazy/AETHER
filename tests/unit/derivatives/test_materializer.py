@@ -15,8 +15,8 @@ from repositories.derivatives_repos import (
     ReconciliationVarianceRepo,
     TradingAccountRepo,
 )
-from services.derivatives import materializer
-from services.derivatives.models import NormalizedFillFact, OrderSide, PositionStatus
+from value.derivatives import materializer
+from value.derivatives.models import NormalizedFillFact, OrderSide, PositionStatus
 
 TENANT = "t-mat-a"
 OTHER_TENANT = "t-mat-b"

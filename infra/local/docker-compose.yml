@@ -30,7 +30,7 @@
 # for_each var.runtime_roles). Same code, same roles, no per-profile source edits.
 x-backend-build: &backend-build
   context: ../..
-  dockerfile: "services/backend/Dockerfile"
+  dockerfile: "services/api/Dockerfile"
 
 x-runtime-env: &runtime-env
   AETHER_ENV: ${AETHER_ENV:-local}
@@ -182,7 +182,7 @@ services:
   backend:
     build:
       context: ../..
-      dockerfile: "services/backend/Dockerfile"
+      dockerfile: "services/api/Dockerfile"
     ports:
       - "8000:8000"
     depends_on:
@@ -243,8 +243,8 @@ services:
     restart: "no"
 
   # ── Runtime-role workers ──────────────────────────────────────────
-  # One process per runtime role (services/runtime/roles.py::WORKER_ROLES),
-  # each booted via `python -m services.runtime.run_role <role>`. These mirror
+  # One process per runtime role (services/api/workers/runtime/roles.py::WORKER_ROLES),
+  # each booted via `python -m workers.runtime.run_role <role>`. These mirror
   # the dedicated cloud ECS runtime-role services 1:1. Gated behind the
   # `workers` profile so the default minimal dev stack is unchanged.
   outbox-relay:
@@ -256,7 +256,7 @@ services:
     environment:
       <<: *runtime-env
       AETHER_ROLE: outbox-relay
-    command: ["python", "-m", "services.runtime.run_role", "outbox-relay"]
+    command: ["python", "-m", "workers.runtime.run_role", "outbox-relay"]
     restart: unless-stopped
 
   stream-worker:
@@ -268,7 +268,7 @@ services:
     environment:
       <<: *runtime-env
       AETHER_ROLE: stream-worker
-    command: ["python", "-m", "services.runtime.run_role", "stream-worker"]
+    command: ["python", "-m", "workers.runtime.run_role", "stream-worker"]
     restart: unless-stopped
 
   identity-worker:
@@ -280,7 +280,7 @@ services:
     environment:
       <<: *runtime-env
       AETHER_ROLE: identity-worker
-    command: ["python", "-m", "services.runtime.run_role", "identity-worker"]
+    command: ["python", "-m", "workers.runtime.run_role", "identity-worker"]
     restart: unless-stopped
 
   graph-writer:
@@ -292,7 +292,7 @@ services:
     environment:
       <<: *runtime-env
       AETHER_ROLE: graph-writer
-    command: ["python", "-m", "services.runtime.run_role", "graph-writer"]
+    command: ["python", "-m", "workers.runtime.run_role", "graph-writer"]
     restart: unless-stopped
 
   measurement-worker:
@@ -304,12 +304,12 @@ services:
     environment:
       <<: *runtime-env
       AETHER_ROLE: measurement-worker
-    command: ["python", "-m", "services.runtime.run_role", "measurement-worker"]
+    command: ["python", "-m", "workers.runtime.run_role", "measurement-worker"]
     restart: unless-stopped
 
   # Semantic classification runs in-process here (never over HTTP): this role
   # owns the semantic-classification and semantic-identity-restatement
-  # consumers in services/runtime/consumer_specs.py.
+  # consumers in services/api/workers/runtime/consumer_specs.py.
   semantic-worker:
     build: *backend-build
     profiles: ["workers", "full"]
@@ -319,7 +319,7 @@ services:
     environment:
       <<: *runtime-env
       AETHER_ROLE: semantic-worker
-    command: ["python", "-m", "services.runtime.run_role", "semantic-worker"]
+    command: ["python", "-m", "workers.runtime.run_role", "semantic-worker"]
     restart: unless-stopped
 
   materializer:
@@ -331,7 +331,7 @@ services:
     environment:
       <<: *runtime-env
       AETHER_ROLE: materializer
-    command: ["python", "-m", "services.runtime.run_role", "materializer"]
+    command: ["python", "-m", "workers.runtime.run_role", "materializer"]
     restart: unless-stopped
 
   # `maintenance` owns the scheduled/cron jobs (job_scheduler, retention_sweep,
@@ -346,7 +346,7 @@ services:
     environment:
       <<: *runtime-env
       AETHER_ROLE: maintenance
-    command: ["python", "-m", "services.runtime.run_role", "maintenance"]
+    command: ["python", "-m", "workers.runtime.run_role", "maintenance"]
     restart: unless-stopped
 
   ml-serving:

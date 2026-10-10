@@ -13,16 +13,16 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
 import pytest
 from repositories.repos import reset_in_memory_stores
 
-from services.profile.aggregator import Profile360Aggregator
-from services.reconciliation.coverage import compute_tenant_coverage
-from services.reconciliation.expectations import REGISTERED_DIMENSIONS
+from identity.profile.aggregator import Profile360Aggregator
+from replay.reconciliation.coverage import compute_tenant_coverage
+from replay.reconciliation.expectations import REGISTERED_DIMENSIONS
 
 
 def setup_function() -> None:

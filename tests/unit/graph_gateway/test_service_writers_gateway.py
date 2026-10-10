@@ -17,7 +17,7 @@ from repositories.graph_mutation_ledger import (
     GraphMutationLedgerRepository,
     reset_graph_ledger_memory,
 )
-from services.profile360_workers.workers import DelegationProjector
+from workers.profile360_workers.workers import DelegationProjector
 from shared.graph.graph import EdgeType, GraphClient
 from shared.graph.mutation_gateway import current_graph_digest, replay_ledger
 
@@ -100,7 +100,7 @@ async def test_agentic_observability_persist_mutations_ledgered(set_mode, monkey
     monkeypatch.setattr(
         "dependencies.providers.get_graph", lambda: client, raising=False
     )
-    from services.agentic_observability import foundation
+    from actions.agentic_observability import foundation
 
     vertex = Vertex("Agent", "agent-obs-1", {"tenant_id": TENANT})
     edge = Edge("OBSERVED", "agent-obs-1", "svc-1", {"tenant_id": TENANT})

@@ -4,7 +4,7 @@ Only run when ``--base-url`` is provided:
 
 - ``http:health`` GET {base}/v1/health must return 200 with no failing
   dependency (the gateway deep probe reports ``status`` plus a
-  ``dependencies`` map — see services/gateway/routes.py).
+  ``dependencies`` map — see services/api/ingestion/gateway/routes.py).
 - ``http:ready``  GET {base}/v1/ready must return 200.
 
 Both SKIP without ``--base-url`` and in ``--dry-run``.

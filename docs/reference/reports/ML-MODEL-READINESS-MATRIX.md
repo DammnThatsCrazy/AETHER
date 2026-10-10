@@ -13,7 +13,7 @@ toc_depth: 2
 source_hashes:
   "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
   "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"
-  "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"
+  "services/ml/serving/src/api.py": "sha256:6f4245be3d28dd75a1ba1495252ec6418cd66e28b13d7f2de9c1e26fe6443147"
   "services/ml/training/pipelines/train.py": "sha256:98f93d379b93e93aa1e9a80eec03c8d1697408d7b58339e42ef4076a4c4cdbd8"
 ---
 
@@ -89,7 +89,7 @@ features because the JSON request models coerce all numbers to float.
 All 9 models have a dedicated prediction endpoint registered in
 `serving/src/api.py`. The `/v1/predict/batch` endpoint supports all models via
 `model_name` dispatch. The backend gateway in
-`services/backend/services/ml_serving/routes.py` proxies
+`services/api/intelligence/ml_serving/routes.py` proxies
 requests and applies versioned cache keys
 (`aether:ml:prediction:{model}:{entity}:{artifact_version}:{contract_hash}`).
 

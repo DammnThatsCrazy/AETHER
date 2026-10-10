@@ -153,7 +153,7 @@ locals {
   # packs eight worker roles into one `lean-worker` service; a dedicated profile
   # keeps one service per role. Terraform only needs the service shape — which
   # roles a service hosts is the runtime's concern, resolved in-process by
-  # services/runtime/roles.py::roles_in from the AETHER_ROLE token.
+  # services/api/workers/runtime/roles.py::roles_in from the AETHER_ROLE token.
   runtime_deployment = yamldecode(file("${path.module}/../../../config/runtime_deployment.yaml"))
   runtime_profile    = local.runtime_deployment.profiles[var.deployment_profile]
 
@@ -207,7 +207,7 @@ locals {
       # single load-bearing reason: a consolidated task must bind one SQS queue
       # per hosted role, which one SQS_QUEUE_URL cannot express. Everything else
       # about a role (consumer group, DLQ, retry policy, metrics label) is
-      # resolved in-process by services/runtime/roles.py::roles_in.
+      # resolved in-process by services/api/workers/runtime/roles.py::roles_in.
       roles         = cfg.roles
       cpu           = cfg.cpu
       memory        = cfg.memory

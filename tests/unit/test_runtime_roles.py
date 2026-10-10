@@ -4,7 +4,7 @@ Two isolation strategies keep these robust to suite ordering (other tests
 evict/reimport the backend ``config``/``services`` packages under different
 ``sys.path`` setups):
 
-- Pure role helpers (``services/runtime/roles.py``) and the ``run_role`` entry
+- Pure role helpers (``services/api/workers/runtime/roles.py``) and the ``run_role`` entry
   point are imported through :func:`backend_on_path`, which pops any cached
   backend modules first and restores them afterwards.
 - ``Settings()`` fail-closed validation runs in a fresh SUBPROCESS with an
@@ -24,9 +24,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
-_BACKEND_PREFIXES = ("config", "services", "shared", "dependencies")
+_BACKEND_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "dependencies")
 
 
 @contextmanager
@@ -51,7 +51,7 @@ def backend_on_path():
 
 
 def _import_roles():
-    return importlib.import_module("services.runtime.roles")
+    return importlib.import_module("workers.runtime.roles")
 
 
 # Deterministic secret env so a non-local Settings() only trips the guard under
@@ -289,7 +289,7 @@ def test_specs_for_role_filters_by_role():
 
 def test_run_role_invalid_returns_error_code():
     with backend_on_path():
-        run_role = importlib.import_module("services.runtime.run_role")
+        run_role = importlib.import_module("workers.runtime.run_role")
         assert run_role.run("definitely-not-a-role") == 2
 
 
@@ -298,7 +298,7 @@ def test_run_role_api_dispatches_to_uvicorn(monkeypatch):
     # teardown (suite-ordering hygiene — run_role sets it outside monkeypatch).
     monkeypatch.setenv("AETHER_ROLE", os.environ.get("AETHER_ROLE", "all"))
     with backend_on_path():
-        run_role = importlib.import_module("services.runtime.run_role")
+        run_role = importlib.import_module("workers.runtime.run_role")
         calls = {}
 
         def _fake_api():
@@ -314,7 +314,7 @@ def test_run_role_api_dispatches_to_uvicorn(monkeypatch):
 def test_run_role_worker_dispatches_to_worker_loop(monkeypatch):
     monkeypatch.setenv("AETHER_ROLE", os.environ.get("AETHER_ROLE", "all"))
     with backend_on_path():
-        run_role = importlib.import_module("services.runtime.run_role")
+        run_role = importlib.import_module("workers.runtime.run_role")
         captured = {}
 
         async def _fake_workers(role):
@@ -331,7 +331,7 @@ def test_run_role_worker_dispatches_to_worker_loop(monkeypatch):
 def test_run_role_main_falls_back_to_aether_role_env(monkeypatch):
     monkeypatch.setenv("AETHER_ROLE", "maintenance")
     with backend_on_path():
-        run_role = importlib.import_module("services.runtime.run_role")
+        run_role = importlib.import_module("workers.runtime.run_role")
         captured = {}
 
         def _fake_run(role):
@@ -346,7 +346,7 @@ def test_run_role_main_falls_back_to_aether_role_env(monkeypatch):
 def test_run_role_main_positional_overrides_env(monkeypatch):
     monkeypatch.setenv("AETHER_ROLE", "maintenance")
     with backend_on_path():
-        run_role = importlib.import_module("services.runtime.run_role")
+        run_role = importlib.import_module("workers.runtime.run_role")
         captured = {}
 
         def _fake_run(role):
@@ -361,7 +361,7 @@ def test_run_role_main_positional_overrides_env(monkeypatch):
 def test_run_role_main_requires_role_or_env(monkeypatch):
     monkeypatch.delenv("AETHER_ROLE", raising=False)
     with backend_on_path():
-        run_role = importlib.import_module("services.runtime.run_role")
+        run_role = importlib.import_module("workers.runtime.run_role")
         with pytest.raises(SystemExit) as excinfo:
             run_role.main([])
         assert excinfo.value.code == 2

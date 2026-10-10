@@ -23,7 +23,7 @@ vi.mock('@kyber/lib/api', () => ({
 }));
 
 // Field names mirror the typed backend contract
-// (services/integrations/providers/payment_rails/kyber_contract.py, v1.0.0).
+// (services/api/connectors/integrations/providers/payment_rails/kyber_contract.py, v1.0.0).
 // The five providers cover the distinct rendered states: healthy, degraded,
 // not_configured (credential-waiting), disabled, and unknown (null operational
 // fields). null reconciliation_matched_rate must render as "—", never 0.

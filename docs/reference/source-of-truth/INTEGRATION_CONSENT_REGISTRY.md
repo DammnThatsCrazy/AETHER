@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/contracts/integration-consent-registry.json, scripts/generate_contracts.py, packages/shared/integration-consent.ts, services/backend/shared/privacy/generated_integration_consent.py, services/backend/services/consent/control_plane.py, services/backend/services/consent/integration_governance.py, services/backend/services/consent/routes.py, services/backend/services/integrations/connectors/service.py, services/backend/services/integrations/connectors/routes.py, services/backend/services/integrations/discovery.py, services/backend/services/integrations/webhook_policy.py, services/backend/services/integrations/webhook_quarantine.py]
+source_files: [packages/shared/contracts/integration-consent-registry.json, scripts/generate_contracts.py, packages/shared/integration-consent.ts, services/api/shared/privacy/generated_integration_consent.py, services/api/governance/consent/control_plane.py, services/api/governance/consent/integration_governance.py, services/api/governance/consent/routes.py, services/api/connectors/integrations/connectors/service.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/discovery.py, services/api/connectors/integrations/webhook_policy.py, services/api/connectors/integrations/webhook_quarantine.py]
 ---
 
 # Integration Consent Registry Source of Truth
@@ -24,7 +24,7 @@ python scripts/generate_contracts.py
 Generated surfaces include:
 
 - `packages/shared/integration-consent.ts`
-- `services/backend/shared/privacy/generated_integration_consent.py`
+- `services/api/shared/privacy/generated_integration_consent.py`
 - `packages/sdk/ios/Sources/AetherSDK/GeneratedIntegrationConsent.swift`
 - `packages/sdk/android/src/main/java/com/aether/sdk/GeneratedIntegrationConsent.kt`
 - `docs/_generated/integration-consent-registry-table.md`

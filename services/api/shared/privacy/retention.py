@@ -1,0 +1,554 @@
+"""
+Aether Privacy — Retention and Deletion Engine
+
+Handles DSAR requests, retention policy enforcement, and deletion cascading
+across all Aether data stores. Integrates with existing consent/DSR service.
+
+Deletion strategies:
+  - hard_delete: Remove record entirely
+  - pseudonymize: Replace PII with irreversible tokens
+  - tombstone: Mark as deleted, retain structure
+  - hash_irreversible: Replace values with one-way hashes
+  - key_destroy: Delete encryption key, rendering data unreadable
+  - edge_sever: Remove graph edges while keeping vertices
+  - retain_aggregate: Delete individual records, keep aggregates
+  - immutable: Cannot be deleted (audit/compliance records)
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import pathlib
+import uuid
+from typing import Any, Optional
+
+from shared.common.common import utc_now
+from shared.privacy.classification import (
+    DataClassification,
+    DeletionBehavior,
+    RetentionClass,
+    get_rules,
+    FIELD_CLASSIFICATIONS,
+)
+from shared.logger.logger import get_logger
+
+logger = get_logger("aether.privacy.retention")
+
+try:
+    _REGISTRY_PATH = pathlib.Path(__file__).resolve().parents[4] / "packages" / "shared" / "contracts" / "consent-registry.json"
+except IndexError:
+    _REGISTRY_PATH = pathlib.Path("/nonexistent/consent-registry.json")
+
+def _load_purpose_retention() -> dict[str, dict]:
+    try:
+        data = json.loads(_REGISTRY_PATH.read_text())
+        return {p["key"]: p for p in data.get("purposes", [])}
+    except Exception:
+        return {}
+
+_PURPOSE_RETENTION: dict[str, dict] = _load_purpose_retention()
+
+# Silver table names that map from registry dsrDeleteScope tokens
+_DSR_SCOPE_TO_SILVER_TABLE: dict[str, str] = {
+    "credit_facts": "silver_credit_facts",
+    "location_facts": "silver_location_facts",
+    "recommendation_facts": "silver_exposure_facts",
+    "agent_facts": "silver_agent_execution_facts",
+    "wallet_facts": "silver_web3_transaction_facts",
+    "stablecoin_facts": "silver_stablecoin_facts",
+    "derivatives_facts": "silver_derivatives_facts",
+    "interop_facts": "silver_interop_facts",
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RETENTION POLICY MATRIX
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Days per retention class
+RETENTION_DAYS: dict[RetentionClass, int] = {
+    RetentionClass.EPHEMERAL: 0,      # Delete immediately after use
+    RetentionClass.SHORT: 30,
+    RetentionClass.STANDARD: 365,
+    RetentionClass.EXTENDED: 1095,     # 3 years
+    RetentionClass.COMPLIANCE: 2555,   # 7 years
+    RetentionClass.PERMANENT: -1,      # Never
+    RetentionClass.LEGAL_HOLD: -1,     # Until hold released
+}
+
+
+def get_retention_days(classification: DataClassification) -> int:
+    """Get retention period in days for a classification tier."""
+    rules = get_rules(classification)
+    return RETENTION_DAYS.get(rules.retention, 365)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PSEUDONYMIZATION ENGINE
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def pseudonymize_value(value: Any, salt: str = "") -> str:
+    """Replace a value with an irreversible pseudonym."""
+    if value is None:
+        return "PSEUDONYMIZED_NULL"
+    raw = f"{salt}:{value}".encode()
+    return f"PSEUDO_{hashlib.sha256(raw).hexdigest()[:16]}"
+
+
+def pseudonymize_record(record: dict, tenant_salt: str = "") -> dict:
+    """Pseudonymize all classified fields in a record."""
+    result = {}
+    for key, value in record.items():
+        classification = FIELD_CLASSIFICATIONS.get(key)
+        if classification and classification in (
+            DataClassification.SENSITIVE_PII,
+            DataClassification.FINANCIAL,
+            DataClassification.REGULATED,
+            DataClassification.HIGHLY_SENSITIVE,
+        ):
+            result[key] = pseudonymize_value(value, tenant_salt)
+        else:
+            result[key] = value
+    # Add deletion metadata
+    result["_pseudonymized"] = True
+    result["_pseudonymized_at"] = utc_now()
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DELETION CASCADING ENGINE
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class DeletionPlan:
+    """
+    Plans and executes deletion across all data stores for a given entity.
+    Respects classification-based deletion behaviors and legal holds.
+    """
+
+    def __init__(self, entity_id: str, tenant_id: str, reason: str = "dsar_erasure"):
+        self.entity_id = entity_id
+        self.tenant_id = tenant_id
+        self.reason = reason
+        self.plan_id = str(uuid.uuid4())
+        self.steps: list[dict] = []
+        self.results: list[dict] = []
+        self.created_at = utc_now()
+
+    def add_step(
+        self,
+        store: str,
+        table: str,
+        behavior: DeletionBehavior,
+        classification: DataClassification,
+        description: str = "",
+        entity_field: str = "",
+    ) -> None:
+        """Add a deletion step to the plan."""
+        self.steps.append({
+            "step_id": str(uuid.uuid4()),
+            "store": store,
+            "table": table,
+            "behavior": behavior.value,
+            "classification": classification.value,
+            "description": description,
+            "entity_field": entity_field,
+            "status": "pending",
+        })
+
+    def build_standard_plan(self, purposes: Optional[list[str]] = None) -> None:
+        """Build a standard deletion plan covering all Aether data stores."""
+        # Profile/Identity records — pseudonymize
+        self.add_step("postgresql", "identity_profiles", DeletionBehavior.PSEUDONYMIZE,
+                       DataClassification.SENSITIVE_PII, "Pseudonymize profile PII fields")
+
+        # Graph vertices — sever edges, pseudonymize properties
+        self.add_step("neptune", "graph_vertices", DeletionBehavior.EDGE_SEVER,
+                       DataClassification.SENSITIVE_PII, "Sever identity-linking graph edges")
+        self.add_step("neptune", "graph_properties", DeletionBehavior.PSEUDONYMIZE,
+                       DataClassification.SENSITIVE_PII, "Pseudonymize vertex PII properties")
+
+        # Behavioral events — hard delete
+        self.add_step("postgresql", "sdk_events", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete raw SDK events")
+
+        # Lake Bronze tier — hard delete raw records
+        self.add_step("postgresql", "lake_bronze", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete Bronze tier raw records")
+
+        # Externalized Bronze objects (FT-8) — packed payload segments in the
+        # object store. Erasure re-packs each object WITHOUT the subject and
+        # removes the subject's rows/descriptors across all three stores; wire
+        # shared.storage.lifecycle.ExternalizedBronzeDSRAdapter under the
+        # "object_store:bronze_sdk_events" adapter key to execute it.
+        self.add_step("object_store", "bronze_sdk_events", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL,
+                       "Propagate erasure to externalized Bronze objects (re-pack without subject)",
+                       entity_field="subject_ref")
+
+        # Lake Silver/Gold tiers — pseudonymize
+        self.add_step("postgresql", "lake_silver", DeletionBehavior.PSEUDONYMIZE,
+                       DataClassification.CONFIDENTIAL, "Pseudonymize Silver tier entity references")
+        self.add_step("postgresql", "lake_gold", DeletionBehavior.RETAIN_AGGREGATE,
+                       DataClassification.INTERNAL, "Retain Gold aggregates, remove entity attribution")
+
+        # Provider credential versions — hard delete on tenant erasure. Keyed on
+        # tenant_id so a per-subject DSR (entity_id = a user) is a safe no-op:
+        # credentials are tenant-owned, so only a tenant-erasure (entity_id =
+        # tenant_id) matches and removes them.
+        self.add_step("postgresql", "provider_credential_versions", DeletionBehavior.HARD_DELETE,
+                       DataClassification.SENSITIVE_PII,
+                       "Delete tenant provider credential versions", entity_field="tenant_id")
+
+        # Cache — hard delete
+        self.add_step("redis", "cache_keys", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete all cache keys for entity")
+
+        # Feature store — pseudonymize
+        self.add_step("redis", "feature_store", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete feature store entries")
+
+        # Financial records — pseudonymize (7-year compliance retention)
+        self.add_step("postgresql", "financial_accounts", DeletionBehavior.PSEUDONYMIZE,
+                       DataClassification.FINANCIAL, "Pseudonymize financial account PII")
+        self.add_step("postgresql", "financial_trades", DeletionBehavior.PSEUDONYMIZE,
+                       DataClassification.FINANCIAL, "Pseudonymize trade records PII")
+
+        # Compliance/audit records — IMMUTABLE (never deleted)
+        self.add_step("postgresql", "audit_logs", DeletionBehavior.IMMUTABLE,
+                       DataClassification.INTERNAL, "Audit logs retained (immutable)")
+        self.add_step("postgresql", "consent_history", DeletionBehavior.IMMUTABLE,
+                       DataClassification.INTERNAL, "Consent history retained (immutable)")
+        self.add_step("postgresql", "compliance_actions", DeletionBehavior.IMMUTABLE,
+                       DataClassification.REGULATED, "Compliance actions retained (immutable)")
+
+        # Cross-domain links — sever
+        self.add_step("postgresql", "identity_links", DeletionBehavior.EDGE_SEVER,
+                       DataClassification.REGULATED, "Sever cross-domain identity links")
+
+        # Identity clusters (wallet, userId, email, fingerprint links) — sever
+        self.add_step("postgresql", "identity_clusters", DeletionBehavior.EDGE_SEVER,
+                       DataClassification.REGULATED, "Sever identity cluster links for entity",
+                       entity_field="entity_id")
+
+        # Device sessions (fingerprint hashes, canvas, webGL, IP subnet) — hard delete
+        self.add_step("postgresql", "device_sessions", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete device fingerprint sessions for entity",
+                       entity_field="anonymous_id")
+
+        # Agent Access Intelligence capability inventory (PR 2, Phase A) — the
+        # observed capability catalog + installations hold subject-derived
+        # observations with no per-subject key, so erasure is at tenant
+        # granularity (hard delete by tenant_id).
+        self.add_step("postgresql", "capability_catalog", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete observed capability catalog rows for tenant",
+                       entity_field="tenant_id")
+        self.add_step("postgresql", "capability_installations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete observed capability installations for tenant",
+                       entity_field="tenant_id")
+        self.add_step("postgresql", "capability_declarations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete declared capability records for tenant",
+                       entity_field="tenant_id")
+        self.add_step("postgresql", "provider_evidence", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL,
+                       "Delete provider-attested access evidence for the subject's tenant",
+                       entity_field="tenant_id")
+
+        # Delegations — including Agent Access Intelligence capability authorizations
+        # (PR 2, Phase B1), which are stored as delegation rows. This closes a
+        # pre-existing gap: `delegations` had NO erasure step at all, so a subject's
+        # grants survived a DSAR. Erasure runs on BOTH sides of the grant, since the
+        # subject may be either the grantee or the grantor. This is a deliberate
+        # behavioral change for pre-existing delegation rows, not only for the new
+        # capability authorizations.
+        self.add_step("postgresql", "delegations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL,
+                       "Delete delegations/capability authorizations granted TO the subject",
+                       entity_field="grantee_entity_id")
+        self.add_step("postgresql", "delegations", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL,
+                       "Delete delegations/capability authorizations granted BY the subject",
+                       entity_field="grantor_entity_id")
+
+        # Silver fact tables — scoped by consent purpose from registry
+        self._add_silver_steps(purposes or list(_PURPOSE_RETENTION.keys()))
+
+    def _add_silver_steps(self, purposes: list[str]) -> None:
+        """Add Silver fact table deletion steps driven by the consent registry's dsrDeleteScope."""
+        seen: set[str] = set()
+        for purpose_key in purposes:
+            meta = _PURPOSE_RETENTION.get(purpose_key, {})
+            for scope_token in meta.get("dsrDeleteScope", []):
+                silver_table = _DSR_SCOPE_TO_SILVER_TABLE.get(scope_token)
+                if silver_table and silver_table not in seen:
+                    seen.add(silver_table)
+                    self.add_step(
+                        "postgresql", silver_table, DeletionBehavior.HARD_DELETE,
+                        DataClassification.CONFIDENTIAL,
+                        f"Delete Silver facts for purpose={purpose_key} scope={scope_token}",
+                        entity_field="entity_id",
+                    )
+
+    async def execute(self, store_adapters: Optional[dict] = None) -> dict:
+        """
+        Execute the deletion plan against real data stores.
+
+        Args:
+            store_adapters: Dict mapping "store:table" keys to repository instances
+                that support delete_by_entity(field, entity_id) and/or
+                delete(record_id). If None, uses default BaseRepository-based
+                lookup for PostgreSQL tables and logs-only for other stores.
+
+        Returns:
+            Execution summary with per-step results, counts, and failure details.
+        """
+        adapters = dict(store_adapters or {})
+        # The externalized-Bronze step must never silently no-op: the default
+        # DSAR path (DSARRequest.process_erasure) supplies no adapters, which
+        # would mark the step executed with records_affected=0 while the
+        # subject's packed payloads survive in object storage. Wire the
+        # canonical adapter automatically; an explicit caller-supplied adapter
+        # still wins. Lazy import — shared.storage pulls repositories/settings.
+        _BRONZE_OBJECT_KEY = "object_store:bronze_sdk_events"
+        if _BRONZE_OBJECT_KEY not in adapters and self.tenant_id:
+            from shared.storage.lifecycle import ExternalizedBronzeDSRAdapter
+
+            adapters[_BRONZE_OBJECT_KEY] = ExternalizedBronzeDSRAdapter(self.tenant_id)
+        executed = 0
+        skipped = 0
+        immutable_retained = 0
+
+        for step in self.steps:
+            behavior = DeletionBehavior(step["behavior"])
+
+            if behavior == DeletionBehavior.IMMUTABLE:
+                step["status"] = "retained_immutable"
+                step["executed_at"] = utc_now()
+                immutable_retained += 1
+                self.results.append(step)
+                continue
+
+            try:
+                store_key = f"{step['store']}:{step['table']}"
+                adapter = adapters.get(store_key)
+
+                if behavior == DeletionBehavior.HARD_DELETE:
+                    entity_field = step.get("entity_field") or "user_id"
+                    if adapter and hasattr(adapter, "delete_by_entity"):
+                        count = await adapter.delete_by_entity(entity_field, self.entity_id)
+                        step["records_affected"] = count
+                    elif adapter and hasattr(adapter, "delete"):
+                        records = await adapter.find_many(filters={entity_field: self.entity_id}, limit=10000)
+                        count = 0
+                        for rec in records:
+                            rid = rec.get("id", "")
+                            if rid and await adapter.delete(rid):
+                                count += 1
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+                        step["note"] = "no adapter configured — deletion logged only"
+
+                elif behavior == DeletionBehavior.PSEUDONYMIZE:
+                    if adapter and hasattr(adapter, "find_many") and hasattr(adapter, "upsert"):
+                        records = await adapter.find_many(filters={"user_id": self.entity_id}, limit=10000)
+                        count = 0
+                        for rec in records:
+                            pseudonymized = pseudonymize_record(rec, self.tenant_id)
+                            rid = rec.get("id", "")
+                            if rid:
+                                await adapter.upsert(rid, pseudonymized, self.tenant_id)
+                                count += 1
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+                        step["note"] = "no adapter configured — pseudonymization logged only"
+
+                elif behavior == DeletionBehavior.EDGE_SEVER:
+                    entity_field = step.get("entity_field")
+                    if adapter and hasattr(adapter, "delete_by_entity"):
+                        if entity_field:
+                            # Single-field keyed table (e.g. identity_clusters keyed by entity_id)
+                            count = await adapter.delete_by_entity(entity_field, self.entity_id)
+                        else:
+                            # Default: Neptune-style graph edges with source/target fields
+                            count = await adapter.delete_by_entity("source_entity_id", self.entity_id)
+                            count += await adapter.delete_by_entity("target_entity_id", self.entity_id)
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+                        step["note"] = "no adapter configured — edge sever logged only"
+
+                elif behavior == DeletionBehavior.TOMBSTONE:
+                    if adapter and hasattr(adapter, "find_many") and hasattr(adapter, "upsert"):
+                        records = await adapter.find_many(filters={"user_id": self.entity_id}, limit=10000)
+                        count = 0
+                        for rec in records:
+                            rid = rec.get("id", "")
+                            if rid:
+                                await adapter.upsert(rid, {"_tombstoned": True, "_tombstoned_at": utc_now()}, self.tenant_id)
+                                count += 1
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+
+                elif behavior == DeletionBehavior.RETAIN_AGGREGATE:
+                    # Remove entity attribution from aggregate records
+                    if adapter and hasattr(adapter, "find_many") and hasattr(adapter, "upsert"):
+                        records = await adapter.find_many(filters={"user_id": self.entity_id}, limit=10000)
+                        count = 0
+                        for rec in records:
+                            rid = rec.get("id", "")
+                            if rid:
+                                rec.pop("user_id", None)
+                                rec.pop("entity_id", None)
+                                rec["_attribution_removed"] = True
+                                await adapter.upsert(rid, rec, self.tenant_id)
+                                count += 1
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+
+                else:
+                    step["records_affected"] = 0
+                    step["note"] = f"behavior {behavior.value} not implemented"
+
+                step["status"] = "executed"
+                step["executed_at"] = utc_now()
+                executed += 1
+                logger.info(
+                    f"Deletion step executed: {step['store']}/{step['table']} "
+                    f"behavior={step['behavior']} entity={self.entity_id} "
+                    f"records_affected={step.get('records_affected', 0)}"
+                )
+
+            except Exception as e:
+                step["status"] = "failed"
+                step["error"] = str(e)
+                step["executed_at"] = utc_now()
+                logger.error(
+                    f"Deletion step failed: {step['store']}/{step['table']} "
+                    f"entity={self.entity_id} error={e}"
+                )
+
+            self.results.append(step)
+
+        return {
+            "plan_id": self.plan_id,
+            "entity_id": self.entity_id,
+            "tenant_id": self.tenant_id,
+            "reason": self.reason,
+            "total_steps": len(self.steps),
+            "executed": executed,
+            "skipped": skipped,
+            "immutable_retained": immutable_retained,
+            "failed": len([s for s in self.steps if s.get("status") == "failed"]),
+            "completed_at": utc_now(),
+            "steps": self.steps,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DSAR WORKFLOW
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class DSARRequest:
+    """Tracks a Data Subject Access Request through its lifecycle."""
+
+    TYPES = {"access", "erasure", "rectification", "restriction", "portability", "objection"}
+    SLA_DAYS = {
+        "access": 30, "erasure": 30, "portability": 30,
+        "rectification": 5, "restriction": 1, "objection": 1,
+    }
+
+    def __init__(
+        self,
+        request_type: str,
+        entity_id: str,
+        tenant_id: str,
+        requester_email: str = "",
+    ):
+        if request_type not in self.TYPES:
+            raise ValueError(f"Invalid DSAR type: {request_type}. Must be one of {self.TYPES}")
+        self.request_id = str(uuid.uuid4())
+        self.request_type = request_type
+        self.entity_id = entity_id
+        self.tenant_id = tenant_id
+        self.requester_email = requester_email
+        self.status = "received"
+        self.created_at = utc_now()
+        self.sla_days = self.SLA_DAYS.get(request_type, 30)
+        self.steps_completed: list[str] = []
+        self.deletion_plan: Optional[DeletionPlan] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "request_id": self.request_id,
+            "request_type": self.request_type,
+            "entity_id": self.entity_id,
+            "tenant_id": self.tenant_id,
+            "status": self.status,
+            "sla_days": self.sla_days,
+            "created_at": self.created_at,
+            "steps_completed": self.steps_completed,
+        }
+
+    async def process_erasure(self) -> dict:
+        """Execute an erasure DSAR with full cascading deletion."""
+        self.status = "in_progress"
+        self.deletion_plan = DeletionPlan(
+            entity_id=self.entity_id,
+            tenant_id=self.tenant_id,
+            reason=f"dsar_{self.request_type}",
+        )
+        self.deletion_plan.build_standard_plan()
+        # Assemble the DSR store adapters (keyed "<store>:<table>") that the plan
+        # executes against. Wire the Agent Access Intelligence capability repos so
+        # their HARD_DELETE steps actually erase rows via
+        # delete_by_entity("tenant_id", <entity_id>) — for a tenant-erasure DSR
+        # entity_id is the tenant id. Imported lazily to avoid a heavy service
+        # import at module load and any import cycle.
+        from actions.agent_access_intelligence.declarations import (
+            CapabilityDeclarationRepository,
+        )
+        from actions.agent_access_intelligence.provider_evidence import (
+            ProviderEvidenceRepository,
+        )
+        from actions.agent_access_intelligence.repositories import (
+            CapabilityCatalogRepository,
+            CapabilityInstallationRepository,
+        )
+        from repositories.repos import DelegationRepository
+        from connectors.providers.credentials.repository import CredentialVersionRepo
+
+        store_adapters = {
+            "postgresql:provider_credential_versions": CredentialVersionRepo(),
+            "postgresql:capability_catalog": CapabilityCatalogRepository(),
+            "postgresql:capability_installations": CapabilityInstallationRepository(),
+            "postgresql:capability_declarations": CapabilityDeclarationRepository(),
+            "postgresql:provider_evidence": ProviderEvidenceRepository(),
+            # Both delegation steps share one adapter key ("<store>:<table>"); the
+            # plan passes each step's own entity_field, so grantee- and grantor-side
+            # erasure both execute against the same repository.
+            "postgresql:delegations": DelegationRepository(),
+        }
+        result = await self.deletion_plan.execute(store_adapters)
+        self.status = "completed" if result["failed"] == 0 else "partial"
+        self.steps_completed.append("deletion_cascade")
+        return result
+
+    async def process_access(self) -> dict:
+        """Compile all data held for a data subject (portability/access)."""
+        self.status = "in_progress"
+        # In production, this would query all stores for entity data
+        self.status = "completed"
+        self.steps_completed.append("data_compiled")
+        return {
+            "request_id": self.request_id,
+            "entity_id": self.entity_id,
+            "status": "completed",
+            "note": "Data compilation requires store-specific queries",
+        }

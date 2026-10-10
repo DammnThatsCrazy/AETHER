@@ -30,7 +30,7 @@ variable "consumer_role_queues" {
   type        = map(string)
   description = <<-EOT
     Consumer role -> canonical consumer group, mirroring the ConsumerSpec
-    registry (services/runtime/consumer_specs.py). Each role listed here
+    registry (services/api/workers/runtime/consumer_specs.py). Each role listed here
     receives a dedicated SNS-subscribed queue plus its own dead-letter queue,
     so roles never consume (and delete) events another role owns, and a poison
     message never lands back on the queue it came from.

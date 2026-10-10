@@ -9,13 +9,13 @@
 #
 # Enforced by scripts/validate_capability_overlays.py (run by repo-doctor):
 # overlay names start with `enable-`, never equal a deployment profile name, and
-# every bound flag must appear in services/backend/config/settings.py. A flag in
+# every bound flag must appear in services/api/config/settings.py. A flag in
 # settings that nothing reads cannot stay there (scripts/validate_settings_flags.py),
 # so a bound flag is always one the runtime consults.
 
 schema_version: 1
 authority: capability-overlays
-flags_source: services/backend/config/settings.py
+flags_source: services/api/config/settings.py
 
 overlays:
   enable-communications:

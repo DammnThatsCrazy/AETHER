@@ -39,10 +39,10 @@
     ]
   },
   "reuse_targets": {
-    "continuation_plane": ["shared/exploration/models.py", "services/exploration/store.py", "services/noesis/conversations.py", "services/runtime/specs.py"],
-    "client_sync_feed": ["shared/events/events.py (EventConsumer)", "services/ingestion/outbox_relay.py", "services/runtime/specs.py"],
-    "push_adapters": ["services/delivery/adapters/base.py (ProviderAdapterRegistry)", "shared/credentials/ (credential_service)"],
-    "installation_model": ["services/auth/sessions/service.py", "services/kyber/devices/", "shared/credentials/"],
-    "mobile_operator_actions_staged": ["services/kyber/ops/registry.py", "services/kyber/sessions/step_up.py", "services/kyber/devices/device_proof.py"]
+    "continuation_plane": ["shared/exploration/models.py", "services/api/journeys/exploration/store.py", "services/api/intelligence/noesis/conversations.py", "services/api/workers/runtime/specs.py"],
+    "client_sync_feed": ["shared/events/events.py (EventConsumer)", "services/api/ingestion/ingestion/outbox_relay.py", "services/api/workers/runtime/specs.py"],
+    "push_adapters": ["services/api/actions/delivery/adapters/base.py (ProviderAdapterRegistry)", "shared/credentials/ (credential_service)"],
+    "installation_model": ["services/api/tenancy/auth/sessions/service.py", "services/api/governance/kyber/devices/", "shared/credentials/"],
+    "mobile_operator_actions_staged": ["services/api/governance/kyber/ops/registry.py", "services/api/governance/kyber/sessions/step_up.py", "services/api/governance/kyber/devices/device_proof.py"]
   }
 }

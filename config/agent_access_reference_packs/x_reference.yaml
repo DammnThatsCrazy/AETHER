@@ -3,7 +3,7 @@
 #
 # A reference pack is a curated, versioned description of ONE agent-access
 # provider, expressed entirely in the vocabulary that
-# services/agentic_observability/provider_framework.py already defines. It is
+# services/api/actions/agentic_observability/provider_framework.py already defines. It is
 # read-only configuration: nothing here authorizes, mutates, or calls anything.
 #
 # This pack describes the provider implemented by
@@ -24,7 +24,7 @@
 #       observed scope is surfaced for review.
 #   Because the failure modes are asymmetric, this pack ships NO baselines it
 #   cannot ground (see baseline_status below), and the loader
-#   (services/agent_access_intelligence/reference_packs.py) raises rather than
+#   (services/api/actions/agent_access_intelligence/reference_packs.py) raises rather than
 #   skipping a malformed pack — a silently dropped pack would degrade to the
 #   empty-baseline case for its provider.
 #
@@ -47,8 +47,8 @@ description: >-
 # pack_status: reference — a reference pack that cannot name its grounding is
 # a fabrication and the validator rejects it.
 grounded_in:
-  - "services/backend/services/agentic_observability/provider_framework.py::XReferenceAdapter"
-  - "services/backend/services/agentic_observability/provider_framework.py::compute_permission_findings"
+  - "services/api/actions/agentic_observability/provider_framework.py::XReferenceAdapter"
+  - "services/api/actions/agentic_observability/provider_framework.py::compute_permission_findings"
 
 # Verbatim from ProviderMetadata(read_only=True, webhook_supported=True, ...).
 read_only: true
@@ -58,7 +58,7 @@ supported_operations:
   - auth_verification
   - action_observation
 
-# Defaults for services/agent_access_intelligence/models.py::CapabilityKind.
+# Defaults for services/api/actions/agent_access_intelligence/models.py::CapabilityKind.
 # This adapter carries no MCP server context, so an observed capability is a
 # provider action unless the observation names an object type.
 capability_kind_defaults:

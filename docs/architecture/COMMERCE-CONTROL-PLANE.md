@@ -6,20 +6,20 @@ visibility: P
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/x402/commerce_routes.py, services/backend/services/x402/approvals.py, services/backend/services/x402/control_plane.py]
+source_files: [services/api/value/x402/commerce_routes.py, services/api/value/x402/approvals.py, services/api/value/x402/control_plane.py]
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "services/backend/services/x402/approvals.py": "sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24"
-  "services/backend/services/x402/commerce_routes.py": "sha256:c6090fda076b98e183e90eb250150010b23832dc66a341d1d8f480063166be8a"
-  "services/backend/services/x402/control_plane.py": "sha256:df8956842b85a3bbac67a711dfda005a80858a51fa71973c3a8106e9bb16b8df"
+  "services/api/value/x402/approvals.py": "sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24"
+  "services/api/value/x402/commerce_routes.py": "sha256:73a9f03a50f3a43b6d17cc2f9e118aec853f6a5d6d2a3c29c1348f66d94d00c4"
+  "services/api/value/x402/control_plane.py": "sha256:4babd8aa29f53920b27d0a5c68e1fb74b1423ab6c52d5a8811272dc5afcb742d"
 ---
 # Aether Agentic Commerce — Control Plane
 
 **Status:** Day-1 GA (feature-flagged via `COMMERCE_CONTROL_PLANE_ENABLED=true`)
 **Layer:** L3b+ (extends existing x402 capture L3b)
-**Surface:** Backend (`services/backend/services/x402/`), Kyber (`features/approvals`, `components/commerce`)
+**Surface:** Backend (`services/api/value/x402/`), Kyber (`features/approvals`, `components/commerce`)
 
 ---
 
@@ -96,20 +96,20 @@ one or more graph vertices/edges, and is traceable via `GET /v1/x402/explain/{ch
 
 | Module | Purpose |
 |---|---|
-| `services/backend/services/x402/commerce_models.py` | Canonical Pydantic domain models (shared) |
-| `services/backend/services/x402/commerce_store.py` | Tenant-isolated in-memory store |
-| `services/backend/services/x402/control_plane.py` | Lifecycle orchestrator (`X402ControlPlane`) |
-| `services/backend/services/x402/resources.py` | `ProtectedResourceRegistry` + Day-1 seeds |
-| `services/backend/services/x402/facilitators.py` | Facilitator + asset registries (USDC Base/Solana) |
-| `services/backend/services/x402/policies.py` | `PolicyEngine` — enforces mandatory approval |
-| `services/backend/services/x402/approvals.py` | `ApprovalService` — full workflow FSM |
-| `services/backend/services/x402/verification.py` | Facilitator + local payment verification |
-| `services/backend/services/x402/settlement.py` | Settlement FSM (pending→verifying→settled/failed) |
-| `services/backend/services/x402/entitlements.py` | Entitlement mint/lookup/reuse/revoke |
-| `services/backend/services/x402/pricing.py` | Price resolution with plan discounts |
-| `services/backend/services/x402/idempotency.py` | Payment-Identifier dedupe — in-memory (local) or Redis-backed (staging/prod), async API |
-| `services/backend/services/x402/economic_mutations.py` | Deterministic graph writers |
-| `services/backend/services/x402/commerce_routes.py` | FastAPI routes (control plane, approvals, entitlements, diagnostics) |
+| `services/api/value/x402/commerce_models.py` | Canonical Pydantic domain models (shared) |
+| `services/api/value/x402/commerce_store.py` | Tenant-isolated in-memory store |
+| `services/api/value/x402/control_plane.py` | Lifecycle orchestrator (`X402ControlPlane`) |
+| `services/api/value/x402/resources.py` | `ProtectedResourceRegistry` + Day-1 seeds |
+| `services/api/value/x402/facilitators.py` | Facilitator + asset registries (USDC Base/Solana) |
+| `services/api/value/x402/policies.py` | `PolicyEngine` — enforces mandatory approval |
+| `services/api/value/x402/approvals.py` | `ApprovalService` — full workflow FSM |
+| `services/api/value/x402/verification.py` | Facilitator + local payment verification |
+| `services/api/value/x402/settlement.py` | Settlement FSM (pending→verifying→settled/failed) |
+| `services/api/value/x402/entitlements.py` | Entitlement mint/lookup/reuse/revoke |
+| `services/api/value/x402/pricing.py` | Price resolution with plan discounts |
+| `services/api/value/x402/idempotency.py` | Payment-Identifier dedupe — in-memory (local) or Redis-backed (staging/prod), async API |
+| `services/api/value/x402/economic_mutations.py` | Deterministic graph writers |
+| `services/api/value/x402/commerce_routes.py` | FastAPI routes (control plane, approvals, entitlements, diagnostics) |
 
 ## 6. Graph schema
 
@@ -130,7 +130,7 @@ All commerce events published under `aether.commerce.*` topic namespace on the e
 | `COMMERCE_CONTROL_PLANE_ENABLED` | `true` | Master flag |
 | `IG_X402_LAYER` | `true` | Underlying x402 L3b |
 
-Mandatory approval is not a flag: `PolicyEngine` enforces it for every spend class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in `services/x402/policies.py`); only the engine's `set_mandatory_approval()` setter, which no production code calls, can change it.
+Mandatory approval is not a flag: `PolicyEngine` enforces it for every spend class (`DEFAULT_APPROVAL_REQUIRED_ALL = True` in `services/api/value/x402/policies.py`); only the engine's `set_mandatory_approval()` setter, which no production code calls, can change it.
 
 ## 9. SDK / API entry points
 
@@ -200,7 +200,7 @@ them.
 Run:
 ```bash
 # Backend
-cd "services/backend" && python -m pytest tests/commerce/ -v --asyncio-mode=auto
+cd "services/api" && python -m pytest tests/commerce/ -v --asyncio-mode=auto
 
 # Kyber
 cd apps/kyber-web && npx vitest run
@@ -213,7 +213,7 @@ cd apps/kyber-web && npx vitest run
   activation state (`control_plane._resolve_environment`) — never trusted from
   the client.
 - On-chain verification resolves the tenant's **own** RPC endpoint+key pair from
-  the credential authority (`services/backend/services/x402/rpc_resolver.py`, domain `rpc`), an
+  the credential authority (`services/api/value/x402/rpc_resolver.py`, domain `rpc`), an
   atomic `{url, api_key, auth_mode}` document. Local/test use a platform default;
   deployed environments with no configured pair return the semantic verdict
   `verification_unavailable` (fail-closed) — never an auto-pass, never a global

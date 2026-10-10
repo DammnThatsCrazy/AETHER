@@ -216,7 +216,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/agent', '/v1/agents', '/v1/profile360'],
       surfaceIds: ['profile360'],
-      services: ['services/backend/services/agent'],
+      services: ['services/api/actions/agent'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/agent360.md'
     },
@@ -276,7 +276,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/campaign-quality', '/v1/campaign-sources', '/v1/campaigns', '/v1/mapping-review'],
       surfaceIds: ['campaign360', 'comparison_workbench'],
-      services: ['services/backend/services/campaign'],
+      services: ['services/api/journeys/campaign'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/campaign360.md'
     },
@@ -336,7 +336,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/clusters'],
       surfaceIds: ['cluster360', 'graph'],
-      services: ['services/backend/services/cluster'],
+      services: ['services/api/graph/cluster'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/cluster360.md'
     },
@@ -396,7 +396,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/comms', '/v1/contact', '/v1/delivery', '/v1/notifications'],
       surfaceIds: ['profile360', 'timeline'],
-      services: ['services/backend/services/comms'],
+      services: ['services/api/journeys/comms'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/communication360.md'
     },
@@ -456,7 +456,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/client-sync', '/v1/integrations', '/v1/provider-connections'],
       surfaceIds: ['connection360'],
-      services: ['services/backend/services/provider_runtime'],
+      services: ['services/api/connectors/provider_runtime'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/connection360.md'
     },
@@ -523,7 +523,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/economic', '/v1/profile'],
       surfaceIds: ['campaign360', 'economic360', 'product_intelligence'],
-      services: ['services/backend/services/economic'],
+      services: ['services/api/value/economic'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/economic360.md'
     },
@@ -583,7 +583,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/events', '/v1/journeys'],
       surfaceIds: ['journeys', 'timeline'],
-      services: ['services/backend/services/events', 'services/backend/services/journeys'],
+      services: ['services/api/ingestion/events', 'services/api/journeys/journeys'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/episode360.md'
     },
@@ -650,7 +650,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/agent', '/v1/agents', '/v1/computations', '/v1/flows', '/v1/jobs'],
       surfaceIds: ['timeline'],
-      services: ['services/backend/services/agent', 'services/backend/services/flows', 'services/backend/services/jobs'],
+      services: ['services/api/actions/agent', 'services/api/value/flows', 'services/api/workers/jobs'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/execution360.md'
     },
@@ -710,7 +710,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/fraud'],
       surfaceIds: ['fraud360', 'graph'],
-      services: ['services/backend/services/fraud'],
+      services: ['services/api/intelligence/fraud'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/fraud360.md'
     },
@@ -770,7 +770,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/geo'],
       surfaceIds: ['geographic360'],
-      services: ['services/backend/services/geo'],
+      services: ['services/api/graph/geo'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/geographic360.md'
     },
@@ -830,7 +830,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/infrastructure'],
       surfaceIds: ['infrastructure360'],
-      services: ['services/backend/services/infrastructure'],
+      services: ['services/api/graph/infrastructure'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/infrastructure360.md'
     },
@@ -890,7 +890,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/attribution', '/v1/conversions', '/v1/journeys', '/v1/measurement', '/v1/spend'],
       surfaceIds: ['campaign360', 'outcome360'],
-      services: ['services/backend/services/measurement'],
+      services: ['services/api/journeys/measurement'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/outcome360.md'
     },
@@ -950,7 +950,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/population'],
       surfaceIds: ['population360'],
-      services: ['services/backend/services/population'],
+      services: ['services/api/identity/population'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/population360.md'
     },
@@ -1010,7 +1010,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/profile', '/v1/profile360'],
       surfaceIds: ['profile360'],
-      services: ['services/backend/services/profile'],
+      services: ['services/api/identity/profile'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/profile360.md'
     },
@@ -1070,7 +1070,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/entities', '/v1/graph', '/v1/semantic'],
       surfaceIds: ['graph', 'profile360'],
-      services: ['services/backend/services/operational_intelligence', 'services/backend/services/semantic_intelligence'],
+      services: ['services/api/graph/operational_intelligence', 'services/api/intelligence/semantic_intelligence'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/relationship360.md'
     },
@@ -1130,7 +1130,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/capability-risk', '/v1/risk-overlays'],
       surfaceIds: ['comparison_workbench', 'graph', 'risk360'],
-      services: ['services/backend/services/risk_overlay'],
+      services: ['services/api/graph/risk_overlay'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/risk360.md'
     },
@@ -1190,7 +1190,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/profile'],
       surfaceIds: ['profile360'],
-      services: ['services/backend/services/profile'],
+      services: ['services/api/identity/profile'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/architecture/blueprints/social360.md'
     },
@@ -1250,7 +1250,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/imports', '/v1/kyber', '/v1/providers'],
       surfaceIds: ['campaign360'],
-      services: ['services/backend/services/imports'],
+      services: ['services/api/ingestion/imports'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/blueprints/source360.md'
     },
@@ -1310,7 +1310,7 @@ export const intelligenceProjectionDefinitions: Record<
     legacyBindings: {
       routes: ['/v1/graph', '/v1/preferences'],
       surfaceIds: ['temporal360'],
-      services: ['services/backend/shared/temporal'],
+      services: ['services/api/shared/temporal'],
       migrationMode: 'converged',
       migrationBlueprint: 'docs/architecture/blueprints/temporal360.md'
     },

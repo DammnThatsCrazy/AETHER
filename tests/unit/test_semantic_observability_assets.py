@@ -2,7 +2,7 @@
 
 Pins the ``aether_semantic_health`` Prometheus alert group and the
 ``semantic-pipeline`` Grafana dashboard to the exact metric names emitted by
-``services/semantic_intelligence`` — an alert or panel referencing a series
+``services/api/intelligence/semantic_intelligence`` — an alert or panel referencing a series
 nothing emits would be silently dead forever. Also asserts both assets parse.
 """
 
@@ -20,7 +20,7 @@ ALERT_RULES = ROOT / "infra/observability/prometheus/alert_rules.yml"
 DASHBOARD = ROOT / "infra/observability/grafana/dashboards/semantic-pipeline.json"
 
 # The complete metric contract emitted by
-# services/backend/services/semantic_intelligence.
+# services/api/intelligence/semantic_intelligence.
 # Any semantic alert expr or dashboard query MUST resolve to one of these.
 CONTRACTED_METRICS = frozenset(
     {
@@ -75,7 +75,7 @@ def test_alert_group_references_only_contracted_metrics():
         assert referenced, f"alert {rule['alert']} references no semantic metric"
         unknown = referenced - CONTRACTED_METRICS
         assert not unknown, (
-            f"alert {rule['alert']} references series services/semantic_intelligence "
+            f"alert {rule['alert']} references series services/api/intelligence/semantic_intelligence "
             f"does not emit: {sorted(unknown)}"
         )
 
@@ -94,7 +94,7 @@ def test_dashboard_json_parses_and_panels_reference_only_contracted_metrics():
         assert referenced, f"panel expr references no semantic metric: {expr}"
         unknown = referenced - CONTRACTED_METRICS
         assert not unknown, (
-            f"panel expr references series services/semantic_intelligence does not "
+            f"panel expr references series services/api/intelligence/semantic_intelligence does not "
             f"emit: {sorted(unknown)} in {expr!r}"
         )
 

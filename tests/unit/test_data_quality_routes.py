@@ -1,7 +1,7 @@
 """CI-gated tests for Data Quality / Drift / Intelligence Quality.
 
 Mirrors the backend-suite coverage in
-``services/backend/tests/data_quality/`` but runs under the
+``services/api/tests/data_quality/`` but runs under the
 root ``tests/`` testpath (which is what CI executes) using the standard
 ``backend_module_path`` import-isolation pattern shared by the other root unit
 tests (see test_governance_routes.py).
@@ -18,8 +18,8 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -47,13 +47,13 @@ def dq(monkeypatch):
     with backend_module_path():
         repos = importlib.import_module("repositories.repos")
         repos.reset_in_memory_stores()
-        audit_mod = importlib.import_module("services.security.audit_ledger")
+        audit_mod = importlib.import_module("governance.security.audit_ledger")
         audit_mod._TENANT_TAIL.clear()
         audit_mod._TENANT_SEQ.clear()
-        routes = importlib.import_module("services.data_quality.routes")
-        service = importlib.import_module("services.data_quality.service")
-        models = importlib.import_module("services.data_quality.models")
-        sec_repos = importlib.import_module("services.security.repositories")
+        routes = importlib.import_module("governance.data_quality.routes")
+        service = importlib.import_module("governance.data_quality.service")
+        models = importlib.import_module("governance.data_quality.models")
+        sec_repos = importlib.import_module("governance.security.repositories")
         yield SimpleNamespace(
             routes=routes,
             service=service,

@@ -8,7 +8,7 @@ local -> staging -> prod:
     or an explicitly documented `gap`);
   * every declared LOCAL compose service actually exists in infra/local/docker-compose.yml;
   * every declared CLOUD terraform module actually exists under the modules dir;
-  * every declared runtime role is a real role in services/runtime/roles.py;
+  * every declared runtime role is a real role in services/api/workers/runtime/roles.py;
   * every non-present capability (`gap`) carries an honest `gap` note.
 
 It then validates the capability-matrix JOIN LAYER (config/capability_matrix.yaml),
@@ -49,7 +49,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / "config" / "deploy_profile.yaml"
-ROLES_PY = ROOT / "services" / "backend" / "services" / "runtime" / "roles.py"
+ROLES_PY = ROOT / "services" / "api" / "workers" / "runtime" / "roles.py"
 
 # Join-layer facet files (see join_errors / _join_facets below).
 JOIN_MATRIX = ROOT / "config" / "capability_matrix.yaml"

@@ -11,13 +11,13 @@ since_version: "0.1.0"
 # Connector Subsystem Registry
 
 Aether organizes connectors into three backend subsystems, each under
-`services/backend/services/`.
+`services/api/services/`.
 
 ## Subsystems
 
 ### Integration Connectors
 
-**Path:** `services/backend/services/integrations/connectors/`
+**Path:** `services/api/connectors/integrations/connectors/`
 
 Email and marketing platform connectors. Each connector implements the
 `ConnectorClass` taxonomy and normalizes provider payloads into canonical
@@ -27,7 +27,7 @@ Connectors: Klaviyo, SendGrid, Mailchimp, Postmark, Iterable, Braze, Customer.io
 
 ### Measurement Connectors
 
-**Path:** `services/backend/services/measurement/connectors/`
+**Path:** `services/api/journeys/measurement/connectors/`
 
 Ad platform measurement connectors for attribution and spend tracking.
 
@@ -35,7 +35,7 @@ Connectors: Google Ads, Meta Ads, TikTok Ads, LinkedIn Ads, X Ads, Reddit Ads, M
 
 ### Derivatives Connectors
 
-**Path:** `services/backend/services/derivatives/connectors/`
+**Path:** `services/api/value/derivatives/connectors/`
 
 Financial venue connectors for DeFi and derivative instrument data.
 
@@ -43,7 +43,7 @@ Connectors: Hyperliquid, Generic Import
 
 ## Provider Plugins
 
-**Path:** `services/backend/services/providers/`
+**Path:** `services/api/connectors/providers/`
 
 Full-lifecycle provider plugins with OAuth, pull sync, webhook handling, and
 normalization. Each plugin emits `AetherEvent` through the canonical
@@ -53,7 +53,7 @@ Providers: Amazon, eBay, Etsy, Shopify, TikTok, Walmart, WooCommerce
 
 ## Provider Runtime
 
-**Path:** `services/backend/services/provider_runtime/`
+**Path:** `services/api/connectors/provider_runtime/`
 
 Centralized runtime that manages provider manifests, certification, validation,
 and the normalization pipeline. All provider plugins register through this runtime.

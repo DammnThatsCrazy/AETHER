@@ -1,6 +1,6 @@
 """Capability declaration tests (PR 2, Phase B2, monoprompt §9.3/§9.5).
 
-Proves the invariants documented in ``services/agent_access_intelligence/declarations.py``
+Proves the invariants documented in ``services/api/actions/agent_access_intelligence/declarations.py``
 against the in-memory backend: re-declaring upserts instead of duplicating, the declared
 ids are derived from the SAME tuple the observed catalog uses (so drift joins exactly), a
 credential-bearing ``server_url`` never reaches storage, a declaration that identifies
@@ -19,14 +19,14 @@ import pytest
 
 from shared.common.common import BadRequestError, NotFoundError
 
-from services.agent_access_intelligence import identity
-from services.agent_access_intelligence.catalog_service import CapabilityCatalogService
-from services.agent_access_intelligence.declarations import (
+from actions.agent_access_intelligence import identity
+from actions.agent_access_intelligence.catalog_service import CapabilityCatalogService
+from actions.agent_access_intelligence.declarations import (
     CAPABILITY_DECLARATIONS_TABLE,
     CapabilityDeclarationRepository,
     CapabilityDeclarationService,
 )
-from services.agent_access_intelligence.models import capability_id_for
+from actions.agent_access_intelligence.models import capability_id_for
 
 
 @pytest.fixture

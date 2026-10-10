@@ -12,12 +12,12 @@ since_version: "0.1.0"
 
 ## Entry Points
 
-`POST /v1/batch` is the first-party SDK entry point (`services/backend/services/ingestion/batch.py`). Other sources have their own authenticated or verified entry paths:
+`POST /v1/batch` is the first-party SDK entry point (`services/api/ingestion/ingestion/batch.py`). Other sources have their own authenticated or verified entry paths:
 
-- API feeds use `POST /v1/ingest/feed` (`services/backend/services/ingestion/routes.py`). The deprecated `/v1/ingest/events` aliases forward SDK events to the batch V1 ingestion function.
-- Imports use the `/v1/imports` upload, validation, approval, and commit workflow (`services/backend/services/imports/routes.py`); commit enqueues an `import.commit` job.
-- The Universal Provider Runtime uses `POST /v1/provider-connections/{connection_id}/sync` for tenant-initiated pulls and `POST /v1/provider-webhooks/{identity_key}` for provider deliveries when that runtime is enabled (`services/backend/services/provider_runtime/routes.py`). The public webhook route verifies provider credentials or signatures inside its gateway; a tenant header is only a routing hint.
-- Legacy connectors continue to use `POST /v1/integrations/connectors/{connector_type}/sync` and verified `POST /v1/integrations/webhooks/{connector_type}` (`services/backend/services/integrations/connectors/routes.py`).
+- API feeds use `POST /v1/ingest/feed` (`services/api/ingestion/ingestion/routes.py`). The deprecated `/v1/ingest/events` aliases forward SDK events to the batch V1 ingestion function.
+- Imports use the `/v1/imports` upload, validation, approval, and commit workflow (`services/api/ingestion/imports/routes.py`); commit enqueues an `import.commit` job.
+- The Universal Provider Runtime uses `POST /v1/provider-connections/{connection_id}/sync` for tenant-initiated pulls and `POST /v1/provider-webhooks/{identity_key}` for provider deliveries when that runtime is enabled (`services/api/connectors/provider_runtime/routes.py`). The public webhook route verifies provider credentials or signatures inside its gateway; a tenant header is only a routing hint.
+- Legacy connectors continue to use `POST /v1/integrations/connectors/{connector_type}/sync` and verified `POST /v1/integrations/webhooks/{connector_type}` (`services/api/connectors/integrations/connectors/routes.py`).
 
 ## Pipeline
 
@@ -38,7 +38,7 @@ These are processing stages, not one shared durable route for every source:
 
 ## Current State
 
-SDK, feed, import, and provider ingestion paths exist, with contract validation, Bronze persistence, Silver normalization, and identity resolution implemented for supported event families. `services/backend/services/ingestion/gateway.py` currently validates and stamps the universal observation envelope, but its consent, idempotency, sequencing, and durable-write gates are still adopted per path; SDK use of that envelope is flag-gated. There is not yet one canonical durable ingress path for every source.
+SDK, feed, import, and provider ingestion paths exist, with contract validation, Bronze persistence, Silver normalization, and identity resolution implemented for supported event families. `services/api/ingestion/ingestion/gateway.py` currently validates and stamps the universal observation envelope, but its consent, idempotency, sequencing, and durable-write gates are still adopted per path; SDK use of that envelope is flag-gated. There is not yet one canonical durable ingress path for every source.
 
 SDK identity resolution no longer runs as request-local background work. The
 `identity-worker` consumes the durable validated-event stream, registers

@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 # ── backend import bootstrap (mirrors scripts/connector_smoke.py) ─────────────
-BACKEND_ROOT = Path(__file__).parent.parent / "services" / "backend"
+BACKEND_ROOT = Path(__file__).parent.parent / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -120,7 +120,7 @@ def _evidence_records(descriptors) -> list[dict]:
         offline_ok = None
         if d.domain == "communications":
             try:
-                from services.comms.conformance import certify_comms
+                from journeys.comms.conformance import certify_comms
                 offline_ok = all(r.passed for r in certify_comms())
             except Exception:  # pragma: no cover
                 offline_ok = False

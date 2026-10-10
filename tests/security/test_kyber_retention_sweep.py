@@ -23,14 +23,14 @@ from typing import Any, get_args
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "kyber-retention-test")
 
 from repositories.repos import BaseRepository, reset_in_memory_stores  # noqa: E402
-from services.kyber.access.contracts import SessionStatus  # noqa: E402
-from services.kyber.retention import (  # noqa: E402
+from governance.kyber.access.contracts import SessionStatus  # noqa: E402
+from governance.kyber.retention import (  # noqa: E402
     ALL_SESSION_STATUSES,
     KYBER_EVIDENCE_TABLES,
     LIVE_SESSION_STATUSES,
@@ -395,7 +395,7 @@ async def test_sweep_summary_reports_every_table_and_audits_once():
             recorded.append(kwargs)
             return kwargs
 
-    import services.security.audit_ledger as ledger_module
+    import governance.security.audit_ledger as ledger_module
 
     original = ledger_module.audit_ledger
     ledger_module.audit_ledger = _Ledger()  # type: ignore[assignment]
@@ -425,7 +425,7 @@ async def test_unknown_resource_type_is_not_swept():
 
 
 async def test_worker_spec_is_registered_under_the_maintenance_role():
-    from services.runtime.roles import ROLE_TO_SPEC_NAMES
+    from workers.runtime.roles import ROLE_TO_SPEC_NAMES
 
     assert "kyber_retention_sweep" in ROLE_TO_SPEC_NAMES["maintenance"]
 

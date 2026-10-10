@@ -21,15 +21,15 @@ Program baseline recorded before PR 1 implementation began.
 
 | Defect | Verified location | Fixed in |
 |---|---|---|
-| Naive timestamps accepted at ingestion | `services/backend/services/ingestion/batch.py` `validate_timestamp` (fromisoformat-only) | PR 1 (shadow machinery) → PR 2 (enforce cutover) |
+| Naive timestamps accepted at ingestion | `services/api/ingestion/ingestion/batch.py` `validate_timestamp` (fromisoformat-only) | PR 1 (shadow machinery) → PR 2 (enforce cutover) |
 | No temporal authority / policy registry / viewer timezone preference | repo-wide: zero hits | PR 1 |
 | `TemporalEnvelope` TS-only; no Py mirror or parity test | `packages/shared/graph-contract.ts:311` vs `shared/graph/graph_contract.py` | PR 1 |
 | No shared frontend time layer; ad-hoc `toLocaleString` in 75+ files | `frontend/{aether,kyber}/src` | PR 1 (layer + freeze) → PR 4 (migration to zero) |
-| GeoIP only on deprecated ingest alias; no trusted-proxy handling; raw IP persisted | `services/backend/services/ingestion/routes.py::_enrich_ip`; raw IP in `services/backend/services/export/routes.py`, `services/backend/services/consent/audit_routes.py` | PR 1 |
-| Geo routes are unconditional `not_provisioned` stubs | `services/backend/services/geo/routes.py` | PR 3 |
-| Profile360 synthesizes generic `RELATED_TO` edges; ad-hoc readiness vocab | `services/backend/services/profile/composer.py::_compose_graph` | PR 2 |
+| GeoIP only on deprecated ingest alias; no trusted-proxy handling; raw IP persisted | `services/api/ingestion/ingestion/routes.py::_enrich_ip`; raw IP in `services/api/ingestion/export/routes.py`, `services/api/governance/consent/audit_routes.py` | PR 1 |
+| Geo routes are unconditional `not_provisioned` stubs | `services/api/graph/geo/routes.py` | PR 3 |
+| Profile360 synthesizes generic `RELATED_TO` edges; ad-hoc readiness vocab | `services/api/identity/profile/composer.py::_compose_graph` | PR 2 |
 | No graph mutation ledger / fact versions / universal mutation gateway | 32 direct-writer files (frozen by `scripts/validate_graph_write_paths.py`); `shared/cis/mutation_gateway.py` used only by agent staging | PR 2 |
-| `/v1/graph/temporal` hardcodes limit=100; frontend live graph = sampled assembly w/ 200-cap | `services/backend/services/operational_intelligence/routes.py`; `apps/aether-web/src/features/graph/use-graph-data.ts` | PR 3 (backend) / PR 4 (frontend) |
+| `/v1/graph/temporal` hardcodes limit=100; frontend live graph = sampled assembly w/ 200-cap | `services/api/graph/operational_intelligence/routes.py`; `apps/aether-web/src/features/graph/use-graph-data.ts` | PR 3 (backend) / PR 4 (frontend) |
 | Cytoscape instance destroyed+recreated per data change | both `graph-canvas.tsx` copies | PR 4 |
 | Broken deep link Cluster360 → `/graph?cluster=` | `cluster-360-page.tsx` vs `graph-page.tsx` | PR 4 |
 | `FilterGroup` parity-tested but no UI constructs one; divergent duplicate `packages/ui/core/src/types/graph-layers.ts` | `packages/shared/graph-contract.ts` / frontend | PR 4 |
@@ -58,7 +58,7 @@ Program baseline recorded before PR 1 implementation began.
 - The non-Alembic `docs/archive/legacy-architecture/backend/migrations/*.sql` tree is legacy
   (derivatives/stablecoin foundations), applied outside the Alembic chain —
   out of scope for this program; do not extend it.
-- The duplicate backend test tree (`services/backend/tests/`)
+- The duplicate backend test tree (`services/api/tests/`)
   is not part of the `make ci-check` lane (root `tests/` is); consolidation is
   follow-up work outside this program's declared scope.
 - Merged PR #454 carried 23 unresolved review findings (19 P1, 4 P2);

@@ -148,7 +148,7 @@ export const materialityComponents = [
 ] as const;
 export type MaterialityComponent = typeof materialityComponents[number];
 
-/** One side of a comparison (Python twin: services/intelligence/comparison/contracts.py). */
+/** One side of a comparison (Python twin: services/api/intelligence/intelligence/comparison/contracts.py). */
 export interface ComparisonSubject {
   subject_type: string;
   subject_id: string;
@@ -157,7 +157,7 @@ export interface ComparisonSubject {
   as_of?: string | null;
 }
 
-/** How the baseline side of a comparison is resolved (Python twin: services/intelligence/comparison/contracts.py). */
+/** How the baseline side of a comparison is resolved (Python twin: services/api/intelligence/intelligence/comparison/contracts.py). */
 export interface BaselineSpec {
   baseline_type: string;
   subject?: ComparisonSubject | null;
@@ -169,7 +169,7 @@ export interface BaselineSpec {
   scenario_id?: string | null;
 }
 
-/** Saved definition of a comparison (Python twin: services/intelligence/comparison/contracts.py). */
+/** Saved definition of a comparison (Python twin: services/api/intelligence/intelligence/comparison/contracts.py). */
 export interface ComparisonDefinition {
   definition_id: string;
   tenant_id: string;
@@ -184,7 +184,7 @@ export interface ComparisonDefinition {
   schema_version?: string | null;
 }
 
-/** One execution of a comparison definition (Python twin: services/intelligence/comparison/contracts.py). */
+/** One execution of a comparison definition (Python twin: services/api/intelligence/intelligence/comparison/contracts.py). */
 export interface ComparisonRun {
   run_id: string;
   definition_id: string;
@@ -202,7 +202,7 @@ export interface ComparisonRun {
   schema_version?: string | null;
 }
 
-/** One materiality-scored difference surfaced by a comparison run (Python twin: services/intelligence/comparison/contracts.py). */
+/** One materiality-scored difference surfaced by a comparison run (Python twin: services/api/intelligence/intelligence/comparison/contracts.py). */
 export interface ComparisonFinding {
   id: string;
   comparison_run_id: string;

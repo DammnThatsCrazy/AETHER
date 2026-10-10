@@ -15,8 +15,8 @@ import pytest
 from shared.exploration.generated_fields import FILTER_FIELD_CATEGORIES
 from shared.exploration.models import ExplorationContextV1
 
-from services.exploration.adapters.base import AdapterContext
-from services.exploration.adapters.social360 import (
+from journeys.exploration.adapters.base import AdapterContext
+from journeys.exploration.adapters.social360 import (
     Social360SurfaceAdapter,
     social_lenses_enabled,
 )
@@ -156,7 +156,7 @@ def test_adapter_gate_respects_env_and_override(monkeypatch):
     adapter = Social360SurfaceAdapter()
     # Patch the module gate function to avoid importing config.settings here;
     # the env parsing itself is covered by test_flag_gate_defaults_off_and_parses_env.
-    import services.exploration.adapters.social360 as social360_module
+    import journeys.exploration.adapters.social360 as social360_module
 
     monkeypatch.setattr(social360_module, "social_lenses_enabled", lambda: False)
     assert adapter.is_enabled() is False

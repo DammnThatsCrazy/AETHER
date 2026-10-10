@@ -11,7 +11,7 @@
 | `app.olympuslabsml.com` | AWS Amplify | `apps/aether-web/` |
 | `status.olympuslabsml.com` | AWS Amplify | `apps/status/` |
 | `kyber.olympuslabsml.com` | Internal only | No public DNS/application route by default |
-| `api.olympuslabsml.com` | AWS ECS/ALB | `services/backend/` |
+| `api.olympuslabsml.com` | AWS ECS/ALB | `services/api/` |
 
 ## Prerequisites — gather before running
 

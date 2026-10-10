@@ -11,10 +11,10 @@ source_files: [services/ml/serving/src/api.py, services/ml/common/artifact_regis
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "infra/observability/prometheus/alert_rules.yml": "sha256:f8de01cbe7e0ecc4cb2e848a3b970f0534c129c6722ff20dfb1c0ec2ea6ea158"
+  "infra/observability/prometheus/alert_rules.yml": "sha256:25634af6fbb16059a145e387c41fc90da3b6448f3f2c7718b4ddd2766d28cef3"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "services/ml/monitoring/monitor.py": "sha256:dead8fcf2862488278dbfdff89a84a90d068dcc38d5ed750a3d103372589cd08"
-  "services/ml/serving/src/api.py": "sha256:ef70ad87f33c6ef3f62055ec8afc2c0ed288bef3e30d780ab3f233ce8e9c9a86"
+  "services/ml/serving/src/api.py": "sha256:6f4245be3d28dd75a1ba1495252ec6418cd66e28b13d7f2de9c1e26fe6443147"
 ---
 
 # ML Incident Runbook

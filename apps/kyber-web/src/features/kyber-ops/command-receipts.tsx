@@ -2,7 +2,7 @@
  * Command receipts — a read-only visibility stub for the durable command lifecycle.
  *
  * Renders the backend's own command-status vocabulary (the raw values from
- * `CommandStatus` in `services/kyber/ops/contracts.py`) and marks where a durable
+ * `CommandStatus` in `services/api/governance/kyber/ops/contracts.py`) and marks where a durable
  * receipt does not exist yet with a "receipt: …" placeholder. This panel governs
  * nothing — there are no approve / execute / verify / dry-run controls here, and an
  * off flag or a failed fetch renders nothing that breaks the page.

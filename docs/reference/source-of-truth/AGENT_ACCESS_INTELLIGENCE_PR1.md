@@ -34,14 +34,14 @@ bronze_sdk_events            +   event_outbox            (durable, idempotent)
    │                                    │
    │                                    ▼
    │                          outbox_relay                (FOR UPDATE SKIP LOCKED,
-   │                          services/backend/services/ingestion/            leases/backoff/dead-letter;
+   │                          services/api/ingestion/ingestion/            leases/backoff/dead-letter;
    │                          outbox_relay.py                runtime role: outbox-relay)
    ▼                                    │
 (searchable Bronze metadata)           ▼
-                              SilverDispatcher            (services/backend/services/silver/dispatcher.py)
+                              SilverDispatcher            (services/api/ingestion/silver/dispatcher.py)
                                         │  routes by silverProjection
                                         ▼
-                              AgentExecutionProjector     (services/backend/services/silver/projectors/
+                              AgentExecutionProjector     (services/api/ingestion/silver/projectors/
                                         │                   agent_execution_projector.py)
                                         ▼
                               silver_agent_execution_facts
@@ -49,7 +49,7 @@ bronze_sdk_events            +   event_outbox            (durable, idempotent)
                         ┌───────────────┴────────────────┐
                         ▼                                 ▼
                 canonical_activity              SilverGraphProjector
-             (_emit_to_canonical_activity)   (services/backend/services/silver/projectors/
+             (_emit_to_canonical_activity)   (services/api/ingestion/silver/projectors/
                                                  silver_graph_projector.py)
 ```
 
@@ -57,13 +57,13 @@ Ownership summary:
 
 | Stage | Canonical owner |
 |---|---|
-| Public ingestion | `POST /v1/batch` (`services/backend/services/ingestion/batch.py`) |
+| Public ingestion | `POST /v1/batch` (`services/api/ingestion/ingestion/batch.py`) |
 | Durable Bronze + outbox | `bronze_sdk_events` + `event_outbox` (FT-5 typed Bronze + transactional outbox) |
-| Relay | `outbox_relay` — `services/backend/services/ingestion/outbox_relay.py` (FT-6), runtime role `outbox-relay` |
-| Silver dispatch | `SilverDispatcher` — `services/backend/services/silver/dispatcher.py` |
+| Relay | `outbox_relay` — `services/api/ingestion/ingestion/outbox_relay.py` (FT-6), runtime role `outbox-relay` |
+| Silver dispatch | `SilverDispatcher` — `services/api/ingestion/silver/dispatcher.py` |
 | Silver fact projection | `AgentExecutionProjector` → `silver_agent_execution_facts` |
 | Canonical activity | `canonical_activity` via `AgentExecutionProjector._emit_to_canonical_activity` |
-| Graph projection | `SilverGraphProjector` — `services/backend/services/silver/projectors/silver_graph_projector.py` |
+| Graph projection | `SilverGraphProjector` — `services/api/ingestion/silver/projectors/silver_graph_projector.py` |
 
 ---
 
@@ -75,7 +75,7 @@ they normalize their payloads into canonical `*_observed` events and hand them t
 `/v1/batch` spine above instead of running the bespoke synchronous pipeline. When the flag
 is OFF, they run exactly as they do today.
 
-Agentic-observability routes (`services/backend/services/agentic_observability/routes.py`):
+Agentic-observability routes (`services/api/actions/agentic_observability/routes.py`):
 
 - `POST /v1/observability/agent/events`
 - `POST /v1/observability/agent/tools`
@@ -83,7 +83,7 @@ Agentic-observability routes (`services/backend/services/agentic_observability/r
 - `POST /v1/observability/agent/risk-signals`
 - `POST /v1/observability/agent/accounts`
 
-External-account observability routes (`services/backend/services/external_account_observability/routes.py`):
+External-account observability routes (`services/api/connectors/external_account_observability/routes.py`):
 
 - `POST /v1/observability/external-accounts`
 - `POST /v1/observability/external-accounts/brokerage`
@@ -91,7 +91,7 @@ External-account observability routes (`services/backend/services/external_accou
 - `POST /v1/observability/external-accounts/order-observations`
 - plus the external-brokerage / order / portfolio / budget observers built on
   `repositories/agentic_observability_repos.py` and
-  `services/backend/services/external_account_observability/graph_mutations.py`.
+  `services/api/connectors/external_account_observability/graph_mutations.py`.
 
 The read/admin surfaces (`GET /v1/admin/kyber/agentic-observability/*`) are unaffected —
 they continue to serve from the same repositories regardless of the flag.
@@ -130,7 +130,7 @@ provider-neutral event types are introduced in this PR (that work is deferred �
 | Canonical activity | `ActivityRepository` write inside the pipeline | `AgentExecutionProjector._emit_to_canonical_activity` |
 | Graph projection | none (the `agentic_projection_outbox` table is no longer written; the worker that drained it was removed) | `SilverGraphProjector` |
 
-Pipeline sources: `services/backend/services/agentic_observability/pipeline.py`,
+Pipeline sources: `services/api/actions/agentic_observability/pipeline.py`,
 `repositories/agentic_observability_repos.py`.
 
 ---

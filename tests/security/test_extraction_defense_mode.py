@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")

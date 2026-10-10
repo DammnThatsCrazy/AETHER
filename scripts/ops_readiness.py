@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -40,12 +40,12 @@ OPS_FLAG_ATTRS = [
 ]
 
 OPS_MODULES = [
-    "services.agent.runtime_repository",
-    "services.agent.worker_bridge",
-    "services.agent.worker_routes",
-    "services.agent.mutation_commit",
-    "services.agent.briefings",
-    "services.agent.ops_alerts",
+    "actions.agent.runtime_repository",
+    "actions.agent.worker_bridge",
+    "actions.agent.worker_routes",
+    "actions.agent.mutation_commit",
+    "actions.agent.briefings",
+    "actions.agent.ops_alerts",
 ]
 
 
@@ -79,7 +79,7 @@ async def run_checks() -> dict:
 
     # Runtime stores reachable.
     try:
-        from services.agent.runtime_repository import get_agent_runtime_repository
+        from actions.agent.runtime_repository import get_agent_runtime_repository
         repo = get_agent_runtime_repository()
         status = await repo.controller_status("__readiness__")
         _check(checks, "runtime_stores_reachable", isinstance(status, (list, dict)))
@@ -88,7 +88,7 @@ async def run_checks() -> dict:
 
     # Worker bridge fails closed outside local mode.
     try:
-        from services.agent import worker_bridge
+        from actions.agent import worker_bridge
         previous = os.environ.get("AETHER_ENV")
         os.environ["AETHER_ENV"] = "staging"
         try:
@@ -117,7 +117,7 @@ async def run_checks() -> dict:
 
     # Mutation commit never bypasses approval (staged mutations stay staged).
     try:
-        from services.agent import mutation_commit
+        from actions.agent import mutation_commit
         has_commit = hasattr(mutation_commit, "commit_approved_mutations")
         source = Path(mutation_commit.__file__).read_text(encoding="utf-8")
         approval_gated = "approved" in source and "staged" in source

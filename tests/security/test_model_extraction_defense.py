@@ -19,9 +19,9 @@ import time
 import numpy as np
 import pytest
 
-from security.model_extraction_defense.canary_detector import CanaryInputDetector
-from security.model_extraction_defense.cleanup import CleanupThread
-from security.model_extraction_defense.config import (
+from governance.model_extraction_defense.canary_detector import CanaryInputDetector
+from governance.model_extraction_defense.cleanup import CleanupThread
+from governance.model_extraction_defense.config import (
     CanaryConfig,
     ExtractionDefenseConfig,
     OutputPerturbationConfig,
@@ -30,13 +30,13 @@ from security.model_extraction_defense.config import (
     RiskScorerConfig,
     WatermarkConfig,
 )
-from security.model_extraction_defense.defense_layer import ExtractionDefenseLayer
-from security.model_extraction_defense.metrics import DefenseMetrics
-from security.model_extraction_defense.output_perturbation import OutputPerturbationLayer
-from security.model_extraction_defense.pattern_detector import QueryPatternDetector
-from security.model_extraction_defense.rate_limiter import QueryRateLimiter
-from security.model_extraction_defense.risk_scorer import ExtractionRiskScorer
-from security.model_extraction_defense.watermark import ModelWatermark
+from governance.model_extraction_defense.defense_layer import ExtractionDefenseLayer
+from governance.model_extraction_defense.metrics import DefenseMetrics
+from governance.model_extraction_defense.output_perturbation import OutputPerturbationLayer
+from governance.model_extraction_defense.pattern_detector import QueryPatternDetector
+from governance.model_extraction_defense.rate_limiter import QueryRateLimiter
+from governance.model_extraction_defense.risk_scorer import ExtractionRiskScorer
+from governance.model_extraction_defense.watermark import ModelWatermark
 
 # =========================================================================
 # Fixtures

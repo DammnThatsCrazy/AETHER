@@ -9,13 +9,13 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
-source_files: [services/backend/services/imports/service.py, services/backend/services/imports/commit.py, services/backend/services/imports/kyber_routes.py, services/backend/repositories/imports_repo.py, services/backend/shared/graph/graph.py]
+source_files: [services/api/ingestion/imports/service.py, services/api/ingestion/imports/commit.py, services/api/ingestion/imports/kyber_routes.py, services/api/repositories/imports_repo.py, services/api/shared/graph/graph.py]
 source_hashes:
-  "services/backend/repositories/imports_repo.py": "sha256:d483f6e353ed70f170ff3738f4b3ac5eed1086722b2fc1c58e48df6315490b37"
-  "services/backend/services/imports/commit.py": "sha256:7eb27dcd26da5c758b6ef6ceb46bcd413bcdca9d4381621c712962cd606104d9"
-  "services/backend/services/imports/kyber_routes.py": "sha256:5dda769c5213f881a57bb19c87078cd45cfcb62c9f54192c9216e70928074dff"
-  "services/backend/services/imports/service.py": "sha256:f687a509ed815ba121efb5d806a65b76a2cee6d5384ffdf6564b76979e0f8d3d"
-  "services/backend/shared/graph/graph.py": "sha256:0f1aa44d3d54e61c87975783d0ad863d1ef22039b78dc7158e48437467a733a6"
+  "services/api/ingestion/imports/commit.py": "sha256:1f65fc26ccb9b12ba9eaef3ba82808055275ea94e282098f3e4a92269779cd36"
+  "services/api/ingestion/imports/kyber_routes.py": "sha256:72539f001ee0853b94b1c2abce5d8f2eb98231b2676bf124e6f9c2e84bdeb749"
+  "services/api/ingestion/imports/service.py": "sha256:091068a1132e6ef688f14830ec2381d082165afba5e875f4b09a21f4d280e8ce"
+  "services/api/repositories/imports_repo.py": "sha256:ba56c9a87416921bc39fd169df7f13a4ef1565947a15761089d11b4295c46870"
+  "services/api/shared/graph/graph.py": "sha256:58b03f8407597f9b6b72910a3c30a51b71f44b1ad07942c0ca5f9a79a3d6a2e7"
 ---
 
 # Runbook — Tenant Import Failures
@@ -63,7 +63,7 @@ The **authoritative** lifecycle is the import-session FSM (`lifecycle_state`:
 `CREATED → UPLOADED → VALIDATING → VALIDATED → NORMALIZING → COMMITTING →
 PROJECTING → RECONCILING → COMPLETED`, plus `REJECTED`, `FAILED`, and the
 terminals `DEAD_LETTERED` / `ROLLED_BACK`). The lowercase `status` above is a
-**parity-locked legacy projection** (`services/backend/services/card_linked_payments/import_session.py`),
+**parity-locked legacy projection** (`services/api/value/card_linked_payments/import_session.py`),
 kept so the frontend and existing commit/approve surfaces keep parsing. When the
 two could disagree, trust `lifecycle_state`.
 

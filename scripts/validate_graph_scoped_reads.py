@@ -31,7 +31,8 @@ import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "services" / "backend"
+DOMAIN_PACKAGES = ("tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing")
+BACKEND = ROOT / "services" / "api"
 ALLOWLIST = ROOT / "scripts" / "allowlists" / "graph_global_reads.json"
 
 _GLOBAL_READ_METHODS = frozenset({"get_all_vertices"})
@@ -69,7 +70,7 @@ def _reads_globally(text: str) -> bool:
 
 def scan() -> set[str]:
     offenders: set[str] = set()
-    for path in (BACKEND / "services").rglob("*.py"):
+    for path in (path for d in DOMAIN_PACKAGES for path in (BACKEND / d).rglob("*.py")):
         rel = str(path.relative_to(ROOT))
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")

@@ -12,7 +12,7 @@ into ungoverned mathematics:
 3. Every ACTIVE canonical definition declares an owner and at least one test.
 4. config/computation_inventory.yaml is well-formed, and every `migrated` entry
    references a real registered definition (shrink-only debt ledger).
-5. Governed substrate dirs (shared/computation, services/computation) are free of
+5. Governed substrate dirs (shared/computation, services/api/intelligence/computation) are free of
    money-as-float patterns, enforced against a SHRINK-ONLY allowlist.
 
 Usage:
@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 GENERATED = BACKEND / "shared" / "computation" / "generated_registry.py"
 INVENTORY = ROOT / "config" / "computation_inventory.yaml"
 ALLOWLIST_DIR = ROOT / "scripts" / "allowlists"
@@ -38,7 +38,7 @@ FLOAT_ALLOWLIST = ALLOWLIST_DIR / "computation_money_float.json"
 
 GOVERNED_DIRS = [
     BACKEND / "shared" / "computation",
-    BACKEND / "services" / "computation",
+    BACKEND / "intelligence" / "computation",
 ]
 
 _MONEY_FLOAT_PATTERNS = (

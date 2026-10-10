@@ -7,13 +7,13 @@ audience: [dev-senior, ops]
 status: experimental
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/semantic_intelligence/routes.py
-  - services/backend/alembic/versions/20260702_semantic_sentiment.py
+  - services/api/intelligence/semantic_intelligence/routes.py
+  - services/api/alembic/versions/20260702_semantic_sentiment.py
 canonical_owner: platform-intelligence@aether
 estimated_read_minutes: 6
 source_hashes:
-  "services/backend/alembic/versions/20260702_semantic_sentiment.py": "sha256:2d092c70599288b4966360b916e2c2c20a1110829524e828a4126fd9ebd3e426"
-  "services/backend/services/semantic_intelligence/routes.py": "sha256:ddd3fcd31482b92381396246daa2cc45f55d61b5bd75885426fa4f02c3215d75"
+  "services/api/alembic/versions/20260702_semantic_sentiment.py": "sha256:2d092c70599288b4966360b916e2c2c20a1110829524e828a4126fd9ebd3e426"
+  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:d9d17f23ae914259fb94e3e2748fbefc3baa193e7984616a34238abc1ecbf6e4"
 ---
 
 # Semantic-Sentiment Operations Runbook

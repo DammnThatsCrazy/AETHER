@@ -11,7 +11,7 @@ canonical_source: config/runtime_deployment.yaml
 #
 # `execution_mode` names the packing strategy:
 #   consolidated — one task hosts several logical roles through an execution
-#                  group token (services/runtime/roles.py::EXECUTION_GROUPS).
+#                  group token (services/api/workers/runtime/roles.py::EXECUTION_GROUPS).
 #                  production-lean and staging: 2 always-on tasks, not 10.
 #   dedicated    — one task per logical role (the pre-v2 1:1 shape).
 #                  production-scale and enterprise-isolated, where per-role
@@ -20,7 +20,7 @@ canonical_source: config/runtime_deployment.yaml
 # Consolidation moves the PROCESS BOUNDARY and nothing else. Inside a
 # consolidated task every member role keeps its own queue, consumer group,
 # DLQ, retry policy, metrics label and restart behaviour — see
-# services/runtime/roles.py::roles_in and services/runtime/consumer_specs.py.
+# services/api/workers/runtime/roles.py::roles_in and services/api/workers/runtime/consumer_specs.py.
 #
 # INVARIANT (enforced by scripts/release/check_delivery_topology.py):
 # every role in roles.py::WORKER_ROLES is hosted by EXACTLY ONE service in
@@ -232,7 +232,7 @@ profiles:
       # Memory 8192: memory, not CPU, is the binding constraint here. Eight
       # roles' DB pools, SQS receive buffers and per-role consumer state now
       # share one heap, and with remote_ml=false the semantic classifier runs
-      # IN-PROCESS in this task (services/semantic_intelligence/consumer.py) —
+      # IN-PROCESS in this task (services/api/intelligence/semantic_intelligence/consumer.py) —
       # a resident model, not a request-scoped allocation. 4 GiB fits the
       # arithmetic but leaves no room for it. The blast radius argues the same
       # way: one OOM kill here takes all eight roles down at once, so headroom

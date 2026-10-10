@@ -7,12 +7,12 @@ audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
 source_files:
-  - services/backend/shared/graph/graph.py
-  - services/backend/shared/graph/relationship_layers.py
-  - services/backend/shared/graph/write_validator.py
-  - services/backend/shared/graph/edge_properties.py
-  - services/backend/shared/graph/mutation_gateway.py
-  - services/backend/services/onchain/action_recorder.py
+  - services/api/shared/graph/graph.py
+  - services/api/shared/graph/relationship_layers.py
+  - services/api/shared/graph/write_validator.py
+  - services/api/shared/graph/edge_properties.py
+  - services/api/shared/graph/mutation_gateway.py
+  - services/api/graph/onchain/action_recorder.py
 canonical_owner: graph@aether
 last_synced_commit: 401f9bd
 ---
@@ -21,7 +21,7 @@ last_synced_commit: 401f9bd
 
 This map records graph-layer event relationships and current write-path
 availability. Vertex/edge definitions live in
-`services/backend/shared/graph/graph.py`. The lake mutation module formerly
+`services/api/shared/graph/graph.py`. The lake mutation module formerly
 used for Silver/Gold projections has been removed. On-chain action writes now
 use `GraphMutationGateway`. The legacy identity-resolution graph mutation
 methods and the legacy engine have been deleted; only the cluster,
@@ -72,7 +72,7 @@ The `rail` field on payment events selects the downstream processing path
 - **H2H** legacy similarity and household graph construction from SDK signals
   is unavailable. The old repository's unscoped mutation methods were removed;
   its cluster and batch API routes return 503. Canonical identity decisions
-  and their governed graph projection live under `services/backend/services/identity/`.
+  and their governed graph projection live under `services/api/identity/identity/`.
   The SDK does not emit H2H graph events.
 - **H2A** edges (user → agent) are derived from `agent_task` events that
   reference the originating user.

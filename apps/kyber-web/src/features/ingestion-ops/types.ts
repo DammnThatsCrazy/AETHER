@@ -8,7 +8,7 @@
  *   · GET /v1/config/sdk/versions
  *
  * The stage vocabulary and disposition statuses match
- * services/ingestion/ingestion_observability.py exactly (RAW is client-side and
+ * services/api/ingestion/ingestion/ingestion_observability.py exactly (RAW is client-side and
  * never observed server-side; RESOLVED → METRICS/FINDINGS are declared for the
  * ladder but report `monitored: false`). No credentials flow through these — the
  * pages only render counters, spans, and static policy data.

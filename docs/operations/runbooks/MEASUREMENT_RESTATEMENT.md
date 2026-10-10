@@ -9,13 +9,13 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
-source_files: [services/backend/repositories/measurement_results_repo.py, services/backend/shared/measurement/restatement.py, services/backend/shared/measurement/compute.py, services/backend/services/measurement/routes/integrity.py, services/backend/services/traffic/repair.py]
+source_files: [services/api/repositories/measurement_results_repo.py, services/api/shared/measurement/restatement.py, services/api/shared/measurement/compute.py, services/api/journeys/measurement/routes/integrity.py, services/api/journeys/traffic/repair.py]
 source_hashes:
-  services/backend/repositories/measurement_results_repo.py: sha256:35a40c028d487f0bbe1b1d19cf3f542c1e0212ff13d40693ad443cbb9ec3f906
-  services/backend/services/measurement/routes/integrity.py: sha256:a0b5704ca62eb3b7fd7bf9e066559c228ecbdc772c16967627713ab690cb6a47
-  services/backend/services/traffic/repair.py: sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0
-  services/backend/shared/measurement/compute.py: sha256:b572af2401ba87547852aa1b44fc5687b66291274a92b1aace752d8e103a90cc
-  services/backend/shared/measurement/restatement.py: sha256:1217bf79afa2c8cb11bd36908aebf616953c382822098f493cc2d8b8a58b8428
+  "services/api/journeys/measurement/routes/integrity.py": "sha256:a0b5704ca62eb3b7fd7bf9e066559c228ecbdc772c16967627713ab690cb6a47"
+  "services/api/journeys/traffic/repair.py": "sha256:309a31315d07945083aa693341cff37b4fe5cefbc71592925c38ad818acfab68"
+  "services/api/repositories/measurement_results_repo.py": "sha256:35a40c028d487f0bbe1b1d19cf3f542c1e0212ff13d40693ad443cbb9ec3f906"
+  "services/api/shared/measurement/compute.py": "sha256:b572af2401ba87547852aa1b44fc5687b66291274a92b1aace752d8e103a90cc"
+  "services/api/shared/measurement/restatement.py": "sha256:1217bf79afa2c8cb11bd36908aebf616953c382822098f493cc2d8b8a58b8428"
 ---
 
 # Runbook — Measurement Restatement

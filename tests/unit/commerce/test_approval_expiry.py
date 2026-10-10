@@ -13,7 +13,7 @@ from unittest.mock import patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
@@ -27,7 +27,7 @@ TENANT = "tenant-expiry-test"
 
 @pytest.fixture(autouse=True)
 def reset_store():
-    from services.x402.commerce_store import reset_commerce_store
+    from value.x402.commerce_store import reset_commerce_store
     reset_commerce_store()
     yield
     reset_commerce_store()
@@ -35,8 +35,8 @@ def reset_store():
 
 @pytest.fixture()
 def svc_and_models():
-    from services.x402.approvals import ApprovalService
-    from services.x402.commerce_models import ApprovalPriority, ApprovalStatus
+    from value.x402.approvals import ApprovalService
+    from value.x402.commerce_models import ApprovalPriority, ApprovalStatus
     return ApprovalService(), ApprovalPriority, ApprovalStatus
 
 
@@ -80,7 +80,7 @@ async def test_normal_approval_not_expired_before_sla(svc_and_models):
 
 @pytest.mark.asyncio
 async def test_normal_approval_expires_after_1h(svc_and_models):
-    import services.x402.approvals as mod
+    import value.x402.approvals as mod
     svc, Priority, _ = svc_and_models
     apr = await _make_approval(svc, Priority.NORMAL, "chg-normal-exp")
     # Advance _now past expires_at
@@ -92,7 +92,7 @@ async def test_normal_approval_expires_after_1h(svc_and_models):
 
 @pytest.mark.asyncio
 async def test_high_approval_expires_after_15m(svc_and_models):
-    import services.x402.approvals as mod
+    import value.x402.approvals as mod
     svc, Priority, _ = svc_and_models
     apr = await _make_approval(svc, Priority.HIGH, "chg-high-exp")
     with patch.object(mod, "_now", _future_now(900 + 120)):
@@ -101,7 +101,7 @@ async def test_high_approval_expires_after_15m(svc_and_models):
 
 @pytest.mark.asyncio
 async def test_high_approval_not_expired_at_10m(svc_and_models):
-    import services.x402.approvals as mod
+    import value.x402.approvals as mod
     svc, Priority, _ = svc_and_models
     apr = await _make_approval(svc, Priority.HIGH, "chg-high-fresh2")
     with patch.object(mod, "_now", _future_now(600)):  # 10 min < 15 min SLA
@@ -112,7 +112,7 @@ async def test_high_approval_not_expired_at_10m(svc_and_models):
 
 @pytest.mark.asyncio
 async def test_critical_approval_expires_after_5m(svc_and_models):
-    import services.x402.approvals as mod
+    import value.x402.approvals as mod
     svc, Priority, _ = svc_and_models
     apr = await _make_approval(svc, Priority.CRITICAL, "chg-critical-exp")
     with patch.object(mod, "_now", _future_now(300 + 120)):
@@ -121,7 +121,7 @@ async def test_critical_approval_expires_after_5m(svc_and_models):
 
 @pytest.mark.asyncio
 async def test_critical_approval_not_expired_at_2m(svc_and_models):
-    import services.x402.approvals as mod
+    import value.x402.approvals as mod
     svc, Priority, _ = svc_and_models
     apr = await _make_approval(svc, Priority.CRITICAL, "chg-critical-fresh2")
     with patch.object(mod, "_now", _future_now(120)):  # 2 min < 5 min SLA
@@ -132,7 +132,7 @@ async def test_critical_approval_not_expired_at_2m(svc_and_models):
 
 @pytest.mark.asyncio
 async def test_low_approval_expires_after_4h(svc_and_models):
-    import services.x402.approvals as mod
+    import value.x402.approvals as mod
     svc, Priority, _ = svc_and_models
     apr = await _make_approval(svc, Priority.LOW, "chg-low-exp")
     with patch.object(mod, "_now", _future_now(14400 + 120)):
@@ -143,7 +143,7 @@ async def test_low_approval_expires_after_4h(svc_and_models):
 
 @pytest.mark.asyncio
 async def test_decide_on_expired_approval_raises(svc_and_models):
-    import services.x402.approvals as mod
+    import value.x402.approvals as mod
     svc, Priority, _ = svc_and_models
     apr = await _make_approval(svc, Priority.CRITICAL, "chg-decide-expired")
     with patch.object(mod, "_now", _future_now(300 + 120)):
@@ -161,7 +161,7 @@ async def test_decide_on_expired_approval_raises(svc_and_models):
 
 @pytest.mark.asyncio
 async def test_sweep_marks_expired_approval(svc_and_models):
-    import services.x402.approvals as mod
+    import value.x402.approvals as mod
     svc, Priority, Status = svc_and_models
     apr = await _make_approval(svc, Priority.CRITICAL, "chg-sweep-exp")
     # Run sweep with patched time far in future

@@ -1,7 +1,7 @@
 """
 C-2.1 — Formal Data Classification Policy
 Bridges the technical classification taxonomy in
-services/backend/shared/privacy/classification.py
+services/api/shared/privacy/classification.py
 into a formal policy document with handling requirements per tier.
 
 The 7-tier technical taxonomy (PUBLIC → HIGHLY_SENSITIVE) is already implemented

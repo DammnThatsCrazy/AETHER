@@ -128,7 +128,7 @@ def run_checks() -> None:
         ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "cache" / "package.json",
         ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "events" / "package.json",
         ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "logger" / "package.json",
-        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "services" / "ingestion" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "ingestion" / "ingestion" / "package.json",
         ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "package.json",
     ]:
         check_package_json(pj, version)

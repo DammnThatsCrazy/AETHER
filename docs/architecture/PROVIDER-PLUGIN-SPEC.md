@@ -7,33 +7,33 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/shared/integration_contracts/plugin.py
-  - services/backend/shared/integration_contracts/capabilities.py
-  - services/backend/shared/integration_contracts/results.py
-  - services/backend/shared/integration_contracts/normalization.py
-  - services/backend/shared/integration_contracts/events.py
-  - services/backend/shared/integration_contracts/identity.py
-  - services/backend/services/provider_runtime/
-  - services/backend/services/providers/shopify/
+  - services/api/shared/integration_contracts/plugin.py
+  - services/api/shared/integration_contracts/capabilities.py
+  - services/api/shared/integration_contracts/results.py
+  - services/api/shared/integration_contracts/normalization.py
+  - services/api/shared/integration_contracts/events.py
+  - services/api/shared/integration_contracts/identity.py
+  - services/api/connectors/provider_runtime/
+  - services/api/connectors/providers/shopify/
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/backend/services/provider_runtime/": "sha256:4d2b5f1bae274fe1f369d4c294ce936dd917c44b72ef13333c6097fa3285daf3"
-  "services/backend/services/providers/shopify/": "sha256:9fa4fad4ec829628ab32bbcf92028cec7dc41cbd2261826f9f6d64a62fb559a2"
-  "services/backend/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
-  "services/backend/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
-  "services/backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
-  "services/backend/shared/integration_contracts/normalization.py": "sha256:65fe57419a11f1a4c6a14225a024af6d74425261a7b27296798142abca9d3aeb"
-  "services/backend/shared/integration_contracts/plugin.py": "sha256:b4cfa2d84da2a47a43f96564d55d4ad63fdad3027feb08e1747cc0788030988c"
-  "services/backend/shared/integration_contracts/results.py": "sha256:cf30d4dbed85c68e809a87b0f256f93665d11844b5a983a0b83177d62800e51a"
+  "services/api/connectors/provider_runtime/": "sha256:a93c938f33f3280596b99270a95a9de8a1472404d6dfcf15bb890118ad21a0c9"
+  "services/api/connectors/providers/shopify/": "sha256:3105e681b0fb0ed9f3417abbc72624377a63a97489cca007ce79ab99b7d857e0"
+  "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
+  "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
+  "services/api/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
+  "services/api/shared/integration_contracts/normalization.py": "sha256:65fe57419a11f1a4c6a14225a024af6d74425261a7b27296798142abca9d3aeb"
+  "services/api/shared/integration_contracts/plugin.py": "sha256:b4cfa2d84da2a47a43f96564d55d4ad63fdad3027feb08e1747cc0788030988c"
+  "services/api/shared/integration_contracts/results.py": "sha256:446889d7588994d97cef2e06ba6cbdb0a2e2496a860a9661ef80770fdf89b003"
 ---
 
 # Provider Plugin Spec
 
 A **provider plugin** is the self-contained unit the Universal Provider
 Runtime (UPR) executes. This spec is the contract for writing one. Reference
-implementation: `services/backend/services/providers/shopify/`.
+implementation: `services/api/connectors/providers/shopify/`.
 
 ## 1. The plugin contract
 
@@ -50,7 +50,7 @@ A plugin satisfies the structural `ProviderPlugin` protocol
 - `normalizer() -> EventNormalizer` — always present (the plugin may return a
   no-op normalizer, but the accessor must exist).
 
-`BaseProviderPlugin` (in `services/backend/services/provider_runtime/plugin.py`) provides the
+`BaseProviderPlugin` (in `services/api/connectors/provider_runtime/plugin.py`) provides the
 **honest defaults**: every capability accessor returns `None`, so a plugin
 claims a capability only by overriding the accessor to return an adapter.
 `normalizer()` — like `identity()` and `manifest()` — is left abstract: a
@@ -166,7 +166,7 @@ A `WebhookAdapter` has two methods:
 
 The `/v1/provider-webhooks/` route is in `PUBLIC_PATH_PREFIXES` — it is
 unauthenticated by API key by design, so the gateway is **fail-closed**
-(`services/backend/services/provider_runtime/webhook.py`). The plugin's
+(`services/api/connectors/provider_runtime/webhook.py`). The plugin's
 `verify()` proves provider-specific authenticity; the runtime also resolves
 and rechecks tenant, connection, and selected-account binding before it
 persists tenant-scoped evidence:
@@ -217,7 +217,7 @@ leaves a retained record.
 
 Even after a delivery is verified and parsed, its normalized events are not
 immediately durable. The provider-runtime event bridge
-(`services/backend/services/provider_runtime/bridge.py`) runs each event through the platform's
+(`services/api/connectors/provider_runtime/bridge.py`) runs each event through the platform's
 **unconditional sensitive-value scrub** on `data`/`context` (server-authoritative
 minimization; redaction never rejects) plus a per-event **ingress
 consent/data-policy gate** (WS-B3) before the Bronze write and publish. A
@@ -278,7 +278,7 @@ Registration is additive and does not touch central type unions:
 
 ## 7. Worked example — the Shopify plugin
 
-`services/backend/services/providers/shopify/` is the reference native plugin. Walk its files:
+`services/api/connectors/providers/shopify/` is the reference native plugin. Walk its files:
 
 - `auth.py` — `AuthAdapter`: credential validation + live connectivity test;
   no secret material ever appears in an error message or result `detail`.
@@ -321,7 +321,7 @@ from shared.integration_contracts.identity import ProviderIdentity
 from shared.integration_contracts.manifest import (
     Authentication, ManifestReadiness, ProviderManifest, Sync, Webhooks,
 )
-from services.provider_runtime.plugin import BaseProviderPlugin
+from connectors.provider_runtime.plugin import BaseProviderPlugin
 from shared.integration_contracts.capabilities import PullAdapter
 from shared.integration_contracts.normalization import EventNormalizer
 from shared.integration_contracts.results import AdapterResult

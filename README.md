@@ -34,7 +34,7 @@ The architecture reset is in progress, so this target describes the intended sha
 | Path | Purpose |
 |---|---|
 | `apps/aether-web/`, `apps/kyber-web/` | Aether customer app and Kyber operator console |
-| `services/backend/` | Backend API, ingestion, identity, graph, and intelligence runtime |
+| `services/api/` | Backend API, ingestion, identity, graph, and intelligence runtime |
 | `services/ml/`, `services/agents/`, `services/compliance/` | ML, internal workers, and compliance services |
 | `packages/` | Shared packages, clients, SDKs, and contracts |
 | `packages/shared/contracts/` | Canonical event, consent, observation, and other shared contracts |

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
@@ -276,7 +276,7 @@ async def test_query_budget_enforcement_under_load():
     """
     from shared.graph.graph import GraphClient
     from shared.graph.traversal import GraphTraversalEngine
-    from services.operational_intelligence.models import QUERY_BUDGET_DEFAULTS
+    from graph.operational_intelligence.models import QUERY_BUDGET_DEFAULTS
 
     max_nodes = QUERY_BUDGET_DEFAULTS["max_nodes"]  # 500
 

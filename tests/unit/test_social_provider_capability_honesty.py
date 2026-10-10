@@ -1,8 +1,8 @@
 """M2-A social-capability honesty gate tests (UPR social vocabulary).
 
 Covers the social-scoped validator
-``services.provider_runtime.social_capability.social_capability_violations`` and
-its wiring into ``services.provider_runtime.validation.capability_violations``
+``connectors.provider_runtime.social_capability.social_capability_violations`` and
+its wiring into ``connectors.provider_runtime.validation.capability_violations``
 (so it runs on ``registry.register``):
 
 * a social plugin whose capability segment is outside the canonical vocabulary
@@ -26,7 +26,7 @@ from types import SimpleNamespace
 # Force the WORKTREE backend onto sys.path ahead of any editable install so the
 # `shared` / `services` imports below resolve to THIS checkout.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_BACKEND = _REPO_ROOT / "services" / "backend"
+_BACKEND = _REPO_ROOT / "services" / "api"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
@@ -46,10 +46,10 @@ from shared.integration_contracts.manifest import (
 )
 from shared.integration_contracts.plugin import PluginValidationError
 
-from services.provider_runtime.plugin import BaseProviderPlugin
-from services.provider_runtime.registry import ProviderRegistry
-from services.provider_runtime.social_capability import social_capability_violations
-from services.provider_runtime.validation import capability_violations
+from connectors.provider_runtime.plugin import BaseProviderPlugin
+from connectors.provider_runtime.registry import ProviderRegistry
+from connectors.provider_runtime.social_capability import social_capability_violations
+from connectors.provider_runtime.validation import capability_violations
 
 
 def _manifest(
@@ -239,7 +239,7 @@ def test_honest_social_plugin_has_no_violations_and_registers():
 def test_commerce_plugin_triggers_zero_social_violations():
     # A real commerce plugin (product == "shop") must stay clean now that the
     # social gate is wired into capability_violations.
-    from services.providers.shopify.plugin import ShopifyOrdersPlugin
+    from connectors.providers.shopify.plugin import ShopifyOrdersPlugin
 
     plugin = ShopifyOrdersPlugin()
     assert social_capability_violations(plugin) == []

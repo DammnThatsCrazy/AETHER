@@ -26,13 +26,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
 from config.settings import Environment  # noqa: E402
-from services.runtime import run_role  # noqa: E402
-from services.runtime.consumer_runner import (  # noqa: E402
+from workers.runtime import run_role  # noqa: E402
+from workers.runtime.consumer_runner import (  # noqa: E402
     ConsumerLoopExited,
     ConsumerRunner,
     build_consumer_runners,
@@ -44,13 +44,13 @@ from services.runtime.consumer_runner import (  # noqa: E402
     role_queue_urls,
     start_consumer_runners,
 )
-from services.runtime.consumer_specs import (  # noqa: E402
+from workers.runtime.consumer_specs import (  # noqa: E402
     CONSUMER_SPECS,
     ConsumerSpec,
     attach_consumer_specs,
     consumer_specs_for_role,
 )
-from services.runtime.roles import (  # noqa: E402
+from workers.runtime.roles import (  # noqa: E402
     ALL_ROLES,
     EXECUTION_GROUPS,
     ROLE_TO_SPEC_NAMES,
@@ -64,7 +64,7 @@ from services.runtime.roles import (  # noqa: E402
     should_start_workers,
     specs_for_role,
 )
-from services.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
+from workers.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
 from shared.events.events import (  # noqa: E402
     ConsumerClientTornDown,
     DLQPublishError,
@@ -72,7 +72,7 @@ from shared.events.events import (  # noqa: E402
     EventConsumer,
     Topic,
 )
-import services.runtime.supervisor as supervisor_mod  # noqa: E402
+import workers.runtime.supervisor as supervisor_mod  # noqa: E402
 import shared.events.events as events_mod  # noqa: E402
 
 
@@ -2067,7 +2067,7 @@ async def test_shutdown_signals_release_the_wait():
 async def test_run_workers_drains_and_shuts_down_on_sigterm(monkeypatch):
     """End-to-end: the signal really does drive ``_shutdown`` to completion."""
     import dependencies.providers as providers_mod
-    import services.runtime as runtime_pkg
+    import workers.runtime as runtime_pkg
 
     class _FakeRuntimeRegistry:
         def __init__(self) -> None:

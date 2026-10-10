@@ -141,17 +141,17 @@
     "path": "docs/archive/legacy-architecture/data-ingestion-layer",
     "role": "deprecated",
     "owner": "platform@aether",
-    "note": "un-deployed TypeScript duplicate of the canonical Python monolith (services/backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend.",
+    "note": "un-deployed TypeScript duplicate of the canonical Python monolith (services/api). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend.",
     "deprecated_at": "2026-09-03",
-    "disposition": "un-deployed TypeScript duplicate of the canonical Python monolith (services/backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend."
+    "disposition": "un-deployed TypeScript duplicate of the canonical Python monolith (services/api). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend."
   },
   {
     "path": "docs/archive/legacy-architecture/data-lake-architecture",
     "role": "deprecated",
     "owner": "platform@aether",
-    "note": "un-deployed TypeScript duplicate of the canonical Python monolith (services/backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend.",
+    "note": "un-deployed TypeScript duplicate of the canonical Python monolith (services/api). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend.",
     "deprecated_at": "2026-09-03",
-    "disposition": "un-deployed TypeScript duplicate of the canonical Python monolith (services/backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend."
+    "disposition": "un-deployed TypeScript duplicate of the canonical Python monolith (services/api). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend."
   },
   {
     "path": "infra",
@@ -172,12 +172,6 @@
     "note": "repository validation, generation, release, docs, and contract tooling."
   },
   {
-    "path": "security",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "security policy, threat-model, and review assets; enforcement code remains in canonical runtime services."
-  },
-  {
     "path": "services",
     "role": "house",
     "owner": "platform@aether",
@@ -190,7 +184,7 @@
     "note": "canonical active internal broker-coupled Celery worker service; registered-not-deployable means it is not an independent deployment unit."
   },
   {
-    "path": "services/backend",
+    "path": "services/api",
     "role": "canonical",
     "owner": "platform@aether",
     "note": "deployed authoritative ingestion/lake/silver monolith; build + ingress evidence references only this tree."

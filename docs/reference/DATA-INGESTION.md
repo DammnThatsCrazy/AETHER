@@ -22,8 +22,8 @@ source_hashes:
 > This document describes the **`docs/archive/legacy-architecture/data-ingestion-layer/`** Node.js / TypeScript
 > tree, which is an **un-deployed legacy duplicate**. The deployed, authoritative
 > ingestion implementation is the Python monolith at
-> `services/backend/` (canonical ingress =
-> `services/backend/services/ingestion/batch.py`,
+> `services/api/` (canonical ingress =
+> `services/api/ingestion/ingestion/batch.py`,
 > `POST /v1/batch`). No new code may be added to this legacy tree; route work
 > into the canonical tree. Banner added by the SDK + Universal Ingestion
 > Alignment program (Phase 0) — see
@@ -35,7 +35,7 @@ analytics events from every Aether SDK, enriched them, and fanned them out to
 the platform's storage and streaming backends. This reference documents that
 legacy service as it exists in the tree; it is **not** the authoritative entry
 point for raw event data — the canonical `POST /v1/batch` ingress is the Python
-monolith's `services/backend/services/ingestion/batch.py`.
+monolith's `services/api/ingestion/ingestion/batch.py`.
 
 ## Architecture overview
 
@@ -188,15 +188,15 @@ restoring from the raw S3 archive.
 ## Relationship to the Python backend
 
 Following the SDK + Universal Ingestion Alignment convergence (Phase 0), the
-Python monolith (`services/backend/`) is the deployed,
+Python monolith (`services/api/`) is the deployed,
 authoritative implementation: SDK-originated event streams land at its canonical
 `POST /v1/batch` ingress
-(`services/backend/services/ingestion/batch.py`). The
+(`services/api/ingestion/ingestion/batch.py`). The
 Node.js `docs/archive/legacy-architecture/data-ingestion-layer/` tree described above is an un-deployed legacy
 duplicate retained in the repo for historical reference only; it must not be
 extended or treated as a runtime input. Do not build new SDK or event
 integrations against the archive. New ingestion work belongs in
-`services/backend/services/ingestion/`.
+`services/api/ingestion/ingestion/`.
 
 ## Operational notes
 

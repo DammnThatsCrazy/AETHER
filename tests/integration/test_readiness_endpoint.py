@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
@@ -31,13 +31,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from config.settings import Environment, settings  # noqa: E402
 from dependencies.providers import get_registry  # noqa: E402
-from services.gateway.readiness import (  # noqa: E402
+from ingestion.gateway.readiness import (  # noqa: E402
     expected_worker_roles,
     readiness_report,
 )
-from services.gateway.routes import router as gateway_router  # noqa: E402
-from services.runtime.roles import ROLE_TO_SPEC_NAMES  # noqa: E402
-from services.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
+from ingestion.gateway.routes import router as gateway_router  # noqa: E402
+from workers.runtime.roles import ROLE_TO_SPEC_NAMES  # noqa: E402
+from workers.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
 
 
 # ── local app: /v1/ready → 200 ───────────────────────────────────────────────
@@ -221,7 +221,7 @@ async def test_failed_release_critical_worker_alone_flips_readiness():
 
     supervisor = WorkerSupervisor(environment=Environment.LOCAL)
     # event_outbox_relay belongs to outbox-relay, the at-least-once delivery
-    # path — declared release-critical in services/runtime/roles.py.
+    # path — declared release-critical in services/api/workers/runtime/roles.py.
     supervisor.register(
         WorkerSpec(
             name="event_outbox_relay", factory=boom, max_restarts=0,

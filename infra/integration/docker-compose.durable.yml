@@ -3,7 +3,7 @@ name: aether-durable-integration
 x-runtime: &runtime
   build:
     context: ../..
-    dockerfile: services/backend/Dockerfile
+    dockerfile: services/api/Dockerfile
   depends_on:
     postgres: {condition: service_healthy}
     redis: {condition: service_healthy}
@@ -94,35 +94,35 @@ services:
   outbox-relay:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: outbox-relay}
-    command: python -m services.runtime.run_role outbox-relay
+    command: python -m workers.runtime.run_role outbox-relay
   stream-worker:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: stream-worker}
-    command: python -m services.runtime.run_role stream-worker
+    command: python -m workers.runtime.run_role stream-worker
   identity-worker:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: identity-worker}
-    command: python -m services.runtime.run_role identity-worker
+    command: python -m workers.runtime.run_role identity-worker
   graph-writer:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: graph-writer}
-    command: python -m services.runtime.run_role graph-writer
+    command: python -m workers.runtime.run_role graph-writer
   measurement-worker:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: measurement-worker}
-    command: python -m services.runtime.run_role measurement-worker
+    command: python -m workers.runtime.run_role measurement-worker
   # Owns the semantic classification + identity-restatement consumers
-  # (services/runtime/consumer_specs.py). Present here so the durable
+  # (services/api/workers/runtime/consumer_specs.py). Present here so the durable
   # integration stack covers all nine canonical roles, not eight.
   semantic-worker:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: semantic-worker}
-    command: python -m services.runtime.run_role semantic-worker
+    command: python -m workers.runtime.run_role semantic-worker
   materializer:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: materializer}
-    command: python -m services.runtime.run_role materializer
+    command: python -m workers.runtime.run_role materializer
   maintenance:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: maintenance}
-    command: python -m services.runtime.run_role maintenance
+    command: python -m workers.runtime.run_role maintenance

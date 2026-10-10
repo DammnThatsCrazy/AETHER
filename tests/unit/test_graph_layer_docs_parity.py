@@ -96,7 +96,7 @@ def test_graph_layer_parity_doc_exists() -> None:
 
 def test_no_placeholder_in_operational_intelligence_routes() -> None:
     """operational_intelligence/routes.py must not contain placeholder overlay strings."""
-    content = _read("services/backend/services/operational_intelligence/routes.py")
+    content = _read("services/api/graph/operational_intelligence/routes.py")
     assert content, "operational_intelligence/routes.py not found"
     assert "placeholder" not in content.lower(), (
         "Placeholder overlay string found in operational_intelligence/routes.py"
@@ -108,7 +108,7 @@ def test_no_placeholder_in_operational_intelligence_routes() -> None:
 
 def test_no_contract_stage_skeleton_in_routes() -> None:
     """contractStage: 'skeleton' must not be in production code routes."""
-    content = _read("services/backend/services/operational_intelligence/routes.py")
+    content = _read("services/api/graph/operational_intelligence/routes.py")
     assert content, "routes.py not found"
     # skeleton stage must not be set on production nodes
     assert '"contractStage": "skeleton"' not in content, (

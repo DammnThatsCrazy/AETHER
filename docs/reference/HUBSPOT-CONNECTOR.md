@@ -10,9 +10,9 @@ flags: [AETHER_CONNECTORS_ENABLED, AETHER_COMMS_INGESTION_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 source_files:
-  - services/backend/services/integrations/connectors/adapters.py
+  - services/api/connectors/integrations/connectors/adapters.py
 source_hashes:
-  "services/backend/services/integrations/connectors/adapters.py": "sha256:dc1b09adfa1eecb2690e47cfdf364b7efaa04ec0e8664f46a513eaf0f7213459"
+  "services/api/connectors/integrations/connectors/adapters.py": "sha256:f308f8c9b61fb9516998ec4859ab1c3879bda32d8a596d620544961e8f933b9a"
 ---
 
 # HubSpot Connector

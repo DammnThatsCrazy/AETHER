@@ -17,7 +17,7 @@ are checked here:
      that silently stops covering a surface is worse than no map: the surface
      still renders, it just renders unwatched.
 
-  2. **Imports.** Every import in ``services/kyber/mirror/*.py`` is matched
+  2. **Imports.** Every import in ``services/api/governance/kyber/mirror/*.py`` is matched
      against a positive, shrink-only allowlist. Importing anything that derives
      a value — a calculator, the graph client, a product service — fails here
      rather than in production. The allowlist is shrink-only in both senses: an
@@ -44,8 +44,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "services" / "backend"
-MIRROR = BACKEND / "services" / "kyber" / "mirror"
+BACKEND = ROOT / "services" / "api"
+MIRROR = BACKEND / "governance" / "kyber" / "mirror"
 MANIFEST = ROOT / "packages" / "shared" / "contracts" / "kyber-feature-surface-manifest.json"
 
 os.environ.setdefault("AETHER_ENV", "local")
@@ -60,13 +60,13 @@ FAILURES: list[str] = []
 #: one. This list is small enough to read, and every entry is justified.
 ALLOWED_IMPORT_PREFIXES: tuple[str, ...] = (
     # Intra-package. The mirror's own contracts, parity and service.
-    "services.kyber.mirror",
+    "governance.kyber.mirror",
     # The ONLY sanctioned path into a tenant's own data.
-    "services.kyber.graph.scoped_gateway",
+    "governance.kyber.graph.scoped_gateway",
     # Authorization vocabulary. Constants and enums; decides nothing here.
-    "services.kyber.access.capabilities",
-    "services.kyber.access.disclosure",
-    "services.kyber.access.dependencies",
+    "governance.kyber.access.capabilities",
+    "governance.kyber.access.disclosure",
+    "governance.kyber.access.dependencies",
     # Shared primitives: response envelope, errors, logging, clock.
     "shared.common.common",
     "shared.logger.logger",
@@ -82,7 +82,10 @@ ALLOWED_IMPORT_PREFIXES: tuple[str, ...] = (
 #: reasons that have nothing to do with this invariant, so only first-party
 #: allowances have to earn their place.
 SHRINK_ONLY_PREFIXES: tuple[str, ...] = tuple(
-    p for p in ALLOWED_IMPORT_PREFIXES if p.startswith(("services.", "shared."))
+    p for p in ALLOWED_IMPORT_PREFIXES if p.startswith((
+        "tenancy.", "ingestion.", "identity.", "graph.", "journeys.", "intelligence.", "value.",
+        "actions.", "governance.", "workers.", "connectors.", "replay.", "billing.", "shared.",
+    ))
 )
 
 #: Third-party and stdlib roots the package may use. No calculation lives here.
@@ -103,7 +106,7 @@ CALCULATION_PREFIXES: tuple[str, ...] = (
     "shared.measurement.restatement",
     "shared.graph.graph",
     "repositories.",
-    "services.analytics",
+    "intelligence.analytics",
     "services.metrics",
 )
 
@@ -191,7 +194,7 @@ def _imported_modules(path: Path) -> list[tuple[str, int]]:
     it actually resolves to, not waved through as a bare name.
     """
     tree = ast.parse(path.read_text(), filename=str(path))
-    package = "services.kyber.mirror"
+    package = "governance.kyber.mirror"
     found: list[tuple[str, int]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -236,7 +239,7 @@ def check_imports() -> tuple[int, set[str]]:
                     else "outside the mirror's allowlist. "
                 )
                 + "The mirror owns no calculations: read tenant data through "
-                "services.kyber.graph.scoped_gateway and call the existing "
+                "governance.kyber.graph.scoped_gateway and call the existing "
                 "shared code for anything derived.",
             )
     return scanned, used_prefixes
@@ -248,7 +251,7 @@ def check_stale_allowances(used_prefixes: set[str]) -> None:
             fail(
                 "imports",
                 f"allowlist entry {prefix!r} is not imported by any module in "
-                f"services/kyber/mirror — a stale allowance is how the next "
+                f"services/api/governance/kyber/mirror — a stale allowance is how the next "
                 f"forbidden import gets waved through. Remove it.",
             )
 
@@ -290,14 +293,14 @@ def main() -> int:
     print("=" * 70)
 
     try:
-        from services.kyber.mirror.contracts import DIAGNOSTIC_SECTIONS
-        from services.kyber.mirror.parity import (
+        from governance.kyber.mirror.contracts import DIAGNOSTIC_SECTIONS
+        from governance.kyber.mirror.parity import (
             PRESENTATION_KEY_REASONS,
             PRESENTATION_KEYS,
         )
-        from services.kyber.mirror.service import SURFACE_VERTEX_TYPES
+        from governance.kyber.mirror.service import SURFACE_VERTEX_TYPES
     except ImportError as exc:
-        print(f"  RESULT: FAIL — services/kyber/mirror is not importable: {exc}")
+        print(f"  RESULT: FAIL — services/api/governance/kyber/mirror is not importable: {exc}")
         print("=" * 70)
         return 1
 

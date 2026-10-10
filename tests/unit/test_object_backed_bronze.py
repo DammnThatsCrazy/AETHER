@@ -41,13 +41,13 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -65,7 +65,7 @@ class _Backend:
         self.settings_mod = importlib.import_module("config.settings")
         self.repos = importlib.import_module("repositories.repos")
         self.repos.reset_in_memory_stores()
-        self.bulk = importlib.import_module("services.ingestion.bronze_bulk")
+        self.bulk = importlib.import_module("ingestion.ingestion.bronze_bulk")
         self.object_store_mod = importlib.import_module("shared.storage.object_store")
         self.manager_mod = importlib.import_module("shared.storage.manager")
         self.compaction_mod = importlib.import_module("shared.storage.compaction")
@@ -682,7 +682,7 @@ def test_place_hold_rejected_when_policy_forbids_holds(tmp_path):
 
 def test_materializer_role_owns_the_bronze_compaction_spec():
     with fresh() as b:
-        roles = importlib.import_module("services.runtime.roles")
+        roles = importlib.import_module("workers.runtime.roles")
         assert "bronze_object_compaction" in roles.ROLE_TO_SPEC_NAMES["materializer"]
         picked = roles.specs_for_role(
             "materializer", ["bronze_object_compaction", "job_worker"]
@@ -693,7 +693,7 @@ def test_materializer_role_owns_the_bronze_compaction_spec():
 
 def test_bronze_compaction_spec_is_registered_and_flag_gated():
     with fresh() as b:
-        specs_mod = importlib.import_module("services.runtime.specs")
+        specs_mod = importlib.import_module("workers.runtime.specs")
         specs = specs_mod.build_worker_specs(
             registry=SimpleNamespace(producer=None), settings=b.settings
         )
@@ -732,7 +732,7 @@ def test_bronze_compaction_spec_is_registered_and_flag_gated():
 
 def test_retention_worker_storage_lifecycle_pass_is_flag_gated():
     with fresh() as b:
-        worker = importlib.import_module("services.security.retention_worker")
+        worker = importlib.import_module("governance.security.retention_worker")
         # Default OFF → pure no-op (None), FT-7-era behavior unchanged.
         assert _run(worker.storage_lifecycle_retention_pass()) is None
 

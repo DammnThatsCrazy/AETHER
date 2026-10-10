@@ -1,7 +1,7 @@
 # Backend settings fields that nothing reads and cannot be deleted yet.
 #
 # scripts/validate_settings_flags.py fails when a field in
-# services/backend/config/settings.py reads an environment variable that no
+# services/api/config/settings.py reads an environment variable that no
 # production Python consults: setting it changes nothing, yet env examples,
 # release flag lists and runbooks present it as a control. This list is
 # shrink-only. Each entry is a Class.field and names the debt-ledger row that owns its removal and is
@@ -30,5 +30,5 @@ allow:
       Terraform and the environment examples pass KYBER_SESSION_COOKIE_SECURE and
       the Kyber access-control document lists it, but the session cookie's Secure
       attribute follows AETHER_ENV (on everywhere except local, dev and test;
-      services/backend/services/kyber/sessions/cookies.py). Retire it together with the
+      services/api/governance/kyber/sessions/cookies.py). Retire it together with the
       Terraform variable and the document row.

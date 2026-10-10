@@ -1,7 +1,7 @@
 /**
  * KYBER Zod schemas for Agentic Commerce.
  * These validate every response from /v1/x402/* and /v1/approvals/* adapters.
- * Wire format mirrors backend Pydantic models in services/x402/commerce_models.py.
+ * Wire format mirrors backend Pydantic models in services/api/value/x402/commerce_models.py.
  */
 import { z } from 'zod';
 

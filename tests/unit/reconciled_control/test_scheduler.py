@@ -28,23 +28,23 @@ from typing import Optional
 
 import pytest
 
-from services.managed_integrations import scheduler as scheduler_module
-from services.managed_integrations.actuators import (
+from connectors.managed_integrations import scheduler as scheduler_module
+from connectors.managed_integrations.actuators import (
     ActuatorApplyResult,
     ActuatorVerifyResult,
     registry_with_authorities,
 )
-from services.managed_integrations.change_sets_repository import (
+from connectors.managed_integrations.change_sets_repository import (
     get_change_set_repository,
 )
-from services.managed_integrations.contracts import ChangeSpec, ObservedStateSnapshot
-from services.managed_integrations.desired_policy import build_desired_state
-from services.managed_integrations.execution_records_repository import (
+from connectors.managed_integrations.contracts import ChangeSpec, ObservedStateSnapshot
+from connectors.managed_integrations.desired_policy import build_desired_state
+from connectors.managed_integrations.execution_records_repository import (
     get_action_required_repository,
     get_change_set_event_repository,
     get_last_known_good_repository,
 )
-from services.managed_integrations.repository import (
+from connectors.managed_integrations.repository import (
     get_managed_integration_repository,
     get_reconcile_run_repository,
 )
@@ -67,9 +67,9 @@ def _scheduler_db_free(monkeypatch: pytest.MonkeyPatch) -> None:
     source every module imports its ``get_pool`` from.
     """
     import repositories.repos as repos_module
-    import services.managed_integrations.change_sets_repository as cs_module
-    import services.managed_integrations.execution_records_repository as er_module
-    import services.managed_integrations.repository as mi_module
+    import connectors.managed_integrations.change_sets_repository as cs_module
+    import connectors.managed_integrations.execution_records_repository as er_module
+    import connectors.managed_integrations.repository as mi_module
 
     async def _no_pool() -> None:
         return None

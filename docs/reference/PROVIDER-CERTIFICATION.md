@@ -7,18 +7,18 @@ audience: [dev-senior, ops, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/shared/integration_contracts/certification.py
-  - services/backend/shared/certification/readiness.py
-  - services/backend/services/provider_runtime/
-  - services/backend/services/providers/routes.py
+  - services/api/shared/integration_contracts/certification.py
+  - services/api/shared/certification/readiness.py
+  - services/api/connectors/provider_runtime/
+  - services/api/connectors/providers/routes.py
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/backend/services/provider_runtime/": "sha256:4d2b5f1bae274fe1f369d4c294ce936dd917c44b72ef13333c6097fa3285daf3"
-  "services/backend/services/providers/routes.py": "sha256:604d8af79653b6472262c42da610787ca6328aadef8c356d6635f56092c6ec39"
-  "services/backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
-  "services/backend/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
+  "services/api/connectors/provider_runtime/": "sha256:a93c938f33f3280596b99270a95a9de8a1472404d6dfcf15bb890118ad21a0c9"
+  "services/api/connectors/providers/routes.py": "sha256:49308bb682d1347fb244676eaf438349c42b961d87561900ba24f20549cee523"
+  "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
+  "services/api/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
 ---
 
 # Provider Certification
@@ -113,7 +113,7 @@ pass. Examples:
 ## 5. Where certification is invoked
 
 - **Admin certify route** — `POST /v1/admin/kyber/provider-connections/certify`
-  (`services/backend/services/provider_runtime/routes.py`) certifies a registered plugin in
+  (`services/api/connectors/provider_runtime/routes.py`) certifies a registered plugin in
   the `local` environment and returns the `CertificationReport`; this route does
   not currently accept an environment override. The admin router mounts only
   when `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED` is set (in addition to

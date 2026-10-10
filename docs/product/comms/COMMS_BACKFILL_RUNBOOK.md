@@ -6,11 +6,11 @@ visibility: I
 audience: [ops, dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/backend/services/integrations/connectors/klaviyo.py, services/backend/services/comms/ingest.py, services/backend/alembic/versions/20260703_comms_intelligence.py]
+source_files: [services/api/connectors/integrations/connectors/klaviyo.py, services/api/journeys/comms/ingest.py, services/api/alembic/versions/20260703_comms_intelligence.py]
 source_hashes:
-  "services/backend/alembic/versions/20260703_comms_intelligence.py": "sha256:651ee8f17a6e86e00d49d09cdbc0041d525682817851af1368576984c27fec76"
-  "services/backend/services/comms/ingest.py": "sha256:f5723b54d3bf02a39c2458e8cd649bf211503503e8f1ce4a735b454aff6dac2f"
-  "services/backend/services/integrations/connectors/klaviyo.py": "sha256:8190d0ab1245843403c890363afba3ad96b6959e244d037044c6df55582c1feb"
+  "services/api/alembic/versions/20260703_comms_intelligence.py": "sha256:651ee8f17a6e86e00d49d09cdbc0041d525682817851af1368576984c27fec76"
+  "services/api/connectors/integrations/connectors/klaviyo.py": "sha256:4255adaf7e0669b8e7d75a632a331fd85ce16696ccfbc8511dba1c37d8539aea"
+  "services/api/journeys/comms/ingest.py": "sha256:5d3bb421d821198b564cd5ad5faa940d4de4de334711c186043366bf2623ad68"
 ---
 
 # Communications Backfill & Replay Runbook
@@ -46,8 +46,8 @@ Bronze is durable before acknowledgement, so any Silver-side incident is
 recoverable by replaying the Bronze range through the dispatcher:
 
 ```python
-from services.silver.dispatcher import SilverDispatcher
-from services.silver.writer import SilverFactWriter
+from ingestion.silver.dispatcher import SilverDispatcher
+from ingestion.silver.writer import SilverFactWriter
 # for each bronze payload in range:
 outcome = await SilverDispatcher().project_with_outcome(envelope)
 await SilverFactWriter().persist(outcome.results)
@@ -62,7 +62,7 @@ duplicate graph relationships (verified by
 Communication state is a pure function of facts:
 
 ```python
-from services.comms.state import CommunicationStateService
+from journeys.comms.state import CommunicationStateService
 await CommunicationStateService().rebuild_for_entity(tenant_id, entity_id)
 ```
 

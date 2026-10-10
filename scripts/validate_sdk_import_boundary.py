@@ -4,7 +4,7 @@
 The Aether client SDKs are thin: they talk to the canonical backend over the
 network (api.aether.io / ingest.aether.so) and must NEVER import backend
 implementation code. The internal trees — the deployed Python monolith
-(``services/backend``) and the two legacy TypeScript
+(``services/api``) and the two legacy TypeScript
 duplicates (``docs/archive/legacy-architecture/data-ingestion-layer/``, ``docs/archive/legacy-architecture/data-lake-architecture/``) — are not
 importable by SDK client surfaces.
 
@@ -58,7 +58,7 @@ _SDK_SURFACE_DIRS = (
 # Internal trees whose package.json ``name`` fields become forbidden specifiers.
 # The canonical backend root is pinned as a static path marker below.
 _INTERNAL_TREE_ROOTS = (
-    "services/backend",
+    "services/api",
     "docs/archive/legacy-architecture/data-ingestion-layer",
     "docs/archive/legacy-architecture/data-lake-architecture",
 )
@@ -68,7 +68,7 @@ _INTERNAL_TREE_ROOTS = (
 _STATIC_ROOT_MARKERS = (
     "aether-backend",
     "aether-datalake-backend",
-    "services/backend",
+    "services/api",
     "docs/archive/legacy-architecture/data-ingestion-layer",
     "docs/archive/legacy-architecture/data-lake-architecture",
 )

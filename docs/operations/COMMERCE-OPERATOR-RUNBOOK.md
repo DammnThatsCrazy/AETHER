@@ -7,12 +7,12 @@ audience: [ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/x402/
+  - services/api/value/x402/
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
-  "services/backend/services/x402/": "sha256:a359d4e6f9e54722c053f8b4b7be789bc5748371ecef4ef2f5843cd48ee93d60"
+  "services/api/value/x402/": "sha256:8d7562c448229ca64ea817ecb71441132a330e17e2831b6783fb754fea547438"
 ---
 # Commerce Operator Runbook
 
@@ -86,7 +86,7 @@ source_hashes:
 `last_pending` climbs across runs.
 
 **Steps:**
-1. The `X402ReconciliationWorker` (`services/backend/services/x402/reconciliation.py`) re-checks
+1. The `X402ReconciliationWorker` (`services/api/value/x402/reconciliation.py`) re-checks
    each PENDING settlement against the tenant's RPC and advances it to SETTLED
    only on confirmed finality; a reverted/underpaid/payer-mismatched payment is
    failed. Persistent PENDING means `verification_unavailable` (RPC not
@@ -100,7 +100,7 @@ source_hashes:
 **Symptom:** Nightly job reports drift > 0.
 
 **Steps:**
-1. Inspect drift report: (extension point, see `services/backend/services/x402/commerce_store.py` patterns).
+1. Inspect drift report: (extension point, see `services/api/value/x402/commerce_store.py` patterns).
 2. Replay silver into graph via `economic_mutations` rebuild helpers.
 3. Verify drift resolved.
 

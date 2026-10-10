@@ -6916,7 +6916,7 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: true
-  # Enterprise pre-sales inquiries (services/contact/routes.py): prospect PII
+  # Enterprise pre-sales inquiries (services/api/identity/contact/routes.py): prospect PII
   # submitted directly to the sales team; the durable record of the inbound
   # lead. Deliberately NOT tenant-scoped and excluded from
   # TENANT_SCOPED_REPOSITORY_REGISTRY, so the account-erasure workflow never
@@ -6940,7 +6940,7 @@ policies:
     requires_permission_hash: false
 
   # ---------------------------------------------------------------------------
-  # Credential-turnkey program tables (services/commerce, metering_evidence,
+  # Credential-turnkey program tables (services/api/value/commerce, metering_evidence,
   # rewards, security, stablecoins, tenant lifecycle, x402 signer refs).
   # Metering/usage and tenant-config surfaces are operational (standard
   # retention, hard delete on tenant erasure). Audit / evidence / signer
@@ -7796,7 +7796,7 @@ policies:
 
   - resource_type: status_component_daily
     # Public status history: per-component daily health-sample counts folded
-    # in by API processes (services/gateway/status_history.py). Platform-global
+    # in by API processes (services/api/ingestion/gateway/status_history.py). Platform-global
     # aggregate availability, no tenant data; pruned on write after 400 days.
     authoritative_store: postgres
     metadata_store: postgres

@@ -34,7 +34,7 @@ def _request(tenant_id=TENANT, permissions=None):
 
 
 def _enable(monkeypatch, enabled=True):
-    import services.exploration.routes as routes
+    import journeys.exploration.routes as routes
 
     monkeypatch.setattr(
         routes, "settings", SimpleNamespace(exploration=SimpleNamespace(enabled=enabled))
@@ -58,7 +58,7 @@ def _session_payload(tenant_id: str, surface: str = "graph") -> dict:
 
 class TestSessionRepository:
     async def test_roundtrip_and_tenant_qualification(self):
-        from services.exploration.session import ExplorationSessionRepository
+        from journeys.exploration.session import ExplorationSessionRepository
 
         repo = ExplorationSessionRepository()
         stored = await repo.upsert_scoped("t1", "s1", _session_payload("t1"))
@@ -84,7 +84,7 @@ class TestSessionRepository:
         assert await repo.get_scoped("t2", "s1") is not None
 
     async def test_get_scoped_rechecks_tenant(self):
-        from services.exploration.session import ExplorationSessionRepository
+        from journeys.exploration.session import ExplorationSessionRepository
 
         repo = ExplorationSessionRepository()
         # Insert directly under t2's qualified id but with t1's tenant field —
@@ -95,7 +95,7 @@ class TestSessionRepository:
         assert await repo.get_scoped("t1", "s1") is None  # wrong qualified id
 
     async def test_to_session_roundtrip(self):
-        from services.exploration.session import ExplorationSessionRepository
+        from journeys.exploration.session import ExplorationSessionRepository
 
         repo = ExplorationSessionRepository()
         stored = await repo.upsert_scoped("t1", "s1", _session_payload("t1"))
@@ -109,7 +109,7 @@ class TestSessionRepository:
 
 class TestSessionService:
     async def test_create_and_load_roundtrip(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         seed = context("graph")
         session = await svc.create_session(seed, tenant_id="t1")
@@ -125,7 +125,7 @@ class TestSessionService:
         assert loaded.current_context == seed
 
     async def test_open_is_initialization_op(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         seed = context("graph", [{"field": "entity.type", "op": "eq", "value": "human"}])
         result = await svc.execute_operation(seed, "OPEN", tenant_id="t1")
@@ -141,7 +141,7 @@ class TestSessionService:
         assert session.current_context.population == seed.population
 
     async def test_pivot_appends_record_and_bumps_count(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         opened = await svc.execute_operation(context("graph"), "OPEN", tenant_id="t1")
         sid = opened.session_id
@@ -161,7 +161,7 @@ class TestSessionService:
         assert session.current_context.scope.surface == "table"
 
     async def test_reset_restores_seed(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         seed = context("graph", [{"field": "entity.type", "op": "eq", "value": "human"}])
         opened = await svc.execute_operation(seed, "OPEN", tenant_id="t1")
@@ -181,7 +181,7 @@ class TestSessionService:
         assert session.current_context.population == seed.population
 
     async def test_rejected_op_records_without_mutating(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         seed = context("profile360")
         opened = await svc.execute_operation(seed, "OPEN", tenant_id="t1")
@@ -201,7 +201,7 @@ class TestSessionService:
         assert session.current_context == seed  # untouched
 
     async def test_session_not_found(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         result = await svc.execute_operation(
             None, "PIVOT", tenant_id="t1", session_id="ghost",
@@ -211,14 +211,14 @@ class TestSessionService:
         assert result.reason == "session_not_found"
 
     async def test_open_requires_seed_context(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         result = await svc.execute_operation(None, "OPEN", tenant_id="t1")
         assert result.status == "rejected"
         assert result.reason == "open_requires_seed_context"
 
     async def test_tenant_isolation_across_sessions(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         opened = await svc.execute_operation(context("graph"), "OPEN", tenant_id="t1")
         sid = opened.session_id
@@ -231,7 +231,7 @@ class TestSessionService:
         assert result.reason == "session_not_found"
 
     async def test_save_and_load_persistence_ops(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         seed = context("graph", [{"field": "entity.type", "op": "eq", "value": "human"}])
         opened = await svc.execute_operation(seed, "OPEN", tenant_id="t1")
@@ -249,7 +249,7 @@ class TestSessionService:
 
 class TestS1Convergence:
     async def test_registered_projection_without_provider_degrades(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         seed = context("profile360")
         result = await svc.execute_operation(seed, "OPEN", tenant_id="t1")
@@ -259,8 +259,8 @@ class TestS1Convergence:
         assert result.reason is None
 
     async def test_registered_projection_with_provider_composes(self):
-        from services.exploration import service as svc
-        from services.infrastructure.provider import register_provider
+        from journeys.exploration import service as svc
+        from graph.infrastructure.provider import register_provider
         from shared.intelligence_projections.registry import projection_registry
         from shared.projection_engine.runtime import runtime
 
@@ -284,7 +284,7 @@ class TestS1Convergence:
                 projection_registry.unregister("infrastructure360")
 
     async def test_lens_add_then_converges_on_projection_surface(self):
-        from services.exploration import service as svc
+        from journeys.exploration import service as svc
 
         seed = context("profile360")
         opened = await svc.execute_operation(seed, "OPEN", tenant_id="t1")
@@ -301,7 +301,7 @@ class TestS1Convergence:
 
 class TestSessionRoutes:
     async def test_create_get_list_delete_roundtrip(self, monkeypatch):
-        import services.exploration.routes as routes
+        import journeys.exploration.routes as routes
 
         # Use a per-test tenant: the in-memory backend is shared by table name
         # across the whole suite, and sibling tests may leak "t1" rows (see
@@ -334,7 +334,7 @@ class TestSessionRoutes:
             await routes.get_session(req, sid)
 
     async def test_create_scope_tenant_mismatch_forbidden(self, monkeypatch):
-        import services.exploration.routes as routes
+        import journeys.exploration.routes as routes
 
         _enable(monkeypatch)
         ctx = context("graph", tenant_id="other-tenant")
@@ -344,7 +344,7 @@ class TestSessionRoutes:
             )
 
     async def test_write_requires_write_permission(self, monkeypatch):
-        import services.exploration.routes as routes
+        import journeys.exploration.routes as routes
 
         _enable(monkeypatch)
         with pytest.raises(Exception):
@@ -354,7 +354,7 @@ class TestSessionRoutes:
             )
 
     async def test_operations_endpoint_applies_pivot(self, monkeypatch):
-        import services.exploration.routes as routes
+        import journeys.exploration.routes as routes
 
         _enable(monkeypatch)
         req = _request()
@@ -376,7 +376,7 @@ class TestSessionRoutes:
         assert resp.data["session"]["current_context"]["scope"]["surface"] == "table"
 
     async def test_operations_endpoint_unknown_session_rejects(self, monkeypatch):
-        import services.exploration.routes as routes
+        import journeys.exploration.routes as routes
 
         _enable(monkeypatch)
         resp = await routes.apply_session_operation(
@@ -391,7 +391,7 @@ class TestSessionRoutes:
         assert resp.data["session"] is None
 
     async def test_session_handlers_404_when_flag_off(self, monkeypatch):
-        import services.exploration.routes as routes
+        import journeys.exploration.routes as routes
 
         _enable(monkeypatch, enabled=False)
         with pytest.raises(NotFoundError, match="feature not enabled"):

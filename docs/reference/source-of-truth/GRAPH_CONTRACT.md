@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/shared/graph/graph.py, services/backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
+source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
 canonical_owner: graph@aether
 last_synced_commit: fae02a9
 ---

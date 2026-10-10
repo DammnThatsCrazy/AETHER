@@ -6,18 +6,18 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/derivatives/adapters/venue_base.py, services/backend/services/interop/providers/layerzero_v2.py, services/backend/services/interop/providers/wormhole.py, services/backend/services/interop/providers/axelar.py, services/backend/services/interop/providers/chainlink_ccip.py, services/backend/services/interop/providers/hyperlane.py, services/backend/services/interop/providers/ibc.py, services/backend/services/interop/providers/debridge.py, services/backend/services/stablecoins/price_feed.py]
+source_files: [services/api/value/derivatives/adapters/venue_base.py, services/api/graph/interop/providers/layerzero_v2.py, services/api/graph/interop/providers/wormhole.py, services/api/graph/interop/providers/axelar.py, services/api/graph/interop/providers/chainlink_ccip.py, services/api/graph/interop/providers/hyperlane.py, services/api/graph/interop/providers/ibc.py, services/api/graph/interop/providers/debridge.py, services/api/value/stablecoins/price_feed.py]
 canonical_owner: platform@aether
 source_hashes:
-  services/backend/services/derivatives/adapters/venue_base.py: sha256:f6d471b0845c69191fa99eaceed7d83698bbad29c48cb7386e06360955d1f226
-  services/backend/services/interop/providers/axelar.py: sha256:91d37bfe0c21d21111e9f15562ca5ab61b8638502e0e5c302ac638c0d4d6780d
-  services/backend/services/interop/providers/chainlink_ccip.py: sha256:5bfac82aeec12bceb5968b76ddd35accdd557aeec59f5260752e1bf5266d9048
-  services/backend/services/interop/providers/debridge.py: sha256:01d11f6dc109f44d8a01b6eb724476fc72e935449756f32fa05ff319807b705a
-  services/backend/services/interop/providers/hyperlane.py: sha256:a894c6a64b73e7e74f99f5a6ae3ee39c9b801606eb7de79770251b7b37638857
-  services/backend/services/interop/providers/ibc.py: sha256:f6208857120ee238a5af1f11169e2368b07b5a624b6d9ca552fe195864dcfe74
-  services/backend/services/interop/providers/layerzero_v2.py: sha256:1da5037959fb2a91ad2febd5738cc84bf1edebf56ff41ffd0cebbb47f00d8d03
-  services/backend/services/interop/providers/wormhole.py: sha256:df38b0a4c82eef4be2302456a48857786187421fb18b35622ddfa0183bbf57ba
-  services/backend/services/stablecoins/price_feed.py: sha256:d575d0b5ad2f8991db7749a34b52cd1b3ef13c8fa047b56e8f1f0d8c2fa51636
+  "services/api/graph/interop/providers/axelar.py": "sha256:ce312d57c97b3af8f19d367ddb9d235a108e82bccb4fb1196b67ed40121fb24f"
+  "services/api/graph/interop/providers/chainlink_ccip.py": "sha256:778b9d5cfd69cf333087a162c5e0a1c7dc1d29407f08463eabafa7f1131d6be4"
+  "services/api/graph/interop/providers/debridge.py": "sha256:c0507abaf8dc3cf28916bff61d6c1dadd3c10c08cb91612c6d413991c8c37df5"
+  "services/api/graph/interop/providers/hyperlane.py": "sha256:598c102da6eabf4a349419f57ecf5e697a5bf19041af2d6e727b37d32bce0906"
+  "services/api/graph/interop/providers/ibc.py": "sha256:e3877b2a59b68ea507699246dc0d693dc3c3be3f281da2c7655f5e2da2234fee"
+  "services/api/graph/interop/providers/layerzero_v2.py": "sha256:d0023a52c1d79801a9e635d224eee544f6c2cec9516b49cb6be8aa08c9d470e1"
+  "services/api/graph/interop/providers/wormhole.py": "sha256:0bf5064d4968017fc3b2c386c10ab1b623dc08bb50221fb5527b2b9fe415cb90"
+  "services/api/value/derivatives/adapters/venue_base.py": "sha256:a06c93e331962efc07f7943943809f42ebe140d946825c4feac84be7eec1654d"
+  "services/api/value/stablecoins/price_feed.py": "sha256:2a88c6769b436ccd3931e73d8523cf15023440a2a9b43a532af0eec0816648f1"
 ---
 
 # Adapter Capability Matrix

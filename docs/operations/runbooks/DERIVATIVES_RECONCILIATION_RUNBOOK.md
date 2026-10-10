@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/derivatives/admin_routes.py
-  - services/backend/services/derivatives/materializer.py
+  - services/api/value/derivatives/admin_routes.py
+  - services/api/value/derivatives/materializer.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/services/derivatives/admin_routes.py": "sha256:cf4e6c5ff4cb8dc919c7b323cf5c00cf20dc8b03bb6238529d3efc9fe15a1239"
-  "services/backend/services/derivatives/materializer.py": "sha256:0d0b8557750c66fefc45e40c068bc99ca5868bd4349ec1e17d3483b53e086532"
+  "services/api/value/derivatives/admin_routes.py": "sha256:94eb1c95b844e86a866fc44b88e831116ebd1a8892ce2535520848e35b57924b"
+  "services/api/value/derivatives/materializer.py": "sha256:202d4cb73dfb080a617cfeb8db34dd7e03f085581b47d40640f3c3e68bb15130"
 ---
 
 # Derivatives Reconciliation Runbook

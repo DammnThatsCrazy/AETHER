@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [docs/reference/reports/economic-interoperability-intelligence/current-state-audit.md]
 canonical_owner: platform@aether
 source_hashes:
-  "docs/reference/reports/economic-interoperability-intelligence/current-state-audit.md": "sha256:d6fa50571ecad017216de21c197b7621c580dd3c2b4984a3aee85bde3343d4eb"
+  "docs/reference/reports/economic-interoperability-intelligence/current-state-audit.md": "sha256:fbd6d03e40fe563457b62b5355656aca0a0b82b035cdd5104bf478b59aed63c9"
 ---
 
 # Repo Truth and Gap Matrix
@@ -31,5 +31,5 @@ Pre-implementation truth (verified by audit, 2026-07-08) and what 8.12.0 changed
 ## Known pre-existing issues (NOT introduced or fixed by this release)
 
 - `tests/unit/test_agent_web_crawler_wrapper.py::test_top_level_web_crawler_wraps_canonical_worker` failed on the baseline (before any 8.12.0 change); later root-caused to a missing sandbox dependency (`bs4`) — passes unchanged once beautifulsoup4 is installed. No code fix was needed or made.
-- Backend-internal `services/backend/tests/` suite (not the gated root `tests/`) has pre-existing failures.
+- Backend-internal `services/api/tests/` suite (not the gated root `tests/`) has pre-existing failures.
 - Multiple Alembic heads existed prior to this release; the new revisions form a linear chain from `20260703_agentic_obs`.

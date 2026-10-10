@@ -1,7 +1,7 @@
 """TS <-> Python parity for the mobile gateway projection contracts (M3a).
 
 `packages/shared/mobile-projection.ts` is the TS twin of the Python-authoritative
-mobile projection builders (`services/mobile/projections.py`). Every surface is
+mobile projection builders (`services/api/ingestion/mobile/projections.py`). Every surface is
 bounded/redacted on the backend; this test asserts the wire key sets stay in
 lockstep so an app screen can never render against a key the backend does not
 emit (M8 architecture-1 remediation).
@@ -13,11 +13,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.mobile.projections import (  # noqa: E402
+from ingestion.mobile.projections import (  # noqa: E402
     MobileProjectionService,
     project_alert,
     project_conversation,
@@ -25,7 +25,7 @@ from services.mobile.projections import (  # noqa: E402
     project_profile_summary,
     project_view,
 )
-from services.mobile.projections import (  # noqa: E402
+from ingestion.mobile.projections import (  # noqa: E402
     _project_profile_behavior,
     _project_profile_entity,
     _project_profile_financials,

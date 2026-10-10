@@ -20,7 +20,7 @@ The spine observes and records state from five integration points. Each integrat
 ```
 ┌──────────────────────────────────┐
 │  ResponsivenessService           │
-│  (services/responsiveness/)      │
+│  (services/api/governance/responsiveness/)      │
 │  record_first_event_ack()        │
 │  update_heartbeat_state()        │
 │  update_provider_sync_state()    │
@@ -46,7 +46,7 @@ The spine observes and records state from five integration points. Each integrat
 
 ---
 
-## 1. SDK ingestion — `services/backend/services/ingestion/batch.py`
+## 1. SDK ingestion — `services/api/ingestion/ingestion/batch.py`
 
 **What's recorded:** First-event-ack latency + SDK heartbeat state.
 
@@ -55,8 +55,8 @@ The spine observes and records state from five integration points. Each integrat
 After events are validated and written to Bronze, the batch handler records the first-event-ack:
 
 ```python
-# services/backend/services/ingestion/batch.py (lines ~660-675)
-from services.responsiveness.service import get_responsiveness_service
+# services/api/ingestion/ingestion/batch.py (lines ~660-675)
+from governance.responsiveness.service import get_responsiveness_service
 
 # ... inside the batch handler, after n_accepted events are written ...
 try:
@@ -113,7 +113,7 @@ This sets `visible_in_dashboard_at` on first call — the moment the SDK's event
 
 ---
 
-## 2. Provider runtime — `services/backend/services/provider_runtime/scheduler.py`
+## 2. Provider runtime — `services/api/connectors/provider_runtime/scheduler.py`
 
 **What's recorded:** Provider sync state — connection lifecycle, first sample, progress %.
 
@@ -122,8 +122,8 @@ This sets `visible_in_dashboard_at` on first call — the moment the SDK's event
 During a provider sync, when the first batch of events is received:
 
 ```python
-# services/backend/services/provider_runtime/scheduler.py (lines ~312-328)
-from services.responsiveness.service import get_responsiveness_service
+# services/api/connectors/provider_runtime/scheduler.py (lines ~312-328)
+from governance.responsiveness.service import get_responsiveness_service
 
 # ... inside the sync loop, after events are received ...
 if not _first_sample_emitted and events:
@@ -166,7 +166,7 @@ The scheduler calls `update_provider_sync_state` at key lifecycle points:
 
 ---
 
-## 3. Graph projector — `services/backend/services/semantic_intelligence/graph_projector.py`
+## 3. Graph projector — `services/api/intelligence/semantic_intelligence/graph_projector.py`
 
 **What's recorded:** Graph hydration state — node/edge counts, projection progress, first-stub visibility, first-value milestones.
 
@@ -175,8 +175,8 @@ The scheduler calls `update_provider_sync_state` at key lifecycle points:
 After each tenant's projection sweep completes:
 
 ```python
-# services/backend/services/semantic_intelligence/graph_projector.py (lines ~693-705)
-from services.responsiveness.service import get_responsiveness_service
+# services/api/intelligence/semantic_intelligence/graph_projector.py (lines ~693-705)
+from governance.responsiveness.service import get_responsiveness_service
 
 # ... after projecting all pairs for a tenant ...
 try:
@@ -198,7 +198,7 @@ except Exception as exc:
 In `project_pair()` (single-pair projection), after a canonical edge is written:
 
 ```python
-# services/backend/services/semantic_intelligence/graph_projector.py (lines ~822-839)
+# services/api/intelligence/semantic_intelligence/graph_projector.py (lines ~822-839)
 if projected:
     # ... existing edge/write logic ...
 
@@ -240,7 +240,7 @@ if projected:
 
 ---
 
-## 4. Jobs worker — `services/backend/services/jobs/worker.py`
+## 4. Jobs worker — `services/api/workers/jobs/worker.py`
 
 **What's recorded:** Background job lifecycle timing — status transitions, progress, stage.
 
@@ -249,8 +249,8 @@ if projected:
 The jobs worker imports `get_responsiveness_service` but the actual `update_background_job` calls are wired in a later phase. The import is present:
 
 ```python
-# services/backend/services/jobs/worker.py (line 49)
-from services.responsiveness.service import get_responsiveness_service
+# services/api/workers/jobs/worker.py (line 49)
+from governance.responsiveness.service import get_responsiveness_service
 ```
 
 ### Planned integration points
@@ -286,7 +286,7 @@ await get_responsiveness_service().update_background_job(
 
 ---
 
-## 5. Analytics queries — `services/backend/services/analytics/routes.py`
+## 5. Analytics queries — `services/api/intelligence/analytics/routes.py`
 
 **What's recorded:** Query execution state — lane, status, first-result latency, total latency, cache hit, projection used.
 
@@ -295,8 +295,8 @@ await get_responsiveness_service().update_background_job(
 After a successful `/v1/analytics/events/query`:
 
 ```python
-# services/backend/services/analytics/routes.py (lines ~80-95)
-from services.responsiveness.service import get_responsiveness_service
+# services/api/intelligence/analytics/routes.py (lines ~80-95)
+from governance.responsiveness.service import get_responsiveness_service
 
 # ... after query results are returned ...
 completed_at = utc_now()
@@ -319,7 +319,7 @@ await get_responsiveness_service().record_query(
 After a failed query:
 
 ```python
-# services/backend/services/analytics/routes.py (lines ~105-115)
+# services/api/intelligence/analytics/routes.py (lines ~105-115)
 except Exception as exc:
     completed_at = utc_now()
     total_ms = (completed_at - submitted_at).total_seconds() * 1000
@@ -381,7 +381,7 @@ The spine is observability, not a data path. If the spine is down, events still 
 ## Dependency graph
 
 ```
-services/responsiveness/service.py
+services/api/governance/responsiveness/service.py
   ├── models.py          (dataclasses + enums)
   ├── repository.py      (ResponsivenessRepository → BaseRepository)
   └── routes.py          (FastAPI router, depends on service)

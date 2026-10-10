@@ -13,14 +13,14 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
-from services.capabilities.release_surface import resolve_release_surface  # noqa: E402
-from services.capabilities.schema import (  # noqa: E402
+from tenancy.capabilities.release_surface import resolve_release_surface  # noqa: E402
+from tenancy.capabilities.schema import (  # noqa: E402
     CapabilitiesResponse,
     EnforcementState,
     ReleaseCapabilities,
@@ -46,7 +46,7 @@ def test_release_surface_non_founding_profile_has_no_manifest_narrowing():
 
 def test_resolve_release_reflects_settings():
     from config.settings import get_settings
-    from services.capabilities.routes import _resolve_release
+    from tenancy.capabilities.routes import _resolve_release
 
     rel = _resolve_release(get_settings())
     assert rel.deployment_profile  # non-empty

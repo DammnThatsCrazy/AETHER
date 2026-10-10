@@ -6,28 +6,28 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/main.py, services/backend/config/settings.py]
+source_files: [services/api/main.py, services/api/config/settings.py]
 canonical_owner: platform@aether
 source_hashes:
-  "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
-  "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
+  "services/api/config/settings.py": "sha256:d55bef95d2e6d1f13c003fe7289e4309d8299ab783b3d58b7660c6519bdaeadb"
+  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
 ---
 
 # Target Architecture
 
 Three observation-only domains wired through EXISTING platform systems —
 no parallel infrastructure was introduced. (Post-merge note: the
-independently merged observer-stack implementations — `services/backend/services/stablecoins`
+independently merged observer-stack implementations — `services/api/value/stablecoins`
 at `/v1/stablecoin` and the derivatives ingestion/accounting layer at
 `/v1/derivatives` — coexist with these domains; this branch's derivatives
 runtime is namespaced under `/v1/derivatives/runtime`.)
 
 A fourth observation-only slice, card-linked payment rails, follows the
 same wiring pattern: `main.py` mounts
-`services/backend/services/card_linked_payments/routes.py` under
+`services/api/value/card_linked_payments/routes.py` under
 `/v1/integrations/providers/payment-rails/card-linked` when
 `AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` is on, and
-`services/backend/services/card_linked_payments/kyber_routes.py` under
+`services/api/value/card_linked_payments/kyber_routes.py` under
 `/v1/admin/kyber/payment-rails/card-linked` when either the master or
 `KYBER_CARD_LINKED_PAYMENT_RAILS_ENABLED` flag is on. Its source of
 truth is `docs/reference/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md`.

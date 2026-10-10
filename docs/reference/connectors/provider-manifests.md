@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Provider Manifests
 
-Every provider plugin under `services/backend/services/providers/` declares a
+Every provider plugin under `services/api/connectors/providers/` declares a
 `ProviderManifest` — the single, typed source of truth for what a provider
 capability *is* and *needs*. The canonical type lives at
 `shared/integration_contracts/manifest.py` (`ProviderManifest` and its
@@ -66,11 +66,11 @@ Declarations alone do not prove per-stream acquisition or certification.
 
 ## Certification
 
-`services/backend/services/provider_runtime/certification.py` (`certify_provider`) runs a fixed
+`services/api/connectors/provider_runtime/certification.py` (`certify_provider`) runs a fixed
 set of honesty checks against a plugin and returns a `CertificationReport`.
 Checks include: identity parses and is non-empty; the manifest passes
 `validate_manifest`; the capability set is honest
-(`services/backend/services/provider_runtime/validation.py`); optional secret
+(`services/api/connectors/provider_runtime/validation.py`); optional secret
 fields are covered by complete mode-selected credential profiles;
 `webhooks.supported` implies both a verification scheme and a webhook adapter; the normalizer never raises on an opaque record; auth
 and pull adapters return an `AdapterResult` (never raise) for a
@@ -82,19 +82,19 @@ certification — adapters are exercised with a no-credential
 
 ## Registration through the provider runtime
 
-`services/backend/services/provider_runtime/manifest_service.py` (`ManifestService`) exposes
+`services/api/connectors/provider_runtime/manifest_service.py` (`ManifestService`) exposes
 one merged manifest surface:
 
 - `catalog()` — the derived catalog: manifests projected from existing
-  inbound connectors (`services/backend/services/integrations/connectors/`,
-  `services/backend/services/measurement/connectors/`, `services/backend/services/derivatives/connectors/`) via
+  inbound connectors (`services/api/connectors/integrations/connectors/`,
+  `services/api/journeys/measurement/connectors/`, `services/api/value/derivatives/connectors/`) via
   `shared/integration_contracts/catalog.py`. This projection is conservative —
   it never claims more readiness, availability, or capability than the
   connector's own descriptor evidences.
 - `installed()` — manifests of plugins registered with the
-  `ProviderRegistry` (`services/backend/services/provider_runtime/registry.py`), e.g. via
+  `ProviderRegistry` (`services/api/connectors/provider_runtime/registry.py`), e.g. via
   `register_provider(...)` at plugin import time (see
-  `services/backend/services/providers/shopify/__init__.py` for the self-registration
+  `services/api/connectors/providers/shopify/__init__.py` for the self-registration
   pattern).
 - `merged_manifests()` — catalog + installed, collision-asserted. A plugin
   manifest that collides on identity with a catalog manifest is only admitted
@@ -104,7 +104,7 @@ one merged manifest surface:
 
 ## Reference plugin
 
-`services/backend/services/providers/shopify/plugin.py` (`ShopifyOrdersPlugin`) is the
+`services/api/connectors/providers/shopify/plugin.py` (`ShopifyOrdersPlugin`) is the
 reference provider plugin for the Universal Provider Runtime. It declares
 identity `shopify.admin.orders_read`, a manifest with an honest capability set
 (auth/account/pull/webhook true; report/stream/reconciliation false), and

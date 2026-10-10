@@ -6,13 +6,13 @@ visibility: I
 audience: [ops, buyer, architect]
 status: beta
 since_version: "0.1.0"
-source_files: [services/backend/services/reliability/service.py, services/backend/services/reliability/routes.py]
+source_files: [services/api/governance/reliability/service.py, services/api/governance/reliability/routes.py]
 related: [reliability/operations, reliability/sre-runbooks, reliability/postmortems]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 source_hashes:
-  services/backend/services/reliability/routes.py: sha256:a28140054a4ffc46654adbf78bec26bca2934ff4d6fdde75c63cfc31adbed2b0
-  services/backend/services/reliability/service.py: sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb
+  "services/api/governance/reliability/routes.py": "sha256:aa8f7b1739acbda7065e85fd6c9a1e60805e542d4f60563adf3010ed7f35ee54"
+  "services/api/governance/reliability/service.py": "sha256:71fe39c503316a915a02f154dececd6385e7e07ed074ddea7ddb24915551d20c"
 ---
 # Incident Response
 

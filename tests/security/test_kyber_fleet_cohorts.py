@@ -18,7 +18,7 @@ over one tenant *is* an identification. A cohort resolving below its minimum is
 suppressed and says so, rather than returning a member count that is itself the
 disclosure.
 
-``services/kyber/graph/fleet.py`` names this file as the place its bounded-query
+``services/api/governance/kyber/graph/fleet.py`` names this file as the place its bounded-query
 claim is proven, so ``test_a_fleet_read_costs_the_same...`` counts repository
 calls while scaling the fleet.
 
@@ -36,21 +36,21 @@ from typing import Any, Optional
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "kyber-graph-test")
 
 from repositories.repos import BaseRepository, reset_in_memory_stores  # noqa: E402
-from services.kyber.graph.cohorts import (  # noqa: E402
+from governance.kyber.graph.cohorts import (  # noqa: E402
     ABSOLUTE_MINIMUM_SIZE,
     COHORT_DEFINITION_TABLE,
     FLEET_CAPABILITY,
     SUPPRESSION_REASON,
     CohortService,
 )
-from services.kyber.graph.contracts import CohortDefinition, FleetProjectionRow  # noqa: E402
-from services.kyber.graph.fleet import (  # noqa: E402
+from governance.kyber.graph.contracts import CohortDefinition, FleetProjectionRow  # noqa: E402
+from governance.kyber.graph.fleet import (  # noqa: E402
     FLEET_PROJECTION_TABLE,
     FleetProjectionService,
 )
@@ -552,7 +552,7 @@ async def test_a_rebuild_that_cannot_run_is_refused_rather_than_reported_done():
     """A rebuild nobody performed must not read as stale rows corrected."""
     service = _service()
 
-    import services.kyber.graph.fleet as fleet_module
+    import governance.kyber.graph.fleet as fleet_module
 
     original = fleet_module._resolve_projector
     fleet_module._resolve_projector = lambda: None  # type: ignore[assignment]
@@ -563,4 +563,4 @@ async def test_a_rebuild_that_cannot_run_is_refused_rather_than_reported_done():
 
     assert refused["accepted"] is False
     assert refused["totals_known"] is False
-    assert refused["missing_inputs"] == ["services.kyber.graph.projector:unavailable"]
+    assert refused["missing_inputs"] == ["governance.kyber.graph.projector:unavailable"]

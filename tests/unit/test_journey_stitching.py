@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULE = ROOT / "services" / "backend" / "services" / "journeys" / "stitching.py"
+MODULE = ROOT / "services" / "api" / "journeys" / "journeys" / "stitching.py"
 
 
 def load_module():

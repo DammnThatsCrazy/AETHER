@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/targeting-intelligence.ts, services/backend/services/targeting_intelligence/models.py, services/backend/services/targeting_intelligence/policy.py, services/backend/services/targeting_intelligence/service.py, services/backend/services/targeting_intelligence/leakage.py, services/backend/services/targeting_intelligence/routes.py]
+source_files: [packages/shared/targeting-intelligence.ts, services/api/intelligence/targeting_intelligence/models.py, services/api/intelligence/targeting_intelligence/policy.py, services/api/intelligence/targeting_intelligence/service.py, services/api/intelligence/targeting_intelligence/leakage.py, services/api/intelligence/targeting_intelligence/routes.py]
 last_synced_commit: HEAD
 ---
 

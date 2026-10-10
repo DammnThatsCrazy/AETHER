@@ -11,8 +11,8 @@ still re-parses as a :class:`UniversalObservationEnvelope`.
 from __future__ import annotations
 
 from shared.observation.envelope import UniversalObservationEnvelope
-from services.ingestion.adapters.sdk import SdkIngressAdapter
-from services.ingestion.gateway import validate_and_stamp
+from ingestion.ingestion.adapters.sdk import SdkIngressAdapter
+from ingestion.ingestion.gateway import validate_and_stamp
 
 
 def _accepted_envelope_dict(adapter: SdkIngressAdapter) -> dict:

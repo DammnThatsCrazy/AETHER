@@ -104,7 +104,7 @@ resource "aws_sqs_queue_policy" "events" {
 #
 # One shared queue would let consumer roles steal (and delete) each other's
 # events. Each consumer role from the ConsumerSpec registry
-# (services/backend/services/runtime/consumer_specs.py)
+# (services/api/workers/runtime/consumer_specs.py)
 # therefore gets its own SNS-subscribed queue.
 #
 # Known limitation: the producer publishes no SNS message attributes, so no

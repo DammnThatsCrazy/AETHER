@@ -7,16 +7,16 @@ audience: [security, architect, dev-senior, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/fraud_networks/
-  - services/backend/repositories/repos.py
+  - services/api/intelligence/fraud_networks/
+  - services/api/repositories/repos.py
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; fraud-network behavior and contracts are unaffected."
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
-  "services/backend/services/fraud_networks/": "sha256:9c7f503deb4644cf1c70768b9286e147a0ecd22a4d34951b91abfc2036ce06f4"
+  "services/api/intelligence/fraud_networks/": "sha256:b8f7d4ac084e4de118d885b2cef1b12d45c066237039600e1e754c2b04d6c8e8"
+  "services/api/repositories/repos.py": "sha256:bbad38e1ca8c19e36f2f936332bbe199e6a7b09e71598495ee72eb2efc2a9100"
 ---
 
 # Fraud Network Intelligence
@@ -106,7 +106,7 @@ Detection Pipeline
 
 ## Scoring Formulas
 
-All scoring functions are pure (`services/backend/services/fraud_networks/scoring.py`); risk in
+All scoring functions are pure (`services/api/intelligence/fraud_networks/scoring.py`); risk in
 [0, 100], confidence in [0, 1].
 
 ### Entity Risk (`score_entity_risk`)
@@ -193,7 +193,7 @@ the authenticated tenant.
 **Takedown → re-attribution.** `POST /{network_id}/takedown` marks the network
 `closed` and invalidates the fraudulent attribution it produced: for each member
 identity it calls the shared re-attribution invalidation service
-(`services/backend/services/measurement/reattribution.py`, Reliability Phase-2 Program 3 M3) with
+(`services/api/journeys/measurement/reattribution.py`, Reliability Phase-2 Program 3 M3) with
 `reason="fraud_takedown"`, superseding each affected active run with a fresh
 zero-credit run. Unlike a DSR erasure it retains the touchpoints/conversions as
 fraud evidence (no tombstone). The response carries a `reattribution` summary;

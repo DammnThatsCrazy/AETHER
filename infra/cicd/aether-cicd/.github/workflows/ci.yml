@@ -65,7 +65,7 @@ jobs:
             # Build comma-separated list of affected services
             AFFECTED=""
             # Map changed paths to the two deployed service names
-            if echo "$CHANGED" | grep -qE "^(services/backend/|services/agents/|security/|packages/)"; then
+            if echo "$CHANGED" | grep -qE "^(services/api/|services/agents/|security/|packages/)"; then
               AFFECTED="${AFFECTED},aether-app"
             fi
             if echo "$CHANGED" | grep -q "^services/ml/"; then
@@ -99,7 +99,7 @@ jobs:
       - name: ESLint (TypeScript)
         run: npx turbo run lint --filter='./packages/*' --filter='./services/*'
       - name: Ruff (Python)
-        run: ruff check services/backend services/ml services/agents
+        run: ruff check services/api services/ml services/agents
 
   security-scan:
     name: "5. Security Scan"
@@ -162,7 +162,7 @@ jobs:
       - name: TypeScript type check
         run: npx turbo run type-check
       - name: mypy (Python)
-        run: mypy --strict services/backend services/ml services/agents
+        run: mypy --strict services/api services/ml services/agents
 
   # ──────────────────────────────────────────────────────────────────────
   # STAGE 3: UNIT TEST (depends on type-check)
@@ -184,7 +184,7 @@ jobs:
           npx turbo run test -- --ci --coverage --coverageReporters=json-summary
       - name: pytest (Python services)
         run: |
-          pytest services/backend services/ml services/agents \
+          pytest services/api services/ml services/agents \
             --cov --cov-report=json --cov-fail-under=90 -q
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -284,7 +284,7 @@ jobs:
         run: |
           if [ "${{ matrix.service }}" = "aether-app" ]; then
             echo "context=." >> $GITHUB_OUTPUT
-            echo "dockerfile=services/backend/Dockerfile" >> $GITHUB_OUTPUT
+            echo "dockerfile=services/api/Dockerfile" >> $GITHUB_OUTPUT
           else
             echo "context=services/ml" >> $GITHUB_OUTPUT
             echo "dockerfile=services/ml/docker/Dockerfile" >> $GITHUB_OUTPUT

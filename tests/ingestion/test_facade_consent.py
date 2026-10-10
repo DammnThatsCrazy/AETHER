@@ -1,7 +1,7 @@
 """Regression tests for the shared WS-B3 ingress facade.
 
 Covers the two post-review findings on
-``services/ingestion/validation.py::evaluate_ingress_decision``:
+``services/api/ingestion/ingestion/validation.py::evaluate_ingress_decision``:
 
 1. Authoritative-ON + a purpose + an unresolvable subject is DENIED
    (``consent_receipt_missing``) — never silently fail-opened to allowed. The
@@ -24,8 +24,8 @@ import uuid
 import pytest
 
 from config.settings import settings
-from services.consent import authority
-from services.ingestion.validation import (
+from governance.consent import authority
+from ingestion.ingestion.validation import (
     RequestPrivacySignals,
     evaluate_ingress_decision,
     scrub_sensitive_fields,

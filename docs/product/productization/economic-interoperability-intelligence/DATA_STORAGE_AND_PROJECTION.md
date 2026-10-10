@@ -6,14 +6,14 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/repositories/typed_repo.py, services/backend/services/silver/dispatcher.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py]
+source_files: [services/api/repositories/typed_repo.py, services/api/ingestion/silver/dispatcher.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py, docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py]
 canonical_owner: platform@aether
 source_hashes:
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_derivatives_exposure.py": "sha256:3f3951246bed211847eabf45fd2dc2e6bac882f9fad2c6375a595c7d2149f0db"
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_interop_paths.py": "sha256:ff433ea1c35069666694aee0f0a2a6cef369cf97b0f77ad5c9eb578f6913caea"
   "docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_stablecoin_flows.py": "sha256:33c4eb1dab69dd4a98201761df37c8de1a6a3006f190937920751135308fc2fa"
-  "services/backend/repositories/typed_repo.py": "sha256:a39b0ac7f0332b0d3c66cb22f13381f509be6f1c3b260e64d30361766fa6fbaa"
-  "services/backend/services/silver/dispatcher.py": "sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f"
+  "services/api/ingestion/silver/dispatcher.py": "sha256:91649997a908ec2894c0097e513dba14c6a7e4d5c39a6519159bf0593e3d01fb"
+  "services/api/repositories/typed_repo.py": "sha256:a39b0ac7f0332b0d3c66cb22f13381f509be6f1c3b260e64d30361766fa6fbaa"
 ---
 
 # Data Storage and Projection

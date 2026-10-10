@@ -4,7 +4,7 @@
 Enforces the release-blocking invariants:
   - the canonical value contract exists (packages/shared/value.ts) and exports
     the required types;
-  - the backend mirror exists (services/value) with matching MetricKind values;
+  - the backend mirror exists (services/api/value/value) with matching MetricKind values;
   - Profile360 no longer sums raw cross-currency floats — the unsafe pattern must
     not reappear, and the safe rollup engine must be used.
 
@@ -18,9 +18,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VALUE_TS = ROOT / "packages" / "shared" / "value.ts"
-VALUE_MODELS_PY = ROOT / "services" / "backend" / "services" / "value" / "models.py"
-ROLLUPS_PY = ROOT / "services" / "backend" / "services" / "value" / "rollups.py"
-AGGREGATOR_PY = ROOT / "services" / "backend" / "services" / "profile" / "aggregator.py"
+VALUE_MODELS_PY = ROOT / "services" / "api" / "value" / "value" / "models.py"
+ROLLUPS_PY = ROOT / "services" / "api" / "value" / "value" / "rollups.py"
+AGGREGATOR_PY = ROOT / "services" / "api" / "identity" / "profile" / "aggregator.py"
 
 ERRORS: list[str] = []
 
@@ -70,18 +70,18 @@ def main() -> int:
         for pat in unsafe_patterns:
             if re.search(pat, agg):
                 fail(
-                    "services/profile/aggregator.py reintroduced an unsafe raw "
-                    f"cross-currency sum (pattern: {pat!r}); use services.value.safe_rollup"
+                    "services/api/identity/profile/aggregator.py reintroduced an unsafe raw "
+                    f"cross-currency sum (pattern: {pat!r}); use value.value.safe_rollup"
                 )
         if "safe_rollup" not in agg:
-            fail("services/profile/aggregator.py no longer uses safe_rollup for financial rollups")
+            fail("services/api/identity/profile/aggregator.py no longer uses safe_rollup for financial rollups")
 
     # 4. Price-source breadth: peg-aware stablecoin valuation + ownership rules.
     value_dir = VALUE_MODELS_PY.parent
     price_sources = value_dir / "price_sources.py"
     ownership = value_dir / "ownership_rules.py"
     if not price_sources.exists():
-        fail("missing services/value/price_sources.py (FX / token / peg-aware stablecoin)")
+        fail("missing services/api/value/value/price_sources.py (FX / token / peg-aware stablecoin)")
     else:
         ps = price_sources.read_text()
         if "stablecoin_peg_verified" not in ps or "classify_peg" not in ps:
@@ -89,7 +89,7 @@ def main() -> int:
         if re.search(r'usd_value["\']?\s*[:=]\s*["\']?0["\']?[,\s}]', ps):
             fail("price_sources must never coerce an unavailable price to 0")
     if not ownership.exists():
-        fail("missing services/value/ownership_rules.py")
+        fail("missing services/api/value/value/ownership_rules.py")
     else:
         own = ownership.read_text()
         for token in ("liability_not_asset", "testnet_excluded", "spam"):

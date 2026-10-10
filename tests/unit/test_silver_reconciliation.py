@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("fastapi", reason="Backend deps not installed")
 
 from shared.graph.graph import Edge, GraphClient, Vertex, VertexType
-from services.silver.reconciliation import ReconciliationReport, SilverReconciliationWorker
+from ingestion.silver.reconciliation import ReconciliationReport, SilverReconciliationWorker
 
 
 async def _fresh_graph() -> GraphClient:

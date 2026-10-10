@@ -11,8 +11,8 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -41,7 +41,7 @@ def feeder(monkeypatch):
         repos = importlib.import_module("repositories.repos")
         repos.reset_in_memory_stores()
         lake = importlib.import_module("repositories.lake")
-        svc = importlib.import_module("services.integrations.dune_feeder.service")
+        svc = importlib.import_module("connectors.integrations.dune_feeder.service")
         bronze = lake.BronzeRepository("dune_feeder")
         silver = lake.SilverRepository("dune_feeder")
         make_raw = lake.make_raw_record

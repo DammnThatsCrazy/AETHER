@@ -1,7 +1,7 @@
 /**
  * Mobile config contract (v1) — GET /v1/mobile/config.
  *
- * TS twin of `services/mobile/config.py` (MobileConfig + DistributionProfile +
+ * TS twin of `services/api/ingestion/mobile/config.py` (MobileConfig + DistributionProfile +
  * UpgradePolicy). Parity-tested by `tests/contracts/test_mobile_config_parity.py`.
  * Fields are snake_case (decision-log D6).
  */

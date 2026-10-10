@@ -7,12 +7,12 @@ audience: [ops, security, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/shared/certification/registry.py
+  - services/api/shared/certification/registry.py
   - docs/operations/SECRETS-MANAGEMENT.md
 canonical_owner: platform@aether
 source_hashes:
-  "docs/operations/SECRETS-MANAGEMENT.md": "sha256:4cb7bb12ad5d90beeb8c88c5c77e6981bf03e7ce8fe81e0b94a8e5f689011bef"
-  "services/backend/shared/certification/registry.py": "sha256:5c2e75d47d24e1dc2429c6ea6a2476cab2b0dcc71be4899ad77bac802ee12624"
+  "docs/operations/SECRETS-MANAGEMENT.md": "sha256:ccf7080c9c4c2c9ba95b7256339674e0fdb31e12ed0b8dfd6fc203209f677d7a"
+  "services/api/shared/certification/registry.py": "sha256:f0d9c01a6f3b2341afca6901db34c4361a444742eb9e403593f669a493a67abc"
 ---
 
 # Credential & Secret Reference

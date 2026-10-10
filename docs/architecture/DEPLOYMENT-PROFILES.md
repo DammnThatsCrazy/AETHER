@@ -11,23 +11,23 @@ canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
-  "config/capability_overlays.yaml": "sha256:a5f005b0c7e2e8494d328c951bffd47842b24cc6f3ac8acaa439003eb3d2f091"
+  "config/capability_overlays.yaml": "sha256:aab4be2180c27275e54164100963b8c3fda947fbcceecb99114bc6412f923407"
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
-  "config/runtime_deployment.yaml": "sha256:ebd56d390e41b185467f917807a1b59ebbe24d7e0c5299bc438902a0f8f2b834"
+  "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
-  "infra/aws/terraform/main.tf": "sha256:68861b95a57c75d22bb0594b4bc758aa06b789205d2c4a6e771658bf419dd8b2"
+  "infra/aws/terraform/main.tf": "sha256:a04ba5462686d78c59d9f03feb2a9261a39adc26814997133ee22a08503e293f"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:2e3b0bc6336ee324e3a3829f4f08c94b901501902981f87034933c875549fb00"
-  "infra/aws/terraform/profiles.tf": "sha256:9b74e7901a2fe2fa3cc2bf14d34b35b9e8fbcb7f9f1a82277770889e7453a692"
+  "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
   "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
   "scripts/release/check_profile_config.py": "sha256:c1a16a2c7342d7be2d16306f1a15915cf4d37ffc4f1c6ea0466e3fe2df71782b"
   "scripts/release/check_profile_parity.py": "sha256:34c8ae168107d6c5e69c26dd2081c9774b42dd158b9663189ff5e70b6415adf2"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
-  "scripts/validate_capability_overlays.py": "sha256:b0f1a77dd11bb41da226b33a46a2ce439b62c1c3fcd4c0ccbbcf3398f4812d9e"
+  "scripts/validate_capability_overlays.py": "sha256:adb635ee0fb3f005ea3be1f56d67d6d421e1282bbb4852986e77ad19dc381a26"
 ---
 
 # Deployment Profiles
@@ -137,7 +137,7 @@ exactly once or unmapped (never both), that staging lanes equal the profile's
 `deployment_lanes`, and that the production postures match its three profiles.
 
 Capabilities are `enable-*` overlays in `config/capability_overlays.yaml`, each
-realized by existing runtime flags from `services/backend/config/settings.py`
+realized by existing runtime flags from `services/api/config/settings.py`
 (`scripts/validate_capability_overlays.py`, run by `make repo-doctor` and as a
 router check in every PR plan). A bound flag must be an environment variable the
 settings file actually reads, matched by whole name, and an overlay must never
@@ -420,7 +420,7 @@ list names the logical roles that one process hosts. `execution_mode` names the
 packing strategy:
 
 - **`consolidated`** — one task hosts several logical roles through an execution
-  group token (`services/backend/services/runtime/roles.py::EXECUTION_GROUPS`).
+  group token (`services/api/workers/runtime/roles.py::EXECUTION_GROUPS`).
   `production-lean` and `staging` run **2 always-on tasks, not 10**: `api`, plus
   one `lean-worker` whose task hosts all eight worker roles —
   `outbox-relay`, `stream-worker`, `identity-worker`, `graph-writer`,
@@ -432,8 +432,8 @@ packing strategy:
 **Consolidation moves the process boundary and nothing else.** Inside a
 consolidated task every member role keeps its own queue, consumer group, DLQ,
 retry policy, backpressure budget, metrics label and restart behaviour, resolved
-in-process by `services/backend/services/runtime/roles.py::roles_in` and
-`services/backend/services/runtime/consumer_specs.py`. Terraform carries the role list for one
+in-process by `services/api/workers/runtime/roles.py::roles_in` and
+`services/api/workers/runtime/consumer_specs.py`. Terraform carries the role list for one
 reason only: a consolidated task must bind one SQS queue per hosted role, which
 a single `SQS_QUEUE_URL` cannot express.
 

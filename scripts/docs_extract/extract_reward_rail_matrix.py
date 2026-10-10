@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate ``docs/_generated/reward-rail-matrix.json`` from source.
 
-Canonical source: ``services/rewards/rail_matrix.py::build_rail_matrix()`` —
+Canonical source: ``services/api/value/rewards/rail_matrix.py::build_rail_matrix()`` —
 every reward rail's tier (production / sandbox / explicit_beta /
 intentionally_unsupported), delivery mode, custody boundary, and external
 action. Deterministic + timestamp-free so the CI extract-docs-drift gate
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 OUTPUT = ROOT / "docs" / "_generated" / "reward-rail-matrix.json"
 
 
@@ -30,14 +30,14 @@ def main() -> int:
     if str(BACKEND_ROOT) not in sys.path:
         sys.path.insert(0, str(BACKEND_ROOT))
     try:
-        from services.rewards.rail_matrix import build_rail_matrix
+        from value.rewards.rail_matrix import build_rail_matrix
     except Exception as exc:  # pragma: no cover — surfaces a real wiring break
         print(f"error: could not import reward rail matrix: {exc}", file=sys.stderr)
         return 1
 
     payload = {
         "version": read_version(),
-        "generated_from": "services/backend/services/rewards/rail_matrix.py",
+        "generated_from": "services/api/value/rewards/rail_matrix.py",
         **build_rail_matrix(),
     }
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)

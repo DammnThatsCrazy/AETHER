@@ -89,7 +89,7 @@ variable "runtime_services" {
     role in a `dedicated` profile and eight in a `consolidated` one. The map
     KEY is the AETHER_ROLE token the container boots with, so a consolidated
     entry is keyed `lean-worker` (an execution group in
-    services/runtime/roles.py) rather than by any role it contains.
+    services/api/workers/runtime/roles.py) rather than by any role it contains.
 
     The api service is absent by construction: it is served by the -backend
     service, the one load-bearing naming exception in the matrix.

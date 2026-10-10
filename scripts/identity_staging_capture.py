@@ -21,10 +21,10 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1] / "services/backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[1] / "services/api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
-from services.identity.contract_inventory import REQUIRED_STAGING_IDENTITY_FLAGS  # noqa: E402
+from identity.identity.contract_inventory import REQUIRED_STAGING_IDENTITY_FLAGS  # noqa: E402
 
 
 def _call_capture(base_url: str, api_key: str) -> dict[str, Any]:

@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -33,7 +33,7 @@ PROVIDER = "klaviyo"
 @pytest.fixture(autouse=True)
 def _clean():
     from repositories.repos import _IN_MEMORY_STORES
-    from services.comms.repository import _local_suppressions
+    from journeys.comms.repository import _local_suppressions
     _IN_MEMORY_STORES.clear()
     _local_suppressions.clear()
     yield
@@ -43,13 +43,13 @@ def _clean():
 
 @pytest.mark.asyncio
 async def test_credential_turnkey_scenario(monkeypatch):
-    from services.integrations.connectors.service import connector_service
-    from services.integrations.connectors.klaviyo import KlaviyoConnector
-    from services.integrations.connectors.base import NormalizedEvent
-    from services.comms.sync_runs import SyncRunService
-    from services.comms.identity_bridge import ProviderIdentityBridge, ProviderIdentityRepository
-    from services.comms.suppression_authority import SuppressionAuthorityService
-    from services.metering_evidence.service import MeteringEvidenceRepository
+    from connectors.integrations.connectors.service import connector_service
+    from connectors.integrations.connectors.klaviyo import KlaviyoConnector
+    from connectors.integrations.connectors.base import NormalizedEvent
+    from journeys.comms.sync_runs import SyncRunService
+    from journeys.comms.identity_bridge import ProviderIdentityBridge, ProviderIdentityRepository
+    from journeys.comms.suppression_authority import SuppressionAuthorityService
+    from billing.metering_evidence.service import MeteringEvidenceRepository
 
     # ── Stubbed provider pull: a campaign catalog record + lifecycle events ──
     def _event(etype: str, ext: str, props: dict) -> NormalizedEvent:

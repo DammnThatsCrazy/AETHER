@@ -6,15 +6,15 @@ visibility: I
 audience: [dev-senior, ops]
 status: experimental
 since_version: 0.1.0
-source_files: [services/backend/services/measurement/connectors/google_ads.py, services/backend/services/measurement/connectors/meta_ads.py, services/backend/services/measurement/connectors/tiktok_ads.py, services/backend/services/measurement/connectors/linkedin_ads.py, services/backend/services/measurement/connectors/x_ads.py, services/backend/services/measurement/connectors/reddit_ads.py, services/backend/services/measurement/connectors/microsoft_ads.py]
+source_files: [services/api/journeys/measurement/connectors/google_ads.py, services/api/journeys/measurement/connectors/meta_ads.py, services/api/journeys/measurement/connectors/tiktok_ads.py, services/api/journeys/measurement/connectors/linkedin_ads.py, services/api/journeys/measurement/connectors/x_ads.py, services/api/journeys/measurement/connectors/reddit_ads.py, services/api/journeys/measurement/connectors/microsoft_ads.py]
 source_hashes:
-  services/backend/services/measurement/connectors/google_ads.py: sha256:0bdb5ba4ae3376e74e09695da7c5160af0d2193ef4067e1e808f59b82415d011
-  services/backend/services/measurement/connectors/linkedin_ads.py: sha256:cc1403bc26e99af200514c71800dbb83f1000fbdf09f15c5506595bb3e40b761
-  services/backend/services/measurement/connectors/meta_ads.py: sha256:c1099c3d670670554a0e7cdbab79d86d256002a519ac084cb21ddec1c4366dbb
-  services/backend/services/measurement/connectors/microsoft_ads.py: sha256:db43a96418564c16897d084bfb8aabc28f354e44c39d399eb87c2ae63f65b9c0
-  services/backend/services/measurement/connectors/reddit_ads.py: sha256:120aeb1ceac9f68f21374cef6af0caac77e67b04b56dcb690aa669c3adf0724c
-  services/backend/services/measurement/connectors/tiktok_ads.py: sha256:d50fcb577c68dd3585be8f95c744e01c61e47fd9b03f890ea8c89cee0f639f36
-  services/backend/services/measurement/connectors/x_ads.py: sha256:4ef01b6a17ed47ef7d2d54a4a3ce515fe6015a0d56543a1d920db0bfcec4c027
+  "services/api/journeys/measurement/connectors/google_ads.py": "sha256:d8f63eff297fe16ac18433f7d6e13c3ae3b1a01ff00b32602181fe01cf413b2d"
+  "services/api/journeys/measurement/connectors/linkedin_ads.py": "sha256:c13c468a6f29d450314a70dea3ffabdad47638a149742dde846c7c6f7d867706"
+  "services/api/journeys/measurement/connectors/meta_ads.py": "sha256:470b73fbeea77c0e8471e7ca3919b530b5cb0c7e50d070af84b7a7f0a850e431"
+  "services/api/journeys/measurement/connectors/microsoft_ads.py": "sha256:d86ce469708e5297db0cdc04272589ff234943c5795155fc89c5a1c6d8290cfc"
+  "services/api/journeys/measurement/connectors/reddit_ads.py": "sha256:93e4f76b421a4041f9f4edc85e23c29990c534e2438ad6196b9c4ba38be3833b"
+  "services/api/journeys/measurement/connectors/tiktok_ads.py": "sha256:4fc09c94676cf884d8414d1ab6d813fae6ebb648dc62f3828317288330489d87"
+  "services/api/journeys/measurement/connectors/x_ads.py": "sha256:2838c6ca8665f97e9e0619478850bb59e3cec762d1f06f3d53ca2e98d1d01f97"
 ---
 
 # Campaign Source Connectors

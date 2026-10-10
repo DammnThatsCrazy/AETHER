@@ -8,7 +8,7 @@ doesn't exist.
 
 Source::
 
-    services/backend/shared/events/events.py
+    services/api/shared/events/events.py
     -> class Topic(str, Enum)
 
 Parses the class body via Python ``ast`` so it doesn't need to import
@@ -21,7 +21,7 @@ Schema::
 
     {
       "version": "8.9.0",
-      "generated_from": "services/backend/shared/events/events.py",
+      "generated_from": "services/api/shared/events/events.py",
       "sections": [
         {
           "name": "Ingestion",
@@ -52,7 +52,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 EVENTS_PY = (
     ROOT
-    / "services" / "backend"
+    / "services" / "api"
     / "shared"
     / "events"
     / "events.py"
@@ -191,7 +191,7 @@ def build_payload(text: str) -> dict:
 
     return {
         "version": read_version(),
-        "generated_from": "services/backend/shared/events/events.py",
+        "generated_from": "services/api/shared/events/events.py",
         "sections": sections,
         "all_topics": all_topics,
     }

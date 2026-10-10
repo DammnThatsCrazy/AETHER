@@ -17,7 +17,7 @@ is not explicitly local or a known testnet (unknown names are treated as mainnet
 
 | Gate | Enforced by | Behavior |
 |------|-------------|----------|
-| **EVM mainnet audit gate** | `services/backend/services/rewards/onchain_gate.py` (`assert_mainnet_audit_evidence`), wired in `services/backend/services/rewards/routes.py` `/evaluate` | For an EVM **mainnet** `onchain_claim` reward, activation fails closed (403) unless a non-revoked `reward_external_audit_evidence` row exists for the exact `(tenant_id, chain_id, contract_address)`. Local/testnet unaffected. Evidence is recorded via `POST /v1/rewards/audit-evidence` and can be revoked to re-gate. |
+| **EVM mainnet audit gate** | `services/api/value/rewards/onchain_gate.py` (`assert_mainnet_audit_evidence`), wired in `services/api/value/rewards/routes.py` `/evaluate` | For an EVM **mainnet** `onchain_claim` reward, activation fails closed (403) unless a non-revoked `reward_external_audit_evidence` row exists for the exact `(tenant_id, chain_id, contract_address)`. Local/testnet unaffected. Evidence is recorded via `POST /v1/rewards/audit-evidence` and can be revoked to re-gate. |
 | **Contract registry gate** | `ContractRegistryRepository.find_for_proof` (backend) | Proof generation requires the contract to be operator-verified in the tenant's registry (prevents a tenant registering an arbitrary contract and obtaining proofs for it). |
 
 ## What records the audit evidence (the honest path)

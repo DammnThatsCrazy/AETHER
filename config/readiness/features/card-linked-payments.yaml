@@ -26,7 +26,7 @@ repository_ceiling:
   - Insert provider credentials into the credential platform; run credentials-preflight.
   remaining_is_repository_controlled: true
   evidence:
-  - services/backend/services/card_linked_payments/
+  - services/api/value/card_linked_payments/
   - docs/reference/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md
   - docs/operations/runbooks/CARD_LINKED_RUNBOOK.md
 implementation:
@@ -127,7 +127,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: services/backend/services/card_linked_payments/'
+  - 'repository evidence: services/api/value/card_linked_payments/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

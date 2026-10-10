@@ -37,8 +37,8 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
-ROUTES = BACKEND / "services" / "kyber" / "ops" / "routes.py"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
+ROUTES = BACKEND / "governance" / "kyber" / "ops" / "routes.py"
 
 #: The four handlers whose authorization is deferred to the command spec.
 NESTED_HANDLERS: tuple[str, ...] = (
@@ -63,7 +63,7 @@ def _function(name: str) -> ast.AsyncFunctionDef:
         if isinstance(node, ast.AsyncFunctionDef) and node.name == name:
             return node
     raise AssertionError(
-        f"{name!r} is not defined in services/kyber/ops/routes.py. If a command "
+        f"{name!r} is not defined in services/api/governance/kyber/ops/routes.py. If a command "
         f"lifecycle route was renamed, update NESTED_HANDLERS — do not delete "
         f"the assertion, because the nested gate is the only thing standing "
         f"between the declared floor and a class-5 command."
@@ -193,7 +193,7 @@ def test_the_registry_floor_is_a_capability_that_grants_nothing():
 
     if str(BACKEND) not in sys.path:
         sys.path.insert(0, str(BACKEND))
-    from services.kyber.access.capabilities import CAPABILITIES
+    from governance.kyber.access.capabilities import CAPABILITIES
 
     floor = CAPABILITIES[FLOOR_CAPABILITY]
     assert floor.action_class == 0, (
@@ -214,8 +214,8 @@ def test_every_registered_command_spec_would_be_evaluated_at_its_own_class():
 
     if str(BACKEND) not in sys.path:
         sys.path.insert(0, str(BACKEND))
-    from services.kyber.access.capabilities import CAPABILITIES
-    from services.kyber.ops.registry import COMMAND_REGISTRY
+    from governance.kyber.access.capabilities import CAPABILITIES
+    from governance.kyber.ops.registry import COMMAND_REGISTRY
 
     assert COMMAND_REGISTRY, "no commands registered; the deferral has nothing to gate"
     for command_type, spec in COMMAND_REGISTRY.items():

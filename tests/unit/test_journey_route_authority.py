@@ -1,6 +1,6 @@
 """/v1/journeys authority — the persisted measurement router owns the surface.
 
-Regression: the in-memory JourneyStitchingService router (services/journeys/
+Regression: the in-memory JourneyStitchingService router (services/api/journeys/journeys/
 routes.py) was mounted *before* the persisted authority and shadowed
 GET /v1/journeys/{journey_id} and /summary with an always-empty in-process
 store (FastAPI first-match-wins). It is now unmounted; this pins the persisted
@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
@@ -22,8 +22,8 @@ os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
 from fastapi.routing import APIRoute  # noqa: E402
 
-_INMEMORY_MODULE = "services.journeys.routes"
-_PERSISTED_MODULE = "services.measurement.routes.journeys"
+_INMEMORY_MODULE = "journeys.journeys.routes"
+_PERSISTED_MODULE = "journeys.measurement.routes.journeys"
 
 
 def _api_routes(app):

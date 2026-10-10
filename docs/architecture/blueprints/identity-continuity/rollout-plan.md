@@ -43,7 +43,7 @@ Do not flip production-lean to ON in one commit. One flag group per PR with proo
 
 ## 4. Observability (blueprint §19-§20)
 
-- **Metrics** — `IdentityMetrics` (`services/backend/services/identity/observability.py`): `source_identity.created`, `resolve.*`, `merge.*`, `split.*`, `veto.*`, `cross_tenant_block`, `projection_restatement.*`, `sdk_heartbeat`, `sdk_identify`, `resolution_latency`, `restatement_latency`.
+- **Metrics** — `IdentityMetrics` (`services/api/identity/identity/observability.py`): `source_identity.created`, `resolve.*`, `merge.*`, `split.*`, `veto.*`, `cross_tenant_block`, `projection_restatement.*`, `sdk_heartbeat`, `sdk_identify`, `resolution_latency`, `restatement_latency`.
 - **Traces** — `IdentityTrace` spans: `ingestion.receive` → `source_identity.register` → `claims.normalize` → `identity.resolve` → `policy.score` → `veto.evaluate` → `decision.write` → `graph_version.create` → `projection_restatement.queue` → `profile_360.update`.
 - **Logs** — `log_identity_decision` emits `tenant_id`, `source_system_id`, `source_identity_id`, `candidate_entity_ids`, `decision_type`, `confidence`, `vetoes`, `policy_version`, `graph_version_before/after`, `projection_jobs_created` (PII redacted).
 - Alert on: rising `veto.*`, `cross_tenant_block`, `projection_restatement.failed`, `resolution_latency p95 > budget`.

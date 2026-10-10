@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations.contracts import (
     INTEGRATION_AVAILABILITY_VALUES,
 )
-from services.managed_integrations.sensors import (
+from connectors.managed_integrations.sensors import (
     observed_capability_availability,
     observed_from_provider_connection,
     observed_from_sdk_health,
@@ -412,7 +412,7 @@ def test_install_age_is_reported_not_thresholded_into_a_state() -> None:
 
 def test_site_install_health_status_is_one_the_reconciler_treats_as_drift() -> None:
     """The seam that matters: a broken install must not reconcile as ``match``."""
-    from services.managed_integrations.reconciler import _UNHEALTHY_STATUSES
+    from connectors.managed_integrations.reconciler import _UNHEALTHY_STATUSES
 
     failed = _site_snap(_site_install(state="failed", status="failed"))
     assert failed.health_status in _UNHEALTHY_STATUSES

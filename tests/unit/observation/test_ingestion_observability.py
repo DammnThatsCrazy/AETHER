@@ -1,6 +1,6 @@
 """WS-E 1 — ingestion funnel observability ledger (flag-gated, default OFF).
 
-Unit tests for :mod:`services.ingestion.ingestion_observability`:
+Unit tests for :mod:`ingestion.ingestion.ingestion_observability`:
 
 * flag OFF = zero recording / no-op; the operator snapshots report
   ``enabled: false`` with zeroed counters (stable health surface, never errors).
@@ -20,7 +20,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.ingestion import ingestion_observability as obs
+from ingestion.ingestion import ingestion_observability as obs
 
 
 @pytest.fixture(autouse=True)

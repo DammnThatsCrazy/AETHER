@@ -24,15 +24,15 @@ from typing import Any, Optional
 
 import pytest
 
-from services.managed_integrations.contracts import SIMULATION_RESULT_VALUES
-from services.managed_integrations.simulation import (
+from connectors.managed_integrations.contracts import SIMULATION_RESULT_VALUES
+from connectors.managed_integrations.simulation import (
     SIMULATION_AXES,
     compare_paths,
     digital_twin_dry_run,
     is_axis,
     run_result,
 )
-from services.managed_integrations.simulation_repository import (
+from connectors.managed_integrations.simulation_repository import (
     SimulationRunView,
     get_simulation_repository,
 )
@@ -53,17 +53,17 @@ def _simulation_db_free(monkeypatch: pytest.MonkeyPatch) -> None:
     simulation store and guarantees no repository write reaches a live
     Postgres even under an ambient non-local ``AETHER_ENV``.
     """
-    import services.managed_integrations.change_sets_repository as cs_module
-    import services.managed_integrations.repository as mi_module
-    import services.managed_integrations.simulation_repository as sim_module
+    import connectors.managed_integrations.change_sets_repository as cs_module
+    import connectors.managed_integrations.repository as mi_module
+    import connectors.managed_integrations.simulation_repository as sim_module
 
-    from services.managed_integrations.change_sets_repository import (
+    from connectors.managed_integrations.change_sets_repository import (
         reset_change_set_in_memory_store,
     )
-    from services.managed_integrations.repository import (
+    from connectors.managed_integrations.repository import (
         reset_managed_integration_in_memory_store,
     )
-    from services.managed_integrations.simulation_repository import (
+    from connectors.managed_integrations.simulation_repository import (
         reset_simulation_stores,
     )
 
@@ -401,10 +401,10 @@ async def test_list_filters_mode_and_orders_newest_first() -> None:
 
 
 async def test_no_mutation_invariant_after_compare_paths() -> None:
-    from services.managed_integrations.change_sets_repository import (
+    from connectors.managed_integrations.change_sets_repository import (
         get_change_set_repository,
     )
-    from services.managed_integrations.repository import (
+    from connectors.managed_integrations.repository import (
         get_managed_integration_repository,
     )
 
@@ -520,17 +520,17 @@ def test_axis_token_helper() -> None:
 async def test_flag_off_parity_imports_clean_and_nothing_auto_runs() -> None:
     import importlib
 
-    import services.managed_integrations.flags as flags
+    import connectors.managed_integrations.flags as flags
 
     assert flags.enabled() is False
     assert flags.reconciler_enabled() is False
     # Re-executing both Phase-3 modules under all-flags-OFF must import cleanly
     # and register no wiring / auto-run no comparison.
     simulation_repository_module = importlib.reload(
-        importlib.import_module("services.managed_integrations.simulation_repository")
+        importlib.import_module("connectors.managed_integrations.simulation_repository")
     )
     simulation_module = importlib.reload(
-        importlib.import_module("services.managed_integrations.simulation")
+        importlib.import_module("connectors.managed_integrations.simulation")
     )
     assert simulation_repository_module.SIMULATION_MODES == (
         "shadow",

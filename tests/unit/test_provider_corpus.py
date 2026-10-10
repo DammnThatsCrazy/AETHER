@@ -15,8 +15,8 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -43,7 +43,7 @@ def backend_module_path():
 
 def test_connector_class_enum_values():
     with backend_module_path():
-        base = importlib.import_module("services.integrations.connectors.base")
+        base = importlib.import_module("connectors.integrations.connectors.base")
         ConnectorClass = base.ConnectorClass
         assert ConnectorClass.OLYMPUS_PROVIDER.value == "olympus_provider"
         assert ConnectorClass.TENANT_BYOD_DATA.value == "tenant_byod_data"
@@ -54,7 +54,7 @@ def test_connector_class_enum_values():
 
 def test_lake_write_policy_enum_values():
     with backend_module_path():
-        base = importlib.import_module("services.integrations.connectors.base")
+        base = importlib.import_module("connectors.integrations.connectors.base")
         LakeWritePolicy = base.LakeWritePolicy
         assert LakeWritePolicy.NEVER.value == "never"
         assert LakeWritePolicy.TENANT_ONLY.value == "tenant_only"
@@ -65,7 +65,7 @@ def test_lake_write_policy_enum_values():
 
 def test_implementation_status_includes_compliance_disabled():
     with backend_module_path():
-        base = importlib.import_module("services.integrations.connectors.base")
+        base = importlib.import_module("connectors.integrations.connectors.base")
         ImplementationStatus = base.ImplementationStatus
         statuses = {s.value for s in ImplementationStatus}
         assert "disabled_compliance_review" in statuses
@@ -75,7 +75,7 @@ def test_implementation_status_includes_compliance_disabled():
 
 def test_priority_phase_values():
     with backend_module_path():
-        base = importlib.import_module("services.integrations.connectors.base")
+        base = importlib.import_module("connectors.integrations.connectors.base")
         PriorityPhase = base.PriorityPhase
         assert PriorityPhase.PHASE_1_FOUNDATION.value == "phase_1_foundation"
         assert PriorityPhase.PHASE_2_ENRICHMENT.value == "phase_2_enrichment"
@@ -89,15 +89,15 @@ def test_priority_phase_values():
 def test_catalog_has_minimum_30_providers(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        catalog_mod = importlib.import_module("services.provider_catalog.catalog")
+        catalog_mod = importlib.import_module("connectors.provider_catalog.catalog")
         assert len(catalog_mod.PROVIDER_CATALOG) >= 30
 
 
 def test_phase_1_providers_present(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        base = importlib.import_module("services.integrations.connectors.base")
-        catalog_mod = importlib.import_module("services.provider_catalog.catalog")
+        base = importlib.import_module("connectors.integrations.connectors.base")
+        catalog_mod = importlib.import_module("connectors.provider_catalog.catalog")
         phase_1 = catalog_mod.get_providers_by_phase(base.PriorityPhase.PHASE_1_FOUNDATION)
         phase_1_ids = {p.provider_id for p in phase_1}
         assert "dune_api" in phase_1_ids
@@ -109,8 +109,8 @@ def test_phase_1_providers_present(monkeypatch):
 def test_social_providers_disabled_compliance_review(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        base = importlib.import_module("services.integrations.connectors.base")
-        catalog_mod = importlib.import_module("services.provider_catalog.catalog")
+        base = importlib.import_module("connectors.integrations.connectors.base")
+        catalog_mod = importlib.import_module("connectors.provider_catalog.catalog")
         disabled_ids = {"twitter_x", "reddit", "telegram_bot", "discord_bot"}
         for p in catalog_mod.PROVIDER_CATALOG:
             if p.provider_id in disabled_ids:
@@ -120,7 +120,7 @@ def test_social_providers_disabled_compliance_review(monkeypatch):
 def test_all_providers_have_required_fields(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        catalog_mod = importlib.import_module("services.provider_catalog.catalog")
+        catalog_mod = importlib.import_module("connectors.provider_catalog.catalog")
         for p in catalog_mod.PROVIDER_CATALOG:
             assert p.provider_id
             assert p.provider_name
@@ -132,7 +132,7 @@ def test_all_providers_have_required_fields(monkeypatch):
 def test_all_providers_not_tenant_visible(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        catalog_mod = importlib.import_module("services.provider_catalog.catalog")
+        catalog_mod = importlib.import_module("connectors.provider_catalog.catalog")
         for p in catalog_mod.PROVIDER_CATALOG:
             assert p.tenant_visible is False
 
@@ -140,7 +140,7 @@ def test_all_providers_not_tenant_visible(monkeypatch):
 def test_dune_access_modes_count(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        catalog_mod = importlib.import_module("services.provider_catalog.catalog")
+        catalog_mod = importlib.import_module("connectors.provider_catalog.catalog")
         assert len(catalog_mod.DUNE_ACCESS_MODES) == 3
         mode_ids = {m.mode_id for m in catalog_mod.DUNE_ACCESS_MODES}
         assert "dune_api" in mode_ids
@@ -151,7 +151,7 @@ def test_dune_access_modes_count(monkeypatch):
 def test_chain_extraction_p0_chains(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        catalog_mod = importlib.import_module("services.provider_catalog.catalog")
+        catalog_mod = importlib.import_module("connectors.provider_catalog.catalog")
         p0 = {p.chain_id for p in catalog_mod.CHAIN_EXTRACTION_PLANS if p.priority == "P0_CRITICAL"}
         assert "ethereum" in p0
         assert "solana" in p0
@@ -161,7 +161,7 @@ def test_chain_extraction_p0_chains(monkeypatch):
 def test_extraction_products_minimum_count(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        catalog_mod = importlib.import_module("services.provider_catalog.catalog")
+        catalog_mod = importlib.import_module("connectors.provider_catalog.catalog")
         assert len(catalog_mod.EXTRACTION_PRODUCTS) >= 10
 
 
@@ -276,8 +276,8 @@ async def test_data_rights_olympus_provider_baseline_auto_set(monkeypatch):
     """Olympus provider grants automatically get olympus_baseline_allowed=True."""
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        dr_models = importlib.import_module("services.integrations.data_rights.models")
-        dr_service_mod = importlib.import_module("services.integrations.data_rights.service")
+        dr_models = importlib.import_module("connectors.integrations.data_rights.models")
+        dr_service_mod = importlib.import_module("connectors.integrations.data_rights.service")
         svc = dr_service_mod.DataRightsService()
         body = dr_models.DataRightsGrantCreate(
             tenant_id="t1", source_id="s1", connector_id="dune_api",
@@ -293,8 +293,8 @@ async def test_data_rights_olympus_provider_baseline_auto_set(monkeypatch):
 async def test_data_rights_model_training_default_false(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        dr_models = importlib.import_module("services.integrations.data_rights.models")
-        dr_service_mod = importlib.import_module("services.integrations.data_rights.service")
+        dr_models = importlib.import_module("connectors.integrations.data_rights.models")
+        dr_service_mod = importlib.import_module("connectors.integrations.data_rights.service")
         svc = dr_service_mod.DataRightsService()
         body = dr_models.DataRightsGrantCreate(
             tenant_id="t2", source_id="s2", connector_id="dune_api",
@@ -309,8 +309,8 @@ async def test_data_rights_model_training_default_false(monkeypatch):
 async def test_data_rights_revoke_blocks_all_use(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        dr_models = importlib.import_module("services.integrations.data_rights.models")
-        dr_service_mod = importlib.import_module("services.integrations.data_rights.service")
+        dr_models = importlib.import_module("connectors.integrations.data_rights.models")
+        dr_service_mod = importlib.import_module("connectors.integrations.data_rights.service")
         svc = dr_service_mod.DataRightsService()
         body = dr_models.DataRightsGrantCreate(
             tenant_id="t3", source_id="s3", connector_id="dune_api",
@@ -336,7 +336,7 @@ async def test_data_rights_revoke_blocks_all_use(monkeypatch):
 def test_anti_distillation_score_binning(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        ad_mod = importlib.import_module("services.security.anti_distillation")
+        ad_mod = importlib.import_module("governance.security.anti_distillation")
         assert ad_mod.apply_output_precision(0.876, "ALPHA") == 0.9
         assert ad_mod.apply_output_precision(0.876, "GAMMA") == 0.88
 
@@ -344,7 +344,7 @@ def test_anti_distillation_score_binning(monkeypatch):
 def test_anti_distillation_honeypot_detection(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        ad_mod = importlib.import_module("services.security.anti_distillation")
+        ad_mod = importlib.import_module("governance.security.anti_distillation")
         config = ad_mod.AntiDistillationConfig(honeypot_wallets=["0xhoneypot"])
         svc = ad_mod.AntiDistillationService(config)
         result = svc.check_query_pattern("t1", "/endpoint", {"wallet_address": "0xhoneypot"})
@@ -355,7 +355,7 @@ def test_anti_distillation_honeypot_detection(monkeypatch):
 def test_anti_distillation_rapid_query_detection(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        ad_mod = importlib.import_module("services.security.anti_distillation")
+        ad_mod = importlib.import_module("governance.security.anti_distillation")
         config = ad_mod.AntiDistillationConfig(rapid_diverse_query_threshold=5, window_seconds=60)
         svc = ad_mod.AntiDistillationService(config)
         for _ in range(4):
@@ -372,7 +372,7 @@ def test_anti_distillation_rapid_query_detection(monkeypatch):
 def test_action_notifier_lake_write_policy_is_never(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
-        base = importlib.import_module("services.integrations.connectors.base")
+        base = importlib.import_module("connectors.integrations.connectors.base")
         assert base.LakeWritePolicy.NEVER.value == "never"
         assert base.ConnectorClass.ACTION_NOTIFIER.value == "action_notifier"
         # Confirm ACTION_NOTIFIER is distinct from data-ingesting classes

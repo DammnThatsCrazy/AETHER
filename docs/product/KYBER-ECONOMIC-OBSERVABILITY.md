@@ -6,12 +6,12 @@ visibility: I
 audience: [dev-senior, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/economic/routes.py, services/backend/services/profile/routes.py, packages/shared/economic-metrics.ts]
+source_files: [services/api/value/economic/routes.py, services/api/identity/profile/routes.py, packages/shared/economic-metrics.ts]
 related: [concepts/economic-value-framing, concepts/unified-economic-graph]
 source_hashes:
-  "packages/shared/economic-metrics.ts": "sha256:51a302d8fcc563f8ef2a59e58d467ca905f0afc9dd25c31f1992c231fe5168d9"
-  "services/backend/services/economic/routes.py": "sha256:a5540341f8b6486f5f3ad65a068d7dc8bb81ed534c0845e605e301ac589b1ee0"
-  "services/backend/services/profile/routes.py": "sha256:4bf5f6d3eabeb14f912d02e5c84a885c709017426b694be57ab310935c9a48ed"
+  "packages/shared/economic-metrics.ts": "sha256:035a58e18a5543feee432a5dec5efa8a4ec61be3a8dee6b9b2385f8dafedb7df"
+  "services/api/identity/profile/routes.py": "sha256:db152bc22effffbb626e2de110e7b369c05be76efd543316045fabd54066b70a"
+  "services/api/value/economic/routes.py": "sha256:b606e1038bf147686e2dc1a30575fb94132be5488ed146d4981a5f8030dc9897"
 ---
 
 # Aether — Kyber Economic Observability
@@ -75,8 +75,8 @@ GET /v1/profile/{id}/economic/warnings       → Missing, stale and contradictin
 ```
 
 Every route requires the `read` permission. `/economic/agentic`, `/economic/campaigns`
-and the two `/v1/economic` routes are served by `services/economic/routes.py`; the
-other four profile routes are served by `services/profile/routes.py`. Each URL has
+and the two `/v1/economic` routes are served by `services/api/value/economic/routes.py`; the
+other four profile routes are served by `services/api/identity/profile/routes.py`. Each URL has
 exactly one handler (`tests/unit/test_route_conflicts.py`).
 
 The `/economic/agentic` breakdown is composed live from payment intents and
@@ -85,7 +85,7 @@ envelope rather than failing when composition errors occur.
 
 ## Implementation
 
-- Backend: `services/backend/services/economic/routes.py` and `services/backend/services/profile/routes.py`
+- Backend: `services/api/value/economic/routes.py` and `services/api/identity/profile/routes.py`
 - Shared types: `packages/shared/economic-metrics.ts`
 - Profile360 integration: `packages/shared/profile360-contract.ts`
 

@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BACKEND_DIR: "services/backend"
+  BACKEND_DIR: "services/api"
   ML_DIR: "services/ml"
   AGENT_DIR: "services/agents"
 
@@ -46,8 +46,8 @@ jobs:
           filters: |
             ml:
               - 'services/ml/**'
-              - 'services/backend/services/ml_serving/**'
-              - 'security/model_extraction_defense/**'
+              - 'services/api/intelligence/ml_serving/**'
+              - 'services/api/governance/model_extraction_defense/**'
               - 'scripts/validate_ml_registry.py'
               - 'scripts/generate_ml_manifest.py'
               - 'infra/**'
@@ -184,7 +184,7 @@ jobs:
 
           disposition = {"schema_version": 1, "component": "backend_image"}
           if selection["backend_image"]:
-              dockerfile = Path("services/backend/Dockerfile")
+              dockerfile = Path("services/api/Dockerfile")
               if not dockerfile.is_file():
                   raise SystemExit(f"Impact Graph selected backend_image but path is missing: {dockerfile}")
               disposition.update({"status": "SELECTED", "path": str(dockerfile)})
@@ -206,7 +206,7 @@ jobs:
           selected="$(.venv/bin/python -c 'import json; print(json.load(open("release-evidence/backend-image-disposition.json"))["status"])')"
           if [ "$selected" = "SELECTED" ]; then
               docker build \
-                --file "services/backend/Dockerfile" \
+                --file "services/api/Dockerfile" \
                 --tag "aether-backend:main-integration-${GITHUB_SHA}" \
                 .
           elif [ "$selected" = "NOT_APPLICABLE" ]; then

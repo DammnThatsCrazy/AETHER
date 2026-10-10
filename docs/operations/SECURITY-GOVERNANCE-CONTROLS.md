@@ -6,15 +6,15 @@ visibility: I
 audience: [buyer, ops, architect, security, compliance]
 status: stable
 since_version: "0.1.0"
-source_files: [services/backend/services/security/policy_engine.py, services/backend/services/security/access_control.py, services/backend/services/governance/routes.py, services/backend/services/reliability/service.py]
+source_files: [services/api/governance/security/policy_engine.py, services/api/governance/security/access_control.py, services/api/governance/governance/routes.py, services/api/governance/reliability/service.py]
 related: [compliance, reliability/operations, reliability/incident-response]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 source_hashes:
-  "services/backend/services/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"
-  "services/backend/services/reliability/service.py": "sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb"
-  "services/backend/services/security/access_control.py": "sha256:3e5f52376cae80e8e109bc580939800220dde88abe18e3efea46c5f643d000ef"
-  "services/backend/services/security/policy_engine.py": "sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713"
+  "services/api/governance/governance/routes.py": "sha256:ca87bb59cf8c61661b53d0294d6cee4f5093beb28ae32aca79cbea7a62b708f1"
+  "services/api/governance/reliability/service.py": "sha256:71fe39c503316a915a02f154dececd6385e7e07ed074ddea7ddb24915551d20c"
+  "services/api/governance/security/access_control.py": "sha256:3e5f52376cae80e8e109bc580939800220dde88abe18e3efea46c5f643d000ef"
+  "services/api/governance/security/policy_engine.py": "sha256:1546d352a7562f0e7c4c595e397eb3dab6f2ad94e039b2765a47373d98cec375"
 ---
 
 # Security, Compliance & Governance Controls
@@ -51,10 +51,10 @@ government buyers run a security review against demonstrable controls. It answer
 
 ## Architecture
 
-The control plane lives in `services/backend/services/security/` (backend) and is additive: it
+The control plane lives in `services/api/governance/security/` (backend) and is additive: it
 **wraps**, never removes, existing `require_permission(...)` checks and OODA
 approval flows. Shared contracts are in `packages/shared/security-governance.ts`
-and `services/backend/services/security/contracts.py`. Access is evaluated as
+and `services/api/governance/security/contracts.py`. Access is evaluated as
 `domain × action × scope` against the `GovernanceDomain` vocabulary in
 `contracts.py`, expanded to `ALL_DOMAINS` in `access_control.py`; the Rights
 Authority tenant surface registers a `rights` domain there so its granular
@@ -112,7 +112,7 @@ active capability authorization.
 Kyber workforce access decisions are recorded as first-class policy decisions
 under the sensitive `kyber.access` policy key (`check_kyber_access`): the Kyber
 access plane (capability + disclosure + tenant scope + device + session
-strength) is evaluated by `services.kyber.access.dependencies`, and the RESULT
+strength) is evaluated by `governance.kyber.access.dependencies`, and the RESULT
 is recorded as evidence — the engine deliberately does not re-evaluate
 authority. Because `kyber.access` is sensitive, **allowed** decisions are
 persisted alongside denials (an operator access log that only records refusals
@@ -159,7 +159,7 @@ For the full compliance posture see [COMPLIANCE.md](COMPLIANCE.md).
 - No external certification/attestation is claimed or implied.
 - Retention enforcement is declarative at this control plane. One automated
   retention sweep now exists — the Rights Authority retention deletion executor
-  (`services/backend/services/rights_authority/deletion_executor.py`, worker
+  (`services/api/tenancy/rights_authority/deletion_executor.py`, worker
   `rights_deletion_executor`), which executes the pending `delete_at_expiry`
   rows the retention seam schedules — but it is **opt-in** (`RIGHTS_AUTHORITY_DELETION_EXECUTOR_ENABLED`,
   default OFF, additionally gated on `RIGHTS_AUTHORITY_ROLLOUT=enforce` and a

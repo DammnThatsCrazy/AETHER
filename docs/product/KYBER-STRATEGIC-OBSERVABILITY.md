@@ -6,16 +6,16 @@ visibility: I
 audience: [buyer, ops, architect]
 status: beta
 since_version: 0.1.0
-source_files: [services/backend/services/intelligence/routes.py, services/backend/services/admin/routes.py, services/backend/services/intelligence/outcome_ledger.py]
+source_files: [services/api/intelligence/intelligence/routes.py, services/api/governance/admin/routes.py, services/api/intelligence/intelligence/outcome_ledger.py]
 flags: []
 related: [ai/outcome-ledger]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/backend/services/admin/routes.py": "sha256:afde854e3e99a713735396a7308ad6a79517f8b80237fb38b2dcfd0aceb67187"
-  "services/backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "services/backend/services/intelligence/routes.py": "sha256:5180cf7321ef1cc342f42acbf64aba510aba598c58c39b671303598f7f5084ef"
+  "services/api/governance/admin/routes.py": "sha256:448866155ff0ffee0857e0843e3ac9c25dec4c32a9a1c30ba1b749e3eb4c168c"
+  "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
+  "services/api/intelligence/intelligence/routes.py": "sha256:46f4df5f21914056a91810cb1c0a490183ed144e99a9568b8aedf170f3b05e29"
 ---
 # Kyber Strategic Observability
 
@@ -31,7 +31,7 @@ Kyber strategic observability uses backend aggregate endpoints to show Olympus L
 - `GET /v1/admin/kyber/vertical-solution-signals`
 - `GET /v1/admin/kyber/expansion-opportunities`
 
-`recommendation-health` and `expansion-opportunities` are served by `services/intelligence/routes.py`. The other five are served by `services/admin/routes.py` and accept a `window` parameter; an older copy of each in `services/intelligence/routes.py` was shadowed by it and is deleted.
+`recommendation-health` and `expansion-opportunities` are served by `services/api/intelligence/intelligence/routes.py`. The other five are served by `services/api/governance/admin/routes.py` and accept a `window` parameter; an older copy of each in `services/api/intelligence/intelligence/routes.py` was shadowed by it and is deleted.
 
 ## Data boundaries
 

@@ -24,9 +24,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from services.agent.mutation_commit import commit_approved_mutations, rollback_mutation
-from services.agent.routes import _runtime_repo
-from services.agent.runtime_repository import AgentRuntimeRepository
+from actions.agent.mutation_commit import commit_approved_mutations, rollback_mutation
+from actions.agent.routes import _runtime_repo
+from actions.agent.runtime_repository import AgentRuntimeRepository
 
 
 # ── fakes / fixtures ──────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "source": "services/backend/shared/events/events.py::Topic",
+  "source": "services/api/shared/events/events.py::Topic",
   "generated_from_enum": true,
   "topic_count": 257,
   "topics": [

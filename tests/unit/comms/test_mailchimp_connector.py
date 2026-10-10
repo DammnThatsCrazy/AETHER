@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -22,7 +22,7 @@ def _mc_form(type_: str, **data) -> dict:
 
 class TestWebhookMapping:
     def test_unsubscribe_maps_to_observed_list_unsubscribe(self):
-        from services.integrations.connectors.mailchimp import MailchimpConnector
+        from connectors.integrations.connectors.mailchimp import MailchimpConnector
         events = MailchimpConnector().parse_webhook(_mc_form(
             "unsubscribe", email="u@example.com", id="mc-1", list_id="L1",
             reason="clicked unsubscribe",
@@ -39,7 +39,7 @@ class TestWebhookMapping:
         assert ev.occurred_at == ""
 
     def test_cleaned_maps_to_suppression_with_reason(self):
-        from services.integrations.connectors.mailchimp import MailchimpConnector
+        from connectors.integrations.connectors.mailchimp import MailchimpConnector
         hard = MailchimpConnector().parse_webhook(
             _mc_form("cleaned", email="a@example.com", action="hard")
         )[0]
@@ -52,13 +52,13 @@ class TestWebhookMapping:
 
     @pytest.mark.parametrize("type_", ["subscribe", "upemail", "profile", "campaign"])
     def test_identity_campaign_events_dropped(self, type_):
-        from services.integrations.connectors.mailchimp import MailchimpConnector
+        from connectors.integrations.connectors.mailchimp import MailchimpConnector
         assert MailchimpConnector().parse_webhook(
             _mc_form(type_, email="x@example.com")
         ) == []
 
     def test_nested_json_payload_shape(self):
-        from services.integrations.connectors.mailchimp import MailchimpConnector
+        from connectors.integrations.connectors.mailchimp import MailchimpConnector
         events = MailchimpConnector().parse_webhook({
             "type": "unsubscribe",
             "data": {"email": "n@example.com", "id": "mc-2", "list_id": "L2"},
@@ -68,18 +68,18 @@ class TestWebhookMapping:
 
 class TestAuthModel:
     def test_endpoint_secret_verified_by_possession(self):
-        from services.integrations.connectors.mailchimp import MailchimpConnector
+        from connectors.integrations.connectors.mailchimp import MailchimpConnector
         # No body signature — possession of the durable endpoint id is the auth.
         assert MailchimpConnector.verify_webhook_signature(b"{}", {}, "")
 
     def test_supports_get_validation_probe(self):
-        from services.integrations.connectors.mailchimp import MailchimpConnector
+        from connectors.integrations.connectors.mailchimp import MailchimpConnector
         assert MailchimpConnector().supports_get_validation is True
 
 
 class TestDescriptor:
     def test_honest_declaration(self):
-        from services.integrations.connectors.mailchimp import MailchimpConnector
+        from connectors.integrations.connectors.mailchimp import MailchimpConnector
         from shared.certification.readiness import to_readiness
         c = MailchimpConnector()
         assert c.signature_scheme == "endpoint_secret"
@@ -90,6 +90,6 @@ class TestDescriptor:
         assert "comms.suppressions" in c.manifest_data_outputs
 
     def test_registry_serves_mailchimp(self):
-        from services.integrations.connectors.registry import get_connector
-        from services.integrations.connectors.mailchimp import MailchimpConnector
+        from connectors.integrations.connectors.registry import get_connector
+        from connectors.integrations.connectors.mailchimp import MailchimpConnector
         assert isinstance(get_connector("mailchimp"), MailchimpConnector)

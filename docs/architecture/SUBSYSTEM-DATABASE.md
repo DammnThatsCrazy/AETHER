@@ -6,15 +6,15 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/repositories/repos.py, services/backend/repositories/lake.py]
+source_files: [services/api/repositories/repos.py, services/api/repositories/lake.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
-  "services/backend/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
+  "services/api/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
+  "services/api/repositories/repos.py": "sha256:bbad38e1ca8c19e36f2f936332bbe199e6a7b09e71598495ee72eb2efc2a9100"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -66,7 +66,7 @@ column set `_jsonb_mode = False`. This applies to
 `NotificationIntelligenceRepository`, `OperatorActionRepository`,
 `TenantNotificationConfigRepository`, `UserNotificationChannelRepository`,
 `SlackOAuthStateRepository`, and the ten identity-resolution stores in
-`services/identity/repository.py`. For these tables the repository reads the column
+`services/api/identity/identity/repository.py`. For these tables the repository reads the column
 set and each column's `data_type` from `information_schema.columns` once per
 table and caches it. Writes and filters are then bound to the migrated types:
 
@@ -135,7 +135,7 @@ table and caches it. Writes and filters are then bound to the migrated types:
 ### Analytics event store
 
 `AnalyticsRepository` reads the `events` and `sessions` tables; the
-`analytics_event_recorder` projector (`services/ingestion/workers.py`, on the
+`analytics_event_recorder` projector (`services/api/ingestion/ingestion/workers.py`, on the
 `stream-ingestion-projection` consumer) is their only production writer.
 
 - **Row identity:** `analytics_event_record_id(tenant_id, event_id)` and

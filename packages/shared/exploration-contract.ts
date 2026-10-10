@@ -61,7 +61,7 @@ export type ExplorationTemporalField = typeof explorationTemporalFields[number];
 
 /** The typed exploration-session operation family. SAVE/LOAD are
  * session-repository operations; the rest are PURE context transforms
- * (see services/exploration/operations.py). */
+ * (see services/api/journeys/exploration/operations.py). */
 export const explorationOperations = [
   'OPEN',
   'PIVOT',

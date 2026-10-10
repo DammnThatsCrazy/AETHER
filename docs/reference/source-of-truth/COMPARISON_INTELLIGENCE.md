@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/comparison-registry.json, packages/shared/comparison-contract.ts, services/backend/services/intelligence/comparison/contracts.py, services/backend/services/intelligence/comparison/generated_vocabulary.py, services/backend/services/intelligence/comparison/engine.py, services/backend/services/intelligence/comparison/baselines.py, services/backend/services/intelligence/comparison/alignment.py, services/backend/services/intelligence/comparison/materiality.py, services/backend/services/intelligence/comparison/collection.py, services/backend/services/intelligence/comparison/findings.py, services/backend/services/intelligence/comparison/watchlists.py, services/backend/services/intelligence/comparison/scenarios.py, services/backend/services/intelligence/comparison/jobs.py, services/backend/services/intelligence/comparison/routes.py, services/backend/services/intelligence/comparison/store.py]
+source_files: [packages/shared/contracts/comparison-registry.json, packages/shared/comparison-contract.ts, services/api/intelligence/intelligence/comparison/contracts.py, services/api/intelligence/intelligence/comparison/generated_vocabulary.py, services/api/intelligence/intelligence/comparison/engine.py, services/api/intelligence/intelligence/comparison/baselines.py, services/api/intelligence/intelligence/comparison/alignment.py, services/api/intelligence/intelligence/comparison/materiality.py, services/api/intelligence/intelligence/comparison/collection.py, services/api/intelligence/intelligence/comparison/findings.py, services/api/intelligence/intelligence/comparison/watchlists.py, services/api/intelligence/intelligence/comparison/scenarios.py, services/api/intelligence/intelligence/comparison/jobs.py, services/api/intelligence/intelligence/comparison/routes.py, services/api/intelligence/intelligence/comparison/store.py]
 last_synced_commit: a500f1f
 ---
 
@@ -21,11 +21,11 @@ require monitoring, investigation, decision, or action.
 | Concern | Canonical owner |
 |---|---|
 | Vocabularies: 6 comparison modes, 8 baseline types, 10 alignment outcomes, 12 run states, 5 severities, 7 dispositions, 10 fact-linkage states, 7 causal-claim levels, 20 comparison dimensions, 14 materiality components | `packages/shared/contracts/comparison-registry.json` → generated TS/Py twins |
-| `ComparisonSubject` / `BaselineSpec` / `ComparisonDefinition` / `ComparisonRun` / `ComparisonFinding` contracts | `services/backend/services/intelligence/comparison/contracts.py` ↔ `comparison-contract.ts` (parity-tested) |
+| `ComparisonSubject` / `BaselineSpec` / `ComparisonDefinition` / `ComparisonRun` / `ComparisonFinding` contracts | `services/api/intelligence/intelligence/comparison/contracts.py` ↔ `comparison-contract.ts` (parity-tested) |
 
 ## Rules
 
-- `services.intelligence` never imports the comparison package eagerly
+- `intelligence.intelligence` never imports the comparison package eagerly
   (contract-tested) — zero cost until `AETHER_COMPARISON_INTELLIGENCE_ENABLED`.
 - Missing data is never equality: preflight data-truth states and
   fact-linkage vocabularies make "empty vs empty" refusals explicit.
@@ -47,7 +47,7 @@ introducing a second ledger. These links are additive and do not change the
 default-off comparison boundary or permit execution without an approved,
 policy-authorized decision.
 
-## PR 3 engine (`services/backend/services/intelligence/comparison/`, flag-gated `AETHER_COMPARISON_INTELLIGENCE_ENABLED`)
+## PR 3 engine (`services/api/intelligence/intelligence/comparison/`, flag-gated `AETHER_COMPARISON_INTELLIGENCE_ENABLED`)
 
 | Module | Responsibility |
 |---|---|
@@ -59,6 +59,6 @@ policy-authorized decision.
 | `scenarios.py` | Read-only counterfactual scenarios — persist nothing. |
 | `jobs.py` / `routes.py` / `store.py` | Runs execute as `comparison.run` jobs on the durable jobs plane; `/v1/intelligence/comparisons` is flag-gated inside every handler; persistence is a `BaseRepository` JSONB store (no alembic migration). |
 
-- `services.intelligence` still never imports the comparison package eagerly
+- `intelligence.intelligence` still never imports the comparison package eagerly
   (contract-tested lazy import). Nothing is production-claimed here — the plane
   ships flag-off.

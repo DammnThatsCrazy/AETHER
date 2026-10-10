@@ -73,7 +73,7 @@ const RETRY_SPEC = {
   title: 'Retry a failed job',
   capability_id: 'kyber.command.retry',
   action_class: 2,
-  handler: 'services.jobs.job_service.retry',
+  handler: 'workers.jobs.job_service.retry',
   verification_checks: ['job_reached_terminal_state'],
   requires_dry_run: false,
   requires_rollback_plan: false,
@@ -87,7 +87,7 @@ const KILL_SWITCH_SPEC = {
   title: 'Activate a kill switch',
   capability_id: 'kyber.command.kill_switch',
   action_class: 5,
-  handler: 'services.kyber.ops.containment.containment_service.activate',
+  handler: 'governance.kyber.ops.containment.containment_service.activate',
   verification_checks: ['switch_is_active', 'mirror_digest_parity'],
   requires_dry_run: true,
   requires_rollback_plan: true,
@@ -118,7 +118,7 @@ const KNOWN_REACH = {
   truncated: false,
   confidence: 0.9,
   summary: 'checkout-api reaches 2 services and 1 tenant',
-  source: 'services.kyber.graph.blast_radius.assess',
+  source: 'governance.kyber.graph.blast_radius.assess',
   computed_at: '2026-07-25T00:00:00Z',
 };
 
@@ -155,7 +155,7 @@ const REACH_WITH_NO_TENANTS = {
 const UNAVAILABLE_REACH = {
   available: false,
   reason: 'blast_radius_assessor_unavailable',
-  missing_inputs: ['services.kyber.graph.blast_radius'],
+  missing_inputs: ['governance.kyber.graph.blast_radius'],
   computed_at: '2026-07-25T00:00:00Z',
 };
 
@@ -855,7 +855,7 @@ describe('KyberCommandsPage — containment', () => {
     const row = await waitFor(() => screen.getByText('connector_sync').closest('tr'));
     expect(row).not.toBeNull();
     expect(
-      within(row as HTMLElement).getByText(/Unknown — services.kyber.graph.blast_radius/),
+      within(row as HTMLElement).getByText(/Unknown — governance.kyber.graph.blast_radius/),
     ).toBeInTheDocument();
   });
 

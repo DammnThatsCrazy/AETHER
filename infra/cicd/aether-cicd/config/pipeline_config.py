@@ -70,14 +70,14 @@ REPO_PACKAGES: dict[str, dict[str, str]] = {
 }
 
 REPO_SERVICES: dict[str, dict[str, str]] = {
-    "services/backend/services/ingestion":    {"lang": "python", "runtime": "python", "tool": "docker"},
-    "services/backend/services/identity":     {"lang": "python", "runtime": "python", "tool": "docker"},
-    "services/backend/services/analytics":    {"lang": "python", "runtime": "python", "tool": "docker"},
-    "services/backend/services/ml_serving":   {"lang": "python", "runtime": "python", "tool": "docker"},
-    "services/backend/services/agent":        {"lang": "python", "runtime": "python", "tool": "docker"},
-    "services/backend/services/campaign":     {"lang": "python", "runtime": "python", "tool": "docker"},
-    "services/backend/services/consent":      {"lang": "python", "runtime": "python", "tool": "docker"},
-    "services/backend/services/admin":        {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/api/ingestion/ingestion":    {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/api/identity/identity":     {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/api/intelligence/analytics":    {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/api/intelligence/ml_serving":   {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/api/actions/agent":        {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/api/journeys/campaign":     {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/api/governance/consent":      {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/api/governance/admin":        {"lang": "python", "runtime": "python", "tool": "docker"},
 }
 
 REPO_OTHER: dict[str, str] = {
@@ -364,14 +364,14 @@ class ChangeDetectionConfig:
     ])
     # Map from path prefix to affected service names
     service_path_map: dict[str, str] = field(default_factory=lambda: {
-        "services/backend/services/ingestion": "ingestion",
-        "services/backend/services/identity":     "identity",
-        "services/backend/services/analytics":    "analytics",
-        "services/backend/services/ml_serving":   "ml-serving",
-        "services/backend/services/agent":        "agent",
-        "services/backend/services/campaign":     "campaign",
-        "services/backend/services/consent":      "consent",
-        "services/backend/services/admin":        "admin",
+        "services/api/ingestion/ingestion": "ingestion",
+        "services/api/identity/identity":     "identity",
+        "services/api/intelligence/analytics":    "analytics",
+        "services/api/intelligence/ml_serving":   "ml-serving",
+        "services/api/actions/agent":        "agent",
+        "services/api/journeys/campaign":     "campaign",
+        "services/api/governance/consent":      "consent",
+        "services/api/governance/admin":        "admin",
     })
 
 

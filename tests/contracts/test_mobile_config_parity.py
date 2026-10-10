@@ -1,6 +1,6 @@
 """TS <-> Python parity for the mobile config contract.
 
-`packages/shared/mobile-config.ts` and `services/mobile/config.py` are
+`packages/shared/mobile-config.ts` and `services/api/ingestion/mobile/config.py` are
 hand-authored twins; this test fails on drift in the distribution-profile /
 upgrade-policy vocabularies or the MobileConfig field set. It also pins that
 the per-build distribution-profile enforcement in
@@ -14,11 +14,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.mobile.config import (  # noqa: E402
+from ingestion.mobile.config import (  # noqa: E402
     ANDROID_DISTRIBUTION_PROFILES,
     DISTRIBUTION_PROFILES,
     IOS_DISTRIBUTION_PROFILES,

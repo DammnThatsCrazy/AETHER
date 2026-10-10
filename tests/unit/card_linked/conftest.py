@@ -8,14 +8,14 @@ from uuid import uuid4
 
 import pytest
 
-BACKEND = str(Path(__file__).parents[3] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[3] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
 
 @pytest.fixture(autouse=True)
 def _fresh_repositories():
-    from services.card_linked_payments.repositories import reset_card_linked_repositories
+    from value.card_linked_payments.repositories import reset_card_linked_repositories
 
     reset_card_linked_repositories()
     yield
@@ -30,6 +30,6 @@ def tenant() -> str:
 @pytest.fixture()
 def ingestion():
     from config.settings import settings
-    from services.card_linked_payments.ingestion import CardLinkedIngestionService
+    from value.card_linked_payments.ingestion import CardLinkedIngestionService
 
     return CardLinkedIngestionService(settings)

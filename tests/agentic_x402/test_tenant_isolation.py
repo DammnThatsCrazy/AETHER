@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 @contextmanager
@@ -140,7 +140,7 @@ async def test_profile360_composer_tenant_isolation(monkeypatch):
             SettlementEventRepository,
             reset_in_memory_stores,
         )
-        from services.profile.economic import AgentProfile360EconomicComposer
+        from identity.profile.economic import AgentProfile360EconomicComposer
         reset_in_memory_stores()
 
         pi_repo = PaymentIntentRepository()

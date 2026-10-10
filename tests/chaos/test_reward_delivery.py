@@ -1,6 +1,6 @@
 """Reward-delivery timeout -> retry -> dead-letter -> operator recovery.
 
-Drives the REAL durable reward-delivery outbox (``services.rewards.
+Drives the REAL durable reward-delivery outbox (``value.rewards.
 delivery_outbox.RewardDeliveryOutbox``) with an injected scripted sender that
 models a webhook timeout. NO live network: the sender is a stub, the webhook
 url is loopback (allowed in local, never dialled).
@@ -15,12 +15,12 @@ from __future__ import annotations
 
 from repositories.delivery_repos import ProviderReceiptRepository
 from repositories.repos import reset_in_memory_stores
-from services.rewards.delivery_outbox import (
+from value.rewards.delivery_outbox import (
     RewardDeliveryJobRepository,
     RewardDeliveryOutbox,
     SenderResult,
 )
-from services.rewards.repositories import RewardActionRepository
+from value.rewards.repositories import RewardActionRepository
 
 WEBHOOK = "http://127.0.0.1:9/reward-hook"  # loopback: allowed in local, never dialled
 

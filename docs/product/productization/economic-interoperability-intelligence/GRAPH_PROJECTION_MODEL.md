@@ -6,12 +6,12 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/shared/graph/graph.py, services/backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
+source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
 canonical_owner: platform@aether
 source_hashes:
   "packages/shared/graph-contract.ts": "sha256:22f04a5932fd36c169c27cab2cf3107df3a8ea6150b02796ce30bc77affd6a94"
-  "services/backend/shared/graph/graph.py": "sha256:0f1aa44d3d54e61c87975783d0ad863d1ef22039b78dc7158e48437467a733a6"
-  "services/backend/shared/graph/relationship_layers.py": "sha256:0136d18ace82541dbb684d486ad12e93be47f0b726de9b9ba0120bcff753c48e"
+  "services/api/shared/graph/graph.py": "sha256:58b03f8407597f9b6b72910a3c30a51b71f44b1ad07942c0ca5f9a79a3d6a2e7"
+  "services/api/shared/graph/relationship_layers.py": "sha256:c12c383bdda3487a894632fb5ad0a1d927a2bf9e27fea9f043a13797322b413c"
 ---
 
 # Graph Projection Model
@@ -88,13 +88,13 @@ and 9 edge types (`CAME_FROM`, `PARTICIPATED_IN`, `USED_PROVIDER`,
 `RelationshipLayer.EXCLUDED` — card-linked behavior is intentionally
 never usable as deterministic identity-merge evidence. PaymentScan
 benchmark rows are never projected to the graph at all
-(`services/backend/services/card_linked_payments/graph_projector.py`).
+(`services/api/value/card_linked_payments/graph_projector.py`).
 
 The semantic-intelligence relationship Gold follows the same projection
 rules: `SEMANTIC_RELATES_TO` (directed entity → entity, a derived analytics
 overlay) is mapped to `RelationshipLayer.EXCLUDED` in `_EDGE_LAYER_MAP` and is
 projected by the semantic graph projector
-(`services/backend/services/semantic_intelligence/graph_projector.py`) from
+(`services/api/intelligence/semantic_intelligence/graph_projector.py`) from
 `gold_relationship_semantic_state` through the canonical `GraphMutationGateway`
 — governed (edge intent, ledger-aware in shadow/enforce mode), idempotent, and
 tenant-scoped, gated on `SEMANTIC_GRAPH_PROJECTOR_ENABLED` (default OFF). See

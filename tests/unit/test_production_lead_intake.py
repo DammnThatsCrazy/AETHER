@@ -176,7 +176,7 @@ def _literal(source: str, name: str) -> Any:
 
 
 def test_topics_match_the_backend_and_the_site_form() -> None:
-    backend = (ROOT / "services" / "backend" / "services" / "contact" / "routes.py").read_text()
+    backend = (ROOT / "services" / "api" / "identity" / "contact" / "routes.py").read_text()
     topics = _literal(backend, "_CONTACT_TOPICS")
     assert set(_literal(_code(), "LABELS")) == topics
     site_api = (ROOT / "apps" / "public-site" / "src" / "site" / "api.ts").read_text()

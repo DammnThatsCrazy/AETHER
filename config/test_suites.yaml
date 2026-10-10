@@ -245,7 +245,7 @@ suites:
     profiles: [local, release]
     expected_runtime_seconds: 120
     hard_runtime_budget_seconds: 300
-    paths: ["services/backend/tests"]
+    paths: ["services/api/tests"]
     # Keep behavior tests parallel, then run the wall-clock performance
     # guardrails serially so xdist scheduler contention cannot turn into a
     # false regression. scripts/run_backend_tests.py covers both passes.
@@ -283,15 +283,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/identity",
-        "services/backend/tests/identity",
+        "services/api/identity/identity",
+        "services/api/tests/identity",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/identity",
+        "services/api/tests/identity",
         "-v",
         "--tb=short",
       ]
@@ -318,15 +318,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/ingestion",
-        "services/backend/tests/ingestion",
+        "services/api/ingestion/ingestion",
+        "services/api/tests/ingestion",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/ingestion",
+        "services/api/tests/ingestion",
         "-v",
         "--tb=short",
       ]
@@ -353,15 +353,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/campaign",
-        "services/backend/tests/campaign",
+        "services/api/journeys/campaign",
+        "services/api/tests/campaign",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/campaign",
+        "services/api/tests/campaign",
         "-v",
         "--tb=short",
       ]
@@ -388,16 +388,16 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/profile",
-        "services/backend/services/profile360_workers",
-        "services/backend/tests/profile360",
+        "services/api/identity/profile",
+        "services/api/workers/profile360_workers",
+        "services/api/tests/profile360",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/profile360",
+        "services/api/tests/profile360",
         "-v",
         "--tb=short",
       ]
@@ -424,15 +424,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/agent",
-        "services/backend/tests/agent",
+        "services/api/actions/agent",
+        "services/api/tests/agent",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/agent",
+        "services/api/tests/agent",
         "-v",
         "--tb=short",
       ]
@@ -459,15 +459,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/computation",
-        "services/backend/tests/computation",
+        "services/api/intelligence/computation",
+        "services/api/tests/computation",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/computation",
+        "services/api/tests/computation",
         "-v",
         "--tb=short",
       ]
@@ -494,15 +494,15 @@ suites:
     hard_runtime_budget_seconds: 420
     paths:
       [
-        "services/backend/services/value",
-        "services/backend/tests/valuation",
+        "services/api/value/value",
+        "services/api/tests/valuation",
       ]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "services/backend/tests/valuation",
+        "services/api/tests/valuation",
         "-v",
         "--tb=short",
       ]
@@ -668,19 +668,19 @@ suites:
     # standalone per-service invocation would hit for those two).
     paths:
       [
-        "services/backend/services/agent_comm_observability/tests",
-        "services/backend/services/external_account_observability/tests",
-        "services/backend/services/agentic_observability/tests",
-        "services/backend/services/protocol_observability/tests",
+        "services/api/actions/agent_comm_observability/tests",
+        "services/api/connectors/external_account_observability/tests",
+        "services/api/actions/agentic_observability/tests",
+        "services/api/graph/protocol_observability/tests",
       ]
     runner:
       [
         "python",
         "scripts/run_pytest_files.py",
-        "services/backend/services/agent_comm_observability/tests",
-        "services/backend/services/external_account_observability/tests",
-        "services/backend/services/agentic_observability/tests",
-        "services/backend/services/protocol_observability/tests",
+        "services/api/actions/agent_comm_observability/tests",
+        "services/api/connectors/external_account_observability/tests",
+        "services/api/actions/agentic_observability/tests",
+        "services/api/graph/protocol_observability/tests",
         "--workers",
         "4",
       ]

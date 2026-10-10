@@ -2,7 +2,7 @@
 """Canonical ingestion-tree ownership gate (single-owner registration).
 
 The repo holds one deployed, authoritative Python monolith at
-``services/backend/`` and two un-deployed TypeScript duplicates under
+``services/api/`` and two un-deployed TypeScript duplicates under
 ``docs/archive/legacy-architecture/`` (the ingestion package is literally
 named ``aether-backend``), plus a set of orphaned dead legacy modules in the
 same archive. The canonical architecture is enforced by giving every tree unit
@@ -18,7 +18,7 @@ the tree unit is genuinely gone). Deprecation edits to the legacy trees are
 acknowledged by the repo-consistency ownership map, not by widening this gate.
 
 Roles:
-  canonical                 services/backend, services/ml, services/compliance,
+  canonical                 services/api, services/ml, services/compliance,
                             packages/*
   deprecated                archived ingestion/lake trees, each orphaned
                             backend module (they
@@ -46,12 +46,12 @@ REGISTRY = ROOT / "scripts" / "allowlists" / "repo_tree_ownership.json"
 
 # Canonical SDK container (packages/*) + the nested canonical backend unit.
 _CANONICAL_CONTAINER = "packages"
-_CANONICAL_BACKEND = "services/backend"
+_CANONICAL_BACKEND = "services/api"
 
 # The deprecated duplicate stacks + the live-but-not-deployable workers.
 _DEPRECATED_ROOT_TREES = ("docs/archive/legacy-architecture/data-ingestion-layer", "docs/archive/legacy-architecture/data-lake-architecture")
 _CANONICAL_SERVICE_UNITS = {
-    "services/backend": "canonical",
+    "services/api": "canonical",
     "services/ml": "canonical",
     "services/compliance": "canonical",
     "services/agents": "registered-not-deployable",
@@ -65,12 +65,11 @@ _ROOT_NOTES = {
     "infra": "canonical deployment configuration, local compose, Terraform, serverless handlers, and infrastructure promotion assets.",
     "packages": "canonical shared packages, SDKs, UI primitives, and runtime contract twins.",
     "scripts": "repository validation, generation, release, docs, and contract tooling.",
-    "security": "security policy, threat-model, and review assets; enforcement code remains in canonical runtime services.",
     "tests": "cross-package, integration, security, and system tests; service-local tests remain with their owning service.",
 }
 
 # Archived backend README carries the deprecation/orphan banner (Ticket C) and
-# is a doc, not a code unit; services/backend is the canonical unit. Hidden
+# is a doc, not a code unit; services/api is the canonical unit. Hidden
 # tooling/config top-level dirs (.github, .claude, ...) are governed by other
 # gates and are never candidate ingestion trees, so they are excluded too.
 _BACKEND_LEGACY_SKIP = {"docs/archive/legacy-architecture/backend/README.md"}
@@ -84,7 +83,7 @@ _DEPRECATED_ORPHAN_DISP = (
 )
 _DEPRECATED_ROOT_DISP = (
     "un-deployed TypeScript duplicate of the canonical Python monolith "
-    "(services/backend). Kept only by version-sync, "
+    "(services/api). Kept only by version-sync, "
     "runtime-fallback, and temporal-integrity coupling; physical removal "
     "deferred to a later phase. Do not extend."
 )
@@ -287,7 +286,7 @@ def main() -> int:
             errors.append(
                 f"tracked tree unit has no single-owner registration: {path}. "
                 "Route the work into the canonical tree "
-                "(services/backend or packages/*) or register it "
+                "(services/api or packages/*) or register it "
                 "in scripts/allowlists/repo_tree_ownership.json with architect review."
             )
 

@@ -26,7 +26,7 @@ from pathlib import Path
 # =========================================================================
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 ML_ROOT = ROOT / "services" / "ml"
 
 if str(BACKEND_ROOT) not in sys.path:
@@ -241,7 +241,7 @@ class TestExtractionExpectationEngine:
     """Test expectation-based extraction signal computation."""
 
     def test_low_signals_for_normal_traffic(self):
-        from services.expectations.extraction_expectations import ExtractionExpectationEngine
+        from intelligence.expectations.extraction_expectations import ExtractionExpectationEngine
         from shared.scoring.extraction_models import ExtractionIdentity
 
         engine = ExtractionExpectationEngine()
@@ -259,7 +259,7 @@ class TestExtractionExpectationEngine:
         assert result.composite_deviation < 0.5
 
     def test_high_signals_for_sweep(self):
-        from services.expectations.extraction_expectations import ExtractionExpectationEngine
+        from intelligence.expectations.extraction_expectations import ExtractionExpectationEngine
         from shared.scoring.extraction_models import ExtractionIdentity
 
         engine = ExtractionExpectationEngine()
@@ -278,7 +278,7 @@ class TestExtractionExpectationEngine:
         assert result.composite_deviation > 0.1
 
     def test_model_enumeration_detection(self):
-        from services.expectations.extraction_expectations import ExtractionExpectationEngine
+        from intelligence.expectations.extraction_expectations import ExtractionExpectationEngine
         from shared.scoring.extraction_models import ExtractionIdentity
 
         engine = ExtractionExpectationEngine()
@@ -301,7 +301,7 @@ class TestExtractionExpectationEngine:
         assert enum_signals[0].value > 0
 
     def test_identity_churn_detection(self):
-        from services.expectations.extraction_expectations import ExtractionExpectationEngine
+        from intelligence.expectations.extraction_expectations import ExtractionExpectationEngine
         from shared.scoring.extraction_models import ExtractionIdentity
 
         engine = ExtractionExpectationEngine()
@@ -583,7 +583,7 @@ class TestAttributionService:
     """Test canary/lineage attribution."""
 
     def test_response_lineage_recording(self):
-        from services.intelligence.extraction_attribution import ExtractionAttributionService
+        from intelligence.intelligence.extraction_attribution import ExtractionAttributionService
         from shared.scoring.extraction_models import ExtractionIdentity
 
         service = ExtractionAttributionService()
@@ -606,7 +606,7 @@ class TestAttributionService:
         assert records[0]["model_name"] == "bot_detection"
 
     def test_canary_generation_and_detection(self):
-        from services.intelligence.extraction_attribution import ExtractionAttributionService
+        from intelligence.intelligence.extraction_attribution import ExtractionAttributionService
 
         service = ExtractionAttributionService(canary_secret="test-secret")
         canaries = service.generate_canary_family("test_family", n_features=5, count=10)
@@ -619,7 +619,7 @@ class TestAttributionService:
         assert hit.canary_index == 0
 
     def test_non_canary_not_detected(self):
-        from services.intelligence.extraction_attribution import ExtractionAttributionService
+        from intelligence.intelligence.extraction_attribution import ExtractionAttributionService
 
         service = ExtractionAttributionService()
         service.generate_canary_family("test", n_features=3, count=5)
@@ -628,7 +628,7 @@ class TestAttributionService:
         assert hit is None
 
     def test_attribution_fingerprint_deterministic(self):
-        from services.intelligence.extraction_attribution import ExtractionAttributionService
+        from intelligence.intelligence.extraction_attribution import ExtractionAttributionService
         from shared.scoring.extraction_models import ExtractionIdentity
 
         service = ExtractionAttributionService(canary_secret="seed1")
@@ -788,7 +788,7 @@ class TestStandardCallerRegression:
             assert result.allowed is True
 
     def test_normal_caller_gets_green_score(self):
-        from services.expectations.extraction_expectations import ExtractionExpectationEngine
+        from intelligence.expectations.extraction_expectations import ExtractionExpectationEngine
         from shared.scoring.extraction_models import ExtractionIdentity, ExtractionRiskBand
         from shared.scoring.extraction_score import ExtractionRiskScorer
 
@@ -834,7 +834,7 @@ class TestAlertEmission:
     """Test extraction alert recording."""
 
     def test_alert_recorded_on_red_band(self):
-        from services.intelligence.extraction_intel import (
+        from intelligence.intelligence.extraction_intel import (
             _alerts,
             record_extraction_alert,
         )

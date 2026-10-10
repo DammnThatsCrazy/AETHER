@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 # Allow running from repo root
-sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "backend"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "api"))
 
 from shared.logger.logger import get_logger
 
@@ -28,8 +28,8 @@ logger = get_logger("aether.scripts.backfill_suggestions")
 
 async def _backfill_recommendations(tenant_id: str | None, limit: int, dry_run: bool) -> int:
     from repositories.repos import BaseRepository
-    from services.suggestions.adapters.recommendation_adapter import find_or_create_from_recommendation
-    from services.suggestions.repository import SuggestionRepository
+    from intelligence.suggestions.adapters.recommendation_adapter import find_or_create_from_recommendation
+    from intelligence.suggestions.repository import SuggestionRepository
     from shared.auth.auth import TenantContext, Role
 
     rec_repo = BaseRepository("recommendations")
@@ -60,8 +60,8 @@ async def _backfill_recommendations(tenant_id: str | None, limit: int, dry_run: 
 
 async def _backfill_notifications(tenant_id: str | None, limit: int, dry_run: bool) -> int:
     from repositories.repos import BaseRepository
-    from services.suggestions.adapters.notification_adapter import create_suggestion_from_notification
-    from services.suggestions.repository import SuggestionRepository
+    from intelligence.suggestions.adapters.notification_adapter import create_suggestion_from_notification
+    from intelligence.suggestions.repository import SuggestionRepository
 
     notif_repo = BaseRepository("notifications")
     sug_repo = SuggestionRepository()
@@ -83,9 +83,9 @@ async def _backfill_notifications(tenant_id: str | None, limit: int, dry_run: bo
                 if existing:
                     continue
                 create = create_suggestion_from_notification(notif, tid)
-                from services.suggestions.models import Suggestion, SuggestionStatus, OodaPhase, SuggestionPriority
-                from services.suggestions.scorer import compute_scores
-                from services.suggestions.policy import requires_approval, execution_eligible
+                from intelligence.suggestions.models import Suggestion, SuggestionStatus, OodaPhase, SuggestionPriority
+                from intelligence.suggestions.scorer import compute_scores
+                from intelligence.suggestions.policy import requires_approval, execution_eligible
                 from shared.common.common import utc_now
                 import uuid
 

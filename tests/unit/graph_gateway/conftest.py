@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -22,7 +22,7 @@ if str(BACKEND) not in sys.path:
 # appears when pytest-xdist co-locates the two suites on one worker. Pinning
 # these packages to the single collection-time generation keeps the test's
 # wired gateway, the projectors, and the digest reader all on one instance.
-_PINNED_PREFIXES = ("shared.graph", "services", "repositories", "config")
+_PINNED_PREFIXES = ("shared.graph", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "repositories", "config")
 
 
 def _is_pinned(name: str) -> bool:

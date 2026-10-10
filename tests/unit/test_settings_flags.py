@@ -51,11 +51,11 @@ TEST = "def test_x(settings):\n    assert settings.widget.test_only_flag\n    se
 
 
 def _repo(tmp_path: Path, settings: str = SETTINGS, files: dict[str, str] | None = None) -> Path:
-    target = tmp_path / "services/backend/config/settings.py"
+    target = tmp_path / "services/api/config/settings.py"
     target.parent.mkdir(parents=True)
     target.write_text(settings, encoding="utf-8")
-    for rel, text in {"services/backend/app.py": USER, "scripts/reader.py": ENV_READER,
-                      "services/backend/tests/test_app.py": TEST, **(files or {})}.items():
+    for rel, text in {"services/api/app.py": USER, "scripts/reader.py": ENV_READER,
+                      "services/api/tests/test_app.py": TEST, **(files or {})}.items():
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -209,7 +209,7 @@ SHARED = textwrap.dedent(
 
 
 def _shared(tmp_path, reader: str) -> set[str]:
-    root = _repo(tmp_path / "repo", settings=SHARED, files={"services/backend/app.py": reader})
+    root = _repo(tmp_path / "repo", settings=SHARED, files={"services/api/app.py": reader})
     return {f.env for f in flags.unread_flags(root)}
 
 
@@ -263,7 +263,7 @@ def test_comments_docstrings_and_prose_are_not_reads(tmp_path):
         MESSAGE = "dead_flag is off, set WIDGET_DEAD=1"
         '''
     )
-    errors = _errors(tmp_path, files={"services/backend/prose.py": reader})
+    errors = _errors(tmp_path, files={"services/api/prose.py": reader})
     assert any("dead_flag" in e for e in errors)
 
 
@@ -272,13 +272,13 @@ def test_an_exact_string_constant_is_a_read_of_its_field_or_variable(tmp_path):
         'import os\nfrom config.settings import settings\n'
         'cfg = settings.widget\ngetattr(cfg, "dead_flag", False)\nos.environ.get("WIDGET_WRAPPED")\n'
     )
-    errors = _errors(tmp_path, files={"services/backend/dyn.py": reader})
+    errors = _errors(tmp_path, files={"services/api/dyn.py": reader})
     assert not any("dead_flag" in e or "wrapped" in e for e in errors)
 
 
 def test_a_getattr_on_an_object_that_is_not_the_section_proves_nothing(tmp_path):
     reader = 'getattr(args, "dead_flag", False)\n'
-    errors = _errors(tmp_path, files={"services/backend/dyn.py": reader})
+    errors = _errors(tmp_path, files={"services/api/dyn.py": reader})
     assert any("dead_flag" in e for e in errors)
 
 
@@ -297,7 +297,7 @@ def test_a_helper_that_hands_back_its_argument_or_the_section_stands_for_the_sec
             return getattr(cfg, "dead_flag", False)
         '''
     )
-    errors = _errors(tmp_path, files={"services/backend/factory.py": reader})
+    errors = _errors(tmp_path, files={"services/api/factory.py": reader})
     assert not any("dead_flag" in e for e in errors)
 
 
@@ -314,7 +314,7 @@ def test_a_helper_that_returns_something_else_is_not_the_section(tmp_path):
             return getattr(cfg, "dead_flag", False)
         '''
     )
-    errors = _errors(tmp_path, files={"services/backend/factory.py": reader})
+    errors = _errors(tmp_path, files={"services/api/factory.py": reader})
     assert any("dead_flag" in e for e in errors)
 
 
@@ -330,14 +330,14 @@ def test_names_in_an_imported_tuple_are_read_by_a_module_that_getattrs_each_name
             return {name: getattr(flags, name) for name in REQUIRED}
         '''
     )
-    errors = _errors(tmp_path, files={"services/backend/inventory.py": inventory, "services/backend/consumer.py": consumer})
+    errors = _errors(tmp_path, files={"services/api/inventory.py": inventory, "services/api/consumer.py": consumer})
     assert not any("dead_flag" in e or "wrapped" in e for e in errors)
 
 
 def test_an_imported_tuple_is_not_a_read_without_a_dynamic_getattr(tmp_path):
     inventory = 'REQUIRED = ("dead_flag",)\n'
     consumer = "from inventory import REQUIRED\nprint(REQUIRED)\n"
-    errors = _errors(tmp_path, files={"services/backend/inventory.py": inventory, "services/backend/consumer.py": consumer})
+    errors = _errors(tmp_path, files={"services/api/inventory.py": inventory, "services/api/consumer.py": consumer})
     assert any("dead_flag" in e for e in errors)
 
 

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -19,7 +19,7 @@ import os  # noqa: E402
 os.environ.setdefault("AETHER_ENV", "local")
 
 from shared.events.events import Event, Topic  # noqa: E402
-from services.measurement.identity_consumer import MeasurementIdentityConsumer  # noqa: E402
+from journeys.measurement.identity_consumer import MeasurementIdentityConsumer  # noqa: E402
 
 TENANT = "tenant-split"
 
@@ -42,7 +42,7 @@ def test_consumer_registers_for_split():
 
 
 async def _run(consumer, payload, monkeypatch):
-    from services.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
+    from replay.projections.projection_restatement_orchestrator import ProjectionRestatementOrchestrator
 
     queued: list[Event] = []
 

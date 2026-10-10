@@ -16,20 +16,20 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from services.managed_integrations.change_planning import (
+from connectors.managed_integrations.change_planning import (
     build_plan,
     validate_guards,
     with_status,
 )
-from services.managed_integrations.change_sets_repository import (
+from connectors.managed_integrations.change_sets_repository import (
     get_change_set_repository,
 )
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations.contracts import (
     DesiredStateSpec,
     ObservedStateSnapshot,
 )
-from services.managed_integrations.desired_policy import build_desired_state
-from services.managed_integrations.reconciler import (
+from connectors.managed_integrations.desired_policy import build_desired_state
+from connectors.managed_integrations.reconciler import (
     DEFAULT_FRESHNESS_WINDOW_SECONDS,
     reconcile,
 )
@@ -47,7 +47,7 @@ def _flow_db_free(monkeypatch: pytest.MonkeyPatch) -> None:
         return None
 
     monkeypatch.setattr(
-        "services.managed_integrations.change_sets_repository.get_pool", _no_pool
+        "connectors.managed_integrations.change_sets_repository.get_pool", _no_pool
     )
 
 

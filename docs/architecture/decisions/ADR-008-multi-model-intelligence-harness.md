@@ -20,7 +20,7 @@ graph, but its intelligence today is narrow and ungrounded:
 
 - **Noesis is deterministic classification with an LLM text-to-query fallback
   and no grounded synthesis.** The `NoesisPlanProvider` seam
-  (`services/backend/services/noesis/provider.py`) returns only a structured, allowlisted
+  (`services/api/intelligence/noesis/provider.py`) returns only a structured, allowlisted
   `QueryPlan` — the model may pick an intent and filters, and Aether executes
   the read against read-only repositories. There is no path for a model to
   produce a grounded answer: no retrieval-before-synthesis, no evidence
@@ -65,7 +65,7 @@ recorded as nine numbered decisions.
 
 ### D1 — Additive extension layered on existing Aether authority
 
-The harness is a **new runtime** (`services/backend/services/model_runtime/` in the backend,
+The harness is a **new runtime** (`services/api/intelligence/model_runtime/` in the backend,
 with contracts under `packages/shared/`) layered on the existing authority:
 intelligence graph, identity, consent, audit ledger, credential backends, and
 policy gates. It reuses — and never re-implements — those systems. The harness
@@ -243,7 +243,7 @@ additively safe:
 
 1. **ADR + contracts** — this ADR, plus the model and task-profile registry
    contracts and their generated twins (model registry, task-profile registry).
-2. **Runtime models** — `services/backend/services/model_runtime/` core models: provider-neutral
+2. **Runtime models** — `services/api/intelligence/model_runtime/` core models: provider-neutral
    request/response, routing, policy, evidence, verification record types.
 3. **Noesis migration** — Noesis's LLM fallback re-points to the harness
    adapter seam; legacy env-key provider reads are retired behind the
@@ -281,9 +281,9 @@ additively safe:
 
 ## References
 
-- `services/backend/services/noesis/provider.py` — the
+- `services/api/intelligence/noesis/provider.py` — the
   Noesis provider seam being migrated to the harness adapter interface.
-- `services/backend/shared/credentials/interface.py` — the
+- `services/api/shared/credentials/interface.py` — the
   `CredentialBackend` abstraction + secret-free `CredentialMetadata`; concrete
   backends live alongside it (`in_memory.py`, `local_encrypted.py`,
   `aws_secrets_manager.py`).

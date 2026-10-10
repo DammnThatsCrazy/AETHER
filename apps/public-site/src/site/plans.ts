@@ -1,6 +1,6 @@
 /**
  * Plans for the pricing page and /app signup. Numbers come from plans.json,
- * which mirrors services/backend/shared/plans/catalog.py (kept in sync by
+ * which mirrors services/api/shared/plans/catalog.py (kept in sync by
  * tests/unit/test_site_plans_match_catalog.py). Copy lives here.
  */
 import data from './plans.json';

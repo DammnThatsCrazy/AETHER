@@ -45,7 +45,7 @@ npm run dev
 ## Run Backend
 
 ```bash
-cd "services/backend"
+cd "services/api"
 python -m uvicorn main:app --reload
 ```
 

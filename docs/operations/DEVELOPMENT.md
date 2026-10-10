@@ -99,7 +99,7 @@ docker compose up -d postgres
 docker compose up -d
 ```
 
-The backend container builds from `services/backend/Dockerfile` and starts on port 8000.
+The backend container builds from `services/api/Dockerfile` and starts on port 8000.
 
 ---
 
@@ -167,7 +167,7 @@ make docs              # generate API docs
 ## Directory reference
 
 ```
-services/backend/               FastAPI backend (55 routers, 400+ endpoints)
+services/api/               FastAPI backend (55 routers, 400+ endpoints)
 services/ml/                    ML training + serving
 services/agents/                Autonomous agent workers (internal)
 services/compliance/            GDPR/SOC 2 controls

@@ -9,11 +9,11 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
-source_files: [services/backend/services/kyber/identity/lifecycle.py, services/backend/services/kyber/identity/principals.py, services/backend/services/kyber/identity/directory_sync.py]
+source_files: [services/api/governance/kyber/identity/lifecycle.py, services/api/governance/kyber/identity/principals.py, services/api/governance/kyber/identity/directory_sync.py]
 source_hashes:
-  services/backend/services/kyber/identity/directory_sync.py: sha256:ed2d2a76b05750f99fa7222d7b967f7d743ffec439d4a88f8b5ab4f0196b0061
-  services/backend/services/kyber/identity/lifecycle.py: sha256:f3c844c87f0efa7a009623672e2a69141734eb5c169d3504224bbf85afb67518
-  services/backend/services/kyber/identity/principals.py: sha256:9efd462db5c76f6da860ec1db01fcf49739d096c04c4705ba8ac8f31bebabd72
+  "services/api/governance/kyber/identity/directory_sync.py": "sha256:3b19c32b5737dc981851ebd8492aed842ffe30264dd641b6d00e9de712959e63"
+  "services/api/governance/kyber/identity/lifecycle.py": "sha256:e88a66c1d7699f88c3a3d8c24eae7a0c0a13c52ab8425e4b96eac326ba39a315"
+  "services/api/governance/kyber/identity/principals.py": "sha256:1ed58a6d915248f3c806186b47a7c600039356ce4768c0efeda2e52df80053a3"
 ---
 
 # Runbook — Kyber Workforce Offboarding

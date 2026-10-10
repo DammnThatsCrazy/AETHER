@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/derivatives.ts, services/backend/services/derivatives/runtime_models.py, services/backend/repositories/derivatives_repos.py]
+source_files: [packages/shared/derivatives.ts, services/api/value/derivatives/runtime_models.py, services/api/repositories/derivatives_repos.py]
 canonical_owner: platform@aether
 last_synced_commit: 03ab3a6
 ---

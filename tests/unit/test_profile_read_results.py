@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.profile.aggregator import _safe
-from services.profile.read_result import DimensionReadResult
+from identity.profile.aggregator import _safe
+from identity.profile.read_result import DimensionReadResult
 
 
 async def _returns_empty():

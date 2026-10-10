@@ -5,13 +5,13 @@ from datetime import datetime, timedelta, timezone
 
 from comparison_fakes import FakeAnalytics, make_events
 
-from services.intelligence.comparison.baselines import (
+from intelligence.intelligence.comparison.baselines import (
     STORED_BASELINE_SUBJECT_TYPE,
     BaselineResolver,
     StoredBaselineRepository,
 )
-from services.intelligence.comparison.collection import AnalyticsDimensionCollector
-from services.intelligence.comparison.contracts import BaselineSpec, ComparisonSubject
+from intelligence.intelligence.comparison.collection import AnalyticsDimensionCollector
+from intelligence.intelligence.comparison.contracts import BaselineSpec, ComparisonSubject
 
 TENANT = "t1"
 SUBJECT = ComparisonSubject(subject_type="entity", subject_id="user-a")

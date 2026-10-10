@@ -18,7 +18,7 @@ const STALE = 15_000;
 
 /**
  * The backend's command-status vocabulary, verbatim from
- * `services/kyber/ops/contracts.py`:
+ * `services/api/governance/kyber/ops/contracts.py`:
  *
  *   CommandStatus = Literal[
  *     "requested", "awaiting_approval", "approved", "rejected", "dry_run_complete",

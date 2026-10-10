@@ -5,7 +5,7 @@
 are loaded by name at runtime, and the modules still unreachable against a ledger
 row (``allow_unreachable``: a ``package`` and the ``modules`` in it, or a single
 ``path``). Every production module under
-``services/backend`` must be reachable from them through static imports
+``services/api`` must be reachable from them through static imports
 (absolute, relative, function-level), a dotted module name used as a string
 constant, or a reference from outside the backend (a script, a workflow, a
 Dockerfile, a registry file), unless it is listed under ``allow_unreachable``
@@ -179,7 +179,7 @@ def _under(module: str, prefix: str) -> bool:
 
 def analyse(config: dict[str, Any], root: Path = ROOT) -> dict[str, Any]:
     """Reachable and unreachable modules for the configured backend (no policy applied)."""
-    backend = config.get("root", "services/backend")
+    backend = config.get("root", "services/api")
     known = backend_modules(root, backend)
     roots: set[str] = {e for e in config.get("entries") or [] if e in known}
     for item in config.get("dynamic_packages") or []:
@@ -317,6 +317,9 @@ def _entry_modules(item: dict[str, Any]) -> list[str] | None:
     return None
 
 
+DOMAIN_PACKAGES = frozenset({"tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing"})
+
+
 def report(config_path: Path = CONFIG, root: Path = ROOT) -> int:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     result = analyse(raw, root)
@@ -327,7 +330,7 @@ def report(config_path: Path = CONFIG, root: Path = ROOT) -> int:
     packages: dict[str, list[str]] = {}
     for module in unreachable:
         parts = module.split(".")
-        top = ".".join(parts[:2]) if parts[0] in ("services",) and len(parts) > 1 else parts[0]
+        top = ".".join(parts[:2]) if len(parts) > 1 and parts[0] in DOMAIN_PACKAGES else parts[0]
         packages.setdefault(top, []).append(module)
     for top, mods in sorted(packages.items(), key=lambda kv: -sum(_lines(known[m]) for m in kv[1])):
         print(f"{sum(_lines(known[m]) for m in mods):6d} {len(mods):3d} {top}")

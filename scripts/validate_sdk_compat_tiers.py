@@ -3,7 +3,7 @@
 
 Fail-closed, static, no-backend-import validator encoding the Invariant #18
 tier table + the staged (shadow/observe) conformance contract for the
-``services/ingestion/sdk_version_tiers.py`` model:
+``services/api/ingestion/ingestion/sdk_version_tiers.py`` model:
 
 Gate H compatibility — pre-1.0 version bands (0.x SemVer):
   * >=0.1.0 stays ``supported`` (full capability set, open upper bound);
@@ -34,8 +34,8 @@ import sys
 from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND = os.path.join(ROOT, "services", "backend")
-TIERS_PY = os.path.join(BACKEND, "services", "ingestion", "sdk_version_tiers.py")
+BACKEND = os.path.join(ROOT, "services", "api")
+TIERS_PY = os.path.join(BACKEND, "ingestion", "ingestion", "sdk_version_tiers.py")
 SETTINGS_PY = os.path.join(BACKEND, "config", "settings.py")
 ENV_EXAMPLE = os.path.join(ROOT, "config/environments/.env.example")
 ENV_PROD_EXAMPLE = os.path.join(ROOT, "config/environments/.env.production.example")

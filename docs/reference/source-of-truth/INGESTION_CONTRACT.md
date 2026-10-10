@@ -7,13 +7,13 @@ audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
 source_files:
-  - services/backend/services/ingestion/batch.py
-  - services/backend/services/identity/ingestion_worker.py
-  - services/backend/services/identity/resolver.py
-  - services/backend/services/runtime/consumer_specs.py
-  - services/backend/services/ingestion/outbox_relay.py
-  - services/backend/services/analytics/routes.py
-  - services/backend/repositories/repos.py
+  - services/api/ingestion/ingestion/batch.py
+  - services/api/identity/identity/ingestion_worker.py
+  - services/api/identity/identity/resolver.py
+  - services/api/workers/runtime/consumer_specs.py
+  - services/api/ingestion/ingestion/outbox_relay.py
+  - services/api/intelligence/analytics/routes.py
+  - services/api/repositories/repos.py
 ---
 # Ingestion Contract
 
@@ -102,7 +102,7 @@ Key: `SHA256(tenant_id:event_id:schema_version)` — tenant-scoped so two tenant
 
 `POST /v1/batch` is implemented in:
 ```
-services/backend/services/ingestion/batch.py
+services/api/ingestion/ingestion/batch.py
 ```
 
 From there events flow into Kafka (`aether.sdk.events.validated`) and into
@@ -229,7 +229,7 @@ an operator action; it does not re-invoke `POST /v1/batch`.
 ## Canonical validation boundary
 
 Both the legacy and transactional-outbox batch branches call
-`services/backend/services/ingestion/validation.py` before any Bronze write or downstream
+`services/api/ingestion/ingestion/validation.py` before any Bronze write or downstream
 publish. The shared result owns schema/type validation, execution-claim
 normalization, recursive sensitive-field scrubbing, server-authoritative consent,
 live `Sec-GPC`/`DNT` request signals, fingerprint-signal classification,

@@ -1,0 +1,767 @@
+"""
+Aether Service — x402 Commerce Control Plane
+Orchestrates the full lifecycle:
+  request → challenge → policy → approval → verify → settle → entitle → grant → fulfill
+
+This is the central backend that Kyber actions and SDK calls route through.
+Every lifecycle stage is persisted, emits events, and writes graph state.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
+
+from shared.events.events import Event, EventProducer, Topic
+from shared.graph.graph import GraphClient
+from shared.logger.logger import get_logger, metrics
+
+from .approvals import get_approval_service
+from .commerce_models import (
+    AccessGrant,
+    ApprovalPriority,
+    ApprovalRequest,
+    ApprovalStatus,
+    Entitlement,
+    EntitlementStatus,
+    Fulfillment,
+    LifecycleTrace,
+    PaymentAuthorization,
+    PaymentRequirement,
+    PolicyOutcome,
+    PreflightResult,
+    Settlement,
+    SettlementState,
+)
+from .commerce_store import get_commerce_store
+from .economic_mutations import EconomicGraphMutations
+from .entitlements import get_entitlement_service
+from .facilitators import get_facilitator_registry
+from .idempotency import get_idempotency_store
+from .policies import get_policy_engine
+from .pricing import PricingEngine
+from .resources import get_resource_registry
+from .settlement import get_settlement_tracker
+from .verification import get_verification_engine, is_terminal_verdict
+
+logger = get_logger("aether.service.x402.control_plane")
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.isoformat()
+
+
+class ControlPlaneError(Exception):
+    def __init__(self, message: str, code: str, status: int = 400):
+        super().__init__(message)
+        self.code = code
+        self.status = status
+
+
+class X402ControlPlane:
+    """Orchestrates the full x402 v2 lifecycle."""
+
+    def __init__(self, graph_client: Optional[GraphClient] = None, event_producer: Optional[EventProducer] = None):
+        self._store = get_commerce_store()
+        self._resources = get_resource_registry()
+        self._facilitators = get_facilitator_registry()
+        self._policy = get_policy_engine()
+        self._approvals = get_approval_service()
+        self._verify = get_verification_engine()
+        self._settle = get_settlement_tracker()
+        self._entitlements = get_entitlement_service()
+        self._idempotency = get_idempotency_store()
+        self._pricing = PricingEngine()
+        self._mutations = EconomicGraphMutations(graph_client)
+        self._producer = event_producer or EventProducer()
+
+    # ─── Preflight ────────────────────────────────────────────────────
+
+    async def preflight(
+        self, tenant_id: str, holder_id: str, resource_id: str
+    ) -> PreflightResult:
+        resource = await self._resources.get(tenant_id, resource_id)
+        if not resource:
+            return PreflightResult(
+                can_access=False,
+                reason="resource_not_found",
+                resource_id=resource_id,
+                holder_id=holder_id,
+            )
+        existing = await self._entitlements.lookup(tenant_id, holder_id, resource_id)
+        if existing:
+            return PreflightResult(
+                can_access=True,
+                reason="active_entitlement",
+                resource_id=resource_id,
+                holder_id=holder_id,
+                existing_entitlement_id=existing.entitlement_id,
+                price_quote_usd=resource.price_usd,
+                accepted_assets=resource.accepted_assets,
+                accepted_chains=resource.accepted_chains,
+                approval_required=resource.approval_required,
+            )
+        return PreflightResult(
+            can_access=False,
+            reason="payment_required",
+            resource_id=resource_id,
+            holder_id=holder_id,
+            price_quote_usd=resource.price_usd,
+            accepted_assets=resource.accepted_assets,
+            accepted_chains=resource.accepted_chains,
+            approval_required=resource.approval_required,
+            challenge_url=f"/v1/x402/challenge?resource_id={resource_id}",
+        )
+
+    # ─── 1. Issue Challenge ───────────────────────────────────────────
+
+    async def issue_challenge(
+        self,
+        tenant_id: str,
+        resource_id: str,
+        requester_id: str,
+        requester_type: str = "agent",
+        chain: str = "eip155:8453",
+        asset_symbol: str = "USDC",
+        recipient: Optional[str] = None,
+    ) -> PaymentRequirement:
+        resource = await self._resources.get(tenant_id, resource_id)
+        if not resource:
+            raise ControlPlaneError(
+                f"Unknown resource: {resource_id}", "RESOURCE_NOT_FOUND", 404
+            )
+        if not resource.active:
+            raise ControlPlaneError("Resource inactive", "RESOURCE_INACTIVE", 410)
+
+        # Compatibility check upfront
+        if resource.accepted_assets and asset_symbol not in resource.accepted_assets:
+            raise ControlPlaneError(
+                f"Asset {asset_symbol} not accepted", "UNSUPPORTED_ASSET", 400
+            )
+        if resource.accepted_chains and chain not in resource.accepted_chains:
+            raise ControlPlaneError(
+                f"Chain {chain} not accepted", "UNSUPPORTED_NETWORK", 400
+            )
+
+        price = await self._pricing.quote_for(tenant_id, resource)
+        treasury = await self._store.get_treasury(tenant_id)
+        treasury_recipient = (
+            f"treasury:{tenant_id}"
+            if treasury
+            else f"aether:{tenant_id}"
+        )
+
+        requirement = PaymentRequirement(
+            tenant_id=tenant_id,
+            resource_id=resource_id,
+            amount_usd=price,
+            asset_symbol=asset_symbol,
+            chain=chain,
+            recipient=recipient or treasury_recipient,
+            protocol_version="v2",
+            expires_at=_iso(_now() + timedelta(minutes=10)),
+            requester_id=requester_id,
+            requester_type=requester_type,
+        )
+        await self._store.put_requirement(requirement)
+        await self._mutations.write_resource(resource)
+        await self._mutations.write_challenge(requirement, resource)
+
+        # Meter the challenged usage (immutable audit fact).
+        await self._meter_challenged(
+            tenant_id,
+            resource_id=resource_id,
+            holder_id=requester_id,
+            amount_usd=price,
+            chain=chain,
+            asset_symbol=asset_symbol,
+            challenge_id=requirement.challenge_id,
+        )
+
+        await self._producer.publish(
+            Event(
+                topic=Topic.COMMERCE_CHALLENGE_ISSUED,
+                payload={
+                    "challenge_id": requirement.challenge_id,
+                    "resource_id": resource_id,
+                    "amount_usd": price,
+                    "asset": asset_symbol,
+                    "chain": chain,
+                    "requester_id": requester_id,
+                    "payment_identifier": requirement.payment_identifier,
+                },
+                tenant_id=tenant_id,
+                source_service="x402.control_plane",
+            )
+        )
+        metrics.increment(
+            "commerce_challenges_issued",
+            labels={"resource": resource_id, "asset": asset_symbol, "chain": chain},
+        )
+        logger.info(
+            f"challenge issued: {requirement.challenge_id} resource={resource_id} "
+            f"amount=${price} {asset_symbol} on {chain}"
+        )
+        return requirement
+
+    # ─── 2. Request Approval ──────────────────────────────────────────
+
+    async def request_approval(
+        self,
+        tenant_id: str,
+        challenge_id: str,
+        priority: ApprovalPriority = ApprovalPriority.NORMAL,
+        reason: str = "",
+        context: Optional[dict[str, Any]] = None,
+    ) -> tuple[ApprovalRequest, "PolicyDecisionLike"]:
+        requirement = await self._store.get_requirement(tenant_id, challenge_id)
+        if not requirement:
+            raise ControlPlaneError("Challenge not found", "CHALLENGE_NOT_FOUND", 404)
+        resource = await self._resources.get(tenant_id, requirement.resource_id)
+        if not resource:
+            raise ControlPlaneError("Resource not found", "RESOURCE_NOT_FOUND", 404)
+
+        decision = await self._policy.evaluate(
+            tenant_id=tenant_id,
+            challenge_id=challenge_id,
+            resource=resource,
+            requester_id=requirement.requester_id,
+            amount_usd=requirement.amount_usd,
+            asset_symbol=requirement.asset_symbol,
+            chain=requirement.chain,
+        )
+        await self._mutations.write_policy_decision(decision)
+
+        if decision.outcome == PolicyOutcome.DENY:
+            await self._producer.publish(
+                Event(
+                    topic=Topic.COMMERCE_POLICY_DENIED,
+                    payload={
+                        "challenge_id": challenge_id,
+                        "decision_id": decision.decision_id,
+                        "reason": decision.denial_reason,
+                    },
+                    tenant_id=tenant_id,
+                    source_service="x402.control_plane",
+                )
+            )
+            raise ControlPlaneError(
+                decision.denial_reason or "policy denied", "POLICY_DENIED", 403
+            )
+
+        approval = await self._approvals.request(
+            tenant_id=tenant_id,
+            challenge_id=challenge_id,
+            resource_id=requirement.resource_id,
+            requester_id=requirement.requester_id,
+            requester_type=requirement.requester_type,
+            amount_usd=requirement.amount_usd,
+            asset_symbol=requirement.asset_symbol,
+            chain=requirement.chain,
+            policy_decision=decision,
+            priority=priority,
+            reason=reason,
+            context=context or {},
+        )
+        await self._mutations.write_approval_request(approval)
+        return approval, decision
+
+    # ─── 3. Apply Decision + Authorize Payment ────────────────────────
+
+    async def apply_decision(
+        self,
+        tenant_id: str,
+        approval_id: str,
+        action: str,
+        decided_by: str,
+        reason: str,
+        is_override: bool = False,
+    ) -> ApprovalRequest:
+        """Apply an approval decision. On approve, create PaymentAuthorization."""
+        from .commerce_models import ApprovalDecision
+
+        approval = await self._approvals.decide(
+            tenant_id=tenant_id,
+            approval_id=approval_id,
+            action=action,
+            decided_by=decided_by,
+            reason=reason,
+            is_override=is_override,
+        )
+        decision_obj = ApprovalDecision(
+            approval_id=approval_id,
+            tenant_id=tenant_id,
+            action=action,
+            decided_by=decided_by,
+            reason=reason,
+            is_override=is_override,
+        )
+        await self._mutations.write_approval_decision(approval, decision_obj)
+        return approval
+
+    async def _resolve_environment(self, tenant_id: str) -> str:
+        """Resolve the x402 credential environment for a tenant, server-side.
+
+        Reads the tenant's persisted x402 capability activation state (the
+        canonical lifecycle). PARTNER_LIVE → ``live``; everything else →
+        ``sandbox``. Never trusts a client-supplied environment. In local/test
+        (no persisted state) defaults to ``sandbox``.
+        """
+        try:
+            from tenancy.capabilities.lifecycle import get_lifecycle_authority
+
+            state = await get_lifecycle_authority().get_state(
+                tenant_id, "x402", "live", "commerce"
+            )
+            if state and state.get("readiness_state") == "partner_live":
+                return "live"
+        except Exception:  # noqa: BLE001 — default to the safe environment
+            pass
+        return "sandbox"
+
+    async def authorize_payment(
+        self,
+        tenant_id: str,
+        approval_id: str,
+        payer: str,
+    ) -> PaymentAuthorization:
+        """Create a PaymentAuthorization for an approved request."""
+        approval = await self._approvals.get(tenant_id, approval_id)
+        if not approval:
+            raise ControlPlaneError("Approval not found", "APPROVAL_NOT_FOUND", 404)
+        if approval.status != ApprovalStatus.APPROVED:
+            raise ControlPlaneError(
+                f"Cannot authorize: approval status is {approval.status}",
+                "APPROVAL_NOT_APPROVED",
+                403,
+            )
+        requirement = await self._store.get_requirement(tenant_id, approval.challenge_id)
+        if not requirement:
+            raise ControlPlaneError("Challenge not found", "CHALLENGE_NOT_FOUND", 404)
+
+        # Idempotent authorize: payment_identifier is the flow's idempotency key
+        # and is unique-indexed per tenant. A re-issued authorization request
+        # (e.g. after a client timeout) returns the ORIGINAL authorization
+        # instead of constructing a fresh one that trips the unique constraint
+        # and surfaces a raw database error.
+        existing_auth = await self._store.get_authorization_by_payment_identifier(
+            tenant_id, requirement.payment_identifier
+        )
+        if existing_auth is not None:
+            logger.info(
+                f"idempotent authorize replay: payment_identifier="
+                f"{requirement.payment_identifier}"
+            )
+            return existing_auth
+
+        # Resolve the environment server-side BEFORE routing so a live
+        # authorization can never select a sandbox-only facilitator (or vice
+        # versa) — supported_environments is enforced during selection.
+        environment = await self._resolve_environment(tenant_id)
+        facilitator = await self._facilitators.select_for(
+            tenant_id, requirement.asset_symbol, requirement.chain, environment
+        )
+        if not facilitator:
+            raise ControlPlaneError(
+                "No facilitator for asset/chain/environment",
+                "FACILITATOR_UNAVAILABLE",
+                503,
+            )
+
+        auth = PaymentAuthorization(
+            tenant_id=tenant_id,
+            challenge_id=approval.challenge_id,
+            approval_id=approval_id,
+            payment_identifier=requirement.payment_identifier,
+            amount_usd=requirement.amount_usd,
+            asset_symbol=requirement.asset_symbol,
+            chain=requirement.chain,
+            environment=environment,
+            recipient=requirement.recipient,
+            payer=payer,
+            facilitator_id=facilitator.facilitator_id,
+        )
+        await self._store.put_authorization(auth)
+        await self._mutations.write_authorization(auth)
+
+        await self._producer.publish(
+            Event(
+                topic=Topic.COMMERCE_FACILITATOR_ROUTE_SELECTED,
+                payload={
+                    "authorization_id": auth.authorization_id,
+                    "facilitator_id": facilitator.facilitator_id,
+                },
+                tenant_id=tenant_id,
+                source_service="x402.control_plane",
+            )
+        )
+        return auth
+
+    # ─── 4. Verify + Settle + Mint Entitlement + Grant Access ─────────
+
+    async def verify_and_settle(
+        self, tenant_id: str, authorization_id: str, tx_hash: str
+    ) -> dict[str, Any]:
+        auth = await self._store.get_authorization(tenant_id, authorization_id)
+        if not auth:
+            raise ControlPlaneError("Authorization not found", "AUTH_NOT_FOUND", 404)
+
+        # Idempotency check by payment_identifier
+        existing = await self._idempotency.lookup(tenant_id, auth.payment_identifier)
+        if existing:
+            logger.info(f"idempotent replay: {auth.payment_identifier}")
+            return existing
+
+        await self._producer.publish(
+            Event(
+                topic=Topic.COMMERCE_PAYMENT_SUBMITTED,
+                payload={
+                    "authorization_id": authorization_id,
+                    "tx_hash": tx_hash,
+                    "payment_identifier": auth.payment_identifier,
+                },
+                tenant_id=tenant_id,
+                source_service="x402.control_plane",
+            )
+        )
+
+        receipt = await self._verify.verify(tenant_id, auth, tx_hash)
+        if not receipt.verified:
+            result = {
+                "verified": False,
+                "receipt_id": receipt.receipt_id,
+                "error": receipt.verification_error,
+            }
+            # A retryable verdict (not_finalized / verification_unavailable)
+            # means the payment was never actually adjudicated — the chain
+            # just hasn't finalized it yet, or the RPC was unreachable. Caching
+            # that here would strand a normally-submitted payment behind a
+            # permanent-looking cached failure until the idempotency entry's
+            # TTL expires, with no settlement for the reconciliation worker to
+            # revisit. Only cache TERMINAL verdicts (verified, or a definitive
+            # failure like reverted/payer_mismatch/amount_below_required) —
+            # a retryable verdict must let the next call re-check the chain.
+            if is_terminal_verdict(receipt.verification_verdict):
+                await self._idempotency.record(tenant_id, auth.payment_identifier, result)
+            else:
+                logger.info(
+                    f"verify_and_settle: retryable verdict "
+                    f"{receipt.verification_verdict!r} for payment_identifier="
+                    f"{auth.payment_identifier} — not cached, next call will "
+                    f"re-check the chain"
+                )
+            return result
+
+        settlement = await self._settle.start(tenant_id, receipt, auth.facilitator_id)
+        await self._mutations.write_receipt_and_settlement(receipt, settlement)
+
+        # Meter the paid usage (immutable audit fact).
+        requirement = await self._store.get_requirement(tenant_id, auth.challenge_id)
+        await self._meter_paid(
+            tenant_id,
+            resource_id=requirement.resource_id if requirement else "",
+            holder_id=auth.payer,
+            amount_usd=auth.amount_usd,
+            chain=auth.chain,
+            asset_symbol=auth.asset_symbol,
+            challenge_id=auth.challenge_id,
+            authorization_id=auth.authorization_id,
+        )
+
+        # Mint the entitlement ONLY once the settlement is SETTLED — i.e. on-chain
+        # finality is confirmed. Outside local/test _settle.start parks the
+        # settlement in PENDING pending reconciliation; granting an ACTIVE
+        # entitlement then would confer access before finality, and a later
+        # reconciliation failure would leave that access unrevoked. When the
+        # reconciliation worker advances the settlement to SETTLED it calls
+        # finalize_settlement_entitlement() to mint it.
+        entitlement = None
+        if settlement.state == SettlementState.SETTLED:
+            entitlement = await self._mint_entitlement_for_settlement(
+                tenant_id, auth, settlement
+            )
+
+        result = {
+            "verified": True,
+            "receipt_id": receipt.receipt_id,
+            "settlement_id": settlement.settlement_id,
+            "settlement_state": settlement.state.value,
+            "entitlement_id": entitlement.entitlement_id if entitlement else None,
+            "expires_at": entitlement.expires_at if entitlement else None,
+        }
+        # Cache only a terminal (SETTLED) result. A PENDING settlement is not yet
+        # final — reconciliation will settle it and mint the entitlement — so
+        # caching now would pin a permanent "no entitlement" replay.
+        if settlement.state == SettlementState.SETTLED:
+            await self._idempotency.record(tenant_id, auth.payment_identifier, result)
+        return result
+
+    async def _mint_entitlement_for_settlement(
+        self, tenant_id: str, auth: PaymentAuthorization, settlement: Settlement
+    ) -> Entitlement:
+        """Mint (idempotently) the entitlement for a SETTLED settlement.
+
+        Idempotent by settlement id: if an entitlement already exists for the
+        settlement (e.g. verify_and_settle and reconciliation both reaching a
+        settled state), the existing one is returned rather than minting a
+        duplicate."""
+        for e in await self._store.list_entitlements(tenant_id):
+            if getattr(e, "settlement_id", None) == settlement.settlement_id:
+                return e
+        approval = await self._approvals.get(tenant_id, auth.approval_id)
+        requirement = await self._store.get_requirement(tenant_id, auth.challenge_id)
+        entitlement = await self._entitlements.mint(
+            tenant_id=tenant_id,
+            holder_id=approval.requester_id if approval else auth.payer,
+            holder_type=requirement.requester_type if requirement else "agent",
+            resource_id=requirement.resource_id if requirement else "",
+            settlement=settlement,
+        )
+        await self._mutations.write_entitlement(entitlement)
+
+        # Meter the entitled usage (immutable audit fact). Idempotent: the
+        # early-return above (existing entitlement for this settlement) means a
+        # reconciled/retried mint never double-counts.
+        await self._meter_entitled(
+            tenant_id,
+            resource_id=requirement.resource_id if requirement else "",
+            holder_id=entitlement.holder_id,
+            amount_usd=auth.amount_usd,
+            challenge_id=auth.challenge_id,
+            entitlement_id=entitlement.entitlement_id,
+        )
+        return entitlement
+
+    async def mint_entitlement_for_reconciled_settlement(
+        self, tenant_id: str, settlement: Settlement
+    ) -> Entitlement:
+        """Mint the entitlement for a settlement the reconciliation worker has
+        verified but NOT yet marked SETTLED — idempotent, resolving the
+        authorization from the settlement's receipt. Minting here (before the
+        terminal state flip) means a transient failure raises and leaves the
+        settlement PENDING for the next tick, instead of stranding a SETTLED
+        settlement with no entitlement. Raises if the authorization can't be
+        resolved."""
+        receipt = await self._store.get_receipt(tenant_id, settlement.receipt_id)
+        auth = (
+            await self._store.get_authorization(tenant_id, receipt.authorization_id)
+            if receipt
+            else None
+        )
+        if auth is None:
+            raise ControlPlaneError(
+                "cannot mint entitlement: authorization not found for settlement",
+                "AUTH_NOT_FOUND",
+                404,
+            )
+        return await self._mint_entitlement_for_settlement(tenant_id, auth, settlement)
+
+    async def finalize_settlement_entitlement(
+        self, tenant_id: str, settlement_id: str
+    ) -> Optional[Entitlement]:
+        """Mint the deferred entitlement once a settlement reaches SETTLED.
+
+        Called by the reconciliation worker after it confirms on-chain finality
+        and advances a PENDING settlement to SETTLED. No-op (returns None) if the
+        settlement is not SETTLED or its authorization can't be resolved."""
+        settlement = await self._store.get_settlement(tenant_id, settlement_id)
+        if settlement is None or settlement.state != SettlementState.SETTLED:
+            return None
+        receipt = await self._store.get_receipt(tenant_id, settlement.receipt_id)
+        auth = (
+            await self._store.get_authorization(tenant_id, receipt.authorization_id)
+            if receipt
+            else None
+        )
+        if auth is None:
+            return None
+        return await self._mint_entitlement_for_settlement(tenant_id, auth, settlement)
+
+    async def grant_access(
+        self,
+        tenant_id: str,
+        entitlement_id: str,
+        request_url: str = "",
+        request_method: str = "GET",
+    ) -> dict[str, Any]:
+        entitlement = await self._store.get_entitlement(tenant_id, entitlement_id)
+        if not entitlement or entitlement.status != EntitlementStatus.ACTIVE:
+            await self._producer.publish(
+                Event(
+                    topic=Topic.COMMERCE_ACCESS_DENIED,
+                    payload={"entitlement_id": entitlement_id, "reason": "inactive"},
+                    tenant_id=tenant_id,
+                    source_service="x402.control_plane",
+                )
+            )
+            raise ControlPlaneError(
+                "Entitlement not active", "ENTITLEMENT_INACTIVE", 401
+            )
+
+        grant = AccessGrant(
+            tenant_id=tenant_id,
+            entitlement_id=entitlement_id,
+            resource_id=entitlement.resource_id,
+            holder_id=entitlement.holder_id,
+            request_url=request_url,
+            request_method=request_method,
+        )
+        await self._store.put_grant(grant)
+
+        fulfillment = Fulfillment(
+            tenant_id=tenant_id,
+            grant_id=grant.grant_id,
+            resource_id=entitlement.resource_id,
+            status="completed",
+            status_code=200,
+        )
+        await self._store.put_fulfillment(fulfillment)
+        await self._mutations.write_grant_and_fulfillment(grant, fulfillment)
+
+        await self._producer.publish(
+            Event(
+                topic=Topic.COMMERCE_ACCESS_GRANTED,
+                payload={
+                    "grant_id": grant.grant_id,
+                    "entitlement_id": entitlement_id,
+                    "resource_id": entitlement.resource_id,
+                },
+                tenant_id=tenant_id,
+                source_service="x402.control_plane",
+            )
+        )
+        metrics.increment("commerce_access_granted")
+
+        # Meter the granted access (immutable audit fact).
+        await self._meter_access_granted(
+            tenant_id,
+            resource_id=entitlement.resource_id,
+            holder_id=entitlement.holder_id,
+            amount_usd=0.0,
+            challenge_id="",
+            entitlement_id=entitlement.entitlement_id,
+        )
+
+        return {
+            "grant_id": grant.grant_id,
+            "fulfillment_id": fulfillment.fulfillment_id,
+            "resource_id": entitlement.resource_id,
+            "status": "granted",
+        }
+
+    # ─── Commerce metering (write-side audit facts) ───────────────────
+    # Each stage records one immutable MeterRecord so challenged/paid/entitled
+    # usage is auditable and reconcilable against silver facts. Best-effort: a
+    # metering write failure must never break the commerce lifecycle.
+
+    async def _meter(self, meter_type: str, tenant_id: str, **kw: Any) -> None:
+        try:
+            from value.commerce.metering import get_metering_service
+
+            await get_metering_service().record(tenant_id, meter_type, **kw)
+        except Exception as exc:  # noqa: BLE001 - metering is best-effort
+            logger.warning(
+                "commerce metering failed type=%s tenant=%s: %s", meter_type, tenant_id, exc
+            )
+
+    async def _meter_challenged(self, tenant_id: str, **kw: Any) -> None:
+        await self._meter("challenge_issued", tenant_id, **kw)
+
+    async def _meter_paid(self, tenant_id: str, **kw: Any) -> None:
+        await self._meter("payment_paid", tenant_id, **kw)
+
+    async def _meter_entitled(self, tenant_id: str, **kw: Any) -> None:
+        await self._meter("entitled", tenant_id, **kw)
+
+    async def _meter_access_granted(self, tenant_id: str, **kw: Any) -> None:
+        await self._meter("access_granted", tenant_id, **kw)
+
+    # ─── Explainability ───────────────────────────────────────────────
+
+    async def explain(self, tenant_id: str, challenge_id: str) -> LifecycleTrace:
+        """Full lifecycle trace for explainability / support / audit."""
+        req = await self._store.get_requirement(tenant_id, challenge_id)
+        trace = LifecycleTrace(
+            challenge_id=challenge_id,
+            tenant_id=tenant_id,
+            requirement=req,
+            graph_writes=self._mutations.get_trace(),
+        )
+        if not req:
+            return trace
+
+        # find policy decision for this challenge
+        for d in await self._store.list_policy_decisions(tenant_id):
+            if d.challenge_id == challenge_id:
+                trace.policy_decision = d
+                break
+
+        # find approval for this challenge
+        for a in await self._store.list_approvals(tenant_id):
+            if a.challenge_id == challenge_id:
+                trace.approval = a
+                break
+
+        # find authorization for this challenge
+        for a in await self._store.list_authorizations(tenant_id):
+            if a.challenge_id == challenge_id:
+                trace.authorization = a
+                break
+
+        # find receipt for this challenge
+        for r in await self._store.list_receipts(tenant_id):
+            if r.challenge_id == challenge_id:
+                trace.receipt = r
+                break
+
+        # find settlement
+        for s in await self._store.list_settlements(tenant_id):
+            if s.challenge_id == challenge_id:
+                trace.settlement = s
+                break
+
+        # find entitlement (by settlement_id)
+        if trace.settlement:
+            for e in await self._store.list_entitlements(tenant_id):
+                if e.settlement_id == trace.settlement.settlement_id:
+                    trace.entitlement = e
+                    break
+
+        # find grant + fulfillment
+        if trace.entitlement:
+            for g in await self._store.list_grants(tenant_id):
+                if g.entitlement_id == trace.entitlement.entitlement_id:
+                    trace.grant = g
+                    break
+        if trace.grant:
+            for f in await self._store.list_fulfillments(tenant_id):
+                if f.grant_id == trace.grant.grant_id:
+                    trace.fulfillment = f
+                    break
+
+        return trace
+
+
+# Module-level singleton
+_plane: Optional[X402ControlPlane] = None
+
+
+def get_control_plane() -> X402ControlPlane:
+    global _plane
+    if _plane is None:
+        _plane = X402ControlPlane()
+    return _plane
+
+
+def reset_control_plane() -> None:
+    global _plane
+    _plane = None
+
+
+# For type hints above
+class PolicyDecisionLike:  # noqa
+    pass

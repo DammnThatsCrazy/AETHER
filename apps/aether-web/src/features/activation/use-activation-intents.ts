@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { restClient } from '@aether-app/lib/api/rest/client';
 
 /**
- * WS-3 intent-driven activation client (services/activation/planner.py).
+ * WS-3 intent-driven activation client (services/api/tenancy/activation/planner.py).
  *
  * The tenant UI's "what are you trying to do?" layer. Like the SDK lifecycle
  * client, every response is the backend truth passed through the standard

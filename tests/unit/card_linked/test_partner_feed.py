@@ -40,7 +40,7 @@ def _event(**overrides) -> dict:
 
 
 def test_contract_accepts_valid_event_and_is_deterministic():
-    from services.card_linked_payments.partner_feed import (
+    from value.card_linked_payments.partner_feed import (
         CARD_LINKED_PARTNER_FEED_SCHEMA_VERSION,
         validate_partner_feed_event,
     )
@@ -55,7 +55,7 @@ def test_contract_accepts_valid_event_and_is_deterministic():
 
 
 def test_contract_rejects_blocked_instrument_fields():
-    from services.card_linked_payments.partner_feed import (
+    from value.card_linked_payments.partner_feed import (
         PartnerFeedSchemaError,
         validate_partner_feed_event,
     )
@@ -67,14 +67,14 @@ def test_contract_rejects_blocked_instrument_fields():
 
 
 def test_contract_strict_allowlist_rejects_unexpected_field():
-    from services.card_linked_payments.partner_feed import validate_partner_feed_event
+    from value.card_linked_payments.partner_feed import validate_partner_feed_event
 
     with pytest.raises(ValueError, match="allowlist"):
         validate_partner_feed_event(_event(surprise_column="boom"), tenant_id="t1")
 
 
 def test_contract_rejects_unsupported_schema_version():
-    from services.card_linked_payments.partner_feed import validate_partner_feed_event
+    from value.card_linked_payments.partner_feed import validate_partner_feed_event
 
     with pytest.raises(ValueError, match="schema_version"):
         validate_partner_feed_event(_event(schema_version="card_linked.partner_feed.v999"),
@@ -82,7 +82,7 @@ def test_contract_rejects_unsupported_schema_version():
 
 
 def test_contract_rejects_topup_basis_spend_side_only():
-    from services.card_linked_payments.partner_feed import validate_partner_feed_event
+    from value.card_linked_payments.partner_feed import validate_partner_feed_event
 
     for topup_basis in ("topup", "funding"):
         with pytest.raises(ValueError, match="spend-side"):
@@ -93,7 +93,7 @@ def test_contract_rejects_topup_basis_spend_side_only():
 
 
 def test_contract_rejects_float_money_but_accepts_atomic_string():
-    from services.card_linked_payments.partner_feed import (
+    from value.card_linked_payments.partner_feed import (
         PartnerFeedSchemaError,
         validate_partner_feed_event,
     )
@@ -108,7 +108,7 @@ def test_contract_rejects_float_money_but_accepts_atomic_string():
 
 async def _verifier_with_secret(tenant: str, secret: str, partner: str | None = "acme"):
     from shared.providers.key_vault import BYOKKeyVault
-    from services.card_linked_payments.partner_feed import (
+    from value.card_linked_payments.partner_feed import (
         CardLinkedPartnerFeedVerifier,
         PARTNER_FEED_VAULT_PROVIDER,
     )
@@ -136,7 +136,7 @@ async def test_hmac_verify_valid_and_invalid_and_tampered():
 
 
 async def test_fail_closed_gate_outside_local(monkeypatch):
-    from services.card_linked_payments import partner_feed as pf
+    from value.card_linked_payments import partner_feed as pf
 
     tenant, secret, partner = "t-gate", "sh_secret", "acme"
     verifier = await _verifier_with_secret(tenant, secret, partner)
@@ -157,7 +157,7 @@ async def test_fail_closed_gate_outside_local(monkeypatch):
 # ── evidence-strength labeling + overclaim guard ──────────────────────────────
 
 def test_evidence_strength_classification_and_overclaim_guard():
-    from services.card_linked_payments.models import (
+    from value.card_linked_payments.models import (
         EvidenceOverclaimError,
         assert_evidence_not_overclaimed,
         classify_evidence_strength,
@@ -197,7 +197,7 @@ async def test_provider_flow_labeled_provider_confirmed(tenant, ingestion):
 # ── top-up / spend non-conflation (never-summed) guard ────────────────────────
 
 def test_summing_guard_rejects_combined_total():
-    from services.card_linked_payments.models import (
+    from value.card_linked_payments.models import (
         TopupSpendConflationError,
         assert_topup_spend_separated,
     )
@@ -213,11 +213,11 @@ def test_summing_guard_rejects_combined_total():
 
 
 async def test_rollups_keep_topup_and_spend_separate(tenant, ingestion):
-    from services.card_linked_payments.gold import (
+    from value.card_linked_payments.gold import (
         campaign_card_linked_outcomes,
         entity_economic_activity,
     )
-    from services.card_linked_payments.models import COMBINED_TOTAL_FORBIDDEN_KEYS
+    from value.card_linked_payments.models import COMBINED_TOTAL_FORBIDDEN_KEYS
 
     await ingestion.ingest_onchain_observation(tenant, {
         "id": "oc_x", "chain": "base", "tx_hash": "0xx", "asset": "USDC",
@@ -251,7 +251,7 @@ class _FakeTenant:
 
 
 def _client(tenant_id: str) -> TestClient:
-    from services.card_linked_payments.routes import router
+    from value.card_linked_payments.routes import router
 
     app = FastAPI()
     app.include_router(router)
@@ -272,7 +272,7 @@ def _enable_flags(monkeypatch):
 
 
 async def _install_verifier(monkeypatch, tenant, secret, partner):
-    from services.card_linked_payments import partner_feed as pf
+    from value.card_linked_payments import partner_feed as pf
 
     verifier = await _verifier_with_secret(tenant, secret, partner)
     monkeypatch.setattr(pf, "_default_verifier", verifier)
@@ -280,8 +280,8 @@ async def _install_verifier(monkeypatch, tenant, secret, partner):
 
 
 async def test_route_rejects_unsigned_outside_local(monkeypatch, tenant):
-    from services.card_linked_payments import ingestion as ing_mod
-    from services.card_linked_payments import partner_feed as pf
+    from value.card_linked_payments import ingestion as ing_mod
+    from value.card_linked_payments import partner_feed as pf
 
     _enable_flags(monkeypatch)
     monkeypatch.setattr(ing_mod, "_service", None, raising=False)
@@ -296,8 +296,8 @@ async def test_route_rejects_unsigned_outside_local(monkeypatch, tenant):
 
 
 async def test_route_accepts_valid_signature(monkeypatch, tenant):
-    from services.card_linked_payments import ingestion as ing_mod
-    from services.card_linked_payments import partner_feed as pf
+    from value.card_linked_payments import ingestion as ing_mod
+    from value.card_linked_payments import partner_feed as pf
 
     _enable_flags(monkeypatch)
     monkeypatch.setattr(ing_mod, "_service", None, raising=False)
@@ -323,8 +323,8 @@ async def test_route_accepts_valid_signature(monkeypatch, tenant):
 
 async def test_route_local_mode_allows_unsigned(monkeypatch, tenant):
     """Local mode preserves the prior behavior: unsigned partner events pass."""
-    from services.card_linked_payments import ingestion as ing_mod
-    from services.card_linked_payments import partner_feed as pf
+    from value.card_linked_payments import ingestion as ing_mod
+    from value.card_linked_payments import partner_feed as pf
 
     _enable_flags(monkeypatch)
     monkeypatch.setattr(ing_mod, "_service", None, raising=False)

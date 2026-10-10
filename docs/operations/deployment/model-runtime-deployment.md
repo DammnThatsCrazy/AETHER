@@ -7,20 +7,20 @@ audience: [ops, dev-senior, architect]
 status: beta
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/model_runtime/config.py
-  - services/backend/services/model_runtime/service.py
-  - services/backend/services/model_runtime/routing/engine.py
-  - services/backend/services/model_runtime/credentials/interface.py
-  - services/backend/services/model_runtime/context/evidence.py
+  - services/api/intelligence/model_runtime/config.py
+  - services/api/intelligence/model_runtime/service.py
+  - services/api/intelligence/model_runtime/routing/engine.py
+  - services/api/intelligence/model_runtime/credentials/interface.py
+  - services/api/intelligence/model_runtime/context/evidence.py
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "services/backend/services/model_runtime/config.py": "sha256:e258302a79e904ebd3f193b20c72fe6270c9f3c7f4f97b1928f1958ed5c6dc03"
-  "services/backend/services/model_runtime/context/evidence.py": "sha256:07382fdbcd3b1cdff3e2129ae03530d91ccd47bfb158329ae29a84e5cf91a0fa"
-  "services/backend/services/model_runtime/credentials/interface.py": "sha256:254fb0df4f45996b5da164a470176b951d28f6f6b0c066f96713106b017cbed5"
-  "services/backend/services/model_runtime/routing/engine.py": "sha256:9c997defc5062e445ff8374c987d558592bb227b442860b7df0a3425d18ffb99"
-  "services/backend/services/model_runtime/service.py": "sha256:c9c879b3a1025a81c5c693c1dfdc734a387f707a65993eaffaf5d1e2a408e4e8"
+  "services/api/intelligence/model_runtime/config.py": "sha256:a9e097da21c81bc0cc9380d63c1c1efd8c1c222720ca51fbfcd3938c4da60132"
+  "services/api/intelligence/model_runtime/context/evidence.py": "sha256:07382fdbcd3b1cdff3e2129ae03530d91ccd47bfb158329ae29a84e5cf91a0fa"
+  "services/api/intelligence/model_runtime/credentials/interface.py": "sha256:a3d9bc04f45960a93ad14fbbda230cd8d4cc2ca07bffcf4116743a7cb4db1ff6"
+  "services/api/intelligence/model_runtime/routing/engine.py": "sha256:3b847ee9e9c0b83b22bf84acafe92319d59b0a5bd062e0d0dfbba08cae0b1481"
+  "services/api/intelligence/model_runtime/service.py": "sha256:d87e82f8df07a4f5037d45b36c74cbcb925e884628340f6e00e8a72fe4453929"
 ---
 
 # Model Runtime Deployment
@@ -33,7 +33,7 @@ describe how to operate it once it is running.
 
 ## 1. Overview
 
-The model runtime (`services/backend/services/model_runtime/`)
+The model runtime (`services/api/intelligence/model_runtime/`)
 is a **new, additive runtime** layered on the existing Aether authority. It is
 **additive to Noesis** — Noesis keeps its read-only intent +
 repository-dispatch architecture, and the harness may be consumed by Noesis or
@@ -142,7 +142,7 @@ falling back to an insecure default.
 | `MODEL_RUNTIME_OBSERVABILITY_ENABLED` | `false` | Production: set `true` (metrics/circuit telemetry) | `false` disables telemetry; keep OFF locally |
 | `MODEL_RUNTIME_CIRCUIT_FAILURE_THRESHOLD` | `5` | Optional (consecutive failures before a provider trips) | Tripped provider degrades the request; never silently bypasses policy |
 | `MODEL_RUNTIME_CIRCUIT_RECOVERY_TIMEOUT_S` | `60` | Optional (seconds before a tripped provider retries) | Recovery is time-boxed and re-trips on repeat failure |
-| `MODEL_RUNTIME_ADAPTERS_DIR` | `services/backend/services/model_runtime/adapters` | Optional (provider adapter registry directory) | Only providers in this directory are loadable |
+| `MODEL_RUNTIME_ADAPTERS_DIR` | `intelligence/model_runtime/adapters` | Optional (provider adapter registry directory) | Only providers in this directory are loadable |
 
 Secrets are **never** declared in `.env` files — the provider-level variables
 below are the only credential-bearing surface, and they are deploy-time injected
@@ -152,7 +152,7 @@ by the secret backend.
 ### Provider credentials
 
 Every adapter-backed provider is registered at startup
-(`services/model_runtime/providers.py`) and, without its credentials, reports
+(`services/api/intelligence/model_runtime/providers.py`) and, without its credentials, reports
 `waiting on credentials: set <VARIABLES>` on `GET /v1/model-runtime/health`. It
 never serves a request and never fails startup. Supplying the variables is the
 only step left to turn a provider on.
@@ -207,14 +207,14 @@ For the design and security rationale, see
 
 ## References
 
-- `services/backend/services/model_runtime/config.py` —
+- `services/api/intelligence/model_runtime/config.py` —
   authoritative `MODEL_RUNTIME_*` env parse.
-- `services/backend/services/model_runtime/service.py` —
+- `services/api/intelligence/model_runtime/service.py` —
   runtime orchestration seam.
-- `services/backend/services/model_runtime/routing/engine.py` —
+- `services/api/intelligence/model_runtime/routing/engine.py` —
   routing modes, entitlements, fallback.
-- `services/backend/services/model_runtime/credentials/interface.py` —
+- `services/api/intelligence/model_runtime/credentials/interface.py` —
   per-tenant credential resolution seam.
-- `services/backend/services/model_runtime/context/evidence.py` —
+- `services/api/intelligence/model_runtime/context/evidence.py` —
   grounded-synthesis evidence models.
 - `docs/architecture/decisions/ADR-008-multi-model-intelligence-harness.md` — decisions D1–D9.

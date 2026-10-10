@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -34,8 +34,8 @@ def _fact(event_type: str, recipient: str, **extra) -> dict:
 
 @pytest.fixture(autouse=True)
 def _clean():
-    from services.comms.repository import reset_local_stores
-    from services.comms.initiatives import reset_local_initiatives
+    from journeys.comms.repository import reset_local_stores
+    from journeys.comms.initiatives import reset_local_initiatives
     reset_local_stores()
     reset_local_initiatives()
     yield
@@ -46,8 +46,8 @@ def _clean():
 class TestInitiatives:
     @pytest.mark.asyncio
     async def test_create_add_members_and_rollup(self):
-        from services.comms.initiatives import InitiativeRepository, InitiativeRollupService
-        from services.comms.repository import CommsFactsRepository
+        from journeys.comms.initiatives import InitiativeRepository, InitiativeRollupService
+        from journeys.comms.repository import CommsFactsRepository
 
         repo = InitiativeRepository()
         initiative = await repo.create("tenant-f", "Product Launch",
@@ -71,12 +71,12 @@ class TestInitiatives:
 
     @pytest.mark.asyncio
     async def test_rollup_unknown_initiative_returns_none(self):
-        from services.comms.initiatives import InitiativeRollupService
+        from journeys.comms.initiatives import InitiativeRollupService
         assert await InitiativeRollupService().rollup("tenant-f", "nope") is None
 
     @pytest.mark.asyncio
     async def test_tenant_isolation(self):
-        from services.comms.initiatives import InitiativeRepository
+        from journeys.comms.initiatives import InitiativeRepository
         repo = InitiativeRepository()
         initiative = await repo.create("tenant-f", "Mine")
         assert await repo.get("tenant-other", initiative["initiative_id"]) is None
@@ -85,7 +85,7 @@ class TestInitiatives:
 class TestCommsPopulation:
     @pytest.mark.asyncio
     async def test_stage_classification(self):
-        from services.comms.repository import CommsFactsRepository
+        from journeys.comms.repository import CommsFactsRepository
         facts = CommsFactsRepository()
         # r1: replied; r2: engaged (click); r3: delivered only; r4: attempted only
         await facts.upsert(_fact("email_delivered", "r1"))
@@ -102,7 +102,7 @@ class TestCommsPopulation:
 
     @pytest.mark.asyncio
     async def test_machine_click_does_not_engage(self):
-        from services.comms.repository import CommsFactsRepository
+        from journeys.comms.repository import CommsFactsRepository
         facts = CommsFactsRepository()
         await facts.upsert(_fact("email_delivered", "r5"))
         await facts.upsert(_fact("email_clicked", "r5", suspected_machine_activity=True))
@@ -112,7 +112,7 @@ class TestCommsPopulation:
 
     @pytest.mark.asyncio
     async def test_flag_filters_compose(self):
-        from services.comms.repository import CommsFactsRepository
+        from journeys.comms.repository import CommsFactsRepository
         facts = CommsFactsRepository()
         await facts.upsert(_fact("email_delivered", "r6"))
         await facts.upsert(_fact("email_bounced", "r6", bounce_type="hard"))
@@ -126,7 +126,7 @@ class TestCommsPopulation:
 
     @pytest.mark.asyncio
     async def test_rows_link_to_profile360_without_raw_addresses(self):
-        from services.comms.repository import CommsFactsRepository
+        from journeys.comms.repository import CommsFactsRepository
         facts = CommsFactsRepository()
         await facts.upsert(_fact("email_delivered", "r8", recipient_display="j***@e***.com"))
         rows = await facts.campaign_population("tenant-f", "camp-f")
@@ -137,7 +137,7 @@ class TestCommsPopulation:
 class TestRebuildCoalescer:
     @pytest.mark.asyncio
     async def test_burst_coalesces_to_one_rebuild(self):
-        from services.comms.rebuild_coalescer import JourneyRebuildCoalescer
+        from journeys.comms.rebuild_coalescer import JourneyRebuildCoalescer
         coalescer = JourneyRebuildCoalescer(window_seconds=60)
         for i in range(25):
             await coalescer.request_rebuild("tenant-f", "ent-1", reason=f"e{i}")
@@ -149,7 +149,7 @@ class TestRebuildCoalescer:
 
     @pytest.mark.asyncio
     async def test_distinct_profiles_do_not_coalesce(self):
-        from services.comms.rebuild_coalescer import JourneyRebuildCoalescer
+        from journeys.comms.rebuild_coalescer import JourneyRebuildCoalescer
         coalescer = JourneyRebuildCoalescer(window_seconds=60)
         await coalescer.request_rebuild("tenant-f", "ent-a")
         await coalescer.request_rebuild("tenant-f", "ent-b")
@@ -160,7 +160,7 @@ class TestRebuildCoalescer:
     @pytest.mark.asyncio
     async def test_window_flush_fires_automatically(self):
         import asyncio
-        from services.comms.rebuild_coalescer import JourneyRebuildCoalescer
+        from journeys.comms.rebuild_coalescer import JourneyRebuildCoalescer
         coalescer = JourneyRebuildCoalescer(window_seconds=0.05)
         await coalescer.request_rebuild("tenant-f", "ent-t")
         await asyncio.sleep(0.2)
@@ -170,8 +170,8 @@ class TestRebuildCoalescer:
 class TestDsrErasure:
     @pytest.mark.asyncio
     async def test_tombstone_removes_facts_and_state(self):
-        from services.comms.repository import CommsFactsRepository
-        from services.comms.state import CommunicationStateService
+        from journeys.comms.repository import CommsFactsRepository
+        from journeys.comms.state import CommunicationStateService
 
         facts = CommsFactsRepository()
         await facts.upsert(_fact("email_delivered", "r9", profile_id="ent-dsr"))
@@ -186,7 +186,7 @@ class TestDsrErasure:
 
     @pytest.mark.asyncio
     async def test_tombstone_is_tenant_scoped(self):
-        from services.comms.repository import CommsFactsRepository
+        from journeys.comms.repository import CommsFactsRepository
         facts = CommsFactsRepository()
         await facts.upsert(_fact("email_delivered", "r10", profile_id="ent-x"))
         removed = await facts.tombstone_by_profile("tenant-other", "ent-x")
@@ -201,9 +201,9 @@ class TestDispatcherBurst:
 
     @pytest.mark.asyncio
     async def test_burst_of_500_events_projects_cleanly(self):
-        from services.silver.dispatcher import SilverDispatcher
-        from services.silver.writer import SilverFactWriter
-        from services.comms.repository import CommsFactsRepository
+        from ingestion.silver.dispatcher import SilverDispatcher
+        from ingestion.silver.writer import SilverFactWriter
+        from journeys.comms.repository import CommsFactsRepository
 
         dispatcher, writer = SilverDispatcher(), SilverFactWriter()
         started = time.monotonic()

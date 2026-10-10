@@ -19,7 +19,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
@@ -35,7 +35,7 @@ def _crypto_ok() -> bool:
 
 pytestmark = pytest.mark.skipif(not _crypto_ok(), reason="cryptography unavailable")
 
-_BACKEND_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+_BACKEND_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 _MANIFEST = yaml.safe_load((ROOT / "config/founding_tenant_release.yaml").read_text())
 FOUNDING_PROFILE = _MANIFEST["profile"]
@@ -53,7 +53,7 @@ def active_profile(profile: str):
     """Fresh backend generation with the given deployment profile active."""
     _evict_backend()
     settings_mod = importlib.import_module("config.settings")
-    registry = importlib.import_module("services.security.route_registry")
+    registry = importlib.import_module("governance.security.route_registry")
     registry.founding_excluded_domains.cache_clear()
     settings = settings_mod.settings
     original = settings.runtime

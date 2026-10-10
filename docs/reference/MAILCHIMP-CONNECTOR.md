@@ -10,9 +10,9 @@ flags: [AETHER_CONNECTORS_ENABLED, AETHER_COMMS_INGESTION_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
-  - services/backend/services/integrations/connectors/mailchimp.py
+  - services/api/connectors/integrations/connectors/mailchimp.py
 source_hashes:
-  "services/backend/services/integrations/connectors/mailchimp.py": "sha256:653baba81ebee7c37366f7fb7b4b672f7af228e913220d038bbb7488ff91a3a1"
+  "services/api/connectors/integrations/connectors/mailchimp.py": "sha256:3b9ae81791bf837b63e03775df0ddb72836c8b0f386bfce3ed11f501cd92223e"
 ---
 
 # Mailchimp Connector

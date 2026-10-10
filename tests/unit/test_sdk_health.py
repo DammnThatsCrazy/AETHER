@@ -37,7 +37,7 @@ def service_context(monkeypatch):
 def sdk_health_service(monkeypatch):
     with service_context(monkeypatch):
         import importlib
-        import services.sdk_health.service as svc_mod
+        import ingestion.sdk_health.service as svc_mod
         importlib.reload(svc_mod)
         svc_mod._sdk_health_service = None
         svc = svc_mod.get_sdk_health_service()

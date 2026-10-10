@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 for _mod in ("jwt", "cryptography", "cryptography.hazmat"):
     if _mod not in sys.modules:
@@ -25,8 +25,8 @@ import os  # noqa: E402
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from services.value import ownership_rules, price_sources  # noqa: E402
-from services.value.models import to_decimal  # noqa: E402
+from value.value import ownership_rules, price_sources  # noqa: E402
+from value.value.models import to_decimal  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

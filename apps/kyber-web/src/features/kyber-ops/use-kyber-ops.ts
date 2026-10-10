@@ -27,7 +27,7 @@
  * **A correlation basis is either deterministic or a guess.** The backend stores the
  * basis and its confidence but does NOT ship a deterministic/heuristic flag, so
  * `basisKind` classifies here against the backend's own `CORRELATION_BASES` table
- * (`services/kyber/ops/correlation.py`). Attributing a signal on time proximity is a
+ * (`services/api/governance/kyber/ops/correlation.py`). Attributing a signal on time proximity is a
  * guess and has to look like one.
  */
 
@@ -301,7 +301,7 @@ const incidentMutationSchema = z
 // ── Correlation basis: deterministic evidence vs. a guess ────────────────────
 
 /**
- * The backend's basis vocabulary (`services/kyber/ops/correlation.py`).
+ * The backend's basis vocabulary (`services/api/governance/kyber/ops/correlation.py`).
  *
  * `release_id` is the same deployment and `explicit` is a caller naming the incident
  * outright — neither infers anything. Everything else is a similarity or a coincidence.

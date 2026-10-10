@@ -1,0 +1,33 @@
+"""Service-level orchestration for the Computation Substrate.
+
+Where ``shared/computation`` is the pure contract layer, ``services/api/intelligence/computation``
+composes it with the rest of the platform (value/rollups, jobs/workers,
+repositories, routes) to actually run, persist, allocate, reconcile, restate, and
+explain canonical computations.
+
+This package is the authoritative home for domain computations migrated onto the
+substrate. ``campaign.py`` is the first migrated vertical (campaign / journey
+economics).
+"""
+
+from __future__ import annotations
+
+from intelligence.computation.campaign import (
+    CampaignAggregates,
+    canonical_campaign_metrics,
+    canonical_journey_allocated_cost,
+)
+from intelligence.computation.repositories import (
+    ComputationConflictError,
+    ComputedResultsRepository,
+    get_computation_repository,
+)
+
+__all__ = [
+    "CampaignAggregates",
+    "canonical_campaign_metrics",
+    "canonical_journey_allocated_cost",
+    "ComputationConflictError",
+    "ComputedResultsRepository",
+    "get_computation_repository",
+]

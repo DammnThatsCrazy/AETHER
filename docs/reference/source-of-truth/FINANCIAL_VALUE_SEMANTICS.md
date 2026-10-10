@@ -15,7 +15,7 @@ executes.
 
 - TypeScript contract: `packages/shared/value.ts` (`AetherValue`, `MetricKind`,
   `USDValuation`, `NativeValue`, `RollupResult`).
-- Backend mirror: `services/backend/services/value/`
+- Backend mirror: `services/api/value/value/`
   (`models.py`, `valuation.py`, `rollups.py`).
 - Gates: `scripts/validate_financial_value_semantics.py` (contract + no
   cross-currency sums), `scripts/validate_frontend_value_display.py`
@@ -37,7 +37,7 @@ executes.
    native currency and only sum USD across values that carry a trustworthy USD
    valuation.
 5. **Stablecoins are peg-aware.** A stablecoin is not assumed to be $1; valuation
-   is peg-aware and source-backed (see `services/backend/services/stablecoin/valuation.py`).
+   is peg-aware and source-backed (see `services/api/value/stablecoin/valuation.py`).
 6. **Metric kinds don't mix.** `balance`, `flow`, `kpi`, `forecast`,
    `valuation`, `liability`, `cost`, `fee`, `revenue`, `risk_exposure`, and
    `unknown` are distinct. Liabilities are never counted as assets.
@@ -46,14 +46,14 @@ executes.
    trusted production USD rollups by default.
 8. **One FX seam — no geography- or population-specific FX.** A cross-360
    monetary metric is computed through this canonical value contract and its FX
-   provenance (`services/backend/services/value` — the `packages/shared/value.ts` mirror) only.
+   provenance (`services/api/value/value` — the `packages/shared/value.ts` mirror) only.
    There is no per-slice FX beside it: no location-flavored or cohort-flavored
    rate table, no second `Money` class, no re-pricing inside the context-360
-   family (`temporal360`/`geographic360`/`population360`, their `services/backend/services/geo`
+   family (`temporal360`/`geographic360`/`population360`, their `services/api/graph/geo`
    plane, the exploration path, or the cross-360 composition seam in
    `shared/projection_engine/composition.py`). A composite that carries a
    monetary metric takes it **pre-priced** from economic360 /
-   `services.value`; the cross-360 composition union (`CompositionResult`)
+   `value.value`; the cross-360 composition union (`CompositionResult`)
    moves section content unchanged — it never re-prices by geography or
    population.
 
@@ -69,30 +69,30 @@ executes.
 | `manual` | Operator-provided |
 | `unavailable` | No trusted USD price within the freshness window (usd_value null) |
 
-The pluggable price-source layer (`services/backend/services/value/price_sources.py`) resolves
+The pluggable price-source layer (`services/api/value/value/price_sources.py`) resolves
 USD across fiat identity, FX, token market price, and **peg-aware stablecoin
-valuation** (reusing `services/backend/services/stablecoin/valuation.classify_peg` — a stablecoin
+valuation** (reusing `services/api/value/stablecoin/valuation.classify_peg` — a stablecoin
 is never assumed to be $1). Real adapters (FX API, market data, Chainlink peg
 feeds) are credential-gated and registered at deploy time; CI runs against
 deterministic fixtures and never requires live credentials. A source being
 unavailable yields **unpriced**, not zero.
 
-Rollup inclusion additionally honors `services/backend/services/value/ownership_rules.py`:
+Rollup inclusion additionally honors `services/api/value/value/ownership_rules.py`:
 liabilities are never counted as assets; testnet and spam/untrusted assets are
 excluded from trusted production rollups; counterparty/external/observed
 relationships are excluded from an owned portfolio. Cross-source agreement is
-classified by `reconcile` in `services/backend/shared/computation/reconciliation.py`.
+classified by `reconcile` in `services/api/shared/computation/reconciliation.py`.
 
 Higher-level rules libraries build on this: `tvl_rules` (gross/net TVL,
 wrapped/LP double-count prevention), `ltv_rules` (historical/predicted/net LTV),
 `portfolio_rules` (cash/stablecoin/volatile/liability buckets + net worth), and
 `account_rules` (Web2 asset vs liability classification). Durable snapshots
-persist via `services/backend/services/value/repositories.py` (tables added in migration
+persist via `services/api/value/value/repositories.py` (tables added in migration
 `20260721_value_semantics`).
 
 ## Safe rollups
 
-`services.value.safe_rollup(records)` returns a `RollupResult`:
+`value.value.safe_rollup(records)` returns a `RollupResult`:
 
 - `total_usd`: decimal string, or **null** when nothing can be priced (never
   `"0"` on absence).
@@ -122,15 +122,15 @@ They now use `safe_rollup`:
 
 Conversions from the SDK (`/v1/batch` → Bronze → Silver `ConversionProjector`),
 webhooks, and the conversions API all persist through
-`services/backend/services/measurement/repositories/conversion_repo.py`
+`services/api/journeys/measurement/repositories/conversion_repo.py`
 (`ConversionRepository.upsert`) — the Silver writer routes
 `canonical_conversions` there instead of its generic insert.
 
 - **Native preserved.** `gross_value` / `net_value` / … and `currency` are the
   native amount and currency as reported (currency upper-cased).
 - **Recorded rate, never parity.** For a foreign-currency row the repository
-  resolves a real rate through `services/backend/services/value/price_sources.py` (the
-  dated snapshot provider in `services/backend/services/value/fx_provider.py` today — an in-process
+  resolves a real rate through `services/api/value/value/price_sources.py` (the
+  dated snapshot provider in `services/api/value/value/fx_provider.py` today — an in-process
   table, no network call on the write path) and records it with
   `provenance.fx_conversion` (`conversion_source`, `method`, `as_of`,
   `priced: true`). Same-currency rows are exactly `1.0`. A caller-supplied

@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/traffic/classifier.py, services/backend/services/traffic/referral_links.py, services/backend/services/traffic/repair.py, services/backend/services/ingestion/acquisition_privacy.py, services/backend/services/silver/dispatcher.py, services/backend/services/silver/projectors/touchpoint_projector.py, services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/engine/attribution_engine.py, services/backend/services/measurement/engine/gold_materializer.py, services/backend/services/measurement/routes/kyber.py, services/backend/services/profile/aggregator.py]
+source_files: [services/api/journeys/traffic/classifier.py, services/api/journeys/traffic/referral_links.py, services/api/journeys/traffic/repair.py, services/api/ingestion/ingestion/acquisition_privacy.py, services/api/ingestion/silver/dispatcher.py, services/api/ingestion/silver/projectors/touchpoint_projector.py, services/api/journeys/measurement/engine/journey_compiler.py, services/api/journeys/measurement/engine/attribution_engine.py, services/api/journeys/measurement/engine/gold_materializer.py, services/api/journeys/measurement/routes/kyber.py, services/api/identity/profile/aggregator.py]
 last_synced_commit: pending
 ---
 

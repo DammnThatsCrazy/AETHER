@@ -286,7 +286,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/main.py"
+          "repository evidence: services/api/main.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -470,7 +470,7 @@
       "confidence": {
         "level": "HIGH",
         "reasons": [
-          "repository evidence: services/backend/services/campaign/registry.py"
+          "repository evidence: services/api/journeys/campaign/registry.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -657,7 +657,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: services/backend/services/card_linked_payments/"
+          "repository evidence: services/api/value/card_linked_payments/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -1032,7 +1032,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/services/integrations/connectors/"
+          "repository evidence: services/api/connectors/integrations/connectors/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -1383,7 +1383,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/services/dune_feeder/service.py"
+          "repository evidence: services/api/connectors/dune_feeder/service.py"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -1786,7 +1786,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: services/backend/services/derivatives/"
+          "repository evidence: services/api/value/derivatives/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -2569,7 +2569,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/services/sdk_drift/routes.py"
+          "repository evidence: services/api/ingestion/sdk_drift/routes.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -2930,7 +2930,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/shared/graph/graph.py"
+          "repository evidence: services/api/shared/graph/graph.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -3282,7 +3282,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: services/backend/services/interop/"
+          "repository evidence: services/api/graph/interop/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -3653,7 +3653,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/services/measurement/"
+          "repository evidence: services/api/journeys/measurement/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -3830,7 +3830,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/shared/measurement/"
+          "repository evidence: services/api/shared/measurement/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -4026,7 +4026,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/services/integrations/connectors/adapters.py"
+          "repository evidence: services/api/connectors/integrations/connectors/adapters.py"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -4219,7 +4219,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: services/backend/services/integrations/providers/payment_rails/"
+          "repository evidence: services/api/connectors/integrations/providers/payment_rails/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -4413,7 +4413,7 @@
       "confidence": {
         "level": "HIGH",
         "reasons": [
-          "repository evidence: services/backend/services/profile/"
+          "repository evidence: services/api/identity/profile/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -4595,7 +4595,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/shared/certification/registry.py"
+          "repository evidence: services/api/shared/certification/registry.py"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -5377,7 +5377,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/shared/auth/auth.py"
+          "repository evidence: services/api/shared/auth/auth.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -5580,7 +5580,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: services/backend/services/semantic_intelligence/"
+          "repository evidence: services/api/intelligence/semantic_intelligence/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -5977,7 +5977,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: services/backend/services/stablecoin/"
+          "repository evidence: services/api/value/stablecoin/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -6164,7 +6164,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/backend/services/imports/"
+          "repository evidence: services/api/ingestion/imports/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"

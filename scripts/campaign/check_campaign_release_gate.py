@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 
 
 @dataclass
@@ -65,13 +65,13 @@ def run_cmd(cmd: list[str], cwd: Path | None = None, timeout: int = 120) -> tupl
 
 def check_required_files() -> list[CheckResult]:
     required = [
-        BACKEND / "services/campaign/registry.py",
-        BACKEND / "services/campaign/resolver.py",
-        BACKEND / "services/campaign/normalization.py",
-        BACKEND / "services/campaign/repository.py",
-        BACKEND / "services/campaign/routes.py",
-        BACKEND / "services/campaign/metrics.py",
-        BACKEND / "services/measurement/connectors/writer.py",
+        BACKEND / "journeys/campaign/registry.py",
+        BACKEND / "journeys/campaign/resolver.py",
+        BACKEND / "journeys/campaign/normalization.py",
+        BACKEND / "journeys/campaign/repository.py",
+        BACKEND / "journeys/campaign/routes.py",
+        BACKEND / "journeys/campaign/metrics.py",
+        BACKEND / "journeys/measurement/connectors/writer.py",
         BACKEND / "alembic/versions/20260627_campaign_registry.py",
         BACKEND / "tests/unit/test_campaign_registry.py",
         BACKEND / "tests/integration/test_campaign_registry_api.py",
@@ -151,7 +151,7 @@ def check_security_tests(strict: bool) -> CheckResult:
 
 
 def check_invariant_docstring_present() -> CheckResult:
-    resolver_file = BACKEND / "services/campaign/resolver.py"
+    resolver_file = BACKEND / "journeys/campaign/resolver.py"
     if not resolver_file.exists():
         return CheckResult("resolver invariants documented", False, "resolver.py missing")
     content = resolver_file.read_text()
@@ -164,7 +164,7 @@ def check_invariant_docstring_present() -> CheckResult:
 
 
 def check_kyber_routes_present() -> CheckResult:
-    kyber_file = BACKEND / "services/measurement/routes/kyber.py"
+    kyber_file = BACKEND / "journeys/measurement/routes/kyber.py"
     if not kyber_file.exists():
         return CheckResult("kyber campaign routes", False, "kyber.py missing")
     content = kyber_file.read_text()

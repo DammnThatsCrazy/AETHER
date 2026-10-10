@@ -53,7 +53,7 @@ architecture:
   connection_lifecycle: complete       # lifecycle.py ConnectionState machine + transitions
   adapter_result_contract: complete    # results.py AdapterResult + bridge mappers
   credential_backend: complete         # shared/credentials CredentialBackend + tenant_credentials
-  credential_authority: complete       # services/providers/credentials (multi-slot)
+  credential_authority: complete       # services/api/connectors/providers/credentials (multi-slot)
   readiness_core: reuse                # shared/certification/* — extend, do not duplicate
   # End-user lifecycle program deliverables (R1+):
   experience_category: completed       # additive customer-facing projection enum (R1-s1)

@@ -10,9 +10,9 @@ flags: [AETHER_CONNECTORS_ENABLED, AETHER_COMMS_INGESTION_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
-  - services/backend/services/integrations/connectors/klaviyo.py
+  - services/api/connectors/integrations/connectors/klaviyo.py
 source_hashes:
-  "services/backend/services/integrations/connectors/klaviyo.py": "sha256:8190d0ab1245843403c890363afba3ad96b6959e244d037044c6df55582c1feb"
+  "services/api/connectors/integrations/connectors/klaviyo.py": "sha256:4255adaf7e0669b8e7d75a632a331fd85ce16696ccfbc8511dba1c37d8539aea"
 ---
 
 # Klaviyo Connector

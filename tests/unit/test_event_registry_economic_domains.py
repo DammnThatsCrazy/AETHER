@@ -13,7 +13,7 @@ import pathlib
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -84,7 +84,7 @@ def test_family_purposes_match_domain_contracts():
 
 
 def test_silver_projection_tokens_map_to_registered_projectors():
-    from services.silver.dispatcher import _ALL_PROJECTORS
+    from ingestion.silver.dispatcher import _ALL_PROJECTORS
 
     handled: set[str] = set()
     for projector in _ALL_PROJECTORS:
