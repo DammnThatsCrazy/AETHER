@@ -98,6 +98,8 @@ CONNECTOR_RECORDS_COMPONENT = "connector_derived_records"
 FINANCIAL_SNAPSHOTS_COMPONENT = "financial_value_snapshots"
 SILVER_FACTS_COMPONENT = "silver_facts"
 BRONZE_EVENTS_COMPONENT = "bronze_events"
+WEB3_OBSERVATIONS_COMPONENT = "web3_observations"
+X402_COMMERCE_COMPONENT = "x402_commerce"
 
 ERASURE_ACTOR = "dsr_erasure_job"
 ERASURE_REASON = "dsr_erasure"
@@ -1252,6 +1254,86 @@ async def _redact_outbox(tenant_id: str, refs: list[str]) -> int:
         return 0
 
 
+async def erase_web3_observations_plane(subject: ErasureSubject) -> dict[str, Receipt]:
+    """Erase tenant-owned raw Web3 observations containing exact subject refs."""
+    from services.web3.registries import Web3ObservationRepository
+
+    repo = Web3ObservationRepository()
+    scoped = repo.for_tenant(subject.tenant_id)
+    refs = set(subject.refs)
+    from shared.storage.lifecycle import StorageLifecycle
+    lifecycle = StorageLifecycle()
+    for ref in sorted(refs):
+        hold = await lifecycle.active_hold(subject.tenant_id, "web3_observations", ref)
+        if hold is not None:
+            return {WEB3_OBSERVATIONS_COMPONENT: Receipt(
+                status="skipped_legal_hold",
+                policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                blocked_reason=str(hold.get("reason") or "legal hold"),
+            )}
+
+    def contains_ref(value: Any) -> bool:
+        if isinstance(value, dict):
+            return any(contains_ref(v) for v in value.values())
+        if isinstance(value, (list, tuple, set)):
+            return any(contains_ref(v) for v in value)
+        return value is not None and str(value) in refs
+
+    def row_is_subject(row: dict[str, Any]) -> bool:
+        fields = (
+            "user_id", "anonymous_id", "entity_id", "canonical_entity_id",
+            "canonical_entity_ref", "owner_entity_id", "actor_id", "subject_id",
+            "wallet_owner", "payload", "observation", "data",
+        )
+        return any(contains_ref(row.get(field)) for field in fields)
+
+    deleted = offset = 0
+    while True:
+        rows = await scoped.find_many(limit=_PAGE, offset=offset, sort_by="observed_at")
+        if not rows:
+            break
+        removed_page = 0
+        for row in rows:
+            if row_is_subject(row):
+                count = await repo.delete_for_tenant_where(
+                    subject.tenant_id, "observation_id", [row.get("observation_id")]
+                )
+                deleted += count
+                removed_page += count
+        if len(rows) < _PAGE:
+            break
+        if not removed_page:
+            offset += _PAGE
+    return {WEB3_OBSERVATIONS_COMPONENT: Receipt(records_impacted=deleted)}
+
+
+async def erase_x402_commerce_plane(subject: ErasureSubject) -> dict[str, Receipt]:
+    """Erase x402 lifecycle rows directly identifying a subject in this tenant."""
+    from services.x402.commerce_store import get_commerce_store
+
+    from shared.storage.lifecycle import StorageLifecycle
+    lifecycle = StorageLifecycle()
+    for resource_type in (
+        "commerce_challenges", "commerce_approvals", "commerce_entitlements",
+        "commerce_authorizations", "commerce_receipts", "commerce_settlements",
+        "commerce_grants", "commerce_fulfillments", "commerce_budget_policies",
+    ):
+        for ref in sorted(subject.refs):
+            hold = await lifecycle.active_hold(subject.tenant_id, resource_type, ref)
+            if hold is not None:
+                return {X402_COMMERCE_COMPONENT: Receipt(
+                    status="skipped_legal_hold",
+                    policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                    blocked_reason=str(hold.get("reason") or "legal hold"),
+                )}
+
+    counts = await get_commerce_store().erase_subject_refs(subject.tenant_id, set(subject.refs))
+    return {X402_COMMERCE_COMPONENT: Receipt(
+        records_impacted=sum(counts.values()),
+        detail={f"x402_{name}": count for name, count in counts.items()},
+    )}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Plane registry (execution order)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1272,6 +1354,8 @@ ENTITY_PLANES: tuple[tuple[str, tuple[str, ...], PlaneFn], ...] = (
     ("financial", (FINANCIAL_SNAPSHOTS_COMPONENT,), erase_financial_plane),
     ("silver", (SILVER_FACTS_COMPONENT,), erase_silver_plane),
     ("bronze", (BRONZE_EVENTS_COMPONENT,), erase_bronze_plane),
+    ("web3_observations", (WEB3_OBSERVATIONS_COMPONENT,), erase_web3_observations_plane),
+    ("x402_commerce", (X402_COMMERCE_COMPONENT,), erase_x402_commerce_plane),
     ("cached_views", (CACHED_VIEWS_COMPONENT,), erase_cached_views_plane),
 )
 ML_ARTIFACT_COMPONENTS = (TRAINING_DATASETS_COMPONENT, MODEL_ARTIFACTS_COMPONENT)

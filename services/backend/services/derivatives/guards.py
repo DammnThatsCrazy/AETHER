@@ -164,6 +164,18 @@ def is_tenant_entitled(
 EntitlementCheck = Callable[..., bool]
 
 
+async def _billing_entitlement_check(tenant_id: str) -> bool:
+    """Use the billing entitlement ledger for venue credential resolution."""
+    from services.billing.revops import TenantEntitlementRepository
+
+    rows = await TenantEntitlementRepository().list_for_tenant(tenant_id)
+    return any(
+        row.get("feature_key") == DERIVATIVES_REQUIRED_ENTITLEMENT
+        and row.get("enabled") is True
+        for row in rows
+    )
+
+
 class CredentialResolutionError(Exception):
     """Base error for resolving a stored credential reference."""
 
@@ -334,11 +346,14 @@ async def build_read_only_adapter(
         raise CredentialResolutionError(
             f"no read-only derivatives adapter registered for venue {venue_id!r}"
         )
+    # Never create a venue client without consulting the durable tenant
+    # entitlement authority. An injected check remains available for isolated
+    # deployments, but omission now uses billing and fails closed.
     resolved = await resolve_read_only_credential(
         credential_reference_id,
         tenant_id=tenant_id,
         service=service,
-        entitlement_check=entitlement_check,
+        entitlement_check=entitlement_check or _billing_entitlement_check,
     )
     adapter_cls = type(adapter_proto)
     rest = RestBackfillClient(

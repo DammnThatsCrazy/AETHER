@@ -826,6 +826,9 @@ public final class Aether: NSObject {
     /// native events carry the correlation context end-to-end.
     private var sourceCorrelation: EventContext.CorrelationContext?
     private var walletAddress: String?
+    private var walletVm: String = "evm"
+    private var walletChainId: String = "unknown"
+    private var walletType: String = "unknown"
     private var email: String?
     private var traits: [String: AnyCodable] = [:]
     private var flushTimer: Timer?
@@ -1363,6 +1366,9 @@ public final class Aether: NSObject {
         self.config = config
         self.anonymousId = loadOrCreateAnonymousId()
         self.walletAddress = defaults.string(forKey: "walletAddress")
+        self.walletVm = defaults.string(forKey: "walletVm") ?? "evm"
+        self.walletChainId = defaults.string(forKey: "walletChainId") ?? "unknown"
+        self.walletType = defaults.string(forKey: "walletType") ?? "unknown"
         self.consentState = defaults.stringArray(forKey: "consentState") ?? []
         self.userId = defaults.string(forKey: "userId")
         self.firstTouchEvidence = loadPersistedEvidence(forKey: Aether.firstTouchDefaultsKey)
@@ -1575,7 +1581,7 @@ public final class Aether: NSObject {
         }
         // Multi-wallet: connect each as a proper wallet event
         for w in data.wallets {
-            walletConnected(address: w.address, walletType: w.walletType, chainId: w.chainId)
+            walletConnected(address: w.address, walletType: w.walletType, chainId: w.chainId, vm: w.vm)
         }
 
         enqueueEvent(type: .identify, properties: [
@@ -1635,6 +1641,9 @@ public final class Aether: NSObject {
         flush()
         userId = nil
         walletAddress = nil
+        walletVm = "evm"
+        walletChainId = "unknown"
+        walletType = "unknown"
         email = nil
         traits = [:]
         consentState = []
@@ -1648,6 +1657,9 @@ public final class Aether: NSObject {
         latestTouchEvidence = nil
         defaults.removeObject(forKey: "userId")
         defaults.removeObject(forKey: "walletAddress")
+        defaults.removeObject(forKey: "walletVm")
+        defaults.removeObject(forKey: "walletChainId")
+        defaults.removeObject(forKey: "walletType")
         defaults.removeObject(forKey: "consentState")
         defaults.removeObject(forKey: Aether.firstTouchDefaultsKey)
         defaults.removeObject(forKey: Aether.latestTouchDefaultsKey)
@@ -2279,33 +2291,57 @@ public final class Aether: NSObject {
 
     // MARK: - Wallet Tracking
 
-    public func walletConnected(address: String, walletType: String? = nil, chainId: String? = nil) {
-        let normalized = normalizeWalletAddress(address)
+    public func walletConnected(address: String, walletType: String? = nil, chainId: String? = nil, vm: String = "evm", provider: String? = nil) {
+        let normalized = normalizeWalletAddress(address, vm: vm)
         walletAddress = normalized
+        walletVm = vm
+        walletChainId = chainId ?? "unknown"
+        self.walletType = walletType ?? "unknown"
         defaults.set(normalized, forKey: "walletAddress")
-        enqueueEvent(type: .wallet, properties: [
+        defaults.set(walletVm, forKey: "walletVm")
+        defaults.set(walletChainId, forKey: "walletChainId")
+        defaults.set(self.walletType, forKey: "walletType")
+        var walletProperties: [String: AnyCodable] = [
             "action": AnyCodable("connect"),
             "address": AnyCodable(normalized),
-            "walletType": AnyCodable(walletType ?? "unknown"),
-            "chainId": AnyCodable(chainId ?? "unknown")
-        ])
+            "walletType": AnyCodable(self.walletType),
+            "chainId": AnyCodable(walletChainId),
+            "vm": AnyCodable(vm)
+        ]
+        if let provider = provider { walletProperties["provider"] = AnyCodable(provider) }
+        enqueueEvent(type: .wallet, properties: walletProperties)
         if config?.autoResumeJourney == true {
-            resolveIdentity(walletAddress: normalized, userId: userId, email: email)
+            resolveIdentity(walletAddress: normalized, userId: userId, email: email, vm: vm)
         }
     }
 
     public func walletDisconnected(address: String) {
+        let normalized = normalizeWalletAddress(address, vm: walletVm)
         enqueueEvent(type: .wallet, properties: [
             "action": AnyCodable("disconnect"),
-            "address": AnyCodable(address)
+            "address": AnyCodable(normalized),
+            "chainId": AnyCodable(walletChainId),
+            "vm": AnyCodable(walletVm),
+            "walletType": AnyCodable(walletType)
         ])
+        if walletAddress == normalized {
+            walletAddress = nil
+            walletVm = "evm"
+            walletChainId = "unknown"
+            walletType = "unknown"
+            defaults.removeObject(forKey: "walletAddress")
+            defaults.removeObject(forKey: "walletVm")
+            defaults.removeObject(forKey: "walletChainId")
+            defaults.removeObject(forKey: "walletType")
+        }
     }
 
-    public func walletTransaction(txHash: String, chainId: String, value: String? = nil, properties: [String: AnyCodable]? = nil) {
+    public func walletTransaction(txHash: String, chainId: String, value: String? = nil, properties: [String: AnyCodable]? = nil, vm: String? = nil) {
         var props: [String: AnyCodable] = [
             "action": AnyCodable("transaction"),
             "txHash": AnyCodable(txHash),
-            "chainId": AnyCodable(chainId)
+            "chainId": AnyCodable(chainId),
+            "vm": AnyCodable(vm ?? walletVm)
         ]
         if let value = value { props["value"] = AnyCodable(value) }
         if let extra = properties { props.merge(extra) { _, new in new } }
@@ -2350,18 +2386,20 @@ public final class Aether: NSObject {
         topic: String,
         address: String? = nil,
         chainId: String? = nil,
-        properties: [String: AnyCodable]? = nil
+        properties: [String: AnyCodable]? = nil,
+        vm: String = "evm"
     ) {
         var props: [String: AnyCodable] = [
             "action":   AnyCodable("walletconnect_session"),
             "topic":    AnyCodable(topic),
             "provider": AnyCodable("walletconnect")
         ]
-        if let address = address   { props["address"]  = AnyCodable(normalizeWalletAddress(address)) }
+        if let address = address   { props["address"]  = AnyCodable(normalizeWalletAddress(address, vm: vm)) }
         if let chainId = chainId   { props["chainId"]  = AnyCodable(chainId) }
+        props["vm"] = AnyCodable(vm)
         if let extra = properties  { props.merge(extra) { _, new in new } }
         if let address = address {
-            walletConnected(address: address, walletType: "walletconnect", chainId: chainId)
+            walletConnected(address: address, walletType: "walletconnect", chainId: chainId, vm: vm)
         } else {
             enqueueEvent(type: .wallet, properties: props)
         }
@@ -2372,7 +2410,7 @@ public final class Aether: NSObject {
     public func getWalletCapabilities() -> [String: Any] {
         return [
             "connected":    walletAddress != nil,
-            "addresses":    walletAddress.map { [["address": $0, "vm": "evm", "walletType": "unknown"]] } ?? [],
+            "addresses":    walletAddress.map { [["address": $0, "vm": walletVm, "walletType": walletType, "chainId": walletChainId]] } ?? [],
             "supportedVMs": ["evm", "svm", "bitcoin", "movevm", "near", "tvm", "cosmos"],
             "applePay":     isApplePayAvailable(),
             "googlePay":    false
@@ -3111,7 +3149,7 @@ public final class Aether: NSObject {
         return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 
-    private func resolveIdentity(walletAddress addr: String?, userId uid: String?, email: String?) {
+    private func resolveIdentity(walletAddress addr: String?, userId uid: String?, email: String?, vm: String? = nil) {
         guard let cfg = config,
               let url = URL(string: "\(cfg.endpoint)/sdk/identity/resolve") else { return }
 
@@ -3123,7 +3161,7 @@ public final class Aether: NSObject {
 
         var wallets: [[String: String]] = []
         if let address = addr, !address.isEmpty {
-            wallets = [["address": address, "vm": "evm"]]
+            wallets = [["address": address, "vm": vm ?? walletVm]]
         }
         var body: [String: Any] = [
             "wallets": wallets,
@@ -3227,7 +3265,7 @@ public final class Aether: NSObject {
 
     func normalizeWalletAddress(_ address: String, vm: String = "evm") -> String {
         switch vm.lowercased() {
-        case "evm": return address.lowercased()
+        case "evm", "eip155": return address.trimmingCharacters(in: .whitespaces).lowercased()
         default:    return address.trimmingCharacters(in: .whitespaces)
         }
     }

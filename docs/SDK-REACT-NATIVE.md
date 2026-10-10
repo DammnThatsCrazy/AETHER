@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/react-native/src/bridge.ts": "sha256:ad3e3d5e9bba01a0bcd1ff8cccd48b7d55a5b97e71f7579c50a741f10c9b6593"
+  "packages/react-native/src/bridge.ts": "sha256:790445142865418604fbda5b12d7524c3a6df40c8be9065ad3b308b811b1efc9"
   "packages/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
@@ -203,21 +203,32 @@ the same shape the backend returns from `POST /sdk/identity/resolve`.
 
 ```typescript
 // Wallet connected
-Aether.wallet.connect('0x1234...abcd', {
-  type: 'metamask',
-  chainId: 1,
+Aether.wallet.connect('7xKXtg2CW87d97TXJSDpbD5jBkheT3hZ4GZ6gYgk6P3', {
+  type: 'samsung_wallet',
+  chainId: 'solana:mainnet',
+  vm: 'svm',
+  provider: 'samsung_wallet',
 });
 
 // Wallet disconnected
-Aether.wallet.disconnect();
+Aether.wallet.disconnect('7xKXtg2CW87d97TXJSDpbD5jBkheT3hZ4GZ6gYgk6P3');
 
 // Transaction
-Aether.wallet.transaction('0xabc123...', {
-  chainId: 1,
+Aether.wallet.transaction('5JdWJ6S4fYEKpo4SxJHpyTmZpHQhHw4DrmSwQxU7F6Kv', {
+  chainId: 'solana:mainnet',
+  vm: 'svm',
   value: '1.5',
-  token: 'ETH',
+  token: 'USDC',
 });
 ```
+
+Call `wallet.connect` from a host-app callback or another authorized source.
+The SDK does not inspect Samsung Wallet or other apps. `vm` controls
+chain-specific address normalization and is included with the wallet
+observation. The backend uses wallet metadata when processing accepted
+source-authorized events; its legacy `/sdk/identity/resolve` endpoint ignores
+unverified wallet claims. A wallet connection does not prove custody,
+ownership, or transaction settlement.
 
 ## Consent Management
 

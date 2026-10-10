@@ -22,11 +22,11 @@ source_hashes:
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
   "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
   "services/backend/services/analytics/routes.py": "sha256:58d556a9dcc74c50a5dd2bec6c779b61c87a01dda11c57471f9ca45539accb2d"
-  "services/backend/services/identity/": "sha256:01503b76be64eda0a099615b9e1434a8a1252b72df48ef0bbf827a80e3396a03"
+  "services/backend/services/identity/": "sha256:7fea0a89321241273e6ba801e0b6b9b9cf1f44fe29fb8b4e4f6d04c91aec7853"
   "services/backend/services/ingestion/batch.py": "sha256:5aa58d2e5bfb018adb76ab74bb49b971bf6f21cbec58b604018da13d44e26ba2"
   "services/backend/services/profile/aggregator.py": "sha256:1a8495842ba83117735baddfbe24ec265dd93a0baec1d91307fb62f210a2ea0c"
   "services/backend/services/profile/composer.py": "sha256:672ed8a1653a7ebe76e4ee38742c7079b36f0ed7c9a291509b62a9cee8083220"
-  "services/backend/services/runtime/consumer_specs.py": "sha256:0bd54fe2c7dd031759f31f312b068428e11958169066764b3bb00792f4e82dac"
+  "services/backend/services/runtime/consumer_specs.py": "sha256:a04703bd1037d8de50c460f0447aed1c5fdde64d29890f765782a8adf053059a"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
 
@@ -161,6 +161,19 @@ identity by default.
 | `Phone` | Phone number (hashed) | `phone_hash` (SHA-256 of E.164), `country_code` |
 | `Wallet` | Blockchain wallet | `address`, `vm`, `chain_ids[]`, `ens`, `classification` |
 | `IdentityCluster` | Merged identity group | `cluster_id`, `canonical_user_id`, `confidence`, `member_count`, `resolution_status` |
+
+Wallet identity signals retain their VM family and, when supplied, concrete
+chain reference from `vm` and `chainId` (for example, `eip155:1` or
+`solana:mainnet`). The resolver includes both in the hash scope, normalizes
+known address formats, and preserves case-sensitive encodings such as Solana,
+Bitcoin Base58, and Substrate SS58. When only the VM is known, hashes are scoped
+to that family; when neither field is present, the legacy EVM namespace is
+used. The `/sdk/identity/resolve` compatibility endpoint ignores unverified
+wallet claims, so these fields affect identity matching only when processed
+from accepted source-authorized events. A wallet connection is an observation
+and does not prove ownership, custody, or key control. Historical wallet hashes
+are not rewritten by this change; reconcile retained source events before
+linking legacy non-EVM aliases.
 
 ### Edge Types
 

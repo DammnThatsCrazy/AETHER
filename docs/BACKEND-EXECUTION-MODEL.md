@@ -19,7 +19,7 @@ toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:f0b62e61d60a115bf5794b2d91fdb6115e3500d41f4f99eeccd726a34b28944c"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
-  "services/backend/services/runtime/consumer_specs.py": "sha256:0bd54fe2c7dd031759f31f312b068428e11958169066764b3bb00792f4e82dac"
+  "services/backend/services/runtime/consumer_specs.py": "sha256:a04703bd1037d8de50c460f0447aed1c5fdde64d29890f765782a8adf053059a"
   "services/backend/services/runtime/roles.py": "sha256:2c63231ee21e24da7724f3ca400d6b5cdee45ce5c6890742f5a0b62c30b51cc8"
   "services/backend/services/runtime/run_role.py": "sha256:4b78f8c38ffa1e805ba8e910d2c960e5f37262e7d4b24a5fa6e5a2d1a2b06d9e"
   "services/backend/services/runtime/specs.py": "sha256:41f38e1d4255446c402a6f13d33cac5e5923343d6f5b030e1c7d07dd47167da7"
@@ -39,7 +39,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `all` | Everything in one process (local/dev default). Rejected in staging/production. |
 | `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
 | `outbox-relay` | Outbox relay workers: the notification outbox, the ingestion `event_outbox` relay (FT-6), and the reward delivery outbox (drains `reward_delivery_jobs` through the rail-sender registry — the at-least-once delivery path for the reward plane). |
-| `stream-worker` | Stream loops plus Bronze/Silver projection, the analytics event-store projection (`analytics_event_recorder` → the `events`/`sessions` tables the analytics API reads), and notification consumers. |
+| `stream-worker` | Stream loops plus Bronze/Silver projection, the analytics event-store projection (`analytics_event_recorder` → the `events`/`sessions` tables the analytics API reads), notification consumers, and safe SDK x402 request/intent observations. |
 | `identity-worker` | Source-identity registration and canonical resolution for validated SDK observations; emits `IDENTITY_RESOLVED` only after a real decision. |
 | `graph-writer` | Profile/graph projection and delegation mutation consumers. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
@@ -50,6 +50,13 @@ API process no longer starts every worker, consumer, and cron in-request.
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
 role → loop-worker mapping lives in `services/backend/services/runtime/roles.py`; canonical
 stream ownership lives in `services/backend/services/runtime/consumer_specs.py::CONSUMER_SPECS`.
+
+The stream worker also projects public SDK x402 request and intent stages through
+`services/ingestion/lifecycle_worker.py` into the canonical durable lifecycle
+mapper. This path records client-originated evidence as observed. It does not
+accept SDK assertions of authorization resolution, settlement, receipt
+verification, or resource delivery as authoritative outcomes; those require a
+source-authoritative verification path.
 
 ## Entry point
 

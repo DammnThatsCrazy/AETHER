@@ -38,6 +38,77 @@ from services.derivatives.foundation import (
 from services.derivatives.runtime_models import AccountLinkRequest, DerivativesObservationIn
 from services.derivatives.state_machines import OrderStateMachine, PositionStateMachine
 
+
+async def _require_entitlement(tenant_id: str) -> None:
+    """Resolve derivatives access from the billing authority; missing means deny."""
+    from services.billing.revops import TenantEntitlementRepository
+
+    rows = await TenantEntitlementRepository().list_for_tenant(tenant_id)
+    if not any(
+        row.get("feature_key") == "derivatives.enabled" and row.get("enabled") is True
+        for row in rows
+    ):
+        raise HTTPException(status_code=403, detail={"code": "derivatives_not_entitled"})
+
+
+async def _record_usage(tenant_id: str, source_id: str, event_name: str) -> None:
+    """Durable, idempotent usage record through the canonical billing service."""
+    from services.billing.revops import MeteringService, UsageMeteringEvent
+
+    await MeteringService().record_event(UsageMeteringEvent(
+        tenant_id=tenant_id,
+        event_type="derivatives_event_ingested",
+        source_type="derivatives_runtime",
+        source_id=source_id,
+        metadata={"event_name": event_name},
+    ))
+
+
+async def _project_graph_account(account: dict) -> None:
+    from shared.graph.graph import get_graph_client
+    from shared.graph.mutation_gateway import GraphMutationGateway
+    from shared.graph.mutation_intents import edge_intent, vertex_intent
+    from services.derivatives.graph_mutations import build_account_mutations
+
+    vertices, edges = build_account_mutations(account)
+    gateway = GraphMutationGateway(graph_client=get_graph_client())
+    for vertex in vertices:
+        await gateway.apply(vertex_intent(
+            vertex, operation="node_versioned", tenant_id=account["tenant_id"],
+            actor_kind="service", actor_id="derivatives_runtime",
+            source_event_id=account["idempotency_key"],
+        ))
+    for edge in edges:
+        await gateway.apply(edge_intent(
+            edge, operation="edge_created", tenant_id=account["tenant_id"],
+            actor_kind="service", actor_id="derivatives_runtime",
+            source_event_id=account["idempotency_key"],
+        ))
+
+
+async def _project_graph_position(position: dict) -> None:
+    if not position.get("trading_account_id") or not position.get("canonical_market_id"):
+        return
+    from shared.graph.graph import get_graph_client
+    from shared.graph.mutation_gateway import GraphMutationGateway
+    from shared.graph.mutation_intents import edge_intent, vertex_intent
+    from services.derivatives.graph_mutations import build_position_mutations
+
+    vertices, edges = build_position_mutations(position)
+    gateway = GraphMutationGateway(graph_client=get_graph_client())
+    for vertex in vertices:
+        await gateway.apply(vertex_intent(
+            vertex, operation="node_versioned", tenant_id=position["tenant_id"],
+            actor_kind="service", actor_id="derivatives_runtime",
+            source_event_id=position.get("idempotency_key") or position["position_id"],
+        ))
+    for edge in edges:
+        await gateway.apply(edge_intent(
+            edge, operation="edge_created", tenant_id=position["tenant_id"],
+            actor_kind="service", actor_id="derivatives_runtime",
+            source_event_id=position.get("idempotency_key") or position["position_id"],
+        ))
+
 router = APIRouter(prefix="/v1/derivatives/runtime", tags=["derivatives"])
 
 # Event intake routing: canonical event name -> (repo factory, id field)
@@ -186,6 +257,7 @@ async def link_account(payload: AccountLinkRequest, request: Request):
     """Observe a read-only account link. Aether stores a credential
     REFERENCE at most — never a secret, never trade/withdraw authority."""
     tenant_id = _gate(request, Permissions.DERIVATIVES_CONNECT)
+    await _require_entitlement(tenant_id)
     validate_payload_tenant(payload, tenant_id)
     _check_no_execution(payload)
     require_read_only_authority(payload.authority_type)
@@ -207,7 +279,10 @@ async def link_account(payload: AccountLinkRequest, request: Request):
         "created_at": utc_now_iso(),
     }
     inserted = await TradingAccountRepo().insert(record)
-    _meter("derivatives_event_ingested")
+    # Re-run projections on duplicate intake too: a previous request may have
+    # persisted the source fact and failed before the graph/meter side effects.
+    await _project_graph_account(record)
+    await _record_usage(tenant_id, record["idempotency_key"], "account_linked")
     return {
         "inserted": inserted,
         "trading_account_id": record["trading_account_id"],
@@ -262,6 +337,7 @@ async def _classify_transition(
 async def ingest_observation(payload: DerivativesObservationIn, request: Request):
     """Canonical derivatives event intake (order/fill/position facts)."""
     tenant_id = _gate(request)
+    await _require_entitlement(tenant_id)
     require_flag(settings.derivatives.runtime_enabled, "Derivatives runtime")
     validate_payload_tenant(payload, tenant_id)
     _check_no_execution(payload)
@@ -294,7 +370,10 @@ async def ingest_observation(payload: DerivativesObservationIn, request: Request
     record.setdefault(id_field, entity_id)
     transition = await _classify_transition(repo, tenant_id, id_field, entity_id, record)
     inserted = await repo.insert(record)
-    _meter("derivatives_event_ingested")
+    # Idempotent projections and metering make retries repair partial fan-out.
+    if id_field == "position_id":
+        await _project_graph_position(record)
+    await _record_usage(tenant_id, record["idempotency_key"], payload.event_name)
     body: dict[str, Any] = {"inserted": inserted, id_field: entity_id, "event_name": payload.event_name}
     if transition is not None:
         body["transition"] = transition

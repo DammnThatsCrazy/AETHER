@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:06f27d5201fde11faf35e157e9b1f47302cd82afdd34d22cccbee606a36ce6be"
+  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:e8c3a09a2c20565009afcfc59134de9125cbf2373919157ce9e915b85d4653ec"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
 ---
@@ -129,22 +129,31 @@ raw device signals are never transmitted.
 ```swift
 // Wallet connected
 Aether.shared.walletConnected(
-    address: "0x1234...abcd",
-    walletType: "metamask",
-    chainId: "eip155:1"
+    address: "7xKXtg2CW87d97TXJSDpbD5jBkheT3hZ4GZ6gYgk6P3",
+    walletType: "samsung_wallet",
+    chainId: "solana:mainnet",
+    vm: "svm",
+    provider: "samsung_wallet"
 )
 
 // Wallet disconnected
-Aether.shared.walletDisconnected(address: "0x1234...abcd")
+Aether.shared.walletDisconnected(address: "7xKXtg2CW87d97TXJSDpbD5jBkheT3hZ4GZ6gYgk6P3")
 
 // Transaction sent
 Aether.shared.walletTransaction(
     txHash: "0xabc123...",
     chainId: "eip155:1",
+    vm: "evm",
     value: "1.5",
     properties: ["token": AnyCodable("ETH")]
 )
 ```
+
+Call this only from a host-app callback or another authorized source. The SDK
+does not inspect Samsung Wallet or other apps. `vm` preserves chain-specific
+address normalization and is recorded with the wallet observation. The backend
+uses wallet metadata when processing accepted source-authorized events; its
+legacy `/sdk/identity/resolve` endpoint ignores unverified wallet claims.
 
 ## Consent Management
 
