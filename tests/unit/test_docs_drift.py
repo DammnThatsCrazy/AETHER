@@ -105,7 +105,7 @@ def test_check_doc_rejects_source_path_outside_repo(dd, tmp_path, monkeypatch):
 
 def test_check_doc_real_doc_with_real_sources(dd):
     """Smoke test: a real authored doc with valid source_files reports clean."""
-    p = ROOT / "docs" / "SDK-WEB.md"
+    p = ROOT / "docs" / "reference" / "SDK-WEB.md"
     if not p.exists():
         pytest.skip("SDK-WEB.md not present")
     r = dd.check_doc(p)

@@ -146,5 +146,5 @@ def test_docs_count_matches_canonical_config():
     data = yaml.safe_load((ROOT / "config" / "deployment_profiles.yaml").read_text())
     n = len((data.get("profiles") or {}).keys())
     assert n == 8, f"canonical profile count changed to {n}; update parity phrases/docs"
-    text = (ROOT / "docs" / "DEPLOYMENT-PROFILES.md").read_text()
+    text = (ROOT / "docs" / "architecture" / "DEPLOYMENT-PROFILES.md").read_text()
     assert f"{n} deployment profiles" in text or "eight deployment profiles" in text

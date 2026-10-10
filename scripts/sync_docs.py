@@ -74,7 +74,8 @@ def top_level_summary(tracked: list[str]) -> list[tuple[str, int, int]]:
 def authored_docs(tracked: list[str] | None = None) -> dict[str, list[str]]:
     """Group authored docs for REPO-INDEX coverage.
 
-    Most authored docs live at ``docs/*.md``. Product-domain slices may also
+    Most authored docs live directly under the four section directories
+    (``docs/{architecture,product,operations,reference}/*.md``). Product-domain slices may also
     introduce narrowly scoped nested docs (for example
     ``docs/product/semantic-sentiment/`` and its runbooks). Include those nested docs
     explicitly so ``sync_docs.py`` is deterministic in CI without sweeping in
@@ -90,6 +91,8 @@ def authored_docs(tracked: list[str] | None = None) -> dict[str, list[str]]:
     tracked_set = set(tracked)
     groups: dict[str, list[str]] = defaultdict(list)
     paths = list(DOCS.glob("*.md"))
+    for section in ("architecture", "product", "operations", "reference"):
+        paths.extend((DOCS / section).glob("*.md"))
     paths.extend((DOCS / "product" / "semantic-sentiment").glob("*.md"))
     paths.extend((DOCS / "operations" / "runbooks" / "semantic-sentiment").glob("*.md"))
     for path in sorted(paths):
@@ -100,9 +103,9 @@ def authored_docs(tracked: list[str] | None = None) -> dict[str, list[str]]:
             continue
         doc_ref = rel.as_posix()
         stem = path.stem
-        if rel.parts[0] == "runbooks":
+        if "runbooks" in rel.parts:
             groups["Runbooks"].append(doc_ref)
-        elif rel.parts[0] == "semantic-sentiment":
+        elif "semantic-sentiment" in rel.parts:
             groups["Product Domains"].append(doc_ref)
         elif stem.startswith("SDK-"):
             groups["SDKs"].append(doc_ref)

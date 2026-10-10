@@ -79,7 +79,7 @@ def test_reward_routes_no_forbidden_language():
 
 
 def test_productization_checklist_has_a6_section():
-    checklist = ROOT / "docs" / "PRODUCTIZATION-CHECKLIST.md"
+    checklist = ROOT / "docs" / "product" / "PRODUCTIZATION-CHECKLIST.md"
     assert checklist.exists(), "docs/product/PRODUCTIZATION-CHECKLIST.md missing"
     text = checklist.read_text(encoding="utf-8")
     assert "Reward Enablement" in text, (
