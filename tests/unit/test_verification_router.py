@@ -16,7 +16,7 @@ from scripts.lib.verification_router import (
 
 
 def test_frontend_change_routes_only_relevant_pr_suites():
-    result = route(["frontend/kyber/src/App.tsx"])
+    result = route(["apps/kyber/src/App.tsx"])
     ids = {item["check_id"] for item in result["checks"]}
     assert result["minimum_lane"] == "pr"
     assert result["affected_domains"] == ["frontend"]

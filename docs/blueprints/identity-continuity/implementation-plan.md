@@ -303,7 +303,7 @@ status: beta
   - `POST /v1/admin/identity/reconcile` — re-run resolution
   - `GET /v1/admin/identity/review-queue` — open conflicts/reviews
   - `GET /v1/admin/identity/activation-status` — tenant activation dashboard data
-- Frontend: `frontend/aether/src/features/identity/`
+- Frontend: `apps/aether/src/features/identity/`
   - `TenantActivationDashboard.tsx` — activation status surface
   - `Profile360IdentityPanel.tsx` — identity panel component
   - `IdentityReviewQueue.tsx` — review queue page

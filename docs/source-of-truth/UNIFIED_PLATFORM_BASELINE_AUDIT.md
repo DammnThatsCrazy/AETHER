@@ -29,10 +29,10 @@ Program baseline recorded before PR 1 implementation began.
 | Geo routes are unconditional `not_provisioned` stubs | `services/backend/services/geo/routes.py` | PR 3 |
 | Profile360 synthesizes generic `RELATED_TO` edges; ad-hoc readiness vocab | `services/backend/services/profile/composer.py::_compose_graph` | PR 2 |
 | No graph mutation ledger / fact versions / universal mutation gateway | 32 direct-writer files (frozen by `scripts/validate_graph_write_paths.py`); `shared/cis/mutation_gateway.py` used only by agent staging | PR 2 |
-| `/v1/graph/temporal` hardcodes limit=100; frontend live graph = sampled assembly w/ 200-cap | `services/backend/services/operational_intelligence/routes.py`; `frontend/aether/src/features/graph/use-graph-data.ts` | PR 3 (backend) / PR 4 (frontend) |
+| `/v1/graph/temporal` hardcodes limit=100; frontend live graph = sampled assembly w/ 200-cap | `services/backend/services/operational_intelligence/routes.py`; `apps/aether/src/features/graph/use-graph-data.ts` | PR 3 (backend) / PR 4 (frontend) |
 | Cytoscape instance destroyed+recreated per data change | both `graph-canvas.tsx` copies | PR 4 |
 | Broken deep link Cluster360 → `/graph?cluster=` | `cluster-360-page.tsx` vs `graph-page.tsx` | PR 4 |
-| `FilterGroup` parity-tested but no UI constructs one; divergent duplicate `frontend/shared/src/types/graph-layers.ts` | `packages/shared/graph-contract.ts` / frontend | PR 4 |
+| `FilterGroup` parity-tested but no UI constructs one; divergent duplicate `apps/shared/src/types/graph-layers.ts` | `packages/shared/graph-contract.ts` / frontend | PR 4 |
 | No ContextCapsule/session-context service; no sessionization | repo-wide: zero hits | PR 1 (contracts) → PR 2 (lifecycle) |
 | No comparison engine / findings / watchlists; no projector-ownership registry; no stage receipts | repo-wide: zero hits | PR 1 (contracts) → PR 2/3 |
 | ClickHouse DDL split-brain (`DateTime64(3,'UTC')` vs bare `DateTime`) | `deploy/clickhouse/schemas/` vs `docs/archive/legacy-architecture/data-lake-architecture/**/schemas/gold_*.py` (15 files frozen by allowlist) | PR 2 |

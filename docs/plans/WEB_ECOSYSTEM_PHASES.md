@@ -30,11 +30,11 @@ in docs.
 
 | Area | Repository state before this program | Gap to the target architecture |
 | --- | --- | --- |
-| Shared foundation | `packages/brand` (`@olympus/brand`) tokens/identity/motion/responsive; `frontend/shared` (`@aether/ui`) React layer + shared CSS/Tailwind preset | None — mature and reused |
-| Olympus corporate site | None | **Missing** — build `frontend/olympus-marketing` |
-| Aether public marketing | None (aether login/signup live only inside the tenant app) | **Missing** — build `frontend/aether-marketing`, move auth threshold into the public experience |
-| Aether tenant app | `frontend/aether` | Present; must receive Olympus-branding-secondary rule and later SSG/auth migration |
-| Kyber | `frontend/kyber` (internal operator app) | Present; docs mis-described it as "Aether's operator product" — restated to Olympus Labs' private internal operator application |
+| Shared foundation | `packages/brand` (`@olympus/brand`) tokens/identity/motion/responsive; `apps/shared` (`@aether/ui`) React layer + shared CSS/Tailwind preset | None — mature and reused |
+| Olympus corporate site | None | **Missing** — build `apps/olympus-marketing` |
+| Aether public marketing | None (aether login/signup live only inside the tenant app) | **Missing** — build `apps/aether-marketing`, move auth threshold into the public experience |
+| Aether tenant app | `apps/aether` | Present; must receive Olympus-branding-secondary rule and later SSG/auth migration |
+| Kyber | `apps/kyber` (internal operator app) | Present; docs mis-described it as "Aether's operator product" — restated to Olympus Labs' private internal operator application |
 | Auth boundary | Forms lived only in the tenant app; no public threshold layout | **Missing** — `AuthLayout` + `/login` `/signup` `/forgot-password` threshold routes in the Aether public shell |
 | Docs/nomenclature | Brand-system docs framed Kyber as an Aether product | Restated Kyber ownership and the multi-shell hierarchy |
 | Registration | Workspaces/typecheck/test/test-registry enumerated literal apps | Add the two marketing workspaces to every registration surface |
@@ -47,10 +47,10 @@ foundation decisions are locked before surface count grows.
 
 | Phase | Deliverable | Workspaces | Entry/exit criteria |
 | --- | --- | --- | --- |
-| **1 (done)** | Shell + domain foundation: Olympus Marketing and Aether Marketing scaffolds, AuthLayout threshold, shared `Button asChild`, registration, source-of-truth + program docs, Kyber nomenclature restate | `olympus-marketing`, `aether-marketing`, `frontend/shared` | Both new workspaces typecheck, test, and build; registry coverage validator green; docs regenerate |
+| **1 (done)** | Shell + domain foundation: Olympus Marketing and Aether Marketing scaffolds, AuthLayout threshold, shared `Button asChild`, registration, source-of-truth + program docs, Kyber nomenclature restate | `olympus-marketing`, `aether-marketing`, `apps/shared` | Both new workspaces typecheck, test, and build; registry coverage validator green; docs regenerate |
 | **2 (done)** | Editorial depth + SSG/SEO foundation for both marketing shells | `olympus-marketing`, `aether-marketing` | Full editorial content per section copy; per-route meta; prerender/SSG layer; lighthouse budgets |
 | **3 (done)** | Capability-deep pages and signature interactions (platform families, solutions, integrations directory, developers selector) | `aether-marketing` | Each capability page states problem/inputs/understanding/output/governance/limitations; truthful availability states |
-| **4 (done)** | In-public authentication entry: real AuthLayout forms, genuine public→private handoff with prefill, origin-scoped session rules | `aether-marketing`, `frontend/aether` | Public threshold collects email/name and hands off to the application origin with `?email` / `?name` prefill; tenant login/signup accept the prefill; the public origin stores no tenant credential, cookie, or session; no parent-domain cookie |
+| **4 (done)** | In-public authentication entry: real AuthLayout forms, genuine public→private handoff with prefill, origin-scoped session rules | `aether-marketing`, `apps/aether` | Public threshold collects email/name and hands off to the application origin with `?email` / `?name` prefill; tenant login/signup accept the prefill; the public origin stores no tenant credential, cookie, or session; no parent-domain cookie |
 | **5 (done)** | Deployment configuration + honest state: origin-ready `vercel.json` security/headers, `.env.example` env contract, opt-in analytics module (inert by default), deploy-contract doc recording exactly what is and is not live | `olympus-marketing`, `aether-marketing` | Code-complete and validated; no live origin, TLS, analytics property, or status page claimed until an infra phase deploys them |
 | **6 (done)** | Motion + design-system polish: shared motion tokens across CSS shells, marketing-shell motion budgets (micro/standard utilities), reduced-motion parity, branding-validator enforcement, motion-is-meaning audit | all shells + `packages/brand` | Shell-level motion budgets enforced by validator + hermetic tests; no decorative ambient motion in apps/auth |
 | **7 (done)** | Program acceptance: accessibility audit, content truth audit, release posture | `olympus-marketing`, `aether-marketing` | Audit must-fix claims fixed; should-fix applied or dispositioned; union `make ci-check` green; docs synced. `make release-gate` stays red **by design** — no public surface is deployed, and release readiness is an infra phase, not a claim this program makes (see Phase 7 acceptance below) |
@@ -62,8 +62,8 @@ boundary) and must land first — it is the current changeset. Phases 2 and 3
 build the customer-visible marketing depth next, ahead of Phase 4 in-public
 authentication entry, because public depth and truthful content are
 prerequisites to hosting the sign-in entry on the public surface. Phase 5 deployment follows auth only
-where the surfaces they carry are ready; `frontend/aether`, `frontend/kyber`,
-and `frontend/docs` deploy independently when their phase content is ready.
+where the surfaces they carry are ready; `apps/aether`, `apps/kyber`,
+and `apps/docs` deploy independently when their phase content is ready.
 
 ## 3. Phase 1 — shipped in this changeset
 
@@ -71,7 +71,7 @@ Phase 1 is complete and verified.
 
 ### 3.1 New workspaces
 
-**`frontend/olympus-marketing`** (`@olympus/olympus-marketing`, port 5178) —
+**`apps/olympus-marketing`** (`@olympus/olympus-marketing`, port 5178) —
 Olympus Labs corporate shell:
 
 - Persistent header (skip link, `OlympusLockup` home link, Primary nav,
@@ -84,7 +84,7 @@ Olympus Labs corporate shell:
 - Build-state chip on every section so no page implies more completeness than
   exists.
 
-**`frontend/aether-marketing`** (`@aether/aether-marketing`, port 5179) — Aether
+**`apps/aether-marketing`** (`@aether/aether-marketing`, port 5179) — Aether
 public shell + the authentication threshold:
 
 - Persistent shell whose behavior reads like a read-only intelligence
@@ -102,7 +102,7 @@ public shell + the authentication threshold:
 
 ### 3.2 Shared and registration changes
 
-- `frontend/shared/src/components/button.tsx`: additive `asChild` support so
+- `apps/shared/src/components/button.tsx`: additive `asChild` support so
   shared `Button` can style a route `Link` or an external anchor without
   duplicating the design system in each shell.
 - Root `package.json`: both workspaces added to `workspaces`, the `typecheck`

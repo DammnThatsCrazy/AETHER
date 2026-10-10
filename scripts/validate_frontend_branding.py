@@ -34,33 +34,33 @@ TEST_FILENAME_RE = re.compile(r"\.(?:test|spec|stories)\.(?:[cm]?[jt]sx?)$", re.
 # behavior-preserving work on the rest of Aether and Kyber.
 NAVIGATION_TARGETS = frozenset(
     {
-        "frontend/aether/src/components/app-shell.tsx",
-        "frontend/kyber/src/components/layout/sidebar.tsx",
-        "frontend/kyber/src/components/layout/top-bar.tsx",
+        "apps/aether/src/components/app-shell.tsx",
+        "apps/kyber/src/components/layout/sidebar.tsx",
+        "apps/kyber/src/components/layout/top-bar.tsx",
     }
 )
 PROVIDER_TARGETS = frozenset(
     {
-        "frontend/shared/src/components/social-provider-icon.tsx",
-        "frontend/kyber/src/features/notifications/channel-type-icon.tsx",
+        "apps/shared/src/components/social-provider-icon.tsx",
+        "apps/kyber/src/features/notifications/channel-type-icon.tsx",
     }
 )
 CANONICAL_MARK_TARGETS = frozenset(
-    {"frontend/aether/src/components/aether-logo.tsx"}
+    {"apps/aether/src/components/aether-logo.tsx"}
 )
 MOTION_SURFACE_ROOTS = (
-    "frontend/aether-marketing/src/components/",
-    "frontend/aether-marketing/src/pages/",
-    "frontend/aether-marketing/src/styles/",
-    "frontend/aether/src/components/",
-    "frontend/kyber/src/components/layout/",
-    "frontend/kyber/src/styles/",
-    "frontend/olympus-marketing/src/components/",
-    "frontend/olympus-marketing/src/pages/",
-    "frontend/olympus-marketing/src/styles/",
-    "frontend/shared/src/components/",
+    "apps/aether-marketing/src/components/",
+    "apps/aether-marketing/src/pages/",
+    "apps/aether-marketing/src/styles/",
+    "apps/aether/src/components/",
+    "apps/kyber/src/components/layout/",
+    "apps/kyber/src/styles/",
+    "apps/olympus-marketing/src/components/",
+    "apps/olympus-marketing/src/pages/",
+    "apps/olympus-marketing/src/styles/",
+    "apps/shared/src/components/",
 )
-GLYPH_COMPATIBILITY_PATH = "frontend/shared/src/components/glyph-icon.tsx"
+GLYPH_COMPATIBILITY_PATH = "apps/shared/src/components/glyph-icon.tsx"
 
 # Navigation icon glyphs documented by the pre-migration audit.  Scanning this
 # known set avoids flagging ordinary non-ASCII product copy (for example a
@@ -228,13 +228,17 @@ def _finding(path: Path, text: str, offset: int, rule: str, reason: str, root: P
     return Finding(_relative(path, root), _line_number(text, offset), rule, reason)
 
 
+#: The web applications that live under apps/ (the mobile shells are not part of this gate).
+WEB_APP_NAMES = ("aether", "aether-marketing", "demo", "docs", "kyber", "marketing", "olympus-marketing", "shared", "site", "status")
+
+
 def is_runtime_path(path: Path, root: Path = ROOT) -> bool:
     """Return whether a file is production frontend source rather than test/docs output."""
     if path.suffix not in SOURCE_SUFFIXES:
         return False
     rel = _relative(path, root)
     parts = Path(rel).parts
-    if not parts or parts[0] != "frontend" or "src" not in parts:
+    if len(parts) < 2 or parts[0] != "apps" or parts[1] not in WEB_APP_NAMES or "src" not in parts:
         return False
     if "docs" in parts or "generated" in parts:
         return False
@@ -245,12 +249,11 @@ def is_runtime_path(path: Path, root: Path = ROOT) -> bool:
 
 
 def _runtime_files(root: Path) -> Iterable[Path]:
-    frontend = root / "frontend"
-    if not frontend.exists():
-        return ()
+    bases = [root / "apps" / name for name in WEB_APP_NAMES if (root / "apps" / name).exists()]
     return (
         path
-        for path in sorted(frontend.rglob("*"))
+        for base in bases
+        for path in sorted(base.rglob("*"))
         if path.is_file() and is_runtime_path(path, root)
     )
 

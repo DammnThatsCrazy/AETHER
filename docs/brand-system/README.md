@@ -53,7 +53,7 @@ a second asset library or a request to redraw product identity.
 | Navigation, action, entity, status, severity, freshness, confidence, provenance taxonomies | `packages/brand/src/iconography/` | Use the typed UI renderers for React; do not reintroduce ASCII/Unicode glyph systems. |
 | Typography, spacing, icon size, focus, borders, radius, elevation and shadows | `packages/brand/src/tokens/` | Existing shared CSS variables remain the visual CSS layer. |
 | Motion, responsive and surface rules | `packages/brand/src/{motion,responsive,surfaces}/` | Apply by semantic purpose, not by copying literal transition/shadow values. |
-| Accessible React rendering | `frontend/shared/src/components/` (`@aether/ui`) | Product apps and a compatible docs surface consume this layer. |
+| Accessible React rendering | `apps/shared/src/components/` (`@aether/ui`) | Product apps and a compatible docs surface consume this layer. |
 
 `@olympus/brand` is deliberately framework-free. It exports metadata and asset
 references, contains no React, and never supplies a remote provider logo.

@@ -20,7 +20,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / "config/deployment_operator_surface.yaml"
 WORKFLOW_DIR = ROOT / ".github/workflows"
-KYBER_SOURCE = ROOT / "frontend/kyber/src"
+KYBER_SOURCE = ROOT / "apps/kyber/src"
 
 EXPECTED_EXECUTION_PATHS = {
     ".github/workflows/deploy.yml": {"push", "workflow_dispatch"},
@@ -165,7 +165,7 @@ def validate(
             + ", ".join(unexpected_apply_sites)
         )
 
-    page = root / "frontend/kyber/src/pages/deployment-readiness/deployment-readiness-page.tsx"
+    page = root / "apps/kyber/src/pages/deployment-readiness/deployment-readiness-page.tsx"
     try:
         page_text = page.read_text(encoding="utf-8")
     except OSError as exc:

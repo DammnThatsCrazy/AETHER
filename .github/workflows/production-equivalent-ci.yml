@@ -22,6 +22,8 @@ on:
     types: [ready_for_review]
   push:
     branches:
+      - Development
+      - staging
       - main
   schedule:
     - cron: '47 3 * * *'

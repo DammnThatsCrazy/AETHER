@@ -1,5 +1,5 @@
 {
-  "_comment": "Canonical map of every tenant-visible Aether surface to its Kyber Tenant Mirror counterpart. Generated from frontend/aether/src/app/router.tsx by scripts/generate_feature_surface_manifest.py \u2014 edit the generator or the exception reasons, never the entries by hand. tenant_parity_required=true means the mirror MUST return byte-identical tenantVisible data for the same tenant, query and contract version; the operator is otherwise debugging a different system than the tenant runs. Only 'tenantVisible' participates in the parity digest; operatorDiagnostics is additive and never alters a tenant-visible value.",
+  "_comment": "Canonical map of every tenant-visible Aether surface to its Kyber Tenant Mirror counterpart. Generated from apps/aether/src/app/router.tsx by scripts/generate_feature_surface_manifest.py \u2014 edit the generator or the exception reasons, never the entries by hand. tenant_parity_required=true means the mirror MUST return byte-identical tenantVisible data for the same tenant, query and contract version; the operator is otherwise debugging a different system than the tenant runs. Only 'tenantVisible' participates in the parity digest; operatorDiagnostics is additive and never alters a tenant-visible value.",
   "schemaVersion": "1.0.0",
   "surfaces": [
     {

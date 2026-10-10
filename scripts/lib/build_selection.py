@@ -10,6 +10,12 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 
 
+#: npm workspace names of the web applications under apps/ (mobile shells are not part of the
+#: shared-runtime-contract rebuild).
+WEB_APP_WORKSPACES = frozenset(f"apps/{name}" for name in (
+    "aether", "aether-marketing", "demo", "docs", "kyber", "marketing", "olympus-marketing", "shared", "site", "status"))
+
+
 def _under(paths: set[str], prefix: str) -> bool:
     return any(path == prefix or path.startswith(prefix + "/") for path in paths)
 
@@ -109,13 +115,13 @@ def _selected_workspaces(
     else:
         selected = {path for path in buildable if _under(changed, path)}
         application_paths = {
-            "aether": "frontend/aether",
-            "kyber": "frontend/kyber",
-            "docs": "frontend/docs",
-            "demo": "frontend/demo",
-            "olympus-marketing": "frontend/olympus-marketing",
-            "aether-marketing": "frontend/aether-marketing",
-            "site": "frontend/site",
+            "aether": "apps/aether",
+            "kyber": "apps/kyber",
+            "docs": "apps/docs",
+            "demo": "apps/demo",
+            "olympus-marketing": "apps/olympus-marketing",
+            "aether-marketing": "apps/aether-marketing",
+            "site": "apps/site",
         }
         selected.update(
             path
@@ -138,7 +144,7 @@ def _selected_workspaces(
             selected.update(buildable)
         elif "shared_runtime_contract" in global_scopes:
             selected.update(
-                path for path in buildable if path.startswith(("packages/", "frontend/"))
+                path for path in buildable if path.startswith("packages/") or path in WEB_APP_WORKSPACES
             )
 
     return _topological_build_order(selected, dependencies)
@@ -165,13 +171,13 @@ def select_builds(
     backend_image = _under(changed, "services/backend")
 
     for prefix, application in (
-        ("frontend/aether", "aether"),
-        ("frontend/kyber", "kyber"),
-        ("frontend/aether-marketing", "aether-marketing"),
-        ("frontend/olympus-marketing", "olympus-marketing"),
-        ("frontend/site", "site"),
-        ("frontend/docs", "docs"),
-        ("frontend/demo", "demo"),
+        ("apps/aether", "aether"),
+        ("apps/kyber", "kyber"),
+        ("apps/aether-marketing", "aether-marketing"),
+        ("apps/olympus-marketing", "olympus-marketing"),
+        ("apps/site", "site"),
+        ("apps/docs", "docs"),
+        ("apps/demo", "demo"),
     ):
         if _under(changed, prefix):
             applications.add(application)
@@ -187,9 +193,9 @@ def select_builds(
     ):
         if _under(changed, prefix):
             packages.add(package)
-    if _under(changed, "frontend/aether") or _under(changed, "frontend/kyber"):
+    if _under(changed, "apps/aether") or _under(changed, "apps/kyber"):
         packages.add("shared")
-    # frontend/site serves packages/brand's marks as its Vite publicDir, a
+    # apps/site serves packages/brand's marks as its Vite publicDir, a
     # filesystem dependency that no workspace manifest declares.
     if _under(changed, "packages/brand"):
         applications.add("site")

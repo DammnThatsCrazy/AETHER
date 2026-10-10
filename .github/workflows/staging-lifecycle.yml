@@ -61,7 +61,7 @@ on:
         type: string
         required: false
       intended_release_sha:
-        description: "Merged-main SHA the approved delivery run must contain (defaults to this workflow revision)"
+        description: "Merged-staging SHA the approved delivery run must contain (defaults to this workflow revision)"
         type: string
         required: false
       plan_run_id:
@@ -130,11 +130,11 @@ jobs:
       deployment_lane: ${{ steps.route.outputs.deployment_lane }}
     steps:
       - uses: actions/checkout@v4
-      - name: Require merged-main authority
+      - name: Require merged-staging authority
         run: |
           set -euo pipefail
-          test "$GITHUB_REF_NAME" = main || {
-            echo '::error::staging lifecycle must be dispatched from merged main'; exit 1;
+          test "$GITHUB_REF_NAME" = staging || {
+            echo '::error::staging lifecycle must be dispatched from merged staging'; exit 1;
           }
       - uses: actions/setup-python@v5
         with:
@@ -518,13 +518,16 @@ jobs:
             --job-timeout-seconds 900 \
             --job-poll-seconds 15
       - name: Verify production status provenance and branch stage
+        # Production builds from main, which lags the staging commit being
+        # woken, so it is validated against main's own head, not the staging SHA.
         env:
-          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
           python scripts/release/check_amplify_app_contract.py \
             --mode production-status \
-            --expected-commit "$EXPECTED_COMMIT_SHA" \
+            --expected-commit "$main_sha" \
             --wait-for-current-job \
             --job-timeout-seconds 900 \
             --job-poll-seconds 15
@@ -716,11 +719,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$REHEARSE" = true ]; then
-            test "$WORKFLOW_BRANCH" = main || {
-              echo '::error::a staging rehearsal must be dispatched from main'; exit 1;
+            test "$WORKFLOW_BRANCH" = staging || {
+              echo '::error::a staging rehearsal must be dispatched from staging'; exit 1;
             }
             test "$INTENDED_RELEASE_SHA" = "$WORKFLOW_SHA" || {
-              echo '::error::the intended immutable release must match this main workflow SHA before wake planning'; exit 1;
+              echo '::error::the intended immutable release must match this staging workflow SHA before wake planning'; exit 1;
             }
             test -n "$RELEASE_RUN_ID" || {
               echo '::error::release_run_id is required before a staging rehearsal can plan or wake infrastructure'; exit 1;
@@ -753,8 +756,8 @@ jobs:
           test "$build_conclusion" = success \
             || { echo "::error::release run ${RELEASE_RUN_ID} has no successful immutable build job"; exit 1; }
           if [ "$REHEARSE" = true ]; then
-            test "$run_head_branch" = main && test "$run_head_sha" = "$WORKFLOW_SHA" || {
-              echo "::error::approved release run ${RELEASE_RUN_ID} is not from this exact main SHA ${WORKFLOW_SHA}"; exit 1;
+            test "$run_head_branch" = staging && test "$run_head_sha" = "$WORKFLOW_SHA" || {
+              echo "::error::approved release run ${RELEASE_RUN_ID} is not from this exact staging SHA ${WORKFLOW_SHA}"; exit 1;
             }
           fi
           test "$run_head_sha" = "$INTENDED_RELEASE_SHA" \
@@ -1528,8 +1531,8 @@ jobs:
               conclusion="$(jq -r '.conclusion' <<<"$run_json")"
               test "$run_path" = '.github/workflows/deploy.yml' || {
                 echo "::error::delivery run ${delivery_run_id} belongs to ${run_path}, not the canonical workflow"; exit 1; }
-              test "$run_branch" = main && test "$run_sha" = "$INTENDED_RELEASE_SHA" || {
-                echo "::error::delivery run ${delivery_run_id} is not for intended main release ${INTENDED_RELEASE_SHA}"; exit 1; }
+              test "$run_branch" = staging && test "$run_sha" = "$INTENDED_RELEASE_SHA" || {
+                echo "::error::delivery run ${delivery_run_id} is not for intended staging release ${INTENDED_RELEASE_SHA}"; exit 1; }
               test "$conclusion" = success || {
                 echo "::error::canonical delivery run ${delivery_run_id} concluded ${conclusion}"; exit 1; }
               jobs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${delivery_run_id}/jobs?per_page=100")"

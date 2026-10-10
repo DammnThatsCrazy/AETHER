@@ -185,19 +185,19 @@ domains:
     minimum_lane: pr
   frontend:
     owner: frontend
-    paths: [frontend/**]
+    paths: [apps/**]
     checks: [frontend-aether, frontend-kyber, frontend-shared]
     path_checks:
-      frontend/aether/**: [frontend-aether]
-      frontend/kyber/**: [frontend-kyber]
-      frontend/shared/**: [frontend-shared]
-      frontend/docs/**: [frontend-docs]
-      frontend/demo/**: [frontend-demo]
-      frontend/aether-marketing/**: [frontend-aether-marketing]
-      frontend/olympus-marketing/**: [frontend-olympus-marketing]
-      frontend/marketing/**: [frontend-aether-marketing, frontend-olympus-marketing]
-      frontend/status/**: [frontend-status]
-      frontend/site/**: [frontend-site]
+      apps/aether/**: [frontend-aether]
+      apps/kyber/**: [frontend-kyber]
+      apps/shared/**: [frontend-shared]
+      apps/docs/**: [frontend-docs]
+      apps/demo/**: [frontend-demo]
+      apps/aether-marketing/**: [frontend-aether-marketing]
+      apps/olympus-marketing/**: [frontend-olympus-marketing]
+      apps/marketing/**: [frontend-aether-marketing, frontend-olympus-marketing]
+      apps/status/**: [frontend-status]
+      apps/site/**: [frontend-site]
     minimum_lane: pr
   sdk:
     owner: sdk

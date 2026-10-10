@@ -254,7 +254,7 @@ def measure(root: Path = ROOT) -> dict[str, int]:
     return {
         "tracked_files": len(files),
         "files_services": top("services/"),
-        "files_frontend": top("frontend/"),
+        "files_frontend": sum(top(f"apps/{name}/") for name in ("aether", "aether-marketing", "demo", "docs", "kyber", "marketing", "olympus-marketing", "shared", "site", "status")),
         "files_tests": top("tests/"),
         "files_docs": top("docs/"),
         "files_docs_archive": top("docs/archive/"),

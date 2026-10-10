@@ -26,7 +26,7 @@ from typing import Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_NAMES = ("aether", "kyber")
-APP_ROOTS = tuple(ROOT / "frontend" / app for app in APP_NAMES)
+APP_ROOTS = tuple(ROOT / "apps" / app for app in APP_NAMES)
 RUNTIME_ROOTS = tuple(app_root / "src" for app_root in APP_ROOTS)
 BUNDLE_ROOTS = tuple(app_root / "dist" for app_root in APP_ROOTS)
 PUBLIC_WORKERS = tuple(
@@ -79,9 +79,9 @@ BUNDLE_TOKENS = (
 )
 
 # --- Demo app -------------------------------------------------------------
-# frontend/demo is a thin backend seed-status client. It may not contain a
+# apps/demo is a thin backend seed-status client. It may not contain a
 # canonical operational dataset or browser API implementation.
-DEMO_APP_ROOT = ROOT / "frontend" / "demo"
+DEMO_APP_ROOT = ROOT / "apps" / "demo"
 DEMO_ENV_VAR = "VITE_DEMO_ENV"
 # Explicit runtime environments accepted by the backend-backed Demo SPA.
 CANONICAL_DEMO_ENVIRONMENTS = ("local", "staging", "production", "test")
@@ -585,8 +585,8 @@ def build_production_bundles(root: Path = ROOT) -> int:
         # contains source but no ignored dist/ output, so build the dependency
         # before asking Vite to resolve it.
         "packages/web",
-        *(f"frontend/{app}" for app in APP_NAMES),
-        "frontend/demo",
+        *(f"apps/{app}" for app in APP_NAMES),
+        "apps/demo",
     ]
     for workspace in workspaces:
         proc = subprocess.run(
@@ -610,7 +610,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if build_status:
             findings.append(
                 {
-                    "path": "frontend",
+                    "path": "apps",
                     "line": 0,
                     "reason": f"production frontend build failed with exit code {build_status}",
                 }

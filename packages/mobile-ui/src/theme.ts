@@ -3,7 +3,7 @@
  *
  * Values mirror the app-shell aesthetic (the aether-mobile and kyber-mobile
  * `App.tsx` shells: `#0b0d12` background, `#f5f7fa` text, `#8b93a7` muted) and the
- * desktop brand accent (`frontend/shared/src/styles/tokens.css` `--color-accent:
+ * desktop brand accent (`apps/shared/src/styles/tokens.css` `--color-accent:
  * #3a6896`).
  *
  * Pure TypeScript with no react-native import, so the tokens are unit-testable in

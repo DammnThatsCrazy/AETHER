@@ -32,9 +32,36 @@ docs/**/*.js
 docs/**/*.js.map
 docs/**/*.d.ts
 !docs/_generated/**
-frontend/**/*.js
-frontend/**/*.js.map
-frontend/**/*.d.ts
+apps/aether/**/*.js
+apps/aether/**/*.js.map
+apps/aether/**/*.d.ts
+apps/aether-marketing/**/*.js
+apps/aether-marketing/**/*.js.map
+apps/aether-marketing/**/*.d.ts
+apps/demo/**/*.js
+apps/demo/**/*.js.map
+apps/demo/**/*.d.ts
+apps/docs/**/*.js
+apps/docs/**/*.js.map
+apps/docs/**/*.d.ts
+apps/kyber/**/*.js
+apps/kyber/**/*.js.map
+apps/kyber/**/*.d.ts
+apps/marketing/**/*.js
+apps/marketing/**/*.js.map
+apps/marketing/**/*.d.ts
+apps/olympus-marketing/**/*.js
+apps/olympus-marketing/**/*.js.map
+apps/olympus-marketing/**/*.d.ts
+apps/shared/**/*.js
+apps/shared/**/*.js.map
+apps/shared/**/*.d.ts
+apps/site/**/*.js
+apps/site/**/*.js.map
+apps/site/**/*.d.ts
+apps/status/**/*.js
+apps/status/**/*.js.map
+apps/status/**/*.d.ts
 packages/**/*.js
 packages/**/*.js.map
 packages/**/*.d.ts
@@ -135,4 +162,4 @@ Smart Contracts/
 scripts/fix_logger_kwargs.py
 
 # Site prerender server bundle (removed after each build)
-frontend/site/dist-ssr/
+apps/site/dist-ssr/

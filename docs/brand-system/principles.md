@@ -51,7 +51,7 @@ compact operational labels—not a replacement body typeface. The typed scale is
 in `packages/brand/src/tokens/typography.ts`.
 
 Keep the established warm/stone CSS surfaces from
-`frontend/shared/src/styles/tokens.css`. A card is generally border-led:
+`apps/shared/src/styles/tokens.css`. A card is generally border-led:
 `surfaceRecipes` reserves stronger shadows for floating layers, modals, and
 tooltips. Use the named spacing, radius, border, focus, elevation, and shadow
 tokens rather than selecting a visual value in a feature.

@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/exploration-contract.ts, frontend/shared/src/exploration/client.ts, packages/shared/contracts/filter-field-registry.json, packages/shared/contracts/surface-capability-registry.json, packages/shared/filter-fields.ts, packages/shared/surface-capabilities.ts, services/backend/shared/exploration/models.py, services/backend/shared/exploration/generated_fields.py, services/backend/shared/exploration/generated_surfaces.py, services/backend/shared/contracts_models/filters.py, services/backend/services/exploration/planner.py, services/backend/services/exploration/facets.py, services/backend/services/exploration/service.py, services/backend/services/exploration/routes.py, services/backend/services/exploration/operations.py, services/backend/services/exploration/session.py, services/backend/services/exploration/store.py, services/backend/services/exploration/snapshots.py, services/backend/services/exploration/adapters/__init__.py, services/backend/services/exploration/adapters/base.py, services/backend/services/exploration/adapters/graph.py, services/backend/services/exploration/adapters/projection.py]
+source_files: [packages/shared/exploration-contract.ts, apps/shared/src/exploration/client.ts, packages/shared/contracts/filter-field-registry.json, packages/shared/contracts/surface-capability-registry.json, packages/shared/filter-fields.ts, packages/shared/surface-capabilities.ts, services/backend/shared/exploration/models.py, services/backend/shared/exploration/generated_fields.py, services/backend/shared/exploration/generated_surfaces.py, services/backend/shared/contracts_models/filters.py, services/backend/services/exploration/planner.py, services/backend/services/exploration/facets.py, services/backend/services/exploration/service.py, services/backend/services/exploration/routes.py, services/backend/services/exploration/operations.py, services/backend/services/exploration/session.py, services/backend/services/exploration/store.py, services/backend/services/exploration/snapshots.py, services/backend/services/exploration/adapters/__init__.py, services/backend/services/exploration/adapters/base.py, services/backend/services/exploration/adapters/graph.py, services/backend/services/exploration/adapters/projection.py]
 last_synced_commit: 99736fed
 ---
 
@@ -43,11 +43,11 @@ envelope carries one applicability entry per requested filter
   adapters** (S6 — `outcome360`/`economic360`/`infrastructure360`, then the
   context-360 leaves `temporal360` (Phase 2) and `population360` (Phase 3) —
   `adapters/projection.py`, below).
-  Frontend seams for the projection-backed surfaces live in `frontend/aether` +
-  `frontend/kyber` (`features/projection-360/`), rendering typed projection
+  Frontend seams for the projection-backed surfaces live in `apps/aether` +
+  `apps/kyber` (`features/projection-360/`), rendering typed projection
   section states — never recomputing them; UI-less surfaces remain legal.
 
-The shared `frontend/shared/src/exploration/client.ts` transport exposes the
+The shared `apps/shared/src/exploration/client.ts` transport exposes the
 same query/facet/view contracts plus snapshot list/create/get/compare methods;
 apps supply their existing authenticated transport and do not duplicate query
 or snapshot state.

@@ -1,7 +1,7 @@
 """Pydantic contracts for reliability, SRE, and incident response.
 
 These mirror the shared TypeScript contracts in
-``frontend/shared/src/types/reliability.ts``. Field names are kept identical
+``apps/shared/src/types/reliability.ts``. Field names are kept identical
 across both layers so payloads round-trip cleanly between backend and frontend.
 """
 from __future__ import annotations

@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - staging
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
@@ -51,8 +52,8 @@ jobs:
               - 'scripts/generate_ml_manifest.py'
               - 'deploy/**'
               - 'docs/archive/legacy-architecture/aws-deployment/**'
-              - 'frontend/kyber/src/features/ml/**'
-              - 'frontend/kyber/src/pages/ml/**'
+              - 'apps/kyber/src/features/ml/**'
+              - 'apps/kyber/src/pages/ml/**'
 
   pr-size:
     # Warn (non-blocking) when a PR exceeds 600 meaningful lines changed.
@@ -130,9 +131,11 @@ jobs:
 
   main-integration:
     name: Main integration authority
-    # Main receives bounded cross-PR integration assurance. Full regression
-    # remains isolated to the schedule and explicit workflow dispatch.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The delivery branches (staging, main) receive bounded cross-PR integration
+    # assurance; staging delivery waits on this check for its exact SHA. The job
+    # keeps its original name because deploy.yml and the release controls poll for
+    # it. Full regression remains isolated to the schedule and explicit dispatch.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -508,7 +511,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run tenant onboarding E2E tests
-        run: cd frontend/aether && npm run e2e
+        run: cd apps/aether && npm run e2e
         env:
           CI: true
 

@@ -6,10 +6,10 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/routes/journeys.py, services/backend/services/measurement/routes/kyber.py, services/backend/alembic/versions/20261010_economic_operation_journey_refs.py, frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx, frontend/kyber/src/pages/measurement/journey-explorer-page.tsx]
+source_files: [services/backend/services/measurement/engine/journey_compiler.py, services/backend/services/measurement/routes/journeys.py, services/backend/services/measurement/routes/kyber.py, services/backend/alembic/versions/20261010_economic_operation_journey_refs.py, apps/aether/src/pages/journey-explorer/journey-explorer-page.tsx, apps/kyber/src/pages/measurement/journey-explorer-page.tsx]
 source_hashes:
-  "frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx": "sha256:0e849243710c8ebac6d61906811ccd02b48f62dac0e4e519ffdecaddbc48b6aa"
-  "frontend/kyber/src/pages/measurement/journey-explorer-page.tsx": "sha256:c6a5887e51223aee851e1ed4b500f484e183d78d9565d0774819fe2d9093a362"
+  "apps/aether/src/pages/journey-explorer/journey-explorer-page.tsx": "sha256:0e849243710c8ebac6d61906811ccd02b48f62dac0e4e519ffdecaddbc48b6aa"
+  "apps/kyber/src/pages/measurement/journey-explorer-page.tsx": "sha256:c6a5887e51223aee851e1ed4b500f484e183d78d9565d0774819fe2d9093a362"
   "services/backend/alembic/versions/20261010_economic_operation_journey_refs.py": "sha256:78479dca594fb9ac8f2ce19f317de933afae3ed1211d8c0c45120c9b023ea87a"
   "services/backend/services/measurement/engine/journey_compiler.py": "sha256:32bad8c530ae3e357a5820af0e45542611ee4cfb0176c9e2c25c6f2078f6e564"
   "services/backend/services/measurement/routes/journeys.py": "sha256:191c2d0f513a37729ae087d07a71f58230dbffef0693240a8d4047178043694e"

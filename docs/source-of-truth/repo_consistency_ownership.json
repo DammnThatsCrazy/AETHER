@@ -40,8 +40,8 @@
         "docs/BACKEND-API.md",
         "docs/source-of-truth/**",
         "packages/shared/**",
-        "frontend/shared/**",
-        "frontend/kyber/**",
+        "apps/shared/**",
+        "apps/kyber/**",
         "tests/**"
       ],
       "required_commands": [
@@ -202,7 +202,7 @@
       ],
       "required_changed_globs": [
         "docs/**",
-        "frontend/kyber/**",
+        "apps/kyber/**",
         "packages/shared/**",
         "tests/**"
       ],
@@ -217,13 +217,13 @@
       "id": "kyber_operator",
       "name": "Kyber operator route/model changed",
       "source_globs": [
-        "frontend/kyber/**",
+        "apps/kyber/**",
         "services/backend/**/*operator*",
         "services/backend/**/*kyber*"
       ],
       "required_changed_globs": [
         "docs/**",
-        "frontend/kyber/**",
+        "apps/kyber/**",
         "packages/shared/**",
         "tests/**",
         "services/backend/**/tests/**"
@@ -325,8 +325,8 @@
         "services/backend/**/repositories/data_artifacts.py",
         "services/backend/**/alembic/versions/*data_exchange*.py",
         "packages/shared/data-exchange.ts",
-        "frontend/aether/src/features/data-exchange/**",
-        "frontend/aether/src/pages/settings/data-exchange-section.tsx"
+        "apps/aether/src/features/data-exchange/**",
+        "apps/aether/src/pages/settings/data-exchange-section.tsx"
       ],
       "required_changed_globs": [
         "packages/shared/data-exchange.ts",

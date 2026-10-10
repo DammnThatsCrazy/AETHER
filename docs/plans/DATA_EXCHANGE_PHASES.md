@@ -170,8 +170,8 @@ M6 is the tenant **Settings → Data Exchange** surface: feature module + sectio
 mounts + export/report dialogs + capability-driven controls, verified by unit /
 component tests and a Playwright E2E spec at the deferred gate.
 
-- `frontend/aether/src/features/data-exchange/` (`api.ts`, `use-*.ts`, `index.ts`), `frontend/aether/src/pages/settings/data-exchange-section.tsx` + `settings-page.tsx` mount, `frontend/aether/src/app/router.tsx` nav, `docs/audits/FRONTEND-ROUTE-STATE-MATRIX.md` rows.
-- `frontend/aether/src/test/unit/data-exchange.test.ts`, `frontend/aether/src/test/component/data-exchange-section.test.tsx`, `frontend/aether/src/test/e2e/data-exchange.spec.ts`.
+- `apps/aether/src/features/data-exchange/` (`api.ts`, `use-*.ts`, `index.ts`), `apps/aether/src/pages/settings/data-exchange-section.tsx` + `settings-page.tsx` mount, `apps/aether/src/app/router.tsx` nav, `docs/audits/FRONTEND-ROUTE-STATE-MATRIX.md` rows.
+- `apps/aether/src/test/unit/data-exchange.test.ts`, `apps/aether/src/test/component/data-exchange-section.test.tsx`, `apps/aether/src/test/e2e/data-exchange.spec.ts`.
 - Exit: unit/component/e2e at the deferred gate (repo precedent: network-enabled run).
 
 ## M7 ledger (shipped — ops/hardening)

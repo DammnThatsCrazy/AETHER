@@ -40,9 +40,9 @@ name: Functionality Proof Spine (CI)
 on:
   pull_request:
     types: [ready_for_review]
-    branches: [main]
+    branches: [Development, staging, main]
   push:
-    branches: [main]
+    branches: [Development, staging, main]
   workflow_dispatch:
 
 permissions:
@@ -411,7 +411,7 @@ jobs:
         run: pnpm --filter '@aether/proof-runner' run test
 
   # -------------------------------------------------------------------
-  # e2e — End-to-end browser tests (Playwright/Cypress via frontend/kyber).
+  # e2e — End-to-end browser tests (Playwright/Cypress via apps/kyber).
   #
   # CONDITIONAL EXECUTION: Only runs when the change comes from the
   # canonical repository (not external PR forks) OR when triggered by a
