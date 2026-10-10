@@ -2,7 +2,7 @@
   "version": "0.1.0-alpha.0",
   "generated_from": [
     "packages/shared/dimension-state.ts",
-    "services/backend/services/reconciliation/expectations.py"
+    "services/api/replay/reconciliation/expectations.py"
   ],
   "states": [
     "ready",

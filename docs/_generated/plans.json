@@ -1,6 +1,6 @@
 {
   "version": "0.1.0-alpha.0",
-  "generated_from": "services/backend/shared/plans/catalog.py",
+  "generated_from": "services/api/shared/plans/catalog.py",
   "plans": [
     {
       "plan_id": "alpha",

@@ -1,6 +1,6 @@
 {
   "version": "0.1.0-alpha.0",
-  "generated_from": "services/backend/shared/events/events.py",
+  "generated_from": "services/api/shared/events/events.py",
   "sections": [
     {
       "name": "Ingestion",
@@ -1235,7 +1235,7 @@
       ]
     },
     {
-      "name": "\u2500\u2500 Responsiveness spine (services/responsiveness) \u2014 appended block \u2500\u2500\u2500\u2500\u2500\u2500",
+      "name": "\u2500\u2500 Responsiveness spine (services/api/governance/responsiveness) \u2014 appended block \u2500\u2500\u2500\u2500\u2500\u2500",
       "topics": [
         {
           "member": "TENANT_ACTIVATION_UPDATED",
