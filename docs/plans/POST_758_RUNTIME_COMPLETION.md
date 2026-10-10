@@ -111,10 +111,13 @@ The Aether Payment Rails session drawer shows the exact order reference,
 order/payment amounts, source IDs, and evidence state for Stripe merchant
 payment sessions.
 Matching never uses amount, time, email, or customer identity; multiple
-successful payments and mismatched amounts remain explicit conflicts. This
-ledger ignores source-time older order revisions and flags divergent revisions
-with equal source time for review. This slice does not project payment graph
-facts or claim settlement. Merchant metadata configuration, live staging
+successful payments and mismatched amounts remain explicit conflicts. Payment
+identity is provider-scoped, so identical transaction IDs from separate rails
+remain distinct evidence; divergent facts reusing the same provider payment ID
+are preserved as a conflict. This ledger ignores source-time older order
+revisions and flags divergent revisions with equal source time for review. This
+slice does not project payment graph facts or claim settlement. Merchant
+metadata configuration, live staging
 certification, SDK checkout linkage, correction/refund semantics, and
 two-provider live certification remain release work. A contract-only scenario
 fixture now records first-order persistence, exact-match, missing-reference,

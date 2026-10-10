@@ -94,8 +94,9 @@ class CommerceOrderPaymentLedger:
         """
         ref = _required(commerce_order_ref, "commerce_order_ref")
         payment_id = _required(provider_payment_id, "provider_payment_id")
+        payment_provider = _required(provider, "provider").lower()
         payment = {
-            "provider": _required(provider, "provider"),
+            "provider": payment_provider,
             "providerPaymentId": payment_id,
             "amount": _decimal_text(amount),
             "currency": _currency(currency),
@@ -109,8 +110,21 @@ class CommerceOrderPaymentLedger:
             "payments": {},
             "createdAt": occurred_at,
         }
-        record.setdefault("payments", {})[payment_id] = payment
-        record["updatedAt"] = occurred_at
+        # Provider IDs are unique only inside their provider's namespace.
+        # Include the provider in the key so equal IDs from distinct rails are
+        # retained as two payment observations rather than overwriting one.
+        payment_key = f"{payment_provider}:{payment_id}"
+        payments = record.setdefault("payments", {})
+        prior_payment = payments.get(payment_key)
+        if prior_payment is None:
+            payments[payment_key] = payment
+        elif any(
+            prior_payment.get(field) != payment.get(field)
+            for field in ("provider", "providerPaymentId", "amount", "currency", "status")
+        ):
+            record["state"] = "conflict"
+            record["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
+        record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
         self._reconcile(record)
         await self._store.set(key, record)
         return record
@@ -149,6 +163,13 @@ class CommerceOrderPaymentLedger:
         # or deduplicates distinct processor payment IDs into order value.
         record["state"] = "matched" if len(eligible) == 1 else "multiple_payments"
         record["matchedPaymentIds"] = [p["providerPaymentId"] for p in eligible]
+        record["matchedPayments"] = [
+            {
+                "provider": payment["provider"],
+                "providerPaymentId": payment["providerPaymentId"],
+            }
+            for payment in eligible
+        ]
 
 
 def _required(value: str, field: str) -> str:
