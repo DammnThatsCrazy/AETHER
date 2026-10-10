@@ -13,9 +13,11 @@
   },
   "payment": {
     "provider": "stripe",
+    "webhook_event_type": "payment_intent.succeeded",
     "provider_payment_id": "pi_proof_41001",
     "commerce_order_ref": "shopify:gid://shopify/Shop/9001:gid://shopify/Order/41001",
     "amount": "49.95",
+    "stripe_amount_minor_units": 4995,
     "currency": "USD",
     "status": "completed",
     "signature_verification": "required_before_recording"
@@ -57,6 +59,13 @@
       "payment_ids": ["pi_proof_41001", "pi_proof_41001"],
       "expected_distinct_successful_payment_count": 1,
       "reason": "provider_payment_id_upsert_is_idempotent"
+    },
+    {
+      "id": "ledger_failure_then_webhook_retry",
+      "payment_ids": ["pi_proof_41001", "pi_proof_41001"],
+      "first_delivery": "funding_session_persisted_then_evidence_store_unavailable",
+      "retry_behavior": "duplicate_event_retries_idempotent_commerce_evidence_upsert",
+      "expected_distinct_successful_payment_count": 1
     },
     {
       "id": "distinct_successful_payments",

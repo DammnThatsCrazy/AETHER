@@ -92,6 +92,7 @@ const FLOW_TYPE_LABELS: Record<FundingFlowType, string> = {
   crypto_deposit: 'Crypto deposit',
   offramp: 'Offramp',
   settlement: 'Settlement',
+  commerce_payment: 'Merchant payment',
   refund: 'Refund',
 };
 

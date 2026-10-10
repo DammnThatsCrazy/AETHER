@@ -950,7 +950,7 @@ export const CATALOG_ENTRIES = [
     family: 'stripe',
     product: 'payment_rails',
     capability: 'observe',
-    display_name: 'Stripe crypto onramp',
+    display_name: 'Stripe payments and crypto onramp',
     category: 'payments',
     experience_category: 'commerce_revenue',
     readiness_state: 'credential_waiting',

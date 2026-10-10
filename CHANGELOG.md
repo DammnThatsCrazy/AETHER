@@ -8,6 +8,7 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 
 ### Added
 
+- Exact-reference commerce reconciliation: Shopify order revisions and signed Stripe `payment_intent.succeeded` observations can join on explicit `aether_order_ref` metadata with exact decimal amount/currency checks; payment completion remains distinct from payout settlement.
 - SDK distribution layer: `@aether/web` build artifacts are emitted and guarded on the publish surface, and a CDN release pipeline (`.github/workflows/publish-sdk.yml`) ships verified manifests with a derived version.
 - Publishable (`pk_`) API keys — a site-scoped, ingestion-only key class alongside the existing secret (`ak_`) class, so a key in page HTML cannot reach the rest of the API.
 - One-tag SDK install: quickstart collapses to a single auto-init script tag that is a real install path, with the canonical envelope stamped on the signals it emits.

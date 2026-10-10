@@ -5,8 +5,8 @@
 // exits, settles, or fails across providers. Aether does not execute or
 // settle payments, custody funds, or sign transactions.
 //
-// Named providers only (no generic webhook fallback): Privy, Stripe crypto
-// onramp, Coinbase onramp/offramp, MoonPay buy/sell, Bridge virtual accounts.
+// Named providers only (no generic webhook fallback): Privy, Stripe merchant
+// payment/onramp, Coinbase onramp/offramp, MoonPay buy/sell, Bridge virtual accounts.
 // Records never carry raw KYC documents, card numbers, bank/routing numbers,
 // or provider secrets; metadata is sanitized and explicitly PII-safe.
 // =============================================================================
@@ -29,6 +29,8 @@ export const fundingFlowTypes = [
   'crypto_deposit',
   'offramp',
   'settlement',
+  // A completed merchant payment observation; distinct from payout settlement.
+  'commerce_payment',
   'refund',
 ] as const;
 export type FundingFlowType = typeof fundingFlowTypes[number];

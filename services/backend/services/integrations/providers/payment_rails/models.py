@@ -5,8 +5,8 @@ normalizes, reconciles, and displays how money enters, exits, settles, or
 fails across providers. Aether does not execute or settle payments, custody
 funds, or sign transactions.
 
-Named providers only (no generic webhook fallback): Privy, Stripe crypto
-onramp, Coinbase onramp/offramp, MoonPay buy/sell, Bridge virtual accounts.
+Named providers only (no generic webhook fallback): Privy, Stripe merchant
+payment/onramp, Coinbase onramp/offramp, MoonPay buy/sell, Bridge virtual accounts.
 Records never carry raw KYC documents, card numbers, bank/routing numbers,
 or provider secrets; metadata is sanitized and explicitly PII-safe.
 """
@@ -32,12 +32,13 @@ FundingFlowType = Literal[
     "crypto_deposit",
     "offramp",
     "settlement",
+    "commerce_payment",
     "refund",
 ]
 
 FUNDING_FLOW_TYPES: tuple[str, ...] = (
     "fiat_onramp", "crypto_onramp", "bank_deposit", "crypto_deposit",
-    "offramp", "settlement", "refund",
+    "offramp", "settlement", "commerce_payment", "refund",
 )
 
 PaymentRail = Literal[

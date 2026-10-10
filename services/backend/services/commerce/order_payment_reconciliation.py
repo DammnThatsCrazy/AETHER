@@ -151,7 +151,9 @@ class CommerceOrderPaymentLedger:
 
 def _required(value: str, field: str) -> str:
     result = str(value or "").strip()
-    if not result or len(result) > 512:
+    if not result or len(result) > 512 or any(
+        ord(char) < 32 or ord(char) == 127 for char in result
+    ):
         raise ValueError(f"{field} must be a non-empty value of at most 512 characters")
     return result
 

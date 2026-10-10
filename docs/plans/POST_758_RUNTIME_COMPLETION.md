@@ -96,18 +96,21 @@ to the Shopify shop/account and order ID. After Bronze/outbox persistence, a
 tenant-scoped ledger records the order revision and exact decimal total. The
 ledger can accept a completed payment observation only when its provider
 adapter supplies the same explicit reference, exact amount, and currency in
-sanitized metadata. It exposes the evidence through
+sanitized metadata. Stripe now normalizes signed
+`payment_intent.succeeded` webhooks as the distinct `commerce_payment` flow
+and passes PaymentIntent `aether_order_ref` metadata into the ledger. This flow
+does not mean payout settlement, and unsupported three-decimal currencies are
+excluded from reconciliation. The ledger exposes the evidence through
 `GET /v1/commerce/reconciliation/order-payments`, guarded by `commerce:read`.
 Matching never uses amount, time, email, or customer identity; multiple
 successful payments and mismatched amounts remain explicit conflicts. This
 ledger ignores source-time older order revisions and flags divergent revisions
 with equal source time for review. This slice does not project payment graph
-facts or claim settlement. No current
-payment adapter emits the commerce metadata contract by default, so provider
+facts or claim settlement. Merchant metadata configuration, live staging
 certification, SDK checkout linkage, correction/refund semantics, and the
 two-provider golden path remain release work. A contract-only scenario fixture
 now records exact-match, missing-reference, mismatch, duplicate, multiple-
-payment, stale-revision, and equal-time conflict expectations at
+payment, partial-write retry, stale-revision, and equal-time conflict expectations at
 `packages/proof-fixtures/fixtures/commerce-reconciliation/exact_reference_scenarios.json`.
 
 ### Slice 0 — Capability and work-order traceability

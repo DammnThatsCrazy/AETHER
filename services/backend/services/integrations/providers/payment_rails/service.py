@@ -540,6 +540,18 @@ class PaymentRailsService:
 
         _, disposition = await self.repos.events.record_event(tenant_id, event)
         if disposition == "ignored_duplicate":
+            # A prior delivery may have committed the provider event/session
+            # but failed while writing the separate commerce evidence ledger.
+            # Retry that idempotent side write from the persisted session.
+            candidate = adapter.normalize_to_funding_session(tenant_id, event)
+            if candidate is not None and candidate.flow_type in {"settlement", "commerce_payment"}:
+                prior_session = await self.repos.sessions.find_by_idempotency_key(
+                    tenant_id, candidate.idempotency_key
+                )
+                if prior_session is not None:
+                    await self._record_commerce_payment_evidence(
+                        tenant_id, adapter, event, prior_session
+                    )
             # A legitimate duplicate retry is a completed delivery — never rebilled.
             await self._receipt_advance(tenant_id, rid, ReceiptStage.COMPLETED,
                                         verification_state="duplicate")
@@ -606,39 +618,7 @@ class PaymentRailsService:
             record["reconciliation_state"] = reconciliation.state
             await self.repos.sessions.save(tenant_id, record)
 
-        # Merchant order reconciliation is opt-in per provider observation:
-        # the adapter must expose an explicit, server supplied reference and
-        # exact commerce amount/currency in sanitized metadata. Never derive
-        # this link from customer, amount, or timestamps.
-        commerce_meta = record.get("metadata") or {}
-        commerce_ref = commerce_meta.get("commerce_order_ref")
-        commerce_amount = commerce_meta.get("commerce_payment_amount")
-        commerce_currency = commerce_meta.get("commerce_payment_currency")
-        if (
-            record.get("flow_type") == "settlement"
-            and record.get("status") == "completed"
-            and commerce_ref
-            and commerce_amount is not None
-            and commerce_currency
-        ):
-            from services.commerce.order_payment_reconciliation import (
-                CommerceOrderPaymentLedger,
-            )
-
-            await CommerceOrderPaymentLedger().record_payment(
-                tenant_id,
-                commerce_order_ref=str(commerce_ref),
-                provider=str(record.get("provider") or adapter.provider_name),
-                provider_payment_id=str(
-                    record.get("provider_transaction_id")
-                    or record.get("provider_session_id")
-                    or record.get("id")
-                ),
-                amount=str(commerce_amount),
-                currency=str(commerce_currency),
-                status="completed",
-                occurred_at=str(record.get("occurred_at") or event.occurred_at),
-            )
+        await self._record_commerce_payment_evidence(tenant_id, adapter, event, record)
 
         emitted = await self._emit_canonical_events(tenant_id, adapter, record)
         await self._receipt_finalize_delivery(tenant_id, rid, record)
@@ -651,6 +631,46 @@ class PaymentRailsService:
             "canonical_events_emitted": emitted,
             "receipt_id": rid,
         }
+
+    async def _record_commerce_payment_evidence(
+        self,
+        tenant_id: str,
+        adapter: PaymentRailAdapter,
+        event: ParsedProviderEvent,
+        record: dict[str, Any],
+    ) -> None:
+        """Idempotently link an admitted provider payment by exact reference."""
+        commerce_meta = record.get("metadata") or {}
+        commerce_ref = commerce_meta.get("commerce_order_ref")
+        commerce_amount = commerce_meta.get("commerce_payment_amount")
+        commerce_currency = commerce_meta.get("commerce_payment_currency")
+        if (
+            record.get("flow_type") not in {"settlement", "commerce_payment"}
+            or record.get("status") != "completed"
+            or not commerce_ref
+            or commerce_amount is None
+            or not commerce_currency
+        ):
+            return
+
+        from services.commerce.order_payment_reconciliation import (
+            CommerceOrderPaymentLedger,
+        )
+
+        await CommerceOrderPaymentLedger().record_payment(
+            tenant_id,
+            commerce_order_ref=str(commerce_ref),
+            provider=str(record.get("provider") or adapter.provider_name),
+            provider_payment_id=str(
+                record.get("provider_transaction_id")
+                or record.get("provider_session_id")
+                or record.get("id")
+            ),
+            amount=str(commerce_amount),
+            currency=str(commerce_currency),
+            status="completed",
+            occurred_at=str(record.get("occurred_at") or event.occurred_at),
+        )
 
     # ── Receipt lifecycle helpers (best-effort; never break the flow) ─────────
 
