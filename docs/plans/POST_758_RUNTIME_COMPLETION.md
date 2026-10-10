@@ -140,6 +140,13 @@ then Profile 360, Agent 360, and Value. Extend Journeys, Signals/Lenses,
 Snapshot, and Kyber diagnostics only where they can display source evidence,
 authority, lifecycle state, and limitations.
 
+**Implementation status (October 10, 2026):** Aether now has an Agent 360 page
+at `/agents/:agentId`, linked from the observed-agent access panel. It consumes
+the existing tenant-scoped Agent 360 API and presents identity/authority,
+execution history, delegation, and payment/settlement evidence. The page keeps
+missing records explicit and states that executor completion is not settled
+value. The mobile Journey and graph reconciliation path remains open.
+
 ### Slice 4 — Journey and release evidence
 
 Run the five approved journeys against controlled fixtures first and authorized

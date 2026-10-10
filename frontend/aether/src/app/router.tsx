@@ -59,6 +59,7 @@ const StablecoinAssetPage = lazy(() => import('@aether-app/pages/stablecoins').t
 const DerivativesPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesPage })));
 const DerivativesAccountPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesAccountPage })));
 const AgentAccessPage = lazy(() => import('@aether-app/pages/agent-access').then(m => ({ default: m.AgentAccessPage })));
+const Agent360Page = lazy(() => import('@aether-app/pages/agent360').then(m => ({ default: m.Agent360Page })));
 const InteropPage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropPage })));
 const InteropMessagePage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropMessagePage })));
 const TenantActivationDashboard = lazy(() => import('@aether-app/features/identity/TenantActivationDashboard').then(m => ({ default: m.TenantActivationDashboard })));
@@ -180,6 +181,7 @@ export function AppRouter() {
                 <Route path="/derivatives" element={<PageSuspense><DerivativesPage /></PageSuspense>} />
                 <Route path="/derivatives/accounts/:accountId" element={<PageSuspense><DerivativesAccountPage /></PageSuspense>} />
                 <Route path="/agent-access" element={<PageSuspense><AgentAccessPage /></PageSuspense>} />
+                <Route path="/agents/:agentId" element={<PageSuspense><Agent360Page /></PageSuspense>} />
                 <Route path="/interoperability" element={<PageSuspense><InteropPage /></PageSuspense>} />
                 <Route path="/interoperability/messages/:messageId" element={<PageSuspense><InteropMessagePage /></PageSuspense>} />
                 <Route path="*" element={<TenantNotFound />} />

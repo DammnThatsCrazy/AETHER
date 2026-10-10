@@ -12,6 +12,10 @@ since_version: "0.1.0"
 
 The Agent 360 provides a complete view around its domain, built on top of the tenant-scoped intelligence graph.
 
+In Aether, the customer route is `/agents/:agentId`; it composes the existing
+tenant-scoped `/v1/profile/{agentId}/agent` read. Agent Access remains the
+separate capability-reach and authorization view.
+
 User-agent executions start through `POST /v1/agents/{agent_id}/execute` after
 the delegation engine allows the requested action. A trusted executor may
 finalize a running execution through
