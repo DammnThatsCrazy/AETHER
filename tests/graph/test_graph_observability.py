@@ -40,17 +40,17 @@ def _read(rel: str) -> str:
 
 
 def test_release_gate_script_exists() -> None:
-    gate = REPO_ROOT / "scripts" / "graph" / "check_graph_release_gate.py"
-    assert gate.exists(), "check_graph_release_gate.py must exist in scripts/graph/"
+    gate = REPO_ROOT / "scripts" / "graph_tools" / "check_graph_release_gate.py"
+    assert gate.exists(), "check_graph_release_gate.py must exist in scripts/graph_tools/"
 
 
 def test_replay_workload_script_exists() -> None:
-    script = REPO_ROOT / "scripts" / "graph" / "replay_relationship_layers.py"
+    script = REPO_ROOT / "scripts" / "graph_tools" / "replay_relationship_layers.py"
     assert script.exists()
 
 
 def test_graph_rebuild_validation_script_exists() -> None:
-    script = REPO_ROOT / "scripts" / "graph" / "graph_rebuild_validation.py"
+    script = REPO_ROOT / "scripts" / "graph_tools" / "graph_rebuild_validation.py"
     assert script.exists()
 
 

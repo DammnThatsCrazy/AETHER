@@ -166,7 +166,7 @@ AREAS: list[Area] = [
             "services/api/shared/graph/relationship_layers.py",
             "services/api/shared/graph/write_validator.py",
             "services/api/shared/graph/edge_properties.py",
-            "scripts/graph/check_graph_release_gate.py",
+            "scripts/graph_tools/check_graph_release_gate.py",
         ],
     ),
     Area(

@@ -242,7 +242,7 @@ def check_mock_provider_replay() -> list[CheckResult]:
                    if not failures else failed("mock-provider", f"cert failures: {failures}"))
     except Exception as exc:
         out.append(failed("mock-provider", f"certification framework failed to load: {exc}"))
-    replay = _run("scripts/graph/replay_relationship_layers.py")
+    replay = _run("scripts/graph_tools/replay_relationship_layers.py")
     out.append(passed("replay-graph", "in-memory relationship-layer replay OK")
                if replay.returncode == 0 else failed("replay-graph", "graph replay failed"))
     return out
