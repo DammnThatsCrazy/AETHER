@@ -318,13 +318,16 @@ jobs:
             --job-timeout-seconds 900 \
             --job-poll-seconds 15
       - name: Verify production status provenance and branch stage
+        # Production builds from main, which lags the staging commit, so it is
+        # validated against main's own head, not the staging SHA.
         env:
-          EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
           python scripts/release/check_amplify_app_contract.py \
             --mode production-status \
-            --expected-commit "$EXPECTED_COMMIT_SHA" \
+            --expected-commit "$main_sha" \
             --wait-for-current-job \
             --job-timeout-seconds 900 \
             --job-poll-seconds 15

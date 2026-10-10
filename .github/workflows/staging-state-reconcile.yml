@@ -677,7 +677,7 @@ jobs:
             local prefix="$2"
             local subdomain dns_record expected_target live_target
             subdomain="$(jq -c --arg prefix "$prefix" \
-              'first((.domainAssociation.subDomains // [])[] | select(.subDomainSetting.prefix == $prefix and .subDomainSetting.branchName == "main")) // empty' \
+              'first((.domainAssociation.subDomains // [])[] | select(.subDomainSetting.prefix == $prefix and .subDomainSetting.branchName == "staging")) // empty' \
               <<<"$association_json")"
             test -n "$subdomain" || return 1
             if jq -e '.verified == true' <<<"$subdomain" >/dev/null; then
@@ -755,7 +755,7 @@ jobs:
                 echo "::error::staging Amplify domain association for ${app_key} lacks the reviewed ${prefix} main subdomain(s); rerun the reviewed reconciliation with REPAIR-STAGING-AMPLIFY"; exit 1;
               fi
               reviewed_settings="$(jq -nc --arg prefixes "${reviewed_prefixes[$app_key]}" \
-                '$prefixes | split(" ") | map({prefix: ., branchName: "main"})')"
+                '$prefixes | split(" ") | map({prefix: ., branchName: "staging"})')"
               settings="$(jq -c --argjson desired "$reviewed_settings" '
                 [(.domainAssociation.subDomains // [])[]?.subDomainSetting, $desired[]]
                 | map(select(type == "object" and .prefix != null and .branchName != null))

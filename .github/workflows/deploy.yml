@@ -607,6 +607,13 @@ jobs:
             staging_ok=$(jq -r '[.jobs[] | select(.name == "Deploy exact release" and .conclusion == "success")] | length' <<<"$jobs_json")
             test "$staging_ok" -ge 1 || {
               echo "::error::production source run ${SOURCE_RUN_ID} has no successful staging deploy job"; exit 1; }
+            # Only staging code that has been promoted into main may go to
+            # production: the staged commit must be contained in this main revision.
+            relation=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${run_head_sha}...${GITHUB_SHA}" --jq .status)
+            case "$relation" in
+              identical|ahead) ;;
+              *) echo "::error::production source run ${SOURCE_RUN_ID} commit ${run_head_sha} is not contained in main ${GITHUB_SHA} (${relation}); promote staging to main first"; exit 1 ;;
+            esac
           fi
       - uses: actions/download-artifact@v4
         if: inputs.environment == 'production'
