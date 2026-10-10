@@ -18,21 +18,21 @@ WORKDIR /app
 
 # Copy workspace root manifests first (layer-cache friendly)
 COPY package.json package-lock.json ./
-COPY apps/kyber-web/package.json    ./apps/kyber/
-COPY packages/ui/core/package.json   ./apps/shared/
+COPY apps/kyber-web/package.json    ./apps/kyber-web/
+COPY packages/ui/core/package.json   ./packages/ui/core/
 COPY packages/shared/package.json   ./packages/shared/
-COPY packages/sdk/web/package.json      ./packages/web/
+COPY packages/sdk/web/package.json      ./packages/sdk/web/
 
 # Install the kyber workspace subtree (pulls its workspace deps)
 RUN npm ci --workspace=apps/kyber-web
 
 # Copy workspace package source (shared/ui/web are TypeScript-source packages)
 COPY packages/shared/ ./packages/shared/
-COPY packages/sdk/web/    ./packages/web/
-COPY packages/ui/core/ ./apps/shared/
+COPY packages/sdk/web/    ./packages/sdk/web/
+COPY packages/ui/core/ ./packages/ui/core/
 
 # Copy app source
-COPY apps/kyber-web/ ./apps/kyber/
+COPY apps/kyber-web/ ./apps/kyber-web/
 
 # Auth0 and API config — baked into the Vite bundle at build time
 ARG VITE_AUTH0_DOMAIN
@@ -41,7 +41,7 @@ ARG VITE_AUTH0_AUDIENCE
 ARG VITE_API_BASE_URL
 ARG VITE_WS_BASE_URL
 
-WORKDIR /app/apps/kyber
+WORKDIR /app/apps/kyber-web
 RUN npm run build
 
 # ─── Stage 2: Serve ───────────────────────────────────────────────
@@ -52,7 +52,7 @@ RUN addgroup -g 1001 -S kyber && \
     adduser  -u 1001 -S kyber -G kyber
 
 # Copy built assets
-COPY --from=builder /app/apps/kyber/dist /usr/share/nginx/html
+COPY --from=builder /app/apps/kyber-web/dist /usr/share/nginx/html
 
 # Nginx config stored as a template; entrypoint substitutes ${BACKEND_URL}
 COPY apps/kyber-web/nginx.conf    /etc/nginx/templates/default.conf.template

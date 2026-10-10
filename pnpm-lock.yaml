@@ -111,7 +111,7 @@ importers:
     dependencies:
       '@aether/react-native':
         specifier: '*'
-        version: link:../../packages/sdk/react-native
+        version: link:../../../../../packages/sdk/react-native
       expo:
         specifier: ^51.0.0
         version: 51.0.39(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react-native@0.74.0(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
@@ -136,10 +136,10 @@ importers:
     dependencies:
       '@aether/proof-fixtures':
         specifier: '*'
-        version: link:../../tests/e2e/proof/packages/fixtures
+        version: link:../../packages/fixtures
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/sdk/web
+        version: link:../../../../../packages/sdk/web
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -173,7 +173,7 @@ importers:
     dependencies:
       '@aether/react-native':
         specifier: '*'
-        version: link:../../packages/sdk/react-native
+        version: link:../../../../../packages/sdk/react-native
       expo:
         specifier: ^51.0.0
         version: 51.0.39(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react-native@0.74.0(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
@@ -198,7 +198,7 @@ importers:
     dependencies:
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/sdk/web
+        version: link:../../../../../packages/sdk/web
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -232,10 +232,10 @@ importers:
     dependencies:
       '@aether/shared':
         specifier: '*'
-        version: link:../../packages/shared
+        version: link:../../../../../packages/shared
       '@aether/web':
         specifier: '*'
-        version: link:../../packages/sdk/web
+        version: link:../../../../../packages/sdk/web
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -272,7 +272,7 @@ importers:
         version: link:../../packages/shared
       '@aether/ui':
         specifier: '*'
-        version: link:../shared
+        version: link:../../packages/ui/core
       '@aether/web':
         specifier: '*'
         version: link:../../packages/sdk/web
@@ -360,7 +360,7 @@ importers:
         version: link:../../packages/shared
       '@aether/ui':
         specifier: '*'
-        version: link:../shared
+        version: link:../../packages/ui/core
       '@olympus/brand':
         specifier: '*'
         version: link:../../packages/ui/brand
@@ -421,7 +421,7 @@ importers:
         version: link:../../packages/shared
       '@aether/ui':
         specifier: '*'
-        version: link:../shared
+        version: link:../../packages/ui/core
       '@aether/web':
         specifier: '*'
         version: link:../../packages/sdk/web
@@ -525,7 +525,7 @@ importers:
         version: link:../../packages/shared
       '@aether/ui':
         specifier: '*'
-        version: link:../shared
+        version: link:../../packages/ui/core
       '@aether/web':
         specifier: '*'
         version: link:../../packages/sdk/web
@@ -637,7 +637,7 @@ importers:
     dependencies:
       '@aether/ui':
         specifier: '*'
-        version: link:../shared
+        version: link:../../packages/ui/core
       '@olympus/brand':
         specifier: '*'
         version: link:../../packages/ui/brand
@@ -695,10 +695,10 @@ importers:
     dependencies:
       '@aether/shared':
         specifier: '*'
-        version: link:../../packages/shared
+        version: link:../../shared
       '@olympus/brand':
         specifier: '*'
-        version: link:../../packages/ui/brand
+        version: link:../brand
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
@@ -830,7 +830,7 @@ importers:
     dependencies:
       '@aether/shared':
         specifier: '*'
-        version: link:../shared
+        version: link:../../shared
     devDependencies:
       typescript:
         specifier: ^5.3.0
@@ -858,7 +858,7 @@ importers:
     dependencies:
       '@aether/shared':
         specifier: '*'
-        version: link:../shared
+        version: link:../../../../../packages/shared
     devDependencies:
       typescript:
         specifier: ^5.4.0
@@ -871,11 +871,11 @@ importers:
     dependencies:
       '@aether/shared':
         specifier: '*'
-        version: link:../shared
+        version: link:../../../../../packages/shared
     devDependencies:
       '@aether/proof-contracts':
         specifier: '*'
-        version: link:../proof-contracts
+        version: link:../contracts
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -887,13 +887,13 @@ importers:
     dependencies:
       '@aether/proof-contracts':
         specifier: '*'
-        version: link:../proof-contracts
+        version: link:../contracts
       '@aether/proof-runner':
         specifier: '*'
-        version: link:../proof-runner
+        version: link:../runner
       '@aether/shared':
         specifier: '*'
-        version: link:../shared
+        version: link:../../../../../packages/shared
     devDependencies:
       typescript:
         specifier: ^5.4.0
@@ -906,13 +906,13 @@ importers:
     dependencies:
       '@aether/proof-contracts':
         specifier: '*'
-        version: link:../proof-contracts
+        version: link:../contracts
       '@aether/proof-fixtures':
         specifier: '*'
-        version: link:../proof-fixtures
+        version: link:../fixtures
       '@aether/shared':
         specifier: '*'
-        version: link:../shared
+        version: link:../../../../../packages/shared
     devDependencies:
       typescript:
         specifier: ^5.4.0
@@ -925,7 +925,7 @@ importers:
     dependencies:
       '@aether/shared':
         specifier: ^0.1.0-alpha.0
-        version: link:../shared
+        version: link:../../shared
       '@react-native-async-storage/async-storage':
         specifier: '>=1.0.0'
         version: 3.1.1(react-native@0.73.11(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react@18.2.0))(react@18.2.0)
@@ -947,7 +947,7 @@ importers:
     devDependencies:
       '@aether/shared':
         specifier: '*'
-        version: link:../shared
+        version: link:../../shared
       '@vitest/coverage-v8':
         specifier: ^1.6.0
         version: 1.6.1(vitest@1.6.1(@types/node@20.19.43)(jsdom@25.0.1)(terser@5.51.2))
@@ -974,7 +974,7 @@ importers:
     dependencies:
       '@aether/shared':
         specifier: ^0.1.0-alpha.0
-        version: link:../shared
+        version: link:../../shared
       react:
         specifier: '>=18.0.0'
         version: 18.2.0

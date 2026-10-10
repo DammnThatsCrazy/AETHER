@@ -20,6 +20,9 @@ packages/*
 !packages/shared/
 !packages/shared/contracts/
 !packages/shared/contracts/**
+!packages/contracts/
+!packages/contracts/delivery/
+!packages/contracts/delivery/**
 apps/
 packages/sdk/playground/
 RootPackageSDK.json

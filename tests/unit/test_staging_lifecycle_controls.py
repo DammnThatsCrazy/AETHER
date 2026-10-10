@@ -898,13 +898,13 @@ def test_identity_ui_fixture_and_authenticated_staging_evidence_feed_proof_pack(
     assert "always()" in ui["if"]
     assert "fixture API" in ui["name"]
     assert "identity-continuity.spec.ts" in ui["run"]
-    assert ui["env"]["PLAYWRIGHT_OUTPUT_DIR"] == "${{ github.workspace }}/artifacts/rehearsal/identity-continuity-ui"
+    assert ui["env"]["PLAYWRIGHT_OUTPUT_DIR"] == "${{ github.workspace }}/.artifacts/rehearsal/identity-continuity-ui"
     assert "identity-continuity-live.spec.ts" in live_ui["run"]
     assert live_ui["env"]["IDENTITY_STAGING_UI_BASE_URL"] == "${{ secrets.TF_AETHER_APP_URL }}"
     assert "IDENTITY_STAGING_CAPTURE_API_KEY" in live_ui["env"]
-    assert live_ui["env"]["PLAYWRIGHT_OUTPUT_DIR"] == "${{ github.workspace }}/artifacts/rehearsal/identity-continuity-ui-live"
-    assert '--ui-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui"' in capture["run"]
-    assert '--ui-live-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui-live"' in capture["run"]
+    assert live_ui["env"]["PLAYWRIGHT_OUTPUT_DIR"] == "${{ github.workspace }}/.artifacts/rehearsal/identity-continuity-ui-live"
+    assert '--ui-evidence-directory "$GITHUB_WORKSPACE/.artifacts/rehearsal/identity-continuity-ui"' in capture["run"]
+    assert '--ui-live-evidence-directory "$GITHUB_WORKSPACE/.artifacts/rehearsal/identity-continuity-ui-live"' in capture["run"]
     assert upload["if"] == "always() && steps.identity_ui_e2e.outcome == 'failure'"
     assert upload["with"]["path"] == ".artifacts/rehearsal/identity-continuity-ui"
     assert "@aether/proof-reporting build" in proof_build["run"]

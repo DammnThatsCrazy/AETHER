@@ -472,7 +472,7 @@ jobs:
           set -euo pipefail
           plan_json="${TF_DIR}/remote-plan-${PROFILE}.json"
           test -s "${plan_json}"
-          mkdir -p artifacts
+          mkdir -p .artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "${PROFILE}" \
             --plan-json "${plan_json}" \

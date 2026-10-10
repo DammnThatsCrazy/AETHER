@@ -5,19 +5,19 @@ WORKDIR /app
 
 # Copy workspace root manifests first (layer-cache friendly)
 COPY package.json package-lock.json ./
-COPY apps/aether-web/package.json   ./apps/aether/
+COPY apps/aether-web/package.json   ./apps/aether-web/
 COPY packages/shared/package.json ./packages/shared/
-COPY packages/ui/package.json     ./packages/ui/
+COPY packages/ui/core/package.json ./packages/ui/core/
 
 # Install all workspace dependencies
 RUN npm ci --workspace=apps/aether-web
 
 # Copy workspace package source (shared + ui are TypeScript-source packages)
 COPY packages/shared/ ./packages/shared/
-COPY packages/ui/     ./packages/ui/
+COPY packages/ui/core/ ./packages/ui/core/
 
 # Copy app source
-COPY apps/aether-web/ ./apps/aether/
+COPY apps/aether-web/ ./apps/aether-web/
 
 # Auth0 and API config — baked into the Vite bundle at build time
 ARG VITE_AUTH0_DOMAIN
@@ -25,7 +25,7 @@ ARG VITE_AUTH0_CLIENT_ID
 ARG VITE_AUTH0_AUDIENCE
 ARG VITE_API_BASE_URL
 
-WORKDIR /app/apps/aether
+WORKDIR /app/apps/aether-web
 RUN npm run build
 
 # ─── Stage 2: Serve ───────────────────────────────────────────────
@@ -36,7 +36,7 @@ RUN addgroup -g 1001 -S aether && \
     adduser  -u 1001 -S aether -G aether
 
 # Copy built assets
-COPY --from=builder /app/apps/aether/dist /usr/share/nginx/html
+COPY --from=builder /app/apps/aether-web/dist /usr/share/nginx/html
 
 # Nginx config stored as a template; entrypoint substitutes ${BACKEND_URL}
 COPY apps/aether-web/nginx.conf    /etc/nginx/templates/default.conf.template

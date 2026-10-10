@@ -20,22 +20,22 @@ for PKG in . packages/shared packages/sdk/web packages/sdk/react-native; do
   npm pkg set version="$VERSION" --prefix "$ROOT/$PKG"
   echo "  ✓ $PKG/package.json"
 done
-npm pkg set "dependencies.@aether/shared=^${VERSION}" --prefix "$ROOT/packages/react-native"
-npm pkg set "dependencies.@aether/shared=^${VERSION}" --prefix "$ROOT/packages/web"
+npm pkg set "dependencies.@aether/shared=^${VERSION}" --prefix "$ROOT/packages/sdk/react-native"
+npm pkg set "dependencies.@aether/shared=^${VERSION}" --prefix "$ROOT/packages/sdk/web"
 
-sed -i "s/^sdkVersion=.*/sdkVersion=${VERSION}/" "$ROOT/packages/android/gradle.properties"
-sed -i "s/s\.version\s*=\s*\"[^\"]*\"/s.version         = \"${VERSION}\"/" "$ROOT/packages/ios/AetherSDK.podspec"
-sed -i "s/s\.version\s*=\s*\"[^\"]*\"/s.version          = \"${VERSION}\"/" "$ROOT/packages/react-native/aether-react-native.podspec"
+sed -i "s/^sdkVersion=.*/sdkVersion=${VERSION}/" "$ROOT/packages/sdk/android/gradle.properties"
+sed -i "s/s\.version\s*=\s*\"[^\"]*\"/s.version         = \"${VERSION}\"/" "$ROOT/packages/sdk/ios/AetherSDK.podspec"
+sed -i "s/s\.version\s*=\s*\"[^\"]*\"/s.version          = \"${VERSION}\"/" "$ROOT/packages/sdk/react-native/aether-react-native.podspec"
 
 perl -0pi -e "s/SDK_VERSION = '[^']+'/SDK_VERSION = '$VERSION'/g" \
   "$ROOT/packages/shared/sdk-version.ts" \
-  "$ROOT/packages/web/src/index.ts" \
-  "$ROOT/packages/web/src/core/event-queue.ts" \
-  "$ROOT/packages/web/src/health/sdk-health-agent.ts" \
-  "$ROOT/packages/react-native/src/modules/HealthAgent.ts"
-perl -0pi -e "s/version: '[^']+'/version: '$VERSION'/g" "$ROOT/packages/react-native/src/context/SemanticContext.ts"
-perl -0pi -e "s/VERSION = \"[^\"]+\"/VERSION = \"$VERSION\"/g" "$ROOT/packages/android/src/main/java/com/aether/sdk/Aether.kt"
-perl -0pi -e "s/v[0-9]+\.[0-9]+\.[0-9]+\)/v$VERSION\)/g; s/version: \"[^\"]+\"/version: \"$VERSION\"/g" "$ROOT/packages/ios/Sources/AetherSDK/Aether.swift"
+  "$ROOT/packages/sdk/web/src/index.ts" \
+  "$ROOT/packages/sdk/web/src/core/event-queue.ts" \
+  "$ROOT/packages/sdk/web/src/health/sdk-health-agent.ts" \
+  "$ROOT/packages/sdk/react-native/src/modules/HealthAgent.ts"
+perl -0pi -e "s/version: '[^']+'/version: '$VERSION'/g" "$ROOT/packages/sdk/react-native/src/context/SemanticContext.ts"
+perl -0pi -e "s/VERSION = \"[^\"]+\"/VERSION = \"$VERSION\"/g" "$ROOT/packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt"
+perl -0pi -e "s/v[0-9]+\.[0-9]+\.[0-9]+\)/v$VERSION\)/g; s/version: \"[^\"]+\"/version: \"$VERSION\"/g" "$ROOT/packages/sdk/ios/Sources/AetherSDK/Aether.swift"
 
 # The loader carries its own copy of the version (it is bundled separately from
 # the SDK), and the backend carries the mirror the install verifier reads back.
@@ -43,7 +43,7 @@ perl -0pi -e "s/v[0-9]+\.[0-9]+\.[0-9]+\)/v$VERSION\)/g; s/version: \"[^\"]+\"/v
 # skipped them would fail closed rather than ship a mislabelled install — but
 # the release could not complete unattended, which is why they are listed here.
 perl -0pi -e "s/LOADER_VERSION = '[^']+'/LOADER_VERSION = '$VERSION'/g" \
-  "$ROOT/packages/web/src/loader/bootstrap.ts"
+  "$ROOT/packages/sdk/web/src/loader/bootstrap.ts"
 perl -0pi -e "s/CANONICAL_SDK_VERSION = \"[^\"]+\"/CANONICAL_SDK_VERSION = \"$VERSION\"/g" \
   "$ROOT/services/api/ingestion/sdk_distribution/versions.py"
 

@@ -1137,7 +1137,7 @@ jobs:
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
         run: |
           set -euo pipefail
-          mkdir -p artifacts
+          mkdir -p .artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
             --deployment-lane "$DEPLOYMENT_LANE" \
@@ -1632,7 +1632,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: staging-wake-plan-validation-${{ github.run_id }}
-          path: artifacts
+          path: .artifacts
 
       - uses: actions/download-artifact@v4
         with:
@@ -1646,7 +1646,7 @@ jobs:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
           INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
-          DELIVERY_EVIDENCE: ${{ github.workspace }}/artifacts/rehearsal/delivery/deployment-evidence.txt
+          DELIVERY_EVIDENCE: ${{ github.workspace }}/.artifacts/rehearsal/delivery/deployment-evidence.txt
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/release"
@@ -1789,7 +1789,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/release"
-          mkdir -p "${GITHUB_WORKSPACE}/artifacts/rehearsal"
+          mkdir -p "${GITHUB_WORKSPACE}/.artifacts/rehearsal"
           python - <<'PY'
           import hashlib, json, os, pathlib, sys
           m = json.load(open("release.json"))
@@ -1811,7 +1811,7 @@ jobs:
             archive="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['${archive_key}']['file'])")"
             expected="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['${archive_key}']['digest'])")"
             test -s "$archive"
-            dist="${GITHUB_WORKSPACE}/artifacts/rehearsal/dist-${app}"
+            dist="${GITHUB_WORKSPACE}/.artifacts/rehearsal/dist-${app}"
             rm -rf "$dist"; mkdir -p "$dist"
             tar -xzf "$archive" -C "$dist"
             bucket_var="$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')"
@@ -1819,9 +1819,9 @@ jobs:
             verify="${RUNNER_TEMP}/verify-${app}"; rm -rf "$verify"; mkdir -p "$verify"
             aws s3 sync "s3://${bucket}" "$verify" --delete
             diff -qr "$dist" "$verify" >/dev/null || { echo "::error::${app} static origin differs from approved artifact"; exit 1; }
-            printf '%s=%s\n' "$app" "$expected" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-origin-verification.txt"
+            printf '%s=%s\n' "$app" "$expected" >> "${GITHUB_WORKSPACE}/.artifacts/rehearsal/static-origin-verification.txt"
           done
-          printf 'manifest_sha256=%s\n' "$RELEASE_MANIFEST_SHA256" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-origin-verification.txt"
+          printf 'manifest_sha256=%s\n' "$RELEASE_MANIFEST_SHA256" >> "${GITHUB_WORKSPACE}/.artifacts/rehearsal/static-origin-verification.txt"
 
       - name: Verify delivered migration and resulting database revision
         run: |
@@ -2502,7 +2502,7 @@ jobs:
         id: identity_ui_e2e
         if: always() && steps.identity_ui_dependencies.outcome == 'success' && steps.identity_ui_browser.outcome == 'success'
         env:
-          PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/rehearsal/identity-continuity-ui
+          PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/.artifacts/rehearsal/identity-continuity-ui
         run: pnpm --filter @aether/aether run e2e -- --reporter=line src/test/e2e/identity-continuity.spec.ts
 
       - name: Run authenticated live staging identity UI evidence
@@ -2512,7 +2512,7 @@ jobs:
           IDENTITY_STAGING_UI_BASE_URL: ${{ secrets.TF_AETHER_APP_URL }}
           AETHER_STAGING_BASE_URL: https://${{ env.ALB_DNS_NAME }}
           IDENTITY_STAGING_CAPTURE_API_KEY: ${{ env.IDENTITY_STAGING_CAPTURE_API_KEY }}
-          PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/rehearsal/identity-continuity-ui-live
+          PLAYWRIGHT_OUTPUT_DIR: ${{ github.workspace }}/.artifacts/rehearsal/identity-continuity-ui-live
         run: |
           set -euo pipefail
           test -n "${IDENTITY_STAGING_UI_BASE_URL:-}" \
@@ -2528,8 +2528,8 @@ jobs:
           set -euo pipefail
           python scripts/identity_staging_capture.py \
             --output .artifacts/rehearsal/identity-continuity-capture.json \
-            --ui-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui" \
-            --ui-live-evidence-directory "$GITHUB_WORKSPACE/artifacts/rehearsal/identity-continuity-ui-live" \
+            --ui-evidence-directory "$GITHUB_WORKSPACE/.artifacts/rehearsal/identity-continuity-ui" \
+            --ui-live-evidence-directory "$GITHUB_WORKSPACE/.artifacts/rehearsal/identity-continuity-ui-live" \
             --commit-sha "$GITHUB_SHA" \
             --branch "$GITHUB_REF_NAME"
 
@@ -3170,7 +3170,7 @@ jobs:
           fi
           checksum="$(sha256sum reviewed.tfplan | cut -d' ' -f1)"
           cd "$GITHUB_WORKSPACE"
-          mkdir -p artifacts
+          mkdir -p .artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
             --deployment-lane "$DEPLOYMENT_LANE" \
@@ -3981,7 +3981,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .artifacts/sleep
-          (cd artifacts && find . -type f ! -name 'evidence.sha256' -print0 \
+          (cd .artifacts && find . -type f ! -name 'evidence.sha256' -print0 \
             | sort -z | xargs -0 sha256sum > evidence.sha256)
           sha256sum .artifacts/evidence.sha256 > .artifacts/evidence.sha256.sha256
           cat .artifacts/evidence.sha256
@@ -3990,7 +3990,7 @@ jobs:
         if: always()
         with:
           name: staging-lifecycle-evidence-${{ github.run_id }}
-          path: artifacts
+          path: .artifacts
           if-no-files-found: warn
           retention-days: 30
 

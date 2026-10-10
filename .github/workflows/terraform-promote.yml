@@ -673,7 +673,7 @@ jobs:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
-          mkdir -p artifacts
+          mkdir -p .artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
             --deployment-lane "$DEPLOYMENT_LANE" \
@@ -1361,7 +1361,7 @@ jobs:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
-          mkdir -p artifacts
+          mkdir -p .artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
             --deployment-lane "$DEPLOYMENT_LANE" \

@@ -270,8 +270,8 @@ jobs:
             echo "⚠ vitest.smoke.config.ts not found — skipping web-next smoke"
           fi
           cd ../web-script-tag
-          if [ -f ../../scripts/smoke/web-sdk.ts ]; then
-            npx tsx ../../scripts/smoke/web-sdk.ts || echo "⚠ web-sdk smoke failed — no live endpoint available (non-fatal)"
+          if [ -f ../../../../scripts/smoke/web-sdk.ts ]; then
+            npx tsx ../../../../scripts/smoke/web-sdk.ts || echo "⚠ web-sdk smoke failed — no live endpoint available (non-fatal)"
           else
             echo "⚠ scripts/smoke/web-sdk.ts not found — skipping script-tag smoke"
           fi
@@ -316,8 +316,8 @@ jobs:
             pnpm install --no-frozen-lockfile
           fi
           npx tsc --noEmit || echo "⚠ tsc --noEmit failed — skipping server smoke (pre-existing)"
-          if [ -f ../../scripts/smoke/staging.ts ]; then
-            npx tsx ../../scripts/smoke/staging.ts || echo "⚠ staging smoke failed — no live endpoint available (non-fatal)"
+          if [ -f ../../../../scripts/smoke/staging.ts ]; then
+            npx tsx ../../../../scripts/smoke/staging.ts || echo "⚠ staging smoke failed — no live endpoint available (non-fatal)"
           fi
 
   # -------------------------------------------------------------------
@@ -534,7 +534,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: '*'
-          path: artifacts
+          path: .artifacts
           merge-multiple: true
 
       - name: Collect proof artifacts
@@ -548,8 +548,8 @@ jobs:
             cp -r packages/shared/dist proof-artifacts/shared-dist/
           fi
           # Copy test results if present
-          if [ -d "artifacts" ]; then
-            cp -r artifacts proof-artifacts/test-results/
+          if [ -d ".artifacts" ]; then
+            cp -r .artifacts proof-artifacts/test-results/
           fi
 
       - name: Upload proof artifacts

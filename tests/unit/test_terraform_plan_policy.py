@@ -989,8 +989,8 @@ def test_inventory_defaults_to_the_artifacts_directory(tmp_path, monkeypatch):
         "--plan-json", str(FIXTURES / "production-lean-valid.json"),
     ])
     assert code == 0
-    assert (tmp_path / "artifacts" / "profile-resource-inventory.json").exists()
-    assert MODULE.DEFAULT_OUT_DIR == "artifacts"
+    assert (tmp_path / ".artifacts" / "profile-resource-inventory.json").exists()
+    assert MODULE.DEFAULT_OUT_DIR == ".artifacts"
     assert MODULE.INVENTORY_JSON == "profile-resource-inventory.json"
 
 

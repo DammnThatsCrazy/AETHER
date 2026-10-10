@@ -141,7 +141,7 @@ INVENTORY_JSON = "profile-resource-inventory.json"
 INVENTORY_MD = "profile-resource-inventory.md"
 RESULT_JSON = "profile-policy-result.json"
 RESULT_MD = "profile-policy-result.md"
-DEFAULT_OUT_DIR = "artifacts"
+DEFAULT_OUT_DIR = ".artifacts"
 
 # Exit code for "the gate could not run", distinct from "the gate failed".
 EXIT_USAGE = 2
