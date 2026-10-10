@@ -10,8 +10,8 @@ REQUIRED = [
     "services/backend/services/semantic_intelligence/engine.py",
     "services/backend/services/semantic_intelligence/routes.py",
     "services/backend/tests/semantic_intelligence/test_semantic_intelligence.py",
-    "docs/semantic-sentiment/SEMANTIC-SENTIMENT-INTELLIGENCE.md",
-    "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
+    "docs/product/semantic-sentiment/SEMANTIC-SENTIMENT-INTELLIGENCE.md",
+    "docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
     "services/backend/alembic/versions/20260702_semantic_sentiment.py",
     "packages/shared/semantic-sentiment.ts",
 ]

@@ -79,7 +79,7 @@
       },
       "operational_ownership": {
         "team": "agent-platform",
-        "runbook": "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
         "dashboards": [
           "grafana:agent-platform"
         ],
@@ -269,7 +269,7 @@
       },
       "operational_ownership": {
         "team": "platform",
-        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "runbook": "docs/operations/runbooks/STAGING_PREFLIGHT.md",
         "dashboards": [
           "grafana:platform"
         ],
@@ -453,7 +453,7 @@
       },
       "operational_ownership": {
         "team": "campaign",
-        "runbook": "docs/runbooks/CAMPAIGN-360-MISSING-CONVERSIONS.md",
+        "runbook": "docs/operations/runbooks/CAMPAIGN-360-MISSING-CONVERSIONS.md",
         "dashboards": [
           "grafana:campaign"
         ],
@@ -640,7 +640,7 @@
       },
       "operational_ownership": {
         "team": "financial-platform",
-        "runbook": "docs/runbooks/CARD_LINKED_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/CARD_LINKED_RUNBOOK.md",
         "dashboards": [
           "grafana:financial-platform"
         ],
@@ -819,7 +819,7 @@
       },
       "operational_ownership": {
         "team": "platform",
-        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "runbook": "docs/operations/runbooks/STAGING_PREFLIGHT.md",
         "dashboards": [
           "grafana:platform"
         ],
@@ -1015,7 +1015,7 @@
       },
       "operational_ownership": {
         "team": "integrations",
-        "runbook": "docs/runbooks/CREDENTIAL-ROTATION.md",
+        "runbook": "docs/operations/runbooks/CREDENTIAL-ROTATION.md",
         "dashboards": [
           "grafana:integrations"
         ],
@@ -1186,7 +1186,7 @@
       },
       "operational_ownership": {
         "team": "frontend",
-        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "runbook": "docs/operations/runbooks/STAGING_PREFLIGHT.md",
         "dashboards": [
           "grafana:frontend"
         ],
@@ -1366,7 +1366,7 @@
       },
       "operational_ownership": {
         "team": "data-platform",
-        "runbook": "docs/runbooks/RECONCILIATION.md",
+        "runbook": "docs/operations/runbooks/RECONCILIATION.md",
         "dashboards": [
           "grafana:data-platform"
         ],
@@ -1769,7 +1769,7 @@
       },
       "operational_ownership": {
         "team": "financial-platform",
-        "runbook": "docs/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
         "dashboards": [
           "grafana:financial-platform"
         ],
@@ -1948,7 +1948,7 @@
       },
       "operational_ownership": {
         "team": "platform",
-        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "runbook": "docs/operations/runbooks/STAGING_PREFLIGHT.md",
         "dashboards": [
           "grafana:platform"
         ],
@@ -2552,7 +2552,7 @@
       },
       "operational_ownership": {
         "team": "graph",
-        "runbook": "docs/runbooks/RECONCILIATION.md",
+        "runbook": "docs/operations/runbooks/RECONCILIATION.md",
         "dashboards": [
           "grafana:graph"
         ],
@@ -2738,7 +2738,7 @@
       },
       "operational_ownership": {
         "team": "agent-platform",
-        "runbook": "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
         "dashboards": [
           "grafana:agent-platform"
         ],
@@ -2913,7 +2913,7 @@
       },
       "operational_ownership": {
         "team": "graph",
-        "runbook": "docs/runbooks/CAMPAIGN-360-GRAPH-DISAGREES-WITH-TOTALS.md",
+        "runbook": "docs/operations/runbooks/CAMPAIGN-360-GRAPH-DISAGREES-WITH-TOTALS.md",
         "dashboards": [
           "grafana:graph"
         ],
@@ -3265,7 +3265,7 @@
       },
       "operational_ownership": {
         "team": "financial-platform",
-        "runbook": "docs/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
         "dashboards": [
           "grafana:financial-platform"
         ],
@@ -3452,7 +3452,7 @@
       },
       "operational_ownership": {
         "team": "kyber",
-        "runbook": "docs/runbooks/KYBER_ACCOUNT_RECOVERY.md",
+        "runbook": "docs/operations/runbooks/KYBER_ACCOUNT_RECOVERY.md",
         "dashboards": [
           "grafana:kyber"
         ],
@@ -3636,7 +3636,7 @@
       },
       "operational_ownership": {
         "team": "measurement",
-        "runbook": "docs/runbooks/MEASUREMENT_RESTATEMENT.md",
+        "runbook": "docs/operations/runbooks/MEASUREMENT_RESTATEMENT.md",
         "dashboards": [
           "grafana:measurement"
         ],
@@ -3813,7 +3813,7 @@
       },
       "operational_ownership": {
         "team": "measurement",
-        "runbook": "docs/runbooks/MEASUREMENT_RESTATEMENT.md",
+        "runbook": "docs/operations/runbooks/MEASUREMENT_RESTATEMENT.md",
         "dashboards": [
           "grafana:measurement"
         ],
@@ -4009,7 +4009,7 @@
       },
       "operational_ownership": {
         "team": "integrations",
-        "runbook": "docs/runbooks/DELIVERY-FAILURES.md",
+        "runbook": "docs/operations/runbooks/DELIVERY-FAILURES.md",
         "dashboards": [
           "grafana:integrations"
         ],
@@ -4202,7 +4202,7 @@
       },
       "operational_ownership": {
         "team": "financial-platform",
-        "runbook": "docs/runbooks/PAYMENT_RAILS_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/PAYMENT_RAILS_RUNBOOK.md",
         "dashboards": [
           "grafana:financial-platform"
         ],
@@ -4396,7 +4396,7 @@
       },
       "operational_ownership": {
         "team": "platform",
-        "runbook": "docs/runbooks/GOLD-TENANT-BACKFILL.md",
+        "runbook": "docs/operations/runbooks/GOLD-TENANT-BACKFILL.md",
         "dashboards": [
           "grafana:platform"
         ],
@@ -4578,7 +4578,7 @@
       },
       "operational_ownership": {
         "team": "integrations",
-        "runbook": "docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md",
         "dashboards": [
           "grafana:integrations"
         ],
@@ -5000,7 +5000,7 @@
       },
       "operational_ownership": {
         "team": "platform",
-        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "runbook": "docs/operations/runbooks/STAGING_PREFLIGHT.md",
         "dashboards": [
           "grafana:platform"
         ],
@@ -5191,7 +5191,7 @@
       },
       "operational_ownership": {
         "team": "platform-sdk",
-        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "runbook": "docs/operations/runbooks/STAGING_PREFLIGHT.md",
         "dashboards": [
           "grafana:platform-sdk"
         ],
@@ -5360,7 +5360,7 @@
       },
       "operational_ownership": {
         "team": "security",
-        "runbook": "docs/runbooks/CREDENTIAL-ROTATION.md",
+        "runbook": "docs/operations/runbooks/CREDENTIAL-ROTATION.md",
         "dashboards": [
           "grafana:security"
         ],
@@ -5771,7 +5771,7 @@
       },
       "operational_ownership": {
         "team": "smart-contracts",
-        "runbook": "docs/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
         "dashboards": [
           "grafana:smart-contracts"
         ],
@@ -5960,7 +5960,7 @@
       },
       "operational_ownership": {
         "team": "financial-platform",
-        "runbook": "docs/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
+        "runbook": "docs/operations/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
         "dashboards": [
           "grafana:financial-platform"
         ],
@@ -6147,7 +6147,7 @@
       },
       "operational_ownership": {
         "team": "platform",
-        "runbook": "docs/runbooks/IMPORT_FAILURES.md",
+        "runbook": "docs/operations/runbooks/IMPORT_FAILURES.md",
         "dashboards": [
           "grafana:platform"
         ],

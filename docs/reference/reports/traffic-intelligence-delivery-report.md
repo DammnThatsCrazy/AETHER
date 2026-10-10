@@ -134,7 +134,7 @@ Historical repair is opt-in, dry-run-first, checkpointed.
 
 ## 16. Documentation status
 
-Authored: `docs/sdk/android-attribution.md`, `docs/sdk/ios-attribution.md`,
+Authored: `docs/reference/sdk/android-attribution.md`, `docs/sdk/ios-attribution.md`,
 `docs/traffic/canonical-traffic-model.md`. Generated: traffic-source registry table,
 event registry, REPO-INDEX. Source-linked docs reviewed + re-stamped
 (CAMPAIGN_360_API, DATA_AND_IDENTITY_CONTRACT updated with the new dimensions).

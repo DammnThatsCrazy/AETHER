@@ -1,7 +1,7 @@
 """Data Exchange Plane — saved import-mapping persistence (M3).
 
 Net-new, tenant-scoped persistence for reusable ``ImportMappingContract``
-mappings (``docs/plans/data-exchange-api.md`` M3 ``/import-mappings`` rows).
+mappings (``docs/architecture/plans/data-exchange-api.md`` M3 ``/import-mappings`` rows).
 A saved mapping is the full Data Exchange envelope mapping (the import engine's
 canonical ``FieldMapping`` list inside ``fields`` plus the identity / temporal /
 currency / geographic / consent policies and the unknown-field rule) bound to a

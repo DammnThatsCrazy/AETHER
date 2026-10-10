@@ -1,0 +1,63 @@
+---
+title: "SVM (Solana) Deploy & Emergency Runbook"
+slug: runbooks/svm-deploy-emergency
+section: operations
+visibility: I
+audience: [ops, dev-senior, security]
+status: stable
+since_version: "0.1.0"
+source_files:
+  - contracts/smart-contracts/programs/solana/audit/08-deployment-procedure.md
+  - contracts/smart-contracts/programs/solana/audit/09-pause-rotation-procedure.md
+  - contracts/smart-contracts/programs/solana/registry/upgrade-authority-policy.md
+canonical_owner: platform@aether
+source_hashes:
+  "contracts/smart-contracts/programs/solana/audit/08-deployment-procedure.md": "sha256:78d567c97c3732b8f88b31305f736565239aec7690b497e7c649da3bf96ace86"
+  "contracts/smart-contracts/programs/solana/audit/09-pause-rotation-procedure.md": "sha256:f648cedaf0beecc54e0f101c335f95c9256d8f7228a47267cd4b7d4e794b3131"
+  "contracts/smart-contracts/programs/solana/registry/upgrade-authority-policy.md": "sha256:126ca9f59ed8c6789db25f8fdaaf477075f5e554f4cb000ccfb5484cd6e253ad"
+---
+
+# SVM (Solana) Deploy & Emergency Runbook
+
+Operational entry point for the Solana reward program. It points to the audit
+package rather than restating it. Authoritative references:
+
+- Deployment procedure: `contracts/smart-contracts/programs/solana/audit/08-deployment-procedure.md`
+- Pause / rotation / incident procedure: `contracts/smart-contracts/programs/solana/audit/09-pause-rotation-procedure.md`
+- Upgrade-authority policy: `contracts/smart-contracts/programs/solana/registry/upgrade-authority-policy.md`
+- Threat model / privileged roles: `audit/02-threat-model.md`, `audit/04-privileged-roles.md`
+- Deploy scripts: `programs/solana/migrations/deploy.ts`,
+  `programs/solana/scripts/deploy_testnet.sh`, `scripts/smoke_test.sh`
+
+## Mainnet gate (do not skip)
+
+As with EVM, mainnet deployment is BLOCKED pending external audit. See
+`EXTERNAL_AUDIT_PREPARATION_GUIDE`. Localnet/testnet follow
+`audit/08-deployment-procedure.md`.
+
+## Deploy (localnet / testnet)
+
+1. `scripts/deploy_localnet.sh` or `scripts/deploy_testnet.sh`, then
+   `migrations/deploy.ts` and `register_program.ts`.
+2. Run `scripts/smoke_test.sh` and confirm the program id + upgrade authority
+   match `registry/upgrade-authority-policy.md`.
+
+## Emergency: pause & rotation
+
+Follow `audit/09-pause-rotation-procedure.md` exactly. Key points:
+
+- The program supports an admin pause; a paused program rejects claim
+  instructions while leaving state readable.
+- Oracle/authority rotation follows the upgrade-authority policy — never rotate
+  to a key outside the registry.
+- Replay isolation is proven in `audit/replay-isolation-proof.md`; do not
+  weaken the nonce/PDA checks to expedite an incident.
+
+## Never do
+
+- Never deploy to mainnet-beta before the external audit clears the gate.
+- Never change the upgrade authority outside `upgrade-authority-policy.md`.
+- Never bypass the pause to "just process one claim" during an incident.
+
+See also: `docs/operations/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md`,
+`docs/product/productization/staging-capstone/EXTERNAL_AUDIT_PREPARATION_GUIDE.md`.

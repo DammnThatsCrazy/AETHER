@@ -22,7 +22,7 @@ correlation, exact-decimal Silver money, and derived-truth mutation governance.
 
 The scope is fixed to gap rows **7 / 8 / 9 / 22 / 24 / 26 / 31** and Invariants
 **#7 / #11 / #12 / #13 / #14** of the
-`docs/productization/sdk-universal-ingestion-alignment/REPO_TRUTH_AND_GAP_MATRIX.md`.
+`docs/product/productization/sdk-universal-ingestion-alignment/REPO_TRUTH_AND_GAP_MATRIX.md`.
 Execution-state row 658 (`EXECUTION_STATE.md`) names this lane.
 
 ## 1. Guiding rules

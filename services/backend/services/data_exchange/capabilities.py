@@ -6,7 +6,7 @@ Read-only envelopes under ``/v1/data-exchange``.  ``/settings`` and
 (``services/data_exchange/contracts.py``); ``/usage`` derives per-tenant
 counts from the M1 ``data_artifacts`` metadata rows so it needs no external
 metering service.  M6 (frontend) builds its Settings → Data Exchange sections
-against exactly these three adapters (freeze ``docs/plans/data-exchange-api.md``
+against exactly these three adapters (freeze ``docs/architecture/plans/data-exchange-api.md``
 M3 / M6).
 """
 

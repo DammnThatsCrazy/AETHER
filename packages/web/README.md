@@ -14,7 +14,7 @@ and hybrid flows and POSTs them to `/v1/batch`. No client-side workflow,
 classification, settlement, or orchestration — the backend owns all of that.
 
 Canonical contracts live in [`../shared/`](../shared/). See
-[`../../docs/source-of-truth/`](../../docs/source-of-truth/) for the
+[`../../docs/reference/source-of-truth/`](../../docs/reference/source-of-truth/) for the
 authoritative event registry, consent model, ingestion contract, and platform
 parity tiers.
 

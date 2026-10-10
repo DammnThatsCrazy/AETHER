@@ -958,7 +958,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Source-of-truth ownership map enforcement",
         results=results,
         stop_on_failure=stop,
-        remediation="update the derived surfaces required by docs/source-of-truth/repo_consistency_ownership.json",
+        remediation="update the derived surfaces required by docs/reference/source-of-truth/repo_consistency_ownership.json",
     )
     run(
         [sys.executable, "scripts/validate_canonical_ingestion_trees.py"],
@@ -1056,28 +1056,28 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Financial value semantics (USD-first contract + no cross-currency sums)",
         results=results,
         stop_on_failure=stop,
-        remediation="use services.value.safe_rollup and the canonical value contract; see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
+        remediation="use services.value.safe_rollup and the canonical value contract; see docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
     )
     run(
         [sys.executable, "scripts/validate_universal_financial_assets.py"],
         name="Universal financial-asset normalization (namespaced ids, Decimal money, immutable valuation, observe-only)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep canonical asset/valuation surfaces on the namespaced Decimal immutable observe-only model; see docs/source-of-truth/FINANCIAL_NORMALIZATION.md",
+        remediation="keep canonical asset/valuation surfaces on the namespaced Decimal immutable observe-only model; see docs/reference/source-of-truth/FINANCIAL_NORMALIZATION.md",
     )
     run(
         [sys.executable, "scripts/validate_kyber_ops_surface.py"],
         name="Kyber operations surface (Gate G: source/schema health, ingestion lag, quality, rejection, replay, lineage via operator-only Kyber control plane)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep the WS-E/WS-B4 Kyber control-plane surfaces mounted + operator-only: /v1/health/pipeline, /v1/config/sdk/versions, the /v1/kyber/ingest/observability router (funnel + Observation Inspector), and the /v1/kyber/ingest/replay router; see docs/source-of-truth/INGESTION_OPS.md",
+        remediation="keep the WS-E/WS-B4 Kyber control-plane surfaces mounted + operator-only: /v1/health/pipeline, /v1/config/sdk/versions, the /v1/kyber/ingest/observability router (funnel + Observation Inspector), and the /v1/kyber/ingest/replay router; see docs/reference/source-of-truth/INGESTION_OPS.md",
     )
     run(
         [sys.executable, "scripts/validate_sdk_compat_tiers.py"],
         name="SDK version-compatibility tiers (Gate H: supported/deprecated/read-compatible bands preserved, fail-closed date enforcement staged behind default-OFF flags)",
         results=results,
         stop_on_failure=stop,
-        remediation="keep services/ingestion/sdk_version_tiers.py on the honest tier table (never block a served band before its date; never weaken staged default-OFF enforcement); see docs/source-of-truth/INGESTION_OPS.md",
+        remediation="keep services/ingestion/sdk_version_tiers.py on the honest tier table (never block a served band before its date; never weaken staged default-OFF enforcement); see docs/reference/source-of-truth/INGESTION_OPS.md",
     )
     run(
         [sys.executable, "scripts/validate_frontend_value_display.py"],
@@ -1210,7 +1210,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Model governance (consent-scoped training + inference gates)",
         results=results,
         stop_on_failure=stop,
-        remediation="ensure services/model_governance gates exist, reuse the consent engine, and are wired into ml_serving/routes.py; see docs/source-of-truth/MODEL_GOVERNANCE.md",
+        remediation="ensure services/model_governance gates exist, reuse the consent engine, and are wired into ml_serving/routes.py; see docs/reference/source-of-truth/MODEL_GOVERNANCE.md",
     )
     run(
         [sys.executable, "scripts/validate_consent_purpose_reconciliation.py"],
@@ -1224,7 +1224,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="SDK runtime parity (observe / manifest-verify / batch-health across SDKs)",
         results=results,
         stop_on_failure=stop,
-        remediation="expose canonical observe(), iOS/Android manifest signature verification, and batch health metrics; see docs/source-of-truth/SDK_RUNTIME_PARITY.md",
+        remediation="expose canonical observe(), iOS/Android manifest signature verification, and batch health metrics; see docs/reference/source-of-truth/SDK_RUNTIME_PARITY.md",
     )
     run(
         [sys.executable, "scripts/check_version_consistency.py"],

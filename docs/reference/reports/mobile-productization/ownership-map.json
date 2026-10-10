@@ -1,11 +1,11 @@
 {
-  "$comment": "Path-ownership freeze for the program. Prevents two work packets from editing the same file concurrently. shared_paths require orchestrator serialization. Precedent: docs/integration-control-plane/FILE_OWNERSHIP.yaml.",
+  "$comment": "Path-ownership freeze for the program. Prevents two work packets from editing the same file concurrently. shared_paths require orchestrator serialization. Precedent: docs/architecture/integration-control-plane/FILE_OWNERSHIP.yaml.",
   "schema_version": 1,
   "owners": {
     "C0_orchestration": [
       "docs/reference/reports/mobile-productization/**",
       "config/credential_contracts.yaml",
-      "docs/source-of-truth/MOBILE_PLATFORM.md"
+      "docs/reference/source-of-truth/MOBILE_PLATFORM.md"
     ],
     "C1_continuity": [
       "services/backend/services/continuation/**",
@@ -19,7 +19,7 @@
       "packages/shared/deep-link.ts",
       "tests/contracts/test_continuation_contract_parity.py",
       "tests/contracts/test_sync_event_contract_parity.py",
-      "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md"
+      "docs/reference/source-of-truth/CROSS_DEVICE_CONTINUITY.md"
     ],
     "C2_notification": [
       "packages/shared/notification.ts",
@@ -28,7 +28,7 @@
       "tests/contracts/test_notification_contract_parity.py",
       "tests/contracts/test_delivery_receipt_parity.py",
       "tests/contracts/test_route_prefix_uniqueness.py",
-      "docs/source-of-truth/NOTIFICATION_CONTROL_PLANE.md"
+      "docs/reference/source-of-truth/NOTIFICATION_CONTROL_PLANE.md"
     ],
     "C3_delivery_providers": [
       "services/backend/services/delivery/adapters/apns.py",
@@ -40,7 +40,7 @@
       "services/backend/alembic/versions/20260822_mobile_installations.py",
       "packages/shared/installation.ts",
       "packages/shared/mobile-config.ts",
-      "docs/source-of-truth/CREDENTIAL_ACTIVATION.md"
+      "docs/reference/source-of-truth/CREDENTIAL_ACTIVATION.md"
     ],
     "C4_mobile_platform": [
       "apps/aether-mobile/**",
@@ -55,11 +55,11 @@
       "packages/mobile-observability/**",
       "packages/mobile-testing/**",
       "packages/mobile-compliance/**",
-      "docs/source-of-truth/AETHER_MOBILE.md",
-      "docs/source-of-truth/KYBER_MOBILE.md",
-      "docs/source-of-truth/MOBILE_COMPLIANCE.md",
-      "docs/source-of-truth/MOBILE_DISTRIBUTION.md",
-      "docs/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md"
+      "docs/reference/source-of-truth/AETHER_MOBILE.md",
+      "docs/reference/source-of-truth/KYBER_MOBILE.md",
+      "docs/reference/source-of-truth/MOBILE_COMPLIANCE.md",
+      "docs/reference/source-of-truth/MOBILE_DISTRIBUTION.md",
+      "docs/reference/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md"
     ]
   },
   "shared_paths_requiring_orchestrator": [

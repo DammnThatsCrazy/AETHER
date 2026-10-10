@@ -63,8 +63,8 @@ sdk_files = [
     'packages/web/src/core/event-queue.ts',
     'packages/android/src/main/java/com/aether/sdk/Aether.kt',
     'packages/ios/Sources/AetherSDK/Aether.swift',
-    'docs/source-of-truth/INGESTION_CONTRACT.md',
-    'docs/SDK-API-CONTRACTS.md',
+    'docs/reference/source-of-truth/INGESTION_CONTRACT.md',
+    'docs/reference/SDK-API-CONTRACTS.md',
 ]
 for rel in sdk_files:
     body = text(rel)

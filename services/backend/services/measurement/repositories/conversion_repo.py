@@ -149,7 +149,7 @@ def normalized_money(row: dict[str, Any], field: str) -> Optional[Decimal]:
     ``native * exchange_rate`` for a priced foreign row, the native amount for
     a same-currency row, and **None** for an unconverted row (unknown rate) or
     a missing amount -- never a 1:1 guess and never a fabricated 0. Decimal
-    end-to-end (docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
+    end-to-end (docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
     """
     amount = _to_decimal(row.get(field))
     if amount is None or conversion_is_unconverted(row):

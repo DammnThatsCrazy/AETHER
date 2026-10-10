@@ -36,7 +36,7 @@ apps:
         reason: unrouted page; mount a route or delete it
       - path: src/pages/measurement/campaign-registry-health-page.tsx
         ledger: product-kyber-unmounted-code-pending
-        reason: unrouted page that docs/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness scorecard name; mount it or correct both
+        reason: unrouted page that docs/product/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness scorecard name; mount it or correct both
       - path: src/pages/customer-success/index.ts
         ledger: product-kyber-unmounted-code-pending
         reason: unrouted page kept only for its component test; mount a route or delete both

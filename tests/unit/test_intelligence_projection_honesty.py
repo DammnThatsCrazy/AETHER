@@ -62,7 +62,7 @@ def _entry(pid: str, **overrides: object) -> dict:
     base = {
         "id": pid,
         "implementationState": "in_flight",
-        "implementationBlueprint": "docs/ACCESS-CONTROL.md",
+        "implementationBlueprint": "docs/architecture/ACCESS-CONTROL.md",
         "projectionKind": "entity_360",
         "canonicalAuthorities": ["graph", "evidence"],
         "surfaceIds": ["graph"],

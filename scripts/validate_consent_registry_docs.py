@@ -11,7 +11,7 @@ matches the registry.
 
 Deliberately NOT scanned (historical or machine-managed records):
 generated docs (``docs/_generated/``), changelogs, ``docs/archive/``,
-``docs/plans/``, and point-in-time ``docs/reference/reports/``. Those legitimately describe a
+``docs/architecture/plans/``, and point-in-time ``docs/reference/reports/``. Those legitimately describe a
 count at a moment in time and must not be rewritten to erase history.
 """
 from __future__ import annotations
@@ -29,15 +29,15 @@ GENERATED_TABLE = ROOT / "docs/_generated/consent-registry-table.md"
 # language and never hardcode a consent-purpose count.
 SCANNED_DOCS = [
     "README.md",
-    "docs/source-of-truth/CONSENT_MODEL.md",
-    "docs/source-of-truth/SDK_SCOPE.md",
-    "docs/source-of-truth/README.md",
-    "docs/COMPLIANCE.md",
-    "docs/PRODUCTIZATION.md",
-    "docs/SDK-WEB.md",
-    "docs/SDK-IOS.md",
-    "docs/SDK-ANDROID.md",
-    "docs/SDK-REACT-NATIVE.md",
+    "docs/reference/source-of-truth/CONSENT_MODEL.md",
+    "docs/reference/source-of-truth/SDK_SCOPE.md",
+    "docs/reference/source-of-truth/README.md",
+    "docs/operations/COMPLIANCE.md",
+    "docs/product/PRODUCTIZATION.md",
+    "docs/reference/SDK-WEB.md",
+    "docs/reference/SDK-IOS.md",
+    "docs/reference/SDK-ANDROID.md",
+    "docs/reference/SDK-REACT-NATIVE.md",
 ]
 
 _NUM = r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)"

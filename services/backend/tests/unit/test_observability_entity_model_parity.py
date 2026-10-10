@@ -26,7 +26,7 @@ with open(_graph_path) as _f:
 _vertex_values: set[str] = set(re.findall(r'=\s*"([^"]+)"', _graph_src))
 
 # ── Entity types expected from the Agentic Observability Layer ─────────────
-# These match exactly what's documented in docs/source-of-truth/ENTITY_MODEL.md
+# These match exactly what's documented in docs/reference/source-of-truth/ENTITY_MODEL.md
 
 EXPECTED_AGENTIC_VERTEX_TYPES = {
     # Agentic observation (MCP / tool / activity / risk)

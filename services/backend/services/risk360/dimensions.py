@@ -1,7 +1,7 @@
 """Risk360 dimension registry — declarative typed registry (Phase 3).
 
 Seeded from the canonical 24-dimension set of
-``docs/source-of-truth/RISK_FRAUD_360.md`` §4 (Risk architecture). Each
+``docs/reference/source-of-truth/RISK_FRAUD_360.md`` §4 (Risk architecture). Each
 :class:`RiskDimension` is one frozen row of the registry: a stable ``key``, a
 human ``label``, a ``description`` of what the dimension measures, and the
 honest ``default_state`` a dimension carries when no observation has fed it.

@@ -769,9 +769,9 @@ def build_bundle(ci_log: str | None = None, github_checks: str | None = None,
                     "absent": sum(1 for v in results.values()
                                   if v.get("status") == "absent")},
         "docs": [
-            "docs/FOUNDING-TENANT-PRODUCTION.md",
-            "docs/DEPLOYMENT-PROFILES.md",
-            "docs/RELEASE-EVIDENCE.md",
+            "docs/operations/FOUNDING-TENANT-PRODUCTION.md",
+            "docs/architecture/DEPLOYMENT-PROFILES.md",
+            "docs/operations/RELEASE-EVIDENCE.md",
         ],
     }
 

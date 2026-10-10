@@ -293,11 +293,11 @@
         ],
         "services": [
           "services/backend/services/identity",
-          "docs/source-of-truth/IDENTITY_RESOLUTION.md"
+          "docs/reference/source-of-truth/IDENTITY_RESOLUTION.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/IDENTITY_RESOLUTION.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/IDENTITY_RESOLUTION.md"
     },
     {
       "id": "evidence_provenance",
@@ -403,12 +403,12 @@
           "services/backend/shared/integrity",
           "services/backend/services/integrity",
           "services/backend/shared/cis/provenance.py",
-          "docs/source-of-truth/ENRICHMENT_LINEAGE.md",
-          "docs/DATA-QUALITY.md"
+          "docs/reference/source-of-truth/ENRICHMENT_LINEAGE.md",
+          "docs/operations/DATA-QUALITY.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/ENRICHMENT_LINEAGE.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/ENRICHMENT_LINEAGE.md"
     },
     {
       "id": "temporal_kernel",
@@ -511,11 +511,11 @@
         "services": [
           "services/backend/shared/temporal",
           "services/backend/services/events",
-          "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
+          "docs/reference/source-of-truth/TEMPORAL_INTEGRITY.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/TEMPORAL_INTEGRITY.md"
     },
     {
       "id": "relationship_fidelity",
@@ -616,7 +616,7 @@
           "semantic_intelligence"
         ],
         "services": [
-          "docs/source-of-truth/GRAPH_LAYER_PARITY.md",
+          "docs/reference/source-of-truth/GRAPH_LAYER_PARITY.md",
           "services/backend/services/semantic_intelligence"
         ],
         "migrationMode": "formalize_existing"
@@ -744,12 +744,12 @@
         "services": [
           "services/backend/services/gateway",
           "services/backend/shared/graph",
-          "docs/source-of-truth/GRAPH_CONTRACT.md",
-          "docs/source-of-truth/GRAPH_LAYER_PARITY.md"
+          "docs/reference/source-of-truth/GRAPH_CONTRACT.md",
+          "docs/reference/source-of-truth/GRAPH_LAYER_PARITY.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/GRAPH_CONTRACT.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/GRAPH_CONTRACT.md"
     },
     {
       "id": "context_capsule",
@@ -853,11 +853,11 @@
         ],
         "services": [
           "services/backend/shared/context_capsule",
-          "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
+          "docs/reference/source-of-truth/CONTEXT_INTELLIGENCE.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/CONTEXT_INTELLIGENCE.md"
     },
     {
       "id": "consent",
@@ -962,11 +962,11 @@
           "services/backend/services/policy",
           "services/backend/services/consent",
           "services/backend/services/dsr_propagation",
-          "docs/source-of-truth/CONSENT_MODEL.md"
+          "docs/reference/source-of-truth/CONSENT_MODEL.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/CONSENT_MODEL.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/CONSENT_MODEL.md"
     },
     {
       "id": "rights_irrl",
@@ -1120,14 +1120,14 @@
           "services/backend/services/policy",
           "services/backend/services/dsr_propagation",
           "services/backend/services/storage_lifecycle",
-          "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
-          "docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md",
-          "docs/source-of-truth/IRRL_NAMING_OVERLAY.md",
-          "docs/source-of-truth/RIGHTS_TAXONOMY.md"
+          "docs/reference/source-of-truth/DATA_RIGHTS_LEDGER.md",
+          "docs/reference/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md",
+          "docs/reference/source-of-truth/IRRL_NAMING_OVERLAY.md",
+          "docs/reference/source-of-truth/RIGHTS_TAXONOMY.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md"
     },
     {
       "id": "upr",
@@ -1242,12 +1242,12 @@
         "services": [
           "services/backend/services/provider_runtime",
           "services/backend/services/providers",
-          "docs/UNIVERSAL-PROVIDER-RUNTIME.md",
-          "docs/source-of-truth/IMPORTS.md"
+          "docs/architecture/UNIVERSAL-PROVIDER-RUNTIME.md",
+          "docs/reference/source-of-truth/IMPORTS.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/UNIVERSAL-PROVIDER-RUNTIME.md"
+      "implementationBlueprint": "docs/architecture/UNIVERSAL-PROVIDER-RUNTIME.md"
     },
     {
       "id": "connector_normalization",
@@ -1350,7 +1350,7 @@
         "services": [
           "services/backend/services/imports",
           "services/backend/services/integrations/connectors",
-          "docs/source-of-truth/SDK_RUNTIME_PARITY.md"
+          "docs/reference/source-of-truth/SDK_RUNTIME_PARITY.md"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -1461,11 +1461,11 @@
         "services": [
           "services/backend/services/measurement",
           "services/backend/shared/measurement",
-          "docs/source-of-truth/MEASUREMENT_INTEGRITY.md"
+          "docs/reference/source-of-truth/MEASUREMENT_INTEGRITY.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/MEASUREMENT_INTEGRITY.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/MEASUREMENT_INTEGRITY.md"
     },
     {
       "id": "attribution_architecture",
@@ -1572,7 +1572,7 @@
         "services": [
           "services/backend/services/attribution",
           "services/backend/services/measurement",
-          "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md"
+          "docs/reference/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -1683,11 +1683,11 @@
         "services": [
           "services/backend/services/exploration",
           "services/backend/shared/exploration",
-          "docs/source-of-truth/EXPLORATION_FABRIC.md"
+          "docs/reference/source-of-truth/EXPLORATION_FABRIC.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/EXPLORATION_FABRIC.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/EXPLORATION_FABRIC.md"
     },
     {
       "id": "projection_plane",
@@ -1814,12 +1814,12 @@
           "intelligence_projection_plane"
         ],
         "services": [
-          "docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md",
+          "docs/reference/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md",
           "services/backend/shared/intelligence_projections"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md"
     },
     {
       "id": "model_governance",
@@ -1930,11 +1930,11 @@
           "services/backend/services/model_governance",
           "services/backend/shared/model_governance",
           "services/backend/services/model_runtime",
-          "docs/source-of-truth/MODEL_GOVERNANCE.md"
+          "docs/reference/source-of-truth/MODEL_GOVERNANCE.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/MODEL_GOVERNANCE.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/MODEL_GOVERNANCE.md"
     },
     {
       "id": "computation_substrate",
@@ -2037,11 +2037,11 @@
           "services/backend/services/computation",
           "services/backend/services/jobs",
           "services/backend/services/flows",
-          "docs/source-of-truth/COMPUTATION_SUBSTRATE.md"
+          "docs/reference/source-of-truth/COMPUTATION_SUBSTRATE.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/COMPUTATION_SUBSTRATE.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/COMPUTATION_SUBSTRATE.md"
     },
     {
       "id": "agentic_runtime_access",
@@ -2145,12 +2145,12 @@
         "services": [
           "services/backend/services/agent",
           "services/backend/services/agent_access_intelligence",
-          "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md",
-          "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
+          "docs/reference/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md",
+          "docs/reference/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md"
     },
     {
       "id": "tenant_readiness",
@@ -2255,8 +2255,8 @@
         "services": [
           "services/backend/services/activation",
           "services/backend/services/tenant_readiness",
-          "docs/source-of-truth/ACTIVATION.md",
-          "docs/source-of-truth/CAPABILITY_MANIFEST.md"
+          "docs/reference/source-of-truth/ACTIVATION.md",
+          "docs/reference/source-of-truth/CAPABILITY_MANIFEST.md"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -2359,7 +2359,7 @@
         "services": [
           "services/backend/services/reliability",
           "services/backend/services/diagnostics",
-          "docs/source-of-truth/PLATFORM_PARITY.md"
+          "docs/reference/source-of-truth/PLATFORM_PARITY.md"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -2461,8 +2461,8 @@
         "services": [
           "services/backend/services/operational_intelligence",
           "services/backend/services/investigation",
-          "docs/DECISION-OUTCOME-INTELLIGENCE.md",
-          "docs/INVESTIGATION-WORKSPACE.md"
+          "docs/architecture/DECISION-OUTCOME-INTELLIGENCE.md",
+          "docs/architecture/INVESTIGATION-WORKSPACE.md"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -2567,8 +2567,8 @@
         "services": [
           "services/backend/services/kyber",
           "services/backend/services/kyber_operator",
-          "docs/source-of-truth/KYBER_ACCESS_CONTROL.md",
-          "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
+          "docs/reference/source-of-truth/KYBER_ACCESS_CONTROL.md",
+          "docs/reference/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -2678,7 +2678,7 @@
         "services": [
           "services/backend/services/noesis",
           "services/backend/services/me",
-          "docs/source-of-truth/UNIFIED_PLATFORM_BASELINE_AUDIT.md"
+          "docs/reference/source-of-truth/UNIFIED_PLATFORM_BASELINE_AUDIT.md"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -2880,7 +2880,7 @@
         "services": [
           "services/backend/services/continuation",
           "services/backend/services/journeys",
-          "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md"
+          "docs/reference/source-of-truth/CROSS_DEVICE_CONTINUITY.md"
         ],
         "migrationMode": "net_new"
       },
@@ -2991,11 +2991,11 @@
           "services/backend/services/temporal360",
           "services/backend/shared/graph",
           "services/backend/shared/temporal",
-          "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
+          "docs/reference/source-of-truth/TEMPORAL_INTEGRITY.md"
         ],
         "migrationMode": "net_new"
       },
-      "implementationBlueprint": "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/TEMPORAL_INTEGRITY.md"
     },
     {
       "id": "context_capsule_semantics",
@@ -3093,11 +3093,11 @@
         "services": [
           "services/backend/services/geographic360",
           "services/backend/shared/context_capsule",
-          "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
+          "docs/reference/source-of-truth/CONTEXT_INTELLIGENCE.md"
         ],
         "migrationMode": "net_new"
       },
-      "implementationBlueprint": "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
+      "implementationBlueprint": "docs/reference/source-of-truth/CONTEXT_INTELLIGENCE.md"
     },
     {
       "id": "grouping_membership",
@@ -3371,11 +3371,11 @@
         ],
         "services": [
           "packages/shared/contracts/spine-registry.json",
-          "docs/decisions/ADR-011-spine-composition-kernel.md"
+          "docs/architecture/decisions/ADR-011-spine-composition-kernel.md"
         ],
         "migrationMode": "net_new"
       },
-      "implementationBlueprint": "docs/decisions/ADR-011-spine-composition-kernel.md"
+      "implementationBlueprint": "docs/architecture/decisions/ADR-011-spine-composition-kernel.md"
     },
     {
       "id": "spine_registry",
@@ -3510,7 +3510,7 @@
           "SpineEnvelope"
         ],
         "services": [
-          "docs/source-of-truth/SPINE_P0_ARCHITECTURE.md"
+          "docs/reference/source-of-truth/SPINE_P0_ARCHITECTURE.md"
         ],
         "migrationMode": "net_new"
       },
@@ -3573,8 +3573,8 @@
           "irrl_naming"
         ],
         "services": [
-          "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
-          "docs/source-of-truth/GRAPH_OF_GRAPHS_DATA_USE.md"
+          "docs/reference/source-of-truth/DATA_RIGHTS_LEDGER.md",
+          "docs/reference/source-of-truth/GRAPH_OF_GRAPHS_DATA_USE.md"
         ],
         "migrationMode": "net_new"
       },
@@ -3637,7 +3637,7 @@
           "14_item_conformance"
         ],
         "services": [
-          "docs/source-of-truth/SPINE_P0_ARCHITECTURE.md",
+          "docs/reference/source-of-truth/SPINE_P0_ARCHITECTURE.md",
           "packages/shared/contracts/spine-registry.json"
         ],
         "migrationMode": "net_new"

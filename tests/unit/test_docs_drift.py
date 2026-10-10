@@ -356,7 +356,7 @@ def test_commit_touches_paths_supports_merge_commit_boundaries(dd, tmp_path, mon
 
     class Result:
         returncode = 0
-        stdout = "docs/CICD.md\n.github/workflows/repo-health.yml\n"
+        stdout = "docs/operations/CICD.md\n.github/workflows/repo-health.yml\n"
 
     def fake_run(args, **kwargs):
         calls.append(args)
@@ -381,7 +381,7 @@ def test_unresolvable_stamp_uses_latest_first_parent_source_boundary(dd, monkeyp
 
     monkeypatch.setattr(dd.subprocess, "run", fake_run)
     monkeypatch.setattr(dd, "commit_touches_paths", lambda sha, paths: True)
-    assert dd.squash_merge_reviewed_at_tip("docs/CICD.md", [".github/workflows/"])
+    assert dd.squash_merge_reviewed_at_tip("docs/operations/CICD.md", [".github/workflows/"])
     assert calls[0][:5] == ["git", "log", "--first-parent", "-1", "--format=%H"]
 
 

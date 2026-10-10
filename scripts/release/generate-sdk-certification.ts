@@ -2,7 +2,7 @@
 /**
  * SDK Certification Report Generator
  *
- * Generates docs/reports/SDK_CERTIFICATION_REPORT.md at CI time.
+ * Generates docs/reference/reports/SDK_CERTIFICATION_REPORT.md at CI time.
  *
  * Reads:
  *  - package.json versions from packages/web, packages/react-native, packages/server,
@@ -65,7 +65,7 @@ const SAMPLE_APP_DIRS = [
   { name: "proof-android", dir: join(ROOT, "apps", "proof-android") },
 ];
 
-const REPORT_DIR = join(ROOT, "docs", "reports");
+const REPORT_DIR = join(ROOT, "docs", "reference", "reports");
 const REPORT_PATH = join(REPORT_DIR, "SDK_CERTIFICATION_REPORT.md");
 
 // ---------------------------------------------------------------------------

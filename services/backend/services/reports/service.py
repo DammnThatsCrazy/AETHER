@@ -362,7 +362,7 @@ async def _emit(topic_attr: str, tenant_id: str, payload: dict) -> None:
 
     Skips silently when the ``Topic`` member does not exist yet (report topic
     members are added by the coordinator at integration, per
-    ``docs/plans/data-exchange-api.md`` shared-surface deltas).
+    ``docs/architecture/plans/data-exchange-api.md`` shared-surface deltas).
     """
     try:
         from shared.events.events import Event, Topic

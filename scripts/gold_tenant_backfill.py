@@ -46,7 +46,7 @@ An old tenant-less key that was overwritten by a LATER tenant before this
 script ever runs cannot be un-overwritten — that data loss already happened
 at write time, silently, long before a backfill exists to look at it. This
 script can only relocate whatever row currently exists; see the runbook's
-cross-tenant-corruption caveat (docs/runbooks/GOLD-TENANT-BACKFILL.md).
+cross-tenant-corruption caveat (docs/operations/runbooks/GOLD-TENANT-BACKFILL.md).
 
 Safety
 ------
@@ -60,7 +60,7 @@ Safety
   storage logic.
 - Against a real database pool, ``--apply`` additionally requires
   ``--confirm-prod`` as an explicit second confirmation. Take a backup first —
-  see docs/runbooks/GOLD-TENANT-BACKFILL.md.
+  see docs/operations/runbooks/GOLD-TENANT-BACKFILL.md.
 
 Usage
 -----
@@ -391,7 +391,7 @@ async def run_backfill(
         raise ConfirmationRequired(
             "Refusing --apply against a live database pool without --confirm-prod. "
             "Take a backup and re-run with both flags — see "
-            "docs/runbooks/GOLD-TENANT-BACKFILL.md."
+            "docs/operations/runbooks/GOLD-TENANT-BACKFILL.md."
         )
 
     target_domains = list(domains) if domains else discover_gold_domains()
@@ -446,7 +446,7 @@ def _print_human(report: dict[str, Any]) -> None:
         print("  DRY RUN -- nothing was written. Re-run with --apply to perform the rekey.")
     elif totals["collisions"]:
         print("  ACTION NEEDED -- unresolved collisions were left in place; review and see "
-              "docs/runbooks/GOLD-TENANT-BACKFILL.md.")
+              "docs/operations/runbooks/GOLD-TENANT-BACKFILL.md.")
 
 
 def _parser() -> argparse.ArgumentParser:

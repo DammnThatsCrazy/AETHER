@@ -479,7 +479,7 @@ controls:
     required_evidence:
       - id: rollback-runbook
         kind: repo_file
-        path: docs/ROLLBACK-RUNBOOK.md
+        path: docs/operations/ROLLBACK-RUNBOOK.md
         external: false
         description: The documented rollback procedure.
       - id: manifest-tool
@@ -578,17 +578,17 @@ controls:
     required_evidence:
       - id: deployment-runbook
         kind: repo_file
-        path: docs/DEPLOYMENT-RUNBOOK.md
+        path: docs/operations/DEPLOYMENT-RUNBOOK.md
         external: false
         description: Operator-level deployment procedure.
       - id: migration-runbook
         kind: repo_file
-        path: docs/MIGRATION-RUNBOOK.md
+        path: docs/operations/MIGRATION-RUNBOOK.md
         external: false
         description: Operator-level migration procedure.
       - id: profiles-doc
         kind: repo_file
-        path: docs/DEPLOYMENT-PROFILES.md
+        path: docs/architecture/DEPLOYMENT-PROFILES.md
         external: false
         description: The profile matrix operators choose from.
       - id: bundle-checksum
@@ -830,13 +830,13 @@ controls:
     required_evidence:
       - id: profiles-doc
         kind: repo_file
-        path: docs/DEPLOYMENT-PROFILES.md
+        path: docs/architecture/DEPLOYMENT-PROFILES.md
         contains: production-lean
         external: false
         description: The lean profile is documented.
       - id: evidence-doc
         kind: repo_file
-        path: docs/RELEASE-EVIDENCE.md
+        path: docs/operations/RELEASE-EVIDENCE.md
         external: false
         description: How the evidence bundle is produced and read.
       - id: bundle-manifest
@@ -924,7 +924,7 @@ controls:
     required_evidence:
       - id: migration-runbook
         kind: repo_file
-        path: docs/MIGRATION-RUNBOOK.md
+        path: docs/operations/MIGRATION-RUNBOOK.md
         external: false
         description: The documented migration procedure.
       - id: migration-result
@@ -1032,7 +1032,7 @@ controls:
     required_evidence:
       - id: rollback-runbook
         kind: repo_file
-        path: docs/ROLLBACK-RUNBOOK.md
+        path: docs/operations/ROLLBACK-RUNBOOK.md
         external: false
         description: The documented rollback procedure.
       - id: rollback-result
@@ -1087,7 +1087,7 @@ controls:
     required_evidence:
       - id: evidence-doc
         kind: repo_file
-        path: docs/RELEASE-EVIDENCE.md
+        path: docs/operations/RELEASE-EVIDENCE.md
         external: false
         description: How the bundle is produced and read.
       - id: rehearsal-history

@@ -113,7 +113,7 @@ finally:
 
 # ── 4. GRAPH_ALIGNMENT.md has source_files: frontmatter ──────────────────
 
-alignment_path = REPO_ROOT / "docs" / "source-of-truth" / "GRAPH_ALIGNMENT.md"
+alignment_path = REPO_ROOT / "docs" / "reference" / "source-of-truth" / "GRAPH_ALIGNMENT.md"
 if alignment_path.exists():
     content = alignment_path.read_text()
     has_frontmatter = "source_files:" in content and content.startswith("---")
@@ -123,7 +123,7 @@ else:
 
 # ── 5. GRAPH_LAYER_PARITY.md has all four layers ─────────────────────────
 
-parity_path = REPO_ROOT / "docs" / "source-of-truth" / "GRAPH_LAYER_PARITY.md"
+parity_path = REPO_ROOT / "docs" / "reference" / "source-of-truth" / "GRAPH_LAYER_PARITY.md"
 if parity_path.exists():
     pc = parity_path.read_text()
     layers_ok = all(layer in pc for layer in ("H2H", "H2A", "A2H", "A2A"))

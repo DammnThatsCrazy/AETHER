@@ -11,7 +11,7 @@ Intelligence, and Interoperability Intelligence expansion.
 
 | Command | Result |
 |---|---|
-| `python scripts/bump_version.py --check` | PASS (8.11.0 aligned; 3 pre-existing doc warnings: `docs/AGENT-CONTROLLER.md` no versioned heading, `EXTRACTION_DEFENSE_AUDIT.md` listed-but-missing, archived backend README has no versioned heading) |
+| `python scripts/bump_version.py --check` | PASS (8.11.0 aligned; 3 pre-existing doc warnings: `docs/architecture/AGENT-CONTROLLER.md` no versioned heading, `EXTRACTION_DEFENSE_AUDIT.md` listed-but-missing, archived backend README has no versioned heading) |
 | `python -m pytest tests/ -n auto` | **1772 passed, 1 failed, 3 skipped** |
 | `npm run build --workspace=packages/shared && npm test` | PASS (all workspaces) |
 | `python scripts/production_status.py` | Overall 4.05/5 — pre-production; deployment/cloud readiness 3/5, scale readiness 3/5 |
@@ -45,7 +45,7 @@ which are not pulled in by `pip install -e ".[dev,backend]"` on a fresh containe
   `UNIQUE(tenant_id, idempotency_key)`.
 - Consent purpose `financial_activity` in `packages/shared/contracts/consent-registry.json`
   (explicit opt-in, 2555d retention, `allowModelTraining: false`).
-- Docs: `docs/source-of-truth/DERIVATIVES_*.md` (5) + `docs/derivatives/*.md` (5), all thin stubs.
+- Docs: `docs/source-of-truth/DERIVATIVES_*.md` (5) + `docs/product/derivatives/*.md` (5), all thin stubs.
 - **Absent**: backend service, repositories, routes, registered events, graph VertexType/EdgeType
   mirror, silver projector, Profile360 section, Noesis intent, metering dimension, DSR table mapping.
 

@@ -8,7 +8,7 @@
 #   - scripts/release/check_cost_policy.py            (forbidden-resource policy)
 #   - scripts/release/check_cost_policy_terraform.py  (Terraform encodes the policy)
 #   - scripts/release/check_cost_model.py             (numeric budget enforcement)
-#   - docs/DEPLOYMENT-PROFILES.md                     (authored narrative)
+#   - docs/architecture/DEPLOYMENT-PROFILES.md                     (authored narrative)
 #
 # It is DATA, not infrastructure. The Terraform work that makes the profile
 # selectable and asserts a `production-lean` plan actually excludes the

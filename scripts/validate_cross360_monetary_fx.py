@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-360 monetary/FX canonical-seam guard (Context Intelligence 360, Phase 5).
 
-Standing rule (``docs/plans/CONTEXTUAL_360_PHASES.md`` §4 rule 4): every
+Standing rule (``docs/architecture/plans/CONTEXTUAL_360_PHASES.md`` §4 rule 4): every
 measure uses ``shared/measurement`` and **monetary values consume the canonical
 value contract / FX provenance only** — there is no geography- or
 population-specific FX, and a cross-360 monetary metric is never computed by
@@ -144,7 +144,7 @@ def main() -> int:
             "composition seam are monetary-free by doctrine. A monetary metric "
             "must come pre-priced from economic360 / services.value (the "
             "packages/shared/value.ts mirror) with canonical FX provenance — "
-            "see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md. Never add a "
+            "see docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md. Never add a "
             "geography- or population-specific FX/money path beside them.",
             file=sys.stderr,
         )

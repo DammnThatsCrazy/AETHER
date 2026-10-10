@@ -267,7 +267,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Communication 360",
         "projectionKind": "sequence_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/communication360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/communication360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "episode", "source"),
         "canonicalAuthorities": ("campaign_touchpoints", "communication_facts", "entities", "evidence", "outcomes"),
@@ -315,7 +315,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("profile360", "timeline"),
             "services": ("services/backend/services/comms",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/communication360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/communication360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -394,7 +394,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Economic 360",
         "projectionKind": "measurement_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/economic360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/economic360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "episode", "source"),
         "canonicalAuthorities": ("commerce", "currency_value_normalization", "economic_facts", "graph", "outcome_facts", "payments"),
@@ -442,7 +442,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("campaign360", "economic360", "product_intelligence"),
             "services": ("services/backend/services/economic",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/economic360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/economic360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -581,7 +581,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Fraud 360",
         "projectionKind": "risk_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/fraud360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/fraud360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity", "relationship"),
         "canonicalAuthorities": ("economic_facts", "evidence", "execution_facts", "fraud_synthesis", "graph_motifs", "identity", "relationship_facts", "risk_outputs", "social_observations"),
@@ -629,7 +629,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("fraud360", "graph"),
             "services": ("services/backend/services/fraud",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/fraud360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/fraud360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -641,7 +641,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Geographic 360",
         "projectionKind": "context_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/geographic360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/geographic360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "population", "source"),
         "canonicalAuthorities": ("context_capsules", "entity_graph", "geo_observations", "locations", "temporal"),
@@ -689,7 +689,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("geographic360",),
             "services": ("services/backend/services/geo",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/geographic360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/geographic360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -701,7 +701,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Infrastructure 360",
         "projectionKind": "infrastructure_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/infrastructure360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/infrastructure360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("deployment", "infrastructure"),
         "canonicalAuthorities": ("deployments", "infrastructure_facts", "infrastructure_state"),
@@ -749,7 +749,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("infrastructure360",),
             "services": ("services/backend/services/infrastructure",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/infrastructure360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/infrastructure360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -761,7 +761,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Outcome 360",
         "projectionKind": "measurement_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/outcome360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/outcome360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "episode", "population"),
         "canonicalAuthorities": ("evidence", "graph", "measurement_contract", "outcome_facts"),
@@ -809,7 +809,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("campaign360", "outcome360"),
             "services": ("services/backend/services/measurement",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/outcome360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/outcome360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -821,7 +821,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Population 360",
         "projectionKind": "context_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/population360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/population360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("cluster", "entity", "population"),
         "canonicalAuthorities": ("cluster_definitions", "cohort_membership", "entities", "evidence", "population_definitions", "temporal"),
@@ -869,7 +869,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("population360",),
             "services": ("services/backend/services/population",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/population360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/population360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -1001,7 +1001,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Risk 360",
         "projectionKind": "risk_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/risk360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/risk360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("cluster", "entity", "population", "relationship"),
         "canonicalAuthorities": ("cluster_membership", "economic_facts", "entity_graph", "evidence", "model_governance", "risk_outputs"),
@@ -1049,7 +1049,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("comparison_workbench", "graph", "risk360"),
             "services": ("services/backend/services/risk_overlay",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/risk360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/risk360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -1061,7 +1061,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Social 360",
         "projectionKind": "relationship_360",
         "implementationState": "in_flight",
-        "implementationBlueprint": "docs/blueprints/social360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/social360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "relationship"),
         "canonicalAuthorities": ("evidence", "graph", "relationship_facts", "social_observations", "source_facts"),
@@ -1109,7 +1109,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("profile360",),
             "services": ("services/backend/services/profile",),
             "migrationMode": "adapter",
-            "migrationBlueprint": "docs/blueprints/social360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/social360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
@@ -1181,7 +1181,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "displayName": "Temporal 360",
         "projectionKind": "context_360",
         "implementationState": "implemented",
-        "implementationBlueprint": "docs/blueprints/temporal360.md",
+        "implementationBlueprint": "docs/architecture/blueprints/temporal360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "relationship"),
         "canonicalAuthorities": ("graph_snapshots", "mutation_history", "temporal_kernel", "validity_state"),
@@ -1229,7 +1229,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "surfaceIds": ("temporal360",),
             "services": ("services/backend/shared/temporal",),
             "migrationMode": "converged",
-            "migrationBlueprint": "docs/blueprints/temporal360.md"
+            "migrationBlueprint": "docs/architecture/blueprints/temporal360.md"
         },
         "deprecatedReason": None,
         "successorId": None,

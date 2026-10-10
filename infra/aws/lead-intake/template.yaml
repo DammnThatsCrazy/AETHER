@@ -5,7 +5,7 @@ AWSTemplateFormatVersion: "2010-09-09"
 # then the lead inbox is emailed through SES. Accepts the same body as the
 # backend's POST /v1/contact/lead for the site's six contact topics and answers
 # with the same {"data": {"received": true, "lead_id": ...}} shape, so the site
-# needs only a different URL. Deploy: see docs/AWS-DEPLOYMENT.md "Production
+# needs only a different URL. Deploy: see docs/operations/AWS-DEPLOYMENT.md "Production
 # lead intake". Long-form intrinsics keep the file plain YAML for its tests.
 Description: Aether production lead intake - Lambda function URL, DynamoDB lead table, SES notification
 

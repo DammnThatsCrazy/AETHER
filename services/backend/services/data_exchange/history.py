@@ -5,7 +5,7 @@ M1 ``data_artifacts`` repository: it renders canonical envelope state (artifact
 statuses, formats, directions) in the Data Exchange vocabulary for the M6
 history surface.  No engine logic lives here.
 
-Route map (frozen in ``docs/plans/data-exchange-api.md`` M4):
+Route map (frozen in ``docs/architecture/plans/data-exchange-api.md`` M4):
 
 - ``GET /v1/data-exchange/artifacts``           → ``{artifacts:[...], count}``
   — unified history across imports/exports/reports/transfers from

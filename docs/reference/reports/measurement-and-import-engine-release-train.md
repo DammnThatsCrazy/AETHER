@@ -22,7 +22,7 @@ individually-green PRs (each passing `make repo-doctor` at 25 gates, 0 failed):
 
 Both are scored **4/5** in `scripts/production_status.py` (release-ready with minor
 gaps; 5 requires production traffic at scale) — see the scorecard and
-`docs/productization/aether_productization_audit.md`, updated together per the
+`docs/product/productization/aether_productization_audit.md`, updated together per the
 CLAUDE.md production-claims rule.
 
 ---
@@ -71,7 +71,7 @@ CLAUDE.md production-claims rule.
   records (`20260719`), tenant-isolated at the repo boundary.
 - Operability: per-tenant `MAX_CONCURRENT_IMPORTS` cap; Kyber console
   `/v1/kyber/imports` (timeline / detail / failed-import requeue, `require_kyber_operator`);
-  `docs/runbooks/IMPORT_FAILURES.md`.
+  `docs/operations/runbooks/IMPORT_FAILURES.md`.
 
 ---
 

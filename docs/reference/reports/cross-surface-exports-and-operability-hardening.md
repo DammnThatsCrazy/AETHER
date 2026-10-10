@@ -63,14 +63,14 @@ bytes contain the exported record.
 
 ### 2. Operational runbooks
 
-- **`docs/runbooks/EXPORT_FAILURES.md`** — stuck/failed export jobs, the 32 MB
+- **`docs/operations/runbooks/EXPORT_FAILURES.md`** — stuck/failed export jobs, the 32 MB
   cap, the checksum-verify fail-closed guard, download 403/404 (expired/deleted
   tombstones), and the 7-day TTL sweep.
-- **`docs/runbooks/IDENTITY_REPAIR.md`** — fragment-aware split (preview →
+- **`docs/operations/runbooks/IDENTITY_REPAIR.md`** — fragment-aware split (preview →
   execute, three modes, `campaign_only_sameness_blocked`), survivor redirects,
   repo↔graph reconciliation (`missing_in_graph` / `missing_in_repo`), recompute,
   and the identity health check.
-- **`docs/runbooks/STAGING_PREFLIGHT.md`** — the preflight gate (env / db /
+- **`docs/operations/runbooks/STAGING_PREFLIGHT.md`** — the preflight gate (env / db /
   redis / http / contracts), the `--dry-run` self-test that proves the gate fails
   closed, and the `/v1/ready` readiness endpoint (advisory workers, 503 semantics).
 
@@ -78,7 +78,7 @@ Each carries `source_files` frontmatter and a reviewed `last_synced_commit`.
 
 ### 3. Jobs-platform source of truth
 
-`docs/source-of-truth/JOBS_PLATFORM.md` documents the durable jobs platform
+`docs/reference/source-of-truth/JOBS_PLATFORM.md` documents the durable jobs platform
 (claim via `FOR UPDATE SKIP LOCKED` + lease, idempotent enqueue, states, DLQ, the
 `@register_handler` contract, tenant + Kyber surfaces, scheduler) and — critically
 — the **deliberate boundary**: the Redis-backed agent runtime
@@ -88,7 +88,7 @@ profile than durable batch jobs.
 
 ### 4. Repo-consistency ownership map extended
 
-`docs/source-of-truth/repo_consistency_ownership.json` gains three change
+`docs/reference/source-of-truth/repo_consistency_ownership.json` gains three change
 categories — `jobs_platform`, `import_engine`, `measurement_integrity` — so a
 future change to any of those subsystems must move with its derived surfaces
 (source-linked docs/runbooks, contract twins, generated docs, tests) or the

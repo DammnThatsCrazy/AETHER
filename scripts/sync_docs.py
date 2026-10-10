@@ -76,7 +76,7 @@ def authored_docs(tracked: list[str] | None = None) -> dict[str, list[str]]:
 
     Most authored docs live at ``docs/*.md``. Product-domain slices may also
     introduce narrowly scoped nested docs (for example
-    ``docs/semantic-sentiment/`` and its runbooks). Include those nested docs
+    ``docs/product/semantic-sentiment/`` and its runbooks). Include those nested docs
     explicitly so ``sync_docs.py`` is deterministic in CI without sweeping in
     archive/source-of-truth trees owned by separate documentation validators.
 
@@ -90,8 +90,8 @@ def authored_docs(tracked: list[str] | None = None) -> dict[str, list[str]]:
     tracked_set = set(tracked)
     groups: dict[str, list[str]] = defaultdict(list)
     paths = list(DOCS.glob("*.md"))
-    paths.extend((DOCS / "semantic-sentiment").glob("*.md"))
-    paths.extend((DOCS / "runbooks" / "semantic-sentiment").glob("*.md"))
+    paths.extend((DOCS / "product" / "semantic-sentiment").glob("*.md"))
+    paths.extend((DOCS / "operations" / "runbooks" / "semantic-sentiment").glob("*.md"))
     for path in sorted(paths):
         rel = path.relative_to(DOCS)
         if path.name in {INDEX_PATH.name, AUTOMATION_PATH.name, "CHANGELOG.md"}:

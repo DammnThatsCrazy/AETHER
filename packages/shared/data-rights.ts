@@ -6,7 +6,7 @@
 // Parity is enforced by tests/unit/test_data_rights_contract_parity.py.
 //
 // This module is the TypeScript twin of the Python DataRightsGrant structured
-// authorities frozen in docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md
+// authorities frozen in docs/reference/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md
 // §3 (canonical contract model) and §5 (rights derivation taxonomy). Every
 // vocabulary below is an `as const` array with a derived snake_case literal-
 // union type (`typeof X[number]`); every interface mirrors a Python pydantic

@@ -215,11 +215,11 @@ RUNBOOK_DEFINITIONS: list[OperationalRunbook] = [
         "We are aware of slowness in the Aether app and are working to restore full performance.",
     ),
     # Registers the existing authored runbook:
-    # docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md
+    # docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md
     _runbook(
         "rb_semantic_classification_degraded", "Semantic Classification Degraded", "semantic_intelligence", "sev3",
         ["semantic abstention rate elevated", "semantic review queue growth", "semantic classify latency p95 elevated"],
-        ["Check /v1/kyber/semantic/fleet-health (model versions, abstention rate)", "Inspect event_to_semantic_classification pipeline freshness", "Follow docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md"],
+        ["Check /v1/kyber/semantic/fleet-health (model versions, abstention rate)", "Inspect event_to_semantic_classification pipeline freshness", "Follow docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md"],
         ["Keep classification abstaining (fail closed) — never fabricate sentiment", "Throttle deep analysis before core ingestion", "Reprocess bounded tenant/time windows via dry-run replay after recovery"],
         ["on-call SRE", "semantic intelligence owner"],
         False,

@@ -1,7 +1,7 @@
 """Data Exchange Plane — identity-preview adapter (M3).
 
 Net-new preview over the canonical identity-resolution seam
-(``docs/plans/data-exchange-api.md`` M3 ``preview/identity``).  For each
+(``docs/architecture/plans/data-exchange-api.md`` M3 ``preview/identity``).  For each
 identity-bearing field of a mapped import the tenant can preview, **before
 commit**, what the canonical resolution would decide for a sample value —
 new entity vs. a single existing link vs. an ambiguous candidate set vs. a

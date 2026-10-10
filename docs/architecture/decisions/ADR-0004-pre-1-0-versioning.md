@@ -31,4 +31,4 @@ All versions before public production use SemVer pre-release identifiers (alpha,
 ## Enforcement
 
 - `scripts/bump_version.py --check` validates version alignment
-- Release policy documented in `docs/releases/release-policy.md`
+- Release policy documented in `docs/operations/releases/release-policy.md`

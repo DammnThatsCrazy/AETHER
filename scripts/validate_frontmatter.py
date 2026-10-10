@@ -38,9 +38,9 @@ SKIP_DIRS = {
     DOCS_ROOT / "reference" / "reports",
     DOCS_ROOT / "_generated",
     DOCS_ROOT / "_templates",
-    DOCS_ROOT / "diagrams",
-    DOCS_ROOT / "examples",
-    DOCS_ROOT / "source-of-truth",
+    DOCS_ROOT / "architecture" / "diagrams",
+    DOCS_ROOT / "reference" / "examples",
+    DOCS_ROOT / "reference" / "source-of-truth",
 }
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)

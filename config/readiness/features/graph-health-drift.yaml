@@ -102,7 +102,7 @@ operational_ownership:
   technical_owner: graph
   operational_owner: platform-ops
   escalation: pagerduty:graph
-  runbook: docs/runbooks/RECONCILIATION.md
+  runbook: docs/operations/runbooks/RECONCILIATION.md
   dashboards:
   - grafana:graph
   alerts:

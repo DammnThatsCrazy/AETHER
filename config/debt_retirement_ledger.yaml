@@ -1,5 +1,5 @@
 # Technical-debt retirement ledger — the enforceable cutover registry for the
-# architecture reset (docs/blueprints/architecture-reset/technical-debt-retirement.md).
+# architecture reset (docs/architecture/blueprints/architecture-reset/technical-debt-retirement.md).
 #
 # One row per duplicated authority. A cutover is finished when the replaced path
 # is gone, not when the new path works. `scripts/validate_debt_retirement_ledger.py`
@@ -509,7 +509,7 @@ entries:
     retire: >-
       eight Kyber files no entry point reaches, kept because deleting them is a
       product call: three unrouted pages (fraud decisions, campaign registry
-      health, which docs/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness
+      health, which docs/product/campaign/CAMPAIGN_KYBER_GUIDE.md and the readiness
       scorecard name, and customer success), an unrendered agent profile, and
       four modules kept alive only by their own tests. Each is mounted in a
       route or deleted with its test.
@@ -682,8 +682,8 @@ entries:
       the canonical staging profile
     consumers:
       - infra/local/docker-compose.yml
-      - docs/DEPLOYMENT-RUNBOOK.md
-      - docs/SMOKE-TEST-CHECKLIST.md
+      - docs/operations/DEPLOYMENT-RUNBOOK.md
+      - docs/operations/SMOKE-TEST-CHECKLIST.md
       - scripts/release/check_delivery_compose_parity.py
     compatibility: local development harness only
     mechanism: delete

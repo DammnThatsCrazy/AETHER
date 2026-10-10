@@ -109,7 +109,7 @@ operational_ownership:
   technical_owner: smart-contracts
   operational_owner: platform-ops
   escalation: pagerduty:smart-contracts
-  runbook: docs/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md
+  runbook: docs/operations/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md
   dashboards:
   - grafana:smart-contracts
   alerts:

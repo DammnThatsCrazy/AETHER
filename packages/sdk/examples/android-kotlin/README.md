@@ -54,7 +54,7 @@ The native Aether Android SDK exposes the following surface (used by the React N
 
 ## Manual smoke testing on Android
 
-See `docs/examples/README.md` for the manual device smoke test procedure for Android. In short:
+See `docs/reference/examples/README.md` for the manual device smoke test procedure for Android. In short:
 
 1. Build and run `apps/proof-android/` on a physical Android device or emulator.
 2. Tap through the first-value journey tabs in the app.

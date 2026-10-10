@@ -76,7 +76,7 @@ from shared.social360.canonical import (  # noqa: E402  (see docstring)
 # exposure-is-context-not-disqualification doctrine). Versioned so a rule change
 # is observable on every context row.
 POLICY_REF = (
-    "blueprint:social360:docs/blueprints/social360.md#ss30-33-3.4:"
+    "blueprint:social360:docs/architecture/blueprints/social360.md#ss30-33-3.4:"
     "incentive-context-resolution:v1"
 )
 

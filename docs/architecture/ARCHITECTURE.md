@@ -44,7 +44,7 @@ Read:
 
 The [Aether Root Architecture](docs/architecture/AETHER_ROOT_ARCHITECTURE.md)
 defines the architecture reset's target runtime and operator control plane.
-Its [delivery plan](docs/blueprints/architecture-reset/README.md) maps the
+Its [delivery plan](docs/architecture/blueprints/architecture-reset/README.md) maps the
 existing implementation to that target and tracks migration evidence. These
 are target documents while the current architecture below remains active.
 
@@ -67,5 +67,5 @@ Read:
 
 For the full backend intelligence architecture, see:
 
-- `docs/ARCHITECTURE.md` — Detailed system map with source-linked references
-- `docs/source-of-truth/BACKEND_INTELLIGENCE_ARCHITECTURE.md`
+- `docs/architecture/PLATFORM-ARCHITECTURE.md` — Detailed system map with source-linked references
+- `docs/reference/source-of-truth/BACKEND_INTELLIGENCE_ARCHITECTURE.md`

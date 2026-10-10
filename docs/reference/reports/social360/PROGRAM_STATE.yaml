@@ -2,7 +2,7 @@
 # Aether — Social360 + Relationship Fidelity extension to the Relational
 # Intelligence Spine — PROGRAM STATE LEDGER
 #
-# Blueprint:  docs/blueprints/social360.md (M1-authored home doc; status: experimental).
+# Blueprint:  docs/architecture/blueprints/social360.md (M1-authored home doc; status: experimental).
 #              (authoritative text: "Aether Social360 + Relationship Fidelity
 #               Extension to the Relational Intelligence Spine", dated 2026-08-21)
 # Doctrine:   "The graph is the product." — extension/convergence, no parallel system.
@@ -30,7 +30,7 @@ gate_notes_2026_09_03:
   make_docs_check: "1/11 failed: 'Generated artifacts — no uncommitted diff'. No current diff on
     docs/_generated (git diff empty). Cause not attributable to M0 slice (report-only files;
     generators do not read docs/reference/reports/). Working tree is concurrently written by another lane
-    (docs/plans/RISK_FRAUD_360_PHASES.md authored by another session at 09:29 during the run).
+    (docs/architecture/plans/RISK_FRAUD_360_PHASES.md authored by another session at 09:29 during the run).
     Recorded per blueprint §2 defect rule as a pre-existing/attributed follow-up: run
     `make repo-doctor-fix` in a quiescent tree on the base lane; not part of this program."
 
@@ -68,7 +68,7 @@ gate_notes_2026_09_04:
     ci-check (env-stripped) 64 passed / 0 failed (CI_CHECK_EXIT=0). Post-fix gate findings
     recorded for reproducibility: (1) source-of-truth ownership gate required a derived
     surface with the new /v1/relationships router mount -> read surface documented in
-    docs/BACKEND-API.md (Relationship Intelligence Service v8.12.0 section); (2) default-deny
+    docs/reference/BACKEND-API.md (Relationship Intelligence Service v8.12.0 section); (2) default-deny
     route-policy ratchet (test_route_registry_coverage) -> /v1/relationships registered in
     config/route_registry.yaml known_prefixes (plain read-only domain, parity with
     /v1/computations + /v1/measurement); (3) storage-policy coverage gate -> six
@@ -133,7 +133,7 @@ milestones:
                                        # shared.graph.graph.EdgeType).
     gate: "canonical repo gate make ci-check (env-stripped), 63 passed / 0 failed"
     deliverables:
-      - docs/blueprints/social360.md                  # program home doc (eff417c1)
+      - docs/architecture/blueprints/social360.md                  # program home doc (eff417c1)
       - packages/shared/contracts/social-silver-facts.schema.json
       - packages/shared/contracts/incentive-context.schema.json
       - packages/shared/contracts/relationship-fidelity-vector.schema.json
@@ -293,7 +293,7 @@ key_decisions:
       The docs are source-linked and drift-governed; their linked sources live on a
       flag-gated, unactivated plane whose projection row is in_flight. Authoring them now
       would document behavior no runtime caller exercises. Authority is currently held
-      honestly by docs/blueprints/social360.md (home doc) + this ledger + the M11/M12
+      honestly by docs/architecture/blueprints/social360.md (home doc) + this ledger + the M11/M12
       close-out reports. Correct authoring belongs to spine productization when the
       surface leaves in_flight (make release-gate + docs_drift --strict then demand them).
       G067 accordingly stays MISSING with the decision recorded; the docs genuinely do not exist.

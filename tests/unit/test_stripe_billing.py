@@ -427,7 +427,7 @@ class TestWebhookHandling:
             assert acct["stripe_subscription_id"] == "sub_1"
 
     def test_subscription_status_gates_the_tier(self, monkeypatch):
-        # Matches the contract in docs/STRIPE-BILLING.md: active/trialing grant the price's
+        # Matches the contract in docs/reference/STRIPE-BILLING.md: active/trialing grant the price's
         # tier, canceled/unpaid/incomplete_expired drop to alpha, other statuses change nothing.
         self._setup(monkeypatch)
         with backend_path():

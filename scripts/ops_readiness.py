@@ -25,12 +25,12 @@ sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
 REQUIRED_DOCS = [
-    "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md",
-    "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md",
-    "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
-    "docs/source-of-truth/AI_OUTCOME_EFFICIENCY.md",
-    "docs/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md",
-    "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md",
+    "docs/reference/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md",
+    "docs/reference/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md",
+    "docs/reference/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
+    "docs/reference/source-of-truth/AI_OUTCOME_EFFICIENCY.md",
+    "docs/reference/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md",
+    "docs/reference/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md",
 ]
 
 OPS_FLAG_ATTRS = [

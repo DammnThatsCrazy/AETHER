@@ -85,7 +85,7 @@ Before opening or updating a PR:
 6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
 7. Use `make ci-check` for broad local or release evidence when needed; PR merge-readiness is determined by the verification disposition.
 
-See `docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md` for the enforced source-to-derived ownership map.
+See `docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md` for the enforced source-to-derived ownership map.
 
 ## Branching
 

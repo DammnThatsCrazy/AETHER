@@ -7,7 +7,7 @@
 - Durable repositories: `services/backend/repositories/stablecoin_repos.py`
 - Additive migration: `services/backend/migrations/2026_07_stablecoin_intelligence_foundation.sql`
 - SDK shared contract: `packages/shared/stablecoin.ts`
-- Source-of-truth docs: `docs/source-of-truth/STABLECOIN_DOMAIN.md`, `STABLECOIN_EVENT_REGISTRY.md`, `STABLECOIN_METRICS.md`
+- Source-of-truth docs: `docs/reference/source-of-truth/STABLECOIN_DOMAIN.md`, `STABLECOIN_EVENT_REGISTRY.md`, `STABLECOIN_METRICS.md`
 - Tests: `tests/unit/test_stablecoin_intelligence_foundation.py`
 
 ## PR2-PR4 dependency gates

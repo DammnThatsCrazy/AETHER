@@ -11,7 +11,7 @@ Usage:
   python scripts/security/secret_scan.py            # report (exit 1 on findings)
   python scripts/security/secret_scan.py --advisory # always exit 0
 
-See docs/SECRET-SCANNING.md.
+See docs/operations/SECRET-SCANNING.md.
 """
 from __future__ import annotations
 

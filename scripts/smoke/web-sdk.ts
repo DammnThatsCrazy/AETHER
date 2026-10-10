@@ -8,7 +8,7 @@
  * Validates:
  *  - HTTP batch ingestion against POST /v1/batch
  *  - Direct SDK usage via @aether/web (if DOM available)
- *  - Correct canonical event envelope per docs/api/ingestion.md
+ *  - Correct canonical event envelope per docs/reference/api/ingestion.md
  */
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ function generateUserId(): string {
 }
 
 /**
- * Build a single canonical ingestion event per docs/api/ingestion.md.
+ * Build a single canonical ingestion event per docs/reference/api/ingestion.md.
  *
  * The canonical event types the backend registry validates are the bare
  * EventType union values: 'heartbeat', 'page', 'identify', 'conversion',

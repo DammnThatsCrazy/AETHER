@@ -27,7 +27,7 @@ repository_ceiling:
   evidence:
   - apps/aether/
   - apps/aether/src/test/e2e/
-  - docs/PRODUCTIZATION.md
+  - docs/product/PRODUCTIZATION.md
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)
@@ -97,7 +97,7 @@ operational_ownership:
   technical_owner: frontend
   operational_owner: platform-ops
   escalation: pagerduty:frontend
-  runbook: docs/runbooks/STAGING_PREFLIGHT.md
+  runbook: docs/operations/runbooks/STAGING_PREFLIGHT.md
   dashboards:
   - grafana:frontend
   alerts:

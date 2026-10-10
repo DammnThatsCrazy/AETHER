@@ -50,7 +50,7 @@ Evidence collected 2026-09-03. Absolute paths in §8 reference list.
    `exportClass:"governed"` (`shared/intelligence_projections/generated_registry.py:1107-1109`).
    Contrast the `web2` method which gates on `credit` consent (`profile/intelligence.py:516-577`).
 9. Registry `social360` legacy binding: `legacyBindings.services = ("services/backend/services/social",)`,
-   `migrationMode:"adapter"`, `migrationBlueprint:"docs/blueprints/social360.md"` (file does not
+   `migrationMode:"adapter"`, `migrationBlueprint:"docs/architecture/blueprints/social360.md"` (file does not
    exist yet — this program will author it in M1).
 
 ## 1. Component → classification matrix

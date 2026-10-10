@@ -14,7 +14,7 @@ source_hashes:
   "services/backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
   "services/backend/services/campaign/routes.py": "sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e"
   "services/backend/services/measurement/repositories/attribution_run_repo.py": "sha256:0a1ec25f6d8bb3ff911ac0e966df64775438ccbcfd7e2cc7e5d73715c4c8482c"
-  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:7ce28680d047299ad11e38a2767b2f8dec878afce70203340d6e1286dea1c374"
+  "services/backend/services/measurement/repositories/conversion_repo.py": "sha256:15955fbf15cb02418c196fb5b9a977e8dffaa47c22f1846c4e87f961708243fe"
   "services/backend/services/measurement/repositories/touchpoint_repo.py": "sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8"
   "services/backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
 ---

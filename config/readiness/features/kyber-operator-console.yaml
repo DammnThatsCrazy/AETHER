@@ -102,7 +102,7 @@ operational_ownership:
   technical_owner: kyber
   operational_owner: platform-ops
   escalation: pagerduty:kyber
-  runbook: docs/runbooks/KYBER_ACCOUNT_RECOVERY.md
+  runbook: docs/operations/runbooks/KYBER_ACCOUNT_RECOVERY.md
   dashboards:
   - grafana:kyber
   alerts:

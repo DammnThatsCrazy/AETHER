@@ -37,7 +37,7 @@ source_hashes:
   "services/backend/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:f52e3ca5ee8ab0050fd9f447642d87fb93f5c7ef0eab16bf8e34211a1360d8b6"
   "services/backend/alembic/versions/20260906_rcp_simulation.py": "sha256:9365aeced6274ca792563a9d8931a54e387e4cced758bfeec7114adc6e932838"
   "services/backend/alembic/versions/20260906_rcp_source_authority.py": "sha256:b3506114be9179b6592dbc08dfc616de066aea4856d274db16f46cf0f8c17422"
-  "services/backend/config/settings.py": "sha256:7f0c4e318f1434a07cd0a8a9803398f37a2e2bdd758a11d94a0040a1c80651f5"
+  "services/backend/config/settings.py": "sha256:fe764b5c58609cf4f7e5a66bce005d79f533c6568bc6977a6ab4d42df0ae2b61"
   "services/backend/main.py": "sha256:00ec069cbc1e995319deadc933182a3d768757b7425da348502d57d70e61d64c"
   "services/backend/services/kyber/access/": "sha256:518b962e1ac1c2d7a4edd9bcfc7882007ab2caf058dd85120946401cf9fbe841"
   "services/backend/services/managed_integrations/": "sha256:41c1cab340da06d00003e77f96541660cecc732099cf696deeb1938a692d7bca"
@@ -57,9 +57,9 @@ This page records the architecture of the §0–40 build as it stands after Phas
 drift classification through planning, approval-gated execution, and
 progressive delivery — and, just as importantly, the boundary of what the lane
 deliberately does **not** do. Phase-by-phase sequencing and evidence live in
-[`docs/plans/RECONCILED_CONTROL_PHASES.md`](../plans/RECONCILED_CONTROL_PHASES.md)
+[`docs/architecture/plans/RECONCILED_CONTROL_PHASES.md`](plans/RECONCILED_CONTROL_PHASES.md)
 and
-[`docs/productization/reconciled-control-plane/EXECUTION_STATE.md`](../productization/reconciled-control-plane/EXECUTION_STATE.md).
+[`docs/product/productization/reconciled-control-plane/EXECUTION_STATE.md`](../product/productization/reconciled-control-plane/EXECUTION_STATE.md).
 
 ## Governing spec
 

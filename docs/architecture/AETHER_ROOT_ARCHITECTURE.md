@@ -12,7 +12,7 @@ since_version: 0.1.0
 
 This document defines the **target** of the architecture reset. It is not a claim
 that every layer is implemented or ready for a design partner. The migration
-ledger in `docs/blueprints/architecture-reset/README.md` records what is present,
+ledger in `docs/architecture/blueprints/architecture-reset/README.md` records what is present,
 what must change, and the evidence required before an old path can retire.
 
 ## Purpose and one proof path

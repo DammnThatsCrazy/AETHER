@@ -61,7 +61,7 @@ _INFRASTRUCTURE360_DEFINITION = {
         "surfaceIds": ["infrastructure360"],
         "services": ["services/backend/services/infrastructure"],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/infrastructure360.md",
+        "migrationBlueprint": "docs/architecture/blueprints/infrastructure360.md",
     },
     "pendingAuthority": [],
     "pendingReference": [],

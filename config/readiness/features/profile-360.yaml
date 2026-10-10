@@ -106,7 +106,7 @@ operational_ownership:
   technical_owner: platform
   operational_owner: platform-ops
   escalation: pagerduty:platform
-  runbook: docs/runbooks/GOLD-TENANT-BACKFILL.md
+  runbook: docs/operations/runbooks/GOLD-TENANT-BACKFILL.md
   dashboards:
   - grafana:platform
   alerts:

@@ -127,7 +127,7 @@ Tabbed sections, left page nav, content pane, per-section accent glyph + color. 
 
 ### Status
 - **Current state:** `GET ${VITE_STATUS_API_URL}` → `{ status, components: { [name]: { status } } }` (already parsed by `componentsFromPayload` in `apps/status/src/main.tsx` — reuse that logic).
-- **History:** `GET ${VITE_STATUS_HISTORY_URL}?days=90` (served by `GET /v1/status/history`, see `docs/BACKEND-API.md#public-status-history`; days without samples are omitted and render as `no_data`, and `incidents` is currently always empty) →
+- **History:** `GET ${VITE_STATUS_HISTORY_URL}?days=90` (served by `GET /v1/status/history`, see `docs/reference/BACKEND-API.md#public-status-history`; days without samples are omitted and render as `no_data`, and `incidents` is currently always empty) →
   `{ components: [{ name, days: [{ date: "YYYY-MM-DD", status: "operational"|"degraded"|"outage"|"no_data", uptime_pct: number|null }] }], incidents: [{ id, title, status, started_at, resolved_at|null, components: [] }] }`
 - Render 90 bars per component: green operational, amber degraded, red outage, **stone `no_data` (distinct from zero)**. Components are collapsible accordions. Missing URL → "Status unavailable" empty state, never fake green.
 

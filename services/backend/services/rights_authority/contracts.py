@@ -1,7 +1,7 @@
 """Rights Authority — canonical contracts (Part 1: Effective Rights Resolver + durable decisions).
 
 Implements the frozen field contract in
-``docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md`` §4 (``RightsDecision``),
+``docs/reference/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md`` §4 (``RightsDecision``),
 §5.2 (``RightsLineage``), §11/§19 (``to_envelope_ref``), §12 (``RightsContext``)
 and §10 (``RightsImpact``).
 

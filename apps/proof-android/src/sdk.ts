@@ -3,7 +3,7 @@
 // Wraps @aether/react-native and falls back to direct POST /v1/batch for
 // signals the native SDK does not surface to JS (heartbeat, identity). Every
 // event-sending function constructs the canonical envelope per
-// docs/api/ingestion.md.
+// docs/reference/api/ingestion.md.
 // =============================================================================
 
 import Aether, { type AetherRNConfig } from '@aether/react-native';
@@ -140,7 +140,7 @@ function nextSequence(): { event: number } {
 }
 
 // ---------------------------------------------------------------------------
-// Canonical envelope builder (docs/api/ingestion.md)
+// Canonical envelope builder (docs/reference/api/ingestion.md)
 // ---------------------------------------------------------------------------
 
 function buildEnvelope(

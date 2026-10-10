@@ -16,7 +16,7 @@
 #
 # After BYOK rotation completes, run:
 #   python scripts/byok_reencrypt.py --old-key <previous> --new-key <current>
-# to re-encrypt stored tenant API keys. See docs/SECRET-ROTATION.md.
+# to re-encrypt stored tenant API keys. See docs/operations/SECRET-ROTATION.md.
 # ============================================================================
 
 # --------------------------------------------------------------------------

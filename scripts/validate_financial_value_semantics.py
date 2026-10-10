@@ -106,7 +106,7 @@ def _report() -> int:
             print(f"  - {e}")
         print(
             "\nFinancial values are canonical & USD-first. See "
-            "docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md."
+            "docs/reference/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md."
         )
         return 1
     print("financial value semantics validation OK (contract present; no unsafe cross-currency sums).")

@@ -1,7 +1,7 @@
 """Social360 + Relationship Fidelity product-surface rollout flags (M10).
 
 Covers the five rollout_controls flags added to ``Social360Config``
-(config/settings.py), mirroring docs/blueprints/social360.md §121-122:
+(config/settings.py), mirroring docs/architecture/blueprints/social360.md §121-122:
 
 * AETHER_SOCIAL360_ENABLED            → False
 * AETHER_RELATIONSHIP_MOTIFS_ENABLED  → False

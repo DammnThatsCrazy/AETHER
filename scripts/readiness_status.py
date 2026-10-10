@@ -352,7 +352,7 @@ def emit_docs(features: list[FeatureRecord], model: ReadinessModel) -> None:
         "Each feature is measured across independent dimensions. Implementation "
         "completion is repository-controlled only — a missing credential, "
         "unprovisioned infrastructure, or an absent provider account never "
-        "reduces it. See `docs/readiness/READINESS-MODEL.md`."
+        "reduces it. See `docs/operations/readiness/READINESS-MODEL.md`."
     )
     fl.append("")
     fl.append("| Feature | Scope | Impl % | Prod % | Ceiling | Achieved | Activation | Confidence |")

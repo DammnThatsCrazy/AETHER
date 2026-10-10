@@ -1,0 +1,241 @@
+---
+title: Stripe Billing — Alpha–Omega Integration
+slug: concepts/stripe-billing
+section: concepts
+visibility: P
+audience: [dev-senior, ops, buyer]
+status: stable
+since_version: "0.1.0"
+source_files:
+  - services/backend/shared/billing/stripe_client.py
+  - services/backend/services/billing/routes.py
+  - services/backend/services/admin/webhook_routes.py
+  - services/backend/shared/plans/catalog.py
+  - scripts/validate_stripe.py
+canonical_owner: billing@aether
+estimated_read_minutes: 6
+toc_depth: 3
+source_hashes:
+  "scripts/validate_stripe.py": "sha256:8f4cb22ddd72665bab55def524d5575dcc3dd7c2396baada9b8027dd21384f1c"
+  "services/backend/services/admin/webhook_routes.py": "sha256:45e3a1c95eb19e1bc6cd80335104b6121c2d74eefb2b2de0b3cbe0abf77c8654"
+  "services/backend/services/billing/routes.py": "sha256:884dbaac1268d2ff9eebb30553d2a4c1079dfae946532544e7e94acb61f1d4a3"
+  "services/backend/shared/billing/stripe_client.py": "sha256:036625098e863c9bf5ee488da84d755212494243a427a6a47d638cee8c0494d5"
+  "services/backend/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
+---
+# Stripe Billing — Aether Alpha–Omega Integration
+
+This document describes how Aether integrates Stripe Billing with the
+7-tier plan catalog (`shared/plans/catalog.py`): Alpha–Delta (self-serve)
+and Epsilon/Omicron/Omega (contract). Auth middleware, Redis-backed rate
+limiting, monthly quota metering, and overage logic all consume the plan
+tier from `tenant_billing_accounts.plan_tier`.
+
+It does **not** create parallel systems for plans, pricing, rate limiting,
+or quotas — Stripe is a payment + invoicing surface that drives the existing
+`tenant_billing_accounts.plan_tier` value, which the existing middleware
+already consumes.
+
+---
+
+## Stripe Dashboard setup (still required)
+
+Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
+
+1. **Create Stripe Products & recurring Prices** for each self-serve plan:
+   - **Alpha** (Free) → recurring subscription Price
+   - **Beta** ($299/mo) → recurring subscription Price
+   - **Gamma** ($899/mo) → recurring subscription Price
+   - **Delta** ($3,449/mo) → recurring subscription Price
+   - Optional yearly Prices (15% off monthly), on the same products:
+     **Beta** $3,050/yr, **Gamma** $9,170/yr, **Delta** $35,180/yr. Stripe
+     amounts are in cents (`305000`, `917000`, `3518000`).
+
+   Contract tiers (Epsilon, Omicron, Omega) are provisioned through the
+   admin operator path and do not require self-serve Stripe Prices. Their
+   mappings may be added later when those operator-managed flows are enabled.
+
+   Pricing lives in `shared/plans/catalog.py::PLAN_CATALOG`. Aether does
+   **not** ship hard-coded Stripe Price IDs; the operator must paste them
+   into env vars below.
+
+2. **Set the Price IDs in env**. Alpha–Delta are the self-serve Checkout
+   tiers. Epsilon, Omicron, and Omega are optional contract-tier mappings. The
+   pilot staging lane requires the four self-service IDs and can accept the
+   optional contract mappings without making them a self-service dependency:
+   ```env
+   STRIPE_PRICE_ALPHA=price_xxx_alpha
+   STRIPE_PRICE_BETA=price_xxx_beta
+   STRIPE_PRICE_GAMMA=price_xxx_gamma
+   STRIPE_PRICE_DELTA=price_xxx_delta
+   STRIPE_PRICE_EPSILON=price_xxx_epsilon
+   STRIPE_PRICE_OMICRON=price_xxx_omicron
+   STRIPE_PRICE_OMEGA=price_xxx_omega
+   # Optional yearly prices; a tier without one bills monthly only.
+   STRIPE_PRICE_BETA_ANNUAL=price_xxx_beta_year
+   STRIPE_PRICE_GAMMA_ANNUAL=price_xxx_gamma_year
+   STRIPE_PRICE_DELTA_ANNUAL=price_xxx_delta_year
+   ```
+
+   Each environment uses its own Stripe account: staging uses the test-mode
+   **Olympus Labs sandbox** (`acct_1TOploG4IgWgDCUX`, `sk_test_` keys) and is
+   never wired to live mode; production uses the live **Olympus Labs** account
+   (`acct_1TOpldQIy0mqIx3U`, `sk_live_` keys). Both carry the same product IDs.
+   `scripts/validate_stripe.py` checks every configured Price ID's product,
+   amount (cents), interval and mode against the key in use.
+
+   On AWS, each Price ID is its own Secrets Manager secret
+   (`aether/stripe-price-<tier>`, and `aether/stripe-price-<tier>-annual` for
+   yearly), holding the bare `price_...` string. Tasks mount the yearly ones
+   only when the Terraform profile sets `stripe_annual_prices_enabled = true`.
+   Staging turns it on with the sandbox yearly prices; production does not set
+   it yet. See [AWS Deployment](../operations/AWS-DEPLOYMENT.md#post-deploy-steps) for the
+   bootstrap and state-reconciliation order.
+
+3. **(Optional) Overage Price** — only if you want to charge Aether overage
+   usage through Stripe invoices:
+   ```env
+   STRIPE_OVERAGE_PRICE_ID=price_xxx_overage
+   ```
+   When unset, Stripe overage invoicing is disabled and Aether continues to
+   use its existing internal overage calculation (`shared/billing/overage.py`)
+   for the `/v1/admin/tenants/{id}/billing` projection.
+
+4. **Configure the webhook endpoint** in the Stripe Dashboard:
+   - URL: `POST https://<your-host>/v1/admin/billing/stripe/webhook`
+   - Subscribed events:
+     - `checkout.session.completed`
+     - `checkout.session.async_payment_succeeded`
+     - `checkout.session.async_payment_failed`
+     - `customer.subscription.created`
+     - `customer.subscription.updated`
+     - `customer.subscription.deleted`
+     - `invoice.created`
+     - `invoice.finalized`
+     - `invoice.paid`
+     - `invoice.payment_succeeded`
+     - `invoice.payment_failed`
+   - Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
+
+5. **Local testing**:
+   - Use Stripe **test mode** keys.
+   - Forward events with the Stripe CLI:
+     `stripe listen --forward-to localhost:8000/v1/admin/billing/stripe/webhook`
+   - Run Aether with `AETHER_ENV=local`. If Stripe keys or Price IDs are missing,
+     `GET /v1/billing/capability` reports `not_configured` and Checkout/Portal
+     fail explicitly; the runtime never manufactures provider URLs.
+     (see "Local mocked mode" below).
+
+---
+
+## Required env vars
+
+| Var | Purpose |
+| --- | --- |
+| `STRIPE_BILLING_ENABLED` | Master toggle (default `false`). |
+| `STRIPE_SECRET_KEY` | Stripe API secret. Required in non-local when enabled. |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret for webhook signature verification. |
+| `STRIPE_PRICE_ALPHA..DELTA` | Recurring subscription Price IDs for self-serve plans. |
+| `STRIPE_PRICE_EPSILON/OMICRON/OMEGA` | Optional contract-tier Price IDs for operator-managed flows. |
+| `STRIPE_PRICE_BETA_ANNUAL/GAMMA_ANNUAL/DELTA_ANNUAL` | Optional yearly Price IDs. Checkout with `billing_interval=annual` needs the tier's yearly price. |
+| `STRIPE_OVERAGE_PRICE_ID` | OPTIONAL Price ID for overage line items. |
+| `STRIPE_CHECKOUT_SUCCESS_URL` | Redirect URL after successful Checkout. |
+| `STRIPE_CHECKOUT_CANCEL_URL` | Redirect URL on cancelled Checkout. |
+| `STRIPE_PORTAL_RETURN_URL` | Return URL from the Stripe Billing Portal. |
+
+In **non-local** environments with `STRIPE_BILLING_ENABLED=true`, the secret
+key, webhook secret, the four self-serve Price IDs (Alpha–Delta), and the
+checkout/portal URLs are required. Contract-tier IDs are optional unless an
+operator-managed tier is being activated; `Settings.__post_init__` raises
+`RuntimeError` if a required value is missing. In **local** mode, they may be
+unset.
+
+---
+
+## API surface
+
+All routes (except the webhook) require the existing `billing` permission and
+go through normal Aether auth, rate-limit, and quota middleware.
+
+| Method | Route | Notes |
+| --- | --- | --- |
+| `GET` | `/v1/billing/capability` | Secret-free provider readiness: `not_configured`, `degraded`, or `available`, with the `missing` settings when degraded and `annual_plans` (tiers with a yearly price). |
+| `GET` | `/v1/billing/plans` | Customer-safe plan catalog; Stripe Price IDs are never exposed. |
+| `POST` | `/v1/billing/checkout` | Tenant-scoped Checkout. Body: `{ "plan_tier": "beta", "billing_interval": "annual" }`; only self-serve tiers (alpha–delta) accepted; `billing_interval` defaults to `monthly`, and `annual` returns 400 when the tier has no yearly price. |
+| `POST` | `/v1/billing/portal` | Tenant-scoped portal creation for an existing billing customer. |
+| `GET` | `/v1/billing/invoices` | Locally persisted invoices normalized to provider-independent customer fields. |
+| `POST` | `/v1/admin/tenants/{tenant_id}/billing/checkout-session` | Creates a subscription Checkout Session. Body: `{ "plan_tier": "gamma", "contact_email": "..." }`. Local plan_tier is **not** changed here. |
+| `POST` | `/v1/admin/tenants/{tenant_id}/billing/portal-session` | Stripe Billing Portal session for an existing customer. |
+| `GET`  | `/v1/admin/tenants/{tenant_id}/billing/invoices` | Locally synced Stripe invoices for the tenant. |
+| `GET`  | `/v1/admin/tenants/{tenant_id}/billing/invoices/{invoice_id}` | One locally synced invoice (tenant-scoped). |
+| `POST` | `/v1/admin/tenants/{tenant_id}/billing/overage-invoice` | Creates a Stripe overage invoice. Disabled when `STRIPE_OVERAGE_PRICE_ID` is unset. Idempotent on `(tenant_id, billing_period)`. |
+| `POST` | `/v1/admin/billing/stripe/webhook` | Stripe webhook ingress. Public from Aether auth (added to `PUBLIC_PATHS`); protected by `Stripe-Signature` verification. |
+
+---
+
+## Webhook → plan_tier flow
+
+Plan changes are **only** applied after the authoritative subscription update
+event (`customer.subscription.updated`). Specifically:
+
+| Event | Action |
+| --- | --- |
+| `checkout.session.completed` | Persist `stripe_customer_id` + `stripe_subscription_id`. **Plan_tier is NOT changed.** |
+| `checkout.session.async_payment_succeeded` | Repair the customer/subscription mapping when needed, record the settled subscription state, and send delayed activation once; the validated Checkout-requested tier is used only for that interim email. Subscription events remain authoritative for `plan_tier`. |
+| `checkout.session.async_payment_failed` | Upsert the customer/subscription mapping before recording `past_due`, so a failure delivered before checkout completion is not lost. |
+| `customer.subscription.created` | Sync subscription state. Update `plan_tier` only if status is `active`/`trialing` and the price matches a configured `STRIPE_PRICE_*`. |
+| `customer.subscription.updated` | **Authoritative.** Map subscription item Price ID back to PlanTier; on `active`/`trialing` update `plan_tier`, status, current_period_end. On `canceled`/`unpaid`/`incomplete_expired` downgrade to alpha. On `past_due` keep current plan. |
+| `customer.subscription.deleted` | Mark canceled, downgrade to alpha. |
+| `invoice.paid` / `invoice.payment_succeeded` | Upsert into `stripe_invoices` (status=paid). |
+| `invoice.payment_failed` | Upsert invoice. **Does not** trigger downgrade by itself. |
+| `invoice.finalized` / `invoice.created` | Upsert invoice metadata. |
+
+The webhook handler does not rewrite cached API-key entries. `APIKeyValidator.validate_async`
+overlays `tenant_billing_accounts.plan_tier` on every authentication, so
+`BurstRateLimiter`, `QuotaEngine`, and `FeatureGate` see the new plan on the
+tenant's next request. One handler serves the route
+(`services/admin/webhook_routes.py`); an earlier inline copy in `admin/routes.py`
+was shadowed by it and is deleted.
+
+Webhook idempotency: every `event_id` is recorded in `stripe_webhook_events`
+on first receipt; duplicate deliveries return 200 with `duplicate: true`.
+
+---
+
+## Unconfigured provider behavior
+
+There is no runtime mocked billing mode. Incomplete Stripe configuration is an
+explicit capability state, and provider operations fail with a dependency
+error rather than fabricated success. Automated tests inject a test-only
+provider fixture when they need to exercise successful Checkout or Portal
+behavior without a live Stripe account.
+
+---
+
+## Storage
+
+Schema is created idempotently by
+`shared/billing/migrations.py::ensure_billing_tables` at backend startup:
+
+- `tenant_billing_accounts` — primary tenant↔Stripe mapping + `plan_tier`.
+- `stripe_webhook_events` — webhook event idempotency log.
+- `stripe_invoices` — locally synced invoice records.
+- `stripe_overage_invoice_attempts` — idempotent record of Stripe overage
+  invoicing attempts, keyed by `(tenant_id, billing_period)`.
+
+Existing `overage_invoices` (internal Aether projection) is preserved.
+
+---
+
+## Overage charging
+
+- `STRIPE_OVERAGE_PRICE_ID` **unset** → existing Aether overage calculation
+  remains the source of truth. The internal projection at
+  `/v1/admin/tenants/{id}/billing` is unchanged. The Stripe overage endpoint
+  returns a clear `400` error.
+- `STRIPE_OVERAGE_PRICE_ID` **set** → operators can call
+  `POST /v1/admin/tenants/{id}/billing/overage-invoice` to push the Aether
+  overage amount into a Stripe invoice item + invoice. The endpoint is
+  idempotent on `(tenant_id, billing_period)` to prevent double-charging.
+
+The Stripe path **uses the Aether overage calculation** to determine the
+amount; pricing is not duplicated.

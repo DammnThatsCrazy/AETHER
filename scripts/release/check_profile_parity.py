@@ -54,12 +54,12 @@ CLOUD_CLASSES = {"staging", "production", "enterprise"}
 # prose that states a number is exactly what the monoprompt's parity rule
 # targets.
 DOCS_COUNT_PHRASES = {
-    "docs/DEPLOYMENT-PROFILES.md": [
+    "docs/architecture/DEPLOYMENT-PROFILES.md": [
         r"{word} deployment profiles",
         r"four of the \*{{0,2}}{word}\*{{0,2}}",
     ],
-    "docs/STAGING-WAKE-SLEEP.md": [r"{word}-profile matrix"],
-    "docs/COST-OPTIMIZATION.md": [r"{word}-profile matrix"],
+    "docs/operations/STAGING-WAKE-SLEEP.md": [r"{word}-profile matrix"],
+    "docs/operations/COST-OPTIMIZATION.md": [r"{word}-profile matrix"],
 }
 
 # English count words for the small integers the canonical set can plausibly be.

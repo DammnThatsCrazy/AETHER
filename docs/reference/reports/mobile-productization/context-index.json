@@ -26,7 +26,7 @@
     "ci_orchestrator": ["scripts/repo_doctor.py"],
     "version_source": ["pyproject.toml", "scripts/bump_version.py", "scripts/check_version_consistency.py"],
     "workspaces": ["package.json"],
-    "deployment_profiles": ["config/deployment_profiles.yaml", "docs/integration-control-plane/DEPLOYMENT_CONTRACT.yaml"],
+    "deployment_profiles": ["config/deployment_profiles.yaml", "docs/architecture/integration-control-plane/DEPLOYMENT_CONTRACT.yaml"],
     "desktop_notification_center": ["frontend/kyber/src/features/notifications/notification-center.tsx", "frontend/kyber/src/features/notifications/use-notifications.ts", "frontend/kyber/NOTIFICATIONS.md"],
     "react_native_observation_sdk": ["packages/react-native/src/index.tsx"],
     "mobile_gateway": ["services/backend/services/mobile/routes.py", "services/backend/services/mobile/service.py"],

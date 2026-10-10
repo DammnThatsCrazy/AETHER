@@ -73,7 +73,7 @@ def test_parity_validator_fails_on_wrong_doc_count(monkeypatch):
 
     def mutated_read(rel_path: str) -> str:
         text = (ROOT / rel_path).read_text()
-        if rel_path == "docs/DEPLOYMENT-PROFILES.md":
+        if rel_path == "docs/architecture/DEPLOYMENT-PROFILES.md":
             # Break every count-carrying phrase the validator watches.
             text = text.replace("eight deployment profiles", "nine deployment profiles")
         return text

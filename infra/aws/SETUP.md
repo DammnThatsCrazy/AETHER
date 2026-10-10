@@ -6,7 +6,7 @@ environment. It targets the **live, profile-driven Terraform root** at
 [`README.md`](README.md), and not the [dead `environments/`
 tree](terraform/README.md#dead-second-terraform-tree).
 
-**Canonical reference:** [`docs/AWS-DEPLOYMENT.md`](../../docs/AWS-DEPLOYMENT.md)
+**Canonical reference:** [`docs/operations/AWS-DEPLOYMENT.md`](../../docs/operations/AWS-DEPLOYMENT.md)
 describes the infrastructure exactly as the Terraform defines it. This file is
 the *procedure*; that doc is the *reference*. When they disagree, the doc wins.
 
@@ -65,7 +65,7 @@ Pick a **deployment profile** before you start — it decides cost and shape:
 | `production-scale` | Scaled production | ElastiCache / MSK / Neptune | 1 NAT |
 | `enterprise-isolated` | Isolated enterprise | ElastiCache / MSK / Neptune | 1 NAT per AZ |
 
-Full matrix: [`docs/DEPLOYMENT-PROFILES.md`](../../docs/DEPLOYMENT-PROFILES.md).
+Full matrix: [`docs/architecture/DEPLOYMENT-PROFILES.md`](../../docs/architecture/DEPLOYMENT-PROFILES.md).
 **Start with `staging`.** It is the strictest rehearsal gate and the intended
 first target.
 
@@ -224,8 +224,8 @@ terraform plan \
 
 Then dispatch the promotion workflow for the `staging` profile with the reviewed
 plan. Staging's wake/validate/sleep cadence is in
-[`docs/STAGING-WAKE-SLEEP.md`](../../docs/STAGING-WAKE-SLEEP.md); the operator
-procedure is [`docs/DEPLOYMENT-RUNBOOK.md`](../../docs/DEPLOYMENT-RUNBOOK.md).
+[`docs/operations/STAGING-WAKE-SLEEP.md`](../../docs/operations/STAGING-WAKE-SLEEP.md); the operator
+procedure is [`docs/operations/DEPLOYMENT-RUNBOOK.md`](../../docs/operations/DEPLOYMENT-RUNBOOK.md).
 
 ---
 
@@ -282,8 +282,8 @@ make validate-cost-policy-terraform
 
 ## See also
 
-- [`docs/AWS-DEPLOYMENT.md`](../../docs/AWS-DEPLOYMENT.md) — canonical infrastructure reference
+- [`docs/operations/AWS-DEPLOYMENT.md`](../../docs/operations/AWS-DEPLOYMENT.md) — canonical infrastructure reference
 - [`terraform/README.md`](terraform/README.md) — the live root, profiles, and egress modes
-- [`docs/DEPLOYMENT-PROFILES.md`](../../docs/DEPLOYMENT-PROFILES.md) — the profile matrix
-- [`docs/DEPLOYMENT-RUNBOOK.md`](../../docs/DEPLOYMENT-RUNBOOK.md) — operator procedure
+- [`docs/architecture/DEPLOYMENT-PROFILES.md`](../../docs/architecture/DEPLOYMENT-PROFILES.md) — the profile matrix
+- [`docs/operations/DEPLOYMENT-RUNBOOK.md`](../../docs/operations/DEPLOYMENT-RUNBOOK.md) — operator procedure
 - [`config/deployment_readiness.yaml`](../../config/deployment_readiness.yaml) — the readiness evidence gate

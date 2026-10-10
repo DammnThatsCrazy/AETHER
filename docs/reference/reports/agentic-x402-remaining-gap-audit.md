@@ -79,7 +79,7 @@ Added `Area("agentic_x402_productization", ...)` with live file checks and a
 
 ### GAP 10 — Documentation — CLOSED
 
-`docs/source-of-truth/EVENT_REGISTRY.md` updated with all 33 new lifecycle events,
+`docs/reference/source-of-truth/EVENT_REGISTRY.md` updated with all 33 new lifecycle events,
 their SDK method names, state machine, and consent rules.  
 `docs/_generated/events.json` regenerated (66 events, 8 families — was 33).
 
@@ -140,6 +140,6 @@ reflect the expanded canonical set.
 | `services/backend/.../services/admin/routes.py` | +4 operator endpoints + enhanced overview |
 | `services/backend/.../services/ingestion/batch.py` | +33 canonical event types + consent |
 | `scripts/production_status.py` | +agentic_x402_productization Area + live checks |
-| `docs/source-of-truth/EVENT_REGISTRY.md` | +33 lifecycle events documented |
+| `docs/reference/source-of-truth/EVENT_REGISTRY.md` | +33 lifecycle events documented |
 | `docs/_generated/events.json` | Regenerated (66 events) |
 | `tests/unit/test_ingestion_batch.py` | Updated expected set to include 33 new events |

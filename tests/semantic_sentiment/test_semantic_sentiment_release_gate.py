@@ -8,7 +8,7 @@ def test_semantic_sentiment_release_gate_assets_exist():
         "services/backend/alembic/versions/20260702_semantic_sentiment.py",
         "packages/shared/semantic-sentiment.ts",
         "scripts/semantic_sentiment/check_release_gate.py",
-        "docs/semantic-sentiment/SEMANTIC-SENTIMENT-INTELLIGENCE.md",
+        "docs/product/semantic-sentiment/SEMANTIC-SENTIMENT-INTELLIGENCE.md",
     ]:
         assert Path(path).exists()
 

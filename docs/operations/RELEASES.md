@@ -38,7 +38,7 @@ Pre-production private alpha.
 ## Release Documentation
 
 - `CHANGELOG.md`
-- `docs/releases/release-policy.md`
-- `docs/releases/retrospective-milestones.md`
-- `docs/releases/tag-policy.md`
-- `docs/releases/unreleased.md`
+- `docs/operations/releases/release-policy.md`
+- `docs/operations/releases/retrospective-milestones.md`
+- `docs/operations/releases/tag-policy.md`
+- `docs/operations/releases/unreleased.md`

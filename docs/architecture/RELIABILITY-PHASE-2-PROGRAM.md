@@ -124,7 +124,7 @@ traces back to that table being what it claims to be.
 
 The repository already contains proof that this problem is solvable
 cheaply: `services/backend/services/security/audit_ledger.py` (`AuditLedger`, documented in
-`docs/AUDIT-EVENT-LEDGER.md`) chains an `integrity_hash` per event to the
+`docs/architecture/AUDIT-EVENT-LEDGER.md`) chains an `integrity_hash` per event to the
 previous event **for the same tenant**, so `verify_chain()` can detect
 deletion or reordering of governance/security audit events. But that
 ledger's own "Planned controls" section is explicit about what is still
@@ -145,7 +145,7 @@ architectural intent, not a verifiable property.
 
 - `AuditLedger.compute_integrity_hash` / `AuditLedger.verify_chain` — a
   working, tested, per-tenant hash-chain implementation, scoped to
-  `SecurityAuditEvent` rows only (`docs/AUDIT-EVENT-LEDGER.md`).
+  `SecurityAuditEvent` rows only (`docs/architecture/AUDIT-EVENT-LEDGER.md`).
 - `bronze_sdk_events` and `event_outbox` — the two tables the V2 ingestion
   path (`services/backend/services/ingestion/bronze_bulk.py`) writes transactionally, with
   `ON CONFLICT ... DO NOTHING` idempotency, but no chaining or hash column.
@@ -185,7 +185,7 @@ primitive rather than reimplementing hash-chaining a second time:
    range (`tenant_id`, first/last `integrity_hash`) they were computed
    from, so a projection can cite its own provenance.
 6. Only after 1–5 are stable: deliver the external WORM export
-   `docs/AUDIT-EVENT-LEDGER.md` already lists as "planned" — e.g. an
+   `docs/architecture/AUDIT-EVENT-LEDGER.md` already lists as "planned" — e.g. an
    object-lock (Object Lock / Glacier Vault Lock–style) bucket that
    receives periodic, signed chain-segment exports — so integrity is
    provable even against a fully compromised database, not merely
@@ -417,7 +417,7 @@ fraud takedown, or a bad-data correction) *and* records citable evidence of
 exactly what changed and why.
 
 Finally, there is no general "replay a corrected pipeline over historical
-data" capability. `docs/BACKFILL-JOBS.md` documents a generic,
+data" capability. `docs/operations/BACKFILL-JOBS.md` documents a generic,
 tenant-scoped, idempotent backfill *pattern*, but nothing today applies
 that pattern specifically to re-draining a Bronze range through
 `journey_compiler` and the attribution engine after a bug fix, a fraud
@@ -440,10 +440,10 @@ change — that is handled ad hoc today, not as a supported operation.
   `mobile_installations`, `client_sync_records` — see
   `services/backend/services/consent/erasure_jobs.py`), ready to record a new kind of step
   once one exists to record.
-- `docs/BACKFILL-JOBS.md` — the generic backfill pattern (scope,
+- `docs/operations/BACKFILL-JOBS.md` — the generic backfill pattern (scope,
   idempotency by `(tenant_id, resource_id)`, throttle, observe, verify)
   that a replay job type would extend rather than replace.
-- `services/backend/services/jobs` (documented in `docs/source-of-truth/JOBS_PLATFORM.md`)
+- `services/backend/services/jobs` (documented in `docs/reference/source-of-truth/JOBS_PLATFORM.md`)
   — the durable jobs platform (`FOR UPDATE SKIP LOCKED` leasing, retries,
   dead-letter, `HANDLER_REGISTRY`/`register_handler`) that already hosts
   `consent.erasure` and is the natural home for a new `replay.*` job type.
@@ -474,7 +474,7 @@ change — that is handled ad hoc today, not as a supported operation.
    jobs platform (`services/backend/services/jobs`, `register_handler`), that re-drains a
    bounded, verified Bronze range through the same Silver/Gold projectors
    and `journey_compiler` — idempotent by `(tenant_id, resource_id)` like
-   every other backfill in `docs/BACKFILL-JOBS.md`.
+   every other backfill in `docs/operations/BACKFILL-JOBS.md`.
 5. **Verify what's being replayed.** Once Program 1's hash-chain exists,
    require replay to verify the Bronze range's chain before re-processing
    it, so replay cannot silently reprocess a range that was itself
@@ -510,7 +510,7 @@ deletion of the data they were computed from.
 
 M2 depends on M1. M3 depends on M1 (reuses the same invalidation
 primitive) and on `services/backend/services/fraud_networks`' existing takedown flow. M4
-depends on the `docs/BACKFILL-JOBS.md` pattern and, for full range
+depends on the `docs/operations/BACKFILL-JOBS.md` pattern and, for full range
 verification, on Program 1 (M5 here depends on Program 1's M2/M3).
 
 ### Risks
@@ -518,7 +518,7 @@ verification, on Program 1 (M5 here depends on Program 1's M2/M3).
 - **Amplification**: automatic re-attribution triggered by every erasure
   could itself become a load spike if many erasures land at once (a bulk
   DSR request, or a large fraud-network takedown). Needs the same
-  throttle/off-peak guidance `docs/BACKFILL-JOBS.md` already states for
+  throttle/off-peak guidance `docs/operations/BACKFILL-JOBS.md` already states for
   backfills, applied to the re-attribution trigger itself.
 - **Retroactive number changes**: replaying a corrected pipeline over a
   historical range (M4) can change previously-reported totals. This must
@@ -835,7 +835,7 @@ their value compounds in a specific order:
   marking in its own frontmatter.
 - Nothing here proposes weakening an existing validator, skipping an
   existing check, or bypassing the ownership map in
-  `docs/source-of-truth/repo_consistency_ownership.json`. Every milestone
+  `docs/reference/source-of-truth/repo_consistency_ownership.json`. Every milestone
   that touches source code, contracts, or generated docs would need to
   satisfy the same gates (`make ci-check`, `docs_drift.py`,
   `validate_contracts.py`, etc.) as any other change when it is actually

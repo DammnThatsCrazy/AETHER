@@ -24,7 +24,7 @@ architecture remain authoritative; the harness layers model routing and
 synthesis on top. It does not replace the intelligence graph, the graph
 mutation gateway, the entity/identity model, consent authority, the audit
 ledger, the credential platform, or the frontend boundaries it extends. See
-`docs/decisions/ADR-008-multi-model-intelligence-harness.md`.
+`docs/architecture/decisions/ADR-008-multi-model-intelligence-harness.md`.
 
 ## 2. Runtime model
 
@@ -194,7 +194,7 @@ Exact startup gates (enforced by `services/backend/services/model_runtime/config
 
 ## 8. References
 
-- `docs/decisions/ADR-008-multi-model-intelligence-harness.md` — the design
+- `docs/architecture/decisions/ADR-008-multi-model-intelligence-harness.md` — the design
   decision record (D5 credentials, D8 observability, D9 flags-off).
 - `services/backend/services/model_runtime/` — the runtime
   package (service, adapters, credentials, routing, task_profiles, context,

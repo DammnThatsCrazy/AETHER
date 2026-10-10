@@ -213,7 +213,7 @@ def _report() -> int:
         print(
             "\nEvery client SDK must expose canonical observe(), iOS/Android must "
             "verify manifest signatures, and batch health metrics must be surfaced. "
-            "See docs/source-of-truth/SDK_RUNTIME_PARITY.md."
+            "See docs/reference/source-of-truth/SDK_RUNTIME_PARITY.md."
         )
         return 1
     print("SDK runtime parity validation OK (observe / manifest-verify / batch-health / native durability present).")

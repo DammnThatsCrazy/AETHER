@@ -110,7 +110,7 @@ def check_ingestion_contract_ts() -> None:
 
 
 def check_contract_doc_references() -> None:
-    doc = ROOT / "docs" / "source-of-truth" / "INGESTION_CONTRACT.md"
+    doc = ROOT / "docs" / "reference" / "source-of-truth" / "INGESTION_CONTRACT.md"
     if not doc.exists():
         record("INGESTION_CONTRACT.md exists", False, "doc missing")
         return

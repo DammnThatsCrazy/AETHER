@@ -22,7 +22,7 @@ function fallbackMark(label: string): ProviderAsset {
  * Provider marks reviewed for use and committed under
  * `src/identity/marks/providers/` (served at `/providers/<file>`). Approved by
  * the site owner on 2026-10-03 with the Olympus Labs + Aether surfaces design
- * handoff; see docs/brand-system/providers.md. `onDark` is a variant for dark
+ * handoff; see docs/product/brand-system/providers.md. `onDark` is a variant for dark
  * backgrounds when the main mark is dark.
  */
 const REVIEWED_MARKS: Readonly<Record<string, { file: string; background: 'light' | 'dark' | 'either'; onDark?: string }>> = {

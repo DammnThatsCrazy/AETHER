@@ -1236,7 +1236,7 @@ resource "aws_route53_zone" "production" {
 locals {
   # Product DNS lives in a Route 53 zone for amplify_domain_name: either the
   # Squarespace-shaped zone above, or a delegated zone created outside this
-  # root (product_dns_zone_id; see docs/DOMAIN-DNS-READINESS.md). This root only
+  # root (product_dns_zone_id; see docs/operations/DOMAIN-DNS-READINESS.md). This root only
   # manages records, never the delegated zone itself.
   product_dns_enabled = var.squarespace_hosted_zone_enabled || var.product_dns_zone_id != ""
   hosted_zone_id = (

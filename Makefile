@@ -731,7 +731,7 @@ production-status: ## Historical maturity index (0-5, non-authoritative) + live 
 # runtime-integrated, what is verified, what is productionized, what is waiting
 # on external activation, and what has been proven per environment. The
 # per-profile hard-gate disposition — never a blended percentage — is the
-# authoritative release signal. See docs/readiness/READINESS-MODEL.md.
+# authoritative release signal. See docs/operations/readiness/READINESS-MODEL.md.
 # ---------------------------------------------------------------------------
 .PHONY: readiness-status readiness-validate readiness-validate-strict feature-readiness profile-readiness readiness-artifacts readiness-migrate
 

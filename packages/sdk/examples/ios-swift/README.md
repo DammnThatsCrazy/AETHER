@@ -54,7 +54,7 @@ The native Aether iOS SDK exposes the following surface (used by the React Nativ
 
 ## Manual smoke testing on iOS
 
-See `docs/examples/README.md` for the manual device smoke test procedure for iOS. In short:
+See `docs/reference/examples/README.md` for the manual device smoke test procedure for iOS. In short:
 
 1. Build and run `apps/proof-ios/` on a physical iOS device or simulator.
 2. Tap through the first-value journey tabs in the app.

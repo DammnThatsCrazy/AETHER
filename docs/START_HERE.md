@@ -22,19 +22,19 @@ Aether is currently a pre-production private alpha at version `0.1.0-alpha.0`.
 
 | Goal | Read |
 |---|---|
-| Understand the product | `docs/source-of-truth/product-truth.md` |
-| Understand the architecture | `docs/source-of-truth/architecture-truth.md` |
-| Understand the repo layout | `docs/source-of-truth/repo-truth.md` |
-| Understand the SDKs | `docs/source-of-truth/sdk-truth.md` |
-| Understand connectors | `docs/source-of-truth/connector-truth.md` |
-| Understand the graph | `docs/source-of-truth/graph-truth.md` |
-| Understand releases | `docs/source-of-truth/release-truth.md` |
-| Understand naming conventions | `docs/source-of-truth/naming-truth.md` |
+| Understand the product | `docs/reference/source-of-truth/product-truth.md` |
+| Understand the architecture | `docs/reference/source-of-truth/architecture-truth.md` |
+| Understand the repo layout | `docs/reference/source-of-truth/repo-truth.md` |
+| Understand the SDKs | `docs/reference/source-of-truth/sdk-truth.md` |
+| Understand connectors | `docs/reference/source-of-truth/connector-truth.md` |
+| Understand the graph | `docs/reference/source-of-truth/graph-truth.md` |
+| Understand releases | `docs/reference/source-of-truth/release-truth.md` |
+| Understand naming conventions | `docs/reference/source-of-truth/naming-truth.md` |
 | Current architecture | `docs/architecture/current/` |
 | Target architecture | `docs/architecture/target/` |
 | Architecture decisions | `docs/architecture/decisions/` |
-| SDK docs | `docs/sdks/` |
-| Connector docs | `docs/connectors/` |
-| Release policy | `docs/releases/release-policy.md` |
+| SDK docs | `docs/reference/sdks/` |
+| Connector docs | `docs/reference/connectors/` |
+| Release policy | `docs/operations/releases/release-policy.md` |
 | Local development | `docs/operations/DEVELOPMENT.md` |
 | Contributing | `CONTRIBUTING.md` |

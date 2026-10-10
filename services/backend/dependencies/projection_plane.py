@@ -13,7 +13,7 @@ row is ``implementationState: "implemented"`` belongs in
 :data:`IMPLEMENTED_PROJECTION_IDS`, and its provider module is added below in
 the SAME change that flips the row. A provider that is implemented but not
 listed here is not live (the phase-1 enforcement note in
-``docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md``).
+``docs/reference/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md``).
 """
 
 from __future__ import annotations

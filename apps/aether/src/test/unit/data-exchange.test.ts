@@ -12,7 +12,7 @@ import {
  * M6 Data Exchange — feature-module trust boundary.
  *
  * The Data Exchange settings surface is built against the frozen
- * `/v1/data-exchange/*` shapes in `docs/plans/data-exchange-api.md`. These
+ * `/v1/data-exchange/*` shapes in `docs/architecture/plans/data-exchange-api.md`. These
  * tests pin three properties on the wire contract:
  *   1. frozen payloads parse (field names + M0 status/direction/classification
  *      vocabulary are enforced);

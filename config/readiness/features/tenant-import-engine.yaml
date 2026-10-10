@@ -102,7 +102,7 @@ operational_ownership:
   technical_owner: platform
   operational_owner: platform-ops
   escalation: pagerduty:platform
-  runbook: docs/runbooks/IMPORT_FAILURES.md
+  runbook: docs/operations/runbooks/IMPORT_FAILURES.md
   dashboards:
   - grafana:platform
   alerts:

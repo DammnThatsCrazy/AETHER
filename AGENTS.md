@@ -39,7 +39,7 @@ unless the user requests a commit.
 
 1. Inspect the changed source category.
 2. For source changes that can affect derived surfaces, check
-   `docs/source-of-truth/repo_consistency_ownership.json` for the surfaces that
+   `docs/reference/source-of-truth/repo_consistency_ownership.json` for the surfaces that
    category requires you to update.
 3. Update all required derived surfaces for the changed category.
 4. If docs, generator inputs, or contract inputs changed, run

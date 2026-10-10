@@ -2182,7 +2182,7 @@ window.AETHER_DOCS = {
     },
     {
      "t": "p",
-     "x": "The full registry lives in `docs/source-of-truth/EVENT_REGISTRY.md` and `packages/shared/contracts/`."
+     "x": "The full registry lives in `docs/reference/source-of-truth/EVENT_REGISTRY.md` and `packages/shared/contracts/`."
     }
    ]
   },

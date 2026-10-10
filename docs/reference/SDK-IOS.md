@@ -1,0 +1,523 @@
+---
+title: Aether iOS SDK — Integration Guide
+slug: sdks/ios
+section: reference
+visibility: P
+audience: [dev-junior, dev-senior]
+status: stable
+since_version: 0.1.0
+source_files: [packages/ios/Sources/AetherSDK/Aether.swift, packages/shared/events.ts, packages/shared/consent.ts]
+canonical_owner: sdk@aether
+estimated_read_minutes: 10
+toc_depth: 3
+source_hashes:
+  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:06f27d5201fde11faf35e157e9b1f47302cd82afdd34d22cccbee606a36ce6be"
+  "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
+  "packages/shared/events.ts": "sha256:79883c251f1b5e9cd493fe08983da78a204f2af69e91d1e2a61036d67e338363"
+---
+
+# Aether iOS SDK v0.1.0-alpha.0 — Integration Guide
+
+## Installation
+
+### Swift Package Manager (recommended)
+
+Add to your `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/AetherSDK/aether-ios.git", from: "0.1.0-alpha.0")
+]
+```
+
+Or in Xcode: File > Add Packages > enter the repository URL.
+
+### CocoaPods
+
+```ruby
+pod 'AetherSDK', '= 0.1.0-alpha.0'
+```
+
+## Quick Start
+
+```swift
+import AetherSDK
+
+// In AppDelegate.application(_:didFinishLaunchingWithOptions:)
+Aether.shared.initialize(config: AetherConfig(apiKey: "your-api-key"))
+```
+
+## Core API
+
+### Event Tracking
+
+`track()` is for **custom application events**. To emit a **canonical backend
+event type** directly, use `observe()` (unknown types are a production-safe
+no-op; payloads asserting `execution_by_aether == true` are rejected — Aether
+observes, it never executes).
+
+```swift
+// Custom event
+Aether.shared.track("button_tapped", properties: [
+    "buttonId": AnyCodable("cta-hero"),
+    "screen": AnyCodable("home")
+])
+
+// Canonical low-level observation (registry event types only)
+Aether.shared.observe("order_completed", properties: ["orderId": AnyCodable("ord_1")])
+
+// Screen view (auto-tracked if screenTracking enabled)
+Aether.shared.screenView("PricingScreen", properties: [
+    "source": AnyCodable("navigation")
+])
+
+// Conversion
+Aether.shared.conversion("purchase_completed", value: 29.99, properties: [
+    "plan": AnyCodable("pro"),
+    "currency": AnyCodable("USD")
+])
+```
+
+### Identity
+
+```swift
+// Identify user with traits
+Aether.shared.hydrateIdentity(IdentityData(
+    userId: "user-123",
+    traits: [
+        "email": AnyCodable("user@example.com"),
+        "plan": AnyCodable("enterprise")
+    ]
+))
+
+// Get anonymous ID
+let anonId = Aether.shared.getAnonymousId()
+
+// Reset on logout
+Aether.shared.reset()
+```
+
+`hydrateIdentity()` queues an `identify` event for `POST /v1/batch`. Its
+`properties.idempotency_key` matches the event's top-level `id`, and both are
+retained together when the SDK retries the queued event. The backend's V1
+canonical resolution guard is tenant-scoped Redis event-ID dedupe with a
+24-hour TTL; V2 uses durable event uniqueness and an at-least-once outbox.
+This protects ordinary retries, but V1 does not persist a resolver work receipt
+or guarantee exactly-once resolution. See [SDK/API Contracts](SDK-API-CONTRACTS.md)
+for the delivery limitations and the separate direct identify endpoint.
+
+> **Native identity → subject-hints convergence (WS-C / Invariant #4, default OFF).**
+> In legacy mode the SDK re-stamps the resolved canonical user id into its
+> persisted identity after `/sdk/identity/resolve` and emits `journey_resumed`
+> with the resolved tuple. Set `subjectHintsOnly = true` on `AetherConfig` to
+> stop that client-side canonical re-stamp — the backend then resolves identity
+> from the source-asserted subject hints the event carries, and the resolved id
+> is still reported inside the `journey_resumed` observation for server use.
+
+### Device Fingerprint
+
+The SDK automatically generates a SHA-256 device fingerprint on initialization from: `identifierForVendor`, device model, system version, screen dimensions, scale, locale, timezone, processor count, and physical memory (via CryptoKit).
+
+The fingerprint is stamped as `context.fingerprint.id`, but stamping is
+**gated**: in GDPR mode it is omitted until `analytics` consent is granted, and
+when `respectATT` is enabled it is omitted unless the user authorized tracking
+via App Tracking Transparency (iOS 14.5+). Only the composite hash is sent —
+raw device signals are never transmitted.
+
+## Wallet Tracking
+
+```swift
+// Wallet connected
+Aether.shared.walletConnected(
+    address: "0x1234...abcd",
+    walletType: "metamask",
+    chainId: "eip155:1"
+)
+
+// Wallet disconnected
+Aether.shared.walletDisconnected(address: "0x1234...abcd")
+
+// Transaction sent
+Aether.shared.walletTransaction(
+    txHash: "0xabc123...",
+    chainId: "eip155:1",
+    value: "1.5",
+    properties: ["token": AnyCodable("ETH")]
+)
+```
+
+## Consent Management
+
+The platform's canonical consent registry
+(`packages/shared/contracts/consent-registry.json`) defines **12 purposes**:
+base purposes `analytics`, `marketing`, `personalization`, `web3`, `agent`,
+`commerce`, plus explicit opt-in purposes `financial_activity`, `credit`,
+`location`, `economic_observability`, `cross_chain_observability`, and
+`fraud_prevention`, which always require separate opt-in and are never granted
+by an accept-all path. Present each explicit opt-in purpose as a separate
+consent choice in your UI.
+
+The iOS runtime exposes `canonicalConsentPurposes` (8 purposes, listed below)
+with `explicitOptInPurposes = ["credit", "location"]`; the extended purposes
+`financial_activity`, `economic_observability`, and `cross_chain_observability`
+are used by the event gating map and stamped into per-event `context.consent`.
+The registry's `fraud_prevention` purpose is not yet surfaced by the iOS
+runtime lists (grant it via `grantConsent` if your integration collects
+fraud-prevention signals; it is never included in `grantAll()`).
+
+```swift
+// Grant specific purposes
+Aether.shared.grantConsent(categories: ["analytics", "marketing"])
+
+// Grant all non-explicit-opt-in purposes (excludes credit and location)
+Aether.shared.grantAll()
+
+// Explicitly grant credit after showing separate consent UI
+Aether.shared.grantConsent(categories: ["credit"])
+
+// Revoke consent
+Aether.shared.revokeConsent(categories: ["marketing"])
+
+// Check current state
+let state = Aether.shared.getConsentState() // ["analytics", ...]
+
+// Runtime canonical purposes
+let purposes = Aether.canonicalConsentPurposes
+// ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
+```
+
+### Consent receipts
+
+```swift
+// Build a deterministic canonical receipt locally
+let receipt = try Aether.shared.buildCanonicalConsentReceipt(input)
+
+// Build AND persist it to the backend (POST /v1/consent/records)
+Aether.shared.recordConsentReceipt(input) { result in ... }
+```
+
+## Ecommerce
+
+```swift
+// Product view
+Aether.shared.trackProductView([
+    "id": AnyCodable("sku-001"),
+    "name": AnyCodable("Widget Pro"),
+    "price": AnyCodable(29.99),
+    "category": AnyCodable("tools")
+])
+
+// Add to cart
+Aether.shared.trackAddToCart([
+    "productId": AnyCodable("sku-001"),
+    "quantity": AnyCodable(2),
+    "price": AnyCodable(29.99)
+])
+
+// Purchase
+Aether.shared.trackPurchase(
+    orderId: "order-456",
+    total: 29.99,
+    currency: "USD",
+    items: [
+        ["productId": AnyCodable("sku-001"), "quantity": AnyCodable(1), "price": AnyCodable(29.99)]
+    ]
+)
+```
+
+## Feature Flags
+
+Feature flags are fetched from the server on initialization and cached locally.
+
+```swift
+// Boolean check
+if Aether.shared.isFeatureEnabled("dark-mode") {
+    enableDarkMode()
+}
+
+// Get value with default
+let limit = Aether.shared.getFeatureValue("upload-limit", default: 10)
+```
+
+## Deep Link Attribution
+
+The SDK captures **12 ad platform click IDs** and all UTM parameters from deep links, storing them as campaign context that is included in every subsequent event via `buildContext()`.
+
+**Supported click IDs:** `gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`
+
+**Campaign context fields:** `source`, `medium`, `campaign`, `content`, `term`, `clickIds` (dictionary), `referrerDomain`
+
+Every attribution entry point runs through one canonical funnel: URL+timestamp
+dedup → canonical acquisition-evidence parse (shared `AcquisitionEvidence`
+schema v3, sanitized URL, `entryMethod`, `destinationDomain`) → campaign
+context → first/latest-touch persistence (30-day TTL) → event emission. The
+active (unexpired) latest-touch evidence rides on every event as
+`context.acquisitionEvidence`.
+
+All classification (organic, paid, social, email, direct) happens server-side via the backend `SourceClassifier` — the SDK ships raw signals only.
+
+```swift
+// Custom URL scheme (entry method "ios_custom_url")
+func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
+    if let url = contexts.first?.url {
+        Aether.shared.handleDeepLink(url)
+    }
+}
+
+// Universal Links (entry method "ios_universal_link"); returns true when consumed
+func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    Aether.shared.handleUniversalLink(userActivity)
+}
+
+// Generic router (http(s) → universal link, otherwise custom scheme)
+Aether.shared.handleURL(url)
+
+// QR codes the host app already decoded (SDK never touches the camera).
+// Entry method "qr_code"; emits qr_code_scanned.
+Aether.shared.handleQrScanResult(url)
+
+// NFC tag URIs the host app already read via CoreNFC (SDK never drives the
+// radio). Entry method "nfc"; emits nfc_tag_read.
+Aether.shared.handleNfcUri(url)
+
+// App Clip invocations; first-touch persists so the full-app install
+// inherits the acquisition source. Emits app_clip_invoked.
+Aether.shared.handleAppClipInvocation(userActivity)
+Aether.shared.handleAppClipInvocation(url: url)
+```
+
+### Deferred attribution
+
+iOS has no Android-style install referrer: on first launch the SDK can resolve
+a deterministic deferred-attribution handoff via
+`POST /v1/attribution/deferred/resolve`. The SDK never fingerprints its way to
+a match — an unmatched install simply stays unattributed. A successful match
+persists first-touch evidence (only if none exists yet) and emits
+`deferred_attribution_resolved`.
+
+## Push Notification Tracking
+
+```swift
+// In UNUserNotificationCenterDelegate
+func userNotificationCenter(_ center: UNUserNotificationCenter,
+                          didReceive response: UNNotificationResponse,
+                          withCompletionHandler completionHandler: @escaping () -> Void) {
+    Aether.shared.trackPushOpened(userInfo: response.notification.request.content.userInfo)
+    completionHandler()
+}
+```
+
+## Configuration Reference
+
+```swift
+struct AetherConfig {
+    let apiKey: String
+    var environment: Environment = .production   // .production, .staging, .development
+    var debug: Bool = false                      // Console logging
+    var endpoint: String = "https://api.aether.io"
+    var modules: ModuleConfig = ModuleConfig()
+    var privacy: PrivacyConfig = PrivacyConfig()
+    var batchSize: Int = 10                      // Events per batch
+    var flushInterval: TimeInterval = 5.0        // Seconds between flushes
+    var manifestVerificationKey: String? = nil   // HMAC-SHA256 manifest signature key
+    var autoResumeJourney: Bool = true           // Call /sdk/identity/resolve on init
+    var onJourneyResumed:                        // Fires once when a prior session is matched
+        ((_ resolvedAnonymousId: String,
+          _ resolvedUserId: String?) -> Void)? = nil
+    var subjectHintsOnly: Bool = false           // Subject-hints identity (default OFF = legacy client-side canonical re-stamp)
+    var encryptedDurableQueue: Bool = false      // AES-GCM durable queue + server ack (default OFF = plaintext delete-before-ack)
+}
+
+struct ModuleConfig {
+    var screenTracking: Bool = true              // Auto-track UIViewController appearances
+    var deepLinkAttribution: Bool = true
+    var pushNotificationTracking: Bool = true
+    var walletTracking: Bool = true              // Wallet event tracking
+    var purchaseTracking: Bool = true
+    var errorTracking: Bool = true
+    var experiments: Bool = false                 // Removed in v7.0 — use feature flags
+}
+
+struct PrivacyConfig {
+    var gdprMode: Bool = false                   // Require consent before tracking
+    var anonymizeIP: Bool = true                 // Hash IP addresses
+    var respectATT: Bool = true                  // Respect App Tracking Transparency
+}
+```
+
+## Architecture
+
+```
+UIKit Events / Wallet Interactions
+        │
+    Raw Events (screen views, taps, wallet connects)
+        │
+    Device Fingerprint (SHA-256 via CryptoKit)
+        │
+    Serial Dispatch Queue (thread-safe event buffering)
+        │
+    Timer-based batch flush (every 5 seconds)
+        │
+    POST /v1/batch → Aether Backend
+```
+
+### What the SDK sends (event context):
+- Event type, name, and raw properties
+- `library` `{name: "aether-ios", version}`, `device` `{osName: "iOS"|"macOS", osVersion, locale, timezone}`
+- Temporal provenance captured at the event's occurrence instant:
+  `utcOffsetMinutes` (zone-at-instant, DST-correct), `timeZoneSource: "device"`,
+  `clockSource: "device"`
+- Device fingerprint hash (gated: GDPR analytics consent + ATT authorization)
+- Campaign context `{source, medium, campaign, content, term, clickIds, referrerDomain}` and active `acquisitionEvidence` (schema v3)
+- Active journey snapshot on every event, network type, thermal state
+- Per-purpose `consent` booleans and a monotonic per-session
+  `sequence.event` counter (reset on session rotation) for gap/reorder
+  detection at ingest
+- Session ID, anonymous ID, user ID
+- Optional source-native correlation context `context.correlation`
+  (`{correlationId, causationId, traceId, spanId, parentObservationId}`),
+  stamped on every outgoing event once the host app calls
+  `Aether.shared.setCorrelationContext(...)`. The backend correlation block is
+  additive — source-native values are never overwritten during normalization,
+  and `parentObservationId` is carried end-to-end into `parent_observation_id`.
+
+### What the backend derives:
+- Device model, screen size from User-Agent
+- IP geolocation (MaxMind GeoLite2)
+- Identity resolution (cross-device matching)
+- Traffic source classification (via `SourceClassifier` — 40+ social, 17+ search, 14 email domain tables)
+- ML predictions (intent, bot detection)
+
+## Auto Screen Tracking
+
+When `screenTracking` is enabled, the SDK uses method swizzling on `UIViewController.viewDidAppear(_:)` to automatically track screen views. System view controllers (prefixed with `UI`, `_`, `NS`) are filtered out.
+
+## Thread Safety
+
+All event operations are dispatched to a private serial queue (`DispatchQueue(label: "com.aether.sdk.serial")`). The SDK is safe to call from any thread.
+
+## Data Persistence
+
+- **Anonymous ID** and **User ID** are persisted in `UserDefaults` under `com.aether.sdk` suite
+- **Device fingerprint** is generated on each init (deterministic — same result for same device)
+- **Event queue** is persisted to `Application Support/aether_queue.json` (file-based, capped at 1000 events; flushed on foreground)
+- **Encrypted durable queue (WS-C row 12, default OFF):** set
+  `encryptedDurableQueue = true` on `AetherConfig` to encrypt the persisted
+  queue file with AES-GCM (256-bit key held in the Keychain,
+  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`) and switch to
+  server-ack removal — events leave the queue only after the batch POST returns
+  2xx (legacy is delete-before-ack), preserving order and idempotency across
+  kills. The file is self-describing (magic prefix), so the legacy plaintext
+  format is still read as the upgrade path when the flag is first enabled.
+- **Server config** cached in memory (refreshed on each app launch)
+
+## Health Agent
+
+The health agent starts automatically after `initialize()`. It:
+- POSTs a signed heartbeat to `/v1/diagnostics/sdk/heartbeat` every 60 seconds
+- Fetches the remote manifest from `/v1/config/sdk/manifest` every 5 minutes
+- Both are fire-and-forget; gated on analytics consent in GDPR mode (it starts
+  when `analytics` is granted post-init)
+- When `manifestVerificationKey` is set, unsigned or invalid manifest
+  signatures are rejected and the last-known-good config is kept
+- Applies the verified manifest natively: `rollout_percentage` gates event
+  sampling and `features` merge into feature-flag resolution (previously the
+  manifest was fetched and verified but never applied)
+
+## Granular Agent Lifecycle Emitters
+
+```swift
+Aether.shared.agentRegistered(agentId:, properties:)
+Aether.shared.agentTaskCreated(taskId:, actorId:, properties:)
+Aether.shared.agentTaskCompleted(taskId:, properties:)
+Aether.shared.agentTaskFailed(taskId:, reason:, properties:)
+Aether.shared.agentEscalatedToHuman(taskId:, reason:, properties:)
+Aether.shared.agentOutcomeRecorded(taskId:, outcome:, properties:)
+// ... 13 more — see AetherHealthAgent for full list
+```
+
+## x402 Lifecycle Emitters
+
+```swift
+Aether.shared.x402ResourceRequested(resourceId:, properties:)
+Aether.shared.x402PaymentRequired(resourceId:, amount:, currency:, properties:)
+Aether.shared.x402PaymentSettled(paymentId:, properties:)
+Aether.shared.x402AccessGranted(resourceId:, properties:)
+// ... 10 more
+```
+
+## Rewards Emitters
+
+```swift
+Aether.shared.rewardActionQueued(campaignId:, ruleId:, properties:)
+Aether.shared.rewardProofGenerated(campaignId:, proofId:, properties:)
+Aether.shared.rewardDelivered(campaignId:, rewardId:, properties:)
+Aether.shared.rewardClaimSubmitted(campaignId:, claimId:, properties:)
+```
+
+## Ecommerce Additions (8.9.0)
+
+```swift
+Aether.shared.trackRemoveFromCart(productId:, quantity:, properties:)
+Aether.shared.trackApplyCoupon(couponCode:, properties:)
+Aether.shared.trackBeginCheckout(cartValue:, currency:, properties:)
+```
+
+## Reward Event Types (A6)
+
+Four reward lifecycle events are supported via `Aether.shared.track()`:
+
+| Event type | When to emit |
+|---|---|
+| `reward_action_queued` | When a reward action has been queued for the user |
+| `reward_proof_generated` | When an on-chain claim proof is ready for wallet submission |
+| `reward_delivered` | When the tenant system confirms reward delivery |
+| `reward_claim_submitted` | When the user submits a claim (on-chain or off-chain) |
+
+Emit using `Aether.shared.track()` with `campaignId`, `ruleId`, and `rewardIdempotencyKey` in properties. These events flow through `POST /v1/batch` and are processed by the reward eligibility pipeline on the backend. The SDK does not evaluate eligibility — that is handled server-side by the Aether reward policy engine.
+
+## Agentic Observability Event Types
+
+47 new event types support passive observation of external agentic activity. All are registered in the SDK's `eventConsentPurpose` map and flow through `POST /v1/batch` like any other event.
+
+**Consent purpose:** `"agent"` for agentic observation events and `"commerce"` for x402 protocol observation events, with five exceptions: the Robinhood-style trading-state observations `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, and `agent_performance_snapshot_observed` are consent-gated on the explicit opt-in purpose `financial_activity` (grant it via `grantConsent(categories: ["financial_activity"])`; it is never included in `grantAll()`).
+
+**Agentic account / MCP / tool (12 types):**
+
+```swift
+// Emit via Aether.shared.track("agentic_account_observed", properties: [...])
+// agentic_account_observed, agentic_account_connected_observed, agentic_account_disconnected_observed
+// agent_budget_observed, agent_budget_changed_observed, agent_permission_observed
+// agent_mcp_connection_observed, agent_tool_observed, agent_tool_invocation_observed
+// agent_activity_observed, agent_risk_signal_observed, agent_notification_observed
+```
+
+**Robinhood-style trading observation (9 types):**
+
+```swift
+// agent_strategy_observed, agent_trade_intent_observed, agent_trade_order_observed
+// agent_trade_fill_observed, agent_trade_rejection_observed, agent_position_observed
+// agent_portfolio_snapshot_observed, agent_performance_snapshot_observed, agent_disconnect_observed
+```
+
+**AgentMail-style communication observation (15 types):**
+
+```swift
+// agent_inbox_observed, agent_email_address_observed, agent_thread_observed
+// agent_message_received_observed, agent_message_sent_observed, agent_reply_observed
+// agent_attachment_observed, agent_attachment_parsed_observed
+// agent_otp_detected_observed, agent_invoice_detected_observed, agent_receipt_detected_observed
+// agent_calendar_intent_observed, agent_support_route_observed
+// agent_semantic_search_observed, agent_data_extraction_observed
+```
+
+**x402 protocol observation (11 types, consent purpose: `"commerce"`):**
+
+```swift
+// x402_resource_request_observed, x402_challenge_observed, x402_payment_requirement_observed
+// x402_signature_observed, x402_verification_observed, x402_settlement_observed
+// x402_resource_access_observed, x402_resource_access_denied_observed
+// x402_failure_observed, x402_replay_risk_observed, x402_provider_observed
+```
+
+> **INVARIANT:** All observation payloads must include `execution_by_aether: false`. AETHER observes external agentic activity — it never originates, signs, executes, or settles on behalf of the caller.

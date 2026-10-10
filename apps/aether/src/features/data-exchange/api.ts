@@ -15,7 +15,7 @@ import {
  *
  * M6 of the Data Exchange program builds the Settings → Data Exchange surface
  * against the frozen `/v1/data-exchange/*` contract in
- * `docs/plans/data-exchange-api.md`. These zod schemas are the trust boundary
+ * `docs/architecture/plans/data-exchange-api.md`. These zod schemas are the trust boundary
  * between the backend read adapters and the typed UI: field names match the
  * freeze tables exactly, and status / direction / classification values are
  * pinned to the M0 shared tuples (`packages/shared/data-exchange.ts`).

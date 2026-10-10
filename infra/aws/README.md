@@ -132,8 +132,8 @@ Fargate pricing. No NAT Gateway (public_ip egress, same as staging/lean).
 ## References
 
 - [tfmcp upstream](https://github.com/nwiizo/tfmcp) — v0.2.2
-- [Aether production deployment](../../docs/PRODUCTION-DEPLOYMENT.md)
-- [Aether AWS lean production](../../docs/AWS-LEAN-PRODUCTION.md)
+- [Aether production deployment](../../docs/operations/PRODUCTION-DEPLOYMENT.md)
+- [Aether AWS lean production](../../docs/operations/AWS-LEAN-PRODUCTION.md)
 - [MCP spec — Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports)
-- [Aether deployment runbook](../../docs/DEPLOYMENT-RUNBOOK.md)
+- [Aether deployment runbook](../../docs/operations/DEPLOYMENT-RUNBOOK.md)
 - [Reviewed Terraform promotion workflow](../../.github/workflows/terraform-promote.yml)

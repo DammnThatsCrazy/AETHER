@@ -40,7 +40,7 @@ Repo roots:
 
 1. **No `relationship360`, `social360`, `communication360` implementations.** All three are
    `projectionKinds` in `packages/shared/contracts/intelligence-projection-registry.json`,
-   marked in-flight / not implemented, with no provider and no `docs/blueprints/*.md`.
+   marked in-flight / not implemented, with no provider and no `docs/architecture/blueprints/*.md`.
 2. **`relationship_fidelity`** exists only as a reserved spine key / hard dependency in the
    projection registry and `scripts/lib/intelligence_projection_validation.py` (SPINE_INDEX).
    No code module, no Computation-Definitions.

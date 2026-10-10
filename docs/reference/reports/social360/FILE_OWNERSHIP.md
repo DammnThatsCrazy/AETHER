@@ -10,7 +10,7 @@ Columns: capability → canonical owner today → owning path → this program's
 |---|---|---|---|
 | Provider auth/sync/webhooks | UPR | `services/backend/services/provider_runtime/` | CONSUME + EXTEND (social capabilities) |
 | Provider credentials | Credential Authority | `services/backend/services/provider_runtime/credential_broker.py`, `shared/providers/credential_cipher.py` | CONSUME |
-| Public/licensed rights | Data Rights | Data-rights authority (per docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md) | CONSUME/ENFORCE |
+| Public/licensed rights | Data Rights | Data-rights authority (per docs/reference/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md) | CONSUME/ENFORCE |
 | Tenant consent | Consent Registry | `packages/shared/contracts/consent-registry.json` | CONSUME |
 | Raw provider evidence | Bronze/UPR | `services/backend/services/provider_runtime/raw_store.py` | CONSUME |
 | Social account/profile facts | **NEW — Social360** | planned `services/social360/` + silver contracts | NEW |

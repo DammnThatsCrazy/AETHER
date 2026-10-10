@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-MATRIX = ROOT / "docs" / "audits" / "FRONTEND-ROUTE-STATE-MATRIX.md"
+MATRIX = ROOT / "docs" / "reference" / "audits" / "FRONTEND-ROUTE-STATE-MATRIX.md"
 ROUTERS = {
     "aether": ROOT / "apps" / "aether" / "src" / "app" / "router.tsx",
     "kyber": ROOT / "apps" / "kyber" / "src" / "app" / "router.tsx",

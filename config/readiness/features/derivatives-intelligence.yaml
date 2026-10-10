@@ -112,7 +112,7 @@ operational_ownership:
   technical_owner: financial-platform
   operational_owner: platform-ops
   escalation: pagerduty:financial-platform
-  runbook: docs/runbooks/DERIVATIVES_STREAM_RUNBOOK.md
+  runbook: docs/operations/runbooks/DERIVATIVES_STREAM_RUNBOOK.md
   dashboards:
   - grafana:financial-platform
   alerts:

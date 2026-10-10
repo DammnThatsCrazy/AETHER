@@ -12,7 +12,7 @@ Operator surface (Kyber):
 
 The webhook is the fastest provider-neutral integration path: any system
 that can POST JSON with an HMAC signature can feed communications into
-Aether without a dedicated connector (docs/comms/COMMS_GENERIC_WEBHOOK.md).
+Aether without a dedicated connector (docs/product/comms/COMMS_GENERIC_WEBHOOK.md).
 """
 
 from __future__ import annotations

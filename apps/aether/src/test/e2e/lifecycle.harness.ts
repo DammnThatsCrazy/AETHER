@@ -2,8 +2,8 @@
  * Shared harness for the End-User Lifecycle E2E suites A–F.
  *
  * These suites exercise the R2-integrated tenant app end to end (see
- * docs/plans/ENDUSER_LIFECYCLE_PHASES.md §7 for the A–E acceptance scenarios and
- * docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md for the route/state/copy
+ * docs/architecture/plans/ENDUSER_LIFECYCLE_PHASES.md §7 for the A–E acceptance scenarios and
+ * docs/reference/source-of-truth/AETHER_END_USER_LIFECYCLE.md for the route/state/copy
  * contract). They are the executable acceptance spec for the lifecycle IA; full
  * execution requires the R3/R4 integration environment the orchestrator
  * provides (WS-1..WS-6 merged, backend seeded, `connectors_enabled` test flag).
@@ -14,7 +14,7 @@
  * than timing out against a surface that intentionally does not exist yet.
  *
  * Canonical vocabulary + markers (single source):
- *   docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md § UX copy invariants.
+ *   docs/reference/source-of-truth/AETHER_END_USER_LIFECYCLE.md § UX copy invariants.
  * Engineering tokens (CampaignSource, secret_ref, …) stay internal; the suites
  * assert on the public copy ("Connect", "Ready", "Needs attention", "Syncing",
  * "Connected") and the stable data markers declared in that spec.

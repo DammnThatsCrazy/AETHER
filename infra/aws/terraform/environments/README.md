@@ -36,11 +36,11 @@ ephemeral profiles). The live variable surface is `../variables.tf` plus
 |---|---|
 | Deploy from scratch | [`../../SETUP.md`](../../SETUP.md) |
 | Understand the live root | [`../README.md`](../README.md) |
-| See what Aether actually runs on AWS | [`docs/AWS-DEPLOYMENT.md`](../../../../docs/AWS-DEPLOYMENT.md) (canonical) |
+| See what Aether actually runs on AWS | [`docs/operations/AWS-DEPLOYMENT.md`](../../../../docs/operations/AWS-DEPLOYMENT.md) (canonical) |
 
 ## Rules for this tree
 
-Per `CLAUDE.md`, `AGENTS.md`, and `docs/AWS-DEPLOYMENT.md`:
+Per `CLAUDE.md`, `AGENTS.md`, and `docs/operations/AWS-DEPLOYMENT.md`:
 
 - **Do not modify, extend, or "fix"** these compositions.
 - **Do not copy patterns out of them** — they describe infrastructure that does

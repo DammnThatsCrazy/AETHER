@@ -41,7 +41,7 @@ description and link-preview image from the design helmets
 (`src/assets/og/*.png`, 1200×630).
 
 Provider logos are the reviewed marks in `packages/brand` (served at
-`/providers/<file>.svg`; see `docs/brand-system/providers.md`). Connect, the
+`/providers/<file>.svg`; see `docs/product/brand-system/providers.md`). Connect, the
 docs connector catalog and the home count show all 21 integrations.
 
 Decisions that differ from the handoff:

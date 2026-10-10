@@ -1,6 +1,6 @@
 """DB-free tests for Data Exchange Plane M2 — signed transfers.
 
-Covers the M2 security contract from ``docs/plans/data-exchange-api.md`` M2 with
+Covers the M2 security contract from ``docs/architecture/plans/data-exchange-api.md`` M2 with
 no Postgres (in-memory ``data_artifacts`` repository + ``InMemoryObjectStore``,
 matching the M1 test harness):
 

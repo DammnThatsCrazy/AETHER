@@ -88,7 +88,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # ---------------------------------------------------------------------------
 
 # The canonical 14-item conformance contract (ADR-011 D6, listed in order in
-# docs/source-of-truth/SPINE_P0_ARCHITECTURE.md §7). A spine row's `conformance`
+# docs/reference/source-of-truth/SPINE_P0_ARCHITECTURE.md §7). A spine row's `conformance`
 # object is compared against this set, and the file's own `conformanceChecks`
 # array must declare exactly these ids. Kept here so a check can never silently
 # drift out of the canonical contract; additions must land here (and in the

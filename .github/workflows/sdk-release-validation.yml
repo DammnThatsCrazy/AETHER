@@ -10,16 +10,16 @@ on:
       - 'packages/ios/**'
       - 'packages/android/**'
       - 'docs/SDK*.md'
-      - 'docs/source-of-truth/**'
-      - 'docs/reports/**'
+      - 'docs/reference/source-of-truth/**'
+      - 'docs/reference/reports/**'
       - 'CHANGELOG.md'
       - 'scripts/validate_sdk_release_alignment.py'
       - 'scripts/release/sdk_conformance.py'
       - 'packages/shared/sdk-parity.json'
       - '.github/workflows/sdk-release-validation.yml'
   # Narrower than the `push` list above, deliberately. This workflow's `ios` job runs
-  # on macos-latest, which bills at a 10x minute multiplier; `docs/source-of-truth/**`,
-  # `docs/reports/**` and `CHANGELOG.md` matched almost every PR in this repo, so
+  # on macos-latest, which bills at a 10x minute multiplier; `docs/reference/source-of-truth/**`,
+  # `docs/reference/reports/**` and `CHANGELOG.md` matched almost every PR in this repo, so
   # documentation-only changes were paying for a full native SDK validation. Pushes to
   # main keep the broad list — that is the sweep that precedes a release. Native SDK
   # validation runs for SDK-touching PRs when they are finalized, not on every draft push.
@@ -106,7 +106,7 @@ jobs:
           (echo "ERROR: CHANGELOG missing SDK Productization entry" && exit 1)
       - name: Audit doc existence check
         run: >-
-          test -f docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md ||
+          test -f docs/reference/reports/SDK_PRODUCTION_READINESS_AUDIT.md ||
           (echo "ERROR: Audit doc missing" && exit 1)
 
       - name: Legacy CDN path scan in docs

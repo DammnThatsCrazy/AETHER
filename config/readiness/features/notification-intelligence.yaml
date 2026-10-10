@@ -116,7 +116,7 @@ operational_ownership:
   technical_owner: integrations
   operational_owner: platform-ops
   escalation: pagerduty:integrations
-  runbook: docs/runbooks/DELIVERY-FAILURES.md
+  runbook: docs/operations/runbooks/DELIVERY-FAILURES.md
   dashboards:
   - grafana:integrations
   alerts:

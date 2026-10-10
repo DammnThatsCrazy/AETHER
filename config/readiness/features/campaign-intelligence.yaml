@@ -105,7 +105,7 @@ operational_ownership:
   technical_owner: campaign
   operational_owner: platform-ops
   escalation: pagerduty:campaign
-  runbook: docs/runbooks/CAMPAIGN-360-MISSING-CONVERSIONS.md
+  runbook: docs/operations/runbooks/CAMPAIGN-360-MISSING-CONVERSIONS.md
   dashboards:
   - grafana:campaign
   alerts:

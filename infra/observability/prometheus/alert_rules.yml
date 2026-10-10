@@ -582,7 +582,7 @@ groups:
           slo: "semantic_abstention_rate_25pct"
         annotations:
           summary: "Semantic abstention ratio >25% for tenant {{ $labels.tenant_id }}"
-          description: "{{ $value | humanizePercentage }} of semantic observations are abstaining. Abstention is fail-closed (correct) behaviour — a sustained surge means the model provider is disabled/credential-less or unsupported input is flooding in. See docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md."
+          description: "{{ $value | humanizePercentage }} of semantic observations are abstaining. Abstention is fail-closed (correct) behaviour — a sustained surge means the model provider is disabled/credential-less or unsupported input is flooding in. See docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md."
 
       - alert: SemanticClassifyLatencyHigh
         expr: >

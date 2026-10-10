@@ -81,9 +81,9 @@ SKIP_DIRS = {
     DOCS_ROOT / "archive",
     DOCS_ROOT / "_generated",
     DOCS_ROOT / "_templates",
-    DOCS_ROOT / "diagrams",
-    DOCS_ROOT / "examples",
-    DOCS_ROOT / "source-of-truth",
+    DOCS_ROOT / "architecture" / "diagrams",
+    DOCS_ROOT / "reference" / "examples",
+    DOCS_ROOT / "reference" / "source-of-truth",
 }
 
 # Managed by scripts/sync_docs.py; their freshness is enforced by

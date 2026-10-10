@@ -231,8 +231,8 @@ distribution · second sync feed · generic mobile mutation channel. Each is reu
   (continuations, installations/push subscriptions, sync change log) server-side; the app has no
   in-app account-deletion UI. Regenerated `apps/*/data-safety.json`; drift-gated
   (`make privacy-manifest-check`).
-- **Readiness-honesty docs (M8-F):** existing — `docs/PRODUCTIZATION.md`,
-  `docs/source-of-truth/REWARD_ENABLEMENT.md`, and `docs/CONNECTORS.md` claimed "production-ready"
+- **Readiness-honesty docs (M8-F):** existing — `docs/product/PRODUCTIZATION.md`,
+  `docs/reference/source-of-truth/REWARD_ENABLEMENT.md`, and `docs/reference/CONNECTORS.md` claimed "production-ready"
   that contradicted the canonical readiness scorecard (`scripts/production_status.py`, overall
   3.77/5 pre-production; most areas 4/5 = release-ready with minor gaps; release blockers for
   infra/ML .artifacts/smart-contract audit). New boundary: all three docs now use scorecard
@@ -246,7 +246,7 @@ distribution · second sync feed · generic mobile mutation channel. Each is reu
   concurrency/delivery/reliability, mobile privacy/store compliance, and
   operational/release honesty — followed by remediation batches and a final
   `make ci-check` gate, all on `claude/aether-turnkey-completion-m8-f8b2e` as one
-  PR (#515) to main. Outcome recorded in `docs/PRODUCTIZATION.md`: **30 findings,
+  PR (#515) to main. Outcome recorded in `docs/product/PRODUCTIZATION.md`: **30 findings,
   0 refuted**. The per-lens report files under
   `docs/reference/reports/mobile-productization/review-lenses/` were **never committed** — the
   review ran and the remediation landed, but the per-finding detail is not part of

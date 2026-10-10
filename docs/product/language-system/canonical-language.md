@@ -10,4 +10,4 @@ since_version: 0.1.0
 
 # Canonical Language
 
-See `docs/source-of-truth/naming-truth.md` for the canonical product language reference.
+See `docs/reference/source-of-truth/naming-truth.md` for the canonical product language reference.

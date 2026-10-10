@@ -3,7 +3,7 @@
 These scenarios need external infrastructure to validate END TO END (a live
 Redis, a live ClickHouse, a live message bus). That live leg is OUT OF
 credentialless scope — it is exercised by the staging runbooks
-(docs/runbooks/STAGING_PREFLIGHT.md and the per-domain runbooks). What we CAN
+(docs/operations/runbooks/STAGING_PREFLIGHT.md and the per-domain runbooks). What we CAN
 and DO validate credentiallessly here is the RECOVERABLE IN-PROCESS PORTION: the
 retry / degrade / buffer-and-flush / lease-reclaim + idempotent-consume logic
 that must hold regardless of which server sits behind it.

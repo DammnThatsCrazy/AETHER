@@ -74,7 +74,7 @@ previous milestone's `make ci-check` is green and committed. Each agent works fr
 | Agent | Item | allowed_paths (write) | Integration TODO (orchestrator) |
 |---|---|---|---|
 | **M7a** demo-seed | Extend `dataset.py` with notifications/continuations/exceptions/incidents/runs/reviews (stable IDs, idempotent, safe reset) | `services/backend/services/demo_seed/dataset.py`, `services/backend/services/demo_seed/models.py`, `services/backend/services/demo_seed/policy.py`, `services/backend/tests/unit/test_demo_seed_mobile.py` | Makefile `design-partner-demo-*` targets |
-| **M7b** distribution-docs | `MOBILE_DISTRIBUTION.md` + `KYBER_MOBILE_COMMAND_SECURITY.md` + readiness scorecard updates (evidence-only) | `docs/source-of-truth/MOBILE_DISTRIBUTION.md`, `docs/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md`, `docs/source-of-truth/MOBILE_COMPLIANCE.md` | source-linked stamp review (`docs_drift.py --update`) |
+| **M7b** distribution-docs | `MOBILE_DISTRIBUTION.md` + `KYBER_MOBILE_COMMAND_SECURITY.md` + readiness scorecard updates (evidence-only) | `docs/reference/source-of-truth/MOBILE_DISTRIBUTION.md`, `docs/reference/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md`, `docs/reference/source-of-truth/MOBILE_COMPLIANCE.md` | source-linked stamp review (`docs_drift.py --update`) |
 
 ## Wave 8 — M8 (C9 adversarial review) — Workflow, not single agents
 

@@ -15,7 +15,7 @@
 #
 # NOTE: this file is the deploy-time copy authored with the provider-manifest
 # conformance wave (§8). The docs-side copy
-# (docs/integration-control-plane/DEPLOYMENT_CONTRACT.yaml) should receive the
+# (docs/architecture/integration-control-plane/DEPLOYMENT_CONTRACT.yaml) should receive the
 # SAME per-capability entries for parity — that file is owned by the docs /
 # integration layer and is not edited here.
 

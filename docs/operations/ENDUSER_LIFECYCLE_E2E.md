@@ -16,8 +16,8 @@ Runbook for the Playwright acceptance suites that exercise the integrated
 End-User Lifecycle tenant app end to end. The suites live at
 `apps/aether/src/test/e2e/lifecycle-{A,B,C,D,E,F}-*.spec.ts` (plus the shared
 `lifecycle.harness.ts`) and are the executable acceptance spec for the lifecycle
-IA — see `docs/plans/ENDUSER_LIFECYCLE_PHASES.md` §7 and
-`docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md` §9.
+IA — see `docs/architecture/plans/ENDUSER_LIFECYCLE_PHASES.md` §7 and
+`docs/reference/source-of-truth/AETHER_END_USER_LIFECYCLE.md` §9.
 
 They are **integration-environment suites**: each is a serial journey over one
 seeded scenario tenant through real connect → sync → readiness → surface flows.
@@ -170,8 +170,8 @@ non-empty and discoverable.
 
 ## 8. Related docs
 
-- `docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md` — canonical vocabulary,
+- `docs/reference/source-of-truth/AETHER_END_USER_LIFECYCLE.md` — canonical vocabulary,
   routes, state projection, markers the suites assert.
-- `docs/plans/ENDUSER_LIFECYCLE_PHASES.md` — program plan (§7 acceptance).
+- `docs/architecture/plans/ENDUSER_LIFECYCLE_PHASES.md` — program plan (§7 acceptance).
 - `apps/aether/src/test/e2e/lifecycle.harness.ts` — gates, routes, copy,
   markers.

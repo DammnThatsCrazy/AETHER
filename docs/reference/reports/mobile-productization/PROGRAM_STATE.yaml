@@ -1,7 +1,7 @@
 # Mobile / Continuity / Notification Productization — living program state.
 # SINGLE AUTHORITY for work status. Only the orchestrator writes this file.
 # Not generated; not source-linked (no drift stamping). Hand-maintained per landing.
-# Precedent: docs/integration-control-plane/PROGRAM_STATE.yaml.
+# Precedent: docs/architecture/integration-control-plane/PROGRAM_STATE.yaml.
 
 program:
   branch: claude/aether-turnkey-completion-m8-f8b2e
@@ -243,7 +243,7 @@ milestones:
       docs_drift --strict 388 clean, 0 stale. Release-gate assessed: only red is supply-chain
       (node-tar via Expo, externally_blocked, Expo SDK 51->57 bump). Owner merge decision on
       PR #515 pending. Per-lens report files (docs/reference/reports/mobile-productization/review-lenses/) were
-      never committed; the 30-findings/0-refuted outcome is recorded in docs/PRODUCTIZATION.md.
+      never committed; the 30-findings/0-refuted outcome is recorded in docs/product/PRODUCTIZATION.md.
 
 # Wave / architecture rollup (reuse-first). "reuse" = exists complete; "extend" = exists, add surface;
 # "build" = net-new this program. Authoritative detail: docs/reference/reports/mobile-productization/repo-baseline.json.

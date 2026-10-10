@@ -88,7 +88,7 @@ def _report() -> int:
             print(f"  - {e}")
         print(
             "\nModel training/inference must be consent-scoped & audited. See "
-            "docs/source-of-truth/MODEL_GOVERNANCE.md."
+            "docs/reference/source-of-truth/MODEL_GOVERNANCE.md."
         )
         return 1
     print("model governance validation OK (training + inference gates present and wired).")

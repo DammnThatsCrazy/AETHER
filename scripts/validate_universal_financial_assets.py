@@ -205,7 +205,7 @@ def _report() -> int:
             print(f"  - {e}")
         print(
             "\nCanonical financial assets are namespaced, Decimal-only, immutable, "
-            "and observation-only. See docs/source-of-truth/FINANCIAL_NORMALIZATION.md."
+            "and observation-only. See docs/reference/source-of-truth/FINANCIAL_NORMALIZATION.md."
         )
         return 1
     print(

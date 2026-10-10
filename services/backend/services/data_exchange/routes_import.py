@@ -10,7 +10,7 @@ onto a canonical service function (``services/imports/service.py`` /
 canonical state in the Data Exchange vocabulary
 (``services/data_exchange/contracts.py`` ``DataArtifactStatus``).
 
-Surface (freeze ``docs/plans/data-exchange-api.md`` M3, flag
+Surface (freeze ``docs/architecture/plans/data-exchange-api.md`` M3, flag
 ``DATA_EXCHANGE_ENABLED``):
 
 - ``POST   /imports``                       create canonical session + envelope artifact

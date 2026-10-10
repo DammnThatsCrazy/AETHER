@@ -13,9 +13,9 @@ activated) into one scalar and is therefore NON-AUTHORITATIVE for release
 eligibility. It is preserved for continuity and comparison only. The
 authoritative readiness signal is the multidimensional model in
 config/readiness_model.yaml (per-dimension states + per-profile hard-gate
-disposition); see scripts/readiness_status.py and docs/readiness/READINESS-MODEL.md.
+disposition); see scripts/readiness_status.py and docs/operations/readiness/READINESS-MODEL.md.
 
-docs/productization/aether_productization_audit.md is the dated narrative
+docs/product/productization/aether_productization_audit.md is the dated narrative
 snapshot of the same data; when scores change, update BOTH (the audit doc
 review is enforced through its source_files link to this script).
 
@@ -189,7 +189,7 @@ AREAS: list[Area] = [
             "services/backend/services/intelligence/graph_mutations.py",
             "services/backend/services/x402/economic_mutations.py",
             "tests/chaos/test_agent_mutation.py",
-            "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
+            "docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
         ],
     ),
     Area(
@@ -231,7 +231,7 @@ AREAS: list[Area] = [
         "usage dashboard, and implementation checklist (/v1/onboarding/*). "
         "Playwright E2E suite added (5 scenarios covering root redirect, signup form, "
         "OTP verification, login fields, SSO/plan selector); CI-gated via e2e-tenant job.",
-        ["apps/aether/", "apps/aether/src/test/e2e/", "docs/PRODUCTIZATION.md"],
+        ["apps/aether/", "apps/aether/src/test/e2e/", "docs/product/PRODUCTIZATION.md"],
     ),
     Area(
         "connectors (BYOK / source)",
@@ -317,11 +317,11 @@ AREAS: list[Area] = [
             "services/backend/services/rewards/routes.py",
             "services/backend/alembic/versions/20260613_reward_enablement.py",
             "tests/chaos/test_reward_delivery.py",
-            "docs/runbooks/REWARD_DELIVERY_RUNBOOK.md",
-            "docs/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
-            "docs/runbooks/SVM_DEPLOY_EMERGENCY_RUNBOOK.md",
-            "docs/source-of-truth/REWARD_ENABLEMENT.md",
-            "docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
+            "docs/operations/runbooks/REWARD_DELIVERY_RUNBOOK.md",
+            "docs/operations/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+            "docs/operations/runbooks/SVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+            "docs/reference/source-of-truth/REWARD_ENABLEMENT.md",
+            "docs/reference/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
         ],
     ),
     Area(
@@ -451,7 +451,7 @@ AREAS: list[Area] = [
             "services/backend/repositories/measurement_results_repo.py",
             "services/backend/services/measurement/routes/integrity.py",
             "services/backend/alembic/versions/20260716_measurement_integrity.py",
-            "docs/source-of-truth/MEASUREMENT_INTEGRITY.md",
+            "docs/reference/source-of-truth/MEASUREMENT_INTEGRITY.md",
         ],
     ),
     Area(
@@ -480,8 +480,8 @@ AREAS: list[Area] = [
             "services/backend/services/imports/kyber_routes.py",
             "services/backend/repositories/import_files.py",
             "packages/shared/imports.ts",
-            "docs/source-of-truth/IMPORTS.md",
-            "docs/runbooks/IMPORT_FAILURES.md",
+            "docs/reference/source-of-truth/IMPORTS.md",
+            "docs/operations/runbooks/IMPORT_FAILURES.md",
         ],
     ),
     Area(
@@ -524,8 +524,8 @@ AREAS: list[Area] = [
             "apps/kyber/src/pages/measurement/campaign-registry-health-page.tsx",
             "scripts/campaign/backfill_campaign_ids.py",
             "scripts/campaign/check_campaign_release_gate.py",
-            "docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
-            "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
+            "docs/product/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
+            "docs/product/campaign/ADR_CAMPAIGN_IDENTITY.md",
             "infra/observability/prometheus/alert_rules.yml",
         ],
     ),
@@ -548,7 +548,7 @@ AREAS: list[Area] = [
             "docs/archive/legacy-architecture/aws-deployment/",
             "infra/",
             ".github/workflows/deploy.yml",
-            "docs/PRODUCTION-READINESS.md",
+            "docs/operations/PRODUCTION-READINESS.md",
         ],
     ),
     Area(
@@ -558,10 +558,10 @@ AREAS: list[Area] = [
         "S3). Locust harness covers /v1/batch and /sdk/identity/resolve with per-endpoint "
         "thresholds; `make load-smoke` / `scripts/load_smoke.py` runs the local smoke gate; "
         "`make load-baselines` runs staging Locust run (50u/10rps/5m) writing CSV baselines. "
-        "docs/LOAD-BASELINES.md documents 5 SLA thresholds and baseline recording procedure. "
+        "docs/operations/LOAD-BASELINES.md documents 5 SLA thresholds and baseline recording procedure. "
         "Gaps: no recorded staging baselines yet; Neptune/identity-merge throughput "
         "unproven at scale.",
-        ["tests/load/", "scripts/load_smoke.py", "docs/LOAD-BASELINES.md", "docs/archive/legacy-architecture/data-lake-architecture/"],
+        ["tests/load/", "scripts/load_smoke.py", "docs/operations/LOAD-BASELINES.md", "docs/archive/legacy-architecture/data-lake-architecture/"],
     ),
     Area(
         "provider certification plane",
@@ -590,8 +590,8 @@ AREAS: list[Area] = [
             "services/backend/shared/certification/checks.py",
             "docs/_generated/adapter-certification-matrix.json",
             "scripts/credentialless_certification.py",
-            "docs/productization/staging-capstone/PROVIDER_CAPABILITY_MATRIX_GUIDE.md",
-            "docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md",
+            "docs/product/productization/staging-capstone/PROVIDER_CAPABILITY_MATRIX_GUIDE.md",
+            "docs/product/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md",
             "tests/chaos/test_certification_readiness.py",
         ],
     ),
@@ -617,8 +617,8 @@ AREAS: list[Area] = [
             "packages/shared/stablecoin.ts",
             "tests/unit/stablecoin/",
             "tests/chaos/test_chain_observers.py",
-            "docs/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
-            "docs/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
+            "docs/operations/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
+            "docs/product/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
         ],
     ),
     Area(
@@ -648,8 +648,8 @@ AREAS: list[Area] = [
             "tests/unit/derivatives/",
             "tests/chaos/test_stream_recovery.py",
             "tests/chaos/test_provider_faults.py",
-            "docs/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
-            "docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
+            "docs/operations/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
+            "docs/reference/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
         ],
     ),
     Area(
@@ -669,8 +669,8 @@ AREAS: list[Area] = [
             "packages/shared/interoperability.ts",
             "tests/unit/interop/",
             "tests/chaos/test_chain_observers.py",
-            "docs/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
-            "docs/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
+            "docs/operations/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
+            "docs/product/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
         ],
     ),
     Area(
@@ -696,8 +696,8 @@ AREAS: list[Area] = [
         [
             "services/backend/services/integrations/providers/payment_rails/",
             "services/backend/services/integrations/providers/payment_rails/sync_worker.py",
-            "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
-            "docs/runbooks/PAYMENT_RAILS_RUNBOOK.md",
+            "docs/reference/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
+            "docs/operations/runbooks/PAYMENT_RAILS_RUNBOOK.md",
             "tests/payment_rails/test_sync_worker.py",
             "tests/chaos/test_webhook_idempotency.py",
         ],
@@ -728,7 +728,7 @@ AREAS: list[Area] = [
             "services/backend/alembic/versions/20260702_semantic_sentiment.py",
             "services/backend/alembic/versions/20260732_semantic_replay.py",
             "services/backend/services/reliability/definitions.py",
-            "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
+            "docs/operations/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
             "tests/integration/semantic/",
             "tests/chaos/test_semantic_pipeline.py",
             "tests/unit/test_semantic_observability_assets.py",
@@ -750,8 +750,8 @@ AREAS: list[Area] = [
         "Operator triage documented in the card-linked runbook.",
         [
             "services/backend/services/card_linked_payments/",
-            "docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
-            "docs/runbooks/CARD_LINKED_RUNBOOK.md",
+            "docs/reference/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
+            "docs/operations/runbooks/CARD_LINKED_RUNBOOK.md",
             "tests/unit/card_linked/test_ingestion_wiring.py",
         ],
     ),
@@ -776,7 +776,7 @@ BLOCKERS: list[Blocker] = [
         "release-blocker",
         "Agent Layer hosted mode requires durable storage (Redis or equivalent)",
         "graph mutation safety",
-        "Enable hosted control-plane storage per docs/AGENT-LAYER-PRODUCTION.md",
+        "Enable hosted control-plane storage per docs/architecture/AGENT-LAYER-PRODUCTION.md",
     ),
     Blocker(
         "pre-production-blocker",
@@ -794,7 +794,7 @@ BLOCKERS: list[Blocker] = [
         "scale-blocker",
         "No staging load baselines recorded; run `make load-baselines` against staging to record",
         "scale readiness",
-        "Run `make load-baselines STAGING_URL=<url>` against staging; commit CSV results and update docs/LOAD-BASELINES.md",
+        "Run `make load-baselines STAGING_URL=<url>` against staging; commit CSV results and update docs/operations/LOAD-BASELINES.md",
     ),
     Blocker(
         "scale-blocker",
@@ -808,7 +808,7 @@ BLOCKERS: list[Blocker] = [
         "providers resolve to CREDENTIAL_WAITING (code-complete, infra-defined, "
         "credential-gated), none validated against a live endpoint",
         "provider certification plane",
-        "Follow docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md: "
+        "Follow docs/product/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md: "
         "supply per-provider credentials/RPC, replay -> sandbox -> partner_live validate, "
         "capture pilot evidence; `make credentialless-certification-strict` gates the floor",
     ),
@@ -934,7 +934,7 @@ REQUIRED_ARTIFACTS = [
     ".github/workflows/repo-consistency.yml",
     ".github/workflows/repo-health.yml",
     "scripts/repo_doctor.py",
-    "docs/productization/aether_productization_audit.md",
+    "docs/product/productization/aether_productization_audit.md",
 ]
 
 

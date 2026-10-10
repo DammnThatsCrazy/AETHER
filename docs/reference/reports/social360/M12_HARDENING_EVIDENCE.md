@@ -66,7 +66,7 @@ skipped:
    source-of-truth doc authored now would document behavior that is not yet
    wired to any runtime caller.
 2. The **authority the docs would carry is already held**, honestly, by
-   `docs/blueprints/social360.md` (home doc, milestone table) + this ledger +
+   `docs/architecture/blueprints/social360.md` (home doc, milestone table) + this ledger +
    the M11/M12 reports — the same artifacts the program used to gate M0-M10.
 3. Authoring them correctly is a **spine-productization** activity (align the
    docs with the surface leaving `in_flight`), which is the correct post-program
@@ -124,4 +124,4 @@ say otherwise.
 - docs/reference/reports/social360/M12_HARDENING_EVIDENCE.md (this file)
 - docs/reference/reports/social360/PROGRAM_STATE.yaml (M11/M12 status + D-06 + gate notes)
 - docs/reference/reports/social360/GAP_LEDGER.csv (G058/G066/G071 status/basis)
-- docs/blueprints/social360.md (milestone table M11/M12)
+- docs/architecture/blueprints/social360.md (milestone table M11/M12)

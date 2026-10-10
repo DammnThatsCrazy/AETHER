@@ -4,7 +4,7 @@ Aether Backend — Reward Rail Adapters
 Rail adapters generate action payloads and deliver them through tenant-owned
 channels. Aether never holds funds or executes the final reward; the tenant does.
 
-See docs/source-of-truth/REWARD_RAILS.md for full rail documentation.
+See docs/reference/source-of-truth/REWARD_RAILS.md for full rail documentation.
 
 Architecture:
     RewardRailAdapter (ABC)
