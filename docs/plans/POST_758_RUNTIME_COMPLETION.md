@@ -119,9 +119,11 @@ client event alone never creates a `PAID` or settled relationship.
 include the connected address as context; the event contract marks wallet,
 chain, and VM fields as source references; Web3 Silver now accepts canonical
 `wallet`/`transaction` events and retains their observed status; identity
-ingestion recognizes `walletAddress`; and validation enforces the generated
-SDK-emittable event set. Contract generation, Python syntax compilation, and
-strict documentation drift checks pass. Provider-backed transaction
+ingestion recognizes `walletAddress`. A wallet-only event now records a
+tenant/chain/VM-scoped hashed source identity without creating a person or
+claiming ownership. Validation enforces the generated SDK-emittable event
+set. Contract generation, Python syntax compilation, and strict documentation
+drift checks pass. Provider-backed transaction
 verification, journey reconciliation, and product evidence remain open.
 
 ### Slice 2 — Authoritative agent execution and economic reconciliation
