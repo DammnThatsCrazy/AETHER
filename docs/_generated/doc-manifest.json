@@ -2361,12 +2361,28 @@
     },
     {
       "path": "docs/architecture/target/sdk-parity-productization.md",
-      "title": "SDK Parity Productization",
+      "title": "SDK Intake Productization",
       "slug": "sdk-parity-productization",
       "section": "architecture",
       "visibility": "I",
       "audience": [
-        "architect"
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/source-intake-and-access-kit-work-orders.md",
+      "title": "Source Intake and Access Kit Convergence Work Orders",
+      "slug": "source-intake-access-kit-convergence",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
       ],
       "status": "experimental",
       "since_version": "0.1.0"

@@ -20,8 +20,10 @@ toc_depth: 3
 reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
+  - commit: "181af52f4"
+    reason: "Reviewed the shared SDK batch wire vector and cross-platform conformance seam. It documents the existing canonical intake path and adds no client-owned tenant, identity, rights, or graph authority."
 source_hashes:
-  "packages/shared/": "sha256:625e112252988ff4307e93a82786685fb734459369728b8263978800e959c4c3"
+  "packages/shared/": "sha256:01c5aa6b65ff9bc3054afd263d7d61ed9013b4091876fefeb27e7713821b4a03"
   "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
   "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
@@ -79,6 +81,13 @@ SDKs            →  /v1/ingest/*     →       ↓
                               ├──── ML Training → Model Registry
                               └──── Intelligence API (risk, analytics, clusters, alerts)
 ```
+
+SDK, CLI, and MCP observation requests use the canonical `POST /v1/batch`
+intake path. The experimental local Access Kit CLI/MCP adapter also reads
+through existing tenant-scoped APIs; it does not create another graph writer,
+identity resolver, or action authority. SDK batch payloads share a minimum
+cross-platform wire vector, while the optional Envelope-B field remains behind
+the server's adoption flags.
 
 The SDK also collects raw user interactions, device fingerprints, wallet events, and session data — then ships everything to the backend for processing, enrichment, identity resolution, and analysis.
 

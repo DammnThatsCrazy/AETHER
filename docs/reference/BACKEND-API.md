@@ -21,6 +21,7 @@ reviewed_source_commits:
   - {'commit': '33dfedb4', 'reason': 'Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture.'}
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
+  - {'commit': 'fcfe08b7b', 'reason': 'Reviewed V1/V2 SDK batch observation-envelope parity. Both storage branches preserve the flat normalized event contract and add the same optional Envelope-B projection only when adoption is enabled; no route or response schema changed.'}
 source_hashes:
   "services/api/actions/": "sha256:cc762b94faad369af1d66f4f3e3ca0728a99860f2d5133a2522ecdcff2413a65"
   "services/api/billing/": "sha256:dd694b14e890adec41191a54a035ad863d9c14a2183ba5e9888c64c018658e77"
@@ -28,7 +29,7 @@ source_hashes:
   "services/api/governance/": "sha256:4979f1d68790c9673561b70d97ad0710960603cc7228fd429539160d64db4f1d"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
   "services/api/identity/": "sha256:e983d0dc2e0dae26c6254cdc8bcff4fff0cb2a8d4e418eefdbbb37bd8103e253"
-  "services/api/ingestion/": "sha256:cced019a9d58c2b5da76ba38436b3d9b945ba9baefdeaf1676fd521977885d5f"
+  "services/api/ingestion/": "sha256:fcf702fa50857a59064078c1dd83a68a9fe8ab571c730a78b98e702573e3d9de"
   "services/api/intelligence/": "sha256:6f97e244ba5d4ab36c14ce27c6a207ba4e428b61173821f33d0e387411a7c737"
   "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -626,6 +627,16 @@ publish semantics match `/v1/batch`, and the aliases now require the same
 `write` permission. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
 retires them with HTTP 410 (routes stay mounted; their bodies return the
 retired error and direct callers to `/v1/batch`).
+
+**Optional observation envelope:** when `AETHER_OBSERVATION_ENVELOPE_ENABLED`
+is on, both the V1 event-bus path and V2 transactional Bronze/outbox path add
+the SDK adapter's `observation_envelope` to the persisted event. When
+`AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED` is also on, that projection is
+validated and stamped through the existing gateway. The change is additive and
+default-off; envelope construction or gateway rejection degrades to the
+accepted flat event and records the corresponding metric. Downstream consumers
+must continue treating the flat event as the compatibility surface during this
+adoption phase.
 
 ---
 

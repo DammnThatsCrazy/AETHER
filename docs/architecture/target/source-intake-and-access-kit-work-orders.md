@@ -3,17 +3,17 @@ title: Source Intake and Access Kit Convergence Work Orders
 slug: source-intake-access-kit-convergence
 section: architecture
 visibility: I
-audience: [architect, dev-senior, product]
+audience: [architect, dev-senior, exec]
 status: experimental
 since_version: "0.1.0"
 ---
 
 # Source Intake and Access Kit Convergence Work Orders
 
-**Program:** Source Intake and Access Kit Convergence  
-**Target branch:** `Development`  
-**Delivery shape:** one stacked branch and one draft PR; work orders become ordered commits in that PR  
-**Baseline:** `Development` at `b3cc28093` (2026-10-11)  
+**Program:** Source Intake and Access Kit Convergence<br>
+**Target branch:** `Development`<br>
+**Delivery shape:** one stacked branch and one draft PR; work orders become ordered commits in that PR<br>
+**Baseline:** `Development` at `b3cc28093` (2026-10-11)<br>
 **Architecture anchors:** merged PR #734 (architecture reset and tenant-safe runtime) and merged PR #733 (universal connector runtime)
 
 ## 1. Objective
@@ -72,6 +72,25 @@ PR #734 and PR #733 are merged into `Development`. They provide substantial arch
 | Aether Mobile | The first-party app has a client, navigation, projection, and continuation shell | Keep this as a graph consumer; beta readiness remains a separate product release gate from customer SDK ingestion |
 | REST, MCP, CLI, Access Kit | Auth, policy, capability, billing, graph, and domain APIs exist in parts; this feature stack includes observed-capability reads, site-bound intake, bounded entity reads, and a safe account-context projection on the experimental CLI/local MCP bridge | Compose existing authorities behind usable, consistent calls. Do not expose new authority by adding a protocol adapter |
 | Live end-to-end evidence | Repository-level contracts exist; provider-backed, customer SDK, and beta/device proof must be evaluated independently | Record exact evidence and limitations; never equate accepted ingestion or a passing unit check with graph or beta readiness |
+
+### Delivery disposition for this PR
+
+The initial implementation slice is complete for the supported routes and
+contracts that have an existing owner. The following matrix distinguishes work
+delivered here from continuation gates that require an authority, policy, or
+live environment outside this branch.
+
+| Work order | Disposition | Evidence or specific continuation gate |
+|---|---|---|
+| WO-0 | Complete | Current #734/#733 ownership and surface map reviewed against this tree; stale standalone source-governance runtime removed from scope. |
+| WO-1 | Partial; provider and SDK handoffs aligned | V1/V2 SDK envelope parity and shared five-platform wire vector are implemented. CSV import rights admission remains gated on the product decision described under WO-1; no import rights behavior is changed in this PR. |
+| WO-2 | Contract slice complete; device proof deferred | Five SDKs consume the shared minimum wire vector or native serialization helper. Device installation, store beta, and tenant graph hydration need device-lab/store credentials and a live tenant. |
+| WO-3 | Supported interaction normalization complete; invocation deferred | Query and observe outcomes share one response envelope. A generic invoker waits for an owning capability execution API, grant model, and server authorization contract. |
+| WO-4 | Supported API surface complete | Existing entity list/detail, account context, capability inventory, and canonical batch intake are composed with fixed projections and bounds. Broad graph search, export, and unsupported queries are not claimed. |
+| WO-5 | Local MCP slice complete; remote MCP deferred | Local stdio initialize/tool listing and handler contracts are tested. Remote transport needs an owning delegated-auth/client identity flow and host conformance evidence. |
+| WO-6 | Env-configured CLI slice complete; customer onboarding deferred | Safe reads and site-bound intake are implemented. Login, tenant switching, secure credential storage, and revocation need a supported delegated-auth owner and live user credentials. |
+| WO-7 | Response correlation complete; cross-authority receipts deferred | Server-returned references are preserved. Billing, usage, audit, and receipt joins require their owners' stable correlation contracts. |
+| WO-8 | Local contract proof complete; live/release proof deferred | Focused test results are listed under WO-8. Customer tenant, device, provider, hosted PR, and release evidence remain independent gates. |
 
 This work starts from `Development` after #734/#733. PR #771 is an unrelated open draft and is not the base of this program.
 
@@ -140,7 +159,7 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 ### WO-0 — Baseline reconciliation and ownership map
 
-**Owner:** integrator  
+**Owner:** integrator<br>
 **Purpose:** replace assumptions from older blueprints with evidence from current `Development`.
 
 - Map SDK, import, provider/webhook, MCP, CLI, REST, and first-party mobile paths to the authorities above.
@@ -152,8 +171,8 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 ### WO-1 — Canonical intake handoff and source identity
 
-**Owner:** intake/SDK track  
-**Dependencies:** WO-0
+**Owner:** intake/SDK track<br>
+**Dependencies:** WO-0<br>
 
 - Reuse the canonical envelope and ingestion gateway. Route only adapters that currently bypass required admission, evidence, tenant, rights, provenance, sequencing, or idempotency controls.
 - Align the stable public SDK batch contract behind its adapter; preserve supported client compatibility while converging server-side persistence and outbox behavior.
@@ -163,10 +182,12 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 **Acceptance:** every changed adapter has an explicit end-to-end handoff to the canonical authority, and no client or adapter makes identity, rights, or graph decisions. Legacy route removal or storage consolidation requires the #734 migration proof, not a parallel destructive cutover.
 
+**Current stack status:** partial. The SDK observation handoff and V1/V2 envelope parity are implemented, and provider admission remains behind the existing Rights Authority checks. The separate CSV import path was audited and found to admit tenant-owned imports without a durable Rights Authority decision reference. This branch does not change that path because the governing product rule is unresolved: require an explicit Rights Authority grant before import, or accept tenant-admin-approved data for tenant use while Rights Authority gates later reuse. Resume this sub-slice only after that policy decision, then prove that denied imports produce no Bronze, identity, or graph writes and that accepted records carry the durable decision reference through replay and governed mutation.
+
 ### WO-2 — SDK productization and mobile evidence
 
-**Owner:** intake/SDK track  
-**Dependencies:** WO-1
+**Owner:** intake/SDK track<br>
+**Dependencies:** WO-1<br>
 
 - Compare Web, Server, React Native, iOS, and Android public APIs against the same observation and consent contract.
 - Check the publishable-key remote configuration/manifest path, version policy, safe public fields, failure visibility, heartbeat, queue diagnostics, and disabled/kill-switch behavior. Fix only gaps verified in the current tree.
@@ -178,8 +199,8 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 ### WO-3 — Protocol-neutral access invocation
 
-**Owner:** access track  
-**Dependencies:** WO-0
+**Owner:** access track<br>
+**Dependencies:** WO-0<br>
 
 - Inventory and reuse existing authentication, tenant resolution, capability catalog/lifecycle, policy, readiness, entitlement, usage, approval, audit, and receipt owners.
 - Add only the missing normalization/router seam needed for protocol adapters to invoke an existing capability authority.
@@ -202,8 +223,8 @@ WO-0 identifies an owning runtime contract.
 
 ### WO-4 — REST/API access contract
 
-**Owner:** access track  
-**Dependencies:** WO-3
+**Owner:** access track<br>
+**Dependencies:** WO-3<br>
 
 - Define the actual supported read/query operations from existing domain APIs. Do not create a catch-all endpoint that silently changes query semantics.
 - Normalize authentication context, problem/error responses, pagination, idempotency rules, and durable result handles where the underlying operation supports them.
@@ -227,8 +248,8 @@ and limits overview maps to 50 entries with `sampled` set on truncation.
 
 ### WO-5 — Aether MCP adapter
 
-**Owner:** access track  
-**Dependencies:** WO-3, WO-4
+**Owner:** access track<br>
+**Dependencies:** WO-3, WO-4<br>
 
 - Verify current official MCP transport/version requirements at implementation time and pin the protocol behavior in the adapter documentation.
 - Separate remote authenticated MCP from an optional local stdio bridge. The bridge delegates to the same remote Access/API authority and never stores a plaintext credential or exposes a new local data authority.
@@ -251,8 +272,8 @@ customer beta evidence remain deferred.
 
 ### WO-6 — Customer CLI adapter
 
-**Owner:** access track  
-**Dependencies:** WO-3, WO-4
+**Owner:** access track<br>
+**Dependencies:** WO-3, WO-4<br>
 
 - Establish one supported customer CLI package and installation command using repository conventions.
 - Implement browser/device login or the existing approved delegated-auth flow, tenant selection backed by server authorization, profile/context management, and token revocation behavior.
@@ -276,8 +297,8 @@ or wait for an owner API.
 
 ### WO-7 — Receipts, telemetry, and developer handoff
 
-**Owner:** integrator with access track  
-**Dependencies:** WO-3 through WO-6
+**Owner:** integrator with access track<br>
+**Dependencies:** WO-3 through WO-6<br>
 
 - Reuse existing audit, billing, usage, approval, and receipt systems. Add protocol/surface attribution only where the canonical event contract is missing it.
 - Define which decisions are billable, included, rate limited, approval gated, or explicitly not yet priced; do not invent plan numbers in an adapter.
@@ -296,8 +317,8 @@ authorities.
 
 ### WO-8 — Cross-surface proof and readiness record
 
-**Owner:** integrator  
-**Dependencies:** WO-1 through WO-7
+**Owner:** integrator<br>
+**Dependencies:** WO-1 through WO-7<br>
 
 - Build focused evidence that covers one supported observation source through the governed graph/read path and one read-only capability through REST, MCP, and CLI adapters.
 - Cover tenant isolation, denied authorization, idempotency/replay, partial/degraded states, error mapping, and durable handle retrieval in the affected surfaces.
@@ -306,29 +327,38 @@ authorities.
 
 **Acceptance:** all claims map to retained evidence; no production, certification, customer-beta, or broad merge-readiness claim is made without its canonical release/PR evidence.
 
-**Current stack status:** partial. Focused Node built-in tests use mocked fetch
-and fake MCP registration for REST/CLI/tool-handler contracts; an additional
-subprocess smoke test exercises the pinned stdio SDK's legacy `initialize` and
-`tools/list` exchange without making an API call. Syntax checks and
-`git diff --check` are also run for this commit. These do not prove live API
-tenant isolation, network timeout behavior against the service, successful
-customer-key calls, modern/legacy host conformance, ingestion-to-graph
-hydration, or any release/production readiness gate. Those remain explicit
-external requirements.
+**Current stack status:** local contract proof is complete for this slice. The
+Access Kit suite passes 23 tests, including mocked REST/CLI/tool-handler
+contracts, terminal-control escaping, and a pinned-SDK stdio subprocess smoke
+test for `initialize` plus `tools/list`. Focused Web (1), Server (3), React
+Native (11), backend V1/V2 observation (37), import/provider admission (25 and
+17 in their respective focused runs), and Swift package-build checks have
+passed. The security diff review found and this stack remediates terminal
+control injection from observed capability labels in human CLI output. Android
+Gradle and Apple XCTest/device tooling are not available in this environment.
+No live tenant, provider credentials, modern remote MCP host, or device/store
+environment was available, so cross-tenant live calls, timeout behavior
+against a service, ingestion-to-graph hydration, customer beta, and release
+readiness remain unproven.
 
 ## 6. Single-PR commit sequence
 
-The intended stack is:
+The integrated feature branch is one commit stack against `Development`. The
+work orders are tracked by the acceptance matrix above; commits are bounded
+implementation slices and may satisfy more than one work order:
 
-1. `docs: define source intake and access convergence work orders` — this page and reconciled architecture ownership.
-2. `feat(ingestion): converge verified source handoffs` — only adapters and contract gaps established by WO-0.
-3. `feat(sdk): align supported client intake contracts` — verified SDK/runtime improvements and examples.
-4. `feat(access): normalize capability invocations` — shared protocol-neutral invocation seam.
-5. `feat(access): expose supported API and MCP capabilities` — only capabilities whose authorities exist.
-6. `feat(cli): route customer commands through access contracts` — safe initial commands and install/auth docs.
-7. `docs: record cross-surface proof and remaining gates` — reviewed evidence, generated/source-linked surfaces, and explicit limitations.
+1. `docs: define source intake and access convergence work orders` — ownership, acceptance, and gates.
+2. `feat(ingestion): align v2 sdk observation envelopes` — V1/V2 envelope parity.
+3. `feat(access-kit): add site-bound CLI and MCP surfaces` — local adapter and canonical intake.
+4. `build: lock Access Kit workspace dependencies` — workspace and lockfile integration.
+5. `test(ingestion): verify v1 and v2 envelope parity` — server contract evidence.
+6. `feat(access-kit): add bounded tenant entity reads` — supported read APIs and projections.
+7. `test(sdk): add shared batch wire conformance vector` — Web, Server, React Native, iOS, and Android fixture.
+8. `feat(access-kit): normalize interaction outcomes` — consistent outcomes and server-returned references.
+9. `fix(access-kit): escape terminal controls in human output` — terminal-safe external labels and values.
+10. Final documentation/evidence commit — actual verification disposition, generated/source-linked pages, and deferred gates.
 
-The sequence may be adjusted after WO-0, but all changes remain commits on the same feature branch and one PR targeting `Development`.
+All changes remain commits on this feature branch and one PR targeting `Development`.
 
 ## 7. Readiness boundaries
 
@@ -337,4 +367,3 @@ The sequence may be adjusted after WO-0, but all changes remain commits on the s
 - A route or MCP tool that returns data does not prove equivalent authorization, rights, scope, readiness, billing, or receipt behavior across transports.
 - A CLI or local bridge is not a privileged operator channel. It must use delegated/customer authorization and the same tenant policy as REST.
 - Repository-local checks, hosted PR checks, live provider evidence, staging, mobile device evidence, and production readiness remain separate claims.
-

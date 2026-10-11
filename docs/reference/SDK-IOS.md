@@ -10,8 +10,11 @@ source_files: [packages/sdk/ios/Sources/AetherSDK/Aether.swift, packages/shared/
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "181af52f4"
+    reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:8e74e347fd0bd27a34523b84235f5d8e4b1004ed930e0967430e82ef5ff30981"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:991a765d1ae398cdabb9da8c5ee571e1b28aba196b2243872aee175871fd90ab"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
 ---
@@ -373,6 +376,11 @@ UIKit Events / Wallet Interactions
         │
     POST /v1/batch → Aether Backend
 ```
+
+Every batch uses the `{ "batch": [...], "sentAt": "..." }` wire envelope.
+Both the legacy sender and durable-ack sender use the same native envelope
+builder. The shared fixture-backed test checks this client contract; it does
+not establish iOS device or customer-tenant graph behavior.
 
 ### What the SDK sends (event context):
 - Event type, name, and raw properties

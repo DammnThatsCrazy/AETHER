@@ -10,8 +10,11 @@ source_files: [packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt, pack
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "181af52f4"
+    reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:f276a2b222788cc4d567282bbf4a5842f45af92e3ef9dea408cdd467b7d71cec"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:c7a6eae4a0bfa818735859b25830f17367213e4b25c9e30448b6e3415da0bcba"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
 ---
@@ -382,6 +385,11 @@ Activity Lifecycle / User Interactions
         │
     POST /v1/batch → Aether Backend
 ```
+
+Every batch uses the `{ "batch": [...], "sentAt": "..." }` wire envelope.
+Both the legacy sender and durable-ack sender use the same native envelope
+builder. The shared fixture-backed test checks this client contract; it does
+not establish Android device or customer-tenant graph behavior.
 
 ### What the SDK sends (event context):
 - Event type, name, and raw properties (sensitive fields scrubbed recursively,

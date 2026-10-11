@@ -3,7 +3,7 @@ title: SDK Intake Productization
 slug: sdk-parity-productization
 section: architecture
 visibility: I
-audience: [architect, dev-senior, product]
+audience: [architect, dev-senior, exec]
 status: experimental
 since_version: "0.1.0"
 ---
